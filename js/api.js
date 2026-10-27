@@ -29,6 +29,8 @@ export function traduzErro(e) {
   return new Error(m);
 }
 
+const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero";
+
 function criarApiSupabase() {
   const cx = conexao();
   if (!cx || !window.supabase) return null;
@@ -59,10 +61,22 @@ function criarApiSupabase() {
     salvarPerfil: async (id, patch) => ok(await sb.from("perfis").update(patch).eq("id", id)),
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
     salvarConfig: async dados => ok(await sb.from("config").upsert({ id: 1, dados, atualizado_em: new Date().toISOString() })),
-    clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"),
-    ordens: async () => todos(() => sb.from("ordens")
-      .select("id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,ck_feito:checkin->feito")
-      .order("numero", { ascending: false })),
+    clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"), produtos: tabela("produtos"),
+    ordens: async desde => todos(() => { let q = sb.from("ordens").select(COLS_ORDENS); if (desde) q = q.gt("atualizado_em", desde); return q.order("numero", { ascending: false }); }),
+    /** linhas alteradas depois de "desde" (sincronização leve a cada minuto) */
+    alterados: async (nome, desde) => todos(() => sb.from(nome).select("*").gt("atualizado_em", desde).order("id")),
+    idsDe: async nome => todos(() => sb.from(nome).select("id").order("id")).then(r => r.map(x => x.id)),
+    recibos: {
+      listar: async ({ ordemId, de, ate } = {}) => { let q = sb.from("recibos").select("*"); if (ordemId) q = q.eq("ordem_id", ordemId); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
+      um: async id => ok(await sb.from("recibos").select("*").eq("id", id).single()),
+      salvar: async r => { const { id, ...resto } = r; return id ? ok(await sb.from("recibos").update(resto).eq("id", id).select().single()) : ok(await sb.from("recibos").insert(resto).select().single()); },
+    },
+    estoque: {
+      movimentos: async produtoId => ok(await sb.from("estoque_mov").select("*").eq("produto_id", produtoId).order("criado_em", { ascending: false }).limit(200)),
+      movimentar: async (produtoId, tipo, qtd, custo, obs) => ok(await sb.rpc("movimentar_estoque", { p_produto: produtoId, p_tipo: tipo, p_qtd: qtd, p_custo: custo || null, p_obs: obs || "" })),
+    },
+    painel: async (ini, fim, grupo) => ok(await sb.rpc("painel_resumo", { p_ini: ini, p_fim: fim, p_grupo: grupo })),
+    importarLegado: async (tipo, linhas, atualizar) => ok(await sb.rpc("importar_legado", { p_tipo: tipo, p_linhas: linhas, p_atualizar: !!atualizar })),
     ordem: async id => {
       const o = ok(await sb.from("ordens").select("*").eq("id", id).single());
       const [itens, fotos, eventos] = await Promise.all([
@@ -76,7 +90,7 @@ function criarApiSupabase() {
       const out = [];
       for (let i = 0; i < ids.length; i += 60) {
         const parte = ids.slice(i, i + 60);
-        out.push(...await todos(() => sb.from("os_itens").select("id,ordem_id,tipo,descricao,qtd,valor_unit,custo_unit,aprovado,executado,servico_id,fornecida_cliente").in("ordem_id", parte).order("id")));
+        out.push(...await todos(() => sb.from("os_itens").select("id,ordem_id,tipo,descricao,codigo,qtd,valor_unit,desconto,custo_unit,aprovado,executado,produto_id,fornecida_cliente").in("ordem_id", parte).order("id")));
       }
       return out;
     },

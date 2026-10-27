@@ -1,6 +1,6 @@
 // Documentos em PDF: checklist de entrada, orçamento e ordem de serviço
 import { api } from "./api.js";
-import { exPlaca, fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, numOS, somaDias } from "./util.js";
+import { exPlaca, fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias } from "./util.js";
 import { secoesCheckin, achados, QUALIDADE, termoEntradaFinal, TERMO_GARANTIA, TERMO_ORCAMENTO } from "./regras.js";
 
 const AZUL = [10, 75, 208], TINTA = [20, 26, 36], CINZA = [96, 106, 122], LINHA = [208, 214, 223], FUNDO = [243, 245, 248];
@@ -163,7 +163,7 @@ function rodape(d, texto) {
 function linhasItens(itens, tipo, opts = {}) {
   return itens.filter(i => i.tipo === tipo).map(i => {
     const recusado = i.aprovado === false;
-    const valor = recusado ? "não aprovado" : reais((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0));
+    const valor = recusado ? "não aprovado" : reais(totalItem(i));
     const desc = i.descricao + (i.adicional ? " (adicional)" : "") + (i.fornecedor && opts.fornecedor ? " · " + i.fornecedor : "");
     if (tipo === "servico") return { celulas: [desc, i.horas ? qtdFmt(i.horas) + " h" : qtdFmt(i.qtd), reais(i.valor_unit), valor], cor: recusado ? { 3: CINZA } : null };
     if (tipo === "peca") return { celulas: [i.codigo || "—", desc, i.fornecida_cliente ? "Do cliente" : (QUALIDADE[i.qualidade] || "—"), qtdFmt(i.qtd), i.fornecida_cliente ? "—" : reais(i.valor_unit), i.fornecida_cliente ? "—" : valor], cor: recusado ? { 5: CINZA } : null };

@@ -11,48 +11,13 @@ export function Mais() {
   return html`<div class="pagina">
     <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div></section>
     <section class="card"><div class="lista">
-      ${it("/catalogo", "Catálogo de serviços", "Preços de mão de obra e tempos padrão", I.chave)}
+      ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.chave)}
+      ${pode(perfil, "verValores") ? it("/recibos", "Recibos de pagamento", "Consultar, reimprimir, cancelar e emitir recibo avulso", I.lista) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}
-      ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia e termos", I.ajuste) : null}
+      ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
+      ${pode(perfil, "ajustes") ? it("/importar", "Importar do OS Oficina 3.0", "Trazer cadastros completos, produtos e O.S. novas do sistema antigo", I.painel) : null}
       <button type="button" class="linha" onClick=${sair}><span class="ic">${I.sair}</span><span class="meio"><strong>Sair</strong><span>Encerrar a sessão neste aparelho</span></span></button>
     </div></section></div>`;
-}
-
-/* ---------------- Catálogo ---------------- */
-export function Catalogo() {
-  const { dados, cfg, perfil, avisar, confirmar, recarregar } = useApp();
-  const [q, setQ] = useState(""), [ed, setEd] = useState(null);
-  const admin = pode(perfil, "ajustes"), ver = pode(perfil, "verValores");
-  const lista = dados.servicos.filter(s => !q || norm(s.nome).includes(norm(q)) || norm(s.categoria).includes(norm(q)));
-  const cats = [...new Set(lista.map(s => s.categoria))].sort();
-  const semPreco = dados.servicos.filter(s => s.ativo !== false && (s.cobranca === "fixo" ? !(Number(s.preco) > 0) : !(Number(s.horas) > 0))).length;
-  const salvar = async () => {
-    if (!ed.nome.trim()) return setEd({ ...ed, erro: "Informe o nome." });
-    try { await api.servicos.salvar({ ...(ed.id ? { id: ed.id } : {}), nome: ed.nome.trim(), categoria: (ed.categoria || "Geral").trim(), cobranca: ed.cobranca, preco: ed.preco || 0, horas: ed.horas || 0, ativo: ed.ativo !== false });
-      setEd(null); avisar("Serviço salvo."); recarregar(["servicos"]); } catch (e) { setEd({ ...ed, erro: e.message }); }
-  };
-  const excluir = async () => { if (!await confirmar({ titulo: "Excluir serviço", texto: "O serviço sai do catálogo. Orçamentos já feitos não mudam.", botao: "Excluir", perigo: true })) return;
-    try { await api.servicos.excluir(ed.id); setEd(null); recarregar(["servicos"]); } catch (e) { setEd({ ...ed, erro: e.message }); } };
-  const valor = s => s.cobranca === "hora" ? (Number(s.horas) ? s.horas.toString().replace(".", ",") + " h · " + reais(s.horas * (cfg.valorHora || 0)) : "tempo não definido") : (Number(s.preco) ? reais(s.preco) : "sem preço");
-  return html`<div class="pagina">
-    ${admin && semPreco ? html`<div class="aviso">${semPreco} serviço(s) sem preço ou sem tempo definido. Complete para usar no orçamento.</div>` : null}
-    ${admin && !(Number(cfg.valorHora) > 0) ? html`<div class="aviso">Valor-hora não configurado. Defina em Ajustes para calcular os serviços cobrados por hora.</div>` : null}
-    <div class="linha-add"><input id="busca-cat" class="inp" aria-label="Buscar serviço" placeholder="Buscar serviço ou categoria" value=${q} onInput=${e => setQ(e.target.value)} />
-      ${admin ? html`<button type="button" class="btn btn-pri" onClick=${() => setEd({ nome: "", categoria: "Geral", cobranca: "fixo", preco: 0, horas: 0, ativo: true })}>+ Novo</button>` : null}</div>
-    ${cats.length ? cats.map(c => html`<section class="card" key=${c}><h3>${c}</h3><div class="lista">${lista.filter(s => s.categoria === c).map(s => html`<button type="button" key=${s.id} class=${"linha" + (s.ativo === false ? " inativo" : "")} disabled=${!admin} onClick=${() => setEd({ ...s })}>
-      <span class="meio"><strong>${s.nome}</strong><span>${s.cobranca === "hora" ? "Cobrado por hora" : "Preço fechado"}${s.ativo === false ? " · inativo" : ""}</span></span>${ver ? html`<b class=${/sem|não/.test(valor(s)) ? "c-warn" : ""}>${valor(s)}</b>` : null}</button>`)}</div></section>`)
-      : html`<${Vazio}>Nenhum serviço no catálogo.</${Vazio}>`}
-    ${ed ? html`<${Modal} titulo=${ed.id ? "Editar serviço" : "Novo serviço"} onFechar=${() => setEd(null)}>
-      <${Campo} id="s-nome" rotulo="Nome" obrig><${Texto} id="s-nome" valor=${ed.nome} onMuda=${v => setEd({ ...ed, nome: v, erro: "" })} /></${Campo}>
-      <${Campo} id="s-cat" rotulo="Categoria"><${Texto} id="s-cat" list="cats" valor=${ed.categoria} onMuda=${v => setEd({ ...ed, categoria: v })} /><datalist id="cats">${[...new Set(dados.servicos.map(s => s.categoria))].map(c => html`<option value=${c} />`)}</datalist></${Campo}>
-      <${Seg} rotulo="Cobrança" opcoes=${[["Preço fechado", "info"], ["Por hora", "info"]]} valor=${ed.cobranca === "hora" ? "Por hora" : "Preço fechado"} onEscolha=${v => setEd({ ...ed, cobranca: v === "Por hora" ? "hora" : "fixo" })} />
-      ${ed.cobranca === "hora" ? html`<${Campo} id="s-horas" rotulo="Tempo padrão (horas)" dica=${"Valor no orçamento: horas × " + reais(cfg.valorHora || 0) + " (valor-hora atual)"}><input id="s-horas" class="inp" inputmode="decimal" value=${String(ed.horas || "").replace(".", ",")} onInput=${e => setEd({ ...ed, horas: parseValor(e.target.value) })} /></${Campo}>`
-        : html`<${Campo} id="s-preco" rotulo="Preço"><${Dinheiro} id="s-preco" valor=${ed.preco} onMuda=${v => setEd({ ...ed, preco: v })} /></${Campo}>`}
-      <label class="linha-check"><input type="checkbox" checked=${ed.ativo !== false} onChange=${e => setEd({ ...ed, ativo: e.target.checked })} /><span>Ativo (aparece na busca do orçamento)</span></label>
-      ${ed.erro ? html`<div class="erros">${ed.erro}</div>` : null}
-      <div class="acoes">${ed.id ? html`<button type="button" class="btn btn-perigo" onClick=${excluir}>Excluir</button>` : null}<span class="espaco"></span><button type="button" class="btn" onClick=${() => setEd(null)}>Cancelar</button><button type="button" class="btn btn-pri" onClick=${salvar}>Salvar</button></div>
-    </${Modal}>` : null}
-  </div>`;
 }
 
 /* ---------------- Equipe ---------------- */
@@ -93,6 +58,11 @@ export function Ajustes() {
     try { const { blob } = await reduzirImagem(arq, 600, "image/png"); const caminho = await api.enviarArquivo("config/logo-" + uuid().slice(0, 8) + ".png", blob, "image/png"); set({ logo: caminho }); }
     catch (e) { avisar("Não foi possível usar esta imagem.", true); } finally { setEnviando(false); } };
   const num = (k, rot, dica, suf) => html`<${Campo} id=${"a-" + k} rotulo=${rot} dica=${dica}><div class="inp-suf"><input id=${"a-" + k} class="inp" inputmode="decimal" value=${String(c[k] ?? "").replace(".", ",")} onInput=${e => set({ [k]: parseValor(e.target.value) })} /><span>${suf}</span></div></${Campo}>`;
+  const [novoTexto, setNovoTexto] = useState({});
+  const listaTextos = (k, rot, dica) => html`<div class="campo"><label>${rot}</label><span class="dica">${dica}</span>
+    ${(c[k] || []).length ? html`<div class="chips">${c[k].map(x => html`<span class="chip" key=${x}>${x}<button type="button" aria-label=${"Remover " + x} onClick=${() => set({ [k]: c[k].filter(y => y !== x) })}>×</button></span>`)}</div>` : null}
+    <div class="linha-add"><input class="inp" id=${"a-" + k} placeholder="Novo item" value=${novoTexto[k] || ""} onInput=${e => setNovoTexto(o => ({ ...o, [k]: e.target.value }))} />
+      <button type="button" class="btn" onClick=${() => { const v = (novoTexto[k] || "").trim(); if (v && !(c[k] || []).includes(v)) set({ [k]: (c[k] || []).concat([v]) }); setNovoTexto(o => ({ ...o, [k]: "" })); }}>Adicionar</button></div></div>`;
   const termo = (k, rot, padrao, dica) => html`<${Campo} id=${"a-" + k} rotulo=${rot} dica=${dica}><${Area} id=${"a-" + k} style=${{ minHeight: "150px" }} valor=${c[k]} onMuda=${v => set({ [k]: v })} /></${Campo}>
     ${c[k] !== padrao ? html`<button type="button" class="btn-link" onClick=${() => set({ [k]: padrao })}>Restaurar texto padrão</button>` : null}`;
   return html`<div class="pagina">
@@ -119,6 +89,15 @@ export function Ajustes() {
       <${Campo} id="a-cond" rotulo="Condições de pagamento padrão no orçamento"><${Texto} id="a-cond" valor=${c.condicoesPadrao} onMuda=${v => set({ condicoesPadrao: v })} /></${Campo}>
       <div class="campo"><label>Formas de pagamento</label><div class="chips">${c.formasPagamento.map(f => html`<span class="chip" key=${f}>${f}<button type="button" aria-label=${"Remover " + f} onClick=${() => set({ formasPagamento: c.formasPagamento.filter(x => x !== f) })}>×</button></span>`)}</div>
         <div class="linha-add"><input class="inp" id="a-forma" placeholder="Nova forma de pagamento" value=${novaForma} onInput=${e => setNovaForma(e.target.value)} /><button type="button" class="btn" onClick=${() => { if (novaForma.trim()) { set({ formasPagamento: c.formasPagamento.concat([novaForma.trim()]) }); setNovaForma(""); } }}>Adicionar</button></div></div>
+    </section>
+    <section class="card"><h2>O.S., recibos e cadastros</h2>
+      <div class="grade">
+        <${Campo} id="a-cidade" rotulo="Cidade (local dos recibos)"><${Texto} id="a-cidade" valor=${c.cidade} onMuda=${v => set({ cidade: v })} /></${Campo}>
+        <div class="campo"><label>Vias da O.S. impressa (padrão)</label><${Seg} rotulo="Vias" opcoes=${[["1 via", "info"], ["2 vias", "info"]]} valor=${(c.impressaoVias || 1) + " via" + (c.impressaoVias === 2 ? "s" : "")} onEscolha=${v => set({ impressaoVias: +v[0] })} /></div>
+      </div>
+      ${listaTextos("situacoesOS", "Situações da O.S.", "Marcadores livres, como no sistema anterior (ex.: Aguardando peças). Aparecem no quadro e na impressão.")}
+      ${listaTextos("tiposCliente", "Tipos de cliente", "Sugestões no cadastro de clientes.")}
+      ${termo("textoRecibo", "Texto de quitação do recibo", CONFIG_PADRAO.textoRecibo)}
     </section>
     <section class="card"><h2>Entrada do veículo</h2>
       <label class="linha-check"><input type="checkbox" checked=${c.exigirFotos} onChange=${e => set({ exigirFotos: e.target.checked })} /><span>Exigir fotos das 4 laterais para finalizar a entrada</span></label>

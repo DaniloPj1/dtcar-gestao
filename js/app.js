@@ -7,10 +7,14 @@ import { Painel, Ordens } from "./telas/painel.js";
 import { NovaOS, ChecklistOS } from "./telas/entrada.js";
 import { Ordem } from "./telas/ordem.js";
 import { Cadastros, ClienteTela, VeiculoTela } from "./telas/cadastros.js";
-import { Mais, Catalogo, Equipe, Ajustes } from "./telas/admin.js";
+import { Mais, Equipe, Ajustes } from "./telas/admin.js";
+import { Recibos } from "./telas/recibos.js";
+import { Imprimir } from "./telas/imprimir.js";
+import { Importar } from "./telas/importar.js";
 
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Clientes e veículos", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", catalogo: "Catálogo de serviços", equipe: "Equipe", ajustes: "Ajustes" };
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina" };
+const SINC = ["ordens", "clientes", "veiculos", "produtos"];
 const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["/entrada", "Nova O.S.", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
 
 function App() {
@@ -18,7 +22,7 @@ function App() {
   const [perfil, setPerfil] = useState(undefined);
   const [rota, setRota] = useState(lerRota());
   const [modoSenha, setModoSenha] = useState(/type=recovery/.test(location.hash));
-  const [dados, setDados] = useState({ clientes: [], veiculos: [], servicos: [], ordens: [], perfis: [], carregado: false });
+  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], carregado: false });
   const [cfg, setCfg] = useState(cfgCompleta({}));
   const [toast, setToast] = useState(null);
   const [conf, setConf] = useState(null);
@@ -37,19 +41,49 @@ function App() {
   }, [sessao && sessao.user && sessao.user.id]);
 
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
-  const recarregar = useCallback(async (quais) => {
-    const todos = ["clientes", "veiculos", "servicos", "ordens", "perfis", "config"];
+  const marcas = useRef({}); // maior atualizado_em já recebido por tabela (relógio do servidor)
+  const marcar = (k, linhas) => { for (const l of linhas) if (l.atualizado_em && (!marcas.current[k] || l.atualizado_em > marcas.current[k])) marcas.current[k] = l.atualizado_em; };
+  /** Carrega tabelas. Para O.S., clientes, veículos e produtos já carregados, busca só o que mudou (rápido);
+   *  use { completo: true } depois de excluir registros. */
+  const recarregar = useCallback(async (quais, opt = {}) => {
+    const todos = ["clientes", "veiculos", "produtos", "ordens", "perfis", "config"];
     const lista = quais && quais.length ? quais : todos;
     try {
-      const res = await Promise.all(lista.map(k => k === "config" ? api.config() : k === "perfis" ? api.perfis() : k === "ordens" ? api.ordens() : api[k].listar(k === "clientes" ? "nome" : k === "servicos" ? "nome" : "criado_em")));
-      const novo = {}; lista.forEach((k, n) => { if (k === "config") setCfg(cfgCompleta(res[n])); else novo[k] = res[n]; });
-      setDados(d => ({ ...d, ...novo, carregado: true })); ultimaCarga.current = Date.now();
+      const res = await Promise.all(lista.map(k => {
+        if (k === "config") return api.config();
+        if (k === "perfis") return api.perfis();
+        const desde = !opt.completo && SINC.includes(k) && marcas.current[k];
+        if (desde) return k === "ordens" ? api.ordens(desde) : api.alterados(k, desde);
+        return k === "ordens" ? api.ordens() : api[k].listar(k === "clientes" ? "nome" : k === "produtos" ? "descricao" : "criado_em");
+      }));
+      const novo = {}, parcial = {};
+      lista.forEach((k, n) => {
+        if (k === "config") return setCfg(cfgCompleta(res[n]));
+        const parc = !opt.completo && SINC.includes(k) && marcas.current[k];
+        if (SINC.includes(k)) marcar(k, res[n]);
+        (parc ? parcial : novo)[k] = res[n];
+      });
+      setDados(d => {
+        const r = { ...d, ...novo, carregado: true };
+        for (const [k, linhas] of Object.entries(parcial)) {
+          if (!linhas.length) continue;
+          const m = new Map(d[k].map(x => [x.id, x])); for (const l of linhas) m.set(l.id, { ...m.get(l.id), ...l });
+          r[k] = k === "ordens" ? [...m.values()].sort((a, b) => b.numero - a.numero) : [...m.values()];
+        }
+        return r;
+      });
+      ultimaCarga.current = Date.now();
     } catch (e) { setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true }); }
   }, []);
   useEffect(() => { if (membro) recarregar(); }, [membro]);
   useEffect(() => {
     if (!membro) return;
-    const atualiza = () => { if (document.visibilityState === "visible" && Date.now() - ultimaCarga.current > 30000) recarregar(["ordens", "clientes", "veiculos"]); };
+    let ultimaCompleta = Date.now();
+    const atualiza = () => {
+      if (document.visibilityState !== "visible" || Date.now() - ultimaCarga.current < 30000) return;
+      const completo = Date.now() - ultimaCompleta > 15 * 60000; if (completo) ultimaCompleta = Date.now();
+      recarregar(SINC, { completo });
+    };
     document.addEventListener("visibilitychange", atualiza); const t = setInterval(atualiza, 60000);
     return () => { document.removeEventListener("visibilitychange", atualiza); clearInterval(t); };
   }, [membro]);
@@ -69,18 +103,21 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { ajustes: "ajustes", equipe: "ajustes", entrada: "entrada" };
+  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores" };
+  const ctx = { sessao, perfil, cfg, dados, recarregar, avisar, confirmar, ir, sair };
+  if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   else corpo = {
-    painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} />`, entrada: () => html`<${NovaOS} />`,
+    painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} params=${params} key=${qs || ""} />`, entrada: () => html`<${NovaOS} />`,
     os: () => sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} key=${param} />`,
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
-    cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, mais: () => html`<${Mais} />`, catalogo: () => html`<${Catalogo} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
+    cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
+    mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
+    recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
   }[base]?.() || html`<${Painel} />`;
 
-  const ctx = { sessao, perfil, cfg, dados, recarregar, avisar, confirmar, ir, sair };
   return html`<${Ctx.Provider} value=${ctx}>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <nav class="nav-desk" aria-label="Navegação">${NAV.map(([r, t]) => html`<button type="button" key=${r} aria-current=${"/" + base === r || (r === "/cadastros" && (base === "cliente" || base === "veiculo")) ? "page" : undefined} onClick=${() => ir(r)}>${t}</button>`)}</nav>

@@ -92,6 +92,16 @@ export const pode = (perfil, acao) => {
   return (regras[acao] || []).includes(p);
 };
 
+export const TABELAS_PRECO = { vista: "À vista", prazo: "A prazo", atacado: "Atacado" };
+export const SITUACAO_CLIENTE = {
+  liberado: { t: "Liberado", cor: "ok" },
+  restrito: { t: "Restrito", cor: "warn", dica: "Aparece um aviso ao abrir O.S. para este cliente." },
+  bloqueado: { t: "Bloqueado", cor: "bad", dica: "Não é possível abrir O.S. para este cliente." },
+};
+export const COMBUSTIVEIS = ["Flex", "Gasolina", "Etanol", "Diesel", "GNV", "Híbrido", "Elétrico"];
+export const ESTADO_CIVIL = ["Solteiro(a)", "Casado(a)", "União estável", "Divorciado(a)", "Viúvo(a)"];
+export const UNIDADES = ["UN", "PC", "KIT", "JG", "PAR", "L", "ML", "KG", "M", "CX", "SERV"];
+
 export const QUALIDADE = { original: "Original / genuína", paralela: "Paralela (mesma especificação)", usada: "Usada / recondicionada" };
 
 export const TERMO_ENTRADA = "Declaro que entreguei o veículo acima identificado nas condições registradas neste checklist e nas fotos anexas, e autorizo a oficina a realizar o diagnóstico. Nenhum serviço será executado sem a apresentação de orçamento e a minha aprovação expressa. Recomenda-se retirar objetos de valor do veículo; os que permanecerem devem estar declarados neste documento. Os dados pessoais informados são usados apenas para identificação, contato e emissão de documentos referentes a este atendimento (Lei 13.709/2018).";
@@ -103,6 +113,11 @@ export const CONFIG_PADRAO = {
   valorHora: 0, markupPecas: 30, garantiaDias: 90, validadeDias: 10, taxaDiagnostico: 0,
   exigirFotos: true, itensExtras: [],
   formasPagamento: ["PIX", "Dinheiro", "Cartão de débito", "Cartão de crédito", "Boleto"],
+  cidade: "Colatina-ES",
+  situacoesOS: ["Aguardando peças", "Faltando peças", "Aguardando pagamento", "Retorno / garantia"],
+  tiposCliente: ["Particular", "Empresa", "Frota", "Motorista de aplicativo", "Comerciante", "Produtor rural", "Mecânico / revenda"],
+  textoRecibo: "Pelo que firmamos o presente recibo, dando plena e irrevogável quitação do valor aqui recebido.",
+  impressaoVias: 1,
   condicoesPadrao: "Pagamento na retirada do veículo.",
   termoEntrada: TERMO_ENTRADA, termoOrcamento: TERMO_ORCAMENTO, termoGarantia: TERMO_GARANTIA,
 };

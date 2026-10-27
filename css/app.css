@@ -382,3 +382,133 @@ ol.ranking li::before{counter-increment:r;content:counter(r);font-weight:700;col
 .coluna .linha .dir{margin-left:auto}
 .kpi.alerta-kpi{border-color:var(--warn)}
 .kpi.alerta-kpi small{color:var(--warn)}
+
+/* ===== versão 3: cadastros do OS Oficina, produtos, recibos, impressão ===== */
+.modal.largo{max-width:920px}
+.form-ficha{display:flex;flex-direction:column;gap:12px}
+.ficha-topo{grid-template-columns:repeat(auto-fit,minmax(150px,220px))}
+.aba-corpo{display:flex;flex-direction:column;gap:12px;padding-top:2px}
+.sub-titulo{font-size:13px!important;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;border-top:1px solid var(--line);padding-top:10px;margin-top:2px}
+.busca-cli{display:flex;flex-direction:column;gap:6px}
+.busca-cli .lista{border:1px solid var(--line);border-radius:8px;padding:0 10px;max-height:300px;overflow:auto}
+.cod{font-family:var(--f-display);font-weight:700;font-size:14px;color:var(--muted);min-width:38px;font-variant-numeric:tabular-nums;flex:none}
+.tag-cad{color:var(--brand);background:var(--brand-soft)}
+.chk-exec{width:22px;height:22px;flex:none;accent-color:var(--ok)}
+.item-os .botao-limpo{display:flex;flex-direction:column;gap:1px;flex:1;min-width:0}
+.item-os .botao-limpo:disabled{cursor:default}
+.inp-hora{max-width:120px;flex:none!important}
+.pills{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.tabela-precos{display:flex;flex-direction:column;gap:8px}
+.linha-preco{display:grid;grid-template-columns:minmax(70px,1fr) minmax(90px,1fr) minmax(130px,1.4fr);gap:8px;align-items:center}
+.linha-preco>span{font-weight:600}
+.linha-preco.cab span{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.tab-mov{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+.tab-mov td{padding:6px 4px;border-top:1px solid var(--line);vertical-align:top}
+.tab-mov td:nth-child(3),.tab-mov td:nth-child(4){text-align:right;white-space:nowrap}
+.tab-mov small{display:block;color:var(--muted)}
+.hoje{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.hoje>div{background:var(--steel);color:var(--on-steel);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}
+.hoje span{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--steel-muted);font-weight:600}
+.hoje b{font-family:var(--f-display);font-size:28px;line-height:1.05;font-variant-numeric:tabular-nums}
+.hoje small{font-size:12px;color:var(--steel-muted);font-variant-numeric:tabular-nums}
+.hoje .t-alerta b{color:#ffb547}
+@media (max-width:560px){.hoje{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.busca-rapida{position:relative}
+.busca-rapida .inp{min-height:50px;font-size:16px}
+.busca-res{position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:15;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:0 12px;box-shadow:0 10px 30px rgba(0,0,0,.15)}
+.esqueleto{min-height:86px;background:linear-gradient(90deg,var(--surface-2),var(--surface),var(--surface-2));background-size:200% 100%;animation:brilho 1.2s infinite}
+@keyframes brilho{to{background-position:-200% 0}}
+.barra-prog{height:12px;border-radius:6px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.barra-prog i{display:block;height:100%;background:var(--brand);transition:width .3s}
+.passos-imp{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:4px}
+.ranking li .btn-whats{min-height:30px;padding:0 8px}
+.ranking li .btn-whats svg{width:16px;height:16px}
+
+/* impressão: tela de visualização */
+.imprimir{color-scheme:light;background:#d8dde4;min-height:100vh;padding:0 0 40px;color:#111418;font-size:12.5px;line-height:1.35}
+.imp-barra{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:10px max(12px,env(safe-area-inset-left,0px));background:var(--steel)}
+.imp-barra .seg button{background:#fff;color:#111}
+.imp-barra .seg button[aria-pressed="true"]{background:var(--brand);color:#fff;border-color:var(--brand)}
+.imprimir .erros,.imprimir .carregando{margin:16px}
+.folha{background:#fff;color:#111418;max-width:210mm;margin:14px auto 0;padding:10mm;box-shadow:0 2px 12px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:8px;position:relative}
+.folha h4{font-family:var(--f-display);font-size:12px;text-transform:uppercase;letter-spacing:.08em;margin:0 0 3px;color:#0a2f80}
+.imp-cab{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center;border-bottom:2px solid #111418;padding-bottom:8px}
+.imp-logo img{height:46px;width:auto;max-width:150px;display:block;object-fit:contain}
+.imp-emp{display:flex;flex-direction:column;font-size:11.5px;color:#333b47}
+.imp-emp b{font-family:var(--f-display);font-size:17px;color:#111418;letter-spacing:.03em}
+.imp-tit{display:flex;flex-direction:column;align-items:flex-end;text-align:right;font-size:11.5px}
+.imp-tit b{font-family:var(--f-display);font-size:16px;letter-spacing:.05em}
+.imp-tit strong{font-family:var(--f-display);font-size:22px;line-height:1.1}
+.imp-tit em{font-style:normal;font-weight:700;font-size:10.5px;text-transform:uppercase;border:1px solid #111;padding:1px 6px;border-radius:3px;margin-top:3px}
+.imp-bloco{border:1px solid #c5ccd6;border-radius:4px;padding:6px 8px}
+.imp-bloco p{margin:0}
+.imp-grade{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:3px 12px}
+.imp-par{display:flex;flex-direction:column;min-width:0}
+.imp-par.largo{grid-column:span 2}
+.imp-par span{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:#5b6573;font-weight:600}
+.imp-par b{font-weight:600;overflow-wrap:anywhere}
+.imp-nota{font-size:11px;color:#333b47;margin:2px 0 0}
+.imp-tab{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+.imp-tab th{background:#eef1f5;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.04em;padding:4px 6px;border:1px solid #c5ccd6}
+.imp-tab td{padding:3px 6px;border:1px solid #d7dce3;vertical-align:top}
+.imp-tab .num{text-align:right;white-space:nowrap}
+.imp-tab .ref{width:16%;overflow-wrap:anywhere}
+.imp-tab tfoot td{font-weight:700;background:#f6f7f9;text-align:right}
+.imp-resumo{display:grid;grid-template-columns:1.6fr 1fr;gap:12px;align-items:start;border-top:1px solid #c5ccd6;padding-top:6px}
+.imp-resumo .imp-grade{grid-template-columns:repeat(2,minmax(0,1fr))}
+.imp-totais{display:flex;flex-direction:column;gap:2px;font-variant-numeric:tabular-nums}
+.imp-totais div{display:flex;justify-content:space-between;gap:10px}
+.imp-totais .tot{border-top:2px solid #111;margin-top:3px;padding-top:3px;font-size:15px;font-weight:700}
+.imp-termo{font-size:10px;color:#333b47;text-align:justify;margin:0}
+.imp-autoriza p{margin:0}
+.imp-marcar{font-weight:700;margin:6px 0!important;letter-spacing:.04em}
+.imp-assins{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:end;margin-top:14px}
+.imp-assin{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:10.5px;text-align:center}
+.imp-assin img{max-height:46px;max-width:220px}
+.imp-linha-assin{border-bottom:1px solid #111;width:100%;height:30px}
+.imp-data{font-size:11px;padding-bottom:14px}
+.imp-rodape{border-top:1px solid #c5ccd6;padding-top:4px;font-size:10px;color:#5b6573;text-align:center;font-weight:600;text-transform:uppercase;letter-spacing:.05em}
+.recibo .rec-valor{align-self:flex-end;border:2px solid #111;border-radius:4px;padding:6px 14px;display:flex;flex-direction:column;align-items:flex-end}
+.recibo .rec-valor span{font-size:10px;font-weight:700;letter-spacing:.08em}
+.recibo .rec-valor b{font-family:var(--f-display);font-size:26px;line-height:1.1}
+.rec-texto{font-size:13.5px;line-height:1.6;text-align:justify;margin:4px 0}
+.rec-local{text-align:right;font-size:13px;margin:6px 0}
+.rec-assins{grid-template-columns:minmax(0,1fr);max-width:340px;margin-left:auto;width:100%}
+.rec-cancelado{position:absolute;inset:auto 0 40% 0;text-align:center;font-family:var(--f-display);font-size:64px;font-weight:700;color:rgba(189,49,41,.28);transform:rotate(-12deg);pointer-events:none;display:flex;flex-direction:column}
+.rec-cancelado small{font-size:14px;color:rgba(189,49,41,.7)}
+.recibos-folha.v2 .folha.recibo+.folha.recibo{margin-top:0;border-top:1px dashed #8a93a0}
+.cupom{background:#fff;color:#000;width:76mm;margin:14px auto;padding:3mm;font-family:"Courier New",monospace;font-size:11px;line-height:1.3;box-shadow:0 2px 12px rgba(0,0,0,.18)}
+.cupom hr{border:0;border-top:1px dashed #000;margin:4px 0}
+.c-centro{text-align:center;display:block}
+.c-dir{text-align:right}
+.c-lin{display:flex;justify-content:space-between}
+.c-tot{font-weight:700;font-size:13px}
+.c-peq{font-size:9.5px;margin-top:6px}
+.c-assin{margin-top:14px}
+.c-item{margin-bottom:2px}
+@media (max-width:640px){.folha{padding:14px}.imp-grade{grid-template-columns:repeat(2,minmax(0,1fr))}.imp-resumo{grid-template-columns:1fr}.imp-cab{grid-template-columns:1fr auto}.imp-logo{display:none}}
+@media print{
+  html,body{background:#fff!important}
+  body::before{display:none}
+  .so-tela{display:none!important}
+  .imprimir{background:#fff;padding:0;min-height:0}
+  .folha{box-shadow:none;margin:0;max-width:none;padding:0;break-after:page}
+  .folha:last-child{break-after:auto}
+  .recibos-folha.v2 .folha.recibo{break-after:auto;break-inside:avoid;min-height:136mm;padding-bottom:6mm}
+  .recibos-folha.v2 .folha.recibo+.folha.recibo{padding-top:6mm}
+  .imp-tab tr,.imp-bloco,.imp-assins{break-inside:avoid}
+  .cupom{box-shadow:none;margin:0;width:auto;padding:0}
+  .imp-grade{grid-template-columns:repeat(4,minmax(0,1fr))!important}
+  .imp-resumo{grid-template-columns:1.6fr 1fr!important}
+  .imp-cab{grid-template-columns:auto 1fr auto!important}.imp-logo{display:block!important}
+}
+.modal>*{flex-shrink:0}
+@media print{
+  .imprimir{font-size:10.5px}
+  .folha{gap:5px}
+  .imp-bloco{padding:3px 6px}
+  .imp-tab td{padding:2px 5px}.imp-tab th{padding:3px 5px}
+  .imp-assins{margin-top:8px}.imp-linha-assin{height:22px}
+  .imp-termo{font-size:9px}
+  .imp-cab{padding-bottom:5px}.imp-logo img{height:40px}
+}

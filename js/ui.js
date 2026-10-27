@@ -1,5 +1,5 @@
 import { html, createContext, useContext, useState, useEffect, useRef } from "./lib.js";
-import { exPlaca, num2, parseValor } from "./util.js";
+import { exPlaca, num2, parseValor, norm, soDig, fmtTel, fmtDoc, normPlaca } from "./util.js";
 import { api } from "./api.js";
 import { STATUS } from "./regras.js";
 
@@ -102,3 +102,18 @@ export function SecaoChecklist({ s, resp, onMuda, faltando }) {
   </section>`;
 }
 export function Vazio({ children }) { return html`<div class="vazio">${children}</div>`; }
+
+/** Busca de cliente por nome, código, telefone, CPF/CNPJ ou placa */
+export function BuscaCliente({ id = "busca-cliente", valor, onEscolha, disabled }) {
+  const { dados } = useApp();
+  const [q, setQ] = useState("");
+  const c = dados.clientes.find(x => x.id === valor);
+  if (c) return html`<div class="achado"><div class="meio"><strong>${c.nome}</strong><div class="sub">cód. ${c.codigo ?? "—"} · ${c.telefone ? fmtTel(c.telefone) : "sem telefone"}${c.doc ? " · " + fmtDoc(c.doc) : ""}</div></div>
+    ${disabled ? null : html`<button type="button" class="btn btn-sm" onClick=${() => onEscolha("")}>Trocar</button>`}</div>`;
+  const n = norm(q), d = soDig(q), p = normPlaca(q);
+  const res = !n ? [] : dados.clientes.filter(x => norm(x.nome).includes(n) || norm(x.fantasia).includes(n) || (d && String(x.codigo) === d) || (d.length >= 4 && (soDig(x.telefone).includes(d) || soDig(x.doc).includes(d)))
+    || (p.length >= 5 && dados.veiculos.some(v => v.cliente_id === x.id && v.placa.includes(p)))).slice(0, 7);
+  return html`<div class="busca-cli"><input id=${id} class="inp" autocomplete="off" disabled=${disabled} placeholder="Nome, código, telefone, CPF ou placa" value=${q} onInput=${e => setQ(e.target.value)} />
+    ${n ? html`<div class="lista">${res.map(x => html`<button type="button" key=${x.id} class="linha" onClick=${() => { onEscolha(x.id); setQ(""); }}><span class="meio"><strong>${x.nome}</strong><span>cód. ${x.codigo ?? "—"} · ${x.telefone ? fmtTel(x.telefone) : "sem telefone"}</span></span></button>`)}
+      ${!res.length ? html`<span class="dica">Nenhum cliente encontrado.</span>` : null}</div>` : null}</div>`;
+}

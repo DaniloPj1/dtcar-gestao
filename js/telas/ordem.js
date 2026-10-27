@@ -1,9 +1,12 @@
+// Tela da O.S. no modelo do OS Oficina 3.0: Principais informações · Veículo · Produtos e serviços · Observações · Checklist · Histórico
 import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, Vazio } from "../ui.js";
-import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, numOS, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde } from "../util.js";
-import { STATUS, FLUXO, pode, QUALIDADE, secoesCheckin, achados, TERMO_GARANTIA } from "../regras.js";
+import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, BuscaCliente } from "../ui.js";
+import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
+import { STATUS, FLUXO, ABERTOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
+import { FormVeiculo, edVeiculo, SitCliente } from "./cadastros.js";
+import { ReciboModal } from "./recibos.js";
 
 /* ---------------- Mensagens de WhatsApp ---------------- */
 const nomeVeic = o => [o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") + " (" + exPlaca(o.veiculo.placa) + ")";
@@ -11,8 +14,8 @@ const primeiroNome = o => ((o.cliente || {}).nome || "").split(" ")[0];
 function linhasItensMsg(itens) {
   const L = [];
   const grupo = (tipo, titulo) => { const g = itens.filter(i => i.tipo === tipo); if (!g.length) return;
-    L.push("*" + titulo + ":*"); g.forEach(i => L.push("• " + i.descricao + (i.fornecida_cliente ? " (peça do cliente)" : " — " + reais(i.qtd * i.valor_unit)))); L.push(""); };
-  grupo("servico", "Mão de obra"); grupo("peca", "Peças"); grupo("terceiro", "Serviços de terceiros");
+    L.push("*" + titulo + ":*"); g.forEach(i => L.push("• " + i.descricao + (Number(i.qtd) !== 1 && i.tipo === "peca" ? " (" + qtdFmt(i.qtd) + ")" : "") + (i.fornecida_cliente ? " (peça do cliente)" : " — " + reais(totalItem(i))))); L.push(""); };
+  grupo("peca", "Peças"); grupo("servico", "Mão de obra"); grupo("terceiro", "Outros valores");
   return L;
 }
 export const MSG = {
@@ -21,7 +24,7 @@ export const MSG = {
     return [`Olá, ${primeiroNome(o)}! O orçamento do seu ${nomeVeic(o)} está pronto (${numOS(o.numero)}).`, "",
       ...(o.diagnostico ? ["*Diagnóstico:* " + o.diagnostico, ""] : []), ...linhasItensMsg(itens),
       ...(t.desconto ? ["Desconto: " + reais(t.desconto)] : []), `*Total: ${reais(t.total)}*`,
-      `Previsão de entrega: ${o.previsao_entrega ? fmtData(o.previsao_entrega) : "a combinar"}`, `Válido até ${fmtData(o.validade_orcamento)}.`, "",
+      `Previsão de entrega: ${o.previsao_entrega ? fmtData(o.previsao_entrega) + (o.previsao_hora ? " às " + o.previsao_hora : "") : "a combinar"}`, `Válido até ${fmtData(o.validade_orcamento)}.`, "",
       "Para aprovar, responda *APROVADO*. Se preferir aprovar só parte dos itens, é só dizer quais. Envio o orçamento completo em PDF a seguir."].join("\n"); },
   adicionais: (o, cfg, itens) => { const t = totais(itens, 0);
     return [`Olá, ${primeiroNome(o)}! Durante o serviço no seu ${nomeVeic(o)}, na ${numOS(o.numero)}, identificamos itens adicionais:`, "",
@@ -30,27 +33,41 @@ export const MSG = {
   entrega: (o, cfg) => `Obrigado pela confiança, ${primeiroNome(o)}!\n\nOs serviços da ${numOS(o.numero)} no seu ${nomeVeic(o)} têm garantia de ${o.garantia_dias} dias, até ${fmtData(somaDias(o.entregue_em, o.garantia_dias))}. Guarde a ordem de serviço que enviamos.\n\n${cfg.nome}${cfg.telefone ? " · " + cfg.telefone : ""}`,
 };
 
-/* ---------------- Edição de item ---------------- */
-function ItemModal({ item, onSalvar, onExcluir, onFechar }) {
-  const { cfg, dados } = useApp();
-  const [i, setI] = useState(item);
-  const [busca, setBusca] = useState("");
-  const set = p => setI(o => ({ ...o, ...p }));
+/* ---------------- Inclusão / edição de item (busca no cadastro de produtos e serviços) ---------------- */
+const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "outro valor (terceiros)" };
+function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
+  const { cfg, dados, perfil } = useApp();
+  const [i, setI] = useState({ desconto: 0, ...item });
+  const [busca, setBusca] = useState(""), [cadastrar, setCadastrar] = useState(false), [erroEst, setErroEst] = useState("");
+  const set = p => { setI(o => ({ ...o, ...p })); setErroEst(""); };
   const sugestaoVenda = c => arred(c * (1 + (Number(cfg.markupPecas) || 0) / 100));
-  const cat = useMemo(() => { const q = norm(busca); return dados.servicos.filter(s => s.ativo !== false && (!q || norm(s.nome).includes(q) || norm(s.categoria).includes(q))).slice(0, 12); }, [busca, dados.servicos]);
-  const usarServico = s => {
-    if (s.cobranca === "hora") set({ descricao: s.nome, servico_id: s.id, horas: Number(s.horas) || 1, qtd: Number(s.horas) || 1, valor_unit: Number(cfg.valorHora) || 0 });
-    else set({ descricao: s.nome, servico_id: s.id, horas: null, qtd: 1, valor_unit: Number(s.preco) || 0 });
+  const tipoProd = i.tipo === "servico" ? "servico" : "produto";
+  const prod = i.produto_id ? dados.produtos.find(p => p.id === i.produto_id) : null;
+  const cat = useMemo(() => { const q = norm(busca), cod = /^\d+$/.test(busca.trim()) ? +busca.trim() : null; if (!q) return [];
+    return dados.produtos.filter(p => p.ativo !== false && p.tipo === tipoProd && (p.codigo === cod || norm(p.descricao).includes(q) || norm(p.referencia).includes(q) || norm(p.marca).includes(q) || norm(p.obs).includes(q) || p.codigo_barras === busca.trim())).slice(0, 12); }, [busca, dados.produtos, tipoProd]);
+  const usar = p => {
+    if (p.tipo === "servico" && p.cobranca === "hora") set({ descricao: p.descricao, produto_id: p.id, servico_id: null, horas: Number(p.horas) || 1, qtd: Number(p.horas) || 1, valor_unit: Number(cfg.valorHora) || 0, custo_unit: 0 });
+    else if (p.tipo === "servico") set({ descricao: p.descricao, produto_id: p.id, servico_id: null, horas: null, qtd: 1, valor_unit: precoTabela(p, tabela), custo_unit: 0 });
+    else set({ descricao: p.descricao, produto_id: p.id, codigo: p.referencia || String(p.codigo), valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, qualidade: i.qualidade || "original" });
     setBusca("");
   };
   const porHora = i.tipo === "servico" && i.horas !== null && i.horas !== undefined;
-  const erro = !i.descricao.trim() ? "Informe a descrição." : !(Number(i.qtd) > 0) ? "Quantidade deve ser maior que zero." : "";
-  const titulo = (item._novo ? "Adicionar " : "Editar ") + { servico: "serviço", peca: "peça", terceiro: "serviço de terceiro" }[i.tipo];
-  return html`<${Modal} titulo=${titulo} onFechar=${onFechar}>
-    ${i.tipo === "servico" && item._novo ? html`<${Campo} id="cat-busca" rotulo="Buscar no catálogo"><${Texto} id="cat-busca" placeholder="ex.: pastilha, alinhamento" valor=${busca} onMuda=${setBusca} /></${Campo}>
-      ${busca || !i.descricao ? html`<div class="lista lista-cat">${cat.map(s => html`<button type="button" key=${s.id} class="linha" onClick=${() => usarServico(s)}><span class="meio"><strong>${s.nome}</strong><span>${s.categoria}</span></span>
-        <span class="sub">${s.cobranca === "hora" ? (Number(s.horas) || "?") + " h × " + reais(cfg.valorHora) : (Number(s.preco) ? reais(s.preco) : "sem preço")}</span></button>`)}
-        ${!cat.length ? html`<span class="dica">Nada encontrado. Preencha abaixo como serviço avulso.</span>` : null}</div>` : null}` : null}
+  const bruto = (Number(i.qtd) || 0) * (Number(i.valor_unit) || 0);
+  const erro = !i.descricao.trim() ? "Informe a descrição." : !(Number(i.qtd) > 0) ? "Quantidade deve ser maior que zero." : Number(i.desconto) > bruto + 0.001 ? "O desconto não pode ser maior que o valor do item." : "";
+  const semEstoque = prod && prod.tipo === "produto" && prod.controla_estoque && Number(prod.estoque_atual) < Number(i.qtd);
+  const salvar = () => {
+    if (semEstoque && !prod.vender_sem_estoque) return setErroEst(`Estoque insuficiente: há ${qtdFmt(prod.estoque_atual)} ${prod.unidade}. Este produto está marcado para não ser vendido sem estoque.`);
+    onSalvar({ ...i, _cadastrar: cadastrar && !i.produto_id && i.tipo !== "terceiro" });
+  };
+  const qtdInp = html`<${Campo} id="it-qtd" rotulo="Quantidade"><input id="it-qtd" class="inp" inputmode="decimal" value=${String(i.qtd).replace(".", ",")} onInput=${e => set({ qtd: Number(e.target.value.replace(",", ".")) || 0 })} /></${Campo}>`;
+  return html`<${Modal} titulo=${(item._novo ? "Incluir " : "Alterar ") + NOME_TIPO[i.tipo]} onFechar=${onFechar}>
+    ${i.tipo !== "terceiro" ? html`<${Campo} id="cat-busca" rotulo=${"Buscar no cadastro de " + (i.tipo === "servico" ? "serviços" : "produtos") + " (tabela " + TABELAS_PRECO[tabela].toLowerCase() + ")"}>
+      <${Texto} id="cat-busca" placeholder=${i.tipo === "servico" ? "ex.: alinhamento, pastilha" : "descrição, código, referência ou aplicação"} valor=${busca} onMuda=${setBusca} /></${Campo}>
+      ${busca ? html`<div class="lista lista-cat">${cat.map(p => html`<button type="button" key=${p.id} class="linha" onClick=${() => usar(p)}><span class="cod">${p.codigo}</span><span class="meio"><strong>${p.descricao}</strong>
+          <span>${[p.referencia, p.marca, p.tipo === "produto" && p.controla_estoque ? "estoque " + qtdFmt(p.estoque_atual) + " " + p.unidade : null].filter(Boolean).join(" · ")}</span></span>
+        <span class="sub">${p.tipo === "servico" && p.cobranca === "hora" ? qtdFmt(p.horas) + " h" : precoTabela(p, tabela) ? reais(precoTabela(p, tabela)) : "sem preço"}</span></button>`)}
+        ${!cat.length ? html`<span class="dica">Nada encontrado. Preencha abaixo como item avulso.</span>` : null}</div>` : null}
+      ${prod ? html`<div class="info">Do cadastro: cód. ${prod.codigo}${prod.tipo === "produto" && prod.controla_estoque ? " · estoque " + qtdFmt(prod.estoque_atual) + " " + prod.unidade : ""} <button type="button" class="btn-link" onClick=${() => set({ produto_id: null })}>desvincular</button></div>` : null}` : null}
     <${Campo} id="it-desc" rotulo="Descrição" obrig><${Texto} id="it-desc" valor=${i.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
     ${i.tipo === "servico" ? html`
       <${Seg} rotulo="Forma de cobrança" opcoes=${[["Preço fechado", "info"], ["Por hora", "info"]]} valor=${porHora ? "Por hora" : "Preço fechado"}
@@ -58,15 +75,10 @@ function ItemModal({ item, onSalvar, onExcluir, onFechar }) {
       ${porHora ? html`<div class="grade">
           <${Campo} id="it-horas" rotulo="Tempo (horas)"><input id="it-horas" class="inp" inputmode="decimal" value=${String(i.horas ?? "").replace(".", ",")} onInput=${e => { const h = Number(e.target.value.replace(",", ".")) || 0; set({ horas: h, qtd: h }); }} /></${Campo}>
           <${Campo} id="it-vh" rotulo="Valor da hora"><${Dinheiro} id="it-vh" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}></div>`
-        : html`<div class="grade">
-          <${Campo} id="it-qtd" rotulo="Quantidade"><input id="it-qtd" class="inp" inputmode="decimal" value=${String(i.qtd).replace(".", ",")} onInput=${e => set({ qtd: Number(e.target.value.replace(",", ".")) || 0 })} /></${Campo}>
-          <${Campo} id="it-val" rotulo="Valor unitário"><${Dinheiro} id="it-val" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}></div>`}` : null}
+        : html`<div class="grade">${qtdInp}<${Campo} id="it-val" rotulo="Valor unitário"><${Dinheiro} id="it-val" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}></div>`}` : null}
     ${i.tipo === "peca" ? html`
-      <div class="grade">
-        <${Campo} id="it-cod" rotulo="Código / referência"><${Texto} id="it-cod" valor=${i.codigo} onMuda=${v => set({ codigo: v })} /></${Campo}>
-        <${Campo} id="it-qtd" rotulo="Quantidade"><input id="it-qtd" class="inp" inputmode="decimal" value=${String(i.qtd).replace(".", ",")} onInput=${e => set({ qtd: Number(e.target.value.replace(",", ".")) || 0 })} /></${Campo}>
-      </div>
-      <label class="linha-check"><input type="checkbox" id="it-cli" checked=${i.fornecida_cliente} onChange=${e => set({ fornecida_cliente: e.target.checked, valor_unit: e.target.checked ? 0 : i.valor_unit, custo_unit: e.target.checked ? 0 : i.custo_unit })} />
+      <div class="grade"><${Campo} id="it-cod" rotulo="Referência / código"><${Texto} id="it-cod" valor=${i.codigo} onMuda=${v => set({ codigo: v })} /></${Campo}>${qtdInp}</div>
+      <label class="linha-check"><input type="checkbox" id="it-cli" checked=${i.fornecida_cliente} onChange=${e => set({ fornecida_cliente: e.target.checked, valor_unit: e.target.checked ? 0 : i.valor_unit, custo_unit: e.target.checked ? 0 : i.custo_unit, desconto: 0 })} />
         <span>Peça fornecida pelo cliente (a oficina garante só a mão de obra de instalação)</span></label>
       ${!i.fornecida_cliente ? html`
         <div class="campo"><label>Procedência</label><${Seg} rotulo="Procedência" opcoes=${Object.entries(QUALIDADE).map(([k, t]) => [t, k === "usada" ? "warn" : "info"])} valor=${QUALIDADE[i.qualidade]}
@@ -74,32 +86,40 @@ function ItemModal({ item, onSalvar, onExcluir, onFechar }) {
           ${i.qualidade === "usada" ? html`<span class="dica erro">Peça usada exige autorização expressa do cliente (CDC, art. 21). Ela aparece identificada no orçamento.</span>` : null}</div>
         <div class="grade">
           <${Campo} id="it-custo" rotulo="Custo unitário (interno)"><${Dinheiro} id="it-custo" valor=${i.custo_unit} onMuda=${v => set({ custo_unit: v, valor_unit: !i.valor_unit || i.valor_unit === sugestaoVenda(i.custo_unit) ? sugestaoVenda(v) : i.valor_unit })} /></${Campo}>
-          <${Campo} id="it-venda" rotulo="Preço de venda unitário" dica=${"Sugestão com margem de " + (cfg.markupPecas || 0) + "%: " + reais(sugestaoVenda(i.custo_unit))}><${Dinheiro} id="it-venda" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}>
+          <${Campo} id="it-venda" rotulo="Preço de venda unitário" dica=${i.produto_id ? "" : "Sugestão com margem de " + (cfg.markupPecas || 0) + "%: " + reais(sugestaoVenda(i.custo_unit))}><${Dinheiro} id="it-venda" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}>
         </div>` : null}` : null}
     ${i.tipo === "terceiro" ? html`
       <div class="grade">
-        <${Campo} id="it-forn" rotulo="Fornecedor"><${Texto} id="it-forn" placeholder="ex.: retífica, torno" valor=${i.fornecedor} onMuda=${v => set({ fornecedor: v })} /></${Campo}>
-        <${Campo} id="it-qtd" rotulo="Quantidade"><input id="it-qtd" class="inp" inputmode="decimal" value=${String(i.qtd).replace(".", ",")} onInput=${e => set({ qtd: Number(e.target.value.replace(",", ".")) || 0 })} /></${Campo}>
+        <${Campo} id="it-forn" rotulo="Fornecedor"><${Texto} id="it-forn" placeholder="ex.: retífica, torno, guincho" valor=${i.fornecedor} onMuda=${v => set({ fornecedor: v })} /></${Campo}>
+        ${qtdInp}
         <${Campo} id="it-custo" rotulo="Custo (interno)"><${Dinheiro} id="it-custo" valor=${i.custo_unit} onMuda=${v => set({ custo_unit: v })} /></${Campo}>
         <${Campo} id="it-venda" rotulo="Valor cobrado"><${Dinheiro} id="it-venda" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}>
       </div>` : null}
-    <div class="total-item"><span>Total do item</span><b>${reais((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0))}</b></div>
-    ${erro ? html`<span class="dica erro">${erro}</span>` : null}
+    ${!i.fornecida_cliente ? html`<div class="grade">
+      <${Campo} id="it-descp" rotulo="Desconto (%)"><input id="it-descp" class="inp" inputmode="decimal" value=${bruto && Number(i.desconto) ? String(arred(Number(i.desconto) / bruto * 100)).replace(".", ",") : ""} onInput=${e => set({ desconto: arred(bruto * parseValor(e.target.value) / 100) })} /></${Campo}>
+      <${Campo} id="it-desc-v" rotulo="Desconto (R$)"><${Dinheiro} id="it-desc-v" valor=${i.desconto} onMuda=${v => set({ desconto: v })} /></${Campo}></div>` : null}
+    ${semEstoque ? html`<div class=${prod.vender_sem_estoque ? "aviso" : "erros"}>Estoque atual: ${qtdFmt(prod.estoque_atual)} ${prod.unidade}. ${prod.vender_sem_estoque ? "A baixa na entrega deixará o saldo negativo." : "Este produto não pode ser vendido sem estoque."}</div>` : null}
+    ${item._novo && !i.produto_id && i.tipo !== "terceiro" && pode(perfil, "cadastrar") ? html`<label class="linha-check"><input type="checkbox" checked=${cadastrar} onChange=${e => setCadastrar(e.target.checked)} /><span>Salvar também no cadastro de ${i.tipo === "servico" ? "serviços" : "produtos"}</span></label>` : null}
+    <div class="total-item"><span>Total do item</span><b>${reais(totalItem(i))}</b></div>
+    ${erro || erroEst ? html`<span class="dica erro">${erro || erroEst}</span>` : null}
     <div class="acoes">${!item._novo ? html`<button type="button" class="btn btn-perigo" onClick=${onExcluir}>Remover</button>` : null}<span class="espaco"></span>
-      <button type="button" class="btn" onClick=${onFechar}>Cancelar</button><button type="button" class="btn btn-pri" disabled=${!!erro} onClick=${() => onSalvar(i)}>Salvar item</button></div>
+      <button type="button" class="btn" onClick=${onFechar}>Cancelar</button><button type="button" class="btn btn-pri" disabled=${!!erro} onClick=${salvar}>Salvar item</button></div>
   </${Modal}>`;
 }
 
-function ItemLinha({ i, verValores, onClick, mostrarAprov }) {
+function ItemLinha({ i, verValores, onClick, mostrarAprov, exec }) {
   const sub = [];
+  if (i.codigo && i.tipo !== "servico") sub.push(i.codigo);
   if (i.tipo === "servico") sub.push(i.horas ? qtdFmt(i.horas) + " h" + (verValores ? " × " + reais(i.valor_unit) : "") : qtdFmt(i.qtd) + (verValores ? " × " + reais(i.valor_unit) : " un"));
-  if (i.tipo === "peca") { if (i.codigo) sub.push(i.codigo); sub.push(i.fornecida_cliente ? "peça do cliente" : (QUALIDADE[i.qualidade] || "procedência não informada")); sub.push(qtdFmt(i.qtd) + " un"); }
-  if (i.tipo === "terceiro") { if (i.fornecedor) sub.push(i.fornecedor); }
-  if (verValores && (i.tipo !== "servico") && Number(i.custo_unit) > 0) sub.push("custo " + reais(i.custo_unit * i.qtd));
-  const ap = i.aprovado === true ? html`<span class="pill p-ok">Aprovado</span>` : i.aprovado === false ? html`<span class="pill p-bad">Não aprovado</span>` : mostrarAprov ? html`<span class="pill p-warn">Aguardando</span>` : null;
-  return html`<button type="button" class=${"linha item-os" + (i.aprovado === false ? " recusado" : "")} onClick=${onClick} disabled=${!onClick}>
-    <span class="meio"><strong>${i.descricao}${i.adicional ? html` <em class="tag">adicional</em>` : null}</strong><span>${sub.join(" · ")}</span></span>
-    <span class="dir">${verValores ? html`<b>${i.fornecida_cliente ? "—" : reais((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0))}</b>` : null}${ap}</span></button>`;
+  if (i.tipo === "peca") { sub.push(qtdFmt(i.qtd) + " un" + (verValores && !i.fornecida_cliente ? " × " + reais(i.valor_unit) : "")); sub.push(i.fornecida_cliente ? "peça do cliente" : (QUALIDADE[i.qualidade] || "procedência não informada")); }
+  if (i.tipo === "terceiro") { if (i.fornecedor) sub.push(i.fornecedor); if (Number(i.qtd) !== 1) sub.push(qtdFmt(i.qtd) + " un"); }
+  if (verValores && Number(i.desconto) > 0) sub.push("desconto " + reais(i.desconto));
+  if (verValores && i.tipo !== "servico" && Number(i.custo_unit) > 0) sub.push("custo " + reais(i.custo_unit * i.qtd));
+  const ap = i.aprovado === true ? (exec ? null : html`<span class="pill p-ok">Aprovado</span>`) : i.aprovado === false ? html`<span class="pill p-bad">Não aprovado</span>` : mostrarAprov ? html`<span class="pill p-warn">Aguardando</span>` : null;
+  return html`<div class=${"linha item-os" + (i.aprovado === false ? " recusado" : "")}>
+    ${exec ? html`<input type="checkbox" class="chk-exec" aria-label=${"Executado: " + i.descricao} checked=${i.executado} disabled=${exec.disabled} onChange=${e => exec.onMuda(e.target.checked)} />` : null}
+    <button type="button" class="meio botao-limpo" onClick=${onClick} disabled=${!onClick}><strong>${i.descricao}${i.adicional ? html` <em class="tag">adicional</em>` : null}${i.produto_id ? html` <em class="tag tag-cad">cadastro</em>` : null}</strong><span>${sub.join(" · ")}</span></button>
+    <span class="dir">${verValores ? html`<b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b>` : null}${ap}</span></div>`;
 }
 
 /* ---------------- Aprovação ---------------- */
@@ -114,7 +134,7 @@ function AprovacaoModal({ o, pendentes, onFechar, onConfirmar }) {
   return html`<${Modal} titulo="Registrar aprovação do cliente" onFechar=${onFechar}>
     <span class="dica">Desmarque os itens que o cliente não aprovou.</span>
     <div class="lista">${pendentes.map(i => html`<label class="linha linha-check" key=${i.id}><input type="checkbox" checked=${!!sel[i.id]} onChange=${e => setSel(s => ({ ...s, [i.id]: e.target.checked }))} />
-      <span class="meio"><strong>${i.descricao}</strong><span>${{ servico: "Mão de obra", peca: "Peça", terceiro: "Terceiro" }[i.tipo]}</span></span><b>${i.fornecida_cliente ? "—" : reais(i.qtd * i.valor_unit)}</b></label>`)}</div>
+      <span class="meio"><strong>${i.descricao}</strong><span>${{ servico: "Mão de obra", peca: "Peça", terceiro: "Outros" }[i.tipo]}</span></span><b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b></label>`)}</div>
     <div class="total-item"><span>Aprovado agora</span><b>${reais(t.total)}</b></div>
     <${Campo} id="ap-por" rotulo="Aprovado por" obrig><${Texto} id="ap-por" valor=${por} onMuda=${setPor} /></${Campo}>
     <div class="campo"><label>Forma de aprovação</label><${Seg} rotulo="Forma" opcoes=${["Presencial (assinatura)", "WhatsApp", "Telefone", "E-mail"].map(x => [x, "info"])} valor=${forma} onEscolha=${setForma} /></div>
@@ -127,10 +147,11 @@ function AprovacaoModal({ o, pendentes, onFechar, onConfirmar }) {
 }
 
 /* ---------------- Entrega ---------------- */
-function EntregaModal({ o, cfg, onFechar, onConfirmar }) {
+function EntregaModal({ o, cfg, saldo, onFechar, onConfirmar }) {
   const [km, setKm] = useState(String(o.km_entrada || ""));
   const [forma, setForma] = useState(o.forma_pagamento || "");
   const [garantia, setGarantia] = useState(String(o.garantia_dias || cfg.garantiaDias || 90));
+  const [recibo, setRecibo] = useState(saldo > 0);
   const [erro, setErro] = useState("");
   const assin = useRef(null);
   const recusado = o.status === "recusado";
@@ -138,16 +159,31 @@ function EntregaModal({ o, cfg, onFechar, onConfirmar }) {
     const k = parseInt(soDig(km), 10);
     if (!(k >= (o.km_entrada || 0))) return setErro("O KM de saída não pode ser menor que o de entrada (" + fmtKm(o.km_entrada) + ").");
     if (o.total > 0 && !forma) return setErro("Informe a forma de pagamento.");
-    onConfirmar({ km: k, forma, garantia: parseInt(garantia, 10) || 0, assin: assin.current });
+    onConfirmar({ km: k, forma, garantia: parseInt(garantia, 10) || 0, assin: assin.current, recibo: recibo && saldo > 0 });
   };
   return html`<${Modal} titulo=${recusado ? "Registrar retirada" : "Registrar entrega"} onFechar=${onFechar}>
-    <div class="total-item"><span>Valor a receber</span><b>${reais(o.total)}</b></div>
+    <div class="total-item"><span>Valor da O.S.</span><b>${reais(o.total)}</b></div>
+    ${saldo < o.total ? html`<div class="total-item"><span>Saldo a receber</span><b>${reais(saldo)}</b></div>` : null}
     <${Campo} id="ent-km" rotulo="KM de saída" obrig><input id="ent-km" class="inp" inputmode="numeric" value=${km ? Number(soDig(km)).toLocaleString("pt-BR") : ""} onInput=${e => { setKm(soDig(e.target.value).slice(0, 7)); setErro(""); }} /></${Campo}>
     ${o.total > 0 ? html`<div class="campo"><label>Forma de pagamento <i>*</i></label><${Seg} rotulo="Pagamento" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>` : null}
+    ${saldo > 0 ? html`<label class="linha-check"><input type="checkbox" id="ent-recibo" checked=${recibo} onChange=${e => setRecibo(e.target.checked)} /><span>Pagamento recebido agora: emitir recibo de ${reais(saldo)}</span></label>` : null}
     ${!recusado ? html`<${Campo} id="ent-gar" rotulo="Garantia (dias)" dica="Mínimo legal para serviços: 90 dias (CDC, art. 26, II)."><input id="ent-gar" class="inp" inputmode="numeric" value=${garantia} onInput=${e => setGarantia(soDig(e.target.value))} /></${Campo}>` : null}
     <div class="campo"><label>Assinatura do cliente na retirada</label><${PadAssinatura} apiRef=${assin} altura=${150} /></div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><button type="button" class="btn btn-pri" onClick=${confirmar}>Confirmar ${recusado ? "retirada" : "entrega"}</button></div>
+  </${Modal}>`;
+}
+
+/* ---------------- Impressão (opções) ---------------- */
+function ImprimirModal({ o, verValores, onFechar }) {
+  const { cfg, ir } = useApp();
+  const [vias, setVias] = useState(String(cfg.impressaoVias || 1)), [valores, setValores] = useState(verValores), [formato, setFormato] = useState("a4");
+  return html`<${Modal} titulo=${"Imprimir " + numOS(o.numero)} onFechar=${onFechar}>
+    <div class="campo"><label>Formato</label><${Seg} rotulo="Formato" opcoes=${[["Folha A4", "info"], ["Cupom 80 mm", "info"]]} valor=${formato === "a4" ? "Folha A4" : "Cupom 80 mm"} onEscolha=${v => setFormato(v.startsWith("Folha") ? "a4" : "cupom")} /></div>
+    ${formato === "a4" ? html`<div class="campo"><label>Vias</label><${Seg} rotulo="Vias" opcoes=${[["1 via", "info"], ["2 vias", "info"]]} valor=${vias + " via" + (vias === "2" ? "s" : "")} onEscolha=${v => setVias(v[0])} /></div>` : null}
+    ${verValores ? html`<label class="linha-check"><input type="checkbox" checked=${valores} onChange=${e => setValores(e.target.checked)} /><span>Mostrar valores na impressão (desmarque para a via do mecânico)</span></label>` : null}
+    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button>
+      <button type="button" class="btn btn-pri" onClick=${() => ir(`/imprimir/os/${o.id}?vias=${formato === "a4" ? vias : 1}&valores=${valores ? 1 : 0}&formato=${formato}`)}>Visualizar e imprimir</button></div>
   </${Modal}>`;
 }
 
@@ -156,54 +192,76 @@ export function Ordem({ id }) {
   const { cfg, perfil, dados, avisar, confirmar, ir, recarregar } = useApp();
   const [o, setO] = useState(null);
   const [erroCarga, setErroCarga] = useState("");
-  const [aba, setAba] = useState("");
+  const [aba, setAba] = useState("principal");
   const [itens, setItens] = useState([]);
   const [removidos, setRemovidos] = useState([]);
   const [campos, setCampos] = useState({});
   const [sujo, setSujo] = useState(false);
   const [modal, setModal] = useState(null);
   const [ocupado, setOcupado] = useState("");
+  const [recibos, setRecibos] = useState([]);
   const verValores = pode(perfil, "verValores");
 
+  const carregarRecibos = () => verValores ? api.recibos.listar({ ordemId: id }).then(setRecibos).catch(() => {}) : null;
   const carregar = async () => {
     try { const r = await api.ordem(id); setO(r); setItens(r.itens); setRemovidos([]); setSujo(false);
-      setCampos({ diagnostico: r.diagnostico, previsao_entrega: r.previsao_entrega || "", condicoes_pagamento: r.condicoes_pagamento, desconto: Number(r.desconto) || 0, obs_execucao: r.obs_execucao, mecanico_id: r.mecanico_id || "" });
-      setAba(a => a || (["execucao", "pronto"].includes(r.status) && !verValores ? "execucao" : ["execucao", "pronto"].includes(r.status) ? "execucao" : "orcamento"));
+      setCampos({ diagnostico: r.diagnostico, reclamacao: r.reclamacao, previsao_entrega: r.previsao_entrega || "", previsao_hora: r.previsao_hora || "", condicoes_pagamento: r.condicoes_pagamento, desconto: Number(r.desconto) || 0,
+        obs_execucao: r.obs_execucao, obs_internas: r.obs_internas || "", box: r.box || "", contato: r.contato || "", situacao: r.situacao || "", tabela_preco: r.tabela_preco || "vista" });
     } catch (e) { setErroCarga(e.message); }
   };
-  useEffect(() => { setO(null); setAba(""); carregar(); }, [id]);
+  useEffect(() => { setO(null); carregar(); carregarRecibos(); }, [id]);
   if (erroCarga) return html`<div class="pagina"><div class="erros">Não foi possível abrir a O.S.: ${erroCarga}</div><button class="btn" onClick=${() => ir("/ordens")}>Voltar</button></div>`;
   if (!o) return html`<div class="pagina"><div class="carregando">Abrindo O.S.…</div></div>`;
 
   const st = o.status;
-  const editavelOrc = pode(perfil, "orcar") && st === "diagnostico";
-  const podeAdicional = pode(perfil, "orcar") && (st === "execucao" || st === "aguardando");
+  const aberta = ABERTOS.includes(st);
+  const gestor = pode(perfil, "orcar");
+  const editavelOrc = gestor && st === "diagnostico";
+  const podeAdicional = gestor && (st === "execucao" || st === "aguardando");
+  const editaInfo = gestor && aberta;
   const pendentes = itens.filter(i => i.aprovado === null || i.aprovado === undefined);
   const aprovadoAlgum = itens.some(i => i.aprovado === true);
   const tOrc = totais(itens, campos.desconto, false), tAprov = totais(itens, campos.desconto, true);
-  const tAtual = ["execucao", "pronto", "entregue", "recusado"].includes(st) ? tAprov : tOrc;
+  const usaAprov = ["execucao", "pronto", "entregue", "recusado"].includes(st);
+  const tAtual = usaAprov ? tAprov : tOrc;
+  const recebido = recibos.filter(r => !r.cancelado).reduce((s, r) => s + Number(r.valor), 0);
+  const saldo = arred(Math.max(0, tAtual.total - recebido));
   const setCampo = p => { setCampos(c => ({ ...c, ...p })); setSujo(true); };
   const evento = (tipo, texto) => api.evento(o.id, tipo, texto, perfil.nome).catch(() => {});
+  const cliCad = dados.clientes.find(c => c.id === o.cliente_id);
 
   const salvar = async (extra = {}, silencioso) => {
     const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(extra.status || st);
     const t = totais(itens, campos.desconto, aprov);
-    await api.salvarItens(o.id, itens.map(({ _novo, ...i }, n) => ({ ...i, posicao: n })), removidos);
-    await api.atualizarOrdem(o.id, { diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento,
-      desconto: campos.desconto, obs_execucao: campos.obs_execucao, total: t.total, custo: t.custo, ...extra });
+    await api.salvarItens(o.id, itens.map(({ _novo, _cadastrar, ...i }, n) => ({ ...i, posicao: n })), removidos);
+    await api.atualizarOrdem(o.id, { diagnostico: campos.diagnostico, reclamacao: campos.reclamacao, previsao_entrega: campos.previsao_entrega || null, previsao_hora: campos.previsao_hora || "",
+      condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto, obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
+      situacao: campos.situacao, tabela_preco: campos.tabela_preco, total: t.total, custo: t.custo, ...extra });
     if (!silencioso) avisar("O.S. salva.");
     await carregar(); recarregar(["ordens"]);
   };
   const acao = async (rotulo, fn) => { setOcupado(rotulo); try { await fn(); } catch (e) { avisar(e.message, true); } finally { setOcupado(""); } };
 
-  const novoItem = tipo => setModal({ tipo: "item", item: { id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: tipo === "servico" ? 0 : 0, custo_unit: 0, horas: null, servico_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: null, executado: false } });
-  const salvarItem = it => { setItens(l => l.some(x => x.id === it.id) ? l.map(x => x.id === it.id ? { ...it, _novo: false } : x) : l.concat([{ ...it, _novo: false }])); setSujo(true); setModal(null); };
+  const novoItem = tipo => setModal({ tipo: "item", item: { id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: null, executado: false } });
+  const salvarItem = async it => {
+    let x = { ...it };
+    if (x._cadastrar) {
+      try {
+        const p = await api.produtos.salvar({ tipo: x.tipo === "servico" ? "servico" : "produto", descricao: x.descricao.trim(), referencia: x.codigo || "", unidade: x.tipo === "servico" ? "SERV" : "UN", custo: x.custo_unit || 0,
+          preco_vista: x.valor_unit || 0, preco_prazo: x.valor_unit || 0, preco_atacado: x.valor_unit || 0, margem_vista: x.custo_unit > 0 ? arred((x.valor_unit / x.custo_unit - 1) * 100) : 0,
+          cobranca: x.horas ? "hora" : "fixo", horas: x.horas || 0, controla_estoque: x.tipo === "peca", avisar_estoque_baixo: false, vender_sem_estoque: true });
+        x.produto_id = p.id; avisar("Incluído no cadastro com o código " + p.codigo + "."); recarregar(["produtos"]);
+      } catch (e) { avisar("O item entrou na O.S., mas não foi possível cadastrá-lo: " + e.message, true); }
+    }
+    delete x._cadastrar;
+    setItens(l => l.some(y => y.id === x.id) ? l.map(y => y.id === x.id ? { ...x, _novo: false } : y) : l.concat([{ ...x, _novo: false }])); setSujo(true); setModal(null);
+  };
   const excluirItem = it => { setItens(l => l.filter(x => x.id !== it.id)); if (!it._novo) setRemovidos(r => r.concat([it.id])); setSujo(true); setModal(null); };
 
   const enviarOrcamento = () => acao("enviar", async () => {
     const erros = [];
     if (!itens.length) erros.push("inclua pelo menos um item");
-    if (!(campos.diagnostico || "").trim()) erros.push("preencha o diagnóstico técnico");
+    if (!(campos.diagnostico || "").trim()) erros.push("preencha o defeito constatado / diagnóstico");
     const semValor = itens.filter(i => !i.fornecida_cliente && !(Number(i.valor_unit) > 0));
     if (semValor.length) erros.push("informe o valor de: " + semValor.map(i => i.descricao).join(", "));
     if (erros.length) throw new Error("Para enviar o orçamento, " + erros.join("; ") + ".");
@@ -236,7 +294,7 @@ export function Ordem({ id }) {
     if (!await confirmar({ titulo: "Orçamento recusado", texto: taxa ? `O orçamento será marcado como recusado e a taxa de diagnóstico de ${reais(taxa)} será lançada para a retirada.` : "O orçamento será marcado como recusado. O veículo fica aguardando retirada.", botao: "Marcar como recusado", perigo: true })) return;
     acao("recusar", async () => {
       let novos = itens.map(i => ({ ...i, aprovado: i.aprovado === true ? true : false }));
-      if (taxa) novos = novos.concat([{ id: uuid(), tipo: "servico", descricao: "Taxa de diagnóstico", codigo: "", fornecedor: "", qtd: 1, valor_unit: taxa, custo_unit: 0, horas: null, servico_id: null, fornecida_cliente: false, qualidade: "", adicional: true, aprovado: true, executado: true }]);
+      if (taxa) novos = novos.concat([{ id: uuid(), tipo: "servico", descricao: "Taxa de diagnóstico", codigo: "", fornecedor: "", qtd: 1, valor_unit: taxa, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: "", adicional: true, aprovado: true, executado: true }]);
       const t = totais(novos, 0, true);
       await api.salvarItens(o.id, novos, removidos);
       await api.atualizarOrdem(o.id, { status: "recusado", total: t.total, custo: t.custo, desconto: 0 });
@@ -250,8 +308,15 @@ export function Ordem({ id }) {
   });
   const salvarMecanico = mid => acao("mec", async () => {
     const m = dados.perfis.find(p => p.id === mid);
-    await api.atualizarOrdem(o.id, { mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" }); await evento("mecanico", "Mecânico responsável: " + (m ? m.nome : "nenhum") + ".");
+    await api.atualizarOrdem(o.id, { mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" }); await evento("mecanico", "Técnico responsável: " + (m ? m.nome : "nenhum") + ".");
     setO(x => ({ ...x, mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" })); recarregar(["ordens"]);
+  });
+  const trocarCliente = cid => acao("cliente", async () => {
+    const c = dados.clientes.find(x => x.id === cid); if (!c) return;
+    if (c.situacao === "bloqueado") throw new Error("Cliente bloqueado: " + (c.restricao || "verifique o cadastro") + ".");
+    const cliente = { nome: c.nome, telefone: c.telefone || "", doc: c.doc || "", endereco: endCompleto(c) };
+    await api.atualizarOrdem(o.id, { cliente_id: c.id, cliente }); await evento("cliente", "Cliente da O.S. alterado para " + c.nome + ".");
+    setO(x => ({ ...x, cliente_id: c.id, cliente })); setModal(null); recarregar(["ordens"]);
   });
   const marcarPronto = async () => {
     const falta = itens.filter(i => i.aprovado === true && !i.executado);
@@ -259,24 +324,30 @@ export function Ordem({ id }) {
     if (falta.length && !await confirmar({ titulo: "Itens não marcados", texto: falta.length + " item(ns) aprovado(s) não foram marcados como executados: " + falta.map(i => i.descricao).join(", ") + ". Concluir mesmo assim?", botao: "Concluir" })) return;
     acao("pronto", async () => { await salvar({ status: "pronto" }, true); await evento("pronto", "Serviço concluído. Veículo pronto para retirada."); setModal({ tipo: "enviar", qual: "pronto" }); });
   };
-  const confirmarEntrega = ({ km, forma, garantia, assin }) => acao("entregar", async () => {
+  const confirmarEntrega = ({ km, forma, garantia, assin, recibo }) => acao("entregar", async () => {
     let assinatura = "";
     if (assin && !assin.vazio()) { const b = await assin.blob(); assinatura = await api.enviarArquivo("assinaturas/" + o.id + "-entrega.png", b, "image/png"); }
     const t = totais(itens, campos.desconto, true);
-    await api.atualizarOrdem(o.id, { status: st === "recusado" ? "recusado" : "entregue", km_saida: km, entregue_em: new Date().toISOString(), forma_pagamento: forma, garantia_dias: garantia, assinatura_entrega: assinatura, total: t.total, custo: t.custo });
+    await api.atualizarOrdem(o.id, { status: st === "recusado" ? "recusado" : "entregue", km_saida: km, entregue_em: new Date().toISOString(), forma_pagamento: forma, garantia_dias: garantia, assinatura_entrega: assinatura, total: t.total, custo: t.custo, situacao: "" });
     const v = dados.veiculos.find(x => x.id === o.veiculo_id);
     if (v && km > (v.km_atual || 0)) await api.veiculos.salvar({ id: v.id, km_atual: km });
     await evento("entrega", (st === "recusado" ? "Veículo retirado sem execução, com " : "Veículo entregue com ") + fmtKm(km) + (forma ? ". Pagamento: " + forma : "") + ".");
-    setModal(null); await carregar(); recarregar(["ordens", "veiculos"]);
-    setModal({ tipo: "enviar", qual: st === "recusado" ? null : "entrega" });
+    setModal(null); await carregar(); recarregar(["ordens", "veiculos", "produtos"]);
+    if (recibo) setModal({ tipo: "recibo", forma });
+    else setModal({ tipo: "enviar", qual: st === "recusado" ? null : "entrega" });
   });
   const cancelar = async () => {
     if (!await confirmar({ titulo: "Cancelar " + numOS(o.numero), texto: "A O.S. fica registrada como cancelada no histórico.", botao: "Cancelar O.S.", perigo: true })) return;
     acao("cancelar", async () => { await api.atualizarOrdem(o.id, { status: "cancelado" }); await evento("cancelamento", "O.S. cancelada."); await carregar(); recarregar(["ordens"]); });
   };
+  const reabrir = async () => {
+    const destino = st === "entregue" ? "pronto" : "diagnostico";
+    if (!await confirmar({ titulo: "Reabrir " + numOS(o.numero), texto: st === "entregue" ? "A O.S. volta para “Pronto para retirada”. A baixa de estoque das peças é estornada e volta a ser feita na nova entrega." : "A O.S. volta para “Em diagnóstico” para refazer o orçamento.", botao: "Reabrir" })) return;
+    acao("reabrir", async () => { await api.atualizarOrdem(o.id, { status: destino, ...(destino === "diagnostico" ? { orcamento_enviado_em: null } : {}) }); await evento("reabertura", "O.S. reaberta (" + STATUS[st].t.toLowerCase() + " → " + STATUS[destino].t.toLowerCase() + ")."); await carregar(); recarregar(["ordens", "produtos"]); });
+  };
   const excluir = async () => {
     if (!await confirmar({ titulo: "Excluir " + numOS(o.numero), texto: "Remove a O.S., os itens, as fotos e o histórico definitivamente. Prefira cancelar: o histórico protege a oficina.", botao: "Excluir definitivamente", perigo: true })) return;
-    acao("excluir", async () => { await api.removerArquivos((o.fotos || []).map(f => f.caminho).concat([o.assinatura_entrada, o.assinatura_entrega].filter(Boolean))); await api.excluirOrdem(o.id); await recarregar(["ordens"]); ir("/ordens"); });
+    acao("excluir", async () => { await api.removerArquivos((o.fotos || []).map(f => f.caminho).concat([o.assinatura_entrada, o.assinatura_entrega].filter(Boolean))); await api.excluirOrdem(o.id); await recarregar(["ordens"], { completo: true }); ir("/ordens"); });
   };
   const enviarFotoExec = arq => acao("foto", async () => {
     const { blob, w, h } = await reduzirImagem(arq, 1280, "image/jpeg", 0.72);
@@ -292,6 +363,7 @@ export function Ordem({ id }) {
     const blob = await gerar(atual, cfg);
     await entregarArquivo(blob, `${nomes[qual]}_${String(o.numero).padStart(5, "0")}_${o.veiculo.placa}.pdf`);
   });
+  const imprimir = async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo: "imprimir" }); };
   const whats = qual => {
     const fn = MSG[qual]; if (!fn) return;
     const lista = qual === "adicionais" ? pendentes : itens.filter(i => i.aprovado !== false);
@@ -302,63 +374,105 @@ export function Ordem({ id }) {
   // ---- barra de ações por etapa
   const B = (rot, fn, pri, dis) => html`<button type="button" class=${"btn" + (pri ? " btn-pri" : "")} disabled=${!!ocupado || dis} onClick=${fn}>${rot}</button>`;
   let acoes = [];
-  if (st === "diagnostico" && pode(perfil, "orcar")) acoes = [B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, true), sujo ? B("Salvar", () => acao("salvar", () => salvar())) : null];
+  if (st === "diagnostico" && gestor) acoes = [B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, true)];
   if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Registrar aprovação", () => setModal({ tipo: "aprovar" }), true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar)];
-  if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Concluir serviço", marcarPronto, true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null, sujo ? B("Salvar", () => acao("salvar", () => salvar())) : null];
+  if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Concluir serviço", marcarPronto, true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
   if (st === "pronto" && pode(perfil, "entregar")) acoes = [B("Registrar entrega", () => setModal({ tipo: "entrega" }), true), B("Avisar cliente", () => whats("pronto"))];
   if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", () => setModal({ tipo: "entrega" }), true)];
-  if (st === "entregue" && pode(perfil, "entregar")) acoes = [B("O.S. em PDF", () => documento("os"), true), B("WhatsApp de garantia", () => whats("entrega"))];
+  if (st === "entregue" && pode(perfil, "entregar")) acoes = [saldo > 0 ? B("Emitir recibo", () => setModal({ tipo: "recibo" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
   acoes = acoes.filter(Boolean);
-
   const passo = FLUXO.indexOf(st);
+
+  /* ===== aba Principais informações ===== */
+  const mecanicos = dados.perfis.filter(p => p.ativo !== false && ["mecanico", "admin", "consultor"].includes(p.papel));
+  const situacoes = [...new Set([...(cfg.situacoesOS || []), campos.situacao].filter(Boolean))];
+  const abaPrincipal = html`
+    <section class="card"><h3>Atendimento</h3>
+      <div class="grade">
+        <div class="campo"><label>Entrada</label><b>${fmtDataHora(o.criado_em)}</b></div>
+        <${Campo} id="os-prev" rotulo="Previsão de entrega">${editaInfo ? html`<div class="linha-add"><input id="os-prev" type="date" class="inp" value=${campos.previsao_entrega || ""} onInput=${e => setCampo({ previsao_entrega: e.target.value })} />
+          <input id="os-prev-h" type="time" class="inp inp-hora" aria-label="Hora prevista" value=${campos.previsao_hora || ""} onInput=${e => setCampo({ previsao_hora: e.target.value })} /></div>` : html`<b>${o.previsao_entrega ? fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "") : "A combinar"}</b>`}</${Campo}>
+        <${Campo} id="os-box" rotulo="Box / prisma">${editaInfo ? html`<${Texto} id="os-box" valor=${campos.box} onMuda=${v => setCampo({ box: v.slice(0, 10) })} />` : html`<b>${o.box || "—"}</b>`}</${Campo}>
+        <${Campo} id="os-sit" rotulo="Situação">${editaInfo ? html`<select id="os-sit" class="inp" value=${campos.situacao} onChange=${e => setCampo({ situacao: e.target.value })}><option value="">—</option>${situacoes.map(x => html`<option value=${x}>${x}</option>`)}</select>` : html`<b>${o.situacao || "—"}</b>`}</${Campo}>
+        <div class="campo"><label>Consultor</label><b>${o.consultor_nome || "—"}</b></div>
+        <${Campo} id="mec" rotulo="Técnico responsável"><select id="mec" class="inp" disabled=${!aberta || !(gestor || st === "execucao")} value=${o.mecanico_id || ""} onChange=${e => salvarMecanico(e.target.value)}>
+          <option value="">${o.mecanico_nome && !o.mecanico_id ? o.mecanico_nome : "Selecione"}</option>${mecanicos.map(m => html`<option key=${m.id} value=${m.id}>${m.nome}</option>`)}</select></${Campo}>
+      </div>
+      ${verValores ? html`<div class="campo"><label>Tabela de preços</label>${editavelOrc ? html`<${Seg} rotulo="Tabela de preços" opcoes=${Object.values(TABELAS_PRECO).map(t => [t, "info"])} valor=${TABELAS_PRECO[campos.tabela_preco]} onEscolha=${t => setCampo({ tabela_preco: Object.keys(TABELAS_PRECO).find(k => TABELAS_PRECO[k] === t) })} />
+        <span class="dica">Vale para os próximos itens buscados no cadastro.</span>` : html`<b>${TABELAS_PRECO[o.tabela_preco || "vista"]}</b>`}</div>` : null}
+    </section>
+    <section class="card"><div class="secao-topo"><h3>Cliente</h3>${editaInfo ? html`<button type="button" class="btn btn-sm" onClick=${() => setModal({ tipo: "cliente" })}>Trocar cliente</button>` : null}</div>
+      <div class="kv"><div><span>Nome</span><b>${o.cliente_id ? html`<button type="button" class="btn-link" onClick=${() => ir("/cliente/" + o.cliente_id)}>${o.cliente.nome}</button>` : o.cliente.nome} <${SitCliente} c=${cliCad} /></b></div>
+        <div><span>Telefone</span><b>${o.cliente.telefone ? fmtTel(o.cliente.telefone) : "—"}</b></div>${o.cliente.doc ? html`<div><span>CPF/CNPJ</span><b>${fmtDoc(o.cliente.doc)}</b></div>` : null}
+        ${cliCad && cliCad.codigo ? html`<div><span>Código</span><b>${cliCad.codigo}</b></div>` : null}</div>
+      ${cliCad && cliCad.situacao && cliCad.situacao !== "liberado" ? html`<div class="aviso">Cadastro ${SITUACAO_CLIENTE[cliCad.situacao].t.toLowerCase()}: ${cliCad.restricao}</div>` : null}
+      <${Campo} id="os-contato" rotulo="Contato (quem trouxe / responsável)">${editaInfo ? html`<${Texto} id="os-contato" valor=${campos.contato} onMuda=${v => setCampo({ contato: v })} />` : html`<b>${o.contato || "—"}</b>`}</${Campo}>
+    </section>
+    <section class="card"><h3>Defeito reclamado</h3>
+      ${editaInfo ? html`<${Area} id="os-recl" valor=${campos.reclamacao} onMuda=${v => setCampo({ reclamacao: v })} />` : html`<p class="texto-pre">${o.reclamacao || "—"}</p>`}</section>
+    <section class="card"><h3>Defeito constatado / diagnóstico</h3>
+      ${editavelOrc ? html`<${Area} id="diag" placeholder="O que foi constatado, testes feitos, causa provável e solução proposta." valor=${campos.diagnostico} onMuda=${v => setCampo({ diagnostico: v })} />`
+        : html`<p class="texto-pre">${o.diagnostico || "—"}</p>`}</section>
+    ${o.aprovacao ? html`<section class="card"><h3>Aprovação</h3><div class="kv"><div><span>Aprovado por</span><b>${o.aprovacao.por}</b></div><div><span>Quando</span><b>${fmtDataHora(o.aprovacao.em)}</b></div><div><span>Forma</span><b>${o.aprovacao.forma}</b></div>${o.aprovacao.obs ? html`<div><span>Obs.</span><b>${o.aprovacao.obs}</b></div>` : null}</div>
+      ${o.aprovacao.assinatura ? html`<${Foto} caminho=${o.aprovacao.assinatura} alt="Assinatura" class="img-assin" />` : null}</section>` : null}`;
+
+  /* ===== aba Veículo ===== */
+  const vCad = dados.veiculos.find(v => v.id === o.veiculo_id);
+  const kv = (rot, x) => x ? html`<div><span>${rot}</span><b>${x}</b></div>` : null;
+  const abaVeiculo = html`<section class="card"><div class="secao-topo"><h3>Dados do veículo</h3>
+      ${vCad ? html`<button type="button" class="btn btn-sm" onClick=${() => setModal({ tipo: "veiculo" })}>${pode(perfil, "cadastrar") ? "Editar ficha" : "Ver ficha"}</button><button type="button" class="btn btn-sm" onClick=${() => ir("/veiculo/" + vCad.id)}>Serviços executados</button>` : null}</div>
+    <div class="kv">${kv("Placa", exPlaca(o.veiculo.placa))}${kv("Marca", o.veiculo.marca)}${kv("Modelo", o.veiculo.modelo)}${kv("Ano", o.veiculo.ano)}${kv("Cor", o.veiculo.cor)}
+      ${kv("Combustível", (vCad && vCad.combustivel) || o.veiculo.motor)}${vCad ? html`${kv("Motor", vCad.motor)}${kv("Chassi", vCad.chassi)}${kv("Renavam", vCad.renavam)}${kv("Motorista", vCad.motorista)}` : null}
+      ${kv("KM de entrada", fmtKm(o.km_entrada))}${o.km_saida ? kv("KM de saída", fmtKm(o.km_saida)) : null}${o.combustivel ? kv("Nível de combustível", o.combustivel) : null}</div>
+    ${vCad && (vCad.revisao_km || vCad.oleo_km || vCad.filtro_km || vCad.revisao_data || vCad.oleo_data || vCad.filtro_data) ? html`<h4 class="sub-titulo">Manutenção programada</h4><div class="kv">
+      ${[["Revisão", vCad.revisao_data, vCad.revisao_km], ["Troca de óleo", vCad.oleo_data, vCad.oleo_km], ["Troca de filtros", vCad.filtro_data, vCad.filtro_km]].filter(m => m[1] || m[2]).map(([t, d, k]) => html`<div key=${t}><span>${t}</span><b>${[d ? fmtData(d) : "", k ? fmtKm(k) : ""].filter(Boolean).join(" · ")}</b></div>`)}</div>` : null}
+    ${vCad && vCad.obs ? html`<p class="texto-pre sub">${vCad.obs}</p>` : null}
+    ${!vCad ? html`<span class="dica">Veículo sem ficha cadastral vinculada.</span>` : null}</section>`;
+
+  /* ===== aba Produtos e serviços ===== */
+  const execOn = ["execucao", "pronto", "entregue"].includes(st);
   const grupo = (tipo, titulo) => {
     const g = itens.filter(i => i.tipo === tipo);
     const podeEditar = editavelOrc || podeAdicional;
     if (!g.length && !podeEditar) return null;
-    return html`<div class="grupo-itens"><div class="secao-topo"><h4>${titulo}</h4>${podeEditar ? html`<button type="button" class="btn btn-sm" onClick=${() => novoItem(tipo)}>+ Adicionar</button>` : null}</div>
+    return html`<div class="grupo-itens"><div class="secao-topo"><h4>${titulo}</h4>${podeEditar ? html`<button type="button" class="btn btn-sm" onClick=${() => novoItem(tipo)}>+ Incluir</button>` : null}</div>
       ${g.length ? html`<div class="lista">${g.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${verValores} mostrarAprov=${st !== "diagnostico"}
+        exec=${execOn && i.aprovado === true ? { disabled: st !== "execucao" || !pode(perfil, "executar") || !!ocupado, onMuda: v => marcarExecutado(i, v) } : null}
         onClick=${(editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined))) ? () => setModal({ tipo: "item", item: i }) : null} />`)}</div>` : html`<span class="dica">Nenhum item.</span>`}</div>`;
   };
-
-  const abaOrc = html`
-    <section class="card"><h3>Diagnóstico técnico</h3>
-      ${editavelOrc ? html`<${Area} id="diag" placeholder="O que foi constatado, testes feitos, causa provável e solução proposta." valor=${campos.diagnostico} onMuda=${v => setCampo({ diagnostico: v })} />`
-        : html`<p class="texto-pre">${o.diagnostico || "—"}</p>`}</section>
-    <section class="card"><div class="secao-topo"><h3>Itens do orçamento</h3>${st === "aguardando" ? html`<span class="sub">Enviado em ${fmtDataHora(o.orcamento_enviado_em)} · válido até ${fmtData(o.validade_orcamento)}</span>` : null}</div>
-      ${grupo("servico", "Mão de obra")}${grupo("peca", "Peças")}${grupo("terceiro", "Serviços de terceiros")}
+  const abaItens = html`
+    <section class="card"><div class="secao-topo"><h3>Produtos e serviços</h3>${st === "aguardando" ? html`<span class="sub">Enviado em ${fmtDataHora(o.orcamento_enviado_em)} · válido até ${fmtData(o.validade_orcamento)}</span>` : null}
+        ${execOn ? html`<span class="sub">${itens.filter(i => i.aprovado === true && i.executado).length} de ${itens.filter(i => i.aprovado === true).length} executados</span>` : null}</div>
+      ${grupo("peca", "Produtos / peças")}${grupo("servico", "Serviços / mão de obra")}${grupo("terceiro", "Outros valores (terceiros, deslocamento)")}
+      ${pendentes.length && st !== "diagnostico" ? html`<div class="aviso">${pendentes.length} item(ns) aguardando aprovação do cliente. Não execute antes da aprovação.</div>` : null}
+      ${st === "execucao" && !gestor ? html`<span class="dica">Encontrou algo a mais? Registre nas observações e avise o consultor para orçar como adicional.</span>` : null}
       ${verValores ? html`<div class="totais">
-        <div><span>Mão de obra</span><b>${reais(tAtual.servicos)}</b></div><div><span>Peças</span><b>${reais(tAtual.pecas)}</b></div>
-        ${tAtual.terceiros ? html`<div><span>Terceiros</span><b>${reais(tAtual.terceiros)}</b></div>` : null}
+        <div><span>Valor dos produtos</span><b>${reais(tAtual.pecas)}</b></div><div><span>Valor dos serviços</span><b>${reais(tAtual.servicos)}</b></div>
+        ${tAtual.terceiros ? html`<div><span>Outros valores</span><b>${reais(tAtual.terceiros)}</b></div>` : null}
         <div><span>Desconto</span>${editavelOrc ? html`<${Dinheiro} id="desc" valor=${campos.desconto} onMuda=${v => setCampo({ desconto: v })} />` : html`<b>${reais(tAtual.desconto)}</b>`}</div>
-        <div class="tot"><span>Total${["execucao", "pronto", "entregue", "recusado"].includes(st) ? " aprovado" : ""}</span><b>${reais(tAtual.total)}</b></div>
+        <div class="tot"><span>Valor total${usaAprov ? " aprovado" : ""}</span><b>${reais(tAtual.total)}</b></div>
         <div class="interno"><span>Custo de peças e terceiros</span><b>${reais(tAtual.custo)}</b></div>
         <div class="interno"><span>Margem bruta</span><b class=${tAtual.margemPct < 30 && tAtual.total > 0 ? "c-warn" : ""}>${reais(tAtual.margem)} · ${tAtual.margemPct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</b></div>
       </div>` : null}</section>
-    ${verValores ? html`<section class="card"><h3>Prazo e pagamento</h3>
+    ${verValores ? html`<section class="card"><h3>Pagamento</h3>
       <div class="grade">
-        <${Campo} id="prev" rotulo="Previsão de entrega">${editavelOrc ? html`<input id="prev" type="date" class="inp" min=${hojeISO()} value=${campos.previsao_entrega || ""} onInput=${e => setCampo({ previsao_entrega: e.target.value })} />` : html`<b>${o.previsao_entrega ? fmtData(o.previsao_entrega) : "A combinar"}</b>`}</${Campo}>
-        <${Campo} id="cond" rotulo="Condições de pagamento">${editavelOrc ? html`<${Texto} id="cond" valor=${campos.condicoes_pagamento} onMuda=${v => setCampo({ condicoes_pagamento: v })} />` : html`<b>${o.condicoes_pagamento || "—"}</b>`}</${Campo}>
-      </div></section>` : null}
-    ${o.aprovacao ? html`<section class="card"><h3>Aprovação</h3><div class="kv"><div><span>Aprovado por</span><b>${o.aprovacao.por}</b></div><div><span>Quando</span><b>${fmtDataHora(o.aprovacao.em)}</b></div><div><span>Forma</span><b>${o.aprovacao.forma}</b></div>${o.aprovacao.obs ? html`<div><span>Obs.</span><b>${o.aprovacao.obs}</b></div>` : null}</div>
-      ${o.aprovacao.assinatura ? html`<${Foto} caminho=${o.aprovacao.assinatura} alt="Assinatura" class="img-assin" />` : null}</section>` : null}`;
+        <${Campo} id="cond" rotulo="Condições de pagamento">${editaInfo ? html`<${Texto} id="cond" valor=${campos.condicoes_pagamento} onMuda=${v => setCampo({ condicoes_pagamento: v })} />` : html`<b>${o.condicoes_pagamento || "—"}</b>`}</${Campo}>
+        <div class="campo"><label>Forma de pagamento</label><b>${o.forma_pagamento || "informada na entrega"}</b></div>
+      </div>
+      <div class="kv"><div><span>Recebido</span><b class=${recebido > 0 ? "c-ok" : ""}>${reais(recebido)}</b></div><div><span>Saldo</span><b class=${saldo > 0 && st === "entregue" ? "c-bad" : ""}>${reais(saldo)}</b></div></div>
+      ${recibos.length ? html`<div class="lista">${recibos.map(r => html`<button type="button" key=${r.id} class=${"linha" + (r.cancelado ? " inativo" : "")} onClick=${() => ir("/imprimir/recibo/" + r.id)}>
+        <span class="meio"><strong>${numRecibo(r.numero)}${r.cancelado ? " · cancelado" : ""}</strong><span>${fmtData(r.data)} · ${r.forma}${r.obs ? " · " + r.obs : ""}</span></span><b>${reais(r.valor)}</b></button>`)}</div>` : null}
+      ${pode(perfil, "entregar") && tAtual.total > 0 && st !== "cancelado" ? html`<button type="button" class="btn" disabled=${saldo <= 0} onClick=${() => setModal({ tipo: "recibo" })}>${saldo > 0 ? "Emitir recibo de pagamento" + (st !== "entregue" ? " (sinal / adiantamento)" : "") : "Pagamento quitado"}</button>` : null}
+    </section>` : null}`;
 
-  const execucaoVisivel = ["execucao", "pronto", "entregue"].includes(st);
-  const mecanicos = dados.perfis.filter(p => p.ativo !== false && ["mecanico", "admin", "consultor"].includes(p.papel));
-  const abaExec = html`
-    ${!execucaoVisivel ? html`<div class="info">A execução começa depois que o cliente aprovar o orçamento.</div>` : null}
-    ${execucaoVisivel ? html`<section class="card"><h3>Responsável pela execução</h3>
-      <select id="mec" class="inp" disabled=${st !== "execucao"} value=${o.mecanico_id || ""} onChange=${e => salvarMecanico(e.target.value)}>
-        <option value="">Selecione o mecânico</option>${mecanicos.map(m => html`<option key=${m.id} value=${m.id}>${m.nome}</option>`)}</select></section>
-    <section class="card"><div class="secao-topo"><h3>Serviços aprovados</h3><span class="sub">${itens.filter(i => i.aprovado === true && i.executado).length} de ${itens.filter(i => i.aprovado === true).length} concluídos</span></div>
-      <div class="lista">${itens.filter(i => i.aprovado === true).map(i => html`<label class="linha linha-check" key=${i.id}><input type="checkbox" disabled=${st !== "execucao" || !pode(perfil, "executar")} checked=${i.executado} onChange=${e => marcarExecutado(i, e.target.checked)} />
-        <span class="meio"><strong>${i.descricao}</strong><span>${{ servico: "Mão de obra", peca: "Peça", terceiro: "Terceiro" }[i.tipo]}${i.tipo === "peca" ? " · " + qtdFmt(i.qtd) + " un" + (i.codigo ? " · " + i.codigo : "") : ""}${i.fornecida_cliente ? " · peça do cliente" : ""}</span></span></label>`)}</div>
-      ${pendentes.length ? html`<div class="aviso">${pendentes.length} item(ns) adicional(is) aguardando aprovação do cliente. Não execute antes da aprovação.</div>` : null}
-      ${st === "execucao" && !pode(perfil, "orcar") ? html`<span class="dica">Encontrou algo a mais? Registre nas observações e avise o consultor para orçar como adicional.</span>` : null}
-    </section>
-    <section class="card"><h3>Observações da execução</h3>
-      ${st === "execucao" ? html`<${Area} id="obs-exec" placeholder="Peças trocadas, medições, recomendações ao cliente para as próximas revisões." valor=${campos.obs_execucao} onMuda=${v => setCampo({ obs_execucao: v })} />
-        ${sujo ? html`<button type="button" class="btn" onClick=${() => acao("salvar", () => salvar())}>Salvar observações</button>` : null}` : html`<p class="texto-pre">${o.obs_execucao || "—"}</p>`}</section>
-    <section class="card"><div class="secao-topo"><h3>Fotos do serviço</h3>
+  /* ===== aba Observações ===== */
+  const podeObsExec = (st === "execucao" && pode(perfil, "executar")) || editaInfo;
+  const abaObs = html`
+    <section class="card"><h3>Serviços executados / observações gerais</h3><span class="dica">Saem na impressão da O.S.</span>
+      ${podeObsExec ? html`<${Area} id="obs-exec" placeholder="Peças trocadas, medições, recomendações ao cliente para as próximas revisões." valor=${campos.obs_execucao} onMuda=${v => setCampo({ obs_execucao: v })} />` : html`<p class="texto-pre">${o.obs_execucao || "—"}</p>`}</section>
+    ${gestor ? html`<section class="card"><h3>Observações internas</h3><span class="dica">Não saem na impressão.</span>
+      ${editaInfo ? html`<${Area} id="obs-int" valor=${campos.obs_internas} onMuda=${v => setCampo({ obs_internas: v })} />` : html`<p class="texto-pre">${o.obs_internas || "—"}</p>`}</section>` : null}
+    ${execOn ? html`<section class="card"><div class="secao-topo"><h3>Fotos do serviço</h3>
       ${st === "execucao" ? html`<label class="btn btn-sm" for="foto-exec">${ocupado === "foto" ? "Enviando…" : "+ Foto"}</label><input id="foto-exec" class="vh" type="file" accept="image/*" capture="environment" onChange=${e => { const a = e.target.files[0]; e.target.value = ""; if (a) enviarFotoExec(a); }} />` : null}</div>
       ${(o.fotos || []).filter(f => f.etapa !== "entrada").length ? html`<div class="fotos">${o.fotos.filter(f => f.etapa !== "entrada").map(f => html`<button type="button" class="foto" key=${f.id} onClick=${() => setModal({ tipo: "foto", f })}><div class="img"><${Foto} caminho=${f.caminho} alt=${f.rotulo} /></div><div class="rot">${f.rotulo}</div></button>`)}</div>`
         : html`<span class="dica">Fotos de peças substituídas e do serviço feito ajudam a justificar o orçamento e a garantia.</span>`}</section>` : null}
@@ -366,6 +480,7 @@ export function Ordem({ id }) {
       <div><span>Pagamento</span><b>${o.forma_pagamento || "—"}</b></div><div><span>Garantia</span><b>${o.garantia_dias} dias · até ${fmtData(somaDias(o.entregue_em, o.garantia_dias))}</b></div></div>
       ${o.assinatura_entrega ? html`<${Foto} caminho=${o.assinatura_entrega} alt="Assinatura na retirada" class="img-assin" />` : null}</section>` : null}`;
 
+  /* ===== aba Checklist ===== */
   const ck = o.checkin || {}, secs = secoesCheckin(ck.itensExtras), ach = achados(ck.resp, secs);
   const podeCk = pode(perfil, "entrada") && !["entregue", "cancelado", "recusado"].includes(st);
   const abaEntrada = !ck.feito ? html`
@@ -377,8 +492,7 @@ export function Ordem({ id }) {
     </section>` : html`
     <section class="card"><div class="secao-topo"><h3>Checklist de entrada</h3>${podeCk ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Editar checklist</button>` : null}</div>
       <span class="sub">Feito em ${fmtDataHora(ck.em)}${ck.por ? " por " + ck.por : ""}</span>
-      <div class="kv">
-      <div><span>KM</span><b>${fmtKm(o.km_entrada)}${ck.kmDivergente ? " ⚠" : ""}</b></div>
+      <div class="kv"><div><span>KM</span><b>${fmtKm(o.km_entrada)}${ck.kmDivergente ? " ⚠" : ""}</b></div>
       <div><span>Combustível</span><b>${o.combustivel}</b></div><div><span>Funcionando</span><b>${o.funcionando}</b></div>
       <div><span>Objetos declarados</span><b>${ck.objetosValor || "Nenhum"}</b></div></div>
       ${ck.kmDivergente ? html`<div class="aviso">KM menor que o registro anterior (${fmtKm(ck.kmAnterior)}). Divergência confirmada na abertura.</div>` : null}
@@ -391,43 +505,56 @@ export function Ordem({ id }) {
 
   const abaHist = html`<section class="card"><h3>Histórico da O.S.</h3>
     ${(o.eventos || []).length ? html`<ol class="linha-tempo">${o.eventos.map(e => html`<li key=${e.id}><b>${fmtDataHora(e.criado_em)}</b> · ${e.usuario_nome || "—"}<div>${e.texto}</div></li>`)}</ol>` : html`<span class="sub">Sem eventos.</span>`}</section>
-    ${pode(perfil, "orcar") && !["entregue", "cancelado"].includes(st) ? html`<button type="button" class="btn btn-perigo" onClick=${cancelar}>Cancelar O.S.</button>` : null}
-    ${pode(perfil, "excluir") ? html`<button type="button" class="btn-link perigo" onClick=${excluir}>Excluir O.S. definitivamente</button>` : null}`;
+    <div class="acoes">
+      ${gestor && !["entregue", "cancelado"].includes(st) ? html`<button type="button" class="btn btn-perigo" onClick=${cancelar}>Cancelar O.S.</button>` : null}
+      ${pode(perfil, "ajustes") && ["entregue", "cancelado", "recusado"].includes(st) ? html`<button type="button" class="btn" onClick=${reabrir}>Reabrir O.S.</button>` : null}
+      ${pode(perfil, "excluir") ? html`<button type="button" class="btn-link perigo" onClick=${excluir}>Excluir O.S. definitivamente</button>` : null}</div>`;
 
-  const abas = [["orcamento", "Orçamento"], ["execucao", "Execução"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
+  const nItens = itens.filter(i => i.aprovado !== false).length;
+  const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
+  const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
+  const podeSalvar = sujo && (editaInfo || st === "execucao");
   return html`<div class="pagina">
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
     <section class="card cab-os">
       <div class="det-cab"><button type="button" class="botao-limpo" title="Ficha do veículo" disabled=${!o.veiculo_id} onClick=${() => ir("/veiculo/" + o.veiculo_id)}><${Placa} placa=${o.veiculo.placa} grande /></button><div class="meio"><h2>${o.veiculo.marca} ${o.veiculo.modelo} ${o.veiculo.ano}</h2>
-        <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}</div></div><${Status} s=${st} /></div>
+        <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}${o.box ? " · box " + o.box : ""}</div></div><div class="pills"><${Status} s=${st} />${o.situacao ? html`<span class="pill p-info">${o.situacao}</span>` : null}</div></div>
       <div class="cli-linha"><div>${o.cliente_id ? html`<button type="button" class="btn-link nome-cli" onClick=${() => ir("/cliente/" + o.cliente_id)}>${o.cliente.nome}</button>` : html`<b>${o.cliente.nome}</b>`}<span>${fmtTel(o.cliente.telefone)}${o.cliente.doc ? " · " + fmtDoc(o.cliente.doc) : ""}</span></div>
         ${o.cliente.telefone ? html`<a class="btn btn-sm btn-whats" href=${linkWhats(o.cliente.telefone, "Olá, " + primeiroNome(o) + "! ")} target="_blank" rel="noopener">${I.whats} WhatsApp</a>` : null}</div>
-      ${o.reclamacao ? html`<div class="reclamacao"><span>Reclamação</span>${o.reclamacao}</div>` : null}
       ${legado ? html`<div class="info">O.S. ${legado.numero} importada do OS Oficina 3.0${legado.situacao ? " · situação no sistema anterior: " + legado.situacao : ""}.</div>` : null}
       ${!ck.feito && !legado && podeCk ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
       ${passo >= 0 ? html`<ol class="trilha">${FLUXO.map((s, n) => html`<li key=${s} class=${n < passo ? "feito" : n === passo ? "atual" : ""}>${STATUS[s].curto}</li>`)}</ol>` : html`<div class=${st === "recusado" ? "aviso" : "info"}>${STATUS[st].t}${st === "recusado" && o.entregue_em ? " · veículo retirado em " + fmtDataHora(o.entregue_em) : ""}</div>`}
       ${acoes.length ? html`<div class="acoes">${acoes}</div>` : null}
       <div class="docs"><span class="sub">Documentos:</span>
-        ${ck.feito ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("entrada")}>${ocupado === "pdf-entrada" ? "Gerando…" : "Checklist de entrada"}</button>` : null}
-        ${verValores && itens.length ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("orcamento")}>${ocupado === "pdf-orcamento" ? "Gerando…" : "Orçamento"}</button>` : null}
-        ${verValores && aprovadoAlgum ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("os")}>${ocupado === "pdf-os" ? "Gerando…" : "Ordem de serviço"}</button>` : null}
+        <button type="button" class="btn-link" disabled=${!!ocupado} onClick=${imprimir}>Imprimir O.S.</button>
+        ${ck.feito ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("entrada")}>${ocupado === "pdf-entrada" ? "Gerando…" : "Checklist (PDF)"}</button>` : null}
+        ${verValores && itens.length ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("orcamento")}>${ocupado === "pdf-orcamento" ? "Gerando…" : "Orçamento (PDF)"}</button>` : null}
+        ${verValores && aprovadoAlgum ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("os")}>${ocupado === "pdf-os" ? "Gerando…" : "O.S. (PDF)"}</button>` : null}
+        ${verValores && recibos.some(r => !r.cancelado) ? html`<button type="button" class="btn-link" onClick=${() => setAba("itens")}>Recibos (${recibos.filter(r => !r.cancelado).length})</button>` : null}
         ${st === "diagnostico" && o.cliente.telefone ? html`<button type="button" class="btn-link" onClick=${() => whats("entrada")}>Avisar recebimento</button>` : null}
       </div>
     </section>
     <${Abas} abas=${abas} ativa=${aba} onTroca=${setAba} />
-    ${aba === "orcamento" ? abaOrc : aba === "execucao" ? abaExec : aba === "entrada" ? abaEntrada : abaHist}
-    ${sujo && (editavelOrc || st === "execucao") ? html`<div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${carregar}>Descartar alterações</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar O.S."}</button></div></div>` : null}
+    ${corpo}
+    ${podeSalvar ? html`<div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${carregar}>Descartar alterações</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar O.S."}</button></div></div>` : null}
 
-    ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
+    ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
-    ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
+    ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
+    ${modal && modal.tipo === "recibo" ? html`<${ReciboModal} ordem=${{ ...o, total: tAtual.total }} valor=${saldo} forma=${modal.forma || o.forma_pagamento} onFechar=${() => setModal(null)} onEmitido=${r => { setModal(null); ir("/imprimir/recibo/" + r.id); }} />` : null}
+    ${modal && modal.tipo === "imprimir" ? html`<${ImprimirModal} o=${o} verValores=${verValores} onFechar=${() => setModal(null)} />` : null}
+    ${modal && modal.tipo === "cliente" ? html`<${Modal} titulo="Trocar cliente da O.S." onFechar=${() => setModal(null)}><${BuscaCliente} id="os-cli" valor="" onEscolha=${trocarCliente} /></${Modal}>` : null}
+    ${modal && modal.tipo === "veiculo" && vCad ? html`<${FormVeiculo} ed=${modal.ed || edVeiculo(vCad)} setEd=${ed => {
+      if (ed === null) { setModal(null); return; }
+      setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed || edVeiculo(vCad)) : ed })); }}
+      onSalvo=${async v => { if (aberta && v) { const veiculo = { ...o.veiculo, placa: v.placa, marca: v.marca, modelo: v.modelo, ano: v.ano, cor: v.cor, motor: v.combustivel || v.motor || "" }; await api.atualizarOrdem(o.id, { veiculo }); setO(x => ({ ...x, veiculo })); recarregar(["ordens"]); } }} />` : null}
     ${modal && modal.tipo === "foto" ? html`<div class="visor" onClick=${() => setModal(null)} role="dialog" aria-label="Foto ampliada"><${Foto} caminho=${modal.f.caminho} alt=${modal.f.rotulo} /><p>${modal.f.rotulo} · toque para fechar</p></div>` : null}
     ${modal && modal.tipo === "enviar" && modal.qual ? html`<${Modal} titulo=${{ orcamento: "Orçamento pronto para envio", pronto: "Serviço concluído", entrega: "Entrega registrada" }[modal.qual]} onFechar=${() => setModal(null)}>
       <p>${{ orcamento: "Envie a mensagem com o resumo e, em seguida, o PDF do orçamento.", pronto: "Avise o cliente que o veículo está pronto para retirada.", entrega: "Envie a ordem de serviço com a garantia para o cliente." }[modal.qual]}</p>
       <div class="acoes col">
         ${o.cliente.telefone ? html`<button type="button" class="btn btn-whats" onClick=${() => whats(modal.qual)}>${I.whats} Abrir WhatsApp com a mensagem</button>` : html`<span class="aviso">Cliente sem telefone cadastrado.</span>`}
         ${modal.qual === "orcamento" ? html`<button type="button" class="btn" onClick=${() => documento("orcamento")}>PDF do orçamento</button>` : null}
-        ${modal.qual === "entrega" ? html`<button type="button" class="btn" onClick=${() => documento("os")}>PDF da ordem de serviço</button>` : null}
+        ${modal.qual === "entrega" ? html`<button type="button" class="btn" onClick=${() => documento("os")}>PDF da ordem de serviço</button><button type="button" class="btn" onClick=${() => setModal({ tipo: "imprimir" })}>Imprimir O.S.</button>` : null}
         <button type="button" class="btn-link" onClick=${() => setModal(null)}>Fechar</button></div></${Modal}>` : null}
   </div>`;
 }

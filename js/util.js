@@ -39,6 +39,8 @@ export const fmtData = d => { if (!d) return "—"; const x = typeof d === "stri
 export const hojeISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 export const somaDias = (iso, n) => { const d = iso ? new Date(iso) : new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
 export const numOS = n => "OS " + String(n ?? "").padStart(5, "0");
+export const numRecibo = n => "Recibo " + String(n ?? "").padStart(5, "0");
+export const endCompleto = c => c ? ([[c.rua, c.complemento].filter(Boolean).join(" "), c.bairro, [c.cidade, c.uf].filter(Boolean).join("/"), c.cep ? "CEP " + c.cep : ""].filter(Boolean).join(", ") || c.endereco || "") : "";
 export function tempoDesde(iso) {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
   if (min < 60) return min + " min"; const hh = Math.floor(min / 60); if (hh < 24) return hh + " h"; const d = Math.floor(hh / 24); return d + (d === 1 ? " dia" : " dias");
@@ -68,12 +70,48 @@ export async function reduzirImagem(file, max, formato = "image/jpeg", qualidade
   } finally { URL.revokeObjectURL(url); }
 }
 
+/** Valor total de um item (quantidade × valor unitário − desconto do item) */
+export const totalItem = i => arred((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0) - (Number(i.desconto) || 0));
+/** Preço de venda de um produto na tabela escolhida (à vista, a prazo, atacado) */
+export const precoTabela = (p, tabela) => Number(p[{ prazo: "preco_prazo", atacado: "preco_atacado" }[tabela] || "preco_vista"]) || Number(p.preco_vista) || 0;
+export const precoPelaMargem = (custo, margem) => arred((Number(custo) || 0) * (1 + (Number(margem) || 0) / 100));
+export const margemDoPreco = (custo, preco) => Number(custo) > 0 ? arred(((Number(preco) || 0) / Number(custo) - 1) * 100) : 0;
+
+/** Valor por extenso em reais: 1234.5 -> "mil, duzentos e trinta e quatro reais e cinquenta centavos" */
+export function extenso(valor) {
+  const U = ["", "um", "dois", "três", "quatro", "cinco", "seis", "sete", "oito", "nove", "dez", "onze", "doze", "treze", "quatorze", "quinze", "dezesseis", "dezessete", "dezoito", "dezenove"];
+  const D = ["", "", "vinte", "trinta", "quarenta", "cinquenta", "sessenta", "setenta", "oitenta", "noventa"];
+  const C = ["", "cento", "duzentos", "trezentos", "quatrocentos", "quinhentos", "seiscentos", "setecentos", "oitocentos", "novecentos"];
+  const ate999 = n => {
+    if (n === 100) return "cem";
+    const c = Math.floor(n / 100), r = n % 100, partes = [];
+    if (c) partes.push(C[c]);
+    if (r) partes.push(r < 20 ? U[r] : D[Math.floor(r / 10)] + (r % 10 ? " e " + U[r % 10] : ""));
+    return partes.join(" e ");
+  };
+  const inteiro = n => {
+    if (n === 0) return "zero";
+    const grupos = [], escalas = [["", ""], ["mil", "mil"], ["milhão", "milhões"], ["bilhão", "bilhões"]];
+    let i = 0; while (n > 0) { grupos.push([n % 1000, i]); n = Math.floor(n / 1000); i++; }
+    const ativos = grupos.filter(([g]) => g).reverse();
+    return ativos.map(([g, e], k) => {
+      let t = e === 1 && g === 1 ? "mil" : ate999(g) + (e ? " " + escalas[e][g === 1 ? 0 : 1] : "");
+      if (k > 0) { const ultimo = k === ativos.length - 1; t = (ultimo && (g < 100 || g % 100 === 0) ? "e " : "") + t; }
+      return t;
+    }).join(" ").replace(/(mil|milhão|milhões|bilhão|bilhões) (?!e )/g, "$1, ");
+  };
+  const v = Math.round((Number(valor) || 0) * 100), r = Math.floor(v / 100), c = v % 100;
+  const sr = r ? inteiro(r) + ((r % 1000000 === 0) ? " de" : "") + (r === 1 ? " real" : " reais") : "";
+  const sc = c ? inteiro(c) + (c === 1 ? " centavo" : " centavos") : "";
+  return sr && sc ? sr + " e " + sc : sr || sc || "zero reais";
+}
+
 /** Totais de uma O.S. a partir dos itens. aprovados=true considera só o que o cliente aprovou. */
 export function totais(itens, desconto = 0, aprovados = false) {
   const t = { servicos: 0, pecas: 0, terceiros: 0, custoPecas: 0, custoTerceiros: 0, subtotal: 0, desconto: arred(desconto), total: 0, custo: 0, margem: 0, margemPct: 0, horas: 0 };
   for (const i of itens || []) {
     if (aprovados ? i.aprovado !== true : i.aprovado === false) continue;
-    const v = arred((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0));
+    const v = totalItem(i);
     const c = arred((Number(i.qtd) || 0) * (Number(i.custo_unit) || 0));
     if (i.tipo === "servico") { t.servicos += v; t.horas += Number(i.horas) || 0; }
     else if (i.tipo === "peca") { t.pecas += v; t.custoPecas += c; }

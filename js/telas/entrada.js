@@ -2,15 +2,15 @@
 import { html, useState, useEffect, useRef, useCallback } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, SecaoChecklist, PadAssinatura, Foto } from "../ui.js";
-import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS } from "../util.js";
-import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
+import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
+import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
 
 export const LS_NOVA = "dtcar-nova-os-v1";
 export const ORIGENS = ["Indicação", "Cliente antigo", "Google", "Instagram / Facebook", "Passou em frente", "Outro"];
 
 function vazioNova() {
-  return { placa: "", veiculoId: "", vNovo: { marca: "", modelo: "", ano: "", cor: "", motor: "" }, clienteId: "", modoCliente: "busca",
-    cNovo: { nome: "", telefone: "", doc: "", endereco: "", origem: "" }, buscaCliente: "", km: "", kmConfirmado: false, reclamacao: "", consultorId: "" };
+  return { placa: "", veiculoId: "", vNovo: { marca: "", modelo: "", ano: "", cor: "", motor: "", combustivel: "" }, clienteId: "", modoCliente: "busca",
+    cNovo: { nome: "", telefone: "", doc: "", endereco: "", bairro: "", origem: "" }, buscaCliente: "", km: "", kmConfirmado: false, reclamacao: "", consultorId: "", box: "", contato: "" };
 }
 /** Deixa a Nova O.S. pré-preenchida com um veículo (usado em Cadastros) */
 export function prepararNovaOS(v) { lsSet(LS_NOVA, { ...vazioNova(), placa: v.placa, veiculoId: v.id, clienteId: v.cliente_id || "" }); }
@@ -23,6 +23,8 @@ function validarNova(f, dados) {
     if (!f.vNovo.modelo.trim()) e.push("Informe o modelo do veículo.");
     const ano = +f.vNovo.ano; if (!(ano >= 1950 && ano <= new Date().getFullYear() + 1)) e.push("Informe o ano do veículo com 4 dígitos.");
   }
+  const cli = dados.clientes.find(c => c.id === f.clienteId);
+  if (cli && cli.situacao === "bloqueado") e.push("Cliente bloqueado: " + (cli.restricao || "verifique o cadastro") + ". Não é possível abrir O.S.");
   if (!f.clienteId) {
     if (f.modoCliente !== "novo") e.push("Selecione um cliente ou cadastre um novo.");
     else {
@@ -66,17 +68,20 @@ export function NovaOS() {
     setSalvando(comChecklist ? "ck" : "os");
     try {
       let cli = cliente, cliId = f.clienteId;
-      if (!cliId) { cli = await api.clientes.salvar({ nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), endereco: f.cNovo.endereco.trim(), origem: f.cNovo.origem || "" }); cliId = cli.id; }
+      if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim();
+        cli = await api.clientes.salvar({ nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), rua, bairro, cidade: "Colatina", uf: "ES",
+          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "" }); cliId = cli.id; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo;
-      if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ano: String(f.vNovo.ano), cor: f.vNovo.cor.trim(), motor: f.vNovo.motor.trim(), cliente_id: cliId, km_atual: km });
+      if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ano: String(f.vNovo.ano), ano_fab: +f.vNovo.ano || null, ano_mod: +f.vNovo.ano || null,
+        cor: f.vNovo.cor.trim(), motor: f.vNovo.motor.trim(), combustivel: f.vNovo.combustivel || "", cliente_id: cliId, km_atual: km });
       else vei = await api.veiculos.salvar({ id: vei.id, cliente_id: cliId, km_atual: Math.max(km, vei.km_atual || 0) });
       const cons = consultores.find(c => c.id === f.consultorId);
       const ordem = await api.criarOrdem({
         status: "diagnostico", cliente_id: cliId, veiculo_id: vei.id,
-        cliente: { nome: cli.nome, telefone: cli.telefone || "", doc: cli.doc || "", endereco: cli.endereco || "" },
-        veiculo: { placa: vei.placa, marca: vei.marca, modelo: vei.modelo, ano: vei.ano, cor: vei.cor || "", motor: vei.motor || "" },
-        km_entrada: km, reclamacao: f.reclamacao.trim(),
+        cliente: { nome: cli.nome, telefone: cli.telefone || "", doc: cli.doc || "", endereco: endCompleto(cli) },
+        veiculo: { placa: vei.placa, marca: vei.marca, modelo: vei.modelo, ano: vei.ano, cor: vei.cor || "", motor: vei.combustivel || vei.motor || "" },
+        km_entrada: km, reclamacao: f.reclamacao.trim(), box: (f.box || "").trim(), contato: (f.contato || "").trim(),
         checkin: { feito: false, kmAnterior: veiculo ? veiculo.km_atual : null, kmDivergente: !!(veiculo && veiculo.km_atual && km < veiculo.km_atual) },
         consultor_id: f.consultorId, consultor_nome: cons ? cons.nome : "",
         garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "",
@@ -105,18 +110,20 @@ export function NovaOS() {
           <${Campo} id="v-modelo" rotulo="Modelo" obrig><${Texto} id="v-modelo" valor=${f.vNovo.modelo} onMuda=${v => muda({ vNovo: { ...f.vNovo, modelo: v } })} /></${Campo}>
           <${Campo} id="v-ano" rotulo="Ano" obrig><${Texto} id="v-ano" inputmode="numeric" maxlength="4" valor=${f.vNovo.ano} onMuda=${v => muda({ vNovo: { ...f.vNovo, ano: soDig(v).slice(0, 4) } })} /></${Campo}>
           <${Campo} id="v-cor" rotulo="Cor"><${Texto} id="v-cor" valor=${f.vNovo.cor} onMuda=${v => muda({ vNovo: { ...f.vNovo, cor: v } })} /></${Campo}>
-          <${Campo} id="v-motor" rotulo="Motor"><${Texto} id="v-motor" placeholder="ex.: 1.0 8V flex" valor=${f.vNovo.motor} onMuda=${v => muda({ vNovo: { ...f.vNovo, motor: v } })} /></${Campo}>
-        </div>` : null}
+          <${Campo} id="v-motor" rotulo="Motor"><${Texto} id="v-motor" placeholder="ex.: 1.0 8V" valor=${f.vNovo.motor} onMuda=${v => muda({ vNovo: { ...f.vNovo, motor: v } })} /></${Campo}>
+        </div>
+        <div class="campo"><label>Combustível</label><${Seg} rotulo="Combustível" opcoes=${COMBUSTIVEIS.map(c => [c, "info"])} valor=${f.vNovo.combustivel} onEscolha=${v => muda({ vNovo: { ...f.vNovo, combustivel: v } })} /></div>` : null}
     </section>
     <section class="card"><h3>Cliente</h3>
-      ${cliente ? html`<div class="achado"><div class="meio"><strong>${cliente.nome}</strong><div class="sub">${fmtTel(cliente.telefone)}${cliente.doc ? " · " + fmtDoc(cliente.doc) : ""}</div></div>
-          <button type="button" class="btn btn-sm" onClick=${() => muda({ clienteId: "", modoCliente: "busca" })}>Trocar</button></div>`
+      ${cliente ? html`<div class="achado"><div class="meio"><strong>${cliente.nome}</strong><div class="sub">cód. ${cliente.codigo ?? "—"} · ${fmtTel(cliente.telefone)}${cliente.doc ? " · " + fmtDoc(cliente.doc) : ""}</div></div>
+          <button type="button" class="btn btn-sm" onClick=${() => muda({ clienteId: "", modoCliente: "busca" })}>Trocar</button></div>
+        ${cliente.situacao && cliente.situacao !== "liberado" ? html`<div class=${cliente.situacao === "bloqueado" ? "erros" : "aviso"}><b>Cadastro ${cliente.situacao}:</b> ${cliente.restricao || "verifique o cadastro"}</div>` : null}`
       : html`<${Abas} abas=${[["busca", "Buscar cliente"], ["novo", "Novo cliente"]]} ativa=${f.modoCliente === "novo" ? "novo" : "busca"} onTroca=${k => muda({ modoCliente: k })} />
         ${f.modoCliente !== "novo" ? html`
           <${Campo} id="busca-cli" rotulo="Nome, telefone ou CPF"><${Texto} id="busca-cli" valor=${f.buscaCliente} onMuda=${v => muda({ buscaCliente: v })} /></${Campo}>
           ${(() => { const q = norm(f.buscaCliente), qd = soDig(f.buscaCliente);
             if (!q) return dados.clientes.length ? html`<span class="dica">${dados.clientes.length} clientes cadastrados. Digite para buscar.</span>` : html`<div class="vazio">Nenhum cliente cadastrado ainda. Use “Novo cliente”.</div>`;
-            const r = dados.clientes.filter(c => norm(c.nome).includes(q) || (qd.length >= 3 && (soDig(c.telefone).includes(qd) || soDig(c.doc).includes(qd)))).slice(0, 8);
+            const r = dados.clientes.filter(c => norm(c.nome).includes(q) || norm(c.fantasia).includes(q) || (qd && String(c.codigo) === qd) || (qd.length >= 3 && (soDig(c.telefone).includes(qd) || soDig(c.doc).includes(qd)))).slice(0, 8);
             return r.length ? html`<div class="lista">${r.map(c => html`<button type="button" key=${c.id} class="linha" onClick=${() => muda({ clienteId: c.id })}><span class="meio"><strong>${c.nome}</strong><span>${fmtTel(c.telefone)}${c.doc ? " · " + fmtDoc(c.doc) : ""}</span></span><span class="btn btn-sm">Selecionar</span></button>`)}</div>`
               : html`<div class="vazio">Nenhum cliente encontrado. <button type="button" class="btn-link" onClick=${() => muda({ modoCliente: "novo", cNovo: { ...f.cNovo, nome: qd.length ? "" : f.buscaCliente, telefone: qd.length >= 10 ? fmtTel(qd) : f.cNovo.telefone } })}>Cadastrar novo</button></div>`; })()}`
         : html`<div class="grade">
@@ -124,7 +131,8 @@ export function NovaOS() {
           <${Campo} id="c-tel" rotulo="Telefone / WhatsApp" obrig><input id="c-tel" class="inp" inputmode="tel" value=${f.cNovo.telefone} onBlur=${e => muda({ cNovo: { ...f.cNovo, telefone: fmtTel(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, telefone: e.target.value } })} /></${Campo}>
           <${Campo} id="c-doc" rotulo="CPF ou CNPJ" dica="Opcional. Necessário para nota fiscal em nome do cliente." erro=${f.cNovo.doc && soDig(f.cNovo.doc).length >= 11 && !docValido(f.cNovo.doc) ? "Número inválido" : ""}>
             <input id="c-doc" class="inp" inputmode="numeric" value=${f.cNovo.doc} onBlur=${e => muda({ cNovo: { ...f.cNovo, doc: fmtDoc(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, doc: e.target.value } })} /></${Campo}>
-          <${Campo} id="c-end" rotulo="Endereço"><${Texto} id="c-end" valor=${f.cNovo.endereco} onMuda=${v => muda({ cNovo: { ...f.cNovo, endereco: v } })} /></${Campo}>
+          <${Campo} id="c-end" rotulo="Endereço (rua e número)"><${Texto} id="c-end" valor=${f.cNovo.endereco} onMuda=${v => muda({ cNovo: { ...f.cNovo, endereco: v } })} /></${Campo}>
+          <${Campo} id="c-bairro" rotulo="Bairro"><${Texto} id="c-bairro" valor=${f.cNovo.bairro || ""} onMuda=${v => muda({ cNovo: { ...f.cNovo, bairro: v } })} /></${Campo}>
         </div>
         <div class="campo"><label>Como conheceu a DTCar?</label><${Seg} rotulo="Origem" opcoes=${ORIGENS.map(o => [o, "info"])} valor=${f.cNovo.origem} onEscolha=${v => muda({ cNovo: { ...f.cNovo, origem: v } })} /></div>`}`}
     </section>
@@ -134,7 +142,11 @@ export function NovaOS() {
       ${veiculo && veiculo.km_atual && f.km !== "" && +soDig(f.km) < veiculo.km_atual ? html`<label class="aviso linha-check">
         <input type="checkbox" id="km-conf" checked=${f.kmConfirmado} onChange=${e => muda({ kmConfirmado: e.target.checked })} />
         <span>KM menor que o último registro (${fmtKm(veiculo.km_atual)}). Confirmo que o valor está correto (troca de painel ou erro anterior). A divergência ficará registrada.</span></label>` : null}
-      <${Campo} id="recl" rotulo="Reclamação do cliente / serviço solicitado" obrig dica="Use as palavras do cliente: o que sente, quando acontece, desde quando.">
+      <div class="grade">
+        <${Campo} id="os-box" rotulo="Box / prisma"><${Texto} id="os-box" valor=${f.box || ""} onMuda=${v => muda({ box: v.slice(0, 10) })} /></${Campo}>
+        <${Campo} id="os-contato" rotulo="Contato (quem trouxe)"><${Texto} id="os-contato" valor=${f.contato || ""} onMuda=${v => muda({ contato: v })} /></${Campo}>
+      </div>
+      <${Campo} id="recl" rotulo="Defeito reclamado / serviço solicitado" obrig dica="Use as palavras do cliente: o que sente, quando acontece, desde quando.">
         <${Area} id="recl" valor=${f.reclamacao} onMuda=${v => muda({ reclamacao: v })} /></${Campo}>
       <div class="campo"><label>Consultor responsável <i>*</i></label>
         ${consultores.length ? html`<${Seg} rotulo="Consultor" opcoes=${consultores.map(c => [c.nome, "info"])} valor=${(consultores.find(c => c.id === f.consultorId) || {}).nome} onEscolha=${v => muda({ consultorId: consultores.find(c => c.nome === v).id })} />`

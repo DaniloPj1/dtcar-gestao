@@ -4,7 +4,7 @@ import { Campo, Texto } from "../ui.js";
 
 function Moldura({ children }) {
   return html`<div class="tela-login"><div class="login-caixa">
-    <div class="marca grande">DT<b>CAR</b><small>GESTÃO DA OFICINA</small></div>${children}</div></div>`;
+    <img class="login-logo" src="icons/logo-preto.png" alt="DTCar Centro Automotivo" /><span class="login-sub">Gestão da oficina</span>${children}</div></div>`;
 }
 
 export function Conexao() {

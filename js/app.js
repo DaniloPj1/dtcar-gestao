@@ -4,14 +4,14 @@ import { Ctx, Modal, I } from "./ui.js";
 import { cfgCompleta, pode } from "./regras.js";
 import { Conexao, Login, Pendente } from "./telas/login.js";
 import { Painel, Ordens } from "./telas/painel.js";
-import { Entrada } from "./telas/entrada.js";
+import { NovaOS, ChecklistOS } from "./telas/entrada.js";
 import { Ordem } from "./telas/ordem.js";
-import { Cadastros } from "./telas/cadastros.js";
+import { Cadastros, ClienteTela, VeiculoTela } from "./telas/cadastros.js";
 import { Mais, Catalogo, Equipe, Ajustes } from "./telas/admin.js";
 
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova entrada", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Clientes e veículos", mais: "Mais", catalogo: "Catálogo de serviços", equipe: "Equipe", ajustes: "Ajustes" };
-const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["/entrada", "Entrada", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Clientes e veículos", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", catalogo: "Catálogo de serviços", equipe: "Equipe", ajustes: "Ajustes" };
+const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["/entrada", "Nova O.S.", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
 
 function App() {
   const [sessao, setSessao] = useState(undefined);
@@ -66,20 +66,24 @@ function App() {
   if (!sessao) return html`<${Login} />`;
   if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sair} />`;
 
-  const [, base, param] = rota.split("/");
+  const [caminho, qs] = rota.split("?");
+  const [, base, param, sub] = caminho.split("/");
+  const params = Object.fromEntries(new URLSearchParams(qs || ""));
   const restrito = { ajustes: "ajustes", equipe: "ajustes", entrada: "entrada" };
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   else corpo = {
-    painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} />`, entrada: () => html`<${Entrada} />`, os: () => html`<${Ordem} id=${param} />`,
-    cadastros: () => html`<${Cadastros} />`, mais: () => html`<${Mais} />`, catalogo: () => html`<${Catalogo} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
+    painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} />`, entrada: () => html`<${NovaOS} />`,
+    os: () => sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} key=${param} />`,
+    cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
+    cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, mais: () => html`<${Mais} />`, catalogo: () => html`<${Catalogo} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
   }[base]?.() || html`<${Painel} />`;
 
   const ctx = { sessao, perfil, cfg, dados, recarregar, avisar, confirmar, ir, sair };
   return html`<${Ctx.Provider} value=${ctx}>
-    <header class="topo"><div class="topo-in"><button type="button" class="marca" onClick=${() => ir("/painel")}>DT<b>CAR</b><small>GESTÃO</small></button>
-      <nav class="nav-desk" aria-label="Navegação">${NAV.map(([r, t]) => html`<button type="button" key=${r} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => ir(r)}>${t}</button>`)}</nav>
+    <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
+      <nav class="nav-desk" aria-label="Navegação">${NAV.map(([r, t]) => html`<button type="button" key=${r} aria-current=${"/" + base === r || (r === "/cadastros" && (base === "cliente" || base === "veiculo")) ? "page" : undefined} onClick=${() => ir(r)}>${t}</button>`)}</nav>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
     <main>${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "/entrada" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => ir(r)}>

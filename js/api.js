@@ -35,8 +35,10 @@ function criarApiSupabase() {
   const sb = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
   const ok = r => { if (r.error) throw traduzErro(r.error); return r.data; };
   const urls = new Map();
+  // o servidor devolve no máximo 1000 linhas por consulta: busca em páginas
+  const todos = async montar => { const out = []; for (let de = 0; ; de += 1000) { const r = ok(await montar().range(de, de + 999)); out.push(...r); if (r.length < 1000) return out; } };
   const tabela = nome => ({
-    listar: async (ordem = "criado_em") => ok(await sb.from(nome).select("*").order(ordem)),
+    listar: async (ordem = "criado_em") => todos(() => sb.from(nome).select("*").order(ordem).order("id")),
     salvar: async obj => { const { id, ...resto } = obj;
       return id ? ok(await sb.from(nome).update(resto).eq("id", id).select().single()) : ok(await sb.from(nome).insert(resto).select().single()); },
     excluir: async id => ok(await sb.from(nome).delete().eq("id", id)),
@@ -58,9 +60,9 @@ function criarApiSupabase() {
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
     salvarConfig: async dados => ok(await sb.from("config").upsert({ id: 1, dados, atualizado_em: new Date().toISOString() })),
     clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"),
-    ordens: async () => ok(await sb.from("ordens")
-      .select("id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,orcamento_enviado_em,validade_orcamento,reclamacao")
-      .order("numero", { ascending: false }).limit(1000)),
+    ordens: async () => todos(() => sb.from("ordens")
+      .select("id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,ck_feito:checkin->feito")
+      .order("numero", { ascending: false })),
     ordem: async id => {
       const o = ok(await sb.from("ordens").select("*").eq("id", id).single());
       const [itens, fotos, eventos] = await Promise.all([
@@ -69,6 +71,14 @@ function criarApiSupabase() {
         sb.from("eventos").select("*").eq("ordem_id", id).order("criado_em", { ascending: false }).then(ok),
       ]);
       return { ...o, itens, fotos, eventos };
+    },
+    itensDasOrdens: async ids => {
+      const out = [];
+      for (let i = 0; i < ids.length; i += 60) {
+        const parte = ids.slice(i, i + 60);
+        out.push(...await todos(() => sb.from("os_itens").select("id,ordem_id,tipo,descricao,qtd,valor_unit,custo_unit,aprovado,executado,servico_id,fornecida_cliente").in("ordem_id", parte).order("id")));
+      }
+      return out;
     },
     criarOrdem: async dados => ok(await sb.from("ordens").insert(dados).select("id,numero").single()),
     atualizarOrdem: async (id, patch) => ok(await sb.from("ordens").update(patch).eq("id", id)),

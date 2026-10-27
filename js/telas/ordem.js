@@ -367,36 +367,48 @@ export function Ordem({ id }) {
       ${o.assinatura_entrega ? html`<${Foto} caminho=${o.assinatura_entrega} alt="Assinatura na retirada" class="img-assin" />` : null}</section>` : null}`;
 
   const ck = o.checkin || {}, secs = secoesCheckin(ck.itensExtras), ach = achados(ck.resp, secs);
-  const abaEntrada = html`
-    <section class="card"><h3>Dados da entrada</h3><div class="kv">
-      <div><span>Data</span><b>${fmtDataHora(o.criado_em)}</b></div><div><span>KM</span><b>${fmtKm(o.km_entrada)}${ck.kmDivergente ? " ⚠" : ""}</b></div>
+  const podeCk = pode(perfil, "entrada") && !["entregue", "cancelado", "recusado"].includes(st);
+  const abaEntrada = !ck.feito ? html`
+    <section class="card ck-vazio"><h3>Checklist de entrada</h3>
+      <p>O checklist não foi feito nesta O.S. Ele é opcional e registra combustível, avarias, pneus, acessórios, fotos e a assinatura do cliente, protegendo a oficina em caso de reclamação.</p>
+      <div class="kv"><div><span>Entrada</span><b>${fmtDataHora(o.criado_em)}</b></div><div><span>KM</span><b>${fmtKm(o.km_entrada)}${ck.kmDivergente ? " ⚠" : ""}</b></div><div><span>Consultor</span><b>${o.consultor_nome || "—"}</b></div></div>
+      ${ck.kmDivergente ? html`<div class="aviso">KM menor que o registro anterior (${fmtKm(ck.kmAnterior)}). Divergência confirmada na abertura.</div>` : null}
+      ${podeCk ? html`<button type="button" class="btn btn-pri" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer checklist de entrada</button>` : null}
+    </section>` : html`
+    <section class="card"><div class="secao-topo"><h3>Checklist de entrada</h3>${podeCk ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Editar checklist</button>` : null}</div>
+      <span class="sub">Feito em ${fmtDataHora(ck.em)}${ck.por ? " por " + ck.por : ""}</span>
+      <div class="kv">
+      <div><span>KM</span><b>${fmtKm(o.km_entrada)}${ck.kmDivergente ? " ⚠" : ""}</b></div>
       <div><span>Combustível</span><b>${o.combustivel}</b></div><div><span>Funcionando</span><b>${o.funcionando}</b></div>
-      <div><span>Consultor</span><b>${o.consultor_nome}</b></div><div><span>Objetos declarados</span><b>${ck.objetosValor || "Nenhum"}</b></div></div>
-      ${ck.kmDivergente ? html`<div class="aviso">KM menor que o registro anterior (${fmtKm(ck.kmAnterior)}). Divergência confirmada na entrada.</div>` : null}
+      <div><span>Objetos declarados</span><b>${ck.objetosValor || "Nenhum"}</b></div></div>
+      ${ck.kmDivergente ? html`<div class="aviso">KM menor que o registro anterior (${fmtKm(ck.kmAnterior)}). Divergência confirmada na abertura.</div>` : null}
       ${ck.observacoes ? html`<p class="texto-pre">${ck.observacoes}</p>` : null}</section>
     ${ach.length ? html`<section class="card"><h3>Observado na entrada</h3><ul class="res-lista">${ach.map((a, n) => html`<li key=${n}><span class=${"dot s-" + a.s}></span><span><b>${a.l}</b>: ${a.v}${a.obs ? " (" + a.obs + ")" : ""}</span></li>`)}</ul></section>` : null}
     ${(o.fotos || []).some(f => f.etapa === "entrada") ? html`<section class="card"><h3>Fotos da entrada</h3><div class="fotos">${o.fotos.filter(f => f.etapa === "entrada").map(f => html`<button type="button" class="foto" key=${f.id} onClick=${() => setModal({ tipo: "foto", f })}><div class="img"><${Foto} caminho=${f.caminho} alt=${f.rotulo} /></div><div class="rot">${f.rotulo}</div></button>`)}</div></section>` : null}
     ${secs.map(s => html`<details class="card" key=${s.id}><summary><h3>${s.titulo}</h3></summary><table class="tab-res"><tbody>${s.itens.map(it => { const r = (ck.resp || {})[it.k] || {}; return html`<tr key=${it.k}><td>${it.l}${r.obs ? html`<small>${r.obs}</small>` : null}</td><td class=${"c-" + (r.s || "na")}>${r.v || "—"}</td></tr>`; })}</tbody></table></details>`)}
     <section class="card"><h3>Assinatura na entrada</h3>${o.assinatura_entrada ? html`<${Foto} caminho=${o.assinatura_entrada} alt="Assinatura" class="img-assin" /><span class="sub">${o.assinante_entrada}</span>` : html`<span class="sub">Sem assinatura digital.</span>`}</section>`;
+  const legado = ck.legado;
 
   const abaHist = html`<section class="card"><h3>Histórico da O.S.</h3>
     ${(o.eventos || []).length ? html`<ol class="linha-tempo">${o.eventos.map(e => html`<li key=${e.id}><b>${fmtDataHora(e.criado_em)}</b> · ${e.usuario_nome || "—"}<div>${e.texto}</div></li>`)}</ol>` : html`<span class="sub">Sem eventos.</span>`}</section>
     ${pode(perfil, "orcar") && !["entregue", "cancelado"].includes(st) ? html`<button type="button" class="btn btn-perigo" onClick=${cancelar}>Cancelar O.S.</button>` : null}
     ${pode(perfil, "excluir") ? html`<button type="button" class="btn-link perigo" onClick=${excluir}>Excluir O.S. definitivamente</button>` : null}`;
 
-  const abas = [["orcamento", "Orçamento"], ["execucao", "Execução"], ["entrada", "Entrada"], ["historico", "Histórico"]];
+  const abas = [["orcamento", "Orçamento"], ["execucao", "Execução"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
   return html`<div class="pagina">
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
     <section class="card cab-os">
-      <div class="det-cab"><${Placa} placa=${o.veiculo.placa} grande /><div class="meio"><h2>${o.veiculo.marca} ${o.veiculo.modelo} ${o.veiculo.ano}</h2>
+      <div class="det-cab"><button type="button" class="botao-limpo" title="Ficha do veículo" disabled=${!o.veiculo_id} onClick=${() => ir("/veiculo/" + o.veiculo_id)}><${Placa} placa=${o.veiculo.placa} grande /></button><div class="meio"><h2>${o.veiculo.marca} ${o.veiculo.modelo} ${o.veiculo.ano}</h2>
         <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}</div></div><${Status} s=${st} /></div>
-      <div class="cli-linha"><div><b>${o.cliente.nome}</b><span>${fmtTel(o.cliente.telefone)}${o.cliente.doc ? " · " + fmtDoc(o.cliente.doc) : ""}</span></div>
+      <div class="cli-linha"><div>${o.cliente_id ? html`<button type="button" class="btn-link nome-cli" onClick=${() => ir("/cliente/" + o.cliente_id)}>${o.cliente.nome}</button>` : html`<b>${o.cliente.nome}</b>`}<span>${fmtTel(o.cliente.telefone)}${o.cliente.doc ? " · " + fmtDoc(o.cliente.doc) : ""}</span></div>
         ${o.cliente.telefone ? html`<a class="btn btn-sm btn-whats" href=${linkWhats(o.cliente.telefone, "Olá, " + primeiroNome(o) + "! ")} target="_blank" rel="noopener">${I.whats} WhatsApp</a>` : null}</div>
-      <div class="reclamacao"><span>Reclamação</span>${o.reclamacao}</div>
+      ${o.reclamacao ? html`<div class="reclamacao"><span>Reclamação</span>${o.reclamacao}</div>` : null}
+      ${legado ? html`<div class="info">O.S. ${legado.numero} importada do OS Oficina 3.0${legado.situacao ? " · situação no sistema anterior: " + legado.situacao : ""}.</div>` : null}
+      ${!ck.feito && !legado && podeCk ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
       ${passo >= 0 ? html`<ol class="trilha">${FLUXO.map((s, n) => html`<li key=${s} class=${n < passo ? "feito" : n === passo ? "atual" : ""}>${STATUS[s].curto}</li>`)}</ol>` : html`<div class=${st === "recusado" ? "aviso" : "info"}>${STATUS[st].t}${st === "recusado" && o.entregue_em ? " · veículo retirado em " + fmtDataHora(o.entregue_em) : ""}</div>`}
       ${acoes.length ? html`<div class="acoes">${acoes}</div>` : null}
       <div class="docs"><span class="sub">Documentos:</span>
-        <button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("entrada")}>${ocupado === "pdf-entrada" ? "Gerando…" : "Checklist de entrada"}</button>
+        ${ck.feito ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("entrada")}>${ocupado === "pdf-entrada" ? "Gerando…" : "Checklist de entrada"}</button>` : null}
         ${verValores && itens.length ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("orcamento")}>${ocupado === "pdf-orcamento" ? "Gerando…" : "Orçamento"}</button>` : null}
         ${verValores && aprovadoAlgum ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("os")}>${ocupado === "pdf-os" ? "Gerando…" : "Ordem de serviço"}</button>` : null}
         ${st === "diagnostico" && o.cliente.telefone ? html`<button type="button" class="btn-link" onClick=${() => whats("entrada")}>Avisar recebimento</button>` : null}

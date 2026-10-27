@@ -8,7 +8,7 @@ const COR = { ok: [18, 122, 70], warn: [160, 95, 0], bad: [189, 49, 41], info: A
 const W = 210, H = 297, M = 12, CW = W - 2 * M, MEIA = (CW - 4) / 2;
 
 async function imagem(caminho) {
-  const url = await api.urlArquivo(caminho);
+  const url = caminho.startsWith("app:") ? caminho.slice(4) : await api.urlArquivo(caminho);
   const blob = await (await fetch(url)).blob();
   const data = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = falha; r.readAsDataURL(blob); });
   const dim = await new Promise((ok, falha) => { const i = new Image(); i.onload = () => ok({ w: i.naturalWidth, h: i.naturalHeight }); i.onerror = falha; i.src = data; });
@@ -27,8 +27,9 @@ function novoDoc() {
 
 async function cabecalho(d, cfg, titulo, linhas) {
   const { doc } = d; let xT = M;
-  if (cfg.logo) {
-    try { const im = await imagem(cfg.logo); const r = Math.min(34 / im.w, 18 / im.h); const lw = im.w * r, lh = im.h * r;
+  const logo = cfg.logo || "app:icons/logo-preto.png";
+  if (logo) {
+    try { const im = await imagem(logo); const r = Math.min(34 / im.w, 18 / im.h); const lw = im.w * r, lh = im.h * r;
       doc.addImage(im.data, im.fmt, M, d.y + (18 - lh) / 2, lw, lh, undefined, "FAST"); xT = M + lw + 5; } catch (e) {}
   }
   d.fonte("bold", 13); d.cor(TINTA); doc.text(cfg.nome || "Oficina", xT, d.y + 5);

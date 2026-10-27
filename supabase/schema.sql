@@ -105,6 +105,11 @@ create table if not exists public.veiculos (
 );
 create index if not exists veiculos_cliente on public.veiculos (cliente_id);
 
+-- campos acrescentados na versão 2 (podem rodar em banco já existente)
+alter table public.clientes add column if not exists nascimento date;
+alter table public.clientes add column if not exists origem text not null default '';
+alter table public.veiculos add column if not exists obs text not null default '';
+
 -- ---------------------------------------------------------------------
 -- Catálogo de serviços (mão de obra)
 --   cobranca = 'fixo' -> usa preco
@@ -171,6 +176,7 @@ create table if not exists public.ordens (
 create index if not exists ordens_status on public.ordens (status);
 create index if not exists ordens_veiculo on public.ordens (veiculo_id);
 create index if not exists ordens_criado on public.ordens (criado_em desc);
+create index if not exists ordens_entregue on public.ordens (entregue_em desc);
 
 create or replace function public.toca_atualizado() returns trigger language plpgsql as $$
 begin new.atualizado_em = now(); return new; end $$;

@@ -104,7 +104,7 @@ export function Ajustes() {
       </div>
       <${Campo} id="a-end" rotulo="Endereço"><${Texto} id="a-end" valor=${c.endereco} onMuda=${v => set({ endereco: v })} /></${Campo}>
       <div class="campo"><label>Logotipo</label><div class="acoes centro">
-        ${c.logo ? html`<${Foto} caminho=${c.logo} alt="Logotipo" class="img-logo" />` : html`<span class="sub">Sem logotipo</span>`}
+        ${c.logo ? html`<${Foto} caminho=${c.logo} alt="Logotipo" class="img-logo" />` : html`<span class="sub">Usando a logo padrão da DTCar nos documentos</span>`}
         <label class="btn btn-sm" for="a-logo">${enviando ? "Enviando…" : c.logo ? "Trocar" : "Enviar imagem"}</label><input id="a-logo" class="vh" type="file" accept="image/*" onChange=${e => { const a = e.target.files[0]; e.target.value = ""; if (a) logo(a); }} />
         ${c.logo ? html`<button type="button" class="btn btn-sm" onClick=${() => set({ logo: "" })}>Remover</button>` : null}</div></div>
     </section>

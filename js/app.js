@@ -26,11 +26,12 @@ function App() {
 
   useEffect(() => { const f = () => { setRota(lerRota()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
+    if (!api) return;
     api.auth.sessao().then(s => setSessao(s || null)).catch(() => setSessao(null));
     return api.auth.aoMudar((s, ev) => { if (ev === "PASSWORD_RECOVERY") setModoSenha(true); setSessao(s || null); });
   }, []);
   useEffect(() => {
-    if (sessao === undefined) return;
+    if (!api || sessao === undefined) return;
     if (!sessao) { setPerfil(null); return; }
     api.meuPerfil(sessao.user.id).then(p => setPerfil(p || { id: sessao.user.id, nome: sessao.user.email, email: sessao.user.email, papel: "pendente" })).catch(() => setPerfil(null));
   }, [sessao && sessao.user && sessao.user.id]);

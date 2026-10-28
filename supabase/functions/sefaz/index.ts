@@ -9,7 +9,7 @@
 //   manifestar   { chave, tipo, justificativa } administrador — confirmar / desconhecer / não realizada
 //   diagnostico  {}                            administrador — confere certificado e conexão segura
 import forge from "npm:node-forge@1.3.1";
-import { createClient } from "npm:@supabase/supabase-js@2.49.1";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
 const URL_DIST = "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx";
 const URL_EVENTO = "https://www.nfe.fazenda.gov.br/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx";

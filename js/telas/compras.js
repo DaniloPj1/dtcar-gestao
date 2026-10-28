@@ -83,6 +83,9 @@ export function EntradaNFe({ params = {} }) {
       const forn = dados.fornecedores.find(f => f.cnpj && f.cnpj === lido.fornecedor.cnpj);
       const rec = reconhecer(lido.itens, { fornecedorId: forn && forn.id, produtos: dados.produtos, vinculos: await api.vinculos.listar().then(v => { setVinculos(v); return v; }).catch(() => vinculos || []) });
       const margem = Number(cfg.markupPecas) || 0;
+      // vindo de "O que sobrou da nota": só os itens escolhidos, com a quantidade restante
+      const soEstes = params.itens && arq.name.startsWith("sefaz-") ? Object.fromEntries(String(params.itens).split(",").map(x => x.split(":")).map(([k, q]) => [k, Number(q)])) : null;
+      if (soEstes) rec.forEach(it => { if (!(String(it.n) in soEstes)) it.acao = "ignorar"; else if (soEstes[it.n] > 0 && soEstes[it.n] < it.qtd) it.qtd = soEstes[it.n]; });
       setItens(rec.map(it => ({ ...it, atualizar_custo: true, novo: { descricao: it.descricao_nf, referencia: it.codigo, marca: "", categoria: "", unidade: ["CX", "PCT", "JG", "KT"].includes(it.unidade) ? it.unidade : (it.unidade || "UN"), margem_vista: margem, estoque_min: 0 } })));
       setNf({ ...lido, fornecedorCadastrado: forn || null, arquivo: arq.name });
       setFin1({ lancar: lido.duplicatas.length > 0, venc: somaMes((lido.nota.emissao || new Date().toISOString()).slice(0, 10), 1) });

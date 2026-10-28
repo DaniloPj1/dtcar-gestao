@@ -5,7 +5,7 @@ import { useApp, Campo, Modal, Vazio, Abas, Texto, Area } from "../ui.js";
 import { norm, soDig, reais, fmtData, fmtDataHora, fmtDoc, numOS, exPlaca, totalItem, qtdFmt, arred } from "../util.js";
 import { pode, STATUS } from "../regras.js";
 import { Dinheiro } from "../ui.js";
-import { lerNFe } from "../nfe.js";
+import { lerNFe, triangular } from "../nfe.js";
 import { contasDaNota } from "./financeiro.js";
 
 const MANIF = { "": "", ciencia: "Ciência registrada", confirmada: "Operação confirmada", desconhecida: "Operação desconhecida", nao_realizada: "Operação não realizada" };
@@ -34,50 +34,96 @@ function Certificado({ onFechar, onEnviado }) {
 }
 
 /* ---------------- vincular a nota a uma O.S. (custo das peças) ---------------- */
-function VincularOS({ n, onFechar, onFeito }) {
-  const { dados, avisar } = useApp();
-  const [q, setQ] = useState(""), [os, setOs] = useState(null), [itens, setItens] = useState(null), [nf, setNf] = useState(null), [sel, setSel] = useState({}), [salvando, setSalvando] = useState(false), [erro, setErro] = useState("");
-  useEffect(() => { if (n.tem_xml) api.sefaz.xml(n.chave).then(x => setNf(lerNFe(x))).catch(() => setNf(null)); }, []);
+// quanto de cada item da nota já foi usado em O.S. (a nota inteira usada = nada sobra)
+function sobras(nf, vincs) {
+  if (!nf) return [];
+  if (vincs.some(v => v.nf_item === null && v.descricao_nf === "Nota inteira")) return [];
+  return nf.itens.map(i => ({ ...i, resta: Math.max(0, Number(i.qtd) - vincs.filter(v => v.nf_item === i.n).reduce((s, v) => s + Number(v.qtd || 0), 0)) })).filter(i => i.resta > 0.0001);
+}
+function VincularOS({ n, inicio = "os", onFechar, onFeito }) {
+  const { dados, avisar, ir } = useApp();
+  const [etapa, setEtapa] = useState(inicio);
+  const [q, setQ] = useState(""), [os, setOs] = useState(null), [itens, setItens] = useState(null), [nf, setNf] = useState(null), [vincs, setVincs] = useState(null);
+  const [sel, setSel] = useState({}), [salvando, setSalvando] = useState(false), [erro, setErro] = useState(""), [marcados, setMarcados] = useState(null), [feitos, setFeitos] = useState([]);
+  const carregarVinc = () => api.sefaz.vinculos(n.chave).then(v => { setVincs(v); return v; }).catch(() => { setVincs([]); return []; });
+  useEffect(() => { carregarVinc(); if (n.tem_xml) api.sefaz.xml(n.chave).then(x => setNf(lerNFe(x))).catch(() => setNf(null)); }, []);
+  const resto = useMemo(() => sobras(nf, vincs || []), [nf, vincs]);
+  const forn = useMemo(() => dados.fornecedores.find(f => f.cnpj && f.cnpj === n.cnpj_emitente), [dados.fornecedores]);
   const emissao = n.emissao ? new Date(n.emissao).getTime() : Date.now();
   const lista = useMemo(() => { const t = norm(q), p = q.toUpperCase().replace(/[^A-Z0-9]/g, ""), d = soDig(q);
     return dados.ordens.filter(o => o.status !== "cancelado" && (!q.trim() || (d && String(o.numero) === String(+d)) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || norm(o.cliente.nome).includes(t) || norm(o.veiculo.modelo).includes(t)))
       .sort((a, b) => Math.abs(new Date(a.criado_em) - emissao) - Math.abs(new Date(b.criado_em) - emissao)).slice(0, 25); }, [q, dados.ordens]);
-  const escolher = async o => { setOs(o); setItens(null); setErro("");
-    try { const r = await api.ordem(o.id); setItens(r.itens.filter(i => i.tipo !== "servico" && !i.fornecida_cliente)); } catch (e) { setErro(e.message); } };
-  // origens possíveis do custo: um item da nota, a nota inteira ou valor digitado
-  const origens = [["", "Não vincular"], ["nota", "Nota inteira (" + reais(n.valor) + ")"], ...(nf ? nf.itens.map(i => ["i" + i.n, i.descricao_nf + " · " + qtdFmt(i.qtd) + " " + i.unidade + " × " + reais(i.custo_unit)]) : []), ["manual", "Outro valor (digitar)"]];
-  const escolherOrigem = (it, v) => { const ni = v.startsWith("i") && nf ? nf.itens.find(x => "i" + x.n === v) : null;
-    const custo = v === "nota" ? Number(n.valor) : ni ? arred(ni.custo_unit * Number(it.qtd)) : v === "manual" ? (sel[it.id] && sel[it.id].custo) || 0 : 0;
-    setSel(s => ({ ...s, [it.id]: v ? { origem: v, custo, nf_item: ni ? ni.n : null, descricao_nf: ni ? ni.descricao_nf : v === "nota" ? "Nota inteira" : "Valor informado" } : undefined })); };
+  const custoDe = (it, ni) => arred(ni.custo_unit * Number(it.qtd));
+  const escolher = async o => { setOs(o); setItens(null); setErro(""); setSel({}); setEtapa("itens");
+    try {
+      const r = await api.ordem(o.id); const pecas = r.itens.filter(i => i.tipo !== "servico" && !i.fornecida_cliente); setItens(pecas);
+      // triangulação: casa as peças da O.S. com os itens que ainda sobram na nota
+      if (nf && resto.length) {
+        let vinculosForn = []; try { vinculosForn = forn ? await api.vinculos.listar() : []; } catch (e) {}
+        const t = triangular(pecas, resto, { produtos: dados.produtos, vinculos: vinculosForn, fornecedorId: forn && forn.id }), ini = {};
+        for (const it of pecas) { const m = t[it.id]; if (!m) continue; const ni = resto.find(x => x.n === m.n);
+          ini[it.id] = { origem: "i" + ni.n, custo: custoDe(it, ni), nf_item: ni.n, descricao_nf: ni.descricao_nf, qtd: Number(it.qtd), sugerido: true }; }
+        setSel(ini);
+      }
+    } catch (e) { setErro(e.message); } };
+  const origens = [["", "Não vincular"], ...(!(vincs || []).length ? [["nota", "Nota inteira (" + reais(n.valor) + ")"]] : []),
+    ...resto.map(i => ["i" + i.n, i.descricao_nf + " · " + qtdFmt(i.resta) + " " + i.unidade + (i.resta < i.qtd ? " restante(s)" : "") + " × " + reais(i.custo_unit)]), ["manual", "Outro valor (digitar)"]];
+  const escolherOrigem = (it, v) => { const ni = v.startsWith("i") ? resto.find(x => "i" + x.n === v) : null;
+    const custo = v === "nota" ? Number(n.valor) : ni ? custoDe(it, ni) : v === "manual" ? (sel[it.id] && sel[it.id].custo) || 0 : 0;
+    setSel(s => ({ ...s, [it.id]: v ? { origem: v, custo, nf_item: ni ? ni.n : null, descricao_nf: ni ? ni.descricao_nf : v === "nota" ? "Nota inteira" : "Valor informado", qtd: ni ? Number(it.qtd) : 0 } : undefined })); };
   const escolhidos = (itens || []).filter(i => sel[i.id] && sel[i.id].origem);
   const custoTot = escolhidos.reduce((s, i) => s + Number(sel[i.id].custo || 0), 0), vendaTot = escolhidos.reduce((s, i) => s + totalItem(i), 0);
   const salvar = async () => {
     if (!escolhidos.length) return setErro("Escolha de onde vem o custo de pelo menos uma peça.");
     if (escolhidos.some(i => !(Number(sel[i.id].custo) > 0))) return setErro("Informe o custo de cada peça escolhida.");
+    const repetidos = escolhidos.map(i => sel[i.id].nf_item).filter(x => x !== null && x !== undefined);
+    if (new Set(repetidos).size !== repetidos.length) {
+      const porItem = {}; escolhidos.forEach(i => { const k = sel[i.id].nf_item; if (k != null) porItem[k] = (porItem[k] || 0) + Number(i.qtd); });
+      const passou = resto.find(r => porItem[r.n] > r.resta + 0.0001); if (passou) return setErro(`O item “${passou.descricao_nf}” tem ${qtdFmt(passou.resta)} ${passou.unidade} na nota e foi usado em mais peças do que isso.`);
+    }
     setSalvando(true); setErro("");
-    try { const r = await api.sefaz.vincular({ chave: n.chave, ordem_id: os.id, itens: escolhidos.map(i => ({ item_id: i.id, nf_item: sel[i.id].nf_item, descricao_nf: sel[i.id].descricao_nf, custo_total: arred(sel[i.id].custo) })) });
-      avisar(`Nota vinculada à ${numOS(r.ordem)}: custo ${reais(r.custo)}, vendido ${reais(r.venda)}.`); onFeito(); }
-    catch (e) { setErro(e.message); } finally { setSalvando(false); }
+    try { const r = await api.sefaz.vincular({ chave: n.chave, ordem_id: os.id, itens: escolhidos.map(i => ({ item_id: i.id, nf_item: sel[i.id].nf_item, descricao_nf: sel[i.id].descricao_nf, qtd: sel[i.id].qtd, custo_total: arred(sel[i.id].custo) })) });
+      avisar(`Nota vinculada à ${numOS(r.ordem)}: custo ${reais(r.custo)}, vendido ${reais(r.venda)}.` + (r.entradas ? " Entrada no estoque: " + r.entradas + "." : ""));
+      setFeitos(f => [...f, numOS(r.ordem)]);
+      const v = await carregarVinc(); const sobra = sobras(nf, v);
+      if (nf && sobra.length) { setMarcados(null); setEtapa("resto"); } else onFeito();
+    } catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };
-  return html`<${Modal} titulo=${"Vincular a NF " + n.numero + " a uma O.S."} largo onFechar=${onFechar}>
-    ${!os ? html`<p class="sub">Escolha a O.S. (aberta ou já entregue) em que as peças desta nota foram usadas. As mais próximas da data da nota aparecem primeiro.</p>
+  const selResto = marcados || Object.fromEntries(resto.map(r => [r.n, true]));
+  const escolhidosResto = resto.filter(r => selResto[r.n]);
+  const titulo = etapa === "resto" ? "O que sobrou da NF " + n.numero : "Vincular a NF " + n.numero + " a uma O.S.";
+  return html`<${Modal} titulo=${titulo} largo onFechar=${feitos.length ? onFeito : onFechar}>
+    ${etapa === "os" ? html`<p class="sub">Escolha a O.S. (aberta ou já entregue) em que as peças desta nota foram usadas. As mais próximas da data da nota aparecem primeiro.</p>
       <input id="vin-busca" class="inp" type="search" autofocus placeholder="Nº da O.S., placa, cliente ou modelo" value=${q} onInput=${e => setQ(e.target.value)} />
       <div class="lista">${lista.map(o => html`<button type="button" key=${o.id} class="linha" onClick=${() => escolher(o)}><span class="cod">${String(o.numero).padStart(5, "0")}</span>
         <span class="meio"><strong>${exPlaca(o.veiculo.placa) || "sem placa"} · ${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")}</strong><span>${o.cliente.nome} · ${fmtData(o.criado_em)} · ${(STATUS[o.status] || {}).curto || o.status}</span></span><b>${reais(o.total)}</b></button>`)}
         ${!lista.length ? html`<span class="dica">Nenhuma O.S. encontrada.</span>` : null}</div>`
-    : html`<div class="total-item"><span>${numOS(os.numero)} · ${exPlaca(os.veiculo.placa)} · ${os.cliente.nome}</span><button type="button" class="btn btn-sm" onClick=${() => { setOs(null); setSel({}); }}>Trocar O.S.</button></div>
+    : etapa === "itens" ? html`<div class="total-item"><span>${numOS(os.numero)} · ${exPlaca(os.veiculo.placa)} · ${os.cliente.nome}</span><button type="button" class="btn btn-sm" onClick=${() => { setOs(null); setSel({}); setEtapa("os"); }}>Trocar O.S.</button></div>
       ${!itens ? html`<div class="esqueleto"></div>` : !itens.length ? html`<${Vazio}>Esta O.S. não tem peças nem serviços de terceiros. Inclua a peça na O.S. primeiro.</${Vazio}>` : html`
-        <p class="sub">Para cada peça da O.S., diga de onde vem o custo. O estoque não é alterado.${!nf ? " Esta nota ainda não tem o XML: use a nota inteira ou digite o valor." : ""}</p>
+        <p class="sub">O valor de venda é o que está na O.S.; da nota vem só o custo. ${nf ? "As peças foram casadas com os itens da nota pela descrição e pela referência: confira as sugestões." : "Esta nota ainda não tem o XML: use a nota inteira ou digite o valor."} Peça do cadastro que já saiu do estoque recebe a entrada desta compra; o resto não mexe no estoque.</p>
         <div class="vinculos">${itens.map(it => { const s = sel[it.id] || {}; const venda = totalItem(it); const marg = s.origem && Number(s.custo) > 0 ? (venda - s.custo) / (venda || 1) * 100 : null;
-          return html`<div class="vinculo-linha" key=${it.id}>
-            <div class="meio"><strong>${it.descricao}</strong><span class="sub">${qtdFmt(it.qtd)} × ${reais(it.valor_unit)} = vendido ${reais(venda)}${it.nfe_ref ? " · já ligado à " + it.nfe_ref : Number(it.custo_unit) ? " · custo atual " + reais(it.custo_unit * it.qtd) : ""}</span></div>
+          return html`<div class=${"vinculo-linha" + (s.sugerido ? " sugerido" : "")} key=${it.id}>
+            <div class="meio"><strong>${it.descricao}</strong><span class="sub">${qtdFmt(it.qtd)} × ${reais(it.valor_unit)} = vendido ${reais(venda)}${it.nfe_ref ? " · já ligado à " + it.nfe_ref : Number(it.custo_unit) ? " · custo atual " + reais(it.custo_unit * it.qtd) : ""}</span>
+              ${s.sugerido ? html`<span class="tag-sug">sugerido pela descrição</span>` : null}</div>
             <select class="inp" aria-label=${"Origem do custo de " + it.descricao} value=${s.origem || ""} onChange=${e => escolherOrigem(it, e.target.value)}>${origens.map(([v, t]) => html`<option value=${v}>${t}</option>`)}</select>
-            ${s.origem ? html`<div class="vinculo-custo"><${Dinheiro} id=${"vc-" + it.id} valor=${s.custo} onMuda=${v => setSel(x => ({ ...x, [it.id]: { ...x[it.id], custo: v } }))} />
+            ${s.origem ? html`<div class="vinculo-custo"><${Dinheiro} id=${"vc-" + it.id} valor=${s.custo} onMuda=${v => setSel(x => ({ ...x, [it.id]: { ...x[it.id], custo: v, sugerido: false } }))} />
               <span class=${"pill p-" + (marg === null ? "muted" : marg < 15 ? "bad" : "ok")}>${marg === null ? "—" : "margem " + Math.round(marg) + "%"}</span></div>` : null}
           </div>`; })}</div>
-        ${escolhidos.length ? html`<div class="total-item tot"><span>Custo ${reais(custoTot)} · vendido ${reais(vendaTot)}</span><b>Lucro ${reais(vendaTot - custoTot)}${vendaTot ? " (" + Math.round((vendaTot - custoTot) / vendaTot * 100) + "%)" : ""}</b></div>` : null}`}`}
+        ${escolhidos.length ? html`<div class="total-item tot"><span>Custo ${reais(custoTot)} · vendido ${reais(vendaTot)}</span><b>Lucro ${reais(vendaTot - custoTot)}${vendaTot ? " (" + Math.round((vendaTot - custoTot) / vendaTot * 100) + "%)" : ""}</b></div>` : null}`}`
+    : html`${feitos.length ? html`<div class="aviso ok">Vinculada à ${feitos.join(", ")}.</div>` : null}
+      ${!resto.length ? html`<${Vazio}>Todos os itens da nota já foram destinados.</${Vazio}>` : html`
+        <p class="sub">Estes itens da nota ainda não foram ligados a nenhuma O.S. Marque os itens e escolha o destino.</p>
+        <div class="lista">${resto.map(r => html`<label class="linha linha-check" key=${r.n}><input type="checkbox" checked=${!!selResto[r.n]} onChange=${e => setMarcados({ ...selResto, [r.n]: e.target.checked })} />
+          <span class="meio"><strong>${r.descricao_nf}</strong><span>${qtdFmt(r.resta)} ${r.unidade}${r.resta < r.qtd ? " restante(s) de " + qtdFmt(r.qtd) : ""} · ${reais(r.custo_unit)} cada</span></span><b>${reais(r.custo_unit * r.resta)}</b></label>`)}</div>
+        <div class="acoes">
+          <button type="button" class="btn" disabled=${!escolhidosResto.length} onClick=${() => { setOs(null); setSel({}); setQ(""); setEtapa("os"); }}>Vincular a outra O.S.</button>
+          <button type="button" class="btn btn-pri" disabled=${!escolhidosResto.length} onClick=${() => ir("/nfe?sefaz=" + n.chave + "&itens=" + escolhidosResto.map(r => r.n + ":" + r.resta).join(","))}>Dar entrada no estoque</button>
+          <button type="button" class="btn" onClick=${async () => { try { await api.sefaz.marcar(n.chave, { obs: "Restante da nota ignorado em " + new Date().toLocaleDateString("pt-BR") + ": " + resto.map(r => r.descricao_nf).join("; ") }); avisar("Restante da nota ignorado."); onFeito(); } catch (e) { setErro(e.message); } }}>Ignorar o restante</button>
+        </div>`}`}
     ${erro ? html`<div class="erros">${erro}</div>` : null}
-    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button>${os ? html`<button type="button" class="btn btn-pri" disabled=${salvando || !escolhidos.length} onClick=${salvar}>${salvando ? "Vinculando…" : "Vincular à O.S."}</button>` : null}</div>
+    <div class="acoes"><span class="espaco"></span>
+      ${etapa === "itens" && os ? html`<button type="button" class="btn" onClick=${feitos.length ? onFeito : onFechar}>Cancelar</button><button type="button" class="btn btn-pri" disabled=${salvando || !escolhidos.length} onClick=${salvar}>${salvando ? "Vinculando…" : "Vincular à O.S."}</button>`
+        : html`<button type="button" class="btn" onClick=${feitos.length ? onFeito : onFechar}>${etapa === "resto" ? "Concluir" : "Cancelar"}</button>`}</div>
   </${Modal}>`;
 }
 
@@ -120,7 +166,8 @@ function Detalhe({ n, onFechar, onMudou }) {
     <div class="acoes">
       ${n.tem_xml && n.status !== "lancada" && pode(perfil, "cadastrar") ? html`<button type="button" class="btn btn-pri" onClick=${() => ir("/nfe?sefaz=" + n.chave)}>Dar entrada no estoque</button>` : null}
       ${n.tem_xml && fin && !n.contas_lancadas ? html`<button type="button" class="btn" disabled=${!!ocupado} onClick=${duplicatas}>Lançar só as duplicatas</button>` : null}
-      ${pode(perfil, "cadastrar") ? html`<button type="button" class="btn" onClick=${() => setVincular(true)}>${vincs.length ? "Vincular a outra O.S." : "Vincular a uma O.S."}</button>` : null}
+      ${pode(perfil, "cadastrar") ? html`<button type="button" class="btn" onClick=${() => setVincular("os")}>${vincs.length ? "Vincular a outra O.S." : "Vincular a uma O.S."}</button>` : null}
+      ${pode(perfil, "cadastrar") && vincs.length && n.tem_xml ? html`<button type="button" class="btn" onClick=${() => setVincular("resto")}>O que sobrou da nota</button>` : null}
       ${n.tem_xml ? html`<button type="button" class="btn" onClick=${baixarXml}>Baixar XML</button>` : null}
       ${n.status === "nova" ? html`<button type="button" class="btn" disabled=${!!ocupado} onClick=${() => acao("ign", async () => { await api.sefaz.marcar(n.chave, { status: "ignorada" }); avisar("Nota ignorada."); })}>Ignorar</button>`
         : n.status === "ignorada" ? html`<button type="button" class="btn" onClick=${() => acao("vol", () => api.sefaz.marcar(n.chave, { status: "nova" }))}>Voltar para novas</button>` : null}
@@ -134,7 +181,7 @@ function Detalhe({ n, onFechar, onMudou }) {
       ${pedirJust ? html`<${Campo} id="sf-just" rotulo="Justificativa (mínimo 15 caracteres)"><${Area} id="sf-just" valor=${just} onMuda=${setJust} /></${Campo}>
         <button type="button" class="btn btn-sm btn-perigo" disabled=${just.trim().length < 15 || !!ocupado} onClick=${() => manifestar("nao_realizada", "Informa à SEFAZ que a compra foi combinada, mas não aconteceu (ex.: mercadoria recusada).")}>Registrar operação não realizada</button>` : null}
     </details>` : null}
-    ${vincular ? html`<${VincularOS} n=${n} onFechar=${() => setVincular(false)} onFeito=${() => { setVincular(false); onMudou(); }} />` : null}
+    ${vincular ? html`<${VincularOS} n=${n} inicio=${vincular} onFechar=${() => setVincular(false)} onFeito=${() => { setVincular(false); onMudou(); }} />` : null}
   </${Modal}>`;
 }
 

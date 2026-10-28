@@ -66,3 +66,35 @@ export function reconhecer(itens, { fornecedorId, produtos, vinculos }) {
 
 /** Link para ver a imagem do produto no Google Imagens */
 export const linkImagem = (...partes) => "https://www.google.com/search?tbm=isch&q=" + encodeURIComponent(partes.filter(Boolean).join(" ").trim());
+
+/* ---------------- triangulação: peças da O.S. × itens da nota ---------------- */
+const PALAVRAS_VAZIAS = new Set(["de", "da", "do", "das", "dos", "com", "para", "p", "c", "s", "e", "em", "un", "und", "pc", "pcs", "jg", "kit", "cx", "lt", "ml", "original", "orig", "novo", "nova"]);
+const tokens = s => norm(s).replace(/[\/\-.]/g, " ").split(/[^a-z0-9]+/).filter(x => x.length > 1 && !PALAVRAS_VAZIAS.has(x)).map(x => x.length > 4 && x.endsWith("s") ? x.slice(0, -1) : x);
+const refsDe = s => String(s || "").toUpperCase().split(/[\s,;()]+/).map(x => x.replace(/[^A-Z0-9]/g, "")).filter(x => x.length >= 4 && /\d/.test(x));
+/** Pontua o quanto um item da O.S. parece com um item da nota (0 a 1+). */
+export function pontuar(itemOS, itemNF, produto) {
+  const a = new Set(tokens(itemOS.descricao)), b = new Set(tokens(itemNF.descricao_nf));
+  let comum = 0; for (const x of a) if (b.has(x)) comum++;
+  let s = a.size && b.size ? comum / Math.min(a.size, b.size) : 0;
+  // referência / código: da peça na O.S., do cadastro e da nota
+  const refsOS = new Set([...refsDe(itemOS.codigo), ...refsDe(itemOS.descricao), ...(produto ? [...refsDe(produto.referencia), produto.codigo_barras || ""] : [])].filter(Boolean));
+  const refsNF = new Set([...refsDe(itemNF.codigo), ...refsDe(itemNF.descricao_nf), itemNF.ean || ""].filter(Boolean));
+  for (const r of refsOS) if (refsNF.has(r)) { s += 1; break; }
+  return s;
+}
+/** Casa cada peça da O.S. com no máximo um item da nota (o mais parecido), sem repetir item da nota. */
+export function triangular(itensOS, itensNF, { produtos = [], vinculos = [], fornecedorId = null } = {}) {
+  const pares = [];
+  for (const o of itensOS) {
+    const prod = o.produto_id && produtos.find(p => p.id === o.produto_id);
+    for (const n of itensNF) {
+      let s = pontuar(o, n, prod);
+      if (prod && fornecedorId && vinculos.some(v => v.fornecedor_id === fornecedorId && v.produto_id === prod.id && v.codigo === n.codigo)) s += 2; // já ligados por entrada de nota anterior
+      if (s >= 0.5) pares.push({ o: o.id, n: n.n, s });
+    }
+  }
+  pares.sort((x, y) => y.s - x.s);
+  const usadosO = new Set(), usadosN = new Set(), out = {};
+  for (const p of pares) { if (usadosO.has(p.o) || usadosN.has(p.n)) continue; usadosO.add(p.o); usadosN.add(p.n); out[p.o] = { n: p.n, s: p.s }; }
+  return out;
+}

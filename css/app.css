@@ -779,3 +779,5 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .vinculo-custo{display:flex;gap:8px;align-items:center}
 .vinculo-custo .inp-din{flex:0 1 180px}
 @media (min-width:900px){.vinculo-linha{grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) auto;align-items:center}}
+.vinculo-linha.sugerido{border-color:var(--ok);background:var(--ok-soft)}
+.tag-sug{display:inline-block;margin-top:4px;font-size:12px;font-weight:600;color:var(--ok)}

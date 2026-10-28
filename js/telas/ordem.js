@@ -141,7 +141,7 @@ function ItemLinha({ i, verValores, onClick, mostrarAprov, exec }) {
   if (i.tipo === "peca") { sub.push(qtdFmt(i.qtd) + " un" + (verValores && !i.fornecida_cliente ? " × " + reais(i.valor_unit) : "")); sub.push(i.fornecida_cliente ? "peça do cliente" : (QUALIDADE[i.qualidade] || "procedência não informada")); }
   if (i.tipo === "terceiro") { if (i.fornecedor) sub.push(i.fornecedor); if (Number(i.qtd) !== 1) sub.push(qtdFmt(i.qtd) + " un"); if (verValores && (i.conta_id || i._conta)) sub.push("conta a pagar lançada"); }
   if (verValores && Number(i.desconto) > 0) sub.push("desconto " + reais(i.desconto));
-  if (verValores && i.tipo !== "servico" && Number(i.custo_unit) > 0) sub.push("custo " + reais(i.custo_unit * i.qtd));
+  if (verValores && i.tipo !== "servico" && Number(i.custo_unit) > 0) sub.push("custo " + reais(i.custo_unit * i.qtd) + (i.nfe_ref ? " (" + i.nfe_ref + ")" : ""));
   const ap = i.aprovado === true ? (exec ? null : html`<span class="pill p-ok">Aprovado</span>`) : i.aprovado === false ? html`<span class="pill p-bad">Não aprovado</span>` : mostrarAprov ? html`<span class="pill p-warn">Aguardando</span>` : null;
   return html`<div class=${"linha item-os" + (i.aprovado === false ? " recusado" : "")}>
     ${exec ? html`<input type="checkbox" class="chk-exec" aria-label=${"Executado: " + i.descricao} checked=${i.executado} disabled=${exec.disabled} onChange=${e => exec.onMuda(e.target.checked)} />` : null}

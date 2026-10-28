@@ -8,7 +8,7 @@ import { fmtDataHora } from "../util.js";
 const TABELAS = [["fornecedores", "Fornecedores"], ["clientes", "Clientes"], ["veiculos", "Veículos"], ["servicos", "Serviços (cadastro antigo)"], ["produtos", "Produtos e serviços"],
   ["produto_fornecedor", "Códigos dos fornecedores"], ["notas_entrada", "Notas de entrada"], ["ordens", "Ordens de serviço"], ["os_itens", "Itens das O.S."], ["eventos", "Histórico das O.S."],
   ["fotos", "Fotos (referências)"], ["recibos", "Recibos"], ["vendas", "Vendas de balcão"], ["venda_itens", "Itens das vendas"], ["estoque_mov", "Movimentos de estoque"],
-  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"]];
+  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."]];
 const NOME = Object.fromEntries(TABELAS);
 const chaveDe = t => t === "estoque_reserva" ? "item_id" : "id";
 const kb = n => n > 1048576 ? (n / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";

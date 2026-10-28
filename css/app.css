@@ -769,3 +769,13 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .manifestar[open]{display:flex;flex-direction:column;gap:8px}
 .sefaz-status .kv small{display:block;color:var(--muted);font-size:12px}
 .sefaz-status .acoes{align-items:center}
+/* ciência e vínculo nota × O.S. */
+.ciencia-box{background:var(--surface-2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.ciencia-box .sub{display:block}
+.ciencia-box .acoes{align-items:center}
+.vinculos{display:flex;flex-direction:column;gap:8px}
+.vinculo-linha{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;padding:10px;border:1px solid var(--line);border-radius:10px}
+.vinculo-linha .meio{display:flex;flex-direction:column;min-width:0}
+.vinculo-custo{display:flex;gap:8px;align-items:center}
+.vinculo-custo .inp-din{flex:0 1 180px}
+@media (min-width:900px){.vinculo-linha{grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) auto;align-items:center}}

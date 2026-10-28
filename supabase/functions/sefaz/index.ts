@@ -83,8 +83,10 @@ export function cliente(c: Cert, ca?: string[]) {
   // deno-lint-ignore no-explicit-any
   const D = Deno as any;
   if (typeof D.createHttpClient !== "function") throw new Error("O servidor não oferece conexão com certificado de cliente (Deno.createHttpClient).");
-  try { return D.createHttpClient({ cert: c.certPem, key: c.keyPem, ...(ca ? { caCerts: ca } : {}) }); }
-  catch (_e) { return D.createHttpClient({ certChain: c.certPem, privateKey: c.keyPem, ...(ca ? { caCerts: ca } : {}) }); }
+  // os web services da SEFAZ só aceitam HTTP/1.1
+  const base = { http1: true, http2: false, ...(ca ? { caCerts: ca } : {}) };
+  try { return D.createHttpClient({ ...base, cert: c.certPem, key: c.keyPem }); }
+  catch (_e) { return D.createHttpClient({ ...base, certChain: c.certPem, privateKey: c.keyPem }); }
 }
 async function soap(url: string, acao: string, corpo: string, c: Cert): Promise<string> {
   const env = `<?xml version="1.0" encoding="utf-8"?><soap12:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap12="http://www.w3.org/2003/05/soap-envelope"><soap12:Body>${corpo}</soap12:Body></soap12:Envelope>`;
@@ -198,7 +200,7 @@ async function consultar(origem: string) {
       if (st === "656") { proxima = minutos(ESPERA_MIN); erro = "SEFAZ bloqueou por consumo indevido: " + mot; break; }
       erro = `SEFAZ: ${st} ${mot}`; proxima = minutos(ESPERA_MIN); break;
     }
-  } catch (e) { erro = String((e as Error).message || e); proxima = minutos(15); }
+  } catch (e) { erro = String((e as Error).message || e); proxima = minutos(2); }
   // ciência automática: libera o XML completo na próxima consulta
   let ciencias = 0;
   if (!erro && cfg.ciencia_automatica) {

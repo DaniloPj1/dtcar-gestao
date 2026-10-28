@@ -109,7 +109,7 @@ async function enviarEventos(c, cnpj, chaves, tipo, just = "") {
 
 /* ---------------- principal ---------------- */
 async function principal() {
-  const url = process.env.SUPABASE_URL, chave = process.env.SUPABASE_SECRET_KEY;
+  const url = (process.env.SUPABASE_URL || "").trim(), chave = (process.env.SUPABASE_SECRET_KEY || "").replace(/\s+/g, "");
   if (!url || !chave) throw new Error("Falta o segredo SUPABASE_SECRET_KEY nas configurações do GitHub.");
   const db = createClient(url, chave, { auth: { persistSession: false } });
   const ok = r => { if (r.error) throw new Error(r.error.message); return r.data; };
@@ -206,7 +206,7 @@ async function principal() {
 if (process.argv[1] && import.meta.url.endsWith(process.argv[1].split("/").pop())) {
   principal().catch(async e => {
     console.error("Erro:", e.message);
-    try { const db = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SECRET_KEY, { auth: { persistSession: false } });
+    try { const db = createClient((process.env.SUPABASE_URL || "").trim(), (process.env.SUPABASE_SECRET_KEY || "").replace(/\s+/g, ""), { auth: { persistSession: false } });
       await db.from("sefaz_config").update({ worker_em: new Date().toISOString(), worker_erro: e.message }).eq("id", 1); } catch { /* sem acesso ao banco */ }
     process.exit(1);
   });

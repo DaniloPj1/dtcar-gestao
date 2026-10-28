@@ -1,0 +1,30 @@
+name: SEFAZ – notas de compra
+# Consulta a SEFAZ com o certificado A1 da DTCar (veja worker/sefaz.mjs).
+# Roda a cada 10 minutos; a consulta em si só acontece de hora em hora ou quando pedida na tela.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+concurrency:
+  group: sefaz
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  sefaz:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: worker
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Instalar dependências
+        run: npm install --no-audit --no-fund --silent --prefix worker
+      - name: Consultar a SEFAZ
+        run: node worker/sefaz.mjs
+        env:
+          SUPABASE_URL: https://vbbklawlbxznsemkgtvg.supabase.co
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY }}

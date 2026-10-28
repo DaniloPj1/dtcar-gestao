@@ -187,6 +187,8 @@ export function Painel() {
   let visiveis = layout.filter(j => (ver || !JANELAS[j.k].valores) && (fin || !JANELAS[j.k].fin));
   const [contasAb, setContasAb] = useState(null), [sefazNovas, setSefazNovas] = useState(0);
   useEffect(() => { if (pode(perfil, "cadastrar") && api.sefaz) api.sefaz.novas().then(setSefazNovas).catch(() => {}); }, []);
+  const [sefazCfg, setSefazCfg] = useState(null);
+  useEffect(() => { if (pode(perfil, "ajustes") && api.sefaz) api.sefaz.config().then(setSefazCfg).catch(() => {}); }, []);
   useEffect(() => { if (fin) api.contas.abertas().then(setContasAb).catch(() => setContasAb([])); }, [fin]);
   if (perfil.papel === "mecanico" && !visiveis.some(j => j.k === "minhas")) visiveis = [{ k: "minhas", tam: 12 }, ...visiveis];
   const precisaRes = ver && visiveis.some(j => JANELAS[j.k].res);
@@ -215,6 +217,8 @@ export function Painel() {
   if (fin && contasAb) { const v = contasAb.filter(c => c.vencimento < hoje), h = contasAb.filter(c => c.vencimento === hoje);
     if (v.length) extras.push({ t: v.length + " conta(s) a pagar vencida(s): " + reais(v.reduce((s, c) => s + Number(c.valor), 0)), s: "Registre o pagamento ou renegocie.", cor: "bad", r: "/financeiro" });
     if (h.length) extras.push({ t: h.length + " conta(s) vencem hoje: " + reais(h.reduce((s, c) => s + Number(c.valor), 0)), s: "Contas a pagar", cor: "warn", r: "/financeiro" }); }
+  if (sefazCfg && sefazCfg.validade && sefazCfg.ativo && (!sefazCfg.worker_em || Date.now() - new Date(sefazCfg.worker_em) > 3 * 3600000))
+    extras.push({ t: "O robô da SEFAZ está parado", s: "As notas de compra não estão sendo buscadas. Veja os detalhes em Notas da SEFAZ.", cor: "bad", r: "/sefaz" });
   if (sefazNovas) extras.push({ t: sefazNovas + " nota(s) de compra nova(s) na SEFAZ", s: "Dê entrada no estoque, lance as duplicatas ou ignore.", cor: "info", r: "/sefaz" });
   if (admin) { const u = cfg.ultimoBackup, d = u ? Math.floor((Date.now() - new Date(u.em)) / DIA) : null;
     if (d === null || d > 7) extras.push({ t: d === null ? "Nenhum backup baixado ainda" : "Último backup há " + d + " dias", s: "Baixe uma cópia dos dados e guarde fora do computador.", cor: "warn", r: "/backup" }); }

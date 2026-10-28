@@ -99,10 +99,12 @@ function criarApiSupabase() {
     sefaz: {
       config: async () => ok(await sb.from("sefaz_config").select("*").eq("id", 1).maybeSingle()),
       salvarConfig: async patch => ok(await sb.from("sefaz_config").update(patch).eq("id", 1)),
-      notas: async () => todos(() => sb.from("nfe_recebidas").select("id,chave,nsu,cnpj_emitente,nome_emitente,ie_emitente,numero,serie,emissao,valor,tipo_nf,situacao,tem_xml,manifestacao,manifestada_em,manifestacao_erro,status,nota_id,contas_lancadas,obs,criado_em").order("emissao", { ascending: false }).order("id")),
+      notas: async () => todos(() => sb.from("nfe_recebidas").select("id,chave,nsu,cnpj_emitente,nome_emitente,ie_emitente,numero,serie,emissao,valor,tipo_nf,situacao,tem_xml,manifestacao,manifestada_em,manifestacao_erro,manifestacao_pedida,status,nota_id,contas_lancadas,obs,criado_em").order("emissao", { ascending: false }).order("id")),
       novas: async () => { const r = await sb.from("nfe_recebidas").select("id", { count: "exact", head: true }).eq("status", "nova").neq("situacao", "cancelada"); if (r.error) throw traduzErro(r.error); return r.count || 0; },
       xml: async chave => ok(await sb.from("nfe_recebidas").select("xml").eq("chave", chave).single()).xml,
       marcar: async (chave, patch) => ok(await sb.from("nfe_recebidas").update(patch).eq("chave", chave)),
+      pedirConsulta: async () => ok(await sb.rpc("pedir_consulta_sefaz")),
+      pedirManifestacao: async (chave, tipo, just) => ok(await sb.rpc("pedir_manifestacao", { p_chave: chave, p_tipo: tipo, p_justificativa: just || "" })),
       chamar: async body => {
         const { data, error } = await sb.functions.invoke("sefaz", { body });
         if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {} throw new Error(m); }

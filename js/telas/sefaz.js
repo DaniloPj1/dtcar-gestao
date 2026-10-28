@@ -9,7 +9,7 @@ import { contasDaNota } from "./financeiro.js";
 
 const MANIF = { "": "", ciencia: "Ciência registrada", confirmada: "Operação confirmada", desconhecida: "Operação desconhecida", nao_realizada: "Operação não realizada" };
 const lerB64 = arq => new Promise((ok, erro) => { const f = new FileReader(); f.onload = () => ok(String(f.result).split(",")[1] || ""); f.onerror = () => erro(new Error("Não foi possível ler o arquivo.")); f.readAsDataURL(arq); });
-const situacaoXml = n => ["desconhecida", "nao_realizada"].includes(n.manifestacao) ? [MANIF[n.manifestacao], "bad"] : n.situacao === "cancelada" ? ["Cancelada pelo emitente", "bad"] : n.situacao === "denegada" ? ["Denegada", "bad"] : n.tem_xml ? ["XML disponível", "ok"]
+const situacaoXml = n => n.manifestacao_pedida ? ["Enviando à SEFAZ: " + MANIF[n.manifestacao_pedida].toLowerCase(), "info"] : ["desconhecida", "nao_realizada"].includes(n.manifestacao) ? [MANIF[n.manifestacao], "bad"] : n.situacao === "cancelada" ? ["Cancelada pelo emitente", "bad"] : n.situacao === "denegada" ? ["Denegada", "bad"] : n.tem_xml ? ["XML disponível", "ok"]
   : n.manifestacao ? ["XML liberado na próxima consulta", "info"] : ["Só o resumo", "warn"];
 
 function Certificado({ onFechar, onEnviado }) {
@@ -39,10 +39,10 @@ function Detalhe({ n, onFechar, onMudou }) {
   const [rot, cor] = situacaoXml(n);
   const acao = async (nome, fn) => { setOcupado(nome); try { await fn(); onMudou(); } catch (e) { avisar(e.message, true); } finally { setOcupado(""); } };
   const manifestar = async (tipo, texto) => {
-    if (!await confirmar({ titulo: MANIF[tipo], texto, botao: "Registrar na SEFAZ", perigo: tipo !== "confirmada" })) return;
-    acao(tipo, async () => { await api.sefaz.chamar({ acao: "manifestar", chave: n.chave, tipo, justificativa: just });
+    if (!await confirmar({ titulo: MANIF[tipo], texto: texto + " O registro é enviado à SEFAZ em até 10 minutos.", botao: "Registrar na SEFAZ", perigo: tipo !== "confirmada" })) return;
+    acao(tipo, async () => { await api.sefaz.pedirManifestacao(n.chave, tipo, just);
       if (tipo !== "confirmada" && n.status === "nova") await api.sefaz.marcar(n.chave, { status: "ignorada" });
-      avisar(MANIF[tipo] + " registrada na SEFAZ."); });
+      avisar("Pedido registrado: a SEFAZ recebe em até 10 minutos."); });
   };
   const baixarXml = async () => { const x = await api.sefaz.xml(n.chave); const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([x], { type: "application/xml" })); a.download = n.chave + "-nfe.xml"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 20000); };
   const duplicatas = () => acao("dup", async () => {
@@ -66,7 +66,7 @@ function Detalhe({ n, onFechar, onMudou }) {
       ${n.status === "nova" ? html`<button type="button" class="btn" disabled=${!!ocupado} onClick=${() => acao("ign", async () => { await api.sefaz.marcar(n.chave, { status: "ignorada" }); avisar("Nota ignorada."); })}>Ignorar</button>`
         : n.status === "ignorada" ? html`<button type="button" class="btn" onClick=${() => acao("vol", () => api.sefaz.marcar(n.chave, { status: "nova" }))}>Voltar para novas</button>` : null}
     </div>
-    ${admin && n.situacao === "autorizada" && !["confirmada", "desconhecida", "nao_realizada"].includes(n.manifestacao) ? html`<details class="manifestar"><summary>Manifestação do destinatário</summary>
+    ${admin && n.situacao === "autorizada" && !n.manifestacao_pedida && !["confirmada", "desconhecida", "nao_realizada"].includes(n.manifestacao) ? html`<details class="manifestar"><summary>Manifestação do destinatário</summary>
       <p class="sub">Registra na SEFAZ a sua posição sobre esta nota. Não dá para desfazer.</p>
       <div class="acoes">
         <button type="button" class="btn btn-sm" disabled=${!!ocupado} onClick=${() => manifestar("confirmada", "Confirma que a compra aconteceu e a mercadoria foi recebida.")}>Confirmar operação</button>
@@ -88,12 +88,12 @@ export function NotasSefaz() {
   const filtradas = useMemo(() => (lista || []).filter(n => (aba === "todas" || (aba === "novas" ? n.status === "nova" && n.situacao !== "cancelada" : n.status === (aba === "lancadas" ? "lancada" : "ignorada")))
     && (!q || norm(n.nome_emitente).includes(norm(q)) || n.numero === q.trim() || (soDig(q).length >= 4 && (n.cnpj_emitente.includes(soDig(q)) || n.chave.includes(soDig(q)))))), [lista, aba, q]);
   const consultar = async () => { setConsultando(true);
-    try { const r = await api.sefaz.chamar({ acao: "consultar" });
-      if (r.aguardar) avisar(r.mensagem, true);
-      else if (r.erro) avisar(r.erro, true);
-      else avisar(`Consulta feita: ${r.novos} nota(s) nova(s), ${r.xmls} XML(s) recebido(s)${r.ciencias ? ", ciência registrada em " + r.ciencias : ""}.`);
+    try { const r = await api.sefaz.pedirConsulta();
+      const espera = r && r.proxima_consulta && new Date(r.proxima_consulta) > new Date();
+      avisar(espera ? "Pedido registrado. A SEFAZ só libera nova consulta às " + new Date(r.proxima_consulta).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) + "; o robô consulta nesse horário." : "Pedido registrado. O robô consulta a SEFAZ em até 10 minutos.");
       carregar(); }
     catch (e) { avisar(e.message, true); } finally { setConsultando(false); } };
+  const roboParado = cfg && cfg.validade && (!cfg.worker_em || Date.now() - new Date(cfg.worker_em) > 40 * 60000);
   const venceEm = cfg && cfg.validade ? Math.floor((new Date(cfg.validade) - Date.now()) / 86400000) : null;
   const n = k => (lista || []).filter(x => k === "novas" ? x.status === "nova" && x.situacao !== "cancelada" : x.status === k).length;
   return html`<div class="pagina larga-media sefaz">
@@ -113,6 +113,8 @@ export function NotasSefaz() {
           <div><span>Próxima consulta</span><b>${cfg.proxima_consulta && new Date(cfg.proxima_consulta) > new Date() ? fmtDataHora(cfg.proxima_consulta) : "a qualquer momento"}</b><small>${cfg.ativo ? "automática de hora em hora" : "busca automática desligada"}</small></div>
         </div>
         ${cfg.ultimo_erro ? html`<div class="erros">${cfg.ultimo_erro}</div>` : null}
+        ${roboParado ? html`<div class="aviso">O robô da SEFAZ ${cfg.worker_em ? "não roda desde " + fmtDataHora(cfg.worker_em) : "ainda não rodou"}. ${cfg.worker_erro ? "Último erro: " + cfg.worker_erro + ". " : ""}Ele roda no GitHub a cada 10 minutos: confira se a chave SUPABASE_SECRET_KEY está cadastrada e se a rotina “SEFAZ – notas de compra” está ativa na aba Actions do repositório.</div>`
+          : cfg.worker_erro ? html`<div class="erros">Robô da SEFAZ: ${cfg.worker_erro}</div>` : html`<span class="dica">Robô da SEFAZ ativo: última verificação ${fmtDataHora(cfg.worker_em)}${cfg.pedido_em && (!cfg.ultima_consulta || cfg.pedido_em > cfg.ultima_consulta) ? " · consulta pedida em " + fmtDataHora(cfg.pedido_em) : ""}.</span>`}
         ${admin ? html`<div class="acoes">
           <label class="linha-check"><input type="checkbox" checked=${cfg.ativo} onChange=${async e => { const v = e.target.checked; try { await api.sefaz.salvarConfig({ ativo: v }); setCfg({ ...cfg, ativo: v }); } catch (x) { avisar(x.message, true); } }} /><span>Buscar automaticamente</span></label>
           <label class="linha-check"><input type="checkbox" checked=${cfg.ciencia_automatica} onChange=${async e => { const v = e.target.checked; try { await api.sefaz.salvarConfig({ ciencia_automatica: v }); setCfg({ ...cfg, ciencia_automatica: v }); } catch (x) { avisar(x.message, true); } }} /><span>Registrar ciência automaticamente (libera o XML)</span></label>

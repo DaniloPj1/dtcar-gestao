@@ -10,7 +10,7 @@ import { contasDaNota } from "./financeiro.js";
 const MANIF = { "": "", ciencia: "Ciência registrada", confirmada: "Operação confirmada", desconhecida: "Operação desconhecida", nao_realizada: "Operação não realizada" };
 const lerB64 = arq => new Promise((ok, erro) => { const f = new FileReader(); f.onload = () => ok(String(f.result).split(",")[1] || ""); f.onerror = () => erro(new Error("Não foi possível ler o arquivo.")); f.readAsDataURL(arq); });
 const situacaoXml = n => n.manifestacao_pedida ? ["Enviando à SEFAZ: " + MANIF[n.manifestacao_pedida].toLowerCase(), "info"] : ["desconhecida", "nao_realizada"].includes(n.manifestacao) ? [MANIF[n.manifestacao], "bad"] : n.situacao === "cancelada" ? ["Cancelada pelo emitente", "bad"] : n.situacao === "denegada" ? ["Denegada", "bad"] : n.tem_xml ? ["XML disponível", "ok"]
-  : n.manifestacao ? ["XML liberado na próxima consulta", "info"] : ["Só o resumo", "warn"];
+  : n.manifestacao ? ["XML liberado na próxima consulta", "info"] : /^596/.test(n.manifestacao_erro || "") ? ["Só o resumo · prazo da ciência expirou", "warn"] : ["Só o resumo", "warn"];
 
 function Certificado({ onFechar, onEnviado }) {
   const { avisar } = useApp();
@@ -57,7 +57,8 @@ function Detalhe({ n, onFechar, onMudou }) {
     <div class="conta-cab"><div><strong>${n.nome_emitente}</strong><span class="sub">${fmtDoc(n.cnpj_emitente)}</span></div><b>${reais(n.valor)}</b></div>
     <div class="chips"><span class=${"pill p-" + cor}>${rot}</span>${n.manifestacao ? html`<span class="pill p-info">${MANIF[n.manifestacao]}</span>` : null}${n.status !== "nova" ? html`<span class="pill p-muted">${n.status === "lancada" ? "Entrada lançada" : "Ignorada"}</span>` : null}${n.contas_lancadas ? html`<span class="pill p-ok">Duplicatas lançadas</span>` : null}</div>
     <div class="kv"><div><span>Emissão</span><b>${n.emissao ? fmtDataHora(n.emissao) : "—"}</b></div><div><span>Chave de acesso</span><b class="mono quebra">${n.chave}</b></div></div>
-    ${n.manifestacao_erro ? html`<div class="aviso">Última manifestação recusada pela SEFAZ: ${n.manifestacao_erro}</div>` : null}
+    ${/^596/.test(n.manifestacao_erro || "") && !n.tem_xml ? html`<div class="aviso">A SEFAZ só aceita a ciência até 10 dias depois da emissão, e esta nota passou desse prazo. Para liberar o XML: se a compra aconteceu, use “Confirmar operação” abaixo (vale até 180 dias); ou peça o XML ao fornecedor e use a Entrada de nota.</div>`
+      : n.manifestacao_erro ? html`<div class="aviso">Última manifestação recusada pela SEFAZ: ${n.manifestacao_erro}</div>` : null}
     ${!n.tem_xml && n.situacao === "autorizada" ? html`<span class="dica">${n.manifestacao ? "A ciência foi registrada: o XML completo chega na próxima consulta (até 1 hora)." : "O sistema registra a ciência da operação na próxima consulta para liberar o XML completo."}</span>` : null}
     <div class="acoes">
       ${n.tem_xml && n.status !== "lancada" && pode(perfil, "cadastrar") ? html`<button type="button" class="btn btn-pri" onClick=${() => ir("/nfe?sefaz=" + n.chave)}>Dar entrada no estoque</button>` : null}

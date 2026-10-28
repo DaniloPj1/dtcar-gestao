@@ -189,7 +189,7 @@ async function principal() {
   // 3. ciência automática
   let ciencias = 0;
   if (!erro && cfg.ciencia_automatica) {
-    const pend = ok(await db.from("nfe_recebidas").select("chave").is("xml", null).eq("manifestacao", "").eq("situacao", "autorizada").order("emissao", { ascending: false }).limit(60));
+    const pend = ok(await db.from("nfe_recebidas").select("chave").is("xml", null).eq("manifestacao", "").eq("situacao", "autorizada").not("manifestacao_erro", "like", "596%").order("emissao", { ascending: false }).limit(60));
     if (pend.length) {
       try {
         const res = await enviarEventos(c, cnpj, pend.map(p => p.chave), "ciencia");

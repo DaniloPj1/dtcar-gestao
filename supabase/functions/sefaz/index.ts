@@ -26,7 +26,11 @@ const EVENTOS: Record<string, [string, string]> = {
 
 const CORS = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type", "Access-Control-Allow-Methods": "POST, OPTIONS" };
 const resposta = (corpo: unknown, status = 200) => new Response(JSON.stringify(corpo), { status, headers: { ...CORS, "Content-Type": "application/json" } });
-const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+function chaveServidor(): string {
+  const legado = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if (legado) return legado;
+  try { const k = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}"); return k.default || Object.values(k)[0] as string || ""; } catch (_e) { return ""; }
+}
+const db = createClient(Deno.env.get("SUPABASE_URL")!, chaveServidor(), { auth: { persistSession: false } });
 
 /* ---------------- utilidades ---------------- */
 export const tag = (xml: string, nome: string) => { const m = new RegExp(`<(?:\\w+:)?${nome}(?:\\s[^>]*)?>([\\s\\S]*?)</(?:\\w+:)?${nome}>`).exec(xml); return m ? m[1].trim() : ""; };

@@ -11,8 +11,12 @@ export function Mais() {
   return html`<div class="pagina">
     <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div></section>
     <section class="card"><div class="lista">
-      ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.chave)}
-      ${pode(perfil, "verValores") ? it("/recibos", "Recibos de pagamento", "Consultar, reimprimir, cancelar e emitir recibo avulso", I.lista) : null}
+      ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
+      ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}
+      ${pode(perfil, "verValores") ? it("/balcao", "Venda de balcão", "Vender peças e serviços sem O.S.", I.carrinho) : null}
+      ${pode(perfil, "cadastrar") ? it("/nfe", "Entrada de nota fiscal (XML)", "Cadastrar produtos e fornecedor e somar o estoque pela NF-e", I.nota) : null}
+      ${pode(perfil, "verValores") ? it("/recibos", "Recibos de pagamento", "Consultar, reimprimir, cancelar e emitir recibo avulso", I.recibo) : null}
+      ${pode(perfil, "verValores") ? it("/relatorios", "Relatório de produtos vendidos", "Quantidade, faturamento e margem por período", I.lista) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}
       ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
       ${pode(perfil, "ajustes") ? it("/importar", "Importar do OS Oficina 3.0", "Trazer cadastros completos, produtos e O.S. novas do sistema antigo", I.painel) : null}

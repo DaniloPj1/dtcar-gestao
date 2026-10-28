@@ -9,12 +9,14 @@ export const referenteOS = o => `pagamento da Ordem de Serviço nº ${String(o.n
   (o.veiculo && o.veiculo.placa ? ` – ${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")} placa ${exPlaca(o.veiculo.placa)}` : "");
 
 /** Emite recibo. ordem: O.S. (opcional); valor: sugestão (saldo da O.S.) */
-export function ReciboModal({ ordem, valor, forma, onFechar, onEmitido }) {
+export function ReciboModal({ ordem, venda, valor, forma, onFechar, onEmitido }) {
   const { cfg, dados, perfil, avisar } = useApp();
   const cli0 = ordem ? dados.clientes.find(c => c.id === ordem.cliente_id) : null;
   const [r, setR] = useState(() => ({
-    cliente_id: ordem ? ordem.cliente_id || "" : "", pagador: ordem ? (ordem.cliente || {}).nome || "" : "", doc: fmtDoc((cli0 && cli0.doc) || (ordem && ordem.cliente && ordem.cliente.doc) || ""),
-    valor: Number(valor) > 0 ? Number(valor) : 0, referente: ordem ? referenteOS(ordem) : "", forma: forma || (ordem && ordem.forma_pagamento) || "", data: hojeISO(), obs: "" }));
+    cliente_id: ordem ? ordem.cliente_id || "" : venda ? venda.cliente_id || "" : "", pagador: ordem ? (ordem.cliente || {}).nome || "" : venda ? (venda.cliente || {}).nome || "" : "",
+    doc: fmtDoc((cli0 && cli0.doc) || (ordem && ordem.cliente && ordem.cliente.doc) || (venda && venda.cliente && venda.cliente.doc) || ""),
+    valor: Number(valor) > 0 ? Number(valor) : 0, referente: ordem ? referenteOS(ordem) : venda ? "pagamento da venda de balcão nº " + String(venda.numero).padStart(5, "0") : "",
+    forma: forma || (ordem && ordem.forma_pagamento) || "", data: hojeISO(), obs: "" }));
   const [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
   const set = p => { setR(x => ({ ...x, ...p })); setErro(""); };
   const escolherCliente = id => { const c = dados.clientes.find(x => x.id === id); set({ cliente_id: id, ...(c ? { pagador: c.nome, doc: fmtDoc(c.doc) } : {}) }); };
@@ -25,14 +27,14 @@ export function ReciboModal({ ordem, valor, forma, onFechar, onEmitido }) {
     if (!r.forma) return setErro("Informe a forma de pagamento.");
     setSalvando(true);
     try {
-      const novo = await api.recibos.salvar({ ordem_id: ordem ? ordem.id : null, cliente_id: r.cliente_id || null, pagador: r.pagador.trim(), doc: soDig(r.doc), valor: Number(r.valor),
+      const novo = await api.recibos.salvar({ ordem_id: ordem ? ordem.id : null, ...(venda ? { venda_id: venda.id } : {}), cliente_id: r.cliente_id || null, pagador: r.pagador.trim(), doc: soDig(r.doc), valor: Number(r.valor),
         referente: r.referente.trim(), forma: r.forma, data: r.data || hojeISO(), obs: r.obs.trim(), emitido_por: perfil.nome });
       if (ordem) await api.evento(ordem.id, "recibo", `${numRecibo(novo.numero)} emitido: ${reais(novo.valor)} (${novo.forma}).`, perfil.nome).catch(() => {});
       avisar(numRecibo(novo.numero) + " emitido."); onEmitido ? onEmitido(novo) : onFechar();
     } catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };
   return html`<${Modal} titulo="Emitir recibo de pagamento" onFechar=${onFechar}>
-    ${ordem ? html`<span class="sub">${numOS(ordem.numero)} · ${(ordem.cliente || {}).nome}</span>` : html`<div class="campo"><label for="r-cli">Cliente cadastrado (opcional)</label><${BuscaCliente} id="r-cli" valor=${r.cliente_id} onEscolha=${escolherCliente} /></div>`}
+    ${ordem ? html`<span class="sub">${numOS(ordem.numero)} · ${(ordem.cliente || {}).nome}</span>` : venda ? html`<span class="sub">Venda de balcão ${String(venda.numero).padStart(5, "0")}</span>` : html`<div class="campo"><label for="r-cli">Cliente cadastrado (opcional)</label><${BuscaCliente} id="r-cli" valor=${r.cliente_id} onEscolha=${escolherCliente} /></div>`}
     <div class="grade">
       <${Campo} id="r-pag" rotulo="Recebemos de" obrig><${Texto} id="r-pag" valor=${r.pagador} onMuda=${v => set({ pagador: v })} /></${Campo}>
       <${Campo} id="r-doc" rotulo="CPF / CNPJ"><input id="r-doc" class="inp" inputmode="numeric" value=${r.doc} onBlur=${e => set({ doc: fmtDoc(e.target.value) })} onInput=${e => set({ doc: e.target.value })} /></${Campo}>

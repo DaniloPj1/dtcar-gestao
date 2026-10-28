@@ -11,24 +11,35 @@ import { Mais, Equipe, Ajustes } from "./telas/admin.js";
 import { Recibos } from "./telas/recibos.js";
 import { Imprimir } from "./telas/imprimir.js";
 import { Importar } from "./telas/importar.js";
+import { Balcao } from "./telas/balcao.js";
+import { EntradaNFe } from "./telas/compras.js";
+import { Relatorios } from "./telas/relatorios.js";
 
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina" };
-const SINC = ["ordens", "clientes", "veiculos", "produtos"];
-const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["/entrada", "Nova O.S.", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios" };
+const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
+// menu do celular (barra inferior) e menu lateral do computador
+const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["+", "Novo", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
+const LATERAL = [
+  ["Operação", [["/painel", "Painel", "painel"], ["/ordens", "Ordens de serviço", "lista"], ["/entrada", "Nova O.S.", "mais", "entrada"], ["/balcao", "Venda de balcão", "carrinho", "verValores"]]],
+  ["Cadastros", [["/cadastros", "Clientes", "pessoas"], ["/cadastros?aba=veiculos", "Veículos", "carro"], ["/cadastros?aba=produtos", "Produtos e estoque", "caixa"], ["/cadastros?aba=fornecedores", "Fornecedores", "fabrica"]]],
+  ["Financeiro", [["/recibos", "Recibos", "recibo", "verValores"], ["/relatorios", "Produtos vendidos", "lista", "verValores"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"]]],
+  ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
+];
 
 function App() {
   const [sessao, setSessao] = useState(undefined);
   const [perfil, setPerfil] = useState(undefined);
   const [rota, setRota] = useState(lerRota());
   const [modoSenha, setModoSenha] = useState(/type=recovery/.test(location.hash));
-  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], carregado: false });
+  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], fornecedores: [], ordens: [], perfis: [], carregado: false });
+  const [novoMenu, setNovoMenu] = useState(false);
   const [cfg, setCfg] = useState(cfgCompleta({}));
   const [toast, setToast] = useState(null);
   const [conf, setConf] = useState(null);
   const ultimaCarga = useRef(0);
 
-  useEffect(() => { const f = () => { setRota(lerRota()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
     if (!api) return;
     api.auth.sessao().then(s => setSessao(s || null)).catch(() => setSessao(null));
@@ -46,7 +57,7 @@ function App() {
   /** Carrega tabelas. Para O.S., clientes, veículos e produtos já carregados, busca só o que mudou (rápido);
    *  use { completo: true } depois de excluir registros. */
   const recarregar = useCallback(async (quais, opt = {}) => {
-    const todos = ["clientes", "veiculos", "produtos", "ordens", "perfis", "config"];
+    const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config"];
     const lista = quais && quais.length ? quais : todos;
     try {
       const res = await Promise.all(lista.map(k => {
@@ -54,7 +65,7 @@ function App() {
         if (k === "perfis") return api.perfis();
         const desde = !opt.completo && SINC.includes(k) && marcas.current[k];
         if (desde) return k === "ordens" ? api.ordens(desde) : api.alterados(k, desde);
-        return k === "ordens" ? api.ordens() : api[k].listar(k === "clientes" ? "nome" : k === "produtos" ? "descricao" : "criado_em");
+        return k === "ordens" ? api.ordens() : api[k].listar(k === "clientes" ? "nome" : k === "produtos" ? "descricao" : k === "fornecedores" ? "razao" : "criado_em");
       }));
       const novo = {}, parcial = {};
       lista.forEach((k, n) => {
@@ -103,7 +114,7 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores" };
+  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores" };
   const ctx = { sessao, perfil, cfg, dados, recarregar, avisar, confirmar, ir, sair };
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
@@ -116,15 +127,25 @@ function App() {
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
+    balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} />`, relatorios: () => html`<${Relatorios} />`,
   }[base]?.() || html`<${Painel} />`;
 
   return html`<${Ctx.Provider} value=${ctx}>
+    <aside class="lateral" aria-label="Menu">
+      <button type="button" class="lateral-marca" onClick=${() => ir("/painel")} aria-label="Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
+      ${LATERAL.map(([grupo, itens]) => { const vis = itens.filter(it => !it[3] || pode(perfil, it[3])); return vis.length ? html`<nav key=${grupo} class="lateral-grupo"><span>${grupo}</span>
+        ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && !qs) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
+          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span></button>`; })}</nav>` : null; })}
+      <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
+    </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
-      <nav class="nav-desk" aria-label="Navegação">${NAV.map(([r, t]) => html`<button type="button" key=${r} aria-current=${"/" + base === r || (r === "/cadastros" && (base === "cliente" || base === "veiculo")) ? "page" : undefined} onClick=${() => ir(r)}>${t}</button>`)}</nav>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
     <main>${corpo}</main>
-    <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "/entrada" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => ir(r)}>
-      ${r === "/entrada" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
+    <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
+      ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
+    ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">
+      ${[["/entrada", "Nova ordem de serviço", "Abrir O.S. para um veículo", "lista", "entrada"], ["/balcao", "Venda de balcão", "Vender peças ou serviços sem O.S.", "carrinho", "verValores"], ["/nfe", "Entrada de nota fiscal", "Importar o XML de uma compra", "nota", "cadastrar"]]
+        .filter(x => pode(perfil, x[4])).map(([r, t, d, ic]) => html`<button type="button" key=${r} class="linha" onClick=${() => { setNovoMenu(false); ir(r); }}><span class="ic">${I[ic]}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`)}</div></${Modal}>` : null}
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => { conf.res(false); setConf(null); }}>Voltar</button>

@@ -38,36 +38,50 @@ const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "out
 function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   const { cfg, dados, perfil } = useApp();
   const [i, setI] = useState({ desconto: 0, ...item });
-  const [busca, setBusca] = useState(""), [cadastrar, setCadastrar] = useState(false), [erroEst, setErroEst] = useState("");
+  const [busca, setBusca] = useState(""), [erroEst, setErroEst] = useState("");
+  // novo item: abre primeiro o catálogo; "Cadastrar só nesta O.S." cria um item que não entra no cadastro geral
+  const [etapa, setEtapa] = useState(item._novo && item.tipo !== "terceiro" ? "catalogo" : "detalhe");
+  const qtdOriginal = !item._novo && item.produto_id ? Number(item.qtd) || 0 : 0;
   const set = p => { setI(o => ({ ...o, ...p })); setErroEst(""); };
   const sugestaoVenda = c => arred(c * (1 + (Number(cfg.markupPecas) || 0) / 100));
   const tipoProd = i.tipo === "servico" ? "servico" : "produto";
   const prod = i.produto_id ? dados.produtos.find(p => p.id === i.produto_id) : null;
-  const cat = useMemo(() => { const q = norm(busca), cod = /^\d+$/.test(busca.trim()) ? +busca.trim() : null; if (!q) return [];
-    return dados.produtos.filter(p => p.ativo !== false && p.tipo === tipoProd && (p.codigo === cod || norm(p.descricao).includes(q) || norm(p.referencia).includes(q) || norm(p.marca).includes(q) || norm(p.obs).includes(q) || p.codigo_barras === busca.trim())).slice(0, 12); }, [busca, dados.produtos, tipoProd]);
+  const cat = useMemo(() => { const q = norm(busca), cod = /^\d+$/.test(busca.trim()) ? +busca.trim() : null;
+    return dados.produtos.filter(p => p.ativo !== false && p.tipo === tipoProd && (!q || p.codigo === cod || norm(p.descricao).includes(q) || norm(p.referencia).includes(q) || norm(p.marca).includes(q) || norm(p.categoria).includes(q) || norm(p.obs).includes(q) || p.codigo_barras === busca.trim()))
+      .sort((a, b) => a.descricao.localeCompare(b.descricao)).slice(0, 80); }, [busca, dados.produtos, tipoProd]);
   const usar = p => {
     if (p.tipo === "servico" && p.cobranca === "hora") set({ descricao: p.descricao, produto_id: p.id, servico_id: null, horas: Number(p.horas) || 1, qtd: Number(p.horas) || 1, valor_unit: Number(cfg.valorHora) || 0, custo_unit: 0 });
     else if (p.tipo === "servico") set({ descricao: p.descricao, produto_id: p.id, servico_id: null, horas: null, qtd: 1, valor_unit: precoTabela(p, tabela), custo_unit: 0 });
     else set({ descricao: p.descricao, produto_id: p.id, codigo: p.referencia || String(p.codigo), valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, qualidade: i.qualidade || "original" });
-    setBusca("");
+    setBusca(""); setEtapa("detalhe");
   };
   const porHora = i.tipo === "servico" && i.horas !== null && i.horas !== undefined;
   const bruto = (Number(i.qtd) || 0) * (Number(i.valor_unit) || 0);
   const erro = !i.descricao.trim() ? "Informe a descrição." : !(Number(i.qtd) > 0) ? "Quantidade deve ser maior que zero." : Number(i.desconto) > bruto + 0.001 ? "O desconto não pode ser maior que o valor do item." : "";
-  const semEstoque = prod && prod.tipo === "produto" && prod.controla_estoque && Number(prod.estoque_atual) < Number(i.qtd);
+  const disponivel = prod ? Number(prod.estoque_atual) + (prod.id === item.produto_id ? qtdOriginal : 0) : 0; // a quantidade já lançada nesta O.S. já saiu do estoque
+  const semEstoque = prod && prod.tipo === "produto" && prod.controla_estoque && disponivel < Number(i.qtd);
   const salvar = () => {
-    if (semEstoque && !prod.vender_sem_estoque) return setErroEst(`Estoque insuficiente: há ${qtdFmt(prod.estoque_atual)} ${prod.unidade}. Este produto está marcado para não ser vendido sem estoque.`);
-    onSalvar({ ...i, _cadastrar: cadastrar && !i.produto_id && i.tipo !== "terceiro" });
+    if (semEstoque && !prod.vender_sem_estoque) return setErroEst(`Estoque insuficiente: há ${qtdFmt(disponivel)} ${prod.unidade}. Este produto está marcado para não ser vendido sem estoque.`);
+    onSalvar({ ...i });
   };
   const qtdInp = html`<${Campo} id="it-qtd" rotulo="Quantidade"><input id="it-qtd" class="inp" inputmode="decimal" value=${String(i.qtd).replace(".", ",")} onInput=${e => set({ qtd: Number(e.target.value.replace(",", ".")) || 0 })} /></${Campo}>`;
+  const plural = i.tipo === "servico" ? "serviços" : "produtos";
+  if (etapa === "catalogo") return html`<${Modal} titulo=${"Incluir " + NOME_TIPO[i.tipo]} largo onFechar=${onFechar}>
+    <div class="cat-topo"><input id="cat-busca" class="inp" type="search" autofocus autocomplete="off" aria-label=${"Buscar " + plural}
+        placeholder=${i.tipo === "servico" ? "Buscar serviço: alinhamento, pastilha…" : "Buscar por descrição, código, referência, marca ou aplicação"} value=${busca} onInput=${e => setBusca(e.target.value)} />
+      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim() }); setEtapa("detalhe"); }}>+ Cadastrar só nesta O.S.</button></div>
+    <span class="dica">Tabela de preço: ${TABELAS_PRECO[tabela].toLowerCase()}. ${cat.length === 80 ? "Mostrando os 80 primeiros; refine a busca." : cat.length + " " + plural + " no cadastro."}</span>
+    <div class="catalogo">${cat.map(p => { const est = p.tipo === "produto" && p.controla_estoque; const zerado = est && Number(p.estoque_atual) <= 0;
+      return html`<button type="button" key=${p.id} class=${"cat-item" + (zerado ? " zerado" : "")} onClick=${() => usar(p)}>
+        <span class="cod">${p.codigo}</span><span class="meio"><strong>${p.descricao}</strong><span>${[p.referencia, p.marca, p.categoria].filter(Boolean).join(" · ")}</span></span>
+        ${est ? html`<span class=${"cat-est" + (zerado ? " c-bad" : "")}>${qtdFmt(p.estoque_atual)} ${p.unidade}</span>` : null}
+        <b>${p.tipo === "servico" && p.cobranca === "hora" ? qtdFmt(p.horas) + " h" : precoTabela(p, tabela) ? reais(precoTabela(p, tabela)) : "sem preço"}</b></button>`; })}
+      ${!cat.length ? html`<div class="vazio">Nenhum ${i.tipo === "servico" ? "serviço" : "produto"} encontrado. Use “Cadastrar só nesta O.S.”.</div>` : null}</div>
+  </${Modal}>`;
   return html`<${Modal} titulo=${(item._novo ? "Incluir " : "Alterar ") + NOME_TIPO[i.tipo]} onFechar=${onFechar}>
-    ${i.tipo !== "terceiro" ? html`<${Campo} id="cat-busca" rotulo=${"Buscar no cadastro de " + (i.tipo === "servico" ? "serviços" : "produtos") + " (tabela " + TABELAS_PRECO[tabela].toLowerCase() + ")"}>
-      <${Texto} id="cat-busca" placeholder=${i.tipo === "servico" ? "ex.: alinhamento, pastilha" : "descrição, código, referência ou aplicação"} valor=${busca} onMuda=${setBusca} /></${Campo}>
-      ${busca ? html`<div class="lista lista-cat">${cat.map(p => html`<button type="button" key=${p.id} class="linha" onClick=${() => usar(p)}><span class="cod">${p.codigo}</span><span class="meio"><strong>${p.descricao}</strong>
-          <span>${[p.referencia, p.marca, p.tipo === "produto" && p.controla_estoque ? "estoque " + qtdFmt(p.estoque_atual) + " " + p.unidade : null].filter(Boolean).join(" · ")}</span></span>
-        <span class="sub">${p.tipo === "servico" && p.cobranca === "hora" ? qtdFmt(p.horas) + " h" : precoTabela(p, tabela) ? reais(precoTabela(p, tabela)) : "sem preço"}</span></button>`)}
-        ${!cat.length ? html`<span class="dica">Nada encontrado. Preencha abaixo como item avulso.</span>` : null}</div>` : null}
-      ${prod ? html`<div class="info">Do cadastro: cód. ${prod.codigo}${prod.tipo === "produto" && prod.controla_estoque ? " · estoque " + qtdFmt(prod.estoque_atual) + " " + prod.unidade : ""} <button type="button" class="btn-link" onClick=${() => set({ produto_id: null })}>desvincular</button></div>` : null}` : null}
+    ${i.tipo !== "terceiro" ? (prod ? html`<div class="info item-origem"><span>Do cadastro: cód. ${prod.codigo}${prod.tipo === "produto" && prod.controla_estoque ? " · disponível " + qtdFmt(disponivel) + " " + prod.unidade : ""}</span>
+        ${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Trocar</button>` : null}</div>`
+      : html`<div class="info item-origem"><span>Item só desta O.S.: não entra no cadastro de ${plural}${i.tipo === "peca" ? " nem no estoque" : ""}.</span>${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Escolher do cadastro</button>` : null}</div>`) : null}
     <${Campo} id="it-desc" rotulo="Descrição" obrig><${Texto} id="it-desc" valor=${i.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
     ${i.tipo === "servico" ? html`
       <${Seg} rotulo="Forma de cobrança" opcoes=${[["Preço fechado", "info"], ["Por hora", "info"]]} valor=${porHora ? "Por hora" : "Preço fechado"}
@@ -98,8 +112,7 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
     ${!i.fornecida_cliente ? html`<div class="grade">
       <${Campo} id="it-descp" rotulo="Desconto (%)"><input id="it-descp" class="inp" inputmode="decimal" value=${bruto && Number(i.desconto) ? String(arred(Number(i.desconto) / bruto * 100)).replace(".", ",") : ""} onInput=${e => set({ desconto: arred(bruto * parseValor(e.target.value) / 100) })} /></${Campo}>
       <${Campo} id="it-desc-v" rotulo="Desconto (R$)"><${Dinheiro} id="it-desc-v" valor=${i.desconto} onMuda=${v => set({ desconto: v })} /></${Campo}></div>` : null}
-    ${semEstoque ? html`<div class=${prod.vender_sem_estoque ? "aviso" : "erros"}>Estoque atual: ${qtdFmt(prod.estoque_atual)} ${prod.unidade}. ${prod.vender_sem_estoque ? "A baixa na entrega deixará o saldo negativo." : "Este produto não pode ser vendido sem estoque."}</div>` : null}
-    ${item._novo && !i.produto_id && i.tipo !== "terceiro" && pode(perfil, "cadastrar") ? html`<label class="linha-check"><input type="checkbox" checked=${cadastrar} onChange=${e => setCadastrar(e.target.checked)} /><span>Salvar também no cadastro de ${i.tipo === "servico" ? "serviços" : "produtos"}</span></label>` : null}
+    ${semEstoque ? html`<div class=${prod.vender_sem_estoque ? "aviso" : "erros"}>Disponível: ${qtdFmt(disponivel)} ${prod.unidade}. ${prod.vender_sem_estoque ? "Ao salvar, o estoque ficará negativo." : "Este produto não pode ser vendido sem estoque."}</div>` : null}
     <div class="total-item"><span>Total do item</span><b>${reais(totalItem(i))}</b></div>
     ${erro || erroEst ? html`<span class="dica erro">${erro || erroEst}</span>` : null}
     <div class="acoes">${!item._novo ? html`<button type="button" class="btn btn-perigo" onClick=${onExcluir}>Remover</button>` : null}<span class="espaco"></span>
@@ -238,7 +251,7 @@ export function Ordem({ id }) {
       condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto, obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
       situacao: campos.situacao, tabela_preco: campos.tabela_preco, total: t.total, custo: t.custo, ...extra });
     if (!silencioso) avisar("O.S. salva.");
-    await carregar(); recarregar(["ordens"]);
+    await carregar(); recarregar(["ordens", "produtos"]);
   };
   const acao = async (rotulo, fn) => { setOcupado(rotulo); try { await fn(); } catch (e) { avisar(e.message, true); } finally { setOcupado(""); } };
 
@@ -287,7 +300,7 @@ export function Ordem({ id }) {
       status, total: t.total, custo: t.custo, diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto });
     const aprovados = novos.filter(i => sel[i.id] && pendentes.some(p => p.id === i.id)).length;
     await evento("aprovacao", `${por} aprovou ${aprovados} de ${pendentes.length} itens (${forma}).` + (status === "recusado" ? " Orçamento recusado." : ""));
-    setModal(null); avisar(status === "recusado" ? "Nenhum item aprovado: orçamento marcado como recusado." : "Aprovação registrada."); await carregar(); recarregar(["ordens"]);
+    setModal(null); avisar(status === "recusado" ? "Nenhum item aprovado: orçamento marcado como recusado." : "Aprovação registrada."); await carregar(); recarregar(["ordens", "produtos"]);
   });
   const recusar = async () => {
     const taxa = Number(cfg.taxaDiagnostico) || 0;
@@ -299,7 +312,7 @@ export function Ordem({ id }) {
       await api.salvarItens(o.id, novos, removidos);
       await api.atualizarOrdem(o.id, { status: "recusado", total: t.total, custo: t.custo, desconto: 0 });
       await evento("recusa", "Orçamento recusado pelo cliente." + (taxa ? " Taxa de diagnóstico lançada." : ""));
-      await carregar(); recarregar(["ordens"]);
+      await carregar(); recarregar(["ordens", "produtos"]);
     });
   };
   const marcarExecutado = (it, v) => acao("exec", async () => {
@@ -338,11 +351,11 @@ export function Ordem({ id }) {
   });
   const cancelar = async () => {
     if (!await confirmar({ titulo: "Cancelar " + numOS(o.numero), texto: "A O.S. fica registrada como cancelada no histórico.", botao: "Cancelar O.S.", perigo: true })) return;
-    acao("cancelar", async () => { await api.atualizarOrdem(o.id, { status: "cancelado" }); await evento("cancelamento", "O.S. cancelada."); await carregar(); recarregar(["ordens"]); });
+    acao("cancelar", async () => { await api.atualizarOrdem(o.id, { status: "cancelado" }); await evento("cancelamento", "O.S. cancelada."); await carregar(); recarregar(["ordens", "produtos"]); });
   };
   const reabrir = async () => {
     const destino = st === "entregue" ? "pronto" : "diagnostico";
-    if (!await confirmar({ titulo: "Reabrir " + numOS(o.numero), texto: st === "entregue" ? "A O.S. volta para “Pronto para retirada”. A baixa de estoque das peças é estornada e volta a ser feita na nova entrega." : "A O.S. volta para “Em diagnóstico” para refazer o orçamento.", botao: "Reabrir" })) return;
+    if (!await confirmar({ titulo: "Reabrir " + numOS(o.numero), texto: st === "entregue" ? "A O.S. volta para “Pronto para retirada”. As peças continuam baixadas do estoque enquanto a O.S. estiver ativa." : "A O.S. volta para “Em diagnóstico” para refazer o orçamento.", botao: "Reabrir" })) return;
     acao("reabrir", async () => { await api.atualizarOrdem(o.id, { status: destino, ...(destino === "diagnostico" ? { orcamento_enviado_em: null } : {}) }); await evento("reabertura", "O.S. reaberta (" + STATUS[st].t.toLowerCase() + " → " + STATUS[destino].t.toLowerCase() + ")."); await carregar(); recarregar(["ordens", "produtos"]); });
   };
   const excluir = async () => {

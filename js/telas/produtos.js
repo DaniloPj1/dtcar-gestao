@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro } from "../ui.js";
 import { norm, reais, qtdFmt, fmtDataHora, parseValor, precoPelaMargem, margemDoPreco, arred } from "../util.js";
 import { pode, UNIDADES, TABELAS_PRECO } from "../regras.js";
+import { linkImagem } from "../nfe.js";
 
 export const estoqueBaixo = p => p.tipo === "produto" && p.ativo !== false && p.controla_estoque && p.avisar_estoque_baixo && Number(p.estoque_min) > 0 && Number(p.estoque_atual) <= Number(p.estoque_min);
 const pct = v => (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -49,6 +50,7 @@ export function FormProduto({ inicial, onFechar, onSalvo }) {
         <div class="campo"><label>Tipo</label><${Seg} rotulo="Tipo" opcoes=${[["Produto / peça", "info"], ["Serviço / mão de obra", "info"]]} valor=${servico ? "Serviço / mão de obra" : "Produto / peça"} onEscolha=${v => set({ tipo: v.startsWith("Serviço") ? "servico" : "produto", unidade: v.startsWith("Serviço") ? "SERV" : (p.unidade === "SERV" ? "UN" : p.unidade) })} /></div>
       </div>
       <${Campo} id="p-desc" rotulo="Descrição" obrig><${Texto} id="p-desc" valor=${p.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
+      ${!servico && (p.referencia || p.descricao) ? html`<a class="btn-link" href=${linkImagem(p.referencia, p.marca, p.referencia ? "" : p.descricao)} target="_blank" rel="noopener">Ver imagem do produto no Google</a>` : null}
       ${!servico ? html`<div class="grade">
         <${Campo} id="p-ref" rotulo="Referência / código do fabricante"><${Texto} id="p-ref" valor=${p.referencia} onMuda=${v => set({ referencia: v })} /></${Campo}>
         <${Campo} id="p-barra" rotulo="Código de barras"><${Texto} id="p-barra" inputmode="numeric" valor=${p.codigo_barras} onMuda=${v => set({ codigo_barras: v })} /></${Campo}>
@@ -77,9 +79,21 @@ export function FormProduto({ inicial, onFechar, onSalvo }) {
       <${Campo} id="p-obs" rotulo=${servico ? "Observações" : "Aplicação / observações"}><${Area} id="p-obs" placeholder=${servico ? "" : "ex.: GOL G1 1.8 8V; GOL G2 1.6 8V"} valor=${p.obs} onMuda=${v => set({ obs: v })} /></${Campo}>
       <label class="linha-check"><input type="checkbox" checked=${p.ativo !== false} onChange=${e => set({ ativo: e.target.checked })} /><span>Ativo (aparece na busca da O.S.)</span></label>
     </fieldset>
+    ${p.id && !servico ? html`<${FornecedoresDoProduto} id=${p.id} />` : null}
     <div class="acoes">${p.id && pode(perfil, "excluir") ? html`<button type="button" class="btn btn-perigo" onClick=${excluir}>Excluir</button>` : null}<span class="espaco"></span>
       <button type="button" class="btn" onClick=${onFechar}>${podeEd ? "Cancelar" : "Fechar"}</button>${podeEd ? html`<button type="button" class="btn btn-pri" onClick=${salvar}>Salvar</button>` : null}</div>
   </${Modal}>`;
+}
+
+/* ---------------- fornecedores e códigos do produto ---------------- */
+function FornecedoresDoProduto({ id }) {
+  const { dados, perfil } = useApp();
+  const [l, setL] = useState(null);
+  useEffect(() => { api.vinculos.doProduto(id).then(setL).catch(() => setL([])); }, [id]);
+  if (!l || !l.length) return null;
+  return html`<h4 class="sub-titulo">Fornecedores</h4><div class="lista">${l.map(v => { const f = dados.fornecedores.find(x => x.id === v.fornecedor_id) || {};
+    return html`<div class="linha" key=${v.id}><span class="meio"><strong>${f.fantasia || f.razao || "Fornecedor"}</strong><span>código ${v.codigo}${Number(v.fator) !== 1 ? " · " + qtdFmt(v.fator) + " un. por " + (v.unidade || "unidade") : ""}${v.ultima_compra ? " · última compra " + new Date(v.ultima_compra + "T12:00").toLocaleDateString("pt-BR") : ""}</span></span>
+      ${pode(perfil, "verValores") && v.ultimo_custo ? html`<b>${reais(v.ultimo_custo)}</b>` : null}</div>`; })}</div>`;
 }
 
 /* ---------------- movimentação de estoque ---------------- */
@@ -118,7 +132,7 @@ export function EstoqueModal({ produto, onFechar }) {
 
 /* ---------------- lista ---------------- */
 export function ProdutosLista() {
-  const { dados, perfil } = useApp();
+  const { dados, perfil, ir } = useApp();
   const [q, setQ] = useState(""), [filtro, setFiltro] = useState("todos"), [ed, setEd] = useState(null), [lim, setLim] = useState(80);
   const ver = pode(perfil, "verValores"), podeCad = pode(perfil, "cadastrar");
   useEffect(() => setLim(80), [q, filtro]);
@@ -141,7 +155,7 @@ export function ProdutosLista() {
   };
   return html`
     <div class="linha-add"><input id="busca-prod" class="inp" aria-label="Buscar produto" placeholder="Descrição, código, referência, marca ou aplicação" value=${q} onInput=${e => setQ(e.target.value)} />
-      ${podeCad ? html`<button type="button" class="btn btn-pri" onClick=${() => setEd({ tipo: filtro === "servico" ? "servico" : "produto", unidade: filtro === "servico" ? "SERV" : "UN" })}>+ Novo</button>` : null}</div>
+      ${podeCad ? html`<button type="button" class="btn" onClick=${() => ir("/nfe")}>Entrada de nota (XML)</button><button type="button" class="btn btn-pri" onClick=${() => setEd({ tipo: filtro === "servico" ? "servico" : "produto", unidade: filtro === "servico" ? "SERV" : "UN" })}>+ Novo</button>` : null}</div>
     <div class="chips rolagem">${[["todos", "Todos"], ["produto", "Produtos / peças"], ["servico", "Serviços"], ["baixo", "Estoque baixo" + (nBaixo ? " (" + nBaixo + ")" : "")], ["inativos", "Inativos"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (filtro === k ? " ativo" : "")} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
     <section class="card"><div class="secao-topo"><h3>${lista.length} item(ns)</h3>${ver ? html`<span class="sub">Estoque a custo: <b>${reais(valorEstoque)}</b></span><button type="button" class="btn btn-sm" onClick=${exportar}>Exportar planilha</button>` : null}</div>
       ${lista.length ? html`<div class="lista">${lista.slice(0, lim).map(p => { const baixo = estoqueBaixo(p); return html`<button type="button" key=${p.id} class=${"linha linha-prod" + (p.ativo === false ? " inativo" : "")} onClick=${() => setEd(p)}>

@@ -18,70 +18,100 @@ function Cabecalho({ titulo, numero, direita }) {
     <div class="imp-tit"><b>${titulo}</b>${numero ? html`<strong>Nº ${numero}</strong>` : null}${direita}</div>
   </header>`;
 }
-const Par = ({ r, v, largo }) => html`<div class=${"imp-par" + (largo ? " largo" : "")}><span>${r}</span><b>${v || "—"}</b></div>`;
+/** Campo impresso só quando preenchido */
+const Par = ({ r, v, largo }) => v === null || v === undefined || String(v).trim() === "" || v === "—" ? null : html`<div class=${"imp-par" + (largo ? " largo" : "")}><span>${r}</span><b>${v}</b></div>`;
 function Assinatura({ nome, img, rotulo }) {
   return html`<div class="imp-assin">${img ? html`<${Foto} caminho=${img} alt="Assinatura" />` : html`<div class="imp-linha-assin"></div>`}<span>${rotulo}${nome ? ": " + nome : ""}</span></div>`;
 }
 
-/* ---------------- O.S. em A4 ---------------- */
-function TabelaItens({ titulo, itens, valores, comRef, total }) {
+/* ---------------- tabela de itens (colunas só quando usadas) ---------------- */
+function TabelaItens({ titulo, itens, valores, total }) {
   if (!itens.length) return null;
-  return html`<table class="imp-tab"><thead><tr>${comRef ? html`<th class="ref">Referência</th>` : null}<th>${titulo}</th><th class="num">Qtd.</th>
-    ${valores ? html`<th class="num">Valor</th><th class="num">Desc.</th><th class="num">Total</th>` : null}</tr></thead>
-    <tbody>${itens.map(i => html`<tr key=${i.id}>${comRef ? html`<td class="ref">${i.codigo || ""}</td>` : null}
-      <td>${i.descricao}${i.fornecida_cliente ? " (peça do cliente)" : i.qualidade === "usada" ? " (usada, autorizada pelo cliente)" : ""}${i.aprovado === false ? " — não aprovado" : ""}</td>
+  const comRef = itens.some(i => i.codigo), comDesc = valores && itens.some(i => Number(i.desconto) > 0);
+  const cols = 2 + (comRef ? 1 : 0) + (valores ? 2 + (comDesc ? 1 : 0) : 0);
+  return html`<table class="imp-tab"><thead><tr><th>${titulo}</th>${comRef ? html`<th class="ref">Ref.</th>` : null}<th class="num">Qtd.</th>
+    ${valores ? html`<th class="num">Unit.</th>${comDesc ? html`<th class="num">Desc.</th>` : null}<th class="num">Total</th>` : null}</tr></thead>
+    <tbody>${itens.map(i => html`<tr key=${i.id}><td>${i.descricao}${i.fornecida_cliente ? " (peça do cliente)" : i.qualidade === "usada" ? " (usada, autorizada)" : ""}</td>${comRef ? html`<td class="ref">${i.codigo || ""}</td>` : null}
       <td class="num">${i.horas ? qtdFmt(i.horas) + " h" : qtdFmt(i.qtd)}</td>
-      ${valores ? html`<td class="num">${i.fornecida_cliente ? "—" : reais(i.valor_unit)}</td><td class="num">${Number(i.desconto) ? reais(i.desconto) : ""}</td><td class="num">${i.fornecida_cliente || i.aprovado === false ? "—" : reais(totalItem(i))}</td>` : null}</tr>`)}</tbody>
-    ${valores ? html`<tfoot><tr><td colspan=${comRef ? 5 : 4}>${total[0]}</td><td class="num">${reais(total[1])}</td></tr></tfoot>` : null}</table>`;
+      ${valores ? html`<td class="num">${i.fornecida_cliente ? "—" : reais(i.valor_unit)}</td>${comDesc ? html`<td class="num">${Number(i.desconto) ? reais(i.desconto) : ""}</td>` : null}<td class="num">${i.fornecida_cliente ? "—" : reais(totalItem(i))}</td>` : null}</tr>`)}</tbody>
+    ${valores ? html`<tfoot><tr><td colspan=${cols - 1}>${total[0]}</td><td class="num">${reais(total[1])}</td></tr></tfoot>` : null}</table>`;
 }
 
+/* ---------------- O.S. em A4: uma folha, só o que foi preenchido ---------------- */
 function ViaOS({ o, cli, vei, valores, via, nVias }) {
   const { cfg } = useApp();
-  const orc = ["diagnostico", "aguardando", "recusado"].includes(o.status) && !o.itens.some(i => i.aprovado === true && o.status !== "recusado");
-  const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(o.status);
-  const lista = o.itens.filter(i => aprov ? i.aprovado !== false : true);
+  const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(o.status) && o.itens.some(i => i.aprovado === true);
+  const orc = !aprov;
+  const lista = o.itens.filter(i => aprov ? i.aprovado === true : i.aprovado !== false);
   const t = totais(o.itens, o.desconto, aprov);
-  const ck = o.checkin || {};
   const termo = orc ? (cfg.termoOrcamento || TERMO_ORCAMENTO) : (cfg.termoGarantia || TERMO_GARANTIA).replace("{dias}", o.garantia_dias || cfg.garantiaDias || 90);
   const tels = [o.cliente.telefone, cli && cli.telefone2].filter(Boolean).map(fmtTel).join(" / ");
-  return html`<article class="folha">
-    <${Cabecalho} titulo=${orc ? "ORÇAMENTO" : "ORDEM DE SERVIÇO"} numero=${n5(o.numero)} direita=${html`<span>Entrada: ${fmtDataHora(o.criado_em)}</span>${nVias > 1 ? html`<em>${via === 1 ? "1ª via – Cliente" : "2ª via – Oficina"}</em>` : null}`} />
-    <section class="imp-bloco"><h4>Cliente</h4><div class="imp-grade">
-      <${Par} r="Cliente" v=${o.cliente.nome + (cli && cli.codigo ? " (cód. " + cli.codigo + ")" : "")} largo /><${Par} r="CPF/CNPJ" v=${fmtDoc(o.cliente.doc || (cli && cli.doc))} />
-      <${Par} r="Endereço" v=${(cli && [cli.rua, cli.complemento].filter(Boolean).join(" ")) || o.cliente.endereco} largo /><${Par} r="Bairro" v=${cli && cli.bairro} />
-      <${Par} r="Cidade" v=${cli && [cli.cidade, cli.uf].filter(Boolean).join(" - ")} /><${Par} r="CEP" v=${cli && cli.cep} /><${Par} r="Telefone" v=${tels} /><${Par} r="Contato" v=${o.contato || (cli && cli.contato)} />
-    </div></section>
-    <section class="imp-bloco"><h4>Veículo</h4><div class="imp-grade">
-      <${Par} r="Placa" v=${exPlaca(o.veiculo.placa)} /><${Par} r="Marca" v=${o.veiculo.marca} /><${Par} r="Modelo" v=${o.veiculo.modelo} /><${Par} r="Cor" v=${o.veiculo.cor} />
-      <${Par} r="Ano" v=${o.veiculo.ano} /><${Par} r="KM atual" v=${o.km_entrada != null ? fmtKm(o.km_entrada) : ""} /><${Par} r="Combustível" v=${(vei && vei.combustivel) || o.veiculo.motor} /><${Par} r="Box" v=${o.box} />
-      ${vei && vei.chassi ? html`<${Par} r="Chassi" v=${vei.chassi} />` : null}${o.combustivel ? html`<${Par} r="Nível combustível" v=${o.combustivel} />` : null}
-    </div>${ck.feito ? html`<p class="imp-nota">Checklist de entrada realizado em ${fmtDataHora(ck.em)}${ck.observacoes ? ": " + ck.observacoes : "."}</p>` : null}</section>
-    ${o.reclamacao ? html`<section class="imp-bloco"><h4>Defeito reclamado</h4><p class="texto-pre">${o.reclamacao}</p></section>` : null}
-    ${o.diagnostico ? html`<section class="imp-bloco"><h4>Defeito constatado / diagnóstico</h4><p class="texto-pre">${o.diagnostico}</p></section>` : null}
-    <${TabelaItens} titulo="Produtos / peças" itens=${lista.filter(i => i.tipo === "peca")} valores=${valores} comRef total=${["Total das peças", t.pecas]} />
-    <${TabelaItens} titulo="Serviços / mão de obra" itens=${lista.filter(i => i.tipo === "servico")} valores=${valores} total=${["Total dos serviços", t.servicos]} />
+  const endereco = cli ? endCompleto(cli) : o.cliente.endereco;
+  const quando = o.status === "entregue" ? ["Entregue em", fmtDataHora(o.entregue_em)] : o.previsao_entrega ? ["Previsão", fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "")] : null;
+  const linhasTot = [["Produtos", t.pecas], ["Serviços", t.servicos], ["Outros valores", t.terceiros], ["Desconto", -t.desconto]].filter(([, v]) => Number(v));
+  return html`<article class="folha os-a4">
+    <${Cabecalho} titulo=${orc ? "ORÇAMENTO" : "ORDEM DE SERVIÇO"} numero=${n5(o.numero)} direita=${html`<span>${fmtDataHora(o.criado_em)}</span>${nVias > 1 ? html`<em>${via === 1 ? "Via do cliente" : "Via da oficina"}</em>` : null}`} />
+    <section class="imp-duas">
+      <div class="imp-bloco"><h4>Cliente</h4><div class="imp-grade g2">
+        <${Par} r="Nome" v=${o.cliente.nome + (cli && cli.codigo ? " (cód. " + cli.codigo + ")" : "")} largo /><${Par} r="CPF/CNPJ" v=${fmtDoc(o.cliente.doc || (cli && cli.doc) || "")} />
+        <${Par} r="Telefone" v=${tels} /><${Par} r="Endereço" v=${endereco} largo /><${Par} r="Contato" v=${o.contato} /></div></div>
+      <div class="imp-bloco"><h4>Veículo</h4><div class="imp-grade g2">
+        <${Par} r="Placa" v=${exPlaca(o.veiculo.placa)} /><${Par} r="Veículo" v=${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")} />
+        <${Par} r="Ano" v=${o.veiculo.ano} /><${Par} r="Cor" v=${o.veiculo.cor} /><${Par} r="KM" v=${o.km_entrada != null ? fmtKm(o.km_entrada) : ""} />
+        <${Par} r="Combustível" v=${(vei && vei.combustivel) || o.veiculo.motor} /><${Par} r="Box" v=${o.box} /><${Par} r="Chassi" v=${vei && vei.chassi} /></div></div>
+    </section>
+    ${o.reclamacao || o.diagnostico ? html`<section class="imp-bloco imp-texto">
+      ${o.reclamacao ? html`<p><b>Reclamação:</b> ${o.reclamacao}</p>` : null}${o.diagnostico ? html`<p><b>Diagnóstico:</b> ${o.diagnostico}</p>` : null}</section>` : null}
+    <${TabelaItens} titulo="Produtos e peças" itens=${lista.filter(i => i.tipo === "peca")} valores=${valores} total=${["Total de produtos", t.pecas]} />
+    <${TabelaItens} titulo="Serviços" itens=${lista.filter(i => i.tipo === "servico")} valores=${valores} total=${["Total de serviços", t.servicos]} />
     <${TabelaItens} titulo="Outros valores" itens=${lista.filter(i => i.tipo === "terceiro")} valores=${valores} total=${["Total de outros valores", t.terceiros]} />
-    ${o.obs_execucao ? html`<section class="imp-bloco"><h4>Serviços executados / observações</h4><p class="texto-pre">${o.obs_execucao}</p></section>` : null}
+    ${o.obs_execucao ? html`<section class="imp-bloco imp-texto"><p><b>Observações:</b> ${o.obs_execucao}</p></section>` : null}
     <section class="imp-resumo">
-      <div class="imp-grade">
+      <div class="imp-grade g2">
         <${Par} r="Responsável" v=${o.mecanico_nome} /><${Par} r="Consultor" v=${o.consultor_nome} />
-        <${Par} r="Situação atual" v=${STATUS[o.status].t + (o.situacao ? " · " + o.situacao : "")} />
-        <${Par} r=${o.status === "entregue" ? "Entrega" : "Previsão"} v=${o.status === "entregue" ? fmtDataHora(o.entregue_em) : o.previsao_entrega ? fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "") : "a combinar"} />
-        <${Par} r="Forma de pagamento" v=${o.forma_pagamento} /><${Par} r="Condições" v=${o.condicoes_pagamento} />
-        ${orc && o.validade_orcamento ? html`<${Par} r="Validade do orçamento" v=${fmtData(o.validade_orcamento)} />` : null}
-        ${o.tabela_preco && o.tabela_preco !== "vista" ? html`<${Par} r="Tabela de preços" v=${TABELAS_PRECO[o.tabela_preco]} />` : null}
+        <${Par} r="Situação" v=${STATUS[o.status].t + (o.situacao ? " · " + o.situacao : "")} />${quando ? html`<${Par} r=${quando[0]} v=${quando[1]} />` : null}
+        <${Par} r="Pagamento" v=${o.forma_pagamento} /><${Par} r="Condições" v=${o.condicoes_pagamento} />
+        ${orc && o.validade_orcamento ? html`<${Par} r="Válido até" v=${fmtData(o.validade_orcamento)} />` : null}
+        ${o.tabela_preco && o.tabela_preco !== "vista" ? html`<${Par} r="Tabela" v=${TABELAS_PRECO[o.tabela_preco]} />` : null}
       </div>
-      ${valores ? html`<div class="imp-totais"><div><span>Valor dos produtos</span><b>${reais(t.pecas)}</b></div><div><span>Valor dos serviços</span><b>${reais(t.servicos)}</b></div>
-        ${t.terceiros ? html`<div><span>Outros valores</span><b>${reais(t.terceiros)}</b></div>` : null}<div><span>Desconto</span><b>${reais(t.desconto)}</b></div>
-        <div class="tot"><span>VALOR TOTAL</span><b>${reais(t.total)}</b></div></div>` : null}
+      ${valores ? html`<div class="imp-totais">${linhasTot.length > 1 ? linhasTot.map(([r, v]) => html`<div key=${r}><span>${r}</span><b>${v < 0 ? "− " + reais(-v) : reais(v)}</b></div>`) : null}
+        <div class="tot"><span>Total</span><b>${reais(t.total)}</b></div></div>` : null}
     </section>
     <p class="imp-termo">${termo}${!orc && o.status === "entregue" ? " Garantia válida até " + fmtData(somaDias(o.entregue_em, o.garantia_dias)) + "." : ""}</p>
-    ${orc ? html`<div class="imp-autoriza"><p>Autorizo a execução do(s) serviço(s) nas condições acima discriminadas.</p><p class="imp-marcar">(   ) Aprovado      (   ) Reprovado</p>
-        <div class="imp-assins"><${Assinatura} rotulo="Assinatura do cliente" nome=${o.cliente.nome} /><div class="imp-data">Data: ____/____/________</div></div></div>`
-      : html`${o.aprovacao ? html`<p class="imp-nota">Serviços autorizados por ${o.aprovacao.por} em ${fmtDataHora(o.aprovacao.em)} (${o.aprovacao.forma}).</p>` : null}
-        <div class="imp-assins"><${Assinatura} rotulo="Cliente" nome=${o.cliente.nome} img=${o.assinatura_entrega} /><${Assinatura} rotulo="Visto da oficina" /></div>
-        <p class="imp-nota">Declaro ter recebido o veículo com os serviços executados e testados, nas condições acima.</p>`}
-    <footer class="imp-rodape">Este documento não vale como recibo de pagamento.</footer>
+    ${orc ? html`<div class="imp-assins"><div class="imp-autoriza"><p>Autorizo a execução nas condições acima.</p><p class="imp-marcar">(   ) Aprovado    (   ) Reprovado    Data: ____/____/______</p></div><${Assinatura} rotulo="Cliente" nome=${o.cliente.nome} /></div>`
+      : html`<div class="imp-assins"><${Assinatura} rotulo="Cliente" nome=${o.cliente.nome} img=${o.assinatura_entrega} /><${Assinatura} rotulo="Oficina" /></div>
+        ${o.aprovacao ? html`<p class="imp-nota">Autorizado por ${o.aprovacao.por} em ${fmtDataHora(o.aprovacao.em)} (${o.aprovacao.forma}). Na retirada, o cliente declara receber o veículo com os serviços executados e testados.</p>` : null}`}
+    <footer class="imp-rodape">Não vale como recibo de pagamento</footer>
+  </article>`;
+}
+
+/* ---------------- Venda de balcão ---------------- */
+function ViaVenda({ v, via, nVias }) {
+  const prod = v.itens.filter(i => i.tipo !== "servico"), serv = v.itens.filter(i => i.tipo === "servico");
+  const sub = (l) => l.reduce((s, i) => s + totalItem(i), 0);
+  return html`<article class=${"folha os-a4" + (v.status === "cancelada" ? " cancelado" : "")}>
+    <${Cabecalho} titulo="VENDA DE BALCÃO" numero=${n5(v.numero)} direita=${html`<span>${fmtDataHora(v.criado_em)}</span>${nVias > 1 ? html`<em>${via === 1 ? "Via do cliente" : "Via da oficina"}</em>` : null}`} />
+    <section class="imp-bloco"><div class="imp-grade"><${Par} r="Cliente" v=${(v.cliente || {}).nome} largo /><${Par} r="CPF/CNPJ" v=${fmtDoc((v.cliente || {}).doc || "")} />
+      <${Par} r="Telefone" v=${(v.cliente || {}).telefone ? fmtTel(v.cliente.telefone) : ""} /><${Par} r="Atendente" v=${v.vendedor_nome} /></div></section>
+    <${TabelaItens} titulo="Produtos e peças" itens=${prod} valores total=${["Total de produtos", sub(prod)]} />
+    <${TabelaItens} titulo="Serviços" itens=${serv} valores total=${["Total de serviços", sub(serv)]} />
+    ${v.obs ? html`<section class="imp-bloco imp-texto"><p><b>Observação:</b> ${v.obs}</p></section>` : null}
+    <section class="imp-resumo"><div class="imp-grade g2"><${Par} r="Pagamento" v=${v.forma_pagamento} />${v.tabela_preco !== "vista" ? html`<${Par} r="Tabela" v=${TABELAS_PRECO[v.tabela_preco]} />` : null}</div>
+      <div class="imp-totais">${Number(v.desconto) ? html`<div><span>Subtotal</span><b>${reais(v.subtotal)}</b></div><div><span>Desconto</span><b>− ${reais(v.desconto)}</b></div>` : null}
+        <div class="tot"><span>Total</span><b>${reais(v.total)}</b></div></div></section>
+    ${v.status === "cancelada" ? html`<div class="rec-cancelado">CANCELADA<small>${v.cancelada_motivo || ""}</small></div>` : null}
+    <div class="imp-assins"><${Assinatura} rotulo="Cliente" /><${Assinatura} rotulo="Oficina" /></div>
+    <footer class="imp-rodape">Documento sem valor fiscal</footer>
+  </article>`;
+}
+function CupomVenda({ v }) {
+  const { cfg } = useApp();
+  return html`<article class="cupom">
+    <b class="c-centro">${cfg.nome}</b>${cfg.endereco ? html`<div class="c-centro">${cfg.endereco}</div>` : null}<div class="c-centro">${[cfg.telefone, cfg.cnpj ? "CNPJ " + cfg.cnpj : ""].filter(Boolean).join(" · ")}</div>
+    <hr /><b>VENDA ${n5(v.numero)}</b>${v.status === "cancelada" ? html` <b>(CANCELADA)</b>` : null}<div>${fmtDataHora(v.criado_em)}</div><div>Cliente: ${(v.cliente || {}).nome || "Consumidor"}</div>
+    <hr />${v.itens.map(i => html`<div class="c-item" key=${i.id}><div>${i.descricao}</div><div class="c-dir">${qtdFmt(i.qtd)} x ${reais(i.valor_unit)}${Number(i.desconto) ? " - " + reais(i.desconto) : ""} = ${reais(totalItem(i))}</div></div>`)}
+    <hr />${Number(v.desconto) ? html`<div class="c-lin"><span>Desconto</span><span>${reais(v.desconto)}</span></div>` : null}<div class="c-lin c-tot"><span>TOTAL</span><span>${reais(v.total)}</span></div>
+    <div>Pagamento: ${v.forma_pagamento}</div><div class="c-centro c-peq">Documento sem valor fiscal.</div>
   </article>`;
 }
 
@@ -179,7 +209,8 @@ function FichaVeiculo({ v }) {
 
 /* ---------------- tela de impressão ---------------- */
 export function Imprimir({ tipo, id, params }) {
-  const { dados, perfil, avisar, confirmar, ir, cfg } = useApp();
+  const { dados, perfil, avisar, confirmar, ir, cfg, recarregar } = useApp();
+  const recarregarProdutos = () => recarregar(["produtos"]);
   const [doc, setDoc] = useState(null), [erro, setErro] = useState("");
   const [vias, setVias] = useState(Number(params.vias) || (tipo === "recibo" ? 2 : Number(cfg.impressaoVias) || 1));
   const valores = params.valores !== "0" && pode(perfil, "verValores");
@@ -187,17 +218,22 @@ export function Imprimir({ tipo, id, params }) {
   useEffect(() => {
     if (tipo === "os") api.ordem(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "recibo") api.recibos.um(id).then(setDoc).catch(e => setErro(e.message));
+    else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }
     else if (tipo === "veiculo") { const v = dados.veiculos.find(x => x.id === id); v ? setDoc(v) : setErro("Veículo não encontrado."); }
     else setErro("Documento desconhecido.");
   }, [tipo, id]);
-  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
-  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" ? "/os/" + id : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : "/veiculo/" + id);
+  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
+  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : "/veiculo/" + id);
   const cancelarRecibo = async () => {
     if (!await confirmar({ titulo: "Cancelar recibo " + n5(doc.numero), texto: "O recibo continua registrado, marcado como cancelado, e deixa de contar como pagamento recebido.", botao: "Cancelar recibo", perigo: true })) return;
     try { await api.recibos.salvar({ id: doc.id, cancelado: true, cancelado_motivo: "Cancelado por " + perfil.nome + " em " + new Date().toLocaleDateString("pt-BR") });
       if (doc.ordem_id) await api.evento(doc.ordem_id, "recibo", "Recibo " + n5(doc.numero) + " cancelado.", perfil.nome).catch(() => {});
       setDoc(await api.recibos.um(doc.id)); avisar("Recibo cancelado."); } catch (e) { avisar(e.message, true); }
+  };
+  const cancelarVenda = async () => {
+    if (!await confirmar({ titulo: "Cancelar venda " + n5(doc.numero), texto: "Os produtos voltam para o estoque e os recibos desta venda são cancelados.", botao: "Cancelar venda", perigo: true })) return;
+    try { await api.vendas.cancelar(doc.id, "Cancelada por " + perfil.nome); setDoc(await api.vendas.uma(doc.id)); avisar("Venda cancelada."); recarregarProdutos(); } catch (e) { avisar(e.message, true); }
   };
   const cli = doc && tipo === "os" ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
   const vei = doc && tipo === "os" ? dados.veiculos.find(v => v.id === doc.veiculo_id) : null;
@@ -206,13 +242,16 @@ export function Imprimir({ tipo, id, params }) {
     ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`}
     <div class="imp-barra so-tela">
       <button type="button" class="btn" onClick=${voltar}>← Voltar</button>
-      ${(tipo === "os" && formato === "a4") || tipo === "recibo" ? html`<div class="seg" role="group" aria-label="Vias">${[1, 2].map(n => html`<button type="button" key=${n} aria-pressed=${vias === n ? "true" : "false"} onClick=${() => setVias(n)}>${n} via${n > 1 ? "s" : ""}</button>`)}</div>` : null}
+      ${((tipo === "os" || tipo === "venda") && formato === "a4") || tipo === "recibo" ? html`<div class="seg" role="group" aria-label="Vias">${[1, 2].map(n => html`<button type="button" key=${n} aria-pressed=${vias === n ? "true" : "false"} onClick=${() => setVias(n)}>${n} via${n > 1 ? "s" : ""}</button>`)}</div>` : null}
       <span class="espaco"></span>
       ${tipo === "recibo" && doc && !doc.cancelado && pode(perfil, "entregar") ? html`<button type="button" class="btn btn-perigo" onClick=${cancelarRecibo}>Cancelar recibo</button>` : null}
+      ${tipo === "venda" && doc && doc.status === "concluida" && pode(perfil, "entregar") ? html`<button type="button" class="btn btn-perigo" onClick=${cancelarVenda}>Cancelar venda</button>` : null}
+      ${tipo === "venda" && doc ? html`<button type="button" class="btn" onClick=${() => ir("/imprimir/venda/" + id + (formato === "cupom" ? "" : "?formato=cupom"))}>${formato === "cupom" ? "Folha A4" : "Cupom 80 mm"}</button>` : null}
       <button type="button" class="btn btn-pri" disabled=${!doc} onClick=${() => window.print()}>Imprimir / salvar PDF</button>
     </div>
     ${erro ? html`<div class="erros so-tela">${erro}</div>` : !doc ? html`<div class="carregando">Preparando documento…</div>`
       : tipo === "os" ? (formato === "cupom" ? html`<${CupomOS} o=${doc} valores=${valores} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaOS} key=${n} o=${doc} cli=${cli} vei=${vei} valores=${valores} via=${n + 1} nVias=${nVias} />`))
+      : tipo === "venda" ? (formato === "cupom" ? html`<${CupomVenda} v=${doc} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaVenda} key=${n} v=${doc} via=${n + 1} nVias=${nVias} />`))
       : tipo === "recibo" ? html`<div class=${"recibos-folha v" + nVias}>${Array.from({ length: nVias }, (_, n) => html`<${ViaRecibo} key=${n} r=${doc} via=${n + 1} nVias=${nVias} />`)}</div>`
       : tipo === "cliente" ? html`<${FichaCliente} c=${doc} />` : html`<${FichaVeiculo} v=${doc} />`}
   </div>`;

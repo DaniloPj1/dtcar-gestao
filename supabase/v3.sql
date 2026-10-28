@@ -333,6 +333,7 @@ returns jsonb language plpgsql security definer set search_path = public as $$
 declare n_ins int := 0; n_upd int := 0; pulados jsonb := '[]'::jsonb;
 begin
   if not public.e_admin() then raise exception 'Somente o administrador pode importar dados.'; end if;
+  perform set_config('dtcar.sem_estoque', '1', true); -- o saldo do estoque já vem do backup
 
   if p_tipo = 'clientes' then
     create temp table x on commit drop as select * from jsonb_to_recordset(p_linhas) as x(

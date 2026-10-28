@@ -7,6 +7,7 @@ import { pode, ABERTOS, SITUACAO_CLIENTE, COMBUSTIVEIS, ESTADO_CIVIL } from "../
 import { LinhaOS } from "./painel.js";
 import { prepararNovaOS, ORIGENS } from "./entrada.js";
 import { ProdutosLista } from "./produtos.js";
+import { FornecedoresLista } from "./compras.js";
 
 const DIA = 86400000;
 const meses = iso => Math.floor((Date.now() - new Date(iso)) / (30.4 * DIA));
@@ -202,7 +203,7 @@ export function FormCadastro(p) { return p.ed.tipo === "cliente" ? html`<${FormC
 /* =================== LISTAS =================== */
 export function Cadastros({ params }) {
   const { dados, perfil, cfg, ir } = useApp();
-  const [aba, setAba] = useState(params && ["veiculos", "produtos"].includes(params.aba) ? params.aba : "clientes");
+  const [aba, setAba] = useState(params && ["veiculos", "produtos", "fornecedores"].includes(params.aba) ? params.aba : "clientes");
   const [q, setQ] = useState(""), [ed, setEd] = useState(null);
   const [filtro, setFiltro] = useState(params && params.filtro === "recuperar" ? "recuperar" : "todos"), [ordem, setOrdem] = useState(params && params.filtro === "recuperar" ? "ultima" : "nome");
   const [lim, setLim] = useState(80);
@@ -238,8 +239,8 @@ export function Cadastros({ params }) {
   const trocarAba = a => { setAba(a); setQ(""); };
 
   return html`<div class="pagina">
-    <${Abas} abas=${[["clientes", "Clientes (" + dados.clientes.length + ")"], ["veiculos", "Veículos (" + dados.veiculos.length + ")"], ["produtos", "Produtos e serviços (" + dados.produtos.filter(x => x.ativo !== false).length + ")"]]} ativa=${aba} onTroca=${trocarAba} />
-    ${aba === "produtos" ? html`<${ProdutosLista} />` : html`
+    <${Abas} abas=${[["clientes", "Clientes (" + dados.clientes.length + ")"], ["veiculos", "Veículos (" + dados.veiculos.length + ")"], ["produtos", "Produtos (" + dados.produtos.filter(x => x.ativo !== false).length + ")"], ["fornecedores", "Fornecedores (" + dados.fornecedores.length + ")"]]} ativa=${aba} onTroca=${trocarAba} />
+    ${aba === "produtos" ? html`<${ProdutosLista} />` : aba === "fornecedores" ? html`<${FornecedoresLista} />` : html`
     <div class="linha-add"><input id="busca-cad" class="inp" aria-label="Buscar" placeholder=${aba === "clientes" ? "Nome, código, telefone, CPF ou placa" : "Placa, marca, modelo ou chassi"} value=${q} onInput=${e => setQ(e.target.value)} />
       ${podeCad ? html`<button type="button" class="btn btn-pri" onClick=${() => setEd(aba === "clientes" ? edCliente() : edVeiculo())}>+ Novo</button>` : null}</div>
     ${aba === "clientes" ? html`

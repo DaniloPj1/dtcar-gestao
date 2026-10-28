@@ -16,9 +16,11 @@ export function Mais() {
       ${pode(perfil, "verValores") ? it("/balcao", "Venda de balcão", "Vender peças e serviços sem O.S.", I.carrinho) : null}
       ${pode(perfil, "cadastrar") ? it("/nfe", "Entrada de nota fiscal (XML)", "Cadastrar produtos e fornecedor e somar o estoque pela NF-e", I.nota) : null}
       ${pode(perfil, "verValores") ? it("/recibos", "Recibos de pagamento", "Consultar, reimprimir, cancelar e emitir recibo avulso", I.recibo) : null}
-      ${pode(perfil, "verValores") ? it("/relatorios", "Relatório de produtos vendidos", "Quantidade, faturamento e margem por período", I.lista) : null}
+      ${pode(perfil, "financeiro") ? it("/financeiro", "Contas a pagar", "Boletos, duplicatas das notas e despesas da oficina", I.dinheiro) : null}
+      ${pode(perfil, "verValores") ? it("/relatorios", "Relatórios", "Histórico de serviços, faturamento, caixa, contas, estoque e mais", I.grafico) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}
       ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
+      ${pode(perfil, "ajustes") ? it("/backup", "Backup", "Baixar uma cópia de todos os dados ou restaurar", I.nuvem) : null}
       ${pode(perfil, "ajustes") ? it("/importar", "Importar do OS Oficina 3.0", "Trazer cadastros completos, produtos e O.S. novas do sistema antigo", I.painel) : null}
       <button type="button" class="linha" onClick=${sair}><span class="ic">${I.sair}</span><span class="meio"><strong>Sair</strong><span>Encerrar a sessão neste aparelho</span></span></button>
     </div></section></div>`;
@@ -86,6 +88,7 @@ export function Ajustes() {
       <div class="grade">
         ${num("valorHora", "Valor da hora de mão de obra", "Usado nos serviços cobrados por hora.", "R$/h")}
         ${num("markupPecas", "Margem sugerida nas peças", "Preço de venda sugerido = custo + esta porcentagem.", "%")}
+        ${num("markupTerceiros", "Margem sugerida nos serviços de terceiros", "Valor cobrado = custo do prestador + esta porcentagem.", "%")}
         ${num("taxaDiagnostico", "Taxa de diagnóstico", "Cobrada só se o orçamento for recusado. Ela é informada no termo de entrada. Deixe 0 para não cobrar.", "R$")}
         ${num("validadeDias", "Validade do orçamento", "O CDC (art. 40) usa 10 dias quando nada é informado.", "dias")}
         ${num("garantiaDias", "Garantia padrão dos serviços", "Mínimo legal: 90 dias (CDC, art. 26, II).", "dias")}
@@ -101,6 +104,7 @@ export function Ajustes() {
       </div>
       ${listaTextos("situacoesOS", "Situações da O.S.", "Marcadores livres, como no sistema anterior (ex.: Aguardando peças). Aparecem no quadro e na impressão.")}
       ${listaTextos("tiposCliente", "Tipos de cliente", "Sugestões no cadastro de clientes.")}
+      ${listaTextos("categoriasDespesa", "Categorias das contas a pagar", "Usadas no Financeiro e nos relatórios de caixa.")}
       ${termo("textoRecibo", "Texto de quitação do recibo", CONFIG_PADRAO.textoRecibo)}
     </section>
     <section class="card"><h2>Entrada do veículo</h2>

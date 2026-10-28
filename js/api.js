@@ -88,6 +88,19 @@ function criarApiSupabase() {
       finalizar: async p => ok(await sb.rpc("finalizar_venda", { p })),
       cancelar: async (id, motivo) => ok(await sb.rpc("cancelar_venda", { p_id: id, p_motivo: motivo || "" })),
     },
+    contas: {
+      listar: async ({ de, ate, campo = "vencimento", status } = {}) => todos(() => { let q = sb.from("contas").select("*"); if (de) q = q.gte(campo, de); if (ate) q = q.lte(campo, ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
+      abertas: async () => todos(() => sb.from("contas").select("*").eq("status", "aberta").order("vencimento").order("id")),
+      salvar: async c => { const { id, ...resto } = c; return id ? ok(await sb.from("contas").update(resto).eq("id", id).select().single()) : ok(await sb.from("contas").insert(resto).select().single()); },
+      excluir: async id => ok(await sb.from("contas").delete().eq("id", id)),
+      lancar: async linhas => ok(await sb.rpc("lancar_contas", { p_linhas: linhas })),
+      porCodigo: async cod => cod ? ok(await sb.from("contas").select("id,descricao,valor,vencimento,status").eq("codigo_barras", cod).neq("status", "cancelada").maybeSingle()) : null,
+    },
+    relatorioItens: async (ini, fim, base) => todos(() => sb.rpc("relatorio_itens", { p_ini: ini, p_fim: fim, p_base: base || "entrega" }).order("numero").order("item_id")),
+    backup: {
+      tabela: async nome => todos(() => sb.from(nome).select("*").order(nome === "estoque_reserva" ? "item_id" : "id")),
+      restaurar: async (nome, linhas) => ok(await sb.rpc("restaurar_tabela", { p_tabela: nome, p_linhas: linhas })),
+    },
     relatorioVendidos: async (ini, fim) => ok(await sb.rpc("relatorio_vendidos", { p_ini: ini, p_fim: fim })),
     painel: async (ini, fim, grupo) => ok(await sb.rpc("painel_resumo", { p_ini: ini, p_fim: fim, p_grupo: grupo })),
     importarLegado: async (tipo, linhas, atualizar) => ok(await sb.rpc("importar_legado", { p_tipo: tipo, p_linhas: linhas, p_atualizar: !!atualizar })),
@@ -113,7 +126,7 @@ function criarApiSupabase() {
     excluirOrdem: async id => ok(await sb.from("ordens").delete().eq("id", id)),
     salvarItens: async (ordemId, itens, removidos) => {
       if (removidos && removidos.length) ok(await sb.from("os_itens").delete().in("id", removidos));
-      if (itens.length) ok(await sb.from("os_itens").upsert(itens.map((i, n) => ({ ...i, ordem_id: ordemId, posicao: i.posicao ?? n }))));
+      if (itens.length) ok(await sb.from("os_itens").upsert(itens.map((i, n) => ({ ...Object.fromEntries(Object.entries(i).filter(([k]) => !k.startsWith("_"))), ordem_id: ordemId, posicao: i.posicao ?? n }))));
     },
     incluirFotos: async linhas => linhas.length ? ok(await sb.from("fotos").insert(linhas)) : null,
     excluirFoto: async foto => { ok(await sb.from("fotos").delete().eq("id", foto.id)); await sb.storage.from("fotos").remove([foto.caminho]); },

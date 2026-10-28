@@ -2,11 +2,12 @@
 import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, BuscaCliente } from "../ui.js";
-import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
+import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, precoPelaMargem, margemDoPreco, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
 import { STATUS, FLUXO, ABERTOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
 import { FormVeiculo, edVeiculo, SitCliente } from "./cadastros.js";
 import { ReciboModal } from "./recibos.js";
+import { BuscaFornecedor } from "./financeiro.js";
 
 /* ---------------- Mensagens de WhatsApp ---------------- */
 const nomeVeic = o => [o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") + " (" + exPlaca(o.veiculo.placa) + ")";
@@ -15,7 +16,7 @@ function linhasItensMsg(itens) {
   const L = [];
   const grupo = (tipo, titulo) => { const g = itens.filter(i => i.tipo === tipo); if (!g.length) return;
     L.push("*" + titulo + ":*"); g.forEach(i => L.push("• " + i.descricao + (Number(i.qtd) !== 1 && i.tipo === "peca" ? " (" + qtdFmt(i.qtd) + ")" : "") + (i.fornecida_cliente ? " (peça do cliente)" : " — " + reais(totalItem(i))))); L.push(""); };
-  grupo("peca", "Peças"); grupo("servico", "Mão de obra"); grupo("terceiro", "Outros valores");
+  grupo("peca", "Peças"); grupo("servico", "Mão de obra"); grupo("terceiro", "Serviços de terceiros");
   return L;
 }
 export const MSG = {
@@ -34,17 +35,21 @@ export const MSG = {
 };
 
 /* ---------------- Inclusão / edição de item (busca no cadastro de produtos e serviços) ---------------- */
-const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "outro valor (terceiros)" };
+const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "serviço de terceiro" };
 function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   const { cfg, dados, perfil } = useApp();
   const [i, setI] = useState({ desconto: 0, ...item });
   const [busca, setBusca] = useState(""), [erroEst, setErroEst] = useState("");
   // novo item: abre primeiro o catálogo; "Cadastrar só nesta O.S." cria um item que não entra no cadastro geral
-  const [etapa, setEtapa] = useState(item._novo && item.tipo !== "terceiro" ? "catalogo" : "detalhe");
+  const [etapa, setEtapa] = useState(item._novo ? "catalogo" : "detalhe");
+  const fin = pode(perfil, "financeiro");
+  const [conta, setConta] = useState(item._conta || null); // { vencimento } para lançar conta a pagar ao prestador
   const qtdOriginal = !item._novo && item.produto_id ? Number(item.qtd) || 0 : 0;
   const set = p => { setI(o => ({ ...o, ...p })); setErroEst(""); };
   const sugestaoVenda = c => arred(c * (1 + (Number(cfg.markupPecas) || 0) / 100));
-  const tipoProd = i.tipo === "servico" ? "servico" : "produto";
+  const tipoProd = i.tipo === "servico" ? "servico" : i.tipo === "terceiro" ? "terceiro" : "produto";
+  const [margTxt, setMargTxt] = useState(null);
+  const margemTer = Number(i.custo_unit) > 0 ? margemDoPreco(i.custo_unit, i.valor_unit) : Number(cfg.markupTerceiros) || 0;
   const prod = i.produto_id ? dados.produtos.find(p => p.id === i.produto_id) : null;
   const cat = useMemo(() => { const q = norm(busca), cod = /^\d+$/.test(busca.trim()) ? +busca.trim() : null;
     return dados.produtos.filter(p => p.ativo !== false && p.tipo === tipoProd && (!q || p.codigo === cod || norm(p.descricao).includes(q) || norm(p.referencia).includes(q) || norm(p.marca).includes(q) || norm(p.categoria).includes(q) || norm(p.obs).includes(q) || p.codigo_barras === busca.trim()))
@@ -52,6 +57,8 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   const usar = p => {
     if (p.tipo === "servico" && p.cobranca === "hora") set({ descricao: p.descricao, produto_id: p.id, servico_id: null, horas: Number(p.horas) || 1, qtd: Number(p.horas) || 1, valor_unit: Number(cfg.valorHora) || 0, custo_unit: 0 });
     else if (p.tipo === "servico") set({ descricao: p.descricao, produto_id: p.id, servico_id: null, horas: null, qtd: 1, valor_unit: precoTabela(p, tabela), custo_unit: 0 });
+    else if (p.tipo === "terceiro") { const f = p.fornecedor_id && dados.fornecedores.find(x => x.id === p.fornecedor_id);
+      set({ descricao: p.descricao, produto_id: p.id, valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, fornecedor_id: f ? f.id : null, fornecedor: f ? f.fantasia || f.razao : i.fornecedor || "" }); }
     else set({ descricao: p.descricao, produto_id: p.id, codigo: p.referencia || String(p.codigo), valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, qualidade: i.qualidade || "original" });
     setBusca(""); setEtapa("detalhe");
   };
@@ -62,24 +69,26 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   const semEstoque = prod && prod.tipo === "produto" && prod.controla_estoque && disponivel < Number(i.qtd);
   const salvar = () => {
     if (semEstoque && !prod.vender_sem_estoque) return setErroEst(`Estoque insuficiente: há ${qtdFmt(disponivel)} ${prod.unidade}. Este produto está marcado para não ser vendido sem estoque.`);
-    onSalvar({ ...i });
+    if (conta && !conta.vencimento) return setErroEst("Informe o vencimento da conta do prestador.");
+    if (conta && !(Number(i.custo_unit) > 0)) return setErroEst("Informe o custo do prestador para lançar a conta a pagar.");
+    onSalvar({ ...i, _conta: i.tipo === "terceiro" && !i.conta_id && conta ? conta : undefined });
   };
   const qtdInp = html`<${Campo} id="it-qtd" rotulo="Quantidade"><input id="it-qtd" class="inp" inputmode="decimal" value=${String(i.qtd).replace(".", ",")} onInput=${e => set({ qtd: Number(e.target.value.replace(",", ".")) || 0 })} /></${Campo}>`;
-  const plural = i.tipo === "servico" ? "serviços" : "produtos";
+  const plural = i.tipo === "servico" ? "serviços" : i.tipo === "terceiro" ? "serviços de terceiros" : "produtos";
   if (etapa === "catalogo") return html`<${Modal} titulo=${"Incluir " + NOME_TIPO[i.tipo]} largo onFechar=${onFechar}>
     <div class="cat-topo"><input id="cat-busca" class="inp" type="search" autofocus autocomplete="off" aria-label=${"Buscar " + plural}
-        placeholder=${i.tipo === "servico" ? "Buscar serviço: alinhamento, pastilha…" : "Buscar por descrição, código, referência, marca ou aplicação"} value=${busca} onInput=${e => setBusca(e.target.value)} />
-      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim() }); setEtapa("detalhe"); }}>+ Cadastrar só nesta O.S.</button></div>
+        placeholder=${i.tipo === "servico" ? "Buscar serviço: alinhamento, pastilha…" : i.tipo === "terceiro" ? "Buscar serviço de terceiro: retífica, torno, guincho…" : "Buscar por descrição, código, referência, marca ou aplicação"} value=${busca} onInput=${e => setBusca(e.target.value)} />
+      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim(), ...(i.tipo === "terceiro" && !i.valor_unit ? { custo_unit: 0, valor_unit: 0 } : {}) }); setEtapa("detalhe"); }}>+ Cadastrar só nesta O.S.</button></div>
     <span class="dica">Tabela de preço: ${TABELAS_PRECO[tabela].toLowerCase()}. ${cat.length === 80 ? "Mostrando os 80 primeiros; refine a busca." : cat.length + " " + plural + " no cadastro."}</span>
     <div class="catalogo">${cat.map(p => { const est = p.tipo === "produto" && p.controla_estoque; const zerado = est && Number(p.estoque_atual) <= 0;
       return html`<button type="button" key=${p.id} class=${"cat-item" + (zerado ? " zerado" : "")} onClick=${() => usar(p)}>
-        <span class="cod">${p.codigo}</span><span class="meio"><strong>${p.descricao}</strong><span>${[p.referencia, p.marca, p.categoria].filter(Boolean).join(" · ")}</span></span>
+        <span class="cod">${p.codigo}</span><span class="meio"><strong>${p.descricao}</strong><span>${[p.referencia, p.marca, p.categoria, p.tipo === "terceiro" && p.fornecedor_id ? ((dados.fornecedores.find(f => f.id === p.fornecedor_id) || {}).fantasia || (dados.fornecedores.find(f => f.id === p.fornecedor_id) || {}).razao) : "", p.tipo === "terceiro" && pode(perfil, "verValores") && Number(p.custo) ? "custo " + reais(p.custo) : ""].filter(Boolean).join(" · ")}</span></span>
         ${est ? html`<span class=${"cat-est" + (zerado ? " c-bad" : "")}>${qtdFmt(p.estoque_atual)} ${p.unidade}</span>` : null}
         <b>${p.tipo === "servico" && p.cobranca === "hora" ? qtdFmt(p.horas) + " h" : precoTabela(p, tabela) ? reais(precoTabela(p, tabela)) : "sem preço"}</b></button>`; })}
-      ${!cat.length ? html`<div class="vazio">Nenhum ${i.tipo === "servico" ? "serviço" : "produto"} encontrado. Use “Cadastrar só nesta O.S.”.</div>` : null}</div>
+      ${!cat.length ? html`<div class="vazio">Nenhum ${NOME_TIPO[i.tipo]} encontrado. Use “Cadastrar só nesta O.S.”${i.tipo === "terceiro" ? " ou cadastre em Cadastros › Produtos › Terceiros para reutilizar" : ""}.</div>` : null}</div>
   </${Modal}>`;
   return html`<${Modal} titulo=${(item._novo ? "Incluir " : "Alterar ") + NOME_TIPO[i.tipo]} onFechar=${onFechar}>
-    ${i.tipo !== "terceiro" ? (prod ? html`<div class="info item-origem"><span>Do cadastro: cód. ${prod.codigo}${prod.tipo === "produto" && prod.controla_estoque ? " · disponível " + qtdFmt(disponivel) + " " + prod.unidade : ""}</span>
+    ${true ? (prod ? html`<div class="info item-origem"><span>Do cadastro: cód. ${prod.codigo}${prod.tipo === "produto" && prod.controla_estoque ? " · disponível " + qtdFmt(disponivel) + " " + prod.unidade : ""}</span>
         ${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Trocar</button>` : null}</div>`
       : html`<div class="info item-origem"><span>Item só desta O.S.: não entra no cadastro de ${plural}${i.tipo === "peca" ? " nem no estoque" : ""}.</span>${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Escolher do cadastro</button>` : null}</div>`) : null}
     <${Campo} id="it-desc" rotulo="Descrição" obrig><${Texto} id="it-desc" valor=${i.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
@@ -103,12 +112,17 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
           <${Campo} id="it-venda" rotulo="Preço de venda unitário" dica=${i.produto_id ? "" : "Sugestão com margem de " + (cfg.markupPecas || 0) + "%: " + reais(sugestaoVenda(i.custo_unit))}><${Dinheiro} id="it-venda" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}>
         </div>` : null}` : null}
     ${i.tipo === "terceiro" ? html`
+      <div class="campo"><label for="it-forn">Prestador</label><${BuscaFornecedor} id="it-forn" somentePrestador valor=${i.fornecedor_id} texto=${i.fornecedor_id ? "" : i.fornecedor}
+        onEscolha=${f => set({ fornecedor_id: f ? f.id : null, fornecedor: f ? f.fantasia || f.razao : "" })} onTexto=${t => set({ fornecedor_id: null, fornecedor: t })} /></div>
       <div class="grade">
-        <${Campo} id="it-forn" rotulo="Fornecedor"><${Texto} id="it-forn" placeholder="ex.: retífica, torno, guincho" valor=${i.fornecedor} onMuda=${v => set({ fornecedor: v })} /></${Campo}>
         ${qtdInp}
-        <${Campo} id="it-custo" rotulo="Custo (interno)"><${Dinheiro} id="it-custo" valor=${i.custo_unit} onMuda=${v => set({ custo_unit: v })} /></${Campo}>
-        <${Campo} id="it-venda" rotulo="Valor cobrado"><${Dinheiro} id="it-venda" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}>
-      </div>` : null}
+        <${Campo} id="it-custo" rotulo="Custo do prestador (unitário)"><${Dinheiro} id="it-custo" valor=${i.custo_unit} onMuda=${v => set({ custo_unit: v, ...(v > 0 ? { valor_unit: precoPelaMargem(v, margemTer) } : {}) })} /></${Campo}>
+        <${Campo} id="it-marg" rotulo="Margem da oficina"><div class="inp-suf"><input id="it-marg" class="inp" inputmode="decimal" disabled=${!(Number(i.custo_unit) > 0)} value=${margTxt ?? (Number(i.custo_unit) > 0 ? String(margemTer).replace(".", ",") : "")} onInput=${e => { setMargTxt(e.target.value); set({ valor_unit: precoPelaMargem(i.custo_unit, parseValor(e.target.value)) }); }} onBlur=${() => setMargTxt(null)} /><span>%</span></div></${Campo}>
+        <${Campo} id="it-venda" rotulo="Valor cobrado do cliente (unitário)"><${Dinheiro} id="it-venda" valor=${i.valor_unit} onMuda=${v => set({ valor_unit: v })} /></${Campo}>
+      </div>
+      ${Number(i.custo_unit) > 0 ? html`<div class=${"info lucro-item" + (Number(i.valor_unit) < Number(i.custo_unit) ? " c-bad" : "")}><span>Custo ${reais(i.custo_unit * i.qtd)} · cobrado ${reais(totalItem(i))}</span><b>Lucro ${reais(totalItem(i) - i.custo_unit * i.qtd)}${totalItem(i) > 0 ? " (" + Math.round((totalItem(i) - i.custo_unit * i.qtd) / totalItem(i) * 100) + "% do valor)" : ""}</b></div>` : null}
+      ${fin && i.conta_id ? html`<span class="dica">A conta a pagar ao prestador já foi lançada no Financeiro.</span>` : fin ? html`<label class="linha-check"><input type="checkbox" id="it-conta" checked=${!!conta} onChange=${e => setConta(e.target.checked ? { vencimento: hojeISO() } : null)} /><span>Lançar conta a pagar ao prestador (${reais((Number(i.custo_unit) || 0) * (Number(i.qtd) || 0))})</span></label>
+        ${conta ? html`<${Campo} id="it-conta-venc" rotulo="Vencimento da conta"><input id="it-conta-venc" type="date" class="inp inp-curto" value=${conta.vencimento} onInput=${e => setConta({ vencimento: e.target.value })} /></${Campo}>` : null}` : null}` : null}
     ${!i.fornecida_cliente ? html`<div class="grade">
       <${Campo} id="it-descp" rotulo="Desconto (%)"><input id="it-descp" class="inp" inputmode="decimal" value=${bruto && Number(i.desconto) ? String(arred(Number(i.desconto) / bruto * 100)).replace(".", ",") : ""} onInput=${e => set({ desconto: arred(bruto * parseValor(e.target.value) / 100) })} /></${Campo}>
       <${Campo} id="it-desc-v" rotulo="Desconto (R$)"><${Dinheiro} id="it-desc-v" valor=${i.desconto} onMuda=${v => set({ desconto: v })} /></${Campo}></div>` : null}
@@ -125,7 +139,7 @@ function ItemLinha({ i, verValores, onClick, mostrarAprov, exec }) {
   if (i.codigo && i.tipo !== "servico") sub.push(i.codigo);
   if (i.tipo === "servico") sub.push(i.horas ? qtdFmt(i.horas) + " h" + (verValores ? " × " + reais(i.valor_unit) : "") : qtdFmt(i.qtd) + (verValores ? " × " + reais(i.valor_unit) : " un"));
   if (i.tipo === "peca") { sub.push(qtdFmt(i.qtd) + " un" + (verValores && !i.fornecida_cliente ? " × " + reais(i.valor_unit) : "")); sub.push(i.fornecida_cliente ? "peça do cliente" : (QUALIDADE[i.qualidade] || "procedência não informada")); }
-  if (i.tipo === "terceiro") { if (i.fornecedor) sub.push(i.fornecedor); if (Number(i.qtd) !== 1) sub.push(qtdFmt(i.qtd) + " un"); }
+  if (i.tipo === "terceiro") { if (i.fornecedor) sub.push(i.fornecedor); if (Number(i.qtd) !== 1) sub.push(qtdFmt(i.qtd) + " un"); if (verValores && (i.conta_id || i._conta)) sub.push("conta a pagar lançada"); }
   if (verValores && Number(i.desconto) > 0) sub.push("desconto " + reais(i.desconto));
   if (verValores && i.tipo !== "servico" && Number(i.custo_unit) > 0) sub.push("custo " + reais(i.custo_unit * i.qtd));
   const ap = i.aprovado === true ? (exec ? null : html`<span class="pill p-ok">Aprovado</span>`) : i.aprovado === false ? html`<span class="pill p-bad">Não aprovado</span>` : mostrarAprov ? html`<span class="pill p-warn">Aguardando</span>` : null;
@@ -147,7 +161,7 @@ function AprovacaoModal({ o, pendentes, onFechar, onConfirmar }) {
   return html`<${Modal} titulo="Registrar aprovação do cliente" onFechar=${onFechar}>
     <span class="dica">Desmarque os itens que o cliente não aprovou.</span>
     <div class="lista">${pendentes.map(i => html`<label class="linha linha-check" key=${i.id}><input type="checkbox" checked=${!!sel[i.id]} onChange=${e => setSel(s => ({ ...s, [i.id]: e.target.checked }))} />
-      <span class="meio"><strong>${i.descricao}</strong><span>${{ servico: "Mão de obra", peca: "Peça", terceiro: "Outros" }[i.tipo]}</span></span><b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b></label>`)}</div>
+      <span class="meio"><strong>${i.descricao}</strong><span>${{ servico: "Mão de obra", peca: "Peça", terceiro: "Terceiro" }[i.tipo]}</span></span><b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b></label>`)}</div>
     <div class="total-item"><span>Aprovado agora</span><b>${reais(t.total)}</b></div>
     <${Campo} id="ap-por" rotulo="Aprovado por" obrig><${Texto} id="ap-por" valor=${por} onMuda=${setPor} /></${Campo}>
     <div class="campo"><label>Forma de aprovação</label><${Seg} rotulo="Forma" opcoes=${["Presencial (assinatura)", "WhatsApp", "Telefone", "E-mail"].map(x => [x, "info"])} valor=${forma} onEscolha=${setForma} /></div>
@@ -246,7 +260,21 @@ export function Ordem({ id }) {
   const salvar = async (extra = {}, silencioso) => {
     const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(extra.status || st);
     const t = totais(itens, campos.desconto, aprov);
-    await api.salvarItens(o.id, itens.map(({ _novo, _cadastrar, ...i }, n) => ({ ...i, posicao: n })), removidos);
+    let lista = itens;
+    if (itens.some(i => i._conta && !i.conta_id)) {
+      lista = [];
+      for (const i of itens) {
+        if (!i._conta || i.conta_id) { lista.push(i); continue; }
+        try {
+          const nomeP = i.fornecedor || "Prestador";
+          const c = await api.contas.salvar({ descricao: i.descricao + " – " + numOS(o.numero) + (o.veiculo && o.veiculo.placa ? " " + exPlaca(o.veiculo.placa) : ""), fornecedor_id: i.fornecedor_id || null, favorecido: nomeP,
+            categoria: "Serviços de terceiros", documento: numOS(o.numero), valor: arred(Number(i.custo_unit) * Number(i.qtd)), vencimento: i._conta.vencimento, origem: "os", ordem_id: o.id, criado_por: perfil.nome });
+          lista.push({ ...i, conta_id: c.id, _conta: undefined });
+        } catch (e) { avisar("O item foi salvo, mas a conta do prestador não foi lançada: " + e.message, true); lista.push({ ...i, _conta: undefined }); }
+      }
+      setItens(lista);
+    }
+    await api.salvarItens(o.id, lista.map(({ _novo, _cadastrar, _conta, ...i }, n) => ({ ...i, posicao: n })), removidos);
     await api.atualizarOrdem(o.id, { diagnostico: campos.diagnostico, reclamacao: campos.reclamacao, previsao_entrega: campos.previsao_entrega || null, previsao_hora: campos.previsao_hora || "",
       condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto, obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
       situacao: campos.situacao, tabela_preco: campos.tabela_preco, total: t.total, custo: t.custo, ...extra });
@@ -456,12 +484,12 @@ export function Ordem({ id }) {
   const abaItens = html`
     <section class="card"><div class="secao-topo"><h3>Produtos e serviços</h3>${st === "aguardando" ? html`<span class="sub">Enviado em ${fmtDataHora(o.orcamento_enviado_em)} · válido até ${fmtData(o.validade_orcamento)}</span>` : null}
         ${execOn ? html`<span class="sub">${itens.filter(i => i.aprovado === true && i.executado).length} de ${itens.filter(i => i.aprovado === true).length} executados</span>` : null}</div>
-      ${grupo("peca", "Produtos / peças")}${grupo("servico", "Serviços / mão de obra")}${grupo("terceiro", "Outros valores (terceiros, deslocamento)")}
+      ${grupo("peca", "Produtos / peças")}${grupo("servico", "Serviços / mão de obra")}${grupo("terceiro", "Serviços de terceiros (retífica, torno, guincho)")}
       ${pendentes.length && st !== "diagnostico" ? html`<div class="aviso">${pendentes.length} item(ns) aguardando aprovação do cliente. Não execute antes da aprovação.</div>` : null}
       ${st === "execucao" && !gestor ? html`<span class="dica">Encontrou algo a mais? Registre nas observações e avise o consultor para orçar como adicional.</span>` : null}
       ${verValores ? html`<div class="totais">
         <div><span>Valor dos produtos</span><b>${reais(tAtual.pecas)}</b></div><div><span>Valor dos serviços</span><b>${reais(tAtual.servicos)}</b></div>
-        ${tAtual.terceiros ? html`<div><span>Outros valores</span><b>${reais(tAtual.terceiros)}</b></div>` : null}
+        ${tAtual.terceiros ? html`<div><span>Serviços de terceiros</span><b>${reais(tAtual.terceiros)}</b></div>` : null}
         <div><span>Desconto</span>${editavelOrc ? html`<${Dinheiro} id="desc" valor=${campos.desconto} onMuda=${v => setCampo({ desconto: v })} />` : html`<b>${reais(tAtual.desconto)}</b>`}</div>
         <div class="tot"><span>Valor total${usaAprov ? " aprovado" : ""}</span><b>${reais(tAtual.total)}</b></div>
         <div class="interno"><span>Custo de peças e terceiros</span><b>${reais(tAtual.custo)}</b></div>

@@ -18,7 +18,7 @@ function Venda() {
   const set = o => { setV(x => ({ ...x, ...o })); setErro(""); };
   const cli = dados.clientes.find(c => c.id === v.clienteId);
   const res = useMemo(() => { const n = norm(q), t = q.trim(), cod = /^\d+$/.test(t) ? +t : null; if (!n) return [];
-    return dados.produtos.filter(p => p.ativo !== false && (p.codigo === cod || p.codigo_barras === t || norm(p.descricao).includes(n) || norm(p.referencia).includes(n) || norm(p.marca).includes(n) || norm(p.obs).includes(n))).slice(0, 10); }, [q, dados.produtos]);
+    return dados.produtos.filter(p => p.ativo !== false && p.tipo !== "terceiro" && (p.codigo === cod || p.codigo_barras === t || norm(p.descricao).includes(n) || norm(p.referencia).includes(n) || norm(p.marca).includes(n) || norm(p.obs).includes(n))).slice(0, 10); }, [q, dados.produtos]);
   const adicionar = p => {
     setV(x => { const ex = x.itens.find(i => i.produto_id === p.id);
       if (ex) return { ...x, itens: x.itens.map(i => i === ex ? { ...i, qtd: Number(i.qtd) + 1 } : i) };

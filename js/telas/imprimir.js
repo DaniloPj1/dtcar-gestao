@@ -48,7 +48,7 @@ function ViaOS({ o, cli, vei, valores, via, nVias }) {
   const tels = [o.cliente.telefone, cli && cli.telefone2].filter(Boolean).map(fmtTel).join(" / ");
   const endereco = cli ? endCompleto(cli) : o.cliente.endereco;
   const quando = o.status === "entregue" ? ["Entregue em", fmtDataHora(o.entregue_em)] : o.previsao_entrega ? ["Previsão", fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "")] : null;
-  const linhasTot = [["Produtos", t.pecas], ["Serviços", t.servicos], ["Outros valores", t.terceiros], ["Desconto", -t.desconto]].filter(([, v]) => Number(v));
+  const linhasTot = [["Produtos", t.pecas], ["Serviços", t.servicos], ["Serviços de terceiros", t.terceiros], ["Desconto", -t.desconto]].filter(([, v]) => Number(v));
   return html`<article class="folha os-a4">
     <${Cabecalho} titulo=${orc ? "ORÇAMENTO" : "ORDEM DE SERVIÇO"} numero=${n5(o.numero)} direita=${html`<span>${fmtDataHora(o.criado_em)}</span>${nVias > 1 ? html`<em>${via === 1 ? "Via do cliente" : "Via da oficina"}</em>` : null}`} />
     <section class="imp-duas">
@@ -64,7 +64,7 @@ function ViaOS({ o, cli, vei, valores, via, nVias }) {
       ${o.reclamacao ? html`<p><b>Reclamação:</b> ${o.reclamacao}</p>` : null}${o.diagnostico ? html`<p><b>Diagnóstico:</b> ${o.diagnostico}</p>` : null}</section>` : null}
     <${TabelaItens} titulo="Produtos e peças" itens=${lista.filter(i => i.tipo === "peca")} valores=${valores} total=${["Total de produtos", t.pecas]} />
     <${TabelaItens} titulo="Serviços" itens=${lista.filter(i => i.tipo === "servico")} valores=${valores} total=${["Total de serviços", t.servicos]} />
-    <${TabelaItens} titulo="Outros valores" itens=${lista.filter(i => i.tipo === "terceiro")} valores=${valores} total=${["Total de outros valores", t.terceiros]} />
+    <${TabelaItens} titulo="Serviços de terceiros" itens=${lista.filter(i => i.tipo === "terceiro")} valores=${valores} total=${["Total de serviços de terceiros", t.terceiros]} />
     ${o.obs_execucao ? html`<section class="imp-bloco imp-texto"><p><b>Observações:</b> ${o.obs_execucao}</p></section>` : null}
     <section class="imp-resumo">
       <div class="imp-grade g2">
@@ -128,7 +128,7 @@ function CupomOS({ o, valores }) {
     <hr /><div>Placa: ${exPlaca(o.veiculo.placa)}  ${o.veiculo.marca} ${o.veiculo.modelo}</div><div>Ano: ${o.veiculo.ano || "—"}  Cor: ${o.veiculo.cor || "—"}</div><div>KM: ${fmtKm(o.km_entrada)}${o.box ? "  Box: " + o.box : ""}</div>
     <hr />${lista.map(i => html`<div class="c-item" key=${i.id}><div>${i.descricao}</div>${valores ? html`<div class="c-dir">${i.horas ? qtdFmt(i.horas) + " h" : qtdFmt(i.qtd)} x ${reais(i.valor_unit)}${Number(i.desconto) ? " - " + reais(i.desconto) : ""} = ${reais(totalItem(i))}</div>` : html`<div class="c-dir">${qtdFmt(i.qtd)}</div>`}</div>`)}
     ${valores ? html`<hr /><div class="c-lin"><span>Produtos</span><span>${reais(t.pecas)}</span></div><div class="c-lin"><span>Serviços</span><span>${reais(t.servicos)}</span></div>
-      ${t.terceiros ? html`<div class="c-lin"><span>Outros</span><span>${reais(t.terceiros)}</span></div>` : null}${t.desconto ? html`<div class="c-lin"><span>Desconto</span><span>${reais(t.desconto)}</span></div>` : null}
+      ${t.terceiros ? html`<div class="c-lin"><span>Terceiros</span><span>${reais(t.terceiros)}</span></div>` : null}${t.desconto ? html`<div class="c-lin"><span>Desconto</span><span>${reais(t.desconto)}</span></div>` : null}
       <div class="c-lin c-tot"><span>TOTAL</span><span>${reais(t.total)}</span></div>` : null}
     <hr /><div>Situação: ${STATUS[o.status].t}${o.situacao ? " · " + o.situacao : ""}</div>${o.forma_pagamento ? html`<div>Pagamento: ${o.forma_pagamento}</div>` : null}
     ${o.mecanico_nome ? html`<div>Responsável: ${o.mecanico_nome}</div>` : null}

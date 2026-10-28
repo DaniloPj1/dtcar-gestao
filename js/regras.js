@@ -88,6 +88,7 @@ export const pode = (perfil, acao) => {
     cadastrar: ["admin", "consultor"],
     excluir: ["admin"],
     ajustes: ["admin"],
+    financeiro: ["admin"],
   };
   return (regras[acao] || []).includes(p);
 };
@@ -118,6 +119,10 @@ export const CONFIG_PADRAO = {
   tiposCliente: ["Particular", "Empresa", "Frota", "Motorista de aplicativo", "Comerciante", "Produtor rural", "Mecânico / revenda"],
   textoRecibo: "Pelo que firmamos o presente recibo, dando plena e irrevogável quitação do valor aqui recebido.",
   impressaoVias: 1,
+  markupTerceiros: 20,
+  categoriasDespesa: ["Fornecedores de peças", "Serviços de terceiros", "Aluguel", "Energia", "Água", "Telefone e internet", "Impostos e taxas", "Simples Nacional (DAS)",
+    "Salários e encargos", "Pró-labore", "Contabilidade", "Sistemas e assinaturas", "Equipamentos e ferramentas", "Manutenção do imóvel", "Marketing", "Combustível",
+    "Cartão de crédito", "Empréstimos e financiamentos", "Taxas bancárias", "Outras despesas"],
   condicoesPadrao: "Pagamento na retirada do veículo.",
   termoEntrada: TERMO_ENTRADA, termoOrcamento: TERMO_ORCAMENTO, termoGarantia: TERMO_GARANTIA,
 };

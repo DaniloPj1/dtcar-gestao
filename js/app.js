@@ -14,17 +14,19 @@ import { Importar } from "./telas/importar.js";
 import { Balcao } from "./telas/balcao.js";
 import { EntradaNFe } from "./telas/compras.js";
 import { Relatorios } from "./telas/relatorios.js";
+import { Financeiro } from "./telas/financeiro.js";
+import { Backup } from "./telas/backup.js";
 
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios" };
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", backup: "Backup" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["+", "Novo", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
 const LATERAL = [
   ["Operação", [["/painel", "Painel", "painel"], ["/ordens", "Ordens de serviço", "lista"], ["/entrada", "Nova O.S.", "mais", "entrada"], ["/balcao", "Venda de balcão", "carrinho", "verValores"]]],
   ["Cadastros", [["/cadastros", "Clientes", "pessoas"], ["/cadastros?aba=veiculos", "Veículos", "carro"], ["/cadastros?aba=produtos", "Produtos e estoque", "caixa"], ["/cadastros?aba=fornecedores", "Fornecedores", "fabrica"]]],
-  ["Financeiro", [["/recibos", "Recibos", "recibo", "verValores"], ["/relatorios", "Produtos vendidos", "lista", "verValores"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"]]],
-  ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
+  ["Financeiro", [["/financeiro", "Contas a pagar", "dinheiro", "financeiro"], ["/recibos", "Recibos", "recibo", "verValores"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"], ["/relatorios", "Relatórios", "grafico", "verValores"]]],
+  ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/backup", "Backup", "nuvem", "ajustes"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
 ];
 
 function App() {
@@ -114,7 +116,7 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores" };
+  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", backup: "ajustes" };
   const ctx = { sessao, perfil, cfg, dados, recarregar, avisar, confirmar, ir, sair };
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
@@ -127,14 +129,15 @@ function App() {
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
-    balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} />`, relatorios: () => html`<${Relatorios} />`,
+    balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
+    financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, backup: () => html`<${Backup} />`,
   }[base]?.() || html`<${Painel} />`;
 
   return html`<${Ctx.Provider} value=${ctx}>
     <aside class="lateral" aria-label="Menu">
       <button type="button" class="lateral-marca" onClick=${() => ir("/painel")} aria-label="Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       ${LATERAL.map(([grupo, itens]) => { const vis = itens.filter(it => !it[3] || pode(perfil, it[3])); return vis.length ? html`<nav key=${grupo} class="lateral-grupo"><span>${grupo}</span>
-        ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && !qs) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
+        ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
           return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span></button>`; })}</nav>` : null; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
     </aside>
@@ -144,7 +147,7 @@ function App() {
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">
-      ${[["/entrada", "Nova ordem de serviço", "Abrir O.S. para um veículo", "lista", "entrada"], ["/balcao", "Venda de balcão", "Vender peças ou serviços sem O.S.", "carrinho", "verValores"], ["/nfe", "Entrada de nota fiscal", "Importar o XML de uma compra", "nota", "cadastrar"]]
+      ${[["/entrada", "Nova ordem de serviço", "Abrir O.S. para um veículo", "lista", "entrada"], ["/balcao", "Venda de balcão", "Vender peças ou serviços sem O.S.", "carrinho", "verValores"], ["/nfe", "Entrada de nota fiscal", "Importar o XML de uma compra", "nota", "cadastrar"], ["/financeiro?nova=pdf", "Conta a pagar", "Lançar boleto, duplicata ou despesa", "dinheiro", "financeiro"]]
         .filter(x => pode(perfil, x[4])).map(([r, t, d, ic]) => html`<button type="button" key=${r} class="linha" onClick=${() => { setNovoMenu(false); ir(r); }}><span class="ic">${I[ic]}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`)}</div></${Modal}>` : null}
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>

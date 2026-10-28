@@ -28,7 +28,15 @@ export function lerNFe(xmlTexto) {
       qtd, valor_unit_nf: num(p, "vUnCom"), total_nf: vProd, extras: arred(extras), custo_unit: Math.round((vProd + extras) / qtd * 10000) / 10000 };
   });
   if (!itens.length) throw new Error("A nota não tem itens.");
-  return { nota, fornecedor, itens };
+  // cobrança: duplicatas (parcelas a pagar) e forma de pagamento
+  const cobr = tag(inf, "cobr");
+  const duplicatas = cobr ? [...cobr.getElementsByTagNameNS("*", "dup")].map((d, n) => ({ numero: txt(d, "nDup") || String(n + 1).padStart(3, "0"), vencimento: txt(d, "dVenc"), valor: num(d, "vDup") }))
+    .filter(d => d.valor > 0 && /^\d{4}-\d{2}-\d{2}$/.test(d.vencimento)) : [];
+  const tPag = [...inf.getElementsByTagNameNS("*", "detPag")].map(d => txt(d, "tPag"));
+  const FORMAS = { "01": "Dinheiro", "02": "Cheque", "03": "Cartão de crédito", "04": "Cartão de débito", "05": "Crédito loja", "15": "Boleto", "16": "Depósito", "17": "PIX", "90": "Sem pagamento", "99": "Outros" };
+  nota.pagamento = tPag.map(t => FORMAS[t] || t).filter(Boolean).join(", ");
+  nota.fatura = cobr ? txt(tag(cobr, "fat"), "nFat") : "";
+  return { nota, fornecedor, itens, duplicatas };
 }
 
 /** Pontuação simples de semelhança entre descrições (palavras em comum) */

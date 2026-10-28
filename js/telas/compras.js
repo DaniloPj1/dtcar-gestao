@@ -5,6 +5,7 @@ import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro } from "../ui.j
 import { norm, soDig, reais, qtdFmt, fmtData, fmtDataHora, fmtDoc, fmtTel, parseValor, precoPelaMargem, arred } from "../util.js";
 import { pode, UNIDADES } from "../regras.js";
 import { lerNFe, reconhecer, linkImagem } from "../nfe.js";
+import { contasDaNota, somaMes } from "./financeiro.js";
 
 const COMO = { vinculo: ["Já vinculado a este fornecedor", "ok"], ean: ["Encontrado pelo código de barras", "ok"], referencia: ["Encontrado pela referência", "info"], parecido: ["Há produtos parecidos", "warn"], nenhum: ["Produto novo", "muted"] };
 
@@ -69,7 +70,8 @@ function ItemNota({ it, i, set, dados, cfg, ver }) {
 export function EntradaNFe() {
   const { dados, cfg, perfil, avisar, recarregar, ir } = useApp();
   const [nf, setNf] = useState(null), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [jaImportada, setJa] = useState(null), [enviando, setEnviando] = useState(false), [res, setRes] = useState(null), [vinculos, setVinculos] = useState(null);
-  const ver = pode(perfil, "verValores");
+  const ver = pode(perfil, "verValores"), fin = pode(perfil, "financeiro");
+  const [fin1, setFin1] = useState({ lancar: true, venc: "" }); // contas a pagar desta nota
   useEffect(() => { api.vinculos.listar().then(setVinculos).catch(() => setVinculos([])); }, []);
   const abrir = async arq => {
     setErro(""); setRes(null); setNf(null);
@@ -81,6 +83,7 @@ export function EntradaNFe() {
       const margem = Number(cfg.markupPecas) || 0;
       setItens(rec.map(it => ({ ...it, atualizar_custo: true, novo: { descricao: it.descricao_nf, referencia: it.codigo, marca: "", categoria: "", unidade: ["CX", "PCT", "JG", "KT"].includes(it.unidade) ? it.unidade : (it.unidade || "UN"), margem_vista: margem, estoque_min: 0 } })));
       setNf({ ...lido, fornecedorCadastrado: forn || null, arquivo: arq.name });
+      setFin1({ lancar: lido.duplicatas.length > 0, venc: somaMes((lido.nota.emissao || new Date().toISOString()).slice(0, 10), 1) });
       setJa(await api.notas.existe(lido.nota.chave).catch(() => null));
     } catch (e) { setErro(e.message); }
   };
@@ -96,12 +99,19 @@ export function EntradaNFe() {
         fator: Number(i.fator) || 1, qtd: i.qtd, custo_unit: i.custo_unit, atualizar_custo: i.atualizar_custo !== false,
         novo: i.acao === "novo" ? { ...i.novo, descricao: i.novo.descricao.trim(), margem_prazo: i.novo.margem_vista, margem_atacado: i.novo.margem_vista } : undefined })) };
       const r = await api.notas.importar(p);
+      if (fin && fin1.lancar) {
+        try { const dups = nf.duplicatas.length ? nf.duplicatas : [{ numero: "001", vencimento: fin1.venc, valor: nf.nota.valor_total }];
+          const forn = r.fornecedor_id && (dados.fornecedores.find(f => f.id === r.fornecedor_id) || {});
+          const c = await api.contas.lancar(contasDaNota({ ...nf, duplicatas: dups }, r.fornecedor_id, forn && forn.categoria_padrao)); r.contas = c.lancadas; }
+        catch (e) { r.erroContas = e.message; }
+      }
       setRes(r); avisar("Entrada da NF " + nf.nota.numero + " registrada."); await recarregar(["produtos", "fornecedores"]);
     } catch (e) { setErro(e.message); } finally { setEnviando(false); }
   };
   const listas = useMemo(() => ({ cat: [...new Set(dados.produtos.map(x => x.categoria).filter(Boolean))].sort(), marca: [...new Set(dados.produtos.map(x => x.marca).filter(Boolean))].sort() }), [dados.produtos]);
   if (res) return html`<div class="pagina"><section class="card"><h2>Entrada registrada</h2>
-    <p>NF ${nf.nota.numero} de ${nf.fornecedor.fantasia || nf.fornecedor.razao}: ${res.vinculados} produto(s) com estoque atualizado, ${res.novos} cadastrado(s) e ${res.ignorados} ignorado(s).</p>
+    <p>NF ${nf.nota.numero} de ${nf.fornecedor.fantasia || nf.fornecedor.razao}: ${res.vinculados} produto(s) com estoque atualizado, ${res.novos} cadastrado(s) e ${res.ignorados} ignorado(s).${res.contas ? " " + res.contas + " conta(s) lançada(s) em contas a pagar." : ""}</p>
+    ${res.erroContas ? html`<div class="erros">O estoque foi atualizado, mas as contas a pagar não foram lançadas: ${res.erroContas}. Lance pelo Financeiro › Duplicatas do XML.</div>` : null}
     <div class="acoes"><button type="button" class="btn btn-pri" onClick=${() => { setNf(null); setRes(null); setItens([]); }}>Importar outra nota</button><button type="button" class="btn" onClick=${() => ir("/cadastros?aba=produtos")}>Ver produtos</button></div></section></div>`;
   return html`<div class="pagina larga-media">
     <section class="card"><div class="secao-topo"><h2>Entrada de nota fiscal</h2>${!nf ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/cadastros?aba=fornecedores")}>Fornecedores</button>` : null}</div>
@@ -117,6 +127,13 @@ export function EntradaNFe() {
         ${jaImportada ? html`<div class="erros">Esta nota já foi importada em ${fmtDataHora(jaImportada.criado_em)}${jaImportada.usuario_nome ? " por " + jaImportada.usuario_nome : ""}. Importar de novo duplicaria o estoque.</div>` : null}
         <span class="dica">Chave ${nf.nota.chave}</span></section>
       <datalist id="nf-cats">${listas.cat.map(x => html`<option value=${x} />`)}</datalist><datalist id="nf-marcas">${listas.marca.map(x => html`<option value=${x} />`)}</datalist><datalist id="nf-uns">${UNIDADES.map(x => html`<option value=${x} />`)}</datalist>
+      ${fin ? html`<section class="card nf-contas"><div class="secao-topo"><h3>Contas a pagar desta nota</h3>${nf.nota.pagamento ? html`<span class="sub">Pagamento: ${nf.nota.pagamento}</span>` : null}</div>
+        ${nf.duplicatas.length ? html`<ul class="ranking">${nf.duplicatas.map(d => html`<li key=${d.numero}><span>Parcela ${d.numero}</span><b>${reais(d.valor)}</b><small>${fmtData(d.vencimento)}</small></li>`)}</ul>
+          <label class="linha-check"><input type="checkbox" id="nf-lancar" checked=${fin1.lancar} onChange=${e => setFin1(x => ({ ...x, lancar: e.target.checked }))} /><span>Lançar ${nf.duplicatas.length === 1 ? "a duplicata" : "as " + nf.duplicatas.length + " duplicatas"} em contas a pagar</span></label>`
+        : html`<span class="dica">A nota não traz duplicatas (pagamento à vista ou não informado).</span>
+          <label class="linha-check"><input type="checkbox" id="nf-lancar" checked=${fin1.lancar} onChange=${e => setFin1(x => ({ ...x, lancar: e.target.checked }))} /><span>Lançar o total de ${reais(nf.nota.valor_total)} como conta a pagar</span></label>
+          ${fin1.lancar ? html`<${Campo} id="nf-venc" rotulo="Vencimento"><input id="nf-venc" type="date" class="inp inp-curto" value=${fin1.venc} onInput=${e => setFin1(x => ({ ...x, venc: e.target.value }))} /></${Campo}>` : null}`}
+      </section>` : null}
       <section class="card"><div class="secao-topo"><h3>Itens (${itens.length})</h3><span class="sub">${resumo.vinc} reconhecido(s) · ${resumo.novo} novo(s) · ${resumo.ign} ignorado(s)</span></div>
         <div class="nf-itens">${itens.map((it, i) => html`<${ItemNota} key=${i} it=${it} i=${i} set=${o => set(i, o)} dados=${dados} cfg=${cfg} ver=${ver} />`)}</div></section>
       <div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${() => { setNf(null); setItens([]); setErro(""); }}>Cancelar</button>
@@ -125,9 +142,9 @@ export function EntradaNFe() {
 }
 
 /* ---------------- fornecedores ---------------- */
-const FORN_VAZIO = { cnpj: "", razao: "", fantasia: "", ie: "", telefone: "", email: "", endereco: "", bairro: "", cidade: "", uf: "", cep: "", contato: "", obs: "", ativo: true };
-export function FormFornecedor({ inicial, onFechar }) {
-  const { perfil, avisar, recarregar, confirmar } = useApp();
+const FORN_VAZIO = { cnpj: "", razao: "", fantasia: "", ie: "", telefone: "", email: "", endereco: "", bairro: "", cidade: "", uf: "", cep: "", contato: "", obs: "", ativo: true, prestador: false, categoria_padrao: "" };
+export function FormFornecedor({ inicial, onFechar, onSalvo }) {
+  const { perfil, cfg, avisar, recarregar, confirmar } = useApp();
   const [f, setF] = useState({ ...FORN_VAZIO, ...inicial, cnpj: fmtDoc(inicial.cnpj || ""), telefone: fmtTel(inicial.telefone || "") }), [erro, setErro] = useState(""), [notas, setNotas] = useState(null);
   useEffect(() => { if (f.id) api.notas.listar().then(l => setNotas(l.filter(n => n.fornecedor_id === f.id))).catch(() => setNotas([])); }, []);
   const set = o => { setF(x => ({ ...x, ...o })); setErro(""); };
@@ -135,7 +152,7 @@ export function FormFornecedor({ inicial, onFechar }) {
   const salvar = async () => {
     if (!f.razao.trim()) return setErro("Informe a razão social.");
     const { id, criado_em, atualizado_em, ...resto } = f;
-    try { await api.fornecedores.salvar({ ...(id ? { id } : {}), ...resto, razao: f.razao.trim(), cnpj: soDig(f.cnpj), telefone: soDig(f.telefone) }); avisar("Fornecedor salvo."); await recarregar(["fornecedores"]); onFechar(); }
+    try { const r = await api.fornecedores.salvar({ ...(id ? { id } : {}), ...resto, razao: f.razao.trim(), cnpj: soDig(f.cnpj), telefone: soDig(f.telefone) }); avisar("Fornecedor salvo."); await recarregar(["fornecedores"]); onSalvo ? onSalvo(r) : onFechar(); }
     catch (e) { setErro(/duplicate/.test(e.message) ? "Já existe um fornecedor com este CNPJ." : e.message); }
   };
   const excluir = async () => { if (!await confirmar({ titulo: "Excluir fornecedor", texto: "Os vínculos de códigos deste fornecedor com os seus produtos também serão apagados.", botao: "Excluir", perigo: true })) return;
@@ -149,6 +166,8 @@ export function FormFornecedor({ inicial, onFechar }) {
       <div class="grade"><${Campo} id="fo-tel" rotulo="Telefone / WhatsApp"><input id="fo-tel" class="inp" inputmode="tel" value=${f.telefone} onBlur=${e => set({ telefone: fmtTel(e.target.value) })} onInput=${e => set({ telefone: e.target.value })} /></${Campo}>
         ${T("email", "E-mail", { type: "email" })}${T("contato", "Vendedor / contato")}</div>
       <div class="grade">${T("endereco", "Endereço")}${T("bairro", "Bairro")}${T("cidade", "Cidade")}${T("uf", "UF", { maxlength: 2 })}${T("cep", "CEP")}</div>
+      <div class="grade"><${Campo} id="fo-cat" rotulo="Categoria das contas" dica="Usada ao lançar boletos deste fornecedor."><${Texto} id="fo-cat" list="fo-cats" valor=${f.categoria_padrao} onMuda=${v => set({ categoria_padrao: v })} /><datalist id="fo-cats">${(cfg.categoriasDespesa || []).map(x => html`<option value=${x} />`)}</datalist></${Campo}></div>
+      <label class="linha-check"><input type="checkbox" checked=${!!f.prestador} onChange=${e => set({ prestador: e.target.checked })} /><span>Presta serviços para a oficina (retífica, torno, guincho, funilaria…)</span></label>
       <${Campo} id="fo-obs" rotulo="Observações"><${Area} id="fo-obs" valor=${f.obs} onMuda=${v => set({ obs: v })} /></${Campo}>
     </fieldset>
     ${f.id ? html`<h4 class="sub-titulo">Notas de entrada</h4>${!notas ? html`<span class="dica">Carregando…</span>` : notas.length ? html`<div class="lista">${notas.map(n => html`<div class="linha" key=${n.id}><span class="meio"><strong>NF ${n.numero}</strong><span>${n.emissao ? fmtData(n.emissao) : fmtData(n.criado_em)} · ${(n.itens || []).length} item(ns)</span></span><b>${reais(n.valor_total)}</b></div>`)}</div>` : html`<span class="dica">Nenhuma nota importada.</span>`}` : null}
@@ -164,7 +183,7 @@ export function FornecedoresLista() {
     <div class="linha-add"><input id="busca-forn" class="inp" aria-label="Buscar fornecedor" placeholder="Nome ou CNPJ" value=${q} onInput=${e => setQ(e.target.value)} />
       ${pode(perfil, "cadastrar") ? html`<button type="button" class="btn" onClick=${() => ir("/nfe")}>Entrada de nota (XML)</button><button type="button" class="btn btn-pri" onClick=${() => setEd({})}>+ Novo</button>` : null}</div>
     <section class="card"><h3>${lista.length} fornecedor(es)</h3>
-      ${lista.length ? html`<div class="lista">${lista.map(f => html`<button type="button" key=${f.id} class="linha" onClick=${() => setEd(f)}><span class="meio"><strong>${f.fantasia || f.razao}</strong><span>${[f.fantasia ? f.razao : "", fmtDoc(f.cnpj), [f.cidade, f.uf].filter(Boolean).join("/"), f.telefone ? fmtTel(f.telefone) : ""].filter(Boolean).join(" · ")}</span></span></button>`)}</div>`
+      ${lista.length ? html`<div class="lista">${lista.map(f => html`<button type="button" key=${f.id} class="linha" onClick=${() => setEd(f)}><span class="meio"><strong>${f.fantasia || f.razao}</strong><span>${[f.prestador ? "prestador de serviço" : "", f.fantasia ? f.razao : "", fmtDoc(f.cnpj), [f.cidade, f.uf].filter(Boolean).join("/"), f.telefone ? fmtTel(f.telefone) : ""].filter(Boolean).join(" · ")}</span></span></button>`)}</div>`
         : html`<${Vazio}>Nenhum fornecedor. Eles são cadastrados automaticamente na entrada da primeira nota.</${Vazio}>`}</section>
     ${ed ? html`<${FormFornecedor} inicial=${ed} onFechar=${() => setEd(null)} />` : null}`;
 }

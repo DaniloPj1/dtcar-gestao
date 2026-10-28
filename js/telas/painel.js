@@ -85,10 +85,25 @@ export const JANELAS = {
   manutencao: { t: "Manutenção programada vencendo", tam: 6, valores: true },
   recuperar: { t: "Clientes para recuperar", tam: 3, valores: true },
   aniversarios: { t: "Aniversariantes do mês", tam: 3, valores: true },
+  contas: { t: "Contas a pagar", tam: 12, valores: true, fin: true },
 };
-export const LAYOUT_PADRAO = [["busca", 12], ["hoje", 12], ["patio", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
+export const LAYOUT_PADRAO = [["busca", 12], ["hoje", 12], ["patio", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
   ["servicos", 4], ["pecas", 4], ["formas", 4], ["manutencao", 6], ["recuperar", 3], ["aniversarios", 3]].map(([k, tam]) => ({ k, tam }));
 const TAMANHOS = [[3, "¼"], [4, "⅓"], [6, "½"], [8, "⅔"], [12, "Inteira"]];
+
+function ContasJanela({ l }) {
+  const { ir } = useApp();
+  if (!l) return html`<span class="dica">Carregando…</span>`;
+  const hoje = hojeISO(), sete = somaDiasISO(hoje, 7), soma = x => x.reduce((s, c) => s + Number(c.valor), 0);
+  const venc = l.filter(c => c.vencimento < hoje), hj = l.filter(c => c.vencimento === hoje), sem = l.filter(c => c.vencimento > hoje && c.vencimento <= sete);
+  return html`<div class="contas-janela"><div class="contas-mini">
+      <div class=${venc.length ? "c-bad" : ""}><span>Vencidas</span><b>${reais(soma(venc))}</b><small>${venc.length}</small></div>
+      <div class=${hj.length ? "c-warn" : ""}><span>Hoje</span><b>${reais(soma(hj))}</b><small>${hj.length}</small></div>
+      <div><span>Próximos 7 dias</span><b>${reais(soma(sem))}</b><small>${sem.length}</small></div></div>
+    ${l.length ? html`<ul class="ranking">${l.slice(0, 5).map(c => html`<li key=${c.id}><span>${c.descricao}</span><b class=${c.vencimento < hoje ? "c-bad" : ""}>${reais(c.valor)}</b><small>${fmtData(c.vencimento).slice(0, 5)}</small></li>`)}</ul>` : html`<span class="dica">Nenhuma conta em aberto.</span>`}
+    <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/financeiro")}>Contas a pagar</button><button type="button" class="btn btn-sm" onClick=${() => ir("/financeiro?nova=pdf")}>Lançar boleto</button></div>
+    <span class="dica">Total em aberto: ${reais(soma(l))}</span></div>`;
+}
 
 const Ranking = ({ itens, vazio, total }) => itens && itens.length ? html`<ol class="ranking">${itens.map((t, i) => html`<li key=${i}><span>${t.nome}</span><b>${reais(t.v)}</b><small>${total ? pct(t.v, total) + "%" : t.n + "×"}</small></li>`)}</ol>` : html`<span class="dica">${vazio}</span>`;
 
@@ -164,9 +179,14 @@ export function Painel() {
   const iv = useMemo(() => intervalo(per), [per]);
 
   // layout: definido pelo administrador (Ajustes), igual para toda a equipe; mecânico não vê janelas de valores
-  const salvo = Array.isArray(cfg.painel) && cfg.painel.length ? cfg.painel.filter(j => JANELAS[j.k]) : LAYOUT_PADRAO;
+  const fin = pode(perfil, "financeiro");
+  let salvo = Array.isArray(cfg.painel) && cfg.painel.length ? cfg.painel.filter(j => JANELAS[j.k]) : LAYOUT_PADRAO;
+  // janela nova da versão 5: entra uma vez no layout já salvo, logo depois do pátio
+  if (!cfg.painelV5 && !salvo.some(j => j.k === "contas")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "contas", tam: 12 }, ...salvo.slice(i + 1)]; }
   const layout = editar ? rascunho : salvo;
-  let visiveis = layout.filter(j => ver || !JANELAS[j.k].valores);
+  let visiveis = layout.filter(j => (ver || !JANELAS[j.k].valores) && (fin || !JANELAS[j.k].fin));
+  const [contasAb, setContasAb] = useState(null);
+  useEffect(() => { if (fin) api.contas.abertas().then(setContasAb).catch(() => setContasAb([])); }, [fin]);
   if (perfil.papel === "mecanico" && !visiveis.some(j => j.k === "minhas")) visiveis = [{ k: "minhas", tam: 12 }, ...visiveis];
   const precisaRes = ver && visiveis.some(j => JANELAS[j.k].res);
   useEffect(() => { if (!precisaRes) return; let vivo = true; setR(null); setRa(null); setErroRes("");
@@ -190,12 +210,18 @@ export function Painel() {
     if (["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hoje) alertas.push([o, "Previsão de entrega (" + fmtData(o.previsao_entrega) + ") vencida", "bad"]);
   });
   alertas.sort((a, b) => (a[2] === "bad" ? 0 : 1) - (b[2] === "bad" ? 0 : 1));
+  const extras = []; // alertas que não são de O.S.
+  if (fin && contasAb) { const v = contasAb.filter(c => c.vencimento < hoje), h = contasAb.filter(c => c.vencimento === hoje);
+    if (v.length) extras.push({ t: v.length + " conta(s) a pagar vencida(s): " + reais(v.reduce((s, c) => s + Number(c.valor), 0)), s: "Registre o pagamento ou renegocie.", cor: "bad", r: "/financeiro" });
+    if (h.length) extras.push({ t: h.length + " conta(s) vencem hoje: " + reais(h.reduce((s, c) => s + Number(c.valor), 0)), s: "Contas a pagar", cor: "warn", r: "/financeiro" }); }
+  if (admin) { const u = cfg.ultimoBackup, d = u ? Math.floor((Date.now() - new Date(u.em)) / DIA) : null;
+    if (d === null || d > 7) extras.push({ t: d === null ? "Nenhum backup baixado ainda" : "Último backup há " + d + " dias", s: "Baixe uma cópia dos dados e guarde fora do computador.", cor: "warn", r: "/backup" }); }
   const baixo = dados.produtos.filter(estoqueBaixo);
   const deHoje = iso => iso && new Date(iso).toDateString() === new Date().toDateString();
   const entradasHoje = dados.ordens.filter(o => deHoje(o.criado_em) && o.status !== "cancelado").length;
   const saidasHoje = dados.ordens.filter(o => o.status === "entregue" && deHoje(o.entregue_em));
   const valorDe = s => ativas.filter(o => o.status === s).reduce((t, o) => t + Number(o.total || 0), 0);
-  const nAlerta = alertas.length + (antigas.length ? 1 : 0);
+  const nAlerta = alertas.length + (antigas.length ? 1 : 0) + extras.length;
   // relacionamento
   const ultima = useMemo(() => { const u = new Map(); for (const o of dados.ordens) { if (!o.cliente_id || o.status === "cancelado") continue; const t = o.entregue_em || o.criado_em; if (!u.has(o.cliente_id) || t > u.get(o.cliente_id)) u.set(o.cliente_id, t); } return u; }, [dados.ordens]);
   const clientesAbertos = new Set(abertas.map(o => o.cliente_id));
@@ -217,7 +243,7 @@ export function Painel() {
     patio: () => html`<div class="patio" role="group" aria-label="Situação do pátio">
       ${["diagnostico", "aguardando", "execucao", "pronto"].map(s => { const n = ativas.filter(o => o.status === s).length; return html`<button type="button" key=${s} class=${"patio-item t-" + STATUS[s].cor + (foco === s ? " ativo" : "")} aria-pressed=${foco === s} onClick=${() => setFoco(foco === s ? "" : s)}>
         <b>${n}</b><span>${STATUS[s].t}</span>${ver && n ? html`<small>${reaisCurto(valorDe(s))}</small>` : null}</button>`; })}</div>`,
-    alertas: () => nAlerta ? html`<div class="lista">${(verTodos ? alertas : alertas.slice(0, 6)).map(([o, t, c], n) => html`<button type="button" key=${n} class="linha" onClick=${() => ir("/os/" + o.id)}><span class=${"dot s-" + c}></span><span class="meio"><strong>${t}</strong><span>${numOS(o.numero)} · ${exPlacaCurta(o)} · ${o.cliente.nome}</span></span></button>`)}
+    alertas: () => nAlerta ? html`<div class="lista">${extras.map((x, n) => html`<button type="button" key=${"x" + n} class="linha" onClick=${() => ir(x.r)}><span class=${"dot s-" + x.cor}></span><span class="meio"><strong>${x.t}</strong><span>${x.s}</span></span></button>`)}${(verTodos ? alertas : alertas.slice(0, 6)).map(([o, t, c], n) => html`<button type="button" key=${n} class="linha" onClick=${() => ir("/os/" + o.id)}><span class=${"dot s-" + c}></span><span class="meio"><strong>${t}</strong><span>${numOS(o.numero)} · ${exPlacaCurta(o)} · ${o.cliente.nome}</span></span></button>`)}
         ${antigas.length ? html`<button type="button" class="linha" onClick=${() => ir("/ordens?filtro=herdadas")}><span class="dot s-info"></span><span class="meio"><strong>${antigas.length} O.S. antigas do sistema anterior ainda abertas</strong><span>Revise e encerre: entregue, recuse ou cancele cada uma.</span></span></button>` : null}</div>
         ${alertas.length > 6 ? html`<button type="button" class="btn-link" onClick=${() => setVerTodos(!verTodos)}>${verTodos ? "Mostrar menos" : "Ver todos (" + alertas.length + ")"}</button>` : null}` : html`<span class="dica">Tudo em dia.</span>`,
     estoque: () => baixo.length ? html`<ul class="ranking">${baixo.slice(0, 7).map(p => html`<li key=${p.id}><span>${p.descricao}</span><b class="c-bad">${Number(p.estoque_atual).toLocaleString("pt-BR")} ${p.unidade}</b><small>mín. ${Number(p.estoque_min).toLocaleString("pt-BR")}</small></li>`)}</ul>
@@ -239,6 +265,7 @@ export function Painel() {
     manutencao: () => manut.length ? html`<ul class="ranking">${manut.slice(0, 7).map(x => html`<li key=${x.v.id}><span>${exPlaca(x.v.placa)} · ${x.c.nome.split(" ")[0]} · ${x.oque}</span><b class=${x.data < hoje ? "c-bad" : ""}>${fmtData(x.data)}</b>
       <a class="btn btn-sm btn-whats" aria-label=${"WhatsApp para " + x.c.nome} href=${linkWhats(x.c.telefone, lembrete(x))} target="_blank" rel="noopener">${I.whats}</a></li>`)}</ul>` : html`<span class="dica">Nenhuma revisão, troca de óleo ou filtro vencendo em 30 dias.</span>`,
     recuperar: () => html`<div class="numero-grande"><b>${recuperar.length}</b><span>sem visita entre 6 meses e 2 anos</span></div>${recuperar.length ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/cadastros?filtro=recuperar")}>Chamar no WhatsApp</button>` : null}`,
+    contas: () => html`<${ContasJanela} l=${contasAb} />`,
     aniversarios: () => aniv.length ? html`<ul class="ranking">${aniv.slice(0, 7).map(c => html`<li key=${c.id}><span>${c.nome}</span><b>${c.nascimento.slice(8, 10)}/${c.nascimento.slice(5, 7)}</b></li>`)}</ul>` : html`<span class="dica">Nenhum neste mês.</span>`,
   };
 
@@ -247,7 +274,7 @@ export function Painel() {
   const mover = (i, d) => setRascunho(l => { const n = [...l], j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const soltar = (alvo) => { if (arrastando === null || arrastando === alvo) return; setRascunho(l => { const n = [...l]; const [x] = n.splice(arrastando, 1); n.splice(alvo, 0, x); return n; }); setArrastando(null); };
   const salvarLayout = async () => { setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, painel: rascunho }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
+    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
   const restaurar = async () => { if (await confirmar({ titulo: "Restaurar painel padrão", texto: "As janelas voltam para a organização original.", botao: "Restaurar" })) setRascunho(LAYOUT_PADRAO.map(j => ({ ...j }))); };
   const ocultas = Object.keys(JANELAS).filter(k => !(rascunho || []).some(j => j.k === k));
 

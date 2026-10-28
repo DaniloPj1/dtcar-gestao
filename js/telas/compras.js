@@ -67,12 +67,14 @@ function ItemNota({ it, i, set, dados, cfg, ver }) {
 }
 
 /* ---------------- tela de entrada da nota ---------------- */
-export function EntradaNFe() {
+export function EntradaNFe({ params = {} }) {
   const { dados, cfg, perfil, avisar, recarregar, ir } = useApp();
   const [nf, setNf] = useState(null), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [jaImportada, setJa] = useState(null), [enviando, setEnviando] = useState(false), [res, setRes] = useState(null), [vinculos, setVinculos] = useState(null);
   const ver = pode(perfil, "verValores"), fin = pode(perfil, "financeiro");
   const [fin1, setFin1] = useState({ lancar: true, venc: "" }); // contas a pagar desta nota
   useEffect(() => { api.vinculos.listar().then(setVinculos).catch(() => setVinculos([])); }, []);
+  // nota vinda da tela Notas da SEFAZ: abre o XML guardado
+  useEffect(() => { if (params.sefaz) api.sefaz.xml(params.sefaz).then(x => abrir({ name: "sefaz-" + params.sefaz + ".xml", text: async () => x })).catch(e => setErro(e.message)); }, []);
   const abrir = async arq => {
     setErro(""); setRes(null); setNf(null);
     try {
@@ -102,7 +104,8 @@ export function EntradaNFe() {
       if (fin && fin1.lancar) {
         try { const dups = nf.duplicatas.length ? nf.duplicatas : [{ numero: "001", vencimento: fin1.venc, valor: nf.nota.valor_total }];
           const forn = r.fornecedor_id && (dados.fornecedores.find(f => f.id === r.fornecedor_id) || {});
-          const c = await api.contas.lancar(contasDaNota({ ...nf, duplicatas: dups }, r.fornecedor_id, forn && forn.categoria_padrao)); r.contas = c.lancadas; }
+          const c = await api.contas.lancar(contasDaNota({ ...nf, duplicatas: dups }, r.fornecedor_id, forn && forn.categoria_padrao)); r.contas = c.lancadas;
+          if (api.sefaz) api.sefaz.marcar(nf.nota.chave, { contas_lancadas: true }).catch(() => {}); }
         catch (e) { r.erroContas = e.message; }
       }
       setRes(r); avisar("Entrada da NF " + nf.nota.numero + " registrada."); await recarregar(["produtos", "fornecedores"]);

@@ -762,3 +762,10 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .tab-rel td:first-child{white-space:nowrap}
 @media (min-width:900px){.relatorio .tab-rel{font-size:13.5px}.relatorio .tab-rel td,.relatorio .tab-rel th{padding:7px 6px}}
 @media print{.relatorio .kpi,.relatorio .kpi *{color:#000!important}.relatorio .kpi{background:#fff!important;border:1px solid #bbb!important}}
+/* notas da SEFAZ */
+.quebra{word-break:break-all;font-size:13px}
+.manifestar{border-top:1px solid var(--line);padding-top:10px}
+.manifestar summary{cursor:pointer;font-weight:600;color:var(--muted)}
+.manifestar[open]{display:flex;flex-direction:column;gap:8px}
+.sefaz-status .kv small{display:block;color:var(--muted);font-size:12px}
+.sefaz-status .acoes{align-items:center}

@@ -14,6 +14,7 @@ export function Mais() {
       ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
       ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}
       ${pode(perfil, "verValores") ? it("/balcao", "Venda de balcão", "Vender peças e serviços sem O.S.", I.carrinho) : null}
+      ${pode(perfil, "cadastrar") ? it("/sefaz", "Notas da SEFAZ", "Notas de compra emitidas para o CNPJ da oficina", I.nuvem) : null}
       ${pode(perfil, "cadastrar") ? it("/nfe", "Entrada de nota fiscal (XML)", "Cadastrar produtos e fornecedor e somar o estoque pela NF-e", I.nota) : null}
       ${pode(perfil, "verValores") ? it("/recibos", "Recibos de pagamento", "Consultar, reimprimir, cancelar e emitir recibo avulso", I.recibo) : null}
       ${pode(perfil, "financeiro") ? it("/financeiro", "Contas a pagar", "Boletos, duplicatas das notas e despesas da oficina", I.dinheiro) : null}

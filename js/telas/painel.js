@@ -1,29 +1,16 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js";
-import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, fmtTel, exPlaca, linkWhats } from "../util.js";
+import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, lsSet, fmtTel, exPlaca, linkWhats } from "../util.js";
 import { STATUS, ABERTOS, pode } from "../regras.js";
 import { LS_NOVA } from "./entrada.js";
 import { estoqueBaixo } from "./produtos.js";
-import { CancelarModal, proximaEtapa, avancarEtapa } from "./acoesos.js";
+import { CancelarModal, EncerrarModal, MenuOS, proximaEtapa, avancarEtapa } from "./acoesos.js";
 
 const DIA = 86400000;
 const diasDesde = iso => (Date.now() - new Date(iso)) / DIA;
 const pct = (a, b) => b ? Math.round(a / b * 100) : 0;
 const reaisCurto = v => v >= 10000 ? "R$ " + (v / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " mil" : reais(v);
-
-export function LinhaOS({ o, verValores, onClick, acoes }) {
-  const atrasada = ["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hojeISO();
-  if (acoes) return html`<div class="linha linha-os-acoes"><button type="button" class="botao-limpo los-corpo" onClick=${onClick}><${Placa} placa=${o.veiculo.placa} />
-    <span class="meio"><strong>${o.veiculo.marca} ${o.veiculo.modelo}${o.situacao ? html` <em class="tag">${o.situacao}</em>` : null}</strong><span>${o._provisorio || numOS(o.numero)} · ${o.cliente.nome}${o.mecanico_nome ? " · " + o.mecanico_nome : ""}${o.box ? " · box " + o.box : ""}</span></span>
-    <span class="dir">${verValores && Number(o.total) > 0 ? html`<b>${reais(o.total)}</b>` : null}<${Status} s=${o.status} o=${o} />
-      <small class=${atrasada ? "c-bad" : ""}>${o.status === "entregue" ? fmtData(o.entregue_em) : atrasada ? "previsão vencida" : tempoDesde(o.criado_em)}</small></span></button>
-    <span class="los-acoes">${acoes}</span></div>`;
-  return html`<button type="button" class="linha" onClick=${onClick}><${Placa} placa=${o.veiculo.placa} />
-    <span class="meio"><strong>${o.veiculo.marca} ${o.veiculo.modelo}${o.situacao ? html` <em class="tag">${o.situacao}</em>` : null}</strong><span>${numOS(o.numero)} · ${o.cliente.nome}${o.mecanico_nome ? " · " + o.mecanico_nome : ""}${o.box ? " · box " + o.box : ""}</span></span>
-    <span class="dir">${verValores && Number(o.total) > 0 ? html`<b>${reais(o.total)}</b>` : null}<${Status} s=${o.status} o=${o} />
-      <small class=${atrasada ? "c-bad" : ""}>${o.status === "entregue" ? fmtData(o.entregue_em) : atrasada ? "previsão vencida" : tempoDesde(o.criado_em)}</small></span></button>`;
-}
 
 /* ---------------- períodos ---------------- */
 const PERIODOS = [["hoje", "Hoje"], ["7d", "7 dias"], ["mes", "Este mês"], ["mesant", "Mês passado"], ["ano", "Este ano"], ["12m", "12 meses"]];
@@ -327,47 +314,108 @@ const exPlacaCurta = o => (o.veiculo && o.veiculo.placa) || "sem placa";
 /** Grade de O.S. no estilo do OS Oficina (modo balcão): abertas em amarelo, entregues em verde */
 function GradeOS({ lista, ver, ir, soma, total, acoesDe }) {
   const cls = o => o._pendente ? "g-prov" : "";
-  return html`<div class="grade-dados"><table><thead><tr><th>O.S.</th><th>Entrada</th><th>Hora</th><th>Placa</th><th>Modelo</th><th>Nome do cliente</th><th>Telefone</th><th>Mecânico</th>
-      ${ver ? html`<th class="num">Total</th>` : null}<th>Situação</th><th></th></tr></thead>
+  return html`<div class="grade-dados"><table><thead><tr><th>O.S.</th><th>Entrada</th><th>Hora</th><th>Previsão</th><th>Placa</th><th>Modelo</th><th>Nome do cliente</th><th>Telefone</th><th>Mecânico</th>
+      ${ver ? html`<th class="num">Total</th><th class="num">Falta receber</th>` : null}<th>Situação</th><th></th></tr></thead>
     <tbody>${lista.map(o => { const d = new Date(o.criado_em); return html`<tr key=${o.id} class=${cls(o)} tabindex="0" onClick=${() => ir("/os/" + o.id)} onKeyDown=${e => e.key === "Enter" && ir("/os/" + o.id)}>
       <td class="mono">${o._provisorio || String(o.numero).padStart(5, "0")}</td><td>${d.toLocaleDateString("pt-BR")}</td><td>${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</td>
+      <td class=${ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO() ? "c-bad" : ""}>${o.previsao_entrega && ABERTOS.includes(o.status) ? fmtData(o.previsao_entrega) : ""}</td>
       <td class="mono">${exPlaca(o.veiculo.placa)}</td><td>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")}</td><td>${o.cliente.nome}</td><td>${o.cliente.telefone ? fmtTel(o.cliente.telefone) : ""}</td><td>${o.mecanico_nome || ""}</td>
-      ${ver ? html`<td class="num"><b>${Number(o.total) ? reais(o.total) : ""}</b></td>` : null}
+      ${ver ? html`<td class="num"><b>${Number(o.total) ? reais(o.total) : ""}</b></td><td class="num c-warn">${o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em ? reais(Math.max(0, Number(o.total || 0) - Number(o.recebido || 0))) : ""}</td>` : null}
       <td>${o._pendente ? html`<span class="pill p-warn">Aguardando número</span>` : html`<${Status} s=${o.status} o=${o} />`}${o.situacao ? html` <span class="sub">${o.situacao}</span>` : null}</td><td class="acoes-td" onClick=${e => e.stopPropagation()}>${acoesDe ? acoesDe(o) : null}</td></tr>`; })}</tbody>
-    <tfoot><tr><td colspan="8">${total} O.S.${total > lista.length ? " (mostrando " + lista.length + ")" : ""}</td>${ver ? html`<td class="num">${reais(soma)}</td>` : null}<td></td><td></td></tr></tfoot></table></div>`;
+    <tfoot><tr><td colspan="9">${total} O.S.${total > lista.length ? " (mostrando " + lista.length + ")" : ""}</td>${ver ? html`<td class="num">${reais(soma)}</td><td></td>` : null}<td></td><td></td></tr></tfoot></table></div>`;
 }
+
+const ETAPAS_RESUMO = [["diagnostico", "Diagnóstico"], ["aguardando", "Aguardando aprovação"], ["execucao", "Em execução"], ["pronto", "Pronto no pátio"], ["receber", "Entregue · a receber"]];
+const ORDENS_OS = [["recentes", "Mais recentes"], ["antigas", "Mais antigas no pátio"], ["previsao", "Previsão de entrega"], ["valor", "Maior valor"], ["numero", "Número da O.S."]];
+const naEtapa = (o, k) => k === "receber" ? o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em : o.status === k;
+const dataHoraCurta = iso => { const d = new Date(iso); return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
 
 export function Ordens({ params = {} }) {
   const { dados, perfil, ir, cfg, avisar, recarregar } = useApp();
   const ver = pode(perfil, "verValores");
   const [q, setQ] = useState(""), [filtro, setFiltro] = useState(params.filtro || "abertas"), [lim, setLim] = useState(60);
-  const [cancelar, setCancelar] = useState(null), [ocupado, setOcupado] = useState("");
+  const [ordem, setOrdem] = useState(() => lsGet("dtcar-os-ordem") || "recentes");
+  const [cancelar, setCancelar] = useState(null), [encerrar, setEncerrar] = useState(null), [ocupado, setOcupado] = useState("");
+  const [visao, setVisao, largo] = useVisao("os");
   const avancar = async (o, etapa) => {
-    if (etapa.tipo === "abrir") return ir("/os/" + o.id + "?acao=" + etapa.acao);
+    if (etapa.tipo === "abrir") return etapa.acao === "receber" || etapa.acao === "entregar" ? setEncerrar(o) : ir("/os/" + o.id + "?acao=" + etapa.acao);
     setOcupado(o.id);
     try { avisar((o._provisorio || numOS(o.numero)) + ": " + await avancarEtapa(o, etapa, { perfil, cfg })); await recarregar(["ordens", "produtos"]); }
     catch (e) { avisar(e.message, true); } finally { setOcupado(""); }
   };
-  const acoesDe = o => { const et = proximaEtapa(o, perfil), podeCanc = pode(perfil, "aprovar") && !o._pendente && !["entregue", "cancelado"].includes(o.status);
-    if (!et && !podeCanc) return null;
-    return html`${et ? html`<button type="button" class="btn btn-sm btn-avancar" title=${et.dica} disabled=${ocupado === o.id} onClick=${() => avancar(o, et)}>${ocupado === o.id ? "…" : et.rot} →</button>` : null}
-      ${podeCanc ? html`<button type="button" class="btn btn-sm btn-cancelar" title="Cancelar O.S." aria-label=${"Cancelar " + numOS(o.numero)} onClick=${() => setCancelar(o)}>Cancelar</button>` : null}`; };
-  const [visao, setVisao, largo] = useVisao("os");
+  const imprimir = (o, valores) => ir(`/imprimir/os/${o.id}?vias=${cfg.impressaoVias || 1}&valores=${valores ? 1 : 0}&formato=a4`);
+  const podeEncerrar = o => !o._pendente && pode(perfil, "entregar") && (["execucao", "pronto"].includes(o.status) || naEtapa(o, "receber"));
+  const acoesDe = o => {
+    if (o._pendente) return null;
+    const et = proximaEtapa(o, perfil), podeCanc = pode(perfil, "aprovar") && !["entregue", "cancelado"].includes(o.status);
+    const enc = podeEncerrar(o);
+    // "Entregar"/"Receber" viram o botão Encerrar; o avanço fica para as etapas sem janela
+    const mostraAvanco = et && et.tipo !== "abrir";
+    return html`${mostraAvanco ? html`<button type="button" class="btn btn-sm btn-avancar" title=${et.dica} disabled=${ocupado === o.id} onClick=${() => avancar(o, et)}>${ocupado === o.id ? "…" : et.rot} →</button>` : null}
+      ${enc ? html`<button type="button" class="btn btn-sm btn-encerrar" title="Registrar entrega e pagamento e finalizar" onClick=${() => setEncerrar(o)}>${o.status === "entregue" ? "Receber" : "Encerrar"}</button>` : null}
+      <${MenuOS} o=${o} itens=${[
+        ["Abrir O.S.", () => ir("/os/" + o.id)],
+        ["Imprimir O.S.", () => imprimir(o, ver)],
+        ver ? ["Imprimir sem valores (mecânico)", () => imprimir(o, false)] : null,
+        o.cliente.telefone ? ["WhatsApp do cliente", () => window.open(linkWhats(o.cliente.telefone, "Olá, " + (o.cliente.nome || "").split(" ")[0] + "! "), "_blank", "noopener")] : null,
+        et && et.tipo === "abrir" && et.acao === "entregar" && o.status === "recusado" ? ["Registrar retirada", () => ir("/os/" + o.id + "?acao=entregar")] : null,
+        enc && o.status !== "entregue" ? ["Entregar (receber depois)", () => ir("/os/" + o.id + "?acao=entregar")] : null,
+        podeCanc ? ["Cancelar O.S.", () => setCancelar(o), true] : null,
+      ]} />`;
+  };
   const lista = useMemo(() => { const n = norm(q), p = normPlaca(q), d = soDig(q);
-    return dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? ABERTOS.includes(o.status) : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado
-        : filtro === "receber" ? o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em : filtro === "finalizadas" ? o.status === "entregue" && !!o.finalizada_em : o.status === filtro))
-      && (!n || norm(o.cliente.nome).includes(n) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || norm(o.veiculo.modelo).includes(n) || (d && String(o.numero) === String(+d)) || norm(o.reclamacao).includes(n)));
-  }, [q, filtro, dados.ordens]);
-  useEffect(() => setLim(60), [q, filtro]);
+    const l = dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? ABERTOS.includes(o.status) : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado
+        : filtro === "receber" ? naEtapa(o, "receber") : filtro === "finalizadas" ? o.status === "entregue" && !!o.finalizada_em : filtro === "atrasadas" ? ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO() : o.status === filtro))
+      && (!n || norm(o.cliente.nome).includes(n) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || norm(o.veiculo.modelo).includes(n) || (d && String(o.numero) === String(+d)) || norm(o.reclamacao).includes(n) || norm(o.mecanico_nome).includes(n)));
+    const cmp = { recentes: (a, b) => (b.criado_em || "").localeCompare(a.criado_em || ""), antigas: (a, b) => (a.criado_em || "").localeCompare(b.criado_em || ""),
+      previsao: (a, b) => (a.previsao_entrega || "9999").localeCompare(b.previsao_entrega || "9999"), valor: (a, b) => Number(b.total || 0) - Number(a.total || 0), numero: (a, b) => (Number(b.numero) || 0) - (Number(a.numero) || 0) }[ordem];
+    return [...l].sort(cmp);
+  }, [q, filtro, ordem, dados.ordens]);
+  useEffect(() => setLim(60), [q, filtro, ordem]);
   const soma = lista.reduce((s, o) => s + Number(o.total || 0), 0);
-  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : "")}>
-    <div class="campo"><label for="busca-os">Buscar por placa, cliente, modelo, número ou reclamação</label><input id="busca-os" class="inp" value=${q} onInput=${e => setQ(e.target.value)} /></div>
-    <div class="chips rolagem">${[["abertas", "Abertas"], ["todas", "Todas"], ...Object.entries(STATUS).map(([k, v]) => [k, v.curto]), ["receber", "A receber"], ["finalizadas", "Finalizadas"], ["herdadas", "Herdadas abertas"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (filtro === k ? " ativo" : "")} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
-    <section class="card"><div class="secao-topo"><h2>Ordens de serviço</h2><span class="sub">${lista.length}${ver && soma ? " · " + reais(soma) : ""}</span>${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} />` : null}</div>
+  const resumo = ETAPAS_RESUMO.map(([k, t]) => { const l = dados.ordens.filter(o => naEtapa(o, k)); return { k, t, n: l.length, v: l.reduce((s, o) => s + Number(k === "receber" ? Math.max(0, Number(o.total || 0) - Number(o.recebido || 0)) : o.total || 0), 0) }; });
+  const atrasadas = dados.ordens.filter(o => ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO()).length;
+  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : " larga-media")}>
+    <div class="os-resumo">${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>
+      <span>${r.t}</span><b>${r.n}</b>${ver ? html`<small>${r.k === "receber" ? "falta " : ""}${reais(r.v)}</small>` : null}</button>`)}
+      ${atrasadas ? html`<button type="button" class=${"osr osr-atraso" + (filtro === "atrasadas" ? " ativo" : "")} onClick=${() => setFiltro(filtro === "atrasadas" ? "abertas" : "atrasadas")}><span>Previsão vencida</span><b>${atrasadas}</b><small>ver quais</small></button>` : null}</div>
+    <div class="os-filtros">
+      <input id="busca-os" class="inp" type="search" aria-label="Buscar O.S." placeholder="Buscar por placa, cliente, modelo, número, mecânico ou reclamação" value=${q} onInput=${e => setQ(e.target.value)} />
+      <select class="inp" aria-label="Situação" value=${filtro} onChange=${e => setFiltro(e.target.value)}>
+        ${[["abertas", "Todas em aberto"], ["todas", "Todas as O.S."], ...Object.entries(STATUS).map(([k, v]) => [k, v.t]), ["receber", "Entregues a receber"], ["finalizadas", "Finalizadas"], ["atrasadas", "Previsão vencida"], ["herdadas", "Herdadas do sistema antigo (abertas)"]].map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
+      <select class="inp" aria-label="Ordenar" value=${ordem} onChange=${e => { setOrdem(e.target.value); lsSet("dtcar-os-ordem", e.target.value); }}>${ORDENS_OS.map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
+      ${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} />` : null}
+    </div>
+    <section class="card"><div class="secao-topo"><h2>${lista.length} O.S.</h2><span class="sub">${ver && soma ? reais(soma) : ""}</span>
+        ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${() => ir("/entrada")}>+ Nova O.S.</button>` : null}</div>
       ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} acoesDe=${acoesDe} />`
-      : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} acoes=${acoesDe(o)} onClick=${() => ir("/os/" + o.id)} />`)}</div>
-        ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}`
+      : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} acoes=${acoesDe(o)} onClick=${() => ir("/os/" + o.id)} />`)}</div>`
         : html`<${Vazio}>${dados.ordens.length ? "Nenhuma O.S. com esse filtro." : "Nenhuma O.S. ainda."}</${Vazio}>`}
+      ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}
     </section>
-    ${cancelar ? html`<${CancelarModal} o=${cancelar} onFechar=${() => setCancelar(null)} onFeito=${() => setCancelar(null)} />` : null}</div>`;
+    ${cancelar ? html`<${CancelarModal} o=${cancelar} onFechar=${() => setCancelar(null)} onFeito=${() => setCancelar(null)} />` : null}
+    ${encerrar ? html`<${EncerrarModal} o=${encerrar} onFechar=${() => setEncerrar(null)} onFeito=${() => setEncerrar(null)} />` : null}</div>`;
+}
+
+export function LinhaOS({ o, verValores, onClick, acoes }) {
+  const atrasada = ["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hojeISO();
+  if (acoes) {
+    const aReceber = o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em;
+    const info = [["Entrada", dataHoraCurta(o.criado_em)], o.previsao_entrega && ABERTOS.includes(o.status) ? ["Previsão", fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : ""), atrasada] : null,
+      o.status === "entregue" && o.entregue_em ? ["Entregue", fmtData(o.entregue_em)] : null, o.mecanico_nome ? ["Mecânico", o.mecanico_nome] : null, o.box ? ["Box", o.box] : null,
+      o.km_entrada ? ["KM", Number(o.km_entrada).toLocaleString("pt-BR")] : null,
+      verValores && aReceber ? ["Falta receber", reais(Math.max(0, Number(o.total || 0) - Number(o.recebido || 0))), true] : null].filter(Boolean);
+    return html`<div class=${"linha linha-os-acoes" + (atrasada ? " atrasada" : "")}><button type="button" class="botao-limpo los-corpo" onClick=${onClick}><${Placa} placa=${o.veiculo.placa} />
+      <span class="meio"><strong><span class="los-num">${o._provisorio || numOS(o.numero)}</span> ${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") || "Veículo"}${o.veiculo.ano ? " " + o.veiculo.ano : ""}${o.situacao ? html` <em class="tag">${o.situacao}</em>` : null}</strong>
+        <span>${o.cliente.nome}${o.cliente.telefone ? " · " + fmtTel(o.cliente.telefone) : ""}${o.contato ? " · contato: " + o.contato : ""}</span>
+        ${o.reclamacao ? html`<span class="los-recl">${o.reclamacao}</span>` : null}
+        <span class="los-info">${info.map(([r, v, alerta]) => html`<i key=${r} class=${alerta ? "alerta" : ""}><em>${r}</em> ${v}</i>`)}</span></span>
+      <span class="dir">${verValores && Number(o.total) > 0 ? html`<b>${reais(o.total)}</b>` : null}<${Status} s=${o.status} o=${o} />
+        <small class=${atrasada ? "c-bad" : ""}>${o.status === "entregue" ? fmtData(o.entregue_em) : atrasada ? "previsão vencida" : "há " + tempoDesde(o.criado_em)}</small></span></button>
+      <span class="los-acoes">${acoes}</span></div>`;
+  }
+  return html`<button type="button" class="linha" onClick=${onClick}><${Placa} placa=${o.veiculo.placa} />
+    <span class="meio"><strong>${o.veiculo.marca} ${o.veiculo.modelo}${o.situacao ? html` <em class="tag">${o.situacao}</em>` : null}</strong><span>${numOS(o.numero)} · ${o.cliente.nome}${o.mecanico_nome ? " · " + o.mecanico_nome : ""}${o.box ? " · box " + o.box : ""}</span></span>
+    <span class="dir">${verValores && Number(o.total) > 0 ? html`<b>${reais(o.total)}</b>` : null}<${Status} s=${o.status} o=${o} />
+      <small class=${atrasada ? "c-bad" : ""}>${o.status === "entregue" ? fmtData(o.entregue_em) : atrasada ? "previsão vencida" : tempoDesde(o.criado_em)}</small></span></button>`;
 }

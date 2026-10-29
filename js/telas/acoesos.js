@@ -1,8 +1,9 @@
 // Ações rápidas da O.S. (usadas na lista e dentro da O.S.): cancelar com motivo e avançar etapa
-import { html, useState } from "../lib.js";
+import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Area, Modal } from "../ui.js";
-import { numOS, somaDias, totais, reais } from "../util.js";
+import { useApp, Campo, Area, Modal, Seg, Dinheiro, I } from "../ui.js";
+import { numOS, somaDias, totais, reais, soDig, fmtKm, hojeISO, arred, linkWhats } from "../util.js";
+import { referenteOS } from "./recibos.js";
 import { pode } from "../regras.js";
 
 export const MOTIVOS_CANCELAMENTO = ["Cliente desistiu do serviço", "Orçamento não aprovado", "Veículo retirado sem serviço", "O.S. aberta por engano / duplicada", "Peça indisponível", "Outro motivo"];
@@ -78,4 +79,83 @@ export async function avancarEtapa(o, etapa, { perfil, cfg }) {
     return "Pronto no pátio.";
   }
   throw new Error("Abra a O.S. para continuar.");
+}
+
+/**
+ * Encerrar O.S. numa janela só: registra a entrega (se ainda não houve) e o pagamento (recibo).
+ * Quitando o total, a O.S. fica finalizada. Vale para O.S. em execução (sem itens pendentes), pronta ou entregue a receber.
+ */
+export function EncerrarModal({ o, onFechar, onFeito }) {
+  const { cfg, perfil, dados, avisar, recarregar, ir } = useApp();
+  const [r, setR] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
+  const [km, setKm] = useState(""), [forma, setForma] = useState(o.forma_pagamento || ""), [valor, setValor] = useState(0), [receber, setReceber] = useState(true), [imprimir, setImprimir] = useState(true);
+  useEffect(() => { (async () => {
+    try {
+      const [ord, recs] = await Promise.all([api.ordem(o.id), api.recibos.listar({ ordemId: o.id })]);
+      const t = totais(ord.itens || [], ord.desconto, true);
+      const pago = recs.filter(x => !x.cancelado).reduce((s, x) => s + Number(x.valor), 0);
+      const saldo = arred(Math.max(0, t.total - pago));
+      setR({ ord, t, pago, saldo, pend: (ord.itens || []).filter(i => i.aprovado === null || i.aprovado === undefined) });
+      setKm(String(ord.km_saida || ord.km_entrada || "")); setValor(saldo);
+    } catch (e) { setErro(e.message); }
+  })(); }, [o.id]);
+  const jaEntregue = o.status === "entregue";
+  const confirmar = async () => {
+    if (!r) return;
+    if (r.pend.length) return setErro("Há itens aguardando aprovação do cliente. Abra a O.S. e registre a decisão antes de encerrar.");
+    const k = parseInt(soDig(km), 10);
+    if (!jaEntregue && !(k >= (r.ord.km_entrada || 0))) return setErro("O KM de saída não pode ser menor que o de entrada (" + fmtKm(r.ord.km_entrada) + ").");
+    if (receber && r.saldo > 0) { if (!forma) return setErro("Informe a forma de pagamento."); if (!(Number(valor) > 0)) return setErro("Informe o valor recebido."); if (Number(valor) > r.saldo + 0.009) return setErro("O valor é maior que o saldo de " + reais(r.saldo) + "."); }
+    setOcupado(true);
+    try {
+      if (!jaEntregue) {
+        await api.atualizarOrdem(o.id, { status: "entregue", km_saida: k, entregue_em: new Date().toISOString(), forma_pagamento: forma || r.ord.forma_pagamento || "", garantia_dias: r.ord.garantia_dias || Number(cfg.garantiaDias) || 90, total: r.t.total, custo: r.t.custo, situacao: "" });
+        const v = dados.veiculos.find(x => x.id === r.ord.veiculo_id); if (v && k > (v.km_atual || 0)) await api.veiculos.salvar({ id: v.id, km_atual: k });
+        await api.evento(o.id, "entrega", "Veículo entregue com " + fmtKm(k) + " (encerramento pela lista).", perfil.nome);
+      }
+      let recibo = null;
+      if (receber && r.saldo > 0) {
+        const cli = dados.clientes.find(c => c.id === r.ord.cliente_id);
+        recibo = await api.recibos.salvar({ ordem_id: o.id, cliente_id: r.ord.cliente_id || null, pagador: (r.ord.cliente || {}).nome || "", doc: soDig((cli && cli.doc) || (r.ord.cliente || {}).doc || ""), valor: Number(valor),
+          referente: referenteOS({ ...r.ord, total: r.t.total }), forma, data: hojeISO(), obs: "", emitido_por: perfil.nome });
+        await api.evento(o.id, "recibo", "Recibo " + String(recibo.numero).padStart(5, "0") + " emitido: " + reais(recibo.valor) + " (" + forma + ").", perfil.nome);
+      }
+      const quitou = !receber ? r.saldo <= 0 : Number(valor) >= r.saldo - 0.009;
+      avisar(numOS(o.numero) + (quitou ? " encerrada e finalizada." : jaEntregue ? ": pagamento parcial registrado." : " entregue; fica a receber."));
+      await recarregar(["ordens", "veiculos", "produtos"]); onFeito && onFeito();
+      if (recibo && imprimir) ir("/imprimir/recibo/" + recibo.id);
+    } catch (e) { setErro(e.message); setOcupado(false); }
+  };
+  return html`<${Modal} titulo=${(jaEntregue ? "Receber e finalizar " : "Encerrar ") + numOS(o.numero)} onFechar=${onFechar}>
+    <p class="sub">${o.veiculo && o.veiculo.placa} · ${[o.veiculo && o.veiculo.marca, o.veiculo && o.veiculo.modelo].filter(Boolean).join(" ")} · ${o.cliente && o.cliente.nome}</p>
+    ${!r && !erro ? html`<div class="carregando">Calculando…</div>` : null}
+    ${r ? html`
+      <div class="encerrar-resumo"><div><span>Total aprovado</span><b>${reais(r.t.total)}</b></div><div><span>Já recebido</span><b>${reais(r.pago)}</b></div><div class="forte"><span>Saldo</span><b>${reais(r.saldo)}</b></div></div>
+      ${r.pend.length ? html`<div class="aviso">${r.pend.length} item(ns) aguardando aprovação. Abra a O.S. para registrar a decisão do cliente.</div>` : null}
+      ${!jaEntregue ? html`<${Campo} id="enc-km" rotulo="KM de saída" obrig><input id="enc-km" class="inp" inputmode="numeric" value=${km ? Number(soDig(km)).toLocaleString("pt-BR") : ""} onInput=${e => { setKm(soDig(e.target.value).slice(0, 7)); setErro(""); }} /></${Campo}>` : null}
+      ${r.saldo > 0 ? html`
+        <div class="campo"><label>Pagamento</label><${Seg} rotulo="Pagamento" opcoes=${[["Receber agora", "ok"], ["Entregar e receber depois", "warn"]]} valor=${receber ? "Receber agora" : "Entregar e receber depois"} onEscolha=${v => { setReceber(v === "Receber agora"); setErro(""); }} /></div>
+        ${receber ? html`<div class="campo"><label>Forma de pagamento <i>*</i></label><${Seg} rotulo="Forma" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>
+          <${Campo} id="enc-valor" rotulo="Valor recebido" dica=${Number(valor) < r.saldo - 0.009 ? "Pagamento parcial: a O.S. continua a receber " + reais(r.saldo - Number(valor)) + "." : "Quitando o saldo, a O.S. é finalizada."}><${Dinheiro} id="enc-valor" valor=${valor} onMuda=${v => { setValor(v); setErro(""); }} /></${Campo}>
+          <label class="linha-check"><input type="checkbox" checked=${imprimir} onChange=${e => setImprimir(e.target.checked)} /><span>Abrir o recibo para imprimir</span></label>` : null}`
+      : html`<div class="info">Nada a receber: a O.S. será finalizada${jaEntregue ? "" : " ao registrar a entrega"}.</div>`}` : null}
+    ${erro ? html`<div class="erros">${erro}</div>` : null}
+    <div class="acoes"><button type="button" class="btn-link" onClick=${() => { onFechar(); ir("/os/" + o.id); }}>Abrir a O.S.</button><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
+      <button type="button" class="btn btn-pri" disabled=${!r || ocupado} onClick=${confirmar}>${ocupado ? "Registrando…" : jaEntregue ? "Registrar pagamento" : receber && r && r.saldo > 0 ? "Encerrar e receber" : "Registrar entrega"}</button></div>
+  </${Modal}>`;
+}
+
+/** Menu "Mais" de cada O.S. na lista */
+export function MenuOS({ o, itens }) {
+  const [aberto, setAberto] = useState(null), ref = useRef(null);
+  // posição fixa na tela: o menu não fica cortado dentro da tabela com rolagem
+  const abrir = e => { if (aberto) return setAberto(null); const r = e.currentTarget.getBoundingClientRect(), alto = 44 * itens.filter(Boolean).length + 12;
+    setAberto({ top: r.bottom + alto + 8 > innerHeight ? Math.max(8, r.top - alto - 4) : r.bottom + 4, right: Math.max(8, innerWidth - r.right) }); };
+  useEffect(() => { if (!aberto) return; const f = () => setAberto(null); addEventListener("scroll", f, true); addEventListener("resize", f); return () => { removeEventListener("scroll", f, true); removeEventListener("resize", f); }; }, [aberto]);
+  useEffect(() => { if (!aberto) return; const f = e => { if (ref.current && !ref.current.contains(e.target)) setAberto(null); }; const k = e => e.key === "Escape" && setAberto(null);
+    document.addEventListener("pointerdown", f); document.addEventListener("keydown", k); return () => { document.removeEventListener("pointerdown", f); document.removeEventListener("keydown", k); }; }, [aberto]);
+  const vis = itens.filter(Boolean);
+  if (!vis.length) return null;
+  return html`<div class="menu-os-lista" ref=${ref}><button type="button" class="btn btn-sm btn-mais" aria-haspopup="menu" aria-expanded=${aberto ? "true" : "false"} aria-label=${"Mais opções da " + numOS(o.numero)} onClick=${abrir}>Mais ▾</button>
+    ${aberto ? html`<div class="mol-lista" role="menu" style=${{ position: "fixed", top: aberto.top + "px", right: aberto.right + "px" }}>${vis.map(([t, fn, perigo]) => html`<button type="button" role="menuitem" key=${t} class=${perigo ? "perigo" : ""} onClick=${() => { setAberto(null); fn(); }}>${t}</button>`)}</div>` : null}</div>`;
 }

@@ -76,6 +76,14 @@ function criarApiSupabase() {
       movimentar: async (produtoId, tipo, qtd, custo, obs) => ok(await sb.rpc("movimentar_estoque", { p_produto: produtoId, p_tipo: tipo, p_qtd: qtd, p_custo: custo || null, p_obs: obs || "" })),
     },
     fornecedores: tabela("fornecedores"),
+    funcionarios: {
+      ...tabela("funcionarios"),
+      lancamentos: async (competencia, funcionarioId) => { let q = sb.from("funcionario_lanc").select("*").eq("competencia", competencia); if (funcionarioId) q = q.eq("funcionario_id", funcionarioId); return ok(await q.order("data").order("criado_em")); },
+      lancar: async l => { const { id, ...resto } = l; return id ? ok(await sb.from("funcionario_lanc").update(resto).eq("id", id).select().single()) : ok(await sb.from("funcionario_lanc").insert(resto).select().single()); },
+      excluirLanc: async id => ok(await sb.from("funcionario_lanc").delete().eq("id", id)),
+      /** O.S. entregues no período, com o mecânico, para calcular a comissão */
+      ordensEntregues: async (ini, fim) => todos(() => sb.from("ordens").select("id,numero,mecanico_id,mecanico_nome,entregue_em,cliente,veiculo").eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero")),
+    },
     vinculos: { listar: async () => todos(() => sb.from("produto_fornecedor").select("*").order("id")), doProduto: async pid => ok(await sb.from("produto_fornecedor").select("*").eq("produto_id", pid)) },
     notas: {
       existe: async chave => chave ? ok(await sb.from("notas_entrada").select("id,numero,criado_em,usuario_nome").eq("chave", chave).maybeSingle()) : null,

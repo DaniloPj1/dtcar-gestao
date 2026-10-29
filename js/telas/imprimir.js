@@ -4,6 +4,8 @@ import { api } from "../api.js";
 import { useApp, Foto } from "../ui.js";
 import { fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias, exPlaca, extenso, endCompleto } from "../util.js";
 import { STATUS, pode, TERMO_GARANTIA, TERMO_ORCAMENTO, SITUACAO_CLIENTE, TABELAS_PRECO } from "../regras.js";
+import { diasDoMes, nomeMes, horasSemana, fmtHoras, VINCULOS, calcularMes, com_encargos } from "../folha.js";
+import { dadosDoMes } from "./funcionarios.js";
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const dataExtenso = iso => { const d = /^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? new Date(iso + "T12:00:00") : new Date(iso || Date.now()); return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`; };
@@ -207,6 +209,47 @@ function FichaVeiculo({ v }) {
   </article>`;
 }
 
+/* ---------------- folha de ponto mensal (para anotar e assinar) ---------------- */
+function FolhaPonto({ f, ym, extras }) {
+  const { cfg } = useApp();
+  const dias = diasDoMes(ym, f.jornada, extras);
+  const prev = j => j ? [j.e, j.sa && j.r ? j.sa + "–" + j.r : "", j.s].filter(Boolean).join(" / ") : "";
+  return html`<article class="folha ponto">
+    <${Cabecalho} titulo="FOLHA DE PONTO" direita=${html`<span>${nomeMes(ym)}</span>`} />
+    <section class="imp-bloco"><div class="ponto-cab">
+      <${Par} r="Funcionário" v=${f.nome} largo /><${Par} r="Função" v=${f.funcao} /><${Par} r="Admissão" v=${f.admissao ? fmtData(f.admissao) : ""} />
+      <${Par} r="CPF" v=${f.cpf ? fmtDoc(f.cpf) : ""} /><${Par} r="CTPS" v=${f.ctps} /><${Par} r="PIS" v=${f.pis} /><${Par} r="Jornada semanal" v=${fmtHoras(horasSemana(f.jornada))} /></div></section>
+    <table class="ponto-tab"><thead><tr><th>Dia</th><th>Horário previsto</th><th>Entrada</th><th>Saída almoço</th><th>Retorno</th><th>Saída</th><th>H. extras</th><th>Assinatura</th></tr></thead>
+      <tbody>${dias.map(d => { const folga = !d.jornada || d.feriado; return html`<tr key=${d.dia} class=${folga ? "folga" : ""}>
+        <td class="c">${String(d.dia).padStart(2, "0")} ${d.nomeDia.slice(0, 3)}</td>
+        <td class="c">${d.feriado ? d.feriado : d.jornada ? prev(d.jornada) : "Descanso"}</td><td></td><td></td><td></td><td></td><td></td><td class="ass-ponto"></td></tr>`; })}</tbody></table>
+    <p class="imp-termo">Declaro que os horários anotados nesta folha correspondem à minha jornada efetivamente cumprida no mês. Intervalo para repouso e alimentação conforme o art. 71 da CLT.</p>
+    <div class="ponto-assins"><${Assinatura} rotulo="Funcionário" nome=${f.nome} /><${Assinatura} rotulo=${cfg.nome} /></div>
+  </article>`;
+}
+
+/* ---------------- resumo do mês do funcionário ---------------- */
+function ResumoFuncionario({ f, ym, m }) {
+  const { cfg } = useApp();
+  const r = calcularMes(f, ym, m.lancs, m.base, cfg.encargos);
+  const lin = (t, v, neg) => v ? html`<tr key=${t}><td>${t}</td><td class="num">${neg ? "− " : ""}${reais(v)}</td></tr>` : null;
+  return html`<article class="folha">
+    <${Cabecalho} titulo="RESUMO DO MÊS" direita=${html`<span>${nomeMes(ym)}</span>`} />
+    <section class="imp-bloco"><div class="imp-grade g2"><${Par} r="Funcionário" v=${f.nome} /><${Par} r="Função" v=${f.funcao} /><${Par} r="Vínculo" v=${VINCULOS[f.vinculo]} /><${Par} r="CPF" v=${f.cpf ? fmtDoc(f.cpf) : ""} /></div></section>
+    <table class="imp-tab"><thead><tr><th>Descrição</th><th class="num">Valor</th></tr></thead><tbody>
+      ${lin("Salário" + (r.diasSalario < 30 ? " (" + r.diasSalario + " dias)" : ""), r.salario)}${lin("Horas extras" + (r.qtdHorasExtras ? " (" + fmtHoras(r.qtdHorasExtras) + ")" : ""), r.horasExtras)}
+      ${lin("Comissão", r.comissao)}${lin("Bônus / prêmios", r.bonus)}${lin("Faltas" + (r.qtdFaltas ? " (" + r.qtdFaltas + " dia(s))" : ""), r.faltas, true)}
+      ${lin("Vales e adiantamentos", r.vales, true)}${lin("INSS / IRRF", r.inss, true)}${lin("Outros descontos", r.descontos, true)}${lin("Já pago", r.pagos, true)}</tbody>
+      <tfoot><tr><td>Saldo a pagar</td><td class="num">${reais(r.saldo)}</td></tr></tfoot></table>
+    ${m.lancs.length ? html`<table class="imp-tab"><thead><tr><th>Data</th><th>Lançamento</th><th class="num">Valor</th></tr></thead><tbody>
+      ${m.lancs.map(l => html`<tr key=${l.id}><td>${fmtData(l.data)}</td><td>${l.descricao || l.tipo.replace("_", " ")}</td><td class="num">${reais(r.valorDe(l))}</td></tr>`)}</tbody></table>` : null}
+    ${m.os.length ? html`<table class="imp-tab"><thead><tr><th>O.S. (comissão ${f.comissao_pct}%)</th><th>Entrega</th><th class="num">Mão de obra</th></tr></thead><tbody>
+      ${m.os.map(o => html`<tr key=${o.id}><td>${n5(o.numero)}</td><td>${fmtData(o.entregue_em)}</td><td class="num">${reais(o.maoDeObra)}</td></tr>`)}</tbody></table>` : null}
+    <p class="imp-termo">Documento de controle interno da oficina. Não substitui o recibo de pagamento de salário (holerite) emitido pela contabilidade.</p>
+    <div class="ponto-assins"><${Assinatura} rotulo="Funcionário" nome=${f.nome} /><${Assinatura} rotulo=${cfg.nome} /></div>
+  </article>`;
+}
+
 /* ---------------- tela de impressão ---------------- */
 export function Imprimir({ tipo, id, params }) {
   const { dados, perfil, avisar, confirmar, ir, cfg, recarregar } = useApp();
@@ -221,10 +264,15 @@ export function Imprimir({ tipo, id, params }) {
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }
     else if (tipo === "veiculo") { const v = dados.veiculos.find(x => x.id === id); v ? setDoc(v) : setErro("Veículo não encontrado."); }
+    else if (tipo === "ponto" || tipo === "funcionario") {
+      if (!pode(perfil, "financeiro")) { setErro("Apenas o administrador imprime documentos de funcionários."); return; }
+      api.funcionarios.listar("nome").then(async l => { const f = l.find(x => x.id === id); if (!f) return setErro("Funcionário não encontrado.");
+        setDoc(tipo === "ponto" ? { f } : { f, m: (await dadosDoMes(params.mes, [f]))[f.id] }); }).catch(e => setErro(e.message));
+    }
     else setErro("Documento desconhecido.");
   }, [tipo, id]);
-  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
-  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : "/veiculo/" + id);
+  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
+  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : "/veiculo/" + id);
   const cancelarRecibo = async () => {
     if (!await confirmar({ titulo: "Cancelar recibo " + n5(doc.numero), texto: "O recibo continua registrado, marcado como cancelado, e deixa de contar como pagamento recebido.", botao: "Cancelar recibo", perigo: true })) return;
     try { await api.recibos.salvar({ id: doc.id, cancelado: true, cancelado_motivo: "Cancelado por " + perfil.nome + " em " + new Date().toLocaleDateString("pt-BR") });
@@ -237,7 +285,7 @@ export function Imprimir({ tipo, id, params }) {
   };
   const cli = doc && tipo === "os" ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
   const vei = doc && tipo === "os" ? dados.veiculos.find(v => v.id === doc.veiculo_id) : null;
-  const nVias = formato === "cupom" || tipo === "cliente" || tipo === "veiculo" ? 1 : vias;
+  const nVias = formato === "cupom" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
   return html`<div class=${"imprimir" + (formato === "cupom" ? " imp-cupom" : "")}>
     ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`}
     <div class="imp-barra so-tela">
@@ -253,6 +301,8 @@ export function Imprimir({ tipo, id, params }) {
       : tipo === "os" ? (formato === "cupom" ? html`<${CupomOS} o=${doc} valores=${valores} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaOS} key=${n} o=${doc} cli=${cli} vei=${vei} valores=${valores} via=${n + 1} nVias=${nVias} />`))
       : tipo === "venda" ? (formato === "cupom" ? html`<${CupomVenda} v=${doc} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaVenda} key=${n} v=${doc} via=${n + 1} nVias=${nVias} />`))
       : tipo === "recibo" ? html`<div class=${"recibos-folha v" + nVias}>${Array.from({ length: nVias }, (_, n) => html`<${ViaRecibo} key=${n} r=${doc} via=${n + 1} nVias=${nVias} />`)}</div>`
+      : tipo === "ponto" ? html`<${FolhaPonto} f=${doc.f} ym=${params.mes} extras=${String(params.feriados || "").split(/[^0-9]+/).filter(Boolean).map(Number)} />`
+      : tipo === "funcionario" ? html`<${ResumoFuncionario} f=${doc.f} ym=${params.mes} m=${doc.m} />`
       : tipo === "cliente" ? html`<${FichaCliente} c=${doc} />` : html`<${FichaVeiculo} v=${doc} />`}
   </div>`;
 }

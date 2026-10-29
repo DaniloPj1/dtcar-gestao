@@ -8,7 +8,7 @@ import { fmtDataHora } from "../util.js";
 const TABELAS = [["fornecedores", "Fornecedores"], ["clientes", "Clientes"], ["veiculos", "Veículos"], ["servicos", "Serviços (cadastro antigo)"], ["produtos", "Produtos e serviços"],
   ["produto_fornecedor", "Códigos dos fornecedores"], ["notas_entrada", "Notas de entrada"], ["ordens", "Ordens de serviço"], ["os_itens", "Itens das O.S."], ["eventos", "Histórico das O.S."],
   ["fotos", "Fotos (referências)"], ["recibos", "Recibos"], ["vendas", "Vendas de balcão"], ["venda_itens", "Itens das vendas"], ["estoque_mov", "Movimentos de estoque"],
-  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."]];
+  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"]];
 const NOME = Object.fromEntries(TABELAS);
 const chaveDe = t => t === "estoque_reserva" ? "item_id" : "id";
 const kb = n => n > 1048576 ? (n / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
@@ -41,7 +41,7 @@ export function Backup() {
       out.config = await api.config(); out.perfis = await api.perfis();
       for (const [t, nome] of TABELAS) {
         p.atual = nome; setProg({ ...p });
-        try { out.tabelas[t] = await api.backup.tabela(t); } catch (e) { if (t === "servicos") { out.tabelas[t] = []; continue; } throw new Error(nome + ": " + e.message); }
+        try { out.tabelas[t] = await api.backup.tabela(t); } catch (e) { if (t === "servicos" || t.startsWith("funcionario")) { out.tabelas[t] = []; continue; } throw new Error(nome + ": " + e.message); }
         p.feito.push([nome, out.tabelas[t].length]); setProg({ ...p });
       }
       const total = Object.values(out.tabelas).reduce((s, l) => s + l.length, 0);

@@ -781,3 +781,22 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (min-width:900px){.vinculo-linha{grid-template-columns:minmax(0,1.2fr) minmax(0,1.3fr) auto;align-items:center}}
 .vinculo-linha.sugerido{border-color:var(--ok);background:var(--ok-soft)}
 .tag-sug{display:inline-block;margin-top:4px;font-size:12px;font-weight:600;color:var(--ok)}
+
+/* ---------- Funcionários ---------- */
+.tab-rel tr.clicavel{cursor:pointer}
+.tab-rel tr.clicavel:hover td{background:var(--surface-2)}
+.func-lin{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line);font-variant-numeric:tabular-nums}
+.func-lin span{color:var(--muted)}
+.func-lin small{font-size:12px}
+.func-lin.tot{border-bottom:2px solid var(--line);padding:9px 0;font-size:15.5px}
+.func-lin.tot span{color:inherit;font-weight:600}
+.ponto-tab{width:100%;border-collapse:collapse;font-size:10.5px;font-variant-numeric:tabular-nums}
+.ponto-tab th,.ponto-tab td{border:1px solid #6b7480;padding:2px 4px;height:5.4mm}
+.ponto-tab th{background:#eef1f5;font-weight:700;text-align:center}
+.ponto-tab td.c{text-align:center;white-space:nowrap}
+.ponto-tab tr.folga td{background:#f1f2f4;color:#5a626d}
+.ponto-tab td.ass-ponto{width:30%}
+.folha.ponto{font-size:11px;gap:6px}
+.ponto-cab{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 12px}
+.ponto-assins{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:22px}
+@media print{.folha.ponto{break-inside:avoid}}

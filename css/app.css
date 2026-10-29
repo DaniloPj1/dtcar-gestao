@@ -800,3 +800,55 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .ponto-cab{display:grid;grid-template-columns:repeat(4,1fr);gap:4px 12px}
 .ponto-assins{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:22px}
 @media print{.folha.ponto{break-inside:avoid}}
+
+/* ---------- Modo balcão (estilo OS Oficina 3.0) ---------- */
+.lateral-modo{margin:0 10px;background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.12);color:#c9d2de}
+body.modo-balcao{font-size:14px;--balcao-topo:104px}
+body.modo-balcao main{margin-left:0;padding:calc(var(--balcao-topo) + 16px) 22px 60px}
+body.modo-balcao .rodape-acoes{left:0;bottom:28px}
+body.modo-balcao .toast{left:50%}
+body.modo-balcao .pagina{max-width:1180px}
+body.modo-balcao .pagina.larga{max-width:1600px}
+body.modo-balcao .card{padding:14px 16px}
+body.modo-balcao .painel-topo h1{font-size:24px}
+.balcao-topo{position:fixed;inset:0 0 auto 0;z-index:40;background:#f3f4f6;border-bottom:1px solid #c7ccd3;box-shadow:0 1px 4px rgba(0,0,0,.08)}
+.balcao-menus{display:flex;gap:2px;padding:2px 8px;background:#fff;border-bottom:1px solid #dfe3e8;font-size:12.5px}
+.balcao-menus .bm{position:relative}
+.balcao-menus .bm>button{border:0;background:none;padding:4px 10px;font-weight:600;text-transform:uppercase;letter-spacing:.02em;color:#1d2530;border-radius:4px}
+.balcao-menus .bm>button:hover,.balcao-menus .bm>button[aria-expanded="true"]{background:#e3ebfb;color:#0a3ea8}
+.bm-lista{position:absolute;top:100%;left:0;min-width:230px;background:#fff;border:1px solid #c7ccd3;border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:4px;z-index:50;display:flex;flex-direction:column}
+.bm-lista button{display:flex;justify-content:space-between;gap:16px;border:0;background:none;padding:7px 10px;text-align:left;font-size:13.5px;border-radius:4px;color:#1d2530}
+.bm-lista button:hover{background:#e3ebfb}
+.bm-lista kbd{font:600 11px var(--f-body);color:#6b7480;border:1px solid #d3d8df;border-radius:3px;padding:0 4px}
+.balcao-icones{display:flex;align-items:stretch;gap:2px;padding:4px 8px;overflow-x:auto}
+.balcao-icones .sep{width:1px;background:#c7ccd3;margin:4px 6px}
+.bi{display:flex;flex-direction:column;align-items:center;gap:2px;min-width:62px;padding:4px 4px 3px;border:1px solid transparent;background:none;border-radius:6px;font-size:11.5px;font-weight:600;color:#1d2530}
+.bi:hover{background:#fff;border-color:#c7ccd3}
+.bi[aria-current="page"]{background:#e3ebfb;border-color:#9db7ef}
+.bi-ic{display:grid;place-items:center;width:34px;height:34px;border-radius:8px;color:#fff}
+.bi-ic svg,.mo-ic svg{width:21px;height:21px}
+.c-azul .bi-ic,.c-azul .mo-ic{background:linear-gradient(#3c7bea,#1f56c4)}
+.c-verde .bi-ic,.c-verde .mo-ic{background:linear-gradient(#35b26a,#1d8a4b)}
+.c-verm .bi-ic,.c-verm .mo-ic{background:linear-gradient(#e2524a,#b42c25)}
+.c-laranja .bi-ic,.c-laranja .mo-ic{background:linear-gradient(#f59a3a,#d4701a)}
+.c-amarelo .bi-ic,.c-amarelo .mo-ic{background:linear-gradient(#f2c230,#c99a0b)}
+.c-roxo .bi-ic,.c-roxo .mo-ic{background:linear-gradient(#8a63e0,#6340b8)}
+.c-cinza .bi-ic,.c-cinza .mo-ic{background:linear-gradient(#7c8796,#59636f)}
+.balcao-status{position:fixed;inset:auto 0 0 0;z-index:40;display:flex;gap:16px;align-items:center;height:26px;padding:0 12px;background:#e9ecf0;border-top:1px solid #c7ccd3;font-size:12px;color:#3d4652}
+.balcao-status .st-on{color:#1d8a4b;font-weight:600}.balcao-status .st-off{color:#b42c25;font-weight:700}
+.area-trabalho{position:fixed;inset:var(--balcao-topo) 0 26px 0;background:#0b0f15 url(../icons/login-fundo.jpg) center/cover no-repeat;display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-start;padding:24px}
+.at-resumo{display:flex;gap:10px}
+.at-resumo button{display:flex;flex-direction:column;align-items:flex-start;background:rgba(10,14,20,.72);border:1px solid rgba(255,255,255,.14);color:#fff;border-radius:10px;padding:10px 16px;backdrop-filter:blur(4px)}
+.at-resumo b{font-size:26px;line-height:1.1}.at-resumo span{font-size:12.5px;color:#c9d2de}
+.at-dica{margin:10px 0 0;color:#aab4c2;font-size:12px}
+.menu-os{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mo-bt{display:flex;align-items:center;gap:10px;padding:8px 10px;border:1px solid var(--line);background:var(--surface);border-radius:8px;font-weight:600;font-size:13.5px;text-align:left;color:var(--ink)}
+.mo-bt:hover{border-color:var(--brand);background:var(--surface-2)}
+.mo-ic{display:grid;place-items:center;width:32px;height:32px;border-radius:7px;color:#fff;flex:none}
+@media (prefers-color-scheme: dark){
+  .balcao-topo{background:#1a2029;border-color:#2c3440}.balcao-menus{background:#141920;border-color:#2c3440}
+  .balcao-menus .bm>button,.bi,.bm-lista button{color:#dde3ea}.bm-lista{background:#1a2029;border-color:#2c3440}
+  .bi:hover{background:#232a35;border-color:#2c3440}.bm-lista button:hover,.balcao-menus .bm>button:hover,.balcao-menus .bm>button[aria-expanded="true"],.bi[aria-current="page"]{background:#24345a;color:#fff}
+  .balcao-status{background:#141920;border-color:#2c3440;color:#aab4c2}
+}
+@media print{.balcao-topo,.balcao-status{display:none!important}body.modo-balcao main{padding:0}}

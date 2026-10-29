@@ -22,7 +22,7 @@ import { Financeiro } from "./telas/financeiro.js";
 import { Backup } from "./telas/backup.js";
 import { NotasSefaz } from "./telas/sefaz.js";
 import { Funcionarios, FuncionarioTela } from "./telas/funcionarios.js";
-import { BarraBalcao, AreaTrabalho, StatusBalcao, modoBalcao, usarModo } from "./telas/modobalcao.js";
+import { BarraBalcao, AreaTrabalho, StatusBalcao, modoBalcao, usarModo, BotaoTema } from "./telas/modobalcao.js";
 
 // modo balcão (estilo OS Oficina) só em tela de computador
 const BALCAO = modoBalcao() && window.matchMedia("(min-width: 900px)").matches;
@@ -227,6 +227,7 @@ function App() {
           return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span></button>`; })}</nav>` : null; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
       <button type="button" class="btn btn-sm lateral-modo" onClick=${() => usarModo("balcao")}>Modo balcão (OS Oficina)</button>
+      <${BotaoTema} classe="btn btn-sm lateral-modo" />
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>

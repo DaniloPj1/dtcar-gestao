@@ -4,6 +4,7 @@ import { html, useState, useEffect, useRef } from "../lib.js";
 import { useApp, Modal, I } from "../ui.js";
 import { normPlaca, soDig, lsGet, lsSet } from "../util.js";
 import { pode, ABERTOS } from "../regras.js";
+import { temaEfetivo, temaEscolhido, aplicarTema } from "../tema.js";
 
 const LS = "dtcar-modo";
 export const modoBalcao = () => lsGet(LS) === "balcao";
@@ -156,6 +157,17 @@ export function StatusBalcao() {
     <span class="espaco"></span>
     <span class=${online ? "st-on" : "st-off"}>${online ? "● Conectado" : "● Sem internet"}</span>
     <span>${agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</span>
-    <span>${perfil.nome}</span><span>DTCar Gestão</span>
+    <${BotaoTema} classe="st-tema" /><span>${perfil.nome}</span><span>DTCar Gestão</span>
   </footer>`;
+}
+
+/** Botão de tema: Claro → Escuro → Automático */
+export function BotaoTema({ classe }) {
+  const [, setN] = useState(0);
+  useEffect(() => { const f = () => setN(n => n + 1); window.addEventListener("dtcar-tema", f); const m = matchMedia("(prefers-color-scheme: dark)"); m.addEventListener && m.addEventListener("change", f);
+    return () => { window.removeEventListener("dtcar-tema", f); m.removeEventListener && m.removeEventListener("change", f); }; }, []);
+  const esc = temaEscolhido(), ef = temaEfetivo();
+  const prox = esc === "claro" ? "escuro" : esc === "escuro" ? "auto" : "claro";
+  const rot = esc === "auto" ? "Tema automático (" + ef + ")" : esc === "claro" ? "Tema claro" : "Tema escuro";
+  return html`<button type="button" class=${classe || "btn btn-sm"} title=${"Trocar para tema " + { claro: "claro", escuro: "escuro", auto: "automático" }[prox]} onClick=${() => aplicarTema(prox)}>${ef === "escuro" ? "☾" : "☀"} ${rot}</button>`;
 }

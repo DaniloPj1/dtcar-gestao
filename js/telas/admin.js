@@ -2,7 +2,7 @@ import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
-import { modoBalcao, usarModo } from "./modobalcao.js";
+import { modoBalcao, usarModo, BotaoTema } from "./modobalcao.js";
 import { pode, PAPEIS, CONFIG_PADRAO, TERMO_ENTRADA, TERMO_ORCAMENTO, TERMO_GARANTIA } from "../regras.js";
 
 /* ---------------- Menu "Mais" ---------------- */
@@ -10,7 +10,7 @@ export function Mais() {
   const { perfil, ir, sair } = useApp();
   const it = (rota, t, d, ic) => html`<button type="button" class="linha" onClick=${() => rota === "#modo" ? usarModo(modoBalcao() ? "moderno" : "balcao") : ir(rota)}><span class="ic">${ic}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`;
   return html`<div class="pagina">
-    <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div></section>
+    <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div><div class="acoes"><${BotaoTema} /></div></section>
     <section class="card"><div class="lista">
       ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
       ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}

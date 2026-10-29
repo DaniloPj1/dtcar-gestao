@@ -1,0 +1,71 @@
+// Dados neste computador: pasta de dados no PC, cópia interna do navegador e fila de envio
+import { html, useState, useEffect } from "../lib.js";
+import { useApp, Modal } from "../ui.js";
+import { fmtDataHora, lsSet } from "../util.js";
+import { local } from "../local.js";
+import { pastaSuportada, escolherPasta, reconectarPasta, esquecerPasta, gravarDadosNaPasta } from "../pasta.js";
+
+/** Janela da primeira abertura do programa instalado: cria a pasta de dados no PC */
+export function AssistentePasta({ onFechar }) {
+  const { avisar } = useApp();
+  const [ocupado, setOcupado] = useState(false);
+  const criar = async () => {
+    setOcupado(true);
+    try { const h = await escolherPasta(); const c = await local.ler("dados"); if (c) await gravarDadosNaPasta(c, true); avisar("Pasta “" + h.name + "” criada. Os dados deste computador passam a ser salvos nela."); onFechar(); }
+    catch (e) { if (e.name !== "AbortError") avisar("Não foi possível criar a pasta: " + e.message, true); }
+    finally { setOcupado(false); }
+  };
+  const depois = () => { lsSet("dtcar-pasta-adiada", Date.now()); onFechar(); };
+  return html`<${Modal} titulo="Pasta de dados neste computador" onFechar=${depois}>
+    <p>Para trabalhar sem internet com segurança, o DTCar Gestão guarda uma cópia dos dados <b>numa pasta deste computador</b>.</p>
+    <ol class="passos-pasta">
+      <li>Clique em <b>Escolher local</b>. Sugerimos a pasta <b>Documentos</b>.</li>
+      <li>O sistema cria dentro dela a pasta <b>DTCar Gestão</b>, com as subpastas <i>dados</i> e <i>copias</i>.</li>
+      <li>Se o Windows perguntar, escolha <b>Permitir sempre</b> (ou “Permitir em todas as visitas”).</li>
+    </ol>
+    <p class="sub">A base principal continua no servidor. A pasta guarda a cópia mais recente, as O.S. abertas sem internet e uma cópia por dia dos últimos 30 dias.</p>
+    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${depois}>Agora não</button>
+      <button type="button" class="btn btn-pri" disabled=${ocupado} onClick=${criar}>${ocupado ? "Criando…" : "Escolher local e criar pasta"}</button></div>
+  </${Modal}>`;
+}
+
+/** Tela Sistema › Dados neste computador */
+export function DadosLocais() {
+  const { pasta, pendentes, enviarFila, avisar, confirmar, abrirAssistentePasta } = useApp();
+  const [copia, setCopia] = useState(null), [uso, setUso] = useState(null), [persist, setPersist] = useState(null);
+  useEffect(() => {
+    local.ler("dados").then(c => setCopia(c || false));
+    if (navigator.storage) { navigator.storage.estimate && navigator.storage.estimate().then(setUso).catch(() => {}); navigator.storage.persisted && navigator.storage.persisted().then(setPersist).catch(() => {}); }
+  }, [pasta && pasta.ultimaGravacao]);
+  const p = pasta || {};
+  const gravarAgora = async () => { const c = await local.ler("dados"); if (!c) return avisar("Ainda não há cópia para gravar. Abra o sistema com internet.", true); avisar((await gravarDadosNaPasta(c, true)) ? "Cópia gravada na pasta." : "Não foi possível gravar na pasta.", !p.ultimaGravacao); };
+  const religar = async () => { avisar((await reconectarPasta()) ? "Pasta reconectada." : "Permissão não concedida.", false); };
+  const desligar = async () => { if (await confirmar({ titulo: "Parar de usar a pasta", texto: "Os arquivos já gravados continuam no computador. O sistema só para de atualizá-los.", botao: "Parar" })) await esquecerPasta(); };
+  const n = k => copia && copia.dados && copia.dados[k] ? copia.dados[k].length.toLocaleString("pt-BR") : "—";
+  return html`<div class="pagina">
+    <div class="painel-topo"><div><h1>Dados neste computador</h1><span class="sub">Cópia para trabalhar sem internet</span></div></div>
+    <section class="card"><div class="secao-topo"><h2>Pasta de dados no PC</h2>
+      ${p.configurada ? html`<span class=${"pill p-" + (p.permissao === "granted" ? "ok" : "warn")}>${p.permissao === "granted" ? "Gravando" : "Precisa reconectar"}</span>` : html`<span class="pill p-muted">Não configurada</span>`}</div>
+      ${!pastaSuportada() ? html`<div class="aviso">Este navegador não permite gravar numa pasta do computador. Use o <b>Google Chrome</b> ou o <b>Microsoft Edge</b> no Windows.</div>`
+      : !p.configurada ? html`<p>Crie a pasta <b>DTCar Gestão</b> (sugestão: dentro de Documentos) para o sistema guardar uma cópia dos dados em arquivos neste computador.</p>
+        <div class="acoes"><button type="button" class="btn btn-pri" onClick=${abrirAssistentePasta}>Criar pasta de dados</button></div>`
+      : html`<div class="kv"><div><span>Pasta</span><b>${p.nome}</b></div><div><span>Última gravação</span><b>${p.ultimaGravacao ? fmtDataHora(p.ultimaGravacao) : "ainda não gravou"}</b></div>
+          <div><span>Conteúdo</span><b>dados\\dtcar-dados.json · dados\\fila-envio.json · copias\\ (30 dias)</b></div></div>
+        ${p.permissao !== "granted" ? html`<div class="aviso">O navegador pediu para confirmar o acesso à pasta depois de reiniciar. Clique em <b>Reconectar</b> e escolha <b>Permitir sempre</b>.</div>` : null}
+        ${p.erro ? html`<div class="erros">Último erro ao gravar: ${p.erro}</div>` : null}
+        <div class="acoes">${p.permissao !== "granted" ? html`<button type="button" class="btn btn-pri" onClick=${religar}>Reconectar</button>` : html`<button type="button" class="btn" onClick=${gravarAgora}>Gravar agora</button>`}
+          <button type="button" class="btn" onClick=${abrirAssistentePasta}>Trocar pasta</button><button type="button" class="btn btn-link" onClick=${desligar}>Parar de usar</button></div>`}
+    </section>
+    <section class="card"><h2>Cópia interna do navegador</h2>
+      ${copia === null ? html`<span class="sub">Lendo…</span>` : !copia ? html`<div class="aviso">Ainda não há cópia neste computador. Abra o sistema com internet e aguarde alguns segundos.</div>`
+      : html`<div class="kv"><div><span>Atualizada em</span><b>${fmtDataHora(copia.salvoEm)}</b></div><div><span>O.S.</span><b>${n("ordens")}</b></div><div><span>Clientes</span><b>${n("clientes")}</b></div>
+          <div><span>Veículos</span><b>${n("veiculos")}</b></div><div><span>Produtos e serviços</span><b>${n("produtos")}</b></div>
+          ${uso && uso.usage ? html`<div><span>Espaço usado</span><b>${(uso.usage / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB</b></div>` : null}
+          <div><span>Protegida contra limpeza</span><b>${persist ? "sim" : "não (instale o programa para proteger)"}</b></div></div>`}
+    </section>
+    <section class="card"><div class="secao-topo"><h2>O.S. abertas sem internet</h2>${pendentes.length ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${enviarFila}>Enviar agora</button>` : null}</div>
+      ${pendentes.length ? html`<ul class="res-lista">${pendentes.map(op => html`<li key=${op.id}><b>${op.provisorio}</b> · ${op.ordem.veiculo.placa} · ${op.ordem.cliente.nome} · aberta em ${fmtDataHora(op.criado_em)}${op.erro ? html` · <span class="c-bad">${op.erro}</span>` : null}</li>`)}</ul>`
+        : html`<span class="sub">Nenhuma O.S. aguardando envio. Tudo está no servidor.</span>`}
+    </section>
+  </div>`;
+}

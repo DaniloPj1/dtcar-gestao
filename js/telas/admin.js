@@ -2,15 +2,15 @@ import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
-import { modoBalcao, usarModo, BotaoTema } from "./modobalcao.js";
+import { BotaoTema } from "./topo.js";
 import { pode, PAPEIS, CONFIG_PADRAO, TERMO_ENTRADA, TERMO_ORCAMENTO, TERMO_GARANTIA } from "../regras.js";
 
 /* ---------------- Menu "Mais" ---------------- */
 export function Mais() {
   const { perfil, ir, sair } = useApp();
-  const it = (rota, t, d, ic) => html`<button type="button" class="linha" onClick=${() => rota === "#modo" ? usarModo(modoBalcao() ? "moderno" : "balcao") : ir(rota)}><span class="ic">${ic}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`;
+  const it = (rota, t, d, ic) => html`<button type="button" class="linha" onClick=${() => ir(rota)}><span class="ic">${ic}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`;
   return html`<div class="pagina">
-    <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div><div class="acoes"><${BotaoTema} /></div></section>
+    <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div><div class="acoes"><${BotaoTema} classe="btn btn-sm" comTexto /></div></section>
     <section class="card"><div class="lista">
       ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
       ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}
@@ -23,9 +23,9 @@ export function Mais() {
       ${pode(perfil, "verValores") ? it("/relatorios", "Relatórios", "Histórico de serviços, faturamento, caixa, contas, estoque e mais", I.grafico) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}
       ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
+      ${it("/dados-locais", "Dados neste computador", "Pasta de dados no PC, cópia para trabalhar sem internet e O.S. aguardando envio", I.caixa)}
       ${pode(perfil, "ajustes") ? it("/backup", "Backup", "Baixar uma cópia de todos os dados ou restaurar", I.nuvem) : null}
       ${pode(perfil, "ajustes") ? it("/importar", "Importar do OS Oficina 3.0", "Trazer cadastros completos, produtos e O.S. novas do sistema antigo", I.painel) : null}
-      ${window.matchMedia("(min-width: 900px)").matches ? it("#modo", modoBalcao() ? "Voltar ao modo moderno" : "Modo balcão (estilo OS Oficina)", "Barra de ícones, menu de O.S. e atalhos F2–F8 neste computador", I.painel) : null}
       <button type="button" class="linha" onClick=${sair}><span class="ic">${I.sair}</span><span class="meio"><strong>Sair</strong><span>Encerrar a sessão neste aparelho</span></span></button>
     </div></section></div>`;
 }

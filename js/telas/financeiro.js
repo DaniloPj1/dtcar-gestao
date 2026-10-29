@@ -275,58 +275,115 @@ function DuplicatasXML({ onFechar, onLancado }) {
 const GRUPOS = [["vencida", "Vencidas"], ["hoje", "Vencem hoje"], ["semana", "Próximos 7 dias"], ["depois", "Mais adiante"]];
 const mesAtual = () => hojeISO().slice(0, 7);
 const limitesMes = m => { const [a, n] = m.split("-").map(Number); return [m + "-01", m + "-" + String(new Date(a, n, 0).getDate()).padStart(2, "0")]; };
+const somaDiasISO = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const mesDe = (n) => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + n); return d.toISOString().slice(0, 7); };
+/** Períodos rápidos: [chave, rótulo, () => [de, ate]] */
+const PERIODOS = [
+  ["mes", "Este mês", () => limitesMes(mesAtual())], ["mesant", "Mês passado", () => limitesMes(mesDe(-1))], ["mesprox", "Próximo mês", () => limitesMes(mesDe(1))],
+  ["7d", "Próximos 7 dias", () => [hojeISO(), somaDiasISO(hojeISO(), 7)]], ["30d", "Próximos 30 dias", () => [hojeISO(), somaDiasISO(hojeISO(), 30)]],
+  ["ano", "Este ano", () => [hojeISO().slice(0, 4) + "-01-01", hojeISO().slice(0, 4) + "-12-31"]], ["pers", "Personalizado", null],
+];
+const SITUACOES = [["", "Todas"], ["aberta", "Em aberto"], ["vencida", "Vencidas"], ["hoje", "Vencem hoje"], ["avencer", "A vencer"], ["paga", "Pagas"], ["cancelada", "Canceladas"]];
+const ORIGENS_CONTA = { manual: "Lançamento manual", boleto: "Boleto", nfe: "Duplicata de nota", os: "Terceiro da O.S.", recorrente: "Despesa fixa", parcelado: "Parcelado" };
+const LS_FILTROS = "dtcar-fin-filtros";
+const FILTROS_VAZIOS = { q: "", cat: "", fav: "", forma: "", origem: "", sit: "", periodo: "mes", campo: "vencimento", de: "", ate: "" };
+
 export function Financeiro({ params = {} }) {
   const { dados } = useApp();
-  const [aba, setAba] = useState(params.aba || "abertas");
-  const [abertas, setAbertas] = useState(null), [doMes, setDoMes] = useState(null), [mes, setMes] = useState(mesAtual());
-  const [q, setQ] = useState(""), [cat, setCat] = useState(""), [erro, setErro] = useState("");
+  const [aba, setAba] = useState(params.aba === "pagas" || params.aba === "mes" ? "consulta" : params.aba || "abertas");
+  const [abertas, setAbertas] = useState(null), [consulta, setConsulta] = useState(null), [erro, setErro] = useState("");
+  const [f, setF] = useState(() => { try { return { ...FILTROS_VAZIOS, ...(JSON.parse(localStorage.getItem(LS_FILTROS) || "null") || {}), ...(params.aba === "pagas" ? { sit: "paga", campo: "pago_em" } : {}) }; } catch (e) { return { ...FILTROS_VAZIOS }; } });
   const [nova, setNova] = useState(params.nova ? { modo: params.nova } : null), [det, setDet] = useState(null), [dup, setDup] = useState(false);
+  const muda = o => setF(x => { const n = { ...x, ...o }; try { localStorage.setItem(LS_FILTROS, JSON.stringify(n)); } catch (e) {} return n; });
+  const limpar = () => muda({ q: "", cat: "", fav: "", forma: "", origem: "", sit: "" });
+  const intervalo = () => { const per = PERIODOS.find(x => x[0] === f.periodo); return per && per[2] ? per[2]() : [f.de || hojeISO().slice(0, 7) + "-01", f.ate || hojeISO()]; };
+  const [de, ate] = intervalo();
   const carregar = () => {
     api.contas.abertas().then(setAbertas).catch(e => { setErro(e.message); setAbertas([]); });
-    const [de, ate] = limitesMes(mes);
-    api.contas.listar({ de, ate, campo: aba === "pagas" ? "pago_em" : "vencimento" }).then(setDoMes).catch(e => { setErro(e.message); setDoMes([]); });
+    if (aba === "consulta") { setConsulta(null); api.contas.listar({ de, ate, campo: f.campo }).then(setConsulta).catch(e => { setErro(e.message); setConsulta([]); }); }
   };
-  useEffect(carregar, [mes, aba]);
+  useEffect(carregar, [aba, de, ate, f.campo]);
   const hoje = hojeISO();
-  const filtra = l => (l || []).filter(c => (!cat || c.categoria === cat) && (!q || norm(c.descricao).includes(norm(q)) || norm(nomeFavorecido(c, dados.fornecedores)).includes(norm(q)) || norm(c.documento).includes(norm(q)) || String(c.valor).includes(q.replace(",", "."))));
+  const fav = c => nomeFavorecido(c, dados.fornecedores);
+  const passa = c => {
+    if (f.cat && (c.categoria || "Sem categoria") !== f.cat) return false;
+    if (f.fav && fav(c) !== f.fav) return false;
+    if (f.forma && (c.forma_pagamento || "") !== f.forma) return false;
+    if (f.origem && c.origem !== f.origem) return false;
+    if (f.q) { const n = norm(f.q); if (!(norm(c.descricao).includes(n) || norm(fav(c)).includes(n) || norm(c.documento).includes(n) || norm(c.obs).includes(n) || String(c.valor).includes(f.q.replace(/\./g, "").replace(",", ".")))) return false; }
+    if (aba === "consulta" && f.sit) {
+      const g = situacao(c, hoje).g;
+      if (f.sit === "aberta" && c.status !== "aberta") return false;
+      if (f.sit === "avencer" && !(c.status === "aberta" && (g === "semana" || g === "depois"))) return false;
+      if (["vencida", "hoje", "paga", "cancelada"].includes(f.sit) && g !== f.sit) return false;
+    }
+    return true;
+  };
   const ab = abertas || [];
   const soma = l => l.reduce((s, c) => s + Number(c.valor), 0);
   const venc = ab.filter(c => c.vencimento < hoje), hj = ab.filter(c => c.vencimento === hoje), sem = ab.filter(c => c.vencimento > hoje && dias(c.vencimento, hoje) <= 7), trinta = ab.filter(c => c.vencimento >= hoje && dias(c.vencimento, hoje) <= 30);
-  const pagasMes = (doMes || []).filter(c => c.status === "paga");
-  const lista = aba === "abertas" ? filtra(ab) : aba === "pagas" ? filtra((doMes || []).filter(c => c.status === "paga")).sort((a, b) => (b.pago_em || "").localeCompare(a.pago_em || "")) : filtra(doMes);
-  const categorias = [...new Set([...(abertas || []), ...(doMes || [])].map(c => c.categoria).filter(Boolean))].sort();
-  const porCategoria = useMemo(() => { const g = new Map(); for (const c of ab) g.set(c.categoria || "Sem categoria", (g.get(c.categoria || "Sem categoria") || 0) + Number(c.valor)); return [...g.entries()].sort((a, b) => b[1] - a[1]); }, [abertas]);
+  const base = aba === "abertas" ? ab : (consulta || []);
+  const lista = base.filter(passa).sort((a, b) => f.campo === "pago_em" && aba === "consulta" ? (b.pago_em || "").localeCompare(a.pago_em || "") : a.vencimento.localeCompare(b.vencimento));
+  const opcoes = (fn) => [...new Set([...(abertas || []), ...(consulta || [])].map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const categorias = opcoes(c => c.categoria || "Sem categoria"), favorecidos = opcoes(fav), formas = opcoes(c => c.forma_pagamento);
+  const ativos = ["q", "cat", "fav", "forma", "origem", "sit"].filter(k => f[k]).length;
+  const totPago = lista.filter(c => c.status === "paga").reduce((s, c) => s + Number(c.valor_pago ?? c.valor), 0);
+  const totAberto = soma(lista.filter(c => c.status === "aberta")), totVencido = soma(lista.filter(c => c.status === "aberta" && c.vencimento < hoje));
+  const porCategoria = useMemo(() => { const g = new Map(); for (const c of lista.filter(c => c.status !== "cancelada")) g.set(c.categoria || "Sem categoria", (g.get(c.categoria || "Sem categoria") || 0) + Number(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)); return [...g.entries()].sort((a, b) => b[1] - a[1]); }, [lista]);
+  const exportar = () => {
+    const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"', n2 = v => String(Number(v || 0).toFixed(2)).replace(".", ",");
+    const linhas = [["Vencimento", "Favorecido", "Descrição", "Categoria", "Documento", "Parcela", "Valor", "Situação", "Pago em", "Valor pago", "Forma de pagamento", "Origem"].map(esc).join(";")];
+    for (const c of lista) linhas.push([fmtData(c.vencimento), fav(c), c.descricao, c.categoria, c.documento, c.parcelas > 1 ? c.parcela + "/" + c.parcelas : "", n2(c.valor), situacao(c, hoje).t, c.pago_em ? fmtData(c.pago_em) : "", c.status === "paga" ? n2(c.valor_pago ?? c.valor) : "", c.forma_pagamento, ORIGENS_CONTA[c.origem] || c.origem].map(esc).join(";"));
+    const blob = new Blob(["﻿" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "contas-dtcar-" + de + "-a-" + ate + ".csv"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
+  };
   const linha = c => { const s = situacao(c, hoje); const d = new Date(c.vencimento + "T12:00:00");
     return html`<button type="button" key=${c.id} class=${"linha conta-linha s-" + s.g} onClick=${() => setDet(c)}>
       <span class="data-bloco"><b>${String(d.getDate()).padStart(2, "0")}</b><small>${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small></span>
-      <span class="meio"><strong>${nomeFavorecido(c, dados.fornecedores)}</strong><span>${[c.descricao !== nomeFavorecido(c, dados.fornecedores) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.codigo_barras ? "boleto" : ""].filter(Boolean).join(" · ")}</span></span>
+      <span class="meio"><strong>${fav(c)}</strong><span>${[c.descricao !== fav(c) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.codigo_barras ? "boleto" : "", c.forma_pagamento && c.status === "paga" ? c.forma_pagamento : ""].filter(Boolean).join(" · ")}</span></span>
       <span class="dir"><b class=${c.status === "cancelada" ? "riscado" : ""}>${reais(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)}</b><span class=${"pill p-" + s.cor}>${s.t}</span></span></button>`; };
+  const sel = (k, rot, ops, rotulos) => html`<label class="filtro"><span>${rot}</span><select class="inp" value=${f[k]} onChange=${e => muda({ [k]: e.target.value })}><option value="">Todos</option>${ops.map(x => html`<option value=${x}>${rotulos ? rotulos[x] || x : x}</option>`)}</select></label>`;
+  const carregando = aba === "abertas" ? !abertas : !consulta;
   return html`<div class="pagina larga financeiro">
     <div class="painel-topo"><div><h1>Contas a pagar</h1><span class="sub">${abertas ? reais(soma(ab)) + " em aberto em " + ab.length + " conta(s)" : "Carregando…"}</span></div>
       <div class="acoes"><button type="button" class="btn" onClick=${() => setDup(true)}>Duplicatas do XML</button><button type="button" class="btn" onClick=${() => setNova({ modo: "pdf" })}>Ler boleto</button><button type="button" class="btn btn-pri" onClick=${() => setNova({ modo: "" })}>+ Nova conta</button></div></div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="kpis fin-kpis">
-      <button type="button" class=${"kpi" + (venc.length ? " kpi-alerta" : "")} onClick=${() => { setAba("abertas"); }}><span>Vencidas</span><b class="kpi-din">${reais(soma(venc))}</b><small>${venc.length} conta(s)</small></button>
-      <div class=${"kpi" + (hj.length ? " kpi-aviso" : "")}><span>Vencem hoje</span><b class="kpi-din">${reais(soma(hj))}</b><small>${hj.length} conta(s)</small></div>
-      <div class="kpi"><span>Próximos 7 dias</span><b class="kpi-din">${reais(soma(sem))}</b><small>${sem.length} conta(s)</small></div>
-      <div class="kpi"><span>Próximos 30 dias</span><b class="kpi-din">${reais(soma(trinta))}</b><small>incluindo hoje</small></div>
+      <button type="button" class=${"kpi" + (venc.length ? " kpi-alerta" : "")} onClick=${() => { setAba("consulta"); muda({ sit: "vencida", periodo: "ano", campo: "vencimento" }); }}><span>Vencidas</span><b class="kpi-din">${reais(soma(venc))}</b><small>${venc.length} conta(s)</small></button>
+      <button type="button" class=${"kpi" + (hj.length ? " kpi-aviso" : "")} onClick=${() => { setAba("consulta"); muda({ sit: "hoje", periodo: "mes", campo: "vencimento" }); }}><span>Vencem hoje</span><b class="kpi-din">${reais(soma(hj))}</b><small>${hj.length} conta(s)</small></button>
+      <button type="button" class="kpi" onClick=${() => { setAba("consulta"); muda({ sit: "aberta", periodo: "7d", campo: "vencimento" }); }}><span>Próximos 7 dias</span><b class="kpi-din">${reais(soma(sem))}</b><small>${sem.length} conta(s)</small></button>
+      <button type="button" class="kpi" onClick=${() => { setAba("consulta"); muda({ sit: "aberta", periodo: "30d", campo: "vencimento" }); }}><span>Próximos 30 dias</span><b class="kpi-din">${reais(soma(trinta))}</b><small>incluindo hoje</small></button>
       <div class="kpi kpi-forte"><span>Total em aberto</span><b class="kpi-din">${reais(soma(ab))}</b><small>dívidas registradas</small></div>
-      <div class="kpi"><span>Pago em ${new Date(mes + "-15").toLocaleDateString("pt-BR", { month: "long" })}</span><b class="kpi-din">${aba === "pagas" ? reais(pagasMes.reduce((s, c) => s + Number(c.valor_pago ?? c.valor), 0)) : "—"}</b><small>${aba === "pagas" ? pagasMes.length + " pagamento(s)" : "veja a aba Pagas"}</small></div>
     </div>
     <div class="fin-corpo">
       <section class="card">
-        <${Abas} abas=${[["abertas", "Em aberto"], ["pagas", "Pagas"], ["mes", "Todas do mês"]]} ativa=${aba} onTroca=${setAba} />
-        <div class="filtros-linha">
-          ${aba !== "abertas" ? html`<input type="month" class="inp inp-mes" aria-label="Mês" value=${mes} onInput=${e => e.target.value && setMes(e.target.value)} />` : null}
-          <input id="busca-conta" class="inp" type="search" placeholder="Fornecedor, descrição, documento ou valor" value=${q} onInput=${e => setQ(e.target.value)} />
-          <select class="inp inp-cat" aria-label="Categoria" value=${cat} onChange=${e => setCat(e.target.value)}><option value="">Todas as categorias</option>${categorias.map(x => html`<option value=${x}>${x}</option>`)}</select>
+        <${Abas} abas=${[["abertas", "Em aberto (" + ab.length + ")"], ["consulta", "Consultar por período"]]} ativa=${aba} onTroca=${setAba} />
+        <div class="fin-filtros">
+          ${aba === "consulta" ? html`<div class="fin-periodo">
+            <label class="filtro"><span>Período</span><select class="inp" value=${f.periodo} onChange=${e => muda({ periodo: e.target.value })}>${PERIODOS.map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select></label>
+            ${f.periodo === "pers" ? html`<label class="filtro"><span>De</span><input type="date" class="inp" value=${f.de || de} onInput=${e => muda({ de: e.target.value })} /></label><label class="filtro"><span>Até</span><input type="date" class="inp" value=${f.ate || ate} onInput=${e => muda({ ate: e.target.value })} /></label>`
+              : html`<span class="fin-intervalo">${fmtData(de)} a ${fmtData(ate)}</span>`}
+            <label class="filtro"><span>Pela data de</span><select class="inp" value=${f.campo} onChange=${e => muda({ campo: e.target.value })}><option value="vencimento">Vencimento</option><option value="pago_em">Pagamento</option><option value="emissao">Emissão</option></select></label>
+          </div>
+          <div class="chips rolagem" role="group" aria-label="Situação">${SITUACOES.map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (f.sit === k ? " ativo" : "")} onClick=${() => muda({ sit: k })}>${t}</button>`)}</div>` : null}
+          <div class="fin-sel">
+            <label class="filtro fin-busca"><span>Buscar</span><input id="busca-conta" class="inp" type="search" placeholder="Descrição, documento, observação ou valor" value=${f.q} onInput=${e => muda({ q: e.target.value })} /></label>
+            ${sel("fav", "Fornecedor / favorecido", favorecidos)}${sel("cat", "Categoria", categorias)}
+            ${aba === "consulta" ? sel("forma", "Forma de pagamento", formas) : null}${sel("origem", "Origem", Object.keys(ORIGENS_CONTA), ORIGENS_CONTA)}
+            ${ativos ? html`<button type="button" class="btn btn-sm fin-limpar" onClick=${limpar}>Limpar filtros (${ativos})</button>` : null}
+          </div>
         </div>
-        ${(aba === "abertas" ? !abertas : !doMes) ? html`<div class="esqueleto"></div>` : !lista.length ? html`<${Vazio}>${aba === "abertas" ? "Nenhuma conta em aberto. Lance boletos, duplicatas e despesas fixas para acompanhar as dívidas da oficina." : "Nada neste mês."}</${Vazio}>`
-          : aba === "abertas" ? GRUPOS.map(([g, t]) => { const l = lista.filter(c => situacao(c, hoje).g === g); return l.length ? html`<div class="grupo-contas" key=${g}><h4>${t}<span>${reais(soma(l))}</span></h4><div class="lista">${l.map(linha)}</div></div>` : null; })
-          : html`<div class="lista">${lista.map(linha)}</div><div class="total-item"><span>${lista.length} conta(s)</span><b>${reais(lista.filter(c => c.status !== "cancelada").reduce((s, c) => s + Number(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor), 0))}</b></div>`}
+        ${carregando ? html`<div class="esqueleto"></div>`
+          : !lista.length ? html`<${Vazio}>${base.length ? "Nenhuma conta com esses filtros." : aba === "abertas" ? "Nenhuma conta em aberto. Lance boletos, duplicatas e despesas fixas para acompanhar as dívidas da oficina." : "Nenhuma conta neste período."}</${Vazio}>`
+          : html`<div class="fin-resumo"><span><b>${lista.length}</b> conta(s)</span>
+              ${totAberto ? html`<span>Em aberto <b>${reais(totAberto)}</b></span>` : null}${totVencido ? html`<span class="c-bad">Vencido <b>${reais(totVencido)}</b></span>` : null}
+              ${totPago ? html`<span class="c-ok">Pago <b>${reais(totPago)}</b></span>` : null}
+              <span class="espaco"></span><button type="button" class="btn btn-sm" onClick=${exportar}>Exportar planilha</button></div>
+            ${aba === "abertas" ? GRUPOS.map(([g, t]) => { const l = lista.filter(c => situacao(c, hoje).g === g); return l.length ? html`<div class="grupo-contas" key=${g}><h4>${t}<span>${reais(soma(l))}</span></h4><div class="lista">${l.map(linha)}</div></div>` : null; })
+              : html`<div class="lista">${lista.map(linha)}</div>`}`}
       </section>
-      <aside class="card fin-lado"><h3>Em aberto por categoria</h3>
-        ${porCategoria.length ? html`<ul class="ranking">${porCategoria.map(([k, v]) => html`<li key=${k}><span>${k}</span><b>${reais(v)}</b></li>`)}</ul>` : html`<span class="dica">Sem contas em aberto.</span>`}
+      <aside class="card fin-lado"><h3>${ativos || aba === "consulta" ? "Por categoria (filtro atual)" : "Em aberto por categoria"}</h3>
+        ${porCategoria.length ? html`<ul class="ranking">${porCategoria.map(([k, v]) => html`<li key=${k}><button type="button" class="botao-limpo" title="Filtrar por esta categoria" onClick=${() => muda({ cat: f.cat === k ? "" : k })}><span>${k}</span><b>${reais(v)}</b></button></li>`)}</ul>` : html`<span class="dica">Sem contas no filtro.</span>`}
         <p class="dica">O sistema não acessa o seu banco. Os boletos entram pelo código, pelo PDF, pela câmera ou pelas duplicatas do XML das notas de compra.</p></aside>
     </div>
     ${nova ? html`<${ContaForm} lerAoAbrir=${nova.modo} onFechar=${() => setNova(null)} onSalvo=${() => { setNova(null); carregar(); }} />` : null}

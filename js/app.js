@@ -1,8 +1,10 @@
 import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js";
 import { api } from "./api.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
-import { fmtDataHora } from "./util.js";
+import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
+import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada } from "./pasta.js";
+import { AssistentePasta } from "./telas/dadoslocais.js";
 import { OSPendente } from "./telas/pendente.js";
 import { Ctx, Modal, I } from "./ui.js";
 import { cfgCompleta, pode } from "./regras.js";
@@ -22,14 +24,13 @@ import { Financeiro } from "./telas/financeiro.js";
 import { Backup } from "./telas/backup.js";
 import { NotasSefaz } from "./telas/sefaz.js";
 import { Funcionarios, FuncionarioTela } from "./telas/funcionarios.js";
-import { BarraBalcao, AreaTrabalho, StatusBalcao, modoBalcao, usarModo, BotaoTema } from "./telas/modobalcao.js";
+import { BarraTopo } from "./telas/topo.js";
+import { DadosLocais } from "./telas/dadoslocais.js";
 
-// modo balcão (estilo OS Oficina) só em tela de computador
-const BALCAO = modoBalcao() && window.matchMedia("(min-width: 900px)").matches;
-if (BALCAO) document.body.classList.add("modo-balcao");
+try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo balcão" foi substituído pela interface única
 
-const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || (BALCAO ? "/inicio" : "/painel"); return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", inicio: "Início" };
+const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["+", "Novo", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
@@ -37,7 +38,7 @@ const LATERAL = [
   ["Operação", [["/painel", "Painel", "painel"], ["/ordens", "Ordens de serviço", "lista"], ["/entrada", "Nova O.S.", "mais", "entrada"], ["/balcao", "Venda de balcão", "carrinho", "verValores"]]],
   ["Cadastros", [["/cadastros", "Clientes", "pessoas"], ["/cadastros?aba=veiculos", "Veículos", "carro"], ["/cadastros?aba=produtos", "Produtos e estoque", "caixa"], ["/cadastros?aba=fornecedores", "Fornecedores", "fabrica"]]],
   ["Financeiro", [["/financeiro", "Contas a pagar", "dinheiro", "financeiro"], ["/recibos", "Recibos", "recibo", "verValores"], ["/sefaz", "Notas da SEFAZ", "nuvem", "cadastrar"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"], ["/funcionarios", "Funcionários", "pessoas", "financeiro"], ["/relatorios", "Relatórios", "grafico", "verValores"]]],
-  ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/backup", "Backup", "nuvem", "ajustes"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
+  ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/backup", "Backup", "nuvem", "ajustes"], ["/dados-locais", "Dados no computador", "caixa"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
 ];
 
 function App() {
@@ -54,6 +55,13 @@ function App() {
   const [offline, setOffline] = useState(null); // { desde, copia } quando o servidor não responde
   const doServidor = useRef(false);
   const [pend, setPend] = useState([]); // fila de envio deste aparelho (O.S. abertas sem internet)
+  const [pasta, setPasta] = useState(null), [assistente, setAssistente] = useState(false);
+  useEffect(() => ouvirPasta(setPasta), []);
+  useEffect(() => { iniciarPasta().then(async st => {
+    if (st.configurada && st.permissao === "granted") { const p = await lerDaPasta().catch(() => null); if (p && await fila.restaurar(p.fila)) atualizarPendentes(); }
+    const instalado = matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches;
+    if (!st.configurada && pastaSuportada() && instalado && !lsGet("dtcar-pasta-adiada")) setAssistente(true);
+  }); }, []);
   const atualizarPendentes = useCallback(async () => { const l = await fila.listar(); setPend(l); return l; }, []);
 
   useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
@@ -108,7 +116,8 @@ function App() {
     } catch (e) {
       if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
       // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
-      const copia = await local.ler("dados");
+      let copia = await local.ler("dados");
+      if (!copia) { const p = await lerDaPasta().catch(() => null); if (p && p.copia && p.copia.dados) { copia = p.copia; local.gravar("dados", { salvoEm: copia.salvoEm, dados: copia.dados, config: copia.config }); } }
       setDados(d => d.carregado ? d : copia ? { ...d, ...copia.dados, carregado: true } : d);
       if (copia && copia.config) setCfg(cfgCompleta(copia.config));
       setOffline(o => o || { desde: new Date().toISOString(), copia: copia ? copia.salvoEm : null });
@@ -118,7 +127,7 @@ function App() {
   // guarda a cópia local sempre que chegam dados do servidor (3 s depois da última mudança)
   useEffect(() => {
     if (!dados.carregado || !doServidor.current || offline) return;
-    const t = setTimeout(() => { const { carregado, ...listas } = dados; local.gravar("dados", { salvoEm: new Date().toISOString(), dados: listas, config: cfg }); }, 3000);
+    const t = setTimeout(() => { const { carregado, ...listas } = dados; const copia = { salvoEm: new Date().toISOString(), dados: listas, config: cfg }; local.gravar("dados", copia); gravarDadosNaPasta(copia); }, 3000);
     return () => clearTimeout(t);
   }, [dados, cfg, offline]);
   // O.S. em aberto ficam guardadas por inteiro para abrir e imprimir sem internet
@@ -193,7 +202,7 @@ function App() {
     clientes: [...dados.clientes, ...pendOS.filter(op => op.cliente && !dados.clientes.some(c => c.id === op.cliente.id)).map(op => ({ ...op.cliente, _pendente: true }))],
     veiculos: [...dados.veiculos, ...pendOS.filter(op => op.veiculo && !dados.veiculos.some(v => v.id === op.veiculo.id || v.placa === op.veiculo.placa)).map(op => ({ ...op.veiculo, _pendente: true }))],
   };
-  const ctx = { sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila };
+  const ctx = { pasta, abrirAssistentePasta: () => setAssistente(true), sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila };
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
@@ -203,7 +212,7 @@ function App() {
     os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} key=${param} />`,
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
-    inicio: () => BALCAO ? html`<${AreaTrabalho} />` : html`<${Painel} />`,
+    "dados-locais": () => html`<${DadosLocais} />`,
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
@@ -216,8 +225,6 @@ function App() {
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => { conf.res(false); setConf(null); }}>Voltar</button>
       <button type="button" class=${"btn " + (conf.perigo ? "btn-perigo" : "btn-pri")} onClick=${() => { conf.res(true); setConf(null); }}>${conf.botao}</button></div></${Modal}>` : null}`;
-  if (BALCAO) return html`<${Ctx.Provider} value=${ctx}><${BarraBalcao} rota=${rota} /><main>${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
-    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main><${StatusBalcao} />${modais}</${Ctx.Provider}>`;
 
   return html`<${Ctx.Provider} value=${ctx}>
     <aside class="lateral" aria-label="Menu">
@@ -226,11 +233,10 @@ function App() {
         ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
           return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span></button>`; })}</nav>` : null; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
-      <button type="button" class="btn btn-sm lateral-modo" onClick=${() => usarModo("balcao")}>Modo balcão (OS Oficina)</button>
-      <${BotaoTema} classe="btn btn-sm lateral-modo" />
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
+    <${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
     <main>${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
     ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
@@ -238,10 +244,8 @@ function App() {
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">
       ${[["/entrada", "Nova ordem de serviço", "Abrir O.S. para um veículo", "lista", "entrada"], ["/balcao", "Venda de balcão", "Vender peças ou serviços sem O.S.", "carrinho", "verValores"], ["/nfe", "Entrada de nota fiscal", "Importar o XML de uma compra", "nota", "cadastrar"], ["/financeiro?nova=pdf", "Conta a pagar", "Lançar boleto, duplicata ou despesa", "dinheiro", "financeiro"]]
         .filter(x => pode(perfil, x[4])).map(([r, t, d, ic]) => html`<button type="button" key=${r} class="linha" onClick=${() => { setNovoMenu(false); ir(r); }}><span class="ic">${I[ic]}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`)}</div></${Modal}>` : null}
-    ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}
-    ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
-      <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => { conf.res(false); setConf(null); }}>Voltar</button>
-      <button type="button" class=${"btn " + (conf.perigo ? "btn-perigo" : "btn-pri")} onClick=${() => { conf.res(true); setConf(null); }}>${conf.botao}</button></div></${Modal}>` : null}
+    ${modais}
+    ${assistente ? html`<${AssistentePasta} onFechar=${() => setAssistente(false)} />` : null}
   </${Ctx.Provider}>`;
 }
 

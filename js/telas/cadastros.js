@@ -238,7 +238,7 @@ export function Cadastros({ params }) {
   const chamar = c => { const r = res.get(c.id); const v = dados.veiculos.find(x => x.cliente_id === c.id); window.open(linkWhats(c.telefone, msgRetorno(c, v, cfg, r.ultima)), "_blank", "noopener"); };
   const trocarAba = a => { setAba(a); setQ(""); };
 
-  return html`<div class="pagina">
+  return html`<div class="pagina larga-media">
     <${Abas} abas=${[["clientes", "Clientes (" + dados.clientes.length + ")"], ["veiculos", "Veículos (" + dados.veiculos.length + ")"], ["produtos", "Produtos (" + dados.produtos.filter(x => x.ativo !== false).length + ")"], ["fornecedores", "Fornecedores (" + dados.fornecedores.length + ")"]]} ativa=${aba} onTroca=${trocarAba} />
     ${aba === "produtos" ? html`<${ProdutosLista} />` : aba === "fornecedores" ? html`<${FornecedoresLista} />` : html`
     <div class="linha-add"><input id="busca-cad" class="inp" aria-label="Buscar" placeholder=${aba === "clientes" ? "Nome, código, telefone, CPF ou placa" : "Placa, marca, modelo ou chassi"} value=${q} onInput=${e => setQ(e.target.value)} />

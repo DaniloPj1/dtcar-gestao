@@ -1,7 +1,7 @@
 // Cadastro de produtos e serviços (modelo do OS Oficina 3.0) e controle de estoque
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro } from "../ui.js";
+import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro, useVisao, TrocaVisao } from "../ui.js";
 import { norm, reais, qtdFmt, fmtDataHora, parseValor, precoPelaMargem, margemDoPreco, arred } from "../util.js";
 import { pode, UNIDADES, TABELAS_PRECO } from "../regras.js";
 import { linkImagem } from "../nfe.js";
@@ -143,6 +143,7 @@ export function ProdutosLista() {
   const { dados, perfil, ir, cfg } = useApp();
   const [q, setQ] = useState(""), [filtro, setFiltro] = useState("todos"), [ed, setEd] = useState(null), [lim, setLim] = useState(80);
   const ver = pode(perfil, "verValores"), podeCad = pode(perfil, "cadastrar");
+  const [visao, setVisao, largo] = useVisao("produtos");
   useEffect(() => setLim(80), [q, filtro]);
   const lista = useMemo(() => {
     const n = norm(q), cod = /^\d+$/.test(q.trim()) ? +q.trim() : null;
@@ -165,15 +166,14 @@ export function ProdutosLista() {
     <div class="linha-add"><input id="busca-prod" class="inp" aria-label="Buscar produto" placeholder="Descrição, código, referência, marca ou aplicação" value=${q} onInput=${e => setQ(e.target.value)} />
       ${podeCad ? html`<button type="button" class="btn" onClick=${() => ir("/nfe")}>Entrada de nota (XML)</button><button type="button" class="btn btn-pri" onClick=${() => setEd({ tipo: ["servico", "terceiro"].includes(filtro) ? filtro : "produto", unidade: ["servico", "terceiro"].includes(filtro) ? "SERV" : "UN", ...(filtro === "terceiro" ? { margem_vista: Number(cfg.markupTerceiros) || 0, margem_prazo: Number(cfg.markupTerceiros) || 0, margem_atacado: Number(cfg.markupTerceiros) || 0 } : {}) })}>+ Novo</button>` : null}</div>
     <div class="chips rolagem">${[["todos", "Todos"], ["produto", "Produtos / peças"], ["servico", "Serviços"], ["terceiro", "Terceiros"], ["baixo", "Estoque baixo" + (nBaixo ? " (" + nBaixo + ")" : "")], ["inativos", "Inativos"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (filtro === k ? " ativo" : "")} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
-    <section class="card"><div class="secao-topo"><h3>${lista.length} item(ns)</h3>${ver ? html`<span class="sub">Estoque a custo: <b>${reais(valorEstoque)}</b></span><button type="button" class="btn btn-sm" onClick=${exportar}>Exportar planilha</button>` : null}</div>
-      ${lista.length && document.body.classList.contains("modo-balcao") ? html`<div class="grade-balcao"><table><thead><tr><th>Código</th><th>Referência</th><th>Descrição do produto / serviço</th><th>Un</th>
+    <section class="card"><div class="secao-topo"><h3>${lista.length} item(ns)</h3>${ver ? html`<span class="sub">Estoque a custo: <b>${reais(valorEstoque)}</b></span><button type="button" class="btn btn-sm" onClick=${exportar}>Exportar planilha</button>` : null}${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} />` : null}</div>
+      ${lista.length && visao === "tabela" ? html`<div class="grade-dados"><table><thead><tr><th>Código</th><th>Referência</th><th>Descrição do produto / serviço</th><th>Un</th>
           ${ver ? html`<th class="num">Vl. à vista</th><th class="num">Vl. a prazo</th>` : null}<th class="num">Estoque</th><th>Grupo / categoria</th><th>Marca</th><th>Localização</th></tr></thead>
         <tbody>${lista.slice(0, lim).map(p => { const est = p.tipo === "produto" && p.controla_estoque, baixo = estoqueBaixo(p), zerado = est && Number(p.estoque_atual) <= 0;
-          return html`<tr key=${p.id} tabindex="0" class=${p.ativo === false ? "g-outra" : p.tipo !== "produto" ? "g-servico" : zerado ? "g-zerado" : baixo ? "g-baixo" : "g-entregue"} onClick=${() => setEd(p)} onKeyDown=${e => e.key === "Enter" && setEd(p)}>
+          return html`<tr key=${p.id} tabindex="0" class=${p.ativo === false ? "g-inativo" : ""} onClick=${() => setEd(p)} onKeyDown=${e => e.key === "Enter" && setEd(p)}>
           <td class="mono">${p.codigo}</td><td class="mono">${p.referencia || ""}</td><td>${p.descricao}</td><td>${p.unidade}</td>
           ${ver ? html`<td class="num">${Number(p.preco_vista) ? reais(p.preco_vista) : ""}</td><td class="num">${Number(p.preco_prazo) ? reais(p.preco_prazo) : ""}</td>` : null}
-          <td class="num">${est ? qtdFmt(p.estoque_atual) : p.tipo === "produto" ? "—" : "serv."}</td><td>${p.categoria || ""}</td><td>${p.marca || ""}</td><td>${p.localizacao || ""}</td></tr>`; })}</tbody></table></div>
-        <div class="legenda-grade"><span class="lg g-entregue">Em estoque</span><span class="lg g-baixo">Estoque baixo</span><span class="lg g-zerado">Zerado</span><span class="lg g-servico">Serviço</span></div>
+          <td class="num"><span class=${zerado ? "c-bad" : baixo ? "c-warn" : ""}>${est ? qtdFmt(p.estoque_atual) : p.tipo === "produto" ? "—" : "serviço"}</span></td><td>${p.categoria || ""}</td><td>${p.marca || ""}</td><td>${p.localizacao || ""}</td></tr>`; })}</tbody></table></div>
         ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 200)}>Mostrar mais (${lista.length - lim})</button>` : null}`
       : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(p => { const baixo = estoqueBaixo(p); return html`<button type="button" key=${p.id} class=${"linha linha-prod" + (p.ativo === false ? " inativo" : "")} onClick=${() => setEd(p)}>
         <span class="cod">${p.codigo}</span>

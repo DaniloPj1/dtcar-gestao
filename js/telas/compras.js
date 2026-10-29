@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro } from "../ui.js";
-import { norm, soDig, reais, qtdFmt, fmtData, fmtDataHora, fmtDoc, fmtTel, parseValor, precoPelaMargem, arred } from "../util.js";
+import { norm, soDig, docValido, reais, qtdFmt, fmtData, fmtDataHora, fmtDoc, fmtTel, parseValor, precoPelaMargem, arred } from "../util.js";
 import { pode, UNIDADES } from "../regras.js";
 import { lerNFe, reconhecer, linkImagem } from "../nfe.js";
 import { contasDaNota, somaMes } from "./financeiro.js";
@@ -150,19 +150,23 @@ export function EntradaNFe({ params = {} }) {
 /* ---------------- fornecedores ---------------- */
 const FORN_VAZIO = { cnpj: "", razao: "", fantasia: "", ie: "", telefone: "", email: "", endereco: "", bairro: "", cidade: "", uf: "", cep: "", contato: "", obs: "", ativo: true, prestador: false, categoria_padrao: "" };
 export function FormFornecedor({ inicial, onFechar, onSalvo }) {
-  const { perfil, cfg, avisar, recarregar, confirmar } = useApp();
+  const { perfil, cfg, avisar, recarregar, confirmar, dados } = useApp();
   const [f, setF] = useState({ ...FORN_VAZIO, ...inicial, cnpj: fmtDoc(inicial.cnpj || ""), telefone: fmtTel(inicial.telefone || "") }), [erro, setErro] = useState(""), [notas, setNotas] = useState(null);
   useEffect(() => { if (f.id) api.notas.listar().then(l => setNotas(l.filter(n => n.fornecedor_id === f.id))).catch(() => setNotas([])); }, []);
   const set = o => { setF(x => ({ ...x, ...o })); setErro(""); };
   const T = (k, rot, attr = {}) => html`<${Campo} id=${"fo-" + k} rotulo=${rot}><${Texto} id=${"fo-" + k} valor=${f[k]} onMuda=${v => set({ [k]: v })} ...${attr} /></${Campo}>`;
   const salvar = async () => {
     if (!f.razao.trim()) return setErro("Informe a razão social.");
+    const doc = soDig(f.cnpj);
+    if (doc && !docValido(doc)) return setErro("CNPJ/CPF inválido. Confira os dígitos ou deixe em branco.");
+    if (doc && dados.fornecedores.some(x => x.id !== f.id && soDig(x.cnpj) === doc)) return setErro("Já existe um fornecedor com este CNPJ/CPF.");
+    const tel = soDig(f.telefone); if (tel && (tel.length < 10 || tel.length > 11)) return setErro("Informe o telefone com DDD.");
     const { id, criado_em, atualizado_em, ...resto } = f;
     try { const r = await api.fornecedores.salvar({ ...(id ? { id } : {}), ...resto, razao: f.razao.trim(), cnpj: soDig(f.cnpj), telefone: soDig(f.telefone) }); avisar("Fornecedor salvo."); await recarregar(["fornecedores"]); onSalvo ? onSalvo(r) : onFechar(); }
     catch (e) { setErro(/duplicate/.test(e.message) ? "Já existe um fornecedor com este CNPJ." : e.message); }
   };
   const excluir = async () => { if (!await confirmar({ titulo: "Excluir fornecedor", texto: "Os vínculos de códigos deste fornecedor com os seus produtos também serão apagados.", botao: "Excluir", perigo: true })) return;
-    try { await api.fornecedores.excluir(f.id); recarregar(["fornecedores"], { completo: true }); onFechar(); } catch (e) { setErro(e.message); } };
+    try { await api.fornecedores.excluir(f.id); avisar("Fornecedor excluído."); recarregar(["fornecedores"], { completo: true }); onFechar(); } catch (e) { setErro(e.message); } };
   return html`<${Modal} titulo=${f.id ? "Fornecedor" : "Novo fornecedor"} largo onFechar=${onFechar}>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <fieldset disabled=${!pode(perfil, "cadastrar")} class="sem-borda form-ficha">
@@ -184,7 +188,7 @@ export function FormFornecedor({ inicial, onFechar, onSalvo }) {
 export function FornecedoresLista() {
   const { dados, perfil, ir } = useApp();
   const [q, setQ] = useState(""), [ed, setEd] = useState(null);
-  const lista = dados.fornecedores.filter(f => !q || norm(f.razao).includes(norm(q)) || norm(f.fantasia).includes(norm(q)) || (soDig(q) && f.cnpj.includes(soDig(q)))).sort((a, b) => (a.fantasia || a.razao).localeCompare(b.fantasia || b.razao));
+  const lista = dados.fornecedores.filter(f => !q || norm(f.razao).includes(norm(q)) || norm(f.fantasia).includes(norm(q)) || (soDig(q) && (f.cnpj || "").includes(soDig(q)))).sort((a, b) => (a.fantasia || a.razao || "").localeCompare(b.fantasia || b.razao || ""));
   return html`
     <div class="linha-add"><input id="busca-forn" class="inp" aria-label="Buscar fornecedor" placeholder="Nome ou CNPJ" value=${q} onInput=${e => setQ(e.target.value)} />
       ${pode(perfil, "cadastrar") ? html`<button type="button" class="btn" onClick=${() => ir("/nfe")}>Entrada de nota (XML)</button><button type="button" class="btn btn-pri" onClick=${() => setEd({})}>+ Novo</button>` : null}</div>

@@ -219,9 +219,7 @@ export function Ordem({ id }) {
   const { cfg, perfil, dados, avisar, confirmar, ir, recarregar } = useApp();
   const [o, setO] = useState(null);
   const [erroCarga, setErroCarga] = useState("");
-  const BALCAO = document.body.classList.contains("modo-balcao");
-  const [aba, setAba] = useState(BALCAO ? "itens" : "principal");
-  const [selItem, setSelItem] = useState(null);
+  const [aba, setAba] = useState("principal");
   const [itens, setItens] = useState([]);
   const [removidos, setRemovidos] = useState([]);
   const [campos, setCampos] = useState({});
@@ -556,77 +554,10 @@ export function Ordem({ id }) {
   const nItens = itens.filter(i => i.aprovado !== false).length;
 
   const podeSalvar = sujo && (editaInfo || st === "execucao");
-  /* ===== modo balcão: tela no leiaute do OS Oficina 3.0 ===== */
-  const podeEditarItens = editavelOrc || podeAdicional;
-  const editavelItem = i => editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined));
-  const itemSel = itens.find(i => i.id === selItem);
-  const dEnt = new Date(o.criado_em);
-  const TIPO_CURTO = { peca: "Peça", servico: "Serviço", terceiro: "Terceiro" };
-  const cabClassico = html`<section class="card os-classica">
-    <div class="osc-cab">
-      <div class="osc-num"><span>Nº da ordem</span><b>${o._provisorio || String(o.numero).padStart(5, "0")}</b><small><${Status} s=${st} /></small></div>
-      <div class="osc-c"><span>Data entrada</span><b>${dEnt.toLocaleDateString("pt-BR")}</b></div>
-      <div class="osc-c"><span>Hora</span><b>${dEnt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</b></div>
-      <div class="osc-c osc-prev"><span>Prev. entrega</span>${editaInfo ? html`<div class="osc-linha"><input type="date" class="inp" aria-label="Previsão de entrega" value=${campos.previsao_entrega || ""} onInput=${e => setCampo({ previsao_entrega: e.target.value })} /><input type="time" class="inp inp-hora" aria-label="Hora prevista" value=${campos.previsao_hora || ""} onInput=${e => setCampo({ previsao_hora: e.target.value })} /></div>` : html`<b>${o.previsao_entrega ? fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "") : "—"}</b>`}</div>
-      ${verValores ? html`<div class="osc-c osc-tab"><span>Tabela de preço</span>${Object.entries(TABELAS_PRECO).map(([k, t]) => html`<label key=${k}><input type="radio" name="osc-tabela" checked=${(campos.tabela_preco || "vista") === k} disabled=${!editavelOrc} onChange=${() => setCampo({ tabela_preco: k })} /> ${t}</label>`)}</div>` : null}
-      <div class="osc-c osc-cli"><span>Descrição do cliente</span><div class="osc-linha"><b class="osc-caixa">${o.cliente.nome}</b>
-        ${o.cliente_id ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/cliente/" + o.cliente_id)}>Consultar</button>` : null}
-        ${editaInfo ? html`<button type="button" class="btn btn-sm" onClick=${() => setModal({ tipo: "cliente" })}>Trocar</button>` : null}</div></div>
-      <div class="osc-c"><span>Placa</span><button type="button" class="botao-limpo" title="Ficha do veículo" disabled=${!o.veiculo_id} onClick=${() => ir("/veiculo/" + o.veiculo_id)}><${Placa} placa=${o.veiculo.placa} /></button></div>
-      <div class="osc-c"><span>Veículo</span><b>${[o.veiculo.marca, o.veiculo.modelo, o.veiculo.ano].filter(Boolean).join(" ")}</b><small>${fmtKm(o.km_entrada)}</small></div>
-      <div class="osc-c"><span>Nome do contato</span>${editaInfo ? html`<input class="inp" aria-label="Nome do contato" value=${campos.contato} onInput=${e => setCampo({ contato: e.target.value })} />` : html`<b>${o.contato || "—"}</b>`}</div>
-      <div class="osc-c"><span>Telefone</span><b>${o.cliente.telefone ? fmtTel(o.cliente.telefone) : "—"}</b>${o.cliente.telefone ? html`<a class="btn-link" href=${linkWhats(o.cliente.telefone, "Olá, " + primeiroNome(o) + "! ")} target="_blank" rel="noopener">WhatsApp</a>` : null}</div>
-      <div class="osc-c"><span>Mecânico / responsável</span><select class="inp" aria-label="Mecânico responsável" disabled=${!aberta || !(gestor || st === "execucao")} value=${o.mecanico_id || ""} onChange=${e => salvarMecanico(e.target.value)}>
-        <option value="">${o.mecanico_nome && !o.mecanico_id ? o.mecanico_nome : "Selecione"}</option>${mecanicos.map(m => html`<option key=${m.id} value=${m.id}>${m.nome}</option>`)}</select></div>
-      <div class="osc-c osc-box"><span>Nº box</span>${editaInfo ? html`<input class="inp" aria-label="Número do box" value=${campos.box} onInput=${e => setCampo({ box: e.target.value.slice(0, 10) })} />` : html`<b>${o.box || "—"}</b>`}</div>
-      <div class="osc-c"><span>Situação atual</span>${editaInfo ? html`<select class="inp" aria-label="Situação" value=${campos.situacao} onChange=${e => setCampo({ situacao: e.target.value })}><option value="">—</option>${situacoes.map(x => html`<option value=${x}>${x}</option>`)}</select>` : html`<b>${o.situacao || "—"}</b>`}</div>
-    </div>
-    ${legado ? html`<div class="info">O.S. ${legado.numero} importada do OS Oficina 3.0${legado.situacao ? " · situação no sistema anterior: " + legado.situacao : ""}.</div>` : null}
-    ${!ck.feito && !legado && podeCk ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
-  </section>`;
-  const abaItensClassica = html`<section class="card osc-itens">
-    <div class="osc-corpo">
-      <div class="osc-botoes">
-        ${podeEditarItens ? html`<button type="button" class="osc-bt c-verde" onClick=${() => novoItem("peca")}><span class="mo-ic">${I.caixa}</span>Incluir peça</button>
-          <button type="button" class="osc-bt c-azul" onClick=${() => novoItem("servico")}><span class="mo-ic">${I.chave}</span>Incluir serviço</button>
-          <button type="button" class="osc-bt c-laranja" onClick=${() => novoItem("terceiro")}><span class="mo-ic">${I.fabrica}</span>Terceiro</button>` : null}
-        <button type="button" class="osc-bt c-cinza" disabled=${!itemSel || !editavelItem(itemSel)} onClick=${() => setModal({ tipo: "item", item: itemSel })}><span class="mo-ic">${I.editar}</span>Alterar</button>
-        <button type="button" class="osc-bt c-verm" disabled=${!itemSel || !editavelOrc} onClick=${async () => { if (await confirmar({ titulo: "Excluir item", texto: itemSel.descricao, botao: "Excluir", perigo: true })) { excluirItem(itemSel); setSelItem(null); } }}><span class="mo-ic">×</span>Excluir</button>
-      </div>
-      <div class="grade-balcao osc-grade"><table><thead><tr>${execOn ? html`<th>Exec.</th>` : null}<th>Tipo</th><th>Referência</th><th>Descrição do produto / serviço</th><th>Un</th><th class="num">Quant.</th>
-          ${verValores ? html`<th class="num">Valor</th><th class="num">Desconto</th><th class="num">Vlr total</th>` : null}<th>Aprovação</th></tr></thead>
-        <tbody>${itens.length ? itens.map(i => html`<tr key=${i.id} class=${(selItem === i.id ? "sel " : "") + (i.aprovado === false ? "g-outra" : i.aprovado === true ? "g-entregue" : "g-aberta")} tabindex="0"
-            onClick=${() => setSelItem(i.id)} onDblClick=${() => editavelItem(i) && setModal({ tipo: "item", item: i })} onKeyDown=${e => e.key === "Enter" && editavelItem(i) && setModal({ tipo: "item", item: i })}>
-          ${execOn ? html`<td>${i.aprovado === true ? html`<input type="checkbox" aria-label=${"Executado: " + i.descricao} checked=${i.executado} disabled=${st !== "execucao" || !pode(perfil, "executar") || !!ocupado} onClick=${e => e.stopPropagation()} onChange=${e => marcarExecutado(i, e.target.checked)} />` : ""}</td>` : null}
-          <td>${TIPO_CURTO[i.tipo]}</td><td class="mono">${i.codigo || ""}</td><td>${i.descricao}${i.fornecida_cliente ? " (peça do cliente)" : ""}${i.adicional ? " · adicional" : ""}</td>
-          <td>${i.tipo === "servico" && i.horas ? "h" : "UN"}</td><td class="num">${i.tipo === "servico" && i.horas ? qtdFmt(i.horas) : qtdFmt(i.qtd)}</td>
-          ${verValores ? html`<td class="num">${i.fornecida_cliente ? "—" : reais(i.valor_unit)}</td><td class="num">${Number(i.desconto) ? reais(i.desconto) : ""}</td><td class="num"><b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b></td>` : null}
-          <td>${i.aprovado === true ? "Aprovado" : i.aprovado === false ? "Não aprovado" : st === "diagnostico" ? "Orçamento" : "Aguardando"}</td></tr>`)
-          : html`<tr><td colspan="10" class="osc-vazio">Nenhum item. Use os botões à esquerda para incluir peças e serviços.</td></tr>`}</tbody></table></div>
-    </div>
-    ${pendentes.length && st !== "diagnostico" ? html`<div class="aviso">${pendentes.length} item(ns) aguardando aprovação do cliente. Não execute antes da aprovação.</div>` : null}
-    <div class="osc-rodape">
-      <div class="osc-cond">${verValores ? html`<label>Condições de pagamento${editaInfo ? html`<input class="inp" value=${campos.condicoes_pagamento} onInput=${e => setCampo({ condicoes_pagamento: e.target.value })} />` : html`<b>${o.condicoes_pagamento || "—"}</b>`}</label>
-        <label>Desconto geral${editavelOrc ? html`<${Dinheiro} id="osc-desc" valor=${campos.desconto} onMuda=${v => setCampo({ desconto: v })} />` : html`<b>${reais(tAtual.desconto)}</b>`}</label>
-        <button type="button" class="btn btn-sm" onClick=${() => setAba("pagamento")}>Pagamento e recibos</button>` : null}</div>
-      ${verValores ? html`<div class="osc-totais">
-        <div><span>Valor produtos</span><b>${reais(tAtual.pecas)}</b></div><div><span>Valor serviços</span><b>${reais(tAtual.servicos)}</b></div>
-        <div><span>Terceiros</span><b>${reais(tAtual.terceiros)}</b></div><div class="neg"><span>Valor desconto (−)</span><b>${reais(tAtual.desconto)}</b></div>
-        <div class="osc-total"><span>TOTAL R$</span><b>${reais(tAtual.total).replace("R$", "").trim()}</b></div></div>` : null}
-    </div>
-  </section>`;
-  const barraClassica = html`<div class="osc-barra"><div class="in">
-    ${acoes}
-    <span class="espaco"></span>
-    <button type="button" class="btn" disabled=${!!ocupado} onClick=${imprimir}>Imprimir</button>
-    ${podeSalvar ? html`<button type="button" class="btn" onClick=${carregar}>Descartar</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar ordem"}</button>` : null}
-    <button type="button" class="btn" onClick=${async () => { if (podeSalvar && !await confirmar({ titulo: "Sair da ordem", texto: "Há alterações não salvas. Sair mesmo assim?", botao: "Sair sem salvar", perigo: true })) return; ir("/ordens"); }}>Sair da ordem</button>
-  </div></div>`;
   const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
-  if (BALCAO) abas.splice(3, 0, ["pagamento", "Pagamento"]);
-  const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: BALCAO ? abaItensClassica : abaItens, pagamento: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
-  return html`<div class=${"pagina" + (BALCAO ? " os-balcao" : "")}>
-    ${BALCAO ? cabClassico : html`<button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
+  const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
+  return html`<div class="pagina">
+    <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
     <section class="card cab-os">
       <div class="det-cab"><button type="button" class="botao-limpo" title="Ficha do veículo" disabled=${!o.veiculo_id} onClick=${() => ir("/veiculo/" + o.veiculo_id)}><${Placa} placa=${o.veiculo.placa} grande /></button><div class="meio"><h2>${o.veiculo.marca} ${o.veiculo.modelo} ${o.veiculo.ano}</h2>
         <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}${o.box ? " · box " + o.box : ""}</div></div><div class="pills"><${Status} s=${st} />${o.situacao ? html`<span class="pill p-info">${o.situacao}</span>` : null}</div></div>
@@ -644,11 +575,10 @@ export function Ordem({ id }) {
         ${verValores && recibos.some(r => !r.cancelado) ? html`<button type="button" class="btn-link" onClick=${() => setAba("itens")}>Recibos (${recibos.filter(r => !r.cancelado).length})</button>` : null}
         ${st === "diagnostico" && o.cliente.telefone ? html`<button type="button" class="btn-link" onClick=${() => whats("entrada")}>Avisar recebimento</button>` : null}
       </div>
-    </section>`}
+    </section>
     <${Abas} abas=${abas} ativa=${aba} onTroca=${setAba} />
     ${corpo}
-    ${BALCAO ? barraClassica : null}
-    ${podeSalvar && !BALCAO ? html`<div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${carregar}>Descartar alterações</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar O.S."}</button></div></div>` : null}
+    ${podeSalvar ? html`<div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${carregar}>Descartar alterações</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar O.S."}</button></div></div>` : null}
 
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}

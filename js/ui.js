@@ -127,3 +127,16 @@ export function BuscaCliente({ id = "busca-cliente", valor, onEscolha, disabled 
     ${n ? html`<div class="lista">${res.map(x => html`<button type="button" key=${x.id} class="linha" onClick=${() => { onEscolha(x.id); setQ(""); }}><span class="meio"><strong>${x.nome}</strong><span>cód. ${x.codigo ?? "—"} · ${x.telefone ? fmtTel(x.telefone) : "sem telefone"}</span></span></button>`)}
       ${!res.length ? html`<span class="dica">Nenhum cliente encontrado.</span>` : null}</div>` : null}</div>`;
 }
+
+/** Visão Lista/Tabela escolhida por tela e guardada no aparelho (tabela só em tela de computador) */
+export function useVisao(chave) {
+  const [v, setV] = useState(() => { try { return localStorage.getItem("dtcar-visao-" + chave) || "lista"; } catch (e) { return "lista"; } });
+  const muda = x => { setV(x); try { localStorage.setItem("dtcar-visao-" + chave, x); } catch (e) {} };
+  const largo = typeof matchMedia === "function" && matchMedia("(min-width: 900px)").matches;
+  return [largo ? v : "lista", muda, largo];
+}
+export function TrocaVisao({ visao, onTroca }) {
+  return html`<div class="troca-visao" role="group" aria-label="Forma de exibição">
+    <button type="button" aria-pressed=${visao === "lista" ? "true" : "false"} title="Lista" onClick=${() => onTroca("lista")}>${I.lista}<span>Lista</span></button>
+    <button type="button" aria-pressed=${visao === "tabela" ? "true" : "false"} title="Tabela" onClick=${() => onTroca("tabela")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18M3 14.5h18M9 9v11"/></svg><span>Tabela</span></button></div>`;
+}

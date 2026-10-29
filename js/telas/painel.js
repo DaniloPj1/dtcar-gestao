@@ -1,6 +1,6 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Placa, Status, Vazio, I } from "../ui.js";
+import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js";
 import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, fmtTel, exPlaca, linkWhats } from "../util.js";
 import { STATUS, ABERTOS, pode } from "../regras.js";
 import { LS_NOVA } from "./entrada.js";
@@ -320,14 +320,14 @@ const exPlacaCurta = o => (o.veiculo && o.veiculo.placa) || "sem placa";
 
 /** Grade de O.S. no estilo do OS Oficina (modo balcão): abertas em amarelo, entregues em verde */
 function GradeOS({ lista, ver, ir, soma, total }) {
-  const cls = o => o._pendente ? "g-prov" : ABERTOS.includes(o.status) ? "g-aberta" : o.status === "entregue" ? "g-entregue" : "g-outra";
-  return html`<div class="grade-balcao"><table><thead><tr><th>O.S.</th><th>Entrada</th><th>Hora</th><th>Placa</th><th>Modelo</th><th>Nome do cliente</th><th>Telefone</th><th>Mecânico</th>
+  const cls = o => o._pendente ? "g-prov" : "";
+  return html`<div class="grade-dados"><table><thead><tr><th>O.S.</th><th>Entrada</th><th>Hora</th><th>Placa</th><th>Modelo</th><th>Nome do cliente</th><th>Telefone</th><th>Mecânico</th>
       ${ver ? html`<th class="num">Total</th>` : null}<th>Situação</th></tr></thead>
     <tbody>${lista.map(o => { const d = new Date(o.criado_em); return html`<tr key=${o.id} class=${cls(o)} tabindex="0" onClick=${() => ir("/os/" + o.id)} onKeyDown=${e => e.key === "Enter" && ir("/os/" + o.id)}>
       <td class="mono">${o._provisorio || String(o.numero).padStart(5, "0")}</td><td>${d.toLocaleDateString("pt-BR")}</td><td>${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</td>
       <td class="mono">${exPlaca(o.veiculo.placa)}</td><td>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")}</td><td>${o.cliente.nome}</td><td>${o.cliente.telefone ? fmtTel(o.cliente.telefone) : ""}</td><td>${o.mecanico_nome || ""}</td>
       ${ver ? html`<td class="num"><b>${Number(o.total) ? reais(o.total) : ""}</b></td>` : null}
-      <td>${o._pendente ? "Aguardando número" : STATUS[o.status] ? STATUS[o.status].t : o.status}${o.situacao ? " · " + o.situacao : ""}</td></tr>`; })}</tbody>
+      <td>${o._pendente ? html`<span class="pill p-warn">Aguardando número</span>` : html`<${Status} s=${o.status} />`}${o.situacao ? html` <span class="sub">${o.situacao}</span>` : null}</td></tr>`; })}</tbody>
     <tfoot><tr><td colspan="8">${total} O.S.${total > lista.length ? " (mostrando " + lista.length + ")" : ""}</td>${ver ? html`<td class="num">${reais(soma)}</td>` : null}<td></td></tr></tfoot></table></div>`;
 }
 
@@ -335,17 +335,18 @@ export function Ordens({ params = {} }) {
   const { dados, perfil, ir } = useApp();
   const ver = pode(perfil, "verValores");
   const [q, setQ] = useState(""), [filtro, setFiltro] = useState(params.filtro || "abertas"), [lim, setLim] = useState(60);
+  const [visao, setVisao, largo] = useVisao("os");
   const lista = useMemo(() => { const n = norm(q), p = normPlaca(q), d = soDig(q);
     return dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? ABERTOS.includes(o.status) : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado : o.status === filtro))
       && (!n || norm(o.cliente.nome).includes(n) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || norm(o.veiculo.modelo).includes(n) || (d && String(o.numero) === String(+d)) || norm(o.reclamacao).includes(n)));
   }, [q, filtro, dados.ordens]);
   useEffect(() => setLim(60), [q, filtro]);
   const soma = lista.reduce((s, o) => s + Number(o.total || 0), 0);
-  return html`<div class="pagina">
+  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : "")}>
     <div class="campo"><label for="busca-os">Buscar por placa, cliente, modelo, número ou reclamação</label><input id="busca-os" class="inp" value=${q} onInput=${e => setQ(e.target.value)} /></div>
     <div class="chips rolagem">${[["abertas", "Abertas"], ["todas", "Todas"], ...Object.entries(STATUS).map(([k, v]) => [k, v.curto]), ["herdadas", "Herdadas abertas"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (filtro === k ? " ativo" : "")} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
-    <section class="card"><div class="secao-topo"><h2>Ordens de serviço</h2><span class="sub">${lista.length}${ver && soma ? " · " + reais(soma) : ""}</span></div>
-      ${lista.length && document.body.classList.contains("modo-balcao") ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} />`
+    <section class="card"><div class="secao-topo"><h2>Ordens de serviço</h2><span class="sub">${lista.length}${ver && soma ? " · " + reais(soma) : ""}</span>${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} />` : null}</div>
+      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} />`
       : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} onClick=${() => ir("/os/" + o.id)} />`)}</div>
         ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}`
         : html`<${Vazio}>${dados.ordens.length ? "Nenhuma O.S. com esse filtro." : "Nenhuma O.S. ainda."}</${Vazio}>`}

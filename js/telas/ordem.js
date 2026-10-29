@@ -3,9 +3,10 @@ import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, BuscaCliente } from "../ui.js";
 import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, precoPelaMargem, margemDoPreco, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
-import { STATUS, FLUXO, ABERTOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
+import { STATUS, FLUXO, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
-import { FormVeiculo, edVeiculo, SitCliente } from "./cadastros.js";
+import { FormVeiculo, edVeiculo, SitCliente, FormCliente, edCliente } from "./cadastros.js";
+import { CancelarModal } from "./acoesos.js";
 import { ReciboModal } from "./recibos.js";
 import { BuscaFornecedor } from "./financeiro.js";
 
@@ -134,7 +135,8 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   </${Modal}>`;
 }
 
-function ItemLinha({ i, verValores, onClick, mostrarAprov, exec }) {
+const ICON_LIXO = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`;
+function ItemLinha({ i, verValores, onClick, mostrarAprov, exec, onExcluir }) {
   const sub = [];
   if (i.codigo && i.tipo !== "servico") sub.push(i.codigo);
   if (i.tipo === "servico") sub.push(i.horas ? qtdFmt(i.horas) + " h" + (verValores ? " × " + reais(i.valor_unit) : "") : qtdFmt(i.qtd) + (verValores ? " × " + reais(i.valor_unit) : " un"));
@@ -146,7 +148,8 @@ function ItemLinha({ i, verValores, onClick, mostrarAprov, exec }) {
   return html`<div class=${"linha item-os" + (i.aprovado === false ? " recusado" : "")}>
     ${exec ? html`<input type="checkbox" class="chk-exec" aria-label=${"Executado: " + i.descricao} checked=${i.executado} disabled=${exec.disabled} onChange=${e => exec.onMuda(e.target.checked)} />` : null}
     <button type="button" class="meio botao-limpo" onClick=${onClick} disabled=${!onClick}><strong>${i.descricao}${i.adicional ? html` <em class="tag">adicional</em>` : null}${i.produto_id ? html` <em class="tag tag-cad">cadastro</em>` : null}</strong><span>${sub.join(" · ")}</span></button>
-    <span class="dir">${verValores ? html`<b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b>` : null}${ap}</span></div>`;
+    <span class="dir">${verValores ? html`<b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b>` : null}${ap}</span>
+    ${onExcluir ? html`<button type="button" class="btn-lixo" title="Excluir da O.S." aria-label=${"Excluir " + i.descricao} onClick=${onExcluir}>${ICON_LIXO}</button>` : null}</div>`;
 }
 
 /* ---------------- Aprovação ---------------- */
@@ -178,22 +181,24 @@ function EntregaModal({ o, cfg, saldo, onFechar, onConfirmar }) {
   const [km, setKm] = useState(String(o.km_entrada || ""));
   const [forma, setForma] = useState(o.forma_pagamento || "");
   const [garantia, setGarantia] = useState(String(o.garantia_dias || cfg.garantiaDias || 90));
-  const [recibo, setRecibo] = useState(saldo > 0);
+  const [recibo, setRecibo] = useState(saldo > 0 ? "" : "nada");
   const [erro, setErro] = useState("");
   const assin = useRef(null);
   const recusado = o.status === "recusado";
   const confirmar = () => {
     const k = parseInt(soDig(km), 10);
     if (!(k >= (o.km_entrada || 0))) return setErro("O KM de saída não pode ser menor que o de entrada (" + fmtKm(o.km_entrada) + ").");
-    if (o.total > 0 && !forma) return setErro("Informe a forma de pagamento.");
-    onConfirmar({ km: k, forma, garantia: parseInt(garantia, 10) || 0, assin: assin.current, recibo: recibo && saldo > 0 });
+    if (saldo > 0 && !recibo) return setErro("Informe se o pagamento foi recebido agora ou fica a receber.");
+    if (recibo === "agora" && !forma) return setErro("Informe a forma de pagamento.");
+    onConfirmar({ km: k, forma, garantia: parseInt(garantia, 10) || 0, assin: assin.current, recibo: recibo === "agora" && saldo > 0 });
   };
   return html`<${Modal} titulo=${recusado ? "Registrar retirada" : "Registrar entrega"} onFechar=${onFechar}>
     <div class="total-item"><span>Valor da O.S.</span><b>${reais(o.total)}</b></div>
     ${saldo < o.total ? html`<div class="total-item"><span>Saldo a receber</span><b>${reais(saldo)}</b></div>` : null}
     <${Campo} id="ent-km" rotulo="KM de saída" obrig><input id="ent-km" class="inp" inputmode="numeric" value=${km ? Number(soDig(km)).toLocaleString("pt-BR") : ""} onInput=${e => { setKm(soDig(e.target.value).slice(0, 7)); setErro(""); }} /></${Campo}>
-    ${o.total > 0 ? html`<div class="campo"><label>Forma de pagamento <i>*</i></label><${Seg} rotulo="Pagamento" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>` : null}
-    ${saldo > 0 ? html`<label class="linha-check"><input type="checkbox" id="ent-recibo" checked=${recibo} onChange=${e => setRecibo(e.target.checked)} /><span>Pagamento recebido agora: emitir recibo de ${reais(saldo)}</span></label>` : null}
+    ${saldo > 0 ? html`<div class="campo"><label>Pagamento <i>*</i></label><${Seg} rotulo="Pagamento" opcoes=${[["Recebido agora", "ok"], ["Receber depois", "warn"]]} valor=${recibo === "agora" ? "Recebido agora" : recibo === "depois" ? "Receber depois" : ""} onEscolha=${v => { setRecibo(v === "Recebido agora" ? "agora" : "depois"); setErro(""); }} />
+      <span class="dica">${recibo === "depois" ? "O veículo sai e a O.S. fica “a receber”. Ela só é finalizada quando o valor for recebido (recibo)." : recibo === "agora" ? "Em seguida abre o recibo de " + reais(saldo) + ". A O.S. é finalizada ao emitir o recibo." : "O carro pode sair antes do pagamento: escolha “Receber depois”."}</span></div>` : null}
+    ${o.total > 0 && recibo !== "nada" ? html`<div class="campo"><label>Forma de pagamento${recibo === "agora" ? html` <i>*</i>` : " (combinada)"}</label><${Seg} rotulo="Forma de pagamento" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>` : null}
     ${!recusado ? html`<${Campo} id="ent-gar" rotulo="Garantia (dias)" dica="Mínimo legal para serviços: 90 dias (CDC, art. 26, II)."><input id="ent-gar" class="inp" inputmode="numeric" value=${garantia} onInput=${e => setGarantia(soDig(e.target.value))} /></${Campo}>` : null}
     <div class="campo"><label>Assinatura do cliente na retirada</label><${PadAssinatura} apiRef=${assin} altura=${150} /></div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
@@ -215,7 +220,7 @@ function ImprimirModal({ o, verValores, onFechar }) {
 }
 
 /* ---------------- Tela da O.S. ---------------- */
-export function Ordem({ id }) {
+export function Ordem({ id, params = {} }) {
   const { cfg, perfil, dados, avisar, confirmar, ir, recarregar } = useApp();
   const [o, setO] = useState(null);
   const [erroCarga, setErroCarga] = useState("");
@@ -237,6 +242,11 @@ export function Ordem({ id }) {
     } catch (e) { setErroCarga(e.message); }
   };
   useEffect(() => { setO(null); carregar(); carregarRecibos(); }, [id]);
+  // vindo da lista com "Entregar" ou "Receber": abre a janela certa assim que a O.S. carrega
+  const acaoInicial = useRef(params.acao);
+  useEffect(() => { if (!o || !acaoInicial.current) return; const a = acaoInicial.current; acaoInicial.current = null;
+    if (a === "entregar" && ["pronto", "recusado"].includes(o.status)) setModal({ tipo: "entrega" });
+    if (a === "receber" && o.status === "entregue") setModal({ tipo: "recibo" }); }, [o]);
   if (erroCarga) return html`<div class="pagina"><div class="erros">Não foi possível abrir a O.S.: ${erroCarga}</div><button class="btn" onClick=${() => ir("/ordens")}>Voltar</button></div>`;
   if (!o) return html`<div class="pagina"><div class="carregando">Abrindo O.S.…</div></div>`;
 
@@ -352,18 +362,19 @@ export function Ordem({ id }) {
     await api.atualizarOrdem(o.id, { mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" }); await evento("mecanico", "Técnico responsável: " + (m ? m.nome : "nenhum") + ".");
     setO(x => ({ ...x, mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" })); recarregar(["ordens"]);
   });
-  const trocarCliente = cid => acao("cliente", async () => {
-    const c = dados.clientes.find(x => x.id === cid); if (!c) return;
+  const trocarCliente = (cid, novo) => acao("cliente", async () => {
+    const c = dados.clientes.find(x => x.id === cid) || novo; if (!c) return;
     if (c.situacao === "bloqueado") throw new Error("Cliente bloqueado: " + (c.restricao || "verifique o cadastro") + ".");
     const cliente = { nome: c.nome, telefone: c.telefone || "", doc: c.doc || "", endereco: endCompleto(c) };
     await api.atualizarOrdem(o.id, { cliente_id: c.id, cliente }); await evento("cliente", "Cliente da O.S. alterado para " + c.nome + ".");
     setO(x => ({ ...x, cliente_id: c.id, cliente })); setModal(null); recarregar(["ordens"]);
   });
-  const marcarPronto = async () => {
+  const marcarPronto = async (entregarJa) => {
     const falta = itens.filter(i => i.aprovado === true && !i.executado);
     if (pendentes.length) return avisar("Há itens adicionais aguardando aprovação do cliente. Registre a decisão antes de concluir.", true);
     if (falta.length && !await confirmar({ titulo: "Itens não marcados", texto: falta.length + " item(ns) aprovado(s) não foram marcados como executados: " + falta.map(i => i.descricao).join(", ") + ". Concluir mesmo assim?", botao: "Concluir" })) return;
-    acao("pronto", async () => { await salvar({ status: "pronto" }, true); await evento("pronto", "Serviço concluído. Veículo pronto para retirada."); setModal({ tipo: "enviar", qual: "pronto" }); });
+    acao("pronto", async () => { await salvar({ status: "pronto" }, true); await evento("pronto", "Serviço concluído. Veículo pronto no pátio, aguardando retirada.");
+      setModal(entregarJa ? { tipo: "entrega" } : { tipo: "enviar", qual: "pronto" }); });
   };
   const confirmarEntrega = ({ km, forma, garantia, assin, recibo }) => acao("entregar", async () => {
     let assinatura = "";
@@ -377,10 +388,7 @@ export function Ordem({ id }) {
     if (recibo) setModal({ tipo: "recibo", forma });
     else setModal({ tipo: "enviar", qual: st === "recusado" ? null : "entrega" });
   });
-  const cancelar = async () => {
-    if (!await confirmar({ titulo: "Cancelar " + numOS(o.numero), texto: "A O.S. fica registrada como cancelada no histórico.", botao: "Cancelar O.S.", perigo: true })) return;
-    acao("cancelar", async () => { await api.atualizarOrdem(o.id, { status: "cancelado" }); await evento("cancelamento", "O.S. cancelada."); await carregar(); recarregar(["ordens", "produtos"]); });
-  };
+  const cancelar = () => setModal({ tipo: "cancelar" });
   const reabrir = async () => {
     const destino = st === "entregue" ? "pronto" : "diagnostico";
     if (!await confirmar({ titulo: "Reabrir " + numOS(o.numero), texto: st === "entregue" ? "A O.S. volta para “Pronto para retirada”. As peças continuam baixadas do estoque enquanto a O.S. estiver ativa." : "A O.S. volta para “Em diagnóstico” para refazer o orçamento.", botao: "Reabrir" })) return;
@@ -417,10 +425,10 @@ export function Ordem({ id }) {
   let acoes = [];
   if (st === "diagnostico" && gestor) acoes = [B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, true)];
   if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Registrar aprovação", () => setModal({ tipo: "aprovar" }), true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar)];
-  if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Concluir serviço", marcarPronto, true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
+  if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Pronto no pátio", () => marcarPronto(false), true), pode(perfil, "entregar") ? B("Pronto e entregue", () => marcarPronto(true)) : null, pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
   if (st === "pronto" && pode(perfil, "entregar")) acoes = [B("Registrar entrega", () => setModal({ tipo: "entrega" }), true), B("Avisar cliente", () => whats("pronto"))];
   if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", () => setModal({ tipo: "entrega" }), true)];
-  if (st === "entregue" && pode(perfil, "entregar")) acoes = [saldo > 0 ? B("Emitir recibo", () => setModal({ tipo: "recibo" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
+  if (st === "entregue" && pode(perfil, "entregar")) acoes = [saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", () => setModal({ tipo: "recibo" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
   acoes = acoes.filter(Boolean);
   const passo = FLUXO.indexOf(st);
 
@@ -443,7 +451,7 @@ export function Ordem({ id }) {
         <span class="dica">Vale para os próximos itens buscados no cadastro.</span>` : html`<b>${TABELAS_PRECO[o.tabela_preco || "vista"]}</b>`}</div>` : null}
     </section>
     <section class="card"><div class="secao-topo"><h3>Cliente</h3>${editaInfo ? html`<button type="button" class="btn btn-sm" onClick=${() => setModal({ tipo: "cliente" })}>Trocar cliente</button>` : null}</div>
-      <div class="kv"><div><span>Nome</span><b>${o.cliente_id ? html`<button type="button" class="btn-link" onClick=${() => ir("/cliente/" + o.cliente_id)}>${o.cliente.nome}</button>` : o.cliente.nome} <${SitCliente} c=${cliCad} /></b></div>
+      <div class="kv"><div><span>Nome</span><b>${o.cliente_id && cliCad ? html`<button type="button" class="btn-link" title="Abrir o cadastro do cliente" onClick=${() => setModal({ tipo: "cadcliente" })}>${o.cliente.nome}</button>` : o.cliente.nome} <${SitCliente} c=${cliCad} /></b></div>
         <div><span>Telefone</span><b>${o.cliente.telefone ? fmtTel(o.cliente.telefone) : "—"}</b></div>${o.cliente.doc ? html`<div><span>CPF/CNPJ</span><b>${fmtDoc(o.cliente.doc)}</b></div>` : null}
         ${cliCad && cliCad.codigo ? html`<div><span>Código</span><b>${cliCad.codigo}</b></div>` : null}</div>
       ${cliCad && cliCad.situacao && cliCad.situacao !== "liberado" ? html`<div class="aviso">Cadastro ${SITUACAO_CLIENTE[cliCad.situacao].t.toLowerCase()}: ${cliCad.restricao}</div>` : null}
@@ -479,7 +487,8 @@ export function Ordem({ id }) {
     return html`<div class="grupo-itens"><div class="secao-topo"><h4>${titulo}</h4>${podeEditar ? html`<button type="button" class="btn btn-sm" onClick=${() => novoItem(tipo)}>+ Incluir</button>` : null}</div>
       ${g.length ? html`<div class="lista">${g.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${verValores} mostrarAprov=${st !== "diagnostico"}
         exec=${execOn && i.aprovado === true ? { disabled: st !== "execucao" || !pode(perfil, "executar") || !!ocupado, onMuda: v => marcarExecutado(i, v) } : null}
-        onClick=${(editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined))) ? () => setModal({ tipo: "item", item: i }) : null} />`)}</div>` : html`<span class="dica">Nenhum item.</span>`}</div>`;
+        onClick=${(editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined))) ? () => setModal({ tipo: "item", item: i }) : null}
+        onExcluir=${(editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined))) ? async () => { if (await confirmar({ titulo: "Excluir item", texto: i.descricao + ". A alteração vale ao salvar a O.S.", botao: "Excluir", perigo: true })) excluirItem(i); } : null} />`)}</div>` : html`<span class="dica">Nenhum item.</span>`}</div>`;
   };
   const abaItens = html`
     <section class="card"><div class="secao-topo"><h3>Produtos e serviços</h3>${st === "aguardando" ? html`<span class="sub">Enviado em ${fmtDataHora(o.orcamento_enviado_em)} · válido até ${fmtData(o.validade_orcamento)}</span>` : null}
@@ -560,11 +569,14 @@ export function Ordem({ id }) {
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
     <section class="card cab-os">
       <div class="det-cab"><button type="button" class="botao-limpo" title="Ficha do veículo" disabled=${!o.veiculo_id} onClick=${() => ir("/veiculo/" + o.veiculo_id)}><${Placa} placa=${o.veiculo.placa} grande /></button><div class="meio"><h2>${o.veiculo.marca} ${o.veiculo.modelo} ${o.veiculo.ano}</h2>
-        <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}${o.box ? " · box " + o.box : ""}</div></div><div class="pills"><${Status} s=${st} />${o.situacao ? html`<span class="pill p-info">${o.situacao}</span>` : null}</div></div>
-      <div class="cli-linha"><div>${o.cliente_id ? html`<button type="button" class="btn-link nome-cli" onClick=${() => ir("/cliente/" + o.cliente_id)}>${o.cliente.nome}</button>` : html`<b>${o.cliente.nome}</b>`}<span>${fmtTel(o.cliente.telefone)}${o.cliente.doc ? " · " + fmtDoc(o.cliente.doc) : ""}</span></div>
+        <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}${o.box ? " · box " + o.box : ""}</div></div><div class="pills"><${Status} s=${st} o=${o} />${o.situacao ? html`<span class="pill p-info">${o.situacao}</span>` : null}</div></div>
+      <div class="cli-linha"><div>${o.cliente_id && cliCad ? html`<button type="button" class="btn-link nome-cli" title="Abrir o cadastro do cliente" onClick=${() => setModal({ tipo: "cadcliente" })}>${o.cliente.nome}</button>` : html`<b>${o.cliente.nome}</b>`}<span>${fmtTel(o.cliente.telefone)}${o.cliente.doc ? " · " + fmtDoc(o.cliente.doc) : ""}</span></div>
         ${o.cliente.telefone ? html`<a class="btn btn-sm btn-whats" href=${linkWhats(o.cliente.telefone, "Olá, " + primeiroNome(o) + "! ")} target="_blank" rel="noopener">${I.whats} WhatsApp</a>` : null}</div>
       ${legado ? html`<div class="info">O.S. ${legado.numero} importada do OS Oficina 3.0${legado.situacao ? " · situação no sistema anterior: " + legado.situacao : ""}.</div>` : null}
       ${!ck.feito && !legado && podeCk ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
+      ${st === "entregue" && o.recebido !== undefined && !o.finalizada_em && saldo > 0 ? html`<div class="aviso">Veículo entregue em ${fmtDataHora(o.entregue_em)}. <b>Falta receber ${reais(saldo)}</b>. A O.S. é finalizada quando o pagamento for registrado.</div>` : null}
+      ${st === "entregue" && o.finalizada_em ? html`<div class="info">O.S. finalizada em ${fmtDataHora(o.finalizada_em)}: veículo entregue e pagamento recebido.</div>` : null}
+      ${st === "cancelado" && o.motivo_cancelamento ? html`<div class="aviso">Cancelada. Motivo: ${o.motivo_cancelamento}</div>` : null}
       ${passo >= 0 ? html`<ol class="trilha">${FLUXO.map((s, n) => html`<li key=${s} class=${n < passo ? "feito" : n === passo ? "atual" : ""}>${STATUS[s].curto}</li>`)}</ol>` : html`<div class=${st === "recusado" ? "aviso" : "info"}>${STATUS[st].t}${st === "recusado" && o.entregue_em ? " · veículo retirado em " + fmtDataHora(o.entregue_em) : ""}</div>`}
       ${acoes.length ? html`<div class="acoes">${acoes}</div>` : null}
       <div class="docs"><span class="sub">Documentos:</span>
@@ -583,9 +595,14 @@ export function Ordem({ id }) {
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
     ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
-    ${modal && modal.tipo === "recibo" ? html`<${ReciboModal} ordem=${{ ...o, total: tAtual.total }} valor=${saldo} forma=${modal.forma || o.forma_pagamento} onFechar=${() => setModal(null)} onEmitido=${r => { setModal(null); ir("/imprimir/recibo/" + r.id); }} />` : null}
+    ${modal && modal.tipo === "recibo" ? html`<${ReciboModal} ordem=${{ ...o, total: tAtual.total }} valor=${saldo} forma=${modal.forma || o.forma_pagamento} onFechar=${() => setModal(null)} onEmitido=${async r => { setModal(null); await recarregar(["ordens"]); ir("/imprimir/recibo/" + r.id); }} />` : null}
     ${modal && modal.tipo === "imprimir" ? html`<${ImprimirModal} o=${o} verValores=${verValores} onFechar=${() => setModal(null)} />` : null}
-    ${modal && modal.tipo === "cliente" ? html`<${Modal} titulo="Trocar cliente da O.S." onFechar=${() => setModal(null)}><${BuscaCliente} id="os-cli" valor="" onEscolha=${trocarCliente} /></${Modal}>` : null}
+    ${modal && modal.tipo === "cliente" ? html`<${Modal} titulo="Trocar cliente da O.S." onFechar=${() => setModal(null)}><${BuscaCliente} id="os-cli" valor="" onEscolha=${trocarCliente} />
+      ${pode(perfil, "cadastrar") ? html`<div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => setModal({ tipo: "novocliente", ed: edCliente() })}>+ Cadastrar novo cliente</button></div>` : null}</${Modal}>` : null}
+    ${modal && modal.tipo === "novocliente" ? html`<${FormCliente} naOS ed=${modal.ed} setEd=${ed => { if (ed === null) { setModal(null); return; } setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed) : ed })); }} onSalvo=${r => r && r.id && trocarCliente(r.id, r)} />` : null}
+    ${modal && modal.tipo === "cadcliente" && cliCad ? html`<${FormCliente} naOS ed=${modal.ed || edCliente(cliCad)} setEd=${ed => { if (ed === null) { setModal(null); return; } setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed || edCliente(cliCad)) : ed })); }}
+      onSalvo=${async r => { if (r && aberta) { const cliente = { nome: r.nome, telefone: r.telefone || "", doc: r.doc || "", endereco: endCompleto(r) }; await api.atualizarOrdem(o.id, { cliente }); setO(x => ({ ...x, cliente })); recarregar(["ordens"]); } }} />` : null}
+    ${modal && modal.tipo === "cancelar" ? html`<${CancelarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); }} />` : null}
     ${modal && modal.tipo === "veiculo" && vCad ? html`<${FormVeiculo} ed=${modal.ed || edVeiculo(vCad)} setEd=${ed => {
       if (ed === null) { setModal(null); return; }
       setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed || edVeiculo(vCad)) : ed })); }}

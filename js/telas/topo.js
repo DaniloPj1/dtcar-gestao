@@ -1,7 +1,7 @@
 // Barra superior do computador: título da tela, busca rápida (F3), situação da conexão e da pasta de dados,
 // botão Nova O.S. e troca de tema. Atalhos: F2 nova O.S., F3 busca, F4 O.S. em aberto, F6 produtos.
 import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
-import { useApp, I } from "../ui.js";
+import { useApp, I, Modal } from "../ui.js";
 import { norm, soDig, normPlaca, exPlaca, fmtTel, fmtDataHora, numOS } from "../util.js";
 import { pode, STATUS } from "../regras.js";
 import { temaEfetivo, temaEscolhido, aplicarTema } from "../tema.js";
@@ -85,9 +85,35 @@ export function BarraTopo({ titulo, offline, pend, enviarFila }) {
     <h1 class="bt-titulo">${titulo}</h1>
     <${BuscaRapida} />
     <div class="bt-dir">
+      <${BotaoInstalar} />
       <${Situacao} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
       <${BotaoTema} classe="btn-icone" />
       ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-pri btn-sm" title="Nova O.S. (F2)" onClick=${() => ir("/entrada")}>${I.mais}<span>Nova O.S.</span></button>` : null}
     </div>
   </header>`;
+}
+
+const ICON_INSTALAR = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4M12 7v6M9.5 10.5L12 13l2.5-2.5"/></svg>`;
+export const instalado = () => matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
+
+/** Botão "Instalar no computador": usa a instalação do Chrome/Edge; sem ela, mostra o passo a passo */
+export function BotaoInstalar({ classe, texto }) {
+  const [evt, setEvt] = useState(window.__dtcarInstalar || null), [ajuda, setAjuda] = useState(false);
+  useEffect(() => { const f = () => setEvt(window.__dtcarInstalar || null); window.addEventListener("dtcar-instalavel", f); return () => window.removeEventListener("dtcar-instalavel", f); }, []);
+  if (instalado()) return null;
+  const instalar = async () => {
+    if (!evt) return setAjuda(true);
+    evt.prompt(); const r = await evt.userChoice.catch(() => null);
+    if (r && r.outcome === "accepted") { window.__dtcarInstalar = null; setEvt(null); }
+  };
+  const edge = /Edg\//.test(navigator.userAgent), cel = /Android|iPhone|iPad/i.test(navigator.userAgent), ios = /iPhone|iPad/i.test(navigator.userAgent);
+  return html`<button type="button" class=${classe || "btn btn-sm botao-instalar"} title="Instalar o DTCar Gestão neste aparelho (ícone na área de trabalho, abre sem internet)" onClick=${instalar}>${ICON_INSTALAR}<span>${texto || "Instalar"}</span></button>
+    ${ajuda ? html`<${Modal} titulo="Instalar o DTCar Gestão" onFechar=${() => setAjuda(false)}>
+      ${location.protocol !== "https:" ? html`<div class="aviso">A instalação só funciona no endereço com <b>https://</b>. Aguarde o certificado do endereço novo ou use o endereço atual.</div>` : null}
+      ${ios ? html`<ol class="passos-pasta"><li>No <b>Safari</b>, toque em <b>Compartilhar</b> (quadrado com seta).</li><li>Escolha <b>Adicionar à Tela de Início</b> e confirme.</li></ol>`
+      : cel ? html`<ol class="passos-pasta"><li>No <b>Chrome</b>, toque no menu <b>⋮</b>.</li><li>Escolha <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>) e confirme.</li></ol>`
+      : edge ? html`<ol class="passos-pasta"><li>No <b>Edge</b>, clique no menu <b>…</b> (canto superior direito).</li><li>Vá em <b>Aplicativos</b> › <b>Instalar este site como um aplicativo</b>.</li><li>Confirme em <b>Instalar</b>. O ícone vai para a área de trabalho e o menu Iniciar.</li></ol>`
+      : html`<ol class="passos-pasta"><li>No <b>Chrome</b>, clique no ícone de instalar na barra de endereço (um monitor com uma seta), ao lado da estrela de favoritos.</li><li>Se não aparecer: menu <b>⋮</b> › <b>Transmitir, salvar e compartilhar</b> › <b>Instalar página como app</b>.</li><li>Confirme em <b>Instalar</b>. O ícone vai para a área de trabalho.</li></ol>`}
+      <p class="sub">Se o navegador não mostrar a opção, o sistema já pode estar instalado neste computador: procure “DTCar Gestão” no menu Iniciar.</p>
+      <div class="acoes"><span class="espaco"></span><button type="button" class="btn btn-pri" onClick=${() => setAjuda(false)}>Entendi</button></div></${Modal}>` : null}`;
 }

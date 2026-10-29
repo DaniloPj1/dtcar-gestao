@@ -1,7 +1,7 @@
 import { html, createContext, useContext, useState, useEffect, useRef } from "./lib.js";
 import { exPlaca, num2, parseValor, norm, soDig, fmtTel, fmtDoc, normPlaca } from "./util.js";
 import { api } from "./api.js";
-import { STATUS } from "./regras.js";
+import { STATUS, situacaoOS } from "./regras.js";
 
 export const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -31,8 +31,8 @@ export const I = {
 export function Placa({ placa, grande }) {
   return html`<span class=${"placa" + (grande ? " p-g" : "")} aria-label=${"Placa " + exPlaca(placa)}><span class="faixa">BRASIL</span><span class="num">${exPlaca(placa) || "-------"}</span></span>`;
 }
-export function Status({ s }) {
-  const st = STATUS[s] || { curto: s, cor: "muted" };
+export function Status({ s, o }) {
+  const st = (o && situacaoOS(o)) || STATUS[s] || { curto: s, cor: "muted" };
   return html`<span class=${"pill p-" + st.cor}>${st.curto}</span>`;
 }
 export function Campo({ id, rotulo, obrig, dica, erro, children }) {

@@ -37,7 +37,8 @@ const CLIENTE_VAZIO = { nome: "", fantasia: "", telefone: "", telefone2: "", tel
 export const edCliente = c => c ? { tipo: "cliente", id: c.id, d: { ...CLIENTE_VAZIO, ...c, ficha: { ...FICHA_VAZIA, ...(c.ficha || {}) }, telefone: fmtTel(c.telefone), telefone2: fmtTel(c.telefone2), telefone3: fmtTel(c.telefone3), doc: fmtDoc(c.doc), data: dataDe(c.criado_em), nascimento: c.nascimento || "" }, erros: [] }
   : { tipo: "cliente", d: { ...CLIENTE_VAZIO, data: hojeISO() }, erros: [] };
 
-export function FormCliente({ ed, setEd, onSalvo }) {
+/** naOS: aberto de dentro da O.S. (só o cadastro: sem excluir e sem sair da O.S.) */
+export function FormCliente({ ed, setEd, onSalvo, naOS }) {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const [aba, setAba] = useState("end");
   const pode_ = pode(perfil, "cadastrar"), d = ed.d;
@@ -124,8 +125,8 @@ export function FormCliente({ ed, setEd, onSalvo }) {
         <${Campo} id="c-hist" rotulo="Histórico do cliente" dica="Anotações de atendimento, combinados e ocorrências."><${Area} id="c-hist" style=${{ minHeight: "140px" }} valor=${d.historico} onMuda=${v => set("historico", v)} /></${Campo}>
         ${F("ocorrencia", "Ocorrência")}</div>`}
     </fieldset>
-    <div class="acoes">${ed.id && pode(perfil, "excluir") ? html`<button type="button" class="btn btn-perigo" onClick=${excluir}>Excluir</button>` : null}
-      ${ed.id ? html`<button type="button" class="btn" onClick=${() => { setEd(null); ir("/imprimir/cliente/" + ed.id); }}>Imprimir ficha</button>` : null}<span class="espaco"></span>
+    <div class="acoes">${ed.id && !naOS && pode(perfil, "excluir") ? html`<button type="button" class="btn btn-perigo" onClick=${excluir}>Excluir</button>` : null}
+      ${ed.id && !naOS ? html`<button type="button" class="btn" onClick=${() => { setEd(null); ir("/imprimir/cliente/" + ed.id); }}>Imprimir ficha</button>` : null}<span class="espaco"></span>
       <button type="button" class="btn" onClick=${() => setEd(null)}>${pode_ ? "Cancelar" : "Fechar"}</button>${pode_ ? html`<button type="button" class="btn btn-pri" onClick=${salvar}>Salvar cadastro</button>` : null}</div>
   </${Modal}>`;
 }

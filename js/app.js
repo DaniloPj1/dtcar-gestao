@@ -211,7 +211,7 @@ function App() {
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   else corpo = {
     painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} params=${params} key=${qs || ""} />`, entrada: () => html`<${NovaOS} />`,
-    os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} key=${param} />`,
+    os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} params=${params} key=${param} />`,
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
     "dados-locais": () => html`<${DadosLocais} />`,

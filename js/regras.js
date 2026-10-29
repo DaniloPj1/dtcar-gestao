@@ -67,12 +67,21 @@ export const STATUS = {
   diagnostico: { t: "Em diagnóstico", curto: "Diagnóstico", cor: "info" },
   aguardando: { t: "Aguardando aprovação", curto: "Aguardando", cor: "warn" },
   execucao: { t: "Em execução", curto: "Execução", cor: "brand" },
-  pronto: { t: "Pronto para retirada", curto: "Pronto", cor: "ok" },
+  pronto: { t: "Pronto no pátio", curto: "Pronto", cor: "ok" },
   entregue: { t: "Entregue", curto: "Entregue", cor: "muted" },
   recusado: { t: "Orçamento recusado", curto: "Recusado", cor: "bad" },
   cancelado: { t: "Cancelada", curto: "Cancelada", cor: "muted" },
 };
 export const FLUXO = ["diagnostico", "aguardando", "execucao", "pronto", "entregue"];
+/** Situação mostrada da O.S.: separa "entregue, a receber" de "finalizada" (entregue e paga) */
+export function situacaoOS(o) {
+  if (!o) return null;
+  if (o.status === "entregue" && o.recebido !== undefined) {
+    if (o.finalizada_em) return { t: "Finalizada", curto: "Finalizada", cor: "muted" };
+    return { t: "Entregue · a receber", curto: "A receber", cor: "warn" };
+  }
+  return STATUS[o.status] || { t: o.status, curto: o.status, cor: "muted" };
+}
 export const ABERTOS = ["diagnostico", "aguardando", "execucao", "pronto"];
 
 export const PAPEIS = { admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico", pendente: "Aguardando liberação" };

@@ -31,6 +31,8 @@ export function traduzErro(e) {
 }
 
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero";
+const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
+let temV11 = true;
 
 function criarApiSupabase() {
   const cx = conexao();
@@ -63,7 +65,12 @@ function criarApiSupabase() {
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
     salvarConfig: async dados => ok(await sb.from("config").upsert({ id: 1, dados, atualizado_em: new Date().toISOString() })),
     clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"), produtos: tabela("produtos"),
-    ordens: async desde => todos(() => { let q = sb.from("ordens").select(COLS_ORDENS); if (desde) q = q.gt("atualizado_em", desde); return q.order("numero", { ascending: false }); }),
+    ordens: async desde => {
+      const busca = cols => todos(() => { let q = sb.from("ordens").select(cols); if (desde) q = q.gt("atualizado_em", desde); return q.order("numero", { ascending: false }); });
+      if (temV11) { try { return await busca(COLS_ORDENS + COLS_V11); } catch (e) { if (!/recebido|finalizada_em|motivo_cancelamento|column/i.test(e.message)) throw e; temV11 = false; } }
+      return busca(COLS_ORDENS);
+    },
+    temV11: () => temV11,
     /** linhas alteradas depois de "desde" (sincronização leve a cada minuto) */
     alterados: async (nome, desde) => todos(() => sb.from(nome).select("*").gt("atualizado_em", desde).order("id")),
     idsDe: async nome => todos(() => sb.from(nome).select("id").order("id")).then(r => r.map(x => x.id)),

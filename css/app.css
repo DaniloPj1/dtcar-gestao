@@ -887,3 +887,22 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .faixa-versao{max-width:1180px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;background:var(--brand-soft);border:1px solid var(--brand);color:var(--ink);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
 .faixa-versao .btn{margin-left:auto}
 @media print{.faixa-versao{display:none}}
+
+/* ---------- Ações rápidas da O.S. ---------- */
+.linha-os-acoes{display:flex;align-items:stretch;gap:8px;padding:0}
+.linha-os-acoes .los-corpo{flex:1;display:flex;align-items:center;gap:12px;min-width:0;padding:10px 12px;text-align:left;color:inherit}
+.linha-os-acoes .los-corpo .meio{flex:1;min-width:0}
+.los-acoes{display:flex;flex-direction:column;justify-content:center;gap:5px;padding:8px 10px 8px 0}
+.btn-avancar{background:var(--brand-soft);color:var(--brand);border-color:transparent;font-weight:700;white-space:nowrap}
+.btn-avancar:hover{background:var(--brand);color:#fff}
+.btn-cancelar{color:var(--bad);white-space:nowrap}
+.btn-cancelar:hover{border-color:var(--bad)}
+.grade-dados td.acoes-td{white-space:nowrap;cursor:default}
+.grade-dados td.acoes-td .btn{margin-left:4px;padding:3px 9px;min-height:28px}
+@media (max-width:640px){.los-acoes{padding:8px 8px 8px 0}.linha-os-acoes .los-corpo .placa{display:none}}
+.btn-lixo{display:grid;place-items:center;width:34px;height:34px;flex:none;border:1px solid transparent;border-radius:8px;background:none;color:var(--muted);cursor:pointer;align-self:center}
+.btn-lixo:hover{color:var(--bad);border-color:var(--bad);background:var(--bad-soft)}
+.btn-lixo svg{width:18px;height:18px}
+.motivos{display:flex;flex-direction:column;gap:2px}
+.botao-instalar{display:inline-flex;align-items:center;gap:6px}
+.botao-instalar svg{width:16px;height:16px}

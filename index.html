@@ -23,7 +23,11 @@
 <script type="module" src="js/app.js"></script>
 <script>
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
-  window.addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(() => {}));
+  // versão nova publicada: avisa na tela (botão "Atualizar agora"); se o programa estiver em segundo plano, atualiza sozinho
+  var tinha = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", function () { if (!tinha) return; window.__dtcarNovaVersao = true;
+    if (document.visibilityState === "hidden") location.reload(); else window.dispatchEvent(new Event("dtcar-nova-versao")); });
+  window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js", { updateViaCache: "none" }).then(function (r) { r.update(); setInterval(function () { r.update(); }, 30 * 60000); }).catch(function () {}); });
 }
 </script>
 </body>

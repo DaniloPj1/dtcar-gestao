@@ -883,3 +883,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* faixas de situação (sem internet / pendências) */
 .faixa-offline{display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px;line-height:1.4}
 .passos-pasta{padding-left:20px;line-height:1.6}
+
+.faixa-versao{max-width:1180px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;background:var(--brand-soft);border:1px solid var(--brand);color:var(--ink);display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.faixa-versao .btn{margin-left:auto}
+@media print{.faixa-versao{display:none}}

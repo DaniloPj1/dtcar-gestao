@@ -56,6 +56,8 @@ function App() {
   const doServidor = useRef(false);
   const [pend, setPend] = useState([]); // fila de envio deste aparelho (O.S. abertas sem internet)
   const [pasta, setPasta] = useState(null), [assistente, setAssistente] = useState(false);
+  const [novaVersao, setNovaVersao] = useState(!!window.__dtcarNovaVersao);
+  useEffect(() => { const f = () => setNovaVersao(true); window.addEventListener("dtcar-nova-versao", f); return () => window.removeEventListener("dtcar-nova-versao", f); }, []);
   useEffect(() => ouvirPasta(setPasta), []);
   useEffect(() => { iniciarPasta().then(async st => {
     if (st.configurada && st.permissao === "granted") { const p = await lerDaPasta().catch(() => null); if (p && await fila.restaurar(p.fila)) atualizarPendentes(); }
@@ -237,7 +239,7 @@ function App() {
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
     <${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
-    <main>${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
+    <main>${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
     ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>

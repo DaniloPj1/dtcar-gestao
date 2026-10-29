@@ -132,10 +132,42 @@ function criarApiSupabase() {
     painel: async (ini, fim, grupo) => ok(await sb.rpc("painel_resumo", { p_ini: ini, p_fim: fim, p_grupo: grupo })),
     importarLegado: async (tipo, linhas, atualizar) => ok(await sb.rpc("importar_legado", { p_tipo: tipo, p_linhas: linhas, p_atualizar: !!atualizar })),
     ordem: async id => {
+      const pend = await local.ler("os:" + id); if (pend && pend._pendente) return pend; // aberta sem internet, ainda não enviada
       try { const r = await buscarOrdem(id); local.gravar("os:" + id, r); return r; }
       catch (e) { if (erroDeRede(e)) { const c = await local.ler("os:" + id); if (c) return { ...c, _local: true }; } throw e; }
     },
     ordemNoAparelho: async id => local.ler("os:" + id),
+    /**
+     * Envia uma O.S. aberta sem internet. Os ids vêm do aparelho, então reenviar não duplica nada:
+     * o que já existe no servidor é reaproveitado. O número é gerado aqui, pela sequência do banco.
+     */
+    sincronizarAbertura: async op => {
+      const inserir = async (t, linha) => {
+        const r = await sb.from(t).insert(linha).select().single();
+        if (!r.error) return [r.data, true];
+        if (/duplicate key/i.test(r.error.message) && /_pkey/i.test(r.error.message)) return [ok(await sb.from(t).select("*").eq("id", linha.id).single()), false];
+        throw traduzErro(r.error);
+      };
+      let veiculoId = op.ordem.veiculo_id;
+      if (op.cliente) await inserir("clientes", op.cliente);
+      if (op.veiculo) {
+        try { await inserir("veiculos", op.veiculo); }
+        catch (e) { // a placa foi cadastrada por outro aparelho enquanto este estava sem internet: usa o cadastro existente
+          if (!/placa/i.test(e.message)) throw e;
+          const v = ok(await sb.from("veiculos").select("id,km_atual").eq("placa", op.veiculo.placa).maybeSingle()); if (!v) throw e;
+          veiculoId = v.id;
+          ok(await sb.from("veiculos").update({ cliente_id: op.veiculo.cliente_id, km_atual: Math.max(op.veiculo.km_atual || 0, v.km_atual || 0) }).eq("id", v.id));
+        }
+      } else if (op.veiculoAtualizar) {
+        const v = ok(await sb.from("veiculos").select("km_atual").eq("id", op.veiculoAtualizar.id).maybeSingle());
+        if (v) ok(await sb.from("veiculos").update({ cliente_id: op.veiculoAtualizar.cliente_id, km_atual: Math.max(op.veiculoAtualizar.km_atual || 0, v.km_atual || 0) }).eq("id", op.veiculoAtualizar.id));
+      }
+      const [o, nova] = await inserir("ordens", { ...op.ordem, veiculo_id: veiculoId });
+      if (nova) for (const ev of op.eventos || []) ok(await sb.from("eventos").insert({ ...ev, ordem_id: o.id }));
+      if (nova) ok(await sb.from("eventos").insert({ ordem_id: o.id, tipo: "sincronizada", usuario_nome: op.usuario_nome || "",
+        texto: `O.S. aberta sem internet em ${new Date(op.criado_em).toLocaleString("pt-BR")} como ${op.provisorio}; recebeu o número ${o.numero} ao sincronizar.` }));
+      return { id: o.id, numero: o.numero, nova };
+    },
     guardarOrdem: async id => { const r = await buscarOrdem(id); await local.gravar("os:" + id, r); return r; },
   };
   async function buscarOrdem(id) {

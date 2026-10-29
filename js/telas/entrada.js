@@ -1,6 +1,8 @@
 // Abertura rápida de O.S. e checklist de entrada (opcional, feito a partir da O.S.)
 import { html, useState, useEffect, useRef, useCallback } from "../lib.js";
 import { api } from "../api.js";
+import { fila, servidorResponde } from "../fila.js";
+import { local } from "../local.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, SecaoChecklist, PadAssinatura, Foto } from "../ui.js";
 import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
 import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
@@ -47,7 +49,7 @@ function validarNova(f, dados) {
 
 /* =================== NOVA O.S. =================== */
 export function NovaOS() {
-  const { dados, cfg, perfil, avisar, confirmar, ir, recarregar } = useApp();
+  const { dados, cfg, perfil, avisar, confirmar, ir, recarregar, atualizarPendentes } = useApp();
   const consultores = dados.perfis.filter(p => p.ativo !== false && (p.papel === "admin" || p.papel === "consultor"));
   const [f, setF] = useState(() => { const r = lsGet(LS_NOVA); return r && r.vNovo ? { ...vazioNova(), ...r } : vazioNova(); });
   const [erros, setErros] = useState([]);
@@ -66,6 +68,7 @@ export function NovaOS() {
     if (e.length) { topo.current && topo.current.scrollIntoView({ behavior: "smooth" }); return; }
     if (abertaDoVeiculo && !await confirmar({ titulo: "Veículo com O.S. aberta", texto: `Este veículo já tem a ${numOS(abertaDoVeiculo.numero)} em andamento. Abrir outra O.S. mesmo assim?`, botao: "Abrir outra" })) return;
     setSalvando(comChecklist ? "ck" : "os");
+    if (atualizarPendentes && !(await servidorResponde(api))) { await abrirSemInternet(); setSalvando(""); return; }
     try {
       let cli = cliente, cliId = f.clienteId;
       if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim();
@@ -92,6 +95,39 @@ export function NovaOS() {
       avisar(numOS(ordem.numero) + " aberta.");
       ir("/os/" + ordem.id + (comChecklist ? "/checklist" : ""));
     } catch (x) { avisar("Não foi possível abrir a O.S.: " + x.message, true); } finally { setSalvando(""); }
+  };
+
+  /** Sem internet: a O.S. vai para a fila com número provisório; o servidor numera quando a conexão voltar */
+  const abrirSemInternet = async () => {
+    try {
+      const agora = new Date().toISOString(), ordemId = uuid(), prov = fila.proximoProvisorio();
+      let cli = cliente, cliId = f.clienteId, novoCli = null;
+      if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim(); cliId = uuid();
+        novoCli = { id: cliId, nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), rua, bairro, cidade: "Colatina", uf: "ES",
+          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "" }; cli = novoCli; }
+      const km = parseInt(soDig(f.km), 10);
+      let vei = veiculo, novoVei = null, veiAtual = null;
+      if (!vei) { novoVei = { id: uuid(), placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ano: String(f.vNovo.ano), ano_fab: +f.vNovo.ano || null, ano_mod: +f.vNovo.ano || null,
+        cor: f.vNovo.cor.trim(), motor: f.vNovo.motor.trim(), combustivel: f.vNovo.combustivel || "", cliente_id: cliId, km_atual: km }; vei = novoVei; }
+      else veiAtual = { id: vei.id, cliente_id: cliId, km_atual: Math.max(km, vei.km_atual || 0) };
+      const cons = consultores.find(c => c.id === f.consultorId);
+      const ordem = {
+        id: ordemId, criado_em: agora, status: "diagnostico", cliente_id: cliId, veiculo_id: vei.id,
+        cliente: { nome: cli.nome, telefone: cli.telefone || "", doc: cli.doc || "", endereco: endCompleto(cli) },
+        veiculo: { placa: vei.placa, marca: vei.marca, modelo: vei.modelo, ano: vei.ano, cor: vei.cor || "", motor: vei.combustivel || vei.motor || "" },
+        km_entrada: km, reclamacao: f.reclamacao.trim(), box: (f.box || "").trim(), contato: (f.contato || "").trim(),
+        checkin: { feito: false, kmAnterior: veiculo ? veiculo.km_atual : null, kmDivergente: !!(veiculo && veiculo.km_atual && km < veiculo.km_atual), offline: { provisorio: prov, aberta_em: agora } },
+        consultor_id: f.consultorId, consultor_nome: cons ? cons.nome : "",
+        garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "",
+      };
+      await fila.adicionar({ id: ordemId, tipo: "abrir_os", criado_em: agora, provisorio: prov, usuario_nome: perfil.nome, cliente: novoCli, veiculo: novoVei, veiculoAtualizar: veiAtual, ordem,
+        eventos: [{ tipo: "abertura", texto: "O.S. aberta com " + fmtKm(km) + " sem internet (" + prov + ").", usuario_nome: perfil.nome, criado_em: agora }] });
+      await local.gravar("os:" + ordemId, { ...ordem, numero: prov, _pendente: true, _provisorio: prov, itens: [], fotos: [], eventos: [], desconto: 0, total: 0 });
+      lsSet(LS_NOVA, null); setF(vazioNova());
+      await atualizarPendentes();
+      avisar(prov + " aberta sem internet. O número definitivo sai quando a conexão voltar.");
+      ir("/os/" + ordemId);
+    } catch (x) { avisar("Não foi possível guardar a O.S. neste aparelho: " + x.message, true); }
   };
 
   return html`<div class="pagina">

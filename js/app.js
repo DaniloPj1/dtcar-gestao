@@ -2,6 +2,8 @@ import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js
 import { api } from "./api.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
 import { fmtDataHora } from "./util.js";
+import { fila } from "./fila.js";
+import { OSPendente } from "./telas/pendente.js";
 import { Ctx, Modal, I } from "./ui.js";
 import { cfgCompleta, pode } from "./regras.js";
 import { Conexao, Login, Pendente } from "./telas/login.js";
@@ -51,6 +53,8 @@ function App() {
   const ultimaCarga = useRef(0);
   const [offline, setOffline] = useState(null); // { desde, copia } quando o servidor não responde
   const doServidor = useRef(false);
+  const [pend, setPend] = useState([]); // fila de envio deste aparelho (O.S. abertas sem internet)
+  const atualizarPendentes = useCallback(async () => { const l = await fila.listar(); setPend(l); return l; }, []);
 
   useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
@@ -100,7 +104,7 @@ function App() {
         return r;
       });
       ultimaCarga.current = Date.now();
-      doServidor.current = true; setOffline(null);
+      doServidor.current = true; setOffline(null); setTimeout(() => enviarFila(), 500);
     } catch (e) {
       if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
       // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
@@ -131,10 +135,24 @@ function App() {
     }, 5000);
     return () => { vivo = false; clearTimeout(t); };
   }, [dados.ordens, offline]);
+  // envia a fila: ao abrir, ao reconectar e a cada minuto enquanto houver pendências
+  const enviarFila = useCallback(async () => {
+    const l = await atualizarPendentes(); if (!l.length || !api.sincronizarAbertura) return;
+    const r = await fila.processar(api); if (!r) return;
+    await atualizarPendentes();
+    if (r.enviadas.length) {
+      setToast({ msg: r.enviadas.map(x => x.op.provisorio + " virou O.S. " + x.res.numero).join(" · "), erro: false });
+      await recarregar(["clientes", "veiculos", "ordens"]);
+      const aqui = r.enviadas.find(x => location.hash === "#/os/" + x.op.id);
+      if (aqui && aqui.res.id !== aqui.op.id) location.hash = "#/os/" + aqui.res.id;
+    }
+    if (r.comErro.length) setToast({ msg: r.comErro.length + " O.S. sem internet não puderam ser enviadas. Abra a O.S. para ver o motivo.", erro: true });
+  }, []);
+  useEffect(() => { if (!membro) return; enviarFila(); const t = setInterval(() => { if (navigator.onLine) enviarFila(); }, 60000); return () => clearInterval(t); }, [membro]);
   // internet voltou: recarrega tudo do servidor
   useEffect(() => {
     if (!membro) return;
-    const volta = () => recarregar(null, { completo: true });
+    const volta = () => { recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); };
     const caiu = () => setOffline(o => o || { desde: new Date().toISOString(), copia: null });
     window.addEventListener("online", volta); window.addEventListener("offline", caiu);
     return () => { window.removeEventListener("online", volta); window.removeEventListener("offline", caiu); };
@@ -167,14 +185,22 @@ function App() {
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
   const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro" };
-  const ctx = { sessao, perfil, cfg, dados, recarregar, avisar, confirmar, ir, sair };
+  const pendOS = pend.filter(op => op.tipo === "abrir_os");
+  const dadosVis = !pendOS.length ? dados : {
+    ...dados,
+    ordens: [...pendOS.map(op => ({ ...op.ordem, numero: op.provisorio, total: 0, desconto: 0, atualizado_em: op.criado_em, _pendente: true, _provisorio: op.provisorio }))
+      .filter(o => !dados.ordens.some(x => x.id === o.id)), ...dados.ordens],
+    clientes: [...dados.clientes, ...pendOS.filter(op => op.cliente && !dados.clientes.some(c => c.id === op.cliente.id)).map(op => ({ ...op.cliente, _pendente: true }))],
+    veiculos: [...dados.veiculos, ...pendOS.filter(op => op.veiculo && !dados.veiculos.some(v => v.id === op.veiculo.id || v.placa === op.veiculo.placa)).map(op => ({ ...op.veiculo, _pendente: true }))],
+  };
+  const ctx = { sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila };
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   else corpo = {
     painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} params=${params} key=${qs || ""} />`, entrada: () => html`<${NovaOS} />`,
-    os: () => sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} key=${param} />`,
+    os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} key=${param} />`,
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
     inicio: () => BALCAO ? html`<${AreaTrabalho} />` : html`<${Painel} />`,
@@ -190,7 +216,8 @@ function App() {
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => { conf.res(false); setConf(null); }}>Voltar</button>
       <button type="button" class=${"btn " + (conf.perigo ? "btn-perigo" : "btn-pri")} onClick=${() => { conf.res(true); setConf(null); }}>${conf.botao}</button></div></${Modal}>` : null}`;
-  if (BALCAO) return html`<${Ctx.Provider} value=${ctx}><${BarraBalcao} rota=${rota} /><main>${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b> Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. O que for gravado agora não será salvo. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main><${StatusBalcao} />${modais}</${Ctx.Provider}>`;
+  if (BALCAO) return html`<${Ctx.Provider} value=${ctx}><${BarraBalcao} rota=${rota} /><main>${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
+    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main><${StatusBalcao} />${modais}</${Ctx.Provider}>`;
 
   return html`<${Ctx.Provider} value=${ctx}>
     <aside class="lateral" aria-label="Menu">
@@ -203,7 +230,8 @@ function App() {
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
-    <main>${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b> Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. O que for gravado agora não será salvo. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main>
+    <main>${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
+    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">

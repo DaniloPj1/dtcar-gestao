@@ -852,3 +852,9 @@ body.modo-balcao .painel-topo h1{font-size:24px}
   .balcao-status{background:#141920;border-color:#2c3440;color:#aab4c2}
 }
 @media print{.balcao-topo,.balcao-status{display:none!important}body.modo-balcao main{padding:0}}
+
+/* ---------- Sem internet (modo consulta) ---------- */
+.faixa-offline{max-width:1180px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;background:#fff4d6;border:1px solid #f0c64b;color:#5a4300;font-size:14px}
+.faixa-offline .btn-link{margin-left:6px}
+@media (prefers-color-scheme: dark){.faixa-offline{background:#3a2f0b;border-color:#7a6111;color:#f6e2a6}}
+@media print{.faixa-offline{display:none}}

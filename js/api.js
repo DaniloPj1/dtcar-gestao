@@ -1,4 +1,5 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
+import { local, erroDeRede } from "./local.js";
 
 const LS_CONEXAO = "dtcar-conexao";
 export function conexao() {
@@ -45,7 +46,7 @@ function criarApiSupabase() {
       return id ? ok(await sb.from(nome).update(resto).eq("id", id).select().single()) : ok(await sb.from(nome).insert(resto).select().single()); },
     excluir: async id => ok(await sb.from(nome).delete().eq("id", id)),
   });
-  return {
+  const metodos = {
     tipo: "supabase",
     auth: {
       sessao: async () => (await sb.auth.getSession()).data.session,
@@ -131,6 +132,13 @@ function criarApiSupabase() {
     painel: async (ini, fim, grupo) => ok(await sb.rpc("painel_resumo", { p_ini: ini, p_fim: fim, p_grupo: grupo })),
     importarLegado: async (tipo, linhas, atualizar) => ok(await sb.rpc("importar_legado", { p_tipo: tipo, p_linhas: linhas, p_atualizar: !!atualizar })),
     ordem: async id => {
+      try { const r = await buscarOrdem(id); local.gravar("os:" + id, r); return r; }
+      catch (e) { if (erroDeRede(e)) { const c = await local.ler("os:" + id); if (c) return { ...c, _local: true }; } throw e; }
+    },
+    ordemNoAparelho: async id => local.ler("os:" + id),
+    guardarOrdem: async id => { const r = await buscarOrdem(id); await local.gravar("os:" + id, r); return r; },
+  };
+  async function buscarOrdem(id) {
       const o = ok(await sb.from("ordens").select("*").eq("id", id).single());
       const [itens, fotos, eventos] = await Promise.all([
         sb.from("os_itens").select("*").eq("ordem_id", id).order("posicao").then(ok),
@@ -138,7 +146,9 @@ function criarApiSupabase() {
         sb.from("eventos").select("*").eq("ordem_id", id).order("criado_em", { ascending: false }).then(ok),
       ]);
       return { ...o, itens, fotos, eventos };
-    },
+  }
+  return {
+    ...metodos,
     itensDasOrdens: async ids => {
       const out = [];
       for (let i = 0; i < ids.length; i += 60) {

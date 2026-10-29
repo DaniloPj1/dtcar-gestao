@@ -1,5 +1,7 @@
 import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js";
 import { api } from "./api.js";
+import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
+import { fmtDataHora } from "./util.js";
 import { Ctx, Modal, I } from "./ui.js";
 import { cfgCompleta, pode } from "./regras.js";
 import { Conexao, Login, Pendente } from "./telas/login.js";
@@ -47,17 +49,22 @@ function App() {
   const [toast, setToast] = useState(null);
   const [conf, setConf] = useState(null);
   const ultimaCarga = useRef(0);
+  const [offline, setOffline] = useState(null); // { desde, copia } quando o servidor não responde
+  const doServidor = useRef(false);
 
   useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
     if (!api) return;
-    api.auth.sessao().then(s => setSessao(s || null)).catch(() => setSessao(null));
+    api.auth.sessao().then(s => setSessao(s || (!navigator.onLine ? sessaoGuardada() : null))).catch(() => setSessao(sessaoGuardada()));
+    pedirPersistencia();
     return api.auth.aoMudar((s, ev) => { if (ev === "PASSWORD_RECOVERY") setModoSenha(true); setSessao(s || null); });
   }, []);
   useEffect(() => {
     if (!api || sessao === undefined) return;
     if (!sessao) { setPerfil(null); return; }
-    api.meuPerfil(sessao.user.id).then(p => setPerfil(p || { id: sessao.user.id, nome: sessao.user.email, email: sessao.user.email, papel: "pendente" })).catch(() => setPerfil(null));
+    const uid = sessao.user.id;
+    api.meuPerfil(uid).then(p => { setPerfil(p || { id: uid, nome: sessao.user.email, email: sessao.user.email, papel: "pendente" }); if (p) local.gravar("perfil:" + uid, p); })
+      .catch(async e => setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null));
   }, [sessao && sessao.user && sessao.user.id]);
 
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
@@ -93,9 +100,45 @@ function App() {
         return r;
       });
       ultimaCarga.current = Date.now();
-    } catch (e) { setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true }); }
+      doServidor.current = true; setOffline(null);
+    } catch (e) {
+      if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
+      // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
+      const copia = await local.ler("dados");
+      setDados(d => d.carregado ? d : copia ? { ...d, ...copia.dados, carregado: true } : d);
+      if (copia && copia.config) setCfg(cfgCompleta(copia.config));
+      setOffline(o => o || { desde: new Date().toISOString(), copia: copia ? copia.salvoEm : null });
+    }
   }, []);
   useEffect(() => { if (membro) recarregar(); }, [membro]);
+  // guarda a cópia local sempre que chegam dados do servidor (3 s depois da última mudança)
+  useEffect(() => {
+    if (!dados.carregado || !doServidor.current || offline) return;
+    const t = setTimeout(() => { const { carregado, ...listas } = dados; local.gravar("dados", { salvoEm: new Date().toISOString(), dados: listas, config: cfg }); }, 3000);
+    return () => clearTimeout(t);
+  }, [dados, cfg, offline]);
+  // O.S. em aberto ficam guardadas por inteiro para abrir e imprimir sem internet
+  useEffect(() => {
+    if (!dados.carregado || !doServidor.current || offline || !api.guardarOrdem) return;
+    let vivo = true;
+    const t = setTimeout(async () => {
+      for (const o of dados.ordens.filter(x => ["diagnostico", "aguardando", "execucao", "pronto"].includes(x.status))) {
+        if (!vivo || !navigator.onLine) return;
+        const c = await api.ordemNoAparelho(o.id);
+        if (c && c.atualizado_em === o.atualizado_em) continue;
+        try { await api.guardarOrdem(o.id); } catch (e) { return; }
+      }
+    }, 5000);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [dados.ordens, offline]);
+  // internet voltou: recarrega tudo do servidor
+  useEffect(() => {
+    if (!membro) return;
+    const volta = () => recarregar(null, { completo: true });
+    const caiu = () => setOffline(o => o || { desde: new Date().toISOString(), copia: null });
+    window.addEventListener("online", volta); window.addEventListener("offline", caiu);
+    return () => { window.removeEventListener("online", volta); window.removeEventListener("offline", caiu); };
+  }, [membro]);
   useEffect(() => {
     if (!membro) return;
     let ultimaCompleta = Date.now();
@@ -147,7 +190,7 @@ function App() {
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => { conf.res(false); setConf(null); }}>Voltar</button>
       <button type="button" class=${"btn " + (conf.perigo ? "btn-perigo" : "btn-pri")} onClick=${() => { conf.res(true); setConf(null); }}>${conf.botao}</button></div></${Modal}>` : null}`;
-  if (BALCAO) return html`<${Ctx.Provider} value=${ctx}><${BarraBalcao} rota=${rota} /><main>${corpo}</main><${StatusBalcao} />${modais}</${Ctx.Provider}>`;
+  if (BALCAO) return html`<${Ctx.Provider} value=${ctx}><${BarraBalcao} rota=${rota} /><main>${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b> Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. O que for gravado agora não será salvo. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main><${StatusBalcao} />${modais}</${Ctx.Provider}>`;
 
   return html`<${Ctx.Provider} value=${ctx}>
     <aside class="lateral" aria-label="Menu">
@@ -160,7 +203,7 @@ function App() {
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
-    <main>${corpo}</main>
+    <main>${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b> Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. O que for gravado agora não será salvo. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">

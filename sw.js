@@ -1,11 +1,14 @@
-// Service worker: deixa o site instalável e abre a tela mesmo com internet instável.
+// Service worker: deixa o site instalável e abre o programa mesmo sem internet.
 // Estratégia "rede primeiro": sempre busca a versão nova; usa a cópia guardada só se a rede falhar.
-const CACHE = "dtcar-v13";
-self.addEventListener("install", e => self.skipWaiting());
+// Os arquivos do programa são guardados na instalação para a primeira abertura offline funcionar.
+// Ao criar um arquivo novo em js/, css/, vendor/ ou icons/, inclua-o em ARQUIVOS e troque a versão de CACHE.
+const CACHE = "dtcar-v14";
+const ARQUIVOS = ["./", "index.html", "manifest.webmanifest", "css/app.css", "icons/favicon.png", "icons/icon-192.png", "icons/icon-512.png", "icons/login-fundo.jpg", "icons/logo-branco-sm.png", "icons/logo-branco.png", "icons/logo-preto.png", "js/api.js", "js/app.js", "js/boleto.js", "js/config.js", "js/dbf.js", "js/folha.js", "js/legado.js", "js/lib.js", "js/local.js", "js/nfe.js", "js/pdf.js", "js/regras.js", "js/telas/admin.js", "js/telas/backup.js", "js/telas/balcao.js", "js/telas/cadastros.js", "js/telas/compras.js", "js/telas/entrada.js", "js/telas/financeiro.js", "js/telas/funcionarios.js", "js/telas/importar.js", "js/telas/imprimir.js", "js/telas/login.js", "js/telas/modobalcao.js", "js/telas/ordem.js", "js/telas/painel.js", "js/telas/produtos.js", "js/telas/recibos.js", "js/telas/relatorios.js", "js/telas/sefaz.js", "js/ui.js", "js/util.js", "vendor/jspdf.umd.min.js", "vendor/preact-htm.js", "vendor/supabase.js"];
+self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => Promise.all(ARQUIVOS.map(a => c.add(a).catch(() => {})))).then(() => self.skipWaiting())));
 self.addEventListener("activate", e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== CACHE).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener("fetch", e => {
   const u = new URL(e.request.url);
   if (e.request.method !== "GET" || u.origin !== location.origin) return; // dados do Supabase nunca passam pelo cache
-  e.respondWith(fetch(e.request).then(r => { const c = r.clone(); caches.open(CACHE).then(k => k.put(e.request, c)); return r; })
-    .catch(() => caches.match(e.request).then(r => r || caches.match("./index.html"))));
+  e.respondWith(fetch(e.request).then(r => { if (r.ok) { const c = r.clone(); caches.open(CACHE).then(k => k.put(e.request, c)); } return r; })
+    .catch(() => caches.match(e.request, { ignoreSearch: true }).then(r => r || (e.request.mode === "navigate" ? caches.match("./index.html") : Response.error()))));
 });

@@ -37,7 +37,8 @@ let temV11 = true, temReceber = true;
 // ---- sem internet: depois que o sistema percebe que caiu, nada fica esperando o servidor ----
 // Toda chamada ao servidor tem tempo-limite; em modo "sem rede" ela falha na hora (e quem chamou usa a cópia do aparelho).
 let semRede = false;
-export const definirSemRede = v => { semRede = !!v; };
+const ativos = new Set(); // chamadas em andamento: ao entrar no modo sem rede, são canceladas na hora (a tela usa a cópia do aparelho)
+export const definirSemRede = v => { semRede = !!v; if (semRede) { for (const c of ativos) c.abort(semConexao("sem internet")); ativos.clear(); } };
 export const estaSemRede = () => semRede;
 const LIMITE_MS = 15000, LIMITE_ARQUIVO_MS = 120000;
 // erro de rede "final": o nome AbortError faz a biblioteca do Supabase não repetir a tentativa (cada repetição esperava de novo)
@@ -45,17 +46,24 @@ const semConexao = motivo => { const e = new Error("Failed to fetch (" + motivo 
 function fetchComLimite(url, opts = {}) {
   if (semRede || !navigator.onLine) return Promise.reject(semConexao("sem internet"));
   const ctl = new AbortController(), lim = /\/storage\/v1\//.test(String(url)) ? LIMITE_ARQUIVO_MS : LIMITE_MS;
-  const t = setTimeout(() => ctl.abort(), lim);
+  const t = setTimeout(() => { ativos.delete(ctl); ctl.abort(semConexao("tempo esgotado")); }, lim); // o motivo vira o erro, inclusive na leitura do corpo
+  ativos.add(ctl);
   if (opts.signal) { if (opts.signal.aborted) ctl.abort(); else opts.signal.addEventListener("abort", () => ctl.abort()); }
   return fetch(url, { ...opts, signal: ctl.signal })
-    .catch(e => { if (opts.signal && opts.signal.aborted) throw e; throw semConexao(e && e.name === "AbortError" ? "tempo esgotado" : "sem resposta do servidor"); })
-    .finally(() => clearTimeout(t));
+    // o prazo vale também para o corpo da resposta: o cronômetro não é desligado quando chegam os cabeçalhos
+    // (cancelar depois de tudo lido não tem efeito)
+    .catch(e => { clearTimeout(t); ativos.delete(ctl); if (opts.signal && opts.signal.aborted) throw e; throw semConexao(e && e.name === "AbortError" ? "tempo esgotado" : "sem resposta do servidor"); });
 }
 
 function criarApiSupabase() {
   const cx = conexao();
   if (!cx || !window.supabase) return null;
   const sb = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }, global: { fetch: fetchComLimite }, db: { retry: false } });
+  // Em modo sem rede, as consultas falham ANTES de a biblioteca tentar renovar o login: com o login vencido e sem internet,
+  // cada consulta esperava ~30 s de tentativas de renovação. Devolve uma "consulta" que recusa na hora, aceitando qualquer encadeamento.
+  const recusa = () => { const p = new Proxy(function () {}, { get: (_, k) => k === "then" ? (a, b) => Promise.reject(semConexao("sem internet")).then(a, b)
+    : k === "catch" ? f => Promise.reject(semConexao("sem internet")).catch(f) : () => p, apply: () => p }); return p; };
+  for (const [obj, nome] of [[sb, "from"], [sb, "rpc"], [sb.storage, "from"]]) { const orig = obj[nome].bind(obj); obj[nome] = (...a) => semRede ? recusa() : orig(...a); }
   const ok = r => { if (r.error) throw traduzErro(r.error); return r.data; };
   const urls = new Map();
   // o servidor devolve no máximo 1000 linhas por consulta: busca em páginas
@@ -77,6 +85,8 @@ function criarApiSupabase() {
     },
     auth: {
       sessao: async () => (await sb.auth.getSession()).data.session,
+      /** login guardado neste aparelho e se já venceu (o token dura 1 hora; sem internet não dá para renovar) */
+      guardadaVencida: s => !!(s && s.expires_at && s.expires_at * 1000 < Date.now() + 60000),
       aoMudar: cb => { const { data } = sb.auth.onAuthStateChange((evento, s) => cb(s, evento)); return () => data.subscription.unsubscribe(); },
       entrar: async (email, senha) => ok(await sb.auth.signInWithPassword({ email, password: senha })),
       cadastrar: async (nome, email, senha) => ok(await sb.auth.signUp({ email, password: senha, options: { data: { nome }, emailRedirectTo: location.origin + location.pathname } })),

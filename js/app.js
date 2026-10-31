@@ -76,9 +76,23 @@ function App() {
   useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
     if (!api) return;
-    api.auth.sessao().then(s => setSessao(s || (!navigator.onLine ? sessaoGuardada() : null))).catch(() => setSessao(sessaoGuardada()));
+    (async () => {
+      // login guardado e vencido (ou sem rede): confere o servidor antes; se não responder, abre direto com o login guardado,
+      // sem esperar as tentativas de renovação (que podiam durar ~30 s e terminar na tela de login)
+      const guardada = sessaoGuardada();
+      if (guardada && (!navigator.onLine || (api.auth.guardadaVencida && api.auth.guardadaVencida(guardada))) && api.testarConexao && !(await api.testarConexao())) {
+        definirSemRede(true); setSessao(guardada); return;
+      }
+      try { const s = await api.auth.sessao(); setSessao(s || (guardada && (!navigator.onLine || estaSemRede()) ? guardada : null)); }
+      catch (e) { setSessao(guardada || null); }
+    })();
     pedirPersistencia();
-    return api.auth.aoMudar((s, ev) => { if (ev === "PASSWORD_RECOVERY") setModoSenha(true); setSessao(s || null); });
+    return api.auth.aoMudar((s, ev) => {
+      if (ev === "PASSWORD_RECOVERY") setModoSenha(true);
+      // sem internet a renovação do login falha e a biblioteca avisa "sem sessão": continua com o login guardado (só "Sair" desloga)
+      if (!s && ev !== "SIGNED_OUT") { const g = sessaoGuardada(); if (g && (estaSemRede() || !navigator.onLine)) return setSessao(g); }
+      setSessao(s || null);
+    });
   }, []);
   useEffect(() => {
     if (!api || sessao === undefined) return;
@@ -96,6 +110,8 @@ function App() {
   const recarregar = useCallback(async (quais, opt = {}) => {
     const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config", "receber"];
     const lista = quais && quais.length ? quais : todos;
+    // se o servidor demorar, confere a conexão em paralelo: sem resposta, entra no modo sem rede e usa a cópia do aparelho na hora
+    const vigia = setTimeout(async () => { if (api.testarConexao && !estaSemRede() && !(await api.testarConexao())) definirSemRede(true); }, 3000);
     try {
       const res = await Promise.all(lista.map(k => {
         if (k === "config") return api.config();
@@ -122,8 +138,9 @@ function App() {
         return r;
       });
       ultimaCarga.current = Date.now();
-      doServidor.current = true; definirSemRede(false); setOffline(null); setTimeout(() => enviarFila(), 500);
+      clearTimeout(vigia); doServidor.current = true; definirSemRede(false); setOffline(null); setTimeout(() => enviarFila(), 500);
     } catch (e) {
+      clearTimeout(vigia);
       if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
       definirSemRede(true); // daqui em diante as telas usam a cópia do aparelho sem esperar o servidor
       // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
@@ -149,32 +166,40 @@ function App() {
     let vivo = true;
     const t = setTimeout(async () => {
       const lista = dados.ordens.filter(x => !x._pendente && ["orcamento", "execucao", "pagamento"].includes(etapaOS(x)));
-      let feitas = 0; setGuardadas({ feitas, total: lista.length });
+      let feitas = 0, falhas = 0; setGuardadas({ feitas, falhas, total: lista.length });
       const fila = [...lista];
       const trabalhar = async () => {
         while (vivo && fila.length) {
           const o = fila.shift();
           const c = await api.ordemNoAparelho(o.id);
-          if (!c || c.atualizado_em !== o.atualizado_em) { try { await api.guardarOrdem(o.id); } catch (e) { if (erroDeRede(e)) { vivo = false; return; } } }
-          feitas++; if (vivo) setGuardadas({ feitas, total: lista.length });
+          if (!c || c.atualizado_em !== o.atualizado_em) {
+            try { await api.guardarOrdem(o.id); if (!(await api.ordemNoAparelho(o.id))) throw new Error("não gravou"); }
+            catch (e) { if (erroDeRede(e)) { vivo = false; return; } falhas++; if (vivo) setGuardadas({ feitas, falhas, total: lista.length }); continue; }
+          }
+          feitas++; if (vivo) setGuardadas({ feitas, falhas, total: lista.length }); // só conta o que ficou gravado de verdade
         }
       };
       await Promise.all([trabalhar(), trabalhar(), trabalhar()]); // 3 de cada vez
-      if (vivo) local.gravar("os:guardadas", { feitas, total: lista.length, em: new Date().toISOString() });
+      local.gravar("os:guardadas", { feitas, falhas, total: lista.length, em: new Date().toISOString() });
     }, 1500);
     return () => { vivo = false; clearTimeout(t); };
   }, [dados.ordens, offline]);
   // backup COMPLETO do servidor na pasta do computador, uma vez por dia (proteção se o online falhar)
   useEffect(() => {
-    if (!dados.carregado || !doServidor.current || offline || !pasta || !pasta.configurada || pasta.permissao !== "granted" || api.tipo !== "supabase") return;
-    let vivo = true;
-    const t = setTimeout(async () => {
-      const ult = await backupDaPasta(), dia = new Date().toISOString().slice(0, 10);
-      if (!vivo || (ult && ult.dia === dia)) return;
-      try { const b = await montarBackup({ perfil, tolerante: true }); delete b.feito; if (vivo) await gravarBackupNaPasta(JSON.stringify(b)); }
-      catch (e) { /* sem internet no meio: tenta de novo na próxima abertura */ }
-    }, 20000);
-    return () => { vivo = false; clearTimeout(t); };
+    // só o administrador: para os outros papéis as regras de acesso devolvem tabelas vazias (sem erro) e o "backup completo" sairia incompleto
+    if (!dados.carregado || !doServidor.current || offline || !pasta || !pasta.configurada || pasta.permissao !== "granted" || api.tipo !== "supabase" || !pode(perfil, "ajustes")) return;
+    let vivo = true, fazendo = false;
+    const fazer = async () => {
+      if (fazendo || estaSemRede()) return; fazendo = true;
+      try {
+        const ult = await backupDaPasta(), dia = new Date().toISOString().slice(0, 10);
+        if (!vivo || (ult && ult.dia === dia)) return;
+        // sem modo tolerante: se alguma tabela falhar, não grava um "backup completo" pela metade (tenta de novo depois)
+        const b = await montarBackup({ perfil }); delete b.feito; delete b.puladas; if (vivo) await gravarBackupNaPasta(JSON.stringify(b));
+      } catch (e) { /* sem internet ou erro: tenta de novo na próxima verificação */ } finally { fazendo = false; }
+    };
+    const t = setTimeout(fazer, 20000), h = setInterval(fazer, 60 * 60000); // confere de hora em hora (programa aberto de um dia para o outro)
+    return () => { vivo = false; clearTimeout(t); clearInterval(h); };
   }, [dados.carregado, offline, pasta && pasta.configurada, pasta && pasta.permissao]);
   // envia a fila: ao abrir, ao reconectar e a cada minuto enquanto houver pendências
   const enviarFila = useCallback(async () => {

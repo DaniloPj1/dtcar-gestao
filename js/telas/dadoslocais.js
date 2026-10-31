@@ -64,7 +64,7 @@ export function DadosLocais() {
       : html`<div class="kv"><div><span>Atualizada em</span><b>${fmtDataHora(copia.salvoEm)}</b></div><div><span>O.S.</span><b>${n("ordens")}</b></div><div><span>Clientes</span><b>${n("clientes")}</b></div>
           <div><span>Veículos</span><b>${n("veiculos")}</b></div><div><span>Produtos e serviços</span><b>${n("produtos")}</b></div>
           ${uso && uso.usage ? html`<div><span>Espaço usado</span><b>${(uso.usage / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB</b></div>` : null}
-          <div><span>O.S. em aberto guardadas por inteiro</span><b>${prog ? prog.feitas + " de " + prog.total + (prog.feitas < prog.total ? " (copiando…)" : "") : "—"}</b></div>
+          <div><span>O.S. em aberto guardadas por inteiro</span><b>${prog ? prog.feitas + " de " + prog.total + (prog.falhas ? " · " + prog.falhas + " com falha (tenta de novo ao abrir com internet)" : prog.feitas < prog.total ? " (copiando…)" : "") : "—"}</b></div>
           <div><span>Protegida contra limpeza</span><b>${window.dtcarDesktop ? "sim (programa para Windows)" : persist ? "sim" : "não (instale o programa para proteger)"}</b></div></div>`}
     </section>
     <section class="card"><div class="secao-topo"><h2>O.S. abertas sem internet</h2>${pendentes.length ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${enviarFila}>Enviar agora</button>` : null}</div>

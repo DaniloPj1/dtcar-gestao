@@ -49,7 +49,7 @@ try:
     pg.on("pageerror", lambda e: log.append("PAGEERR " + str(e)))
     cfg = open(os.path.join(RAIZ, "js", "config.js")).read().replace("https://vbbklawlbxznsemkgtvg.supabase.co", "http://127.0.0.1:9998")
     ctx.route("**/js/config.js", lambda r: r.fulfill(status=200, content_type="text/javascript", body=cfg))
-    pg.add_init_script("localStorage.setItem('sb-127-auth-token', %s)" % json.dumps(json.dumps(sessao)))
+    ctx.add_init_script("if (!sessionStorage.getItem('semente')) { localStorage.setItem('sb-127-auth-token', %s); sessionStorage.setItem('semente', '1'); }" % json.dumps(json.dumps(sessao)))
     U = "http://localhost:8766/"
     pg.goto(U + "#/ordens"); pg.wait_for_timeout(9000)  # carrega e guarda as O.S. em aberto (inclui aguardando pagamento)
     chk("online: lista carregou", "01900" in pg.inner_text("main"))
@@ -74,6 +74,19 @@ try:
     pg.evaluate("location.hash = '#/caixa'"); pg.wait_for_timeout(800)
     print("caixa:", pg.inner_text("main")[:200].replace("\n", " | "))
     pg.screenshot(path=os.path.join(RAIZ, "teste", "telas", "r1-os-offline.png"))
+    # dia seguinte sem internet: login vencido e servidor sem resposta → abre direto com o login guardado (sem tela de login)
+    venc = dict(sessao); venc["expires_at"] = int(time.time()) - 600
+    pg.evaluate("localStorage.setItem('sb-127-auth-token', %s)" % json.dumps(json.dumps(venc)))
+    ctx.clear_cookies(); pg2 = ctx.new_page(); t0 = time.time()
+    pg2.add_init_script("localStorage.setItem('sb-127-auth-token', %s)" % json.dumps(json.dumps(venc)))
+    pg2.goto(U + "#/ordens"); 
+    abriu = False
+    for i in range(40):
+        tx = pg2.inner_text("body")
+        if "01900" in tx: abriu = True; break
+        pg2.wait_for_timeout(500)
+    dt = time.time() - t0
+    chk("login vencido + sem servidor: abre com o login guardado em %.1fs" % dt, abriu and "ENTRAR" not in pg2.inner_text("body") and dt < 14)
     b.close()
 except Exception as e:
     falhas.append("EXCECAO " + str(e).split("\n")[0])

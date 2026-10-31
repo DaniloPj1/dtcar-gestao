@@ -49,7 +49,7 @@ function copiaCompleta(pasta, versao) {
   try {
     const sw = fs.readFileSync(path.join(pasta, "sw.js"), "utf8"), lista = arquivosDoSw(sw), hashes = hashesDoSw(sw);
     return versaoDoSw(sw) === versao && lista.includes("index.html") &&
-      lista.every(rel => { const arq = confinar(pasta, rel); return fs.statSync(arq).isFile() && (!hashes || !hashes[rel] || sha256(fs.readFileSync(arq)) === hashes[rel]); });
+      lista.every(rel => { const arq = confinar(pasta, rel); return fs.statSync(arq).isFile() && !!hashes && !!hashes[rel] && sha256(fs.readFileSync(arq)) === hashes[rel]; });
   } catch (e) { return false; }
 }
 function versaoEmbutida() { try { return versaoDoSw(fs.readFileSync(path.join(siteEmbutido(), "sw.js"), "utf8")); } catch (e) { return 0; } }
@@ -71,7 +71,6 @@ async function servir(req) {
   const u = new URL(req.url);
   if (u.protocol !== ESQUEMA + ":" || u.hostname !== HOST) return new Response("Proibido", { status: 403 });
   const rel = decodeURIComponent(u.pathname).replace(/^\/+/, "") || "index.html";
-  if (trocaPendente && rel === "index.html") { trocaPendente = false; escolherSite(); }
   let arq; try { arq = confinar(raizAtual, rel); } catch (e) { return new Response("Proibido", { status: 403 }); }
   if (!fs.existsSync(arq)) return new Response("Não encontrado", { status: 404 });
   return net.fetch(pathToFileURL(arq).toString());
@@ -87,11 +86,12 @@ async function atualizarSite() {
     const v = versaoDoSw(sw), lista = arquivosDoSw(sw), hashes = hashesDoSw(sw);
     const jaBaixada = trocaPendente ? (lerJSON(path.join(pastaSites(), "atual.json")) || {}).versao || 0 : 0;
     if (!v || v <= Math.max(versaoAtual, jaBaixada) || !lista.includes("index.html")) return;
+    if (!hashes || lista.some(rel => !hashes[rel])) throw new Error("lista de integridade ausente ou incompleta"); // sem conferência, não troca
     const nome = "v" + v, tmp = path.join(pastaSites(), nome + ".baixando"), fim = path.join(pastaSites(), nome);
     await fsp.rm(tmp, { recursive: true, force: true });
     for (const rel of lista.concat(["sw.js"])) {
       const dados = rel === "sw.js" ? Buffer.from(sw) : await baixar(SITE + rel + "?d=" + v);
-      if (hashes && rel !== "sw.js" && hashes[rel] && sha256(dados) !== hashes[rel]) throw new Error("arquivo diferente do publicado: " + rel);
+      if (rel !== "sw.js" && sha256(dados) !== hashes[rel]) throw new Error("arquivo diferente do publicado: " + rel);
       const destino = confinar(tmp, rel); await fsp.mkdir(path.dirname(destino), { recursive: true }); await fsp.writeFile(destino, dados);
     }
     // o site pode ter sido publicado de novo no meio do download: só aceita se a versão continuar a mesma
@@ -140,6 +140,11 @@ function criarJanela() {
   const externo = url => /^https?:|^mailto:|^tel:/i.test(url);
   // o programa nunca abre janelas novas nem sai das próprias telas: o que for de fora vai para o navegador do Windows
   w.webContents.setWindowOpenHandler(({ url }) => { if (externo(url)) shell.openExternal(url); return { action: "deny" }; });
+  // telas novas já baixadas entram quando a janela recarrega por inteiro (botão "Atualizar agora")
+  w.webContents.on("did-start-navigation", (ev, url, mesmaPagina, quadroPrincipal) => {
+    const d = ev && typeof ev === "object" && "url" in ev ? ev : { url, isSameDocument: mesmaPagina, isMainFrame: quadroPrincipal };
+    if (trocaPendente && d.isMainFrame && !d.isSameDocument && String(d.url).startsWith(`${ESQUEMA}://${HOST}/`)) { trocaPendente = false; escolherSite(); }
+  });
   w.webContents.on("will-navigate", (ev, url) => { if (url.startsWith(`${ESQUEMA}://${HOST}/`)) return; ev.preventDefault(); if (externo(url)) shell.openExternal(url); });
   w.loadURL(`${ESQUEMA}://${HOST}/index.html`);
   // teste automático (teste/teste_programa.sh): grava o que apareceu na tela e fecha
@@ -149,7 +154,13 @@ function criarJanela() {
     const r = await w.webContents.executeJavaScript(`(async () => ({ texto: document.body.innerText.slice(0, 400), ponte: !!window.dtcarDesktop,
       pasta: await window.dtcarDesktop.pasta.info(), info: await window.dtcarDesktop.info(),
       fora: await window.dtcarDesktop.pasta.escrever("../fora.txt", "x").then(() => "gravou", () => "bloqueado") }))()`).catch(e => ({ erro: e.message }));
-    fs.writeFileSync(process.env.DTCAR_TESTE_SAIDA, JSON.stringify({ ...r, msgs }, null, 1)); app.quit();
+    // recarrega a janela e confere de novo (troca de telas baixadas só no recarregamento)
+    const antes = { ...r, msgs };
+    w.webContents.reload();
+    w.webContents.once("did-finish-load", () => setTimeout(async () => {
+      antes.depoisDeRecarregar = await w.webContents.executeJavaScript("window.dtcarDesktop.info()").catch(e => ({ erro: e.message }));
+      fs.writeFileSync(process.env.DTCAR_TESTE_SAIDA, JSON.stringify(antes, null, 1)); app.quit();
+    }, 1500));
   }, 6000));
   return w;
 }

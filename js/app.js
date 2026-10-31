@@ -106,8 +106,10 @@ function App() {
     if (!api || sessao === undefined) return;
     if (!sessao) { setPerfil(null); return; }
     const uid = sessao.user.id;
-    api.meuPerfil(uid).then(p => { setPerfil(p || { id: uid, nome: sessao.user.email, email: sessao.user.email, papel: "pendente" }); if (p) local.gravar("perfil:" + uid, p); })
-      .catch(async e => setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null));
+    api.meuPerfil(uid).then(async p => {
+      if (!p && estaSemRede()) p = await local.ler("perfil:" + uid); // sem internet, nunca "aguardando liberação" por falta de cópia
+      setPerfil(p || { id: uid, nome: sessao.user.email, email: sessao.user.email, papel: "pendente" }); if (p) local.gravar("perfil:" + uid, p); })
+      .catch(async e => { if (erroDeRede(e)) definirSemRede(true); setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null); });
   }, [sessao && sessao.user && sessao.user.id]);
 
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
@@ -173,7 +175,7 @@ function App() {
       if (!copia) { const p = await lerDaPasta().catch(() => null); if (p && p.copia && p.copia.dados) { copia = p.copia; local.gravar("dados", { salvoEm: copia.salvoEm, dados: copia.dados, config: copia.config }); } }
       setDados(d => d.carregado ? d : copia ? { ...d, ...copia.dados, carregado: true } : d);
       if (copia && copia.config) setCfg(cfgCompleta(copia.config));
-      setOffline(o => o || { desde: new Date().toISOString(), copia: copia ? copia.salvoEm : null });
+      setOffline(o => ({ desde: new Date().toISOString(), copia: copia ? copia.salvoEm : null, ...(o || {}), semCopia: !copia }));
     }
   }, []);
   useEffect(() => { if (membro) recarregar(); }, [membro]);
@@ -287,7 +289,7 @@ function App() {
   if (sessao === undefined || (sessao && perfil === undefined)) return html`<div class="carregando">Carregando…</div>`;
   if (modoSenha && sessao) return html`<${Login} modo="nova" />`;
   if (!sessao) return html`<${Login} />`;
-  if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sair} />`;
+  if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sair} semInternet=${estaSemRede() || !navigator.onLine} />`;
 
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
@@ -305,9 +307,13 @@ function App() {
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
+  // sem internet e sem nenhuma cópia dos dados neste computador: avisa em vez de ficar em "Carregando" sem fim
+  else if (!dados.carregado && offline && offline.semCopia) corpo = html`<div class="pagina"><section class="card so-online"><h2>Sem internet e sem cópia dos dados</h2>
+    <p>Este computador ainda não tem a cópia dos dados para trabalhar sem internet. Conecte à internet e abra o programa uma vez; depois ele abre sem internet.</p>
+    <button type="button" class="btn" onClick=${() => reconectar(true)}>Tentar de novo</button></section></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   // telas que ainda não têm cópia no aparelho (etapa 2 do programa): sem internet, avisam em vez de ficar carregando
-  else if (offline && SO_ONLINE[base] && !(api.bancoDoPC && LE_DO_BANCO.includes(base))) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>
+  else if (offline && SO_ONLINE[base] && !(api.bancoDoPC && api.bancoPronto && LE_DO_BANCO.includes(base))) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>
     <p>${SO_ONLINE[base]} Os dados desta tela ainda não ficam guardados neste computador (isso vem na próxima etapa do programa). A cópia de segurança completa continua na pasta Documentos\DTCar Gestão.</p>
     <p class="sub">Sem internet, funcionam: painel, ordens de serviço (consulta e impressão das O.S. guardadas), Nova O.S. com número provisório, clientes, veículos, produtos e contas a receber (consulta).</p>
     <div class="acoes"><button type="button" class="btn btn-pri" onClick=${() => reconectar(true)}>Tentar conectar</button><button type="button" class="btn" onClick=${() => ir("/painel")}>Ir para o painel</button></div></section></div>`;
@@ -344,7 +350,7 @@ function App() {
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
     <${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
     <main>${cfg.espelhoLegado !== false ? html`<div class="faixa-transicao" role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}</div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
-    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => reconectar(true)}>Tentar de novo</button></div>` : null}${corpo}</main>
+    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet.${api.bancoDoPC && !api.bancoPronto ? " O banco de dados do PC ainda não foi carregado: abra o programa uma vez com internet e espere a carga (Sistema › Dados no computador)." : ""} <button type="button" class="btn-link" onClick=${() => reconectar(true)}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">

@@ -141,6 +141,20 @@ export async function converterLegado(t) {
       criado_em: ts(r.DATA) || "2022-05-01T00:00:00-03:00" });
   }
 
+  // códigos repetidos: o mais antigo fica com o número do sistema antigo; os demais ganham números novos acima do maior código do backup.
+  // (antes isso ficava com a sequência do banco, que o espelho volta para 1: os números novos batiam com códigos do próprio backup
+  // e a carga parava em "produtos_codigo_unico")
+  {
+    const grupos = new Map();
+    for (const p of produtos) { if (p.codigo == null) continue; if (!grupos.has(p.codigo)) grupos.set(p.codigo, []); grupos.get(p.codigo).push(p); }
+    let prox = produtos.reduce((m, p) => Math.max(m, +p.codigo || 0), 0);
+    for (const [, g] of [...grupos].sort((a, b) => a[0] - b[0])) {
+      if (g.length < 2) continue;
+      g.sort((a, b) => (a.criado_em < b.criado_em ? -1 : a.criado_em > b.criado_em ? 1 : a.descricao.localeCompare(b.descricao, "pt-BR")));
+      for (const p of g.slice(1)) { p.obs = (p.obs ? p.obs + " · " : "") + "Código no OS Oficina: " + p.codigo; p.codigo = ++prox; }
+    }
+  }
+
   // ---------------- veículos (cadastro PLACA + placas que só aparecem nas O.S.)
   const ordens = t.ORDEM || [];
   const kmOS = new Map();

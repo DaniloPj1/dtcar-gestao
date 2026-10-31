@@ -60,7 +60,14 @@ export function Login({ modo: modoInicial }) {
   </${Moldura}>`;
 }
 
-export function Pendente({ perfil, sair }) {
+export function Pendente({ perfil, sair, semInternet }) {
+  // sem internet não dá para conferir a liberação: não é "aguardando liberação" (e "Sair" agora impediria entrar de novo)
+  if (semInternet && (!perfil || perfil.papel === "pendente")) return html`<${Moldura}>
+    <h1>Sem internet</h1>
+    <p>Não foi possível conferir o seu acesso: este computador ainda não tem a cópia dos dados. Conecte à internet e abra o programa uma vez;
+      depois disso ele abre sem internet com o banco de dados do PC.</p>
+    <button type="button" class="btn btn-bloco" onClick=${() => location.reload()}>Tentar de novo</button>
+  </${Moldura}>`;
   return html`<${Moldura}>
     <h1>Acesso aguardando liberação</h1>
     <p>Olá, ${perfil ? perfil.nome : ""}. Seu cadastro foi criado. Peça ao administrador da oficina para liberar seu acesso em <b>Mais › Equipe</b>.</p>

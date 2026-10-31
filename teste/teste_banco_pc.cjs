@@ -77,6 +77,21 @@ app.on("browser-window-created", async (e, w) => {
     chk("funcionários sem internet", t.includes("Carlos Mecânico"));
     await js(`location.hash = "#/recibos"`); await espera(2000); t = ultimoTexto = await js("document.body.innerText");
     chk("recibos sem internet", t.includes("Cliente A"));
+    // programa recém-atualizado que nunca abriu com internet: banco do PC vazio → usa a cópia do navegador (não "aguardando liberação")
+    await js("window.dtcarDesktop.banco.zerar()");
+    w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");
+    chk("banco do PC vazio: abre com a cópia do navegador", t.includes("Sem internet") && !/aguardando libera/i.test(t) && t.includes("banco de dados do PC ainda não foi carregado"));
+    await js(`location.hash = "#/os/o1"`); await espera(2500); t = ultimoTexto = await js("document.body.innerText");
+    chk("banco do PC vazio: O.S. guardada abre", t.includes("01900") && !t.includes("Abrindo O.S.") && !t.includes("Não foi possível abrir"));
+    // sem nenhuma cópia do acesso: avisa "Sem internet" (nunca "aguardando liberação" nem "Sair")
+    await js(`import("./js/local.js").then(m => m.local.apagarTudo())`);
+    w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");
+    chk("sem cópia do acesso: tela Sem internet", /sem internet/i.test(t) && !/aguardando libera/i.test(t));
+    // com o acesso guardado mas sem nenhuma cópia dos dados: avisa em vez de "Carregando" sem fim
+    await js(`import("./js/local.js").then(m => m.local.gravar("perfil:u1", ${JSON.stringify(D.perfis[0])}))`);
+    fs.rmSync(path.join(app.getPath("documents"), "DTCar Gestão"), { recursive: true, force: true }); // cópia da pasta também some
+    w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");
+    chk("sem cópia dos dados: aviso (não fica em Carregando)", t.includes("sem cópia dos dados") && !t.includes("Carregando dados"));
   } catch (x) { resultado.falhas.push("EXCECAO " + x.message); }
   fs.writeFileSync(path.join(casa, "resultado.json"), JSON.stringify(resultado, null, 1));
   console.log("RESULTADO " + JSON.stringify(resultado)); srv.close(); app.quit();

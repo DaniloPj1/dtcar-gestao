@@ -5,6 +5,15 @@
 
 const B = typeof window !== "undefined" && window.dtcarDesktop && window.dtcarDesktop.banco ? window.dtcarDesktop.banco : null;
 export const replicaDisponivel = () => !!B;
+// o banco do PC só vale para leitura depois da 1ª carga completa; antes disso (programa recém-instalado ou atualizado
+// sem ter aberto com internet) as telas usam a cópia do navegador, como no programa 1.0
+let pronta = false;
+export const replicaProntaJa = () => pronta;
+export async function replicaPronta() {
+  if (pronta || !B) return pronta;
+  try { pronta = !!(await B.meta("completa:em")); } catch (e) { pronta = false; }
+  return pronta;
+}
 
 // mesma lista do backup (quem é referenciado vem antes) + equipe e ajustes
 export const TABELAS_REPLICA = ["perfis", "fornecedores", "clientes", "veiculos", "servicos", "produtos", "produto_fornecedor", "notas_entrada",
@@ -73,7 +82,7 @@ export async function replicar(api, { completo = false, espelho = null, config =
     }
     if (espelhoNovo) await B.meta("espelho", espelho);
     if (config) await B.meta("config", JSON.stringify(config));
-    if (cicloCompleto) await B.meta("completa:em", String(agora));
+    if (cicloCompleto) { await B.meta("completa:em", String(agora)); pronta = true; }
     const info = await B.info();
     estado = { ...estado, rodando: false, ultima: new Date().toISOString(), registros: Object.values(info.tabelas).reduce((s, n) => s + n, 0), tabelas: info.tabelas, tamanho: info.tamanho, v13 };
     await B.meta("ultima", estado.ultima);

@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v12.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v14.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -32,6 +32,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (a) dado operacional novo (tabela ou coluna com O.S., dinheiro, cadastro ou estoque) entra em `espelho_legado_zerar()` ou é declarado
   preservado, com o motivo, no SQL e no PR; (b) nada pode levar a equipe a achar que um lançamento aqui é oficial nesse período;
   (c) o PR diz em uma linha como a mudança se comporta antes e depois da virada.
+- Carga do sistema antigo: código de produto repetido no OS Oficina é resolvido em `js/legado.js` (o mais antigo fica com o número;
+  os outros ganham números acima do maior código e a observação "Código no OS Oficina: N"). Nunca depender da sequência do banco, que o espelho zera.
 - Estoque: a peça sai quando entra na O.S. e volta se for removida, recusada ou cancelada.
 - Garantia de serviço e responsabilidade por peça trazida pelo cliente ficam separadas; nada de cláusula contra o CDC.
 - Não inventar preço, torque, pinagem, código de peça ou regra fiscal.
@@ -46,6 +48,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (`js/replica.js`: carga completa, depois só o que mudou por `atualizado_em` + tabela `exclusoes` do `supabase/v13.sql`).
   Sem internet, `js/api.js` (`comBancoDoPC`) lê do banco do PC. Cópia diária do banco em Documentos\DTCar Gestão\banco.
   Espelho do sistema antigo: quando muda `cfg.ultimoEspelho.em`, o banco do PC é zerado e recarregado.
+  O banco do PC só vale para leitura depois da 1ª carga completa (`replicaPronta()`, meta `completa:em`); antes disso as leituras
+  respondem "sem conexão" e as telas usam a cópia do navegador. Sem internet, falta de perfil nunca vira "aguardando liberação".
 - Etapa 2b (próxima): gravar no banco do PC + fila de envio (O.S. sem internet usa número provisório PROV-NN, decisão do Danilo em 31/10;
   o definitivo é dado pelo servidor ao enviar, por ordem de horário). Depois: regras de conflito e opção de rede para um 2º PC.
 - Programa e telas são independentes: telas novas chegam pelo site; mudança em `desktop/` exige nova versão do programa

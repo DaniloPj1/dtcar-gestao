@@ -19,6 +19,17 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
-      - run: npm run publicar
+      - name: Gerar e publicar o instalador
+        shell: bash
+        run: |
+          set -o pipefail
+          npm run publicar 2>&1 | tee build.log
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # o log do Actions nem sempre é acessível de fora; o final do erro vira uma anotação (legível pela API)
+      - name: Mostrar o erro
+        if: failure()
+        shell: bash
+        run: |
+          msg=$(tail -c 5000 build.log | sed 's/%/%25/g; s/\r//g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Falha ao gerar o instalador::$msg"

@@ -9,6 +9,8 @@ const { app, BrowserWindow, protocol, net, ipcMain, shell, Menu, dialog } = requ
 const path = require("path");
 const fs = require("fs");
 const fsp = fs.promises;
+const crypto = require("crypto");
+const sha256 = dados => crypto.createHash("sha256").update(dados).digest("hex");
 const { pathToFileURL } = require("url");
 
 const SITE = process.env.DTCAR_SITE || "https://gestao.dtcarcentroautomotivo.com.br/"; // DTCAR_SITE: só para teste
@@ -31,21 +33,46 @@ function arquivosDoSw(texto) {
   const m = /const ARQUIVOS = \[([\s\S]*?)\];/.exec(texto || ""); if (!m) return [];
   return [...m[1].matchAll(/"([^"]+)"/g)].map(x => x[1]).filter(a => a !== "./" && !a.includes(".."));
 }
+function hashesDoSw(texto) { const m = /const INTEGRIDADE = (\{[^\n]*\});/.exec(texto || ""); try { return m ? JSON.parse(m[1]) : null; } catch (e) { return null; } }
+/** Caminho dentro da pasta base, sem escapar por "..", pasta vizinha de nome parecido ou atalho (link) do Windows */
+function confinar(base, rel) {
+  if (typeof rel !== "string" || rel.includes("\0")) throw new Error("Caminho inválido");
+  base = path.resolve(base);
+  const alvo = path.resolve(base, rel.replace(/[\\/]+/g, path.sep)), trecho = path.relative(base, alvo);
+  if (!trecho || trecho === ".." || trecho.startsWith(".." + path.sep) || path.isAbsolute(trecho)) throw new Error("Caminho inválido");
+  let atual = base; // a própria base pode ser um link (Documentos no OneDrive); o que está dentro dela, não
+  for (const parte of trecho.split(path.sep)) { atual = path.join(atual, parte); try { if (fs.lstatSync(atual).isSymbolicLink()) throw new Error("Caminho inválido"); } catch (e) { if (e.code !== "ENOENT") throw e; } }
+  return alvo;
+}
+/** Cópia baixada válida: mesma versão, todos os arquivos presentes e, quando o site publica a integridade, idênticos ao publicado */
+function copiaCompleta(pasta, versao) {
+  try {
+    const sw = fs.readFileSync(path.join(pasta, "sw.js"), "utf8"), lista = arquivosDoSw(sw), hashes = hashesDoSw(sw);
+    return versaoDoSw(sw) === versao && lista.includes("index.html") &&
+      lista.every(rel => { const arq = confinar(pasta, rel); return fs.statSync(arq).isFile() && (!hashes || !hashes[rel] || sha256(fs.readFileSync(arq)) === hashes[rel]); });
+  } catch (e) { return false; }
+}
 function versaoEmbutida() { try { return versaoDoSw(fs.readFileSync(path.join(siteEmbutido(), "sw.js"), "utf8")); } catch (e) { return 0; } }
 let raizAtual = null, versaoAtual = 0;
 function escolherSite() {
-  const atual = lerJSON(path.join(pastaSites(), "atual.json")); // { versao, pasta }
+  const atual = lerJSON(path.join(pastaSites(), "atual.json")); // { versao, pasta, arquivos }
   const vEmb = versaoEmbutida();
-  if (atual && atual.versao > vEmb && fs.existsSync(path.join(pastaSites(), atual.pasta, "index.html"))) { raizAtual = path.join(pastaSites(), atual.pasta); versaoAtual = atual.versao; }
+  // a cópia baixada só vale se estiver completa (todos os arquivos da lista); senão volta para a do instalador e baixa de novo
+  const completa = atual && atual.pasta === "v" + atual.versao && copiaCompleta(path.join(pastaSites(), atual.pasta), atual.versao);
+  if (atual && !completa) { try { fs.rmSync(path.join(pastaSites(), "atual.json"), { force: true }); } catch (e) {} }
+  if (completa && atual.versao > vEmb) { raizAtual = path.join(pastaSites(), atual.pasta); versaoAtual = atual.versao; }
   else { raizAtual = siteEmbutido(); versaoAtual = vEmb; }
 }
 
+// a troca para as telas novas só acontece quando a página recarrega (nunca mistura arquivos de duas versões)
+let trocaPendente = false;
 // serve os arquivos das telas a partir do disco (forma recomendada pelo Electron: net.fetch de file://)
 async function servir(req) {
   const u = new URL(req.url);
+  if (u.protocol !== ESQUEMA + ":" || u.hostname !== HOST) return new Response("Proibido", { status: 403 });
   const rel = decodeURIComponent(u.pathname).replace(/^\/+/, "") || "index.html";
-  const arq = path.normalize(path.join(raizAtual, rel));
-  if (!arq.startsWith(path.normalize(raizAtual))) return new Response("Proibido", { status: 403 });
+  if (trocaPendente && rel === "index.html") { trocaPendente = false; escolherSite(); }
+  let arq; try { arq = confinar(raizAtual, rel); } catch (e) { return new Response("Proibido", { status: 403 }); }
   if (!fs.existsSync(arq)) return new Response("Não encontrado", { status: 404 });
   return net.fetch(pathToFileURL(arq).toString());
 }
@@ -57,32 +84,44 @@ async function atualizarSite() {
   if (atualizando) return; atualizando = true;
   try {
     const sw = (await baixar(SITE + "sw.js?d=" + Date.now())).toString("utf8");
-    const v = versaoDoSw(sw), lista = arquivosDoSw(sw);
-    if (!v || v <= versaoAtual || !lista.includes("index.html")) return;
+    const v = versaoDoSw(sw), lista = arquivosDoSw(sw), hashes = hashesDoSw(sw);
+    const jaBaixada = trocaPendente ? (lerJSON(path.join(pastaSites(), "atual.json")) || {}).versao || 0 : 0;
+    if (!v || v <= Math.max(versaoAtual, jaBaixada) || !lista.includes("index.html")) return;
     const nome = "v" + v, tmp = path.join(pastaSites(), nome + ".baixando"), fim = path.join(pastaSites(), nome);
     await fsp.rm(tmp, { recursive: true, force: true });
     for (const rel of lista.concat(["sw.js"])) {
       const dados = rel === "sw.js" ? Buffer.from(sw) : await baixar(SITE + rel + "?d=" + v);
-      const destino = path.join(tmp, rel); await fsp.mkdir(path.dirname(destino), { recursive: true }); await fsp.writeFile(destino, dados);
+      if (hashes && rel !== "sw.js" && hashes[rel] && sha256(dados) !== hashes[rel]) throw new Error("arquivo diferente do publicado: " + rel);
+      const destino = confinar(tmp, rel); await fsp.mkdir(path.dirname(destino), { recursive: true }); await fsp.writeFile(destino, dados);
     }
+    // o site pode ter sido publicado de novo no meio do download: só aceita se a versão continuar a mesma
+    if (versaoDoSw((await baixar(SITE + "sw.js?d=" + Date.now())).toString("utf8")) !== v) throw new Error("versão mudou durante o download");
     await fsp.rm(fim, { recursive: true, force: true }); await fsp.rename(tmp, fim);
-    await fsp.writeFile(path.join(pastaSites(), "atual.json"), JSON.stringify({ versao: v, pasta: nome, em: new Date().toISOString() }));
+    await fsp.writeFile(path.join(pastaSites(), "atual.json"), JSON.stringify({ versao: v, pasta: nome, arquivos: lista.concat(["sw.js"]), em: new Date().toISOString() }));
     // guarda só a versão atual e a anterior
-    for (const d of await fsp.readdir(pastaSites())) if (/^v\d+/.test(d) && d !== nome && d !== "v" + versaoAtual) await fsp.rm(path.join(pastaSites(), d), { recursive: true, force: true }).catch(() => {});
-    escolherSite();
+    for (const d of await fsp.readdir(pastaSites())) if (/^v\d+/.test(d) && d !== nome && d !== path.basename(raizAtual)) await fsp.rm(path.join(pastaSites(), d), { recursive: true, force: true }).catch(() => {});
+    trocaPendente = true; // vale na próxima vez que a tela recarregar ("Atualizar agora")
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("dtcar-nova-versao", v);
   } catch (e) { /* sem internet ou site fora do ar: segue com a cópia que já está no disco */ }
   finally { atualizando = false; }
 }
 
 // ---------- pasta de dados em Documentos (usada pelo js/pasta.js) ----------
-function caminhoSeguro(rel) {
-  const base = pastaDados(), arq = path.normalize(path.join(base, ...String(rel).split(/[\\/]+/)));
-  if (!arq.startsWith(base)) throw new Error("Caminho inválido");
-  return arq;
-}
+const caminhoSeguro = rel => confinar(pastaDados(), String(rel));
 ipcMain.handle("pasta:info", async () => { await fsp.mkdir(path.join(pastaDados(), "dados"), { recursive: true }); await fsp.mkdir(path.join(pastaDados(), "copias"), { recursive: true }); return { caminho: pastaDados(), nome: NOME_PASTA }; });
-ipcMain.handle("pasta:escrever", async (e, rel, texto) => { const a = caminhoSeguro(rel); await fsp.mkdir(path.dirname(a), { recursive: true }); const t = a + ".tmp"; await fsp.writeFile(t, texto, "utf8"); await fsp.rename(t, a); return true; });
+// gravações no mesmo arquivo entram em fila (a última pedida é a que fica); arquivo temporário com nome único
+const gravacoes = new Map();
+ipcMain.handle("pasta:escrever", async (e, rel, texto) => {
+  const a = caminhoSeguro(rel), anterior = gravacoes.get(a) || Promise.resolve();
+  const tarefa = anterior.catch(() => {}).then(async () => {
+    await fsp.mkdir(path.dirname(a), { recursive: true });
+    const t = a + "." + crypto.randomUUID() + ".tmp";
+    try { await fsp.writeFile(t, String(texto), { encoding: "utf8", flag: "wx" }); await fsp.rename(t, a); return true; }
+    finally { await fsp.rm(t, { force: true }).catch(() => {}); }
+  });
+  gravacoes.set(a, tarefa);
+  try { return await tarefa; } finally { if (gravacoes.get(a) === tarefa) gravacoes.delete(a); }
+});
 ipcMain.handle("pasta:ler", async (e, rel) => { try { return await fsp.readFile(caminhoSeguro(rel), "utf8"); } catch (x) { return null; } });
 ipcMain.handle("pasta:listar", async (e, rel) => { try { return await fsp.readdir(caminhoSeguro(rel)); } catch (x) { return []; } });
 ipcMain.handle("pasta:remover", async (e, rel) => { await fsp.rm(caminhoSeguro(rel), { force: true }); return true; });
@@ -99,8 +138,9 @@ function criarJanela() {
   w.once("ready-to-show", () => { w.maximize(); w.show(); });
   // links de fora (WhatsApp, GitHub, SEFAZ…) abrem no navegador do computador
   const externo = url => /^https?:|^mailto:|^tel:/i.test(url);
-  w.webContents.setWindowOpenHandler(({ url }) => { if (externo(url)) { shell.openExternal(url); return { action: "deny" }; } return { action: "allow" }; });
-  w.webContents.on("will-navigate", (ev, url) => { if (externo(url)) { ev.preventDefault(); shell.openExternal(url); } });
+  // o programa nunca abre janelas novas nem sai das próprias telas: o que for de fora vai para o navegador do Windows
+  w.webContents.setWindowOpenHandler(({ url }) => { if (externo(url)) shell.openExternal(url); return { action: "deny" }; });
+  w.webContents.on("will-navigate", (ev, url) => { if (url.startsWith(`${ESQUEMA}://${HOST}/`)) return; ev.preventDefault(); if (externo(url)) shell.openExternal(url); });
   w.loadURL(`${ESQUEMA}://${HOST}/index.html`);
   // teste automático (teste/teste_programa.sh): grava o que apareceu na tela e fecha
   const msgs = []; if (process.env.DTCAR_TESTE_SAIDA) { w.webContents.on("console-message", (e, l, m) => msgs.push(String(m || (e && e.message) || "").slice(0, 200)));

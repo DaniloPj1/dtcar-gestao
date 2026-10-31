@@ -89,7 +89,7 @@ export function Importar() {
           ${cfg.ultimoEspelho ? html`<br /><small>Última carga: ${new Date(cfg.ultimoEspelho.em).toLocaleString("pt-BR")} por ${cfg.ultimoEspelho.por} (${cfg.ultimoEspelho.ordens} O.S.).</small>` : null}
           <details class="regra-transicao" open><summary>Regra do período de transição (dois sistemas em paralelo)</summary><ol>
             <li><b>O OS Oficina é o sistema oficial.</b> Toda O.S., recibo, venda e cadastro real é lançado nele.</li>
-            <li><b>O DTCar Gestão é para consulta e treino.</b> O que for lançado aqui é apagado na próxima carga. A faixa amarela no topo de todas as telas lembra isso.</li>
+            <li><b>O DTCar Gestão é para consulta e treino.</b> A carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores, funcionários e as demais áreas preservadas <b>não</b> são limpos: nelas, só lance o que for real. A faixa amarela no topo de todas as telas lembra isso.</li>
             <li><b>A carga é feita só pelo administrador</b>, de preferência no fim do expediente, com o backup do OS Oficina do dia.</li>
             <li><b>A virada tem data marcada:</b> última carga, desligar o espelho e, a partir daí, lançar só no DTCar Gestão. O OS Oficina fica só para consulta.</li>
           </ol></details>

@@ -9,7 +9,7 @@ import { local } from "./local.js";
 const NOME_PASTA = "DTCar Gestão", DIAS_COPIAS = 30;
 // No programa para Windows (desktop/), a pasta é sempre Documentos\DTCar Gestão e quem grava é o próprio programa
 const D = typeof window !== "undefined" && window.dtcarDesktop ? window.dtcarDesktop.pasta : null;
-const PROGRAMA = { programa: true };
+const PROGRAMA = { programa: true, name: NOME_PASTA };
 export const pastaSuportada = () => !!D || typeof window.showDirectoryPicker === "function";
 
 let estado = { configurada: false, permissao: "", nome: "", ultimaGravacao: null, erro: "" };
@@ -47,7 +47,7 @@ const LEIA_ME = "Pasta de dados do DTCar Gestão neste computador.\r\n\r\n" +
   "copias\\                 - uma cópia por dia, guardadas por " + DIAS_COPIAS + " dias\r\n\r\n" +
   "Não apague nem edite estes arquivos. Copie esta pasta para um pendrive ou para a nuvem com frequência.\r\n";
 export async function escolherPasta() {
-  if (D) { await iniciarPasta(); return PROGRAMA; }
+  if (D) { const st = await iniciarPasta(); if (!st.configurada) throw new Error(st.erro || "Não foi possível acessar a pasta Documentos\\DTCar Gestão."); return PROGRAMA; }
   const base = await window.showDirectoryPicker({ id: "dtcar-dados", mode: "readwrite", startIn: "documents" });
   const h = base.name === NOME_PASTA ? base : await base.getDirectoryHandle(NOME_PASTA, { create: true });
   await h.getDirectoryHandle("dados", { create: true }); await h.getDirectoryHandle("copias", { create: true });
@@ -62,7 +62,7 @@ export async function escolherPasta() {
 }
 /** Religa a permissão (o navegador pode pedir de novo depois de reiniciar) */
 export async function reconectarPasta() {
-  if (D) { await iniciarPasta(); return true; }
+  if (D) { const st = await iniciarPasta(); return st.configurada && st.permissao === "granted"; }
   const h = await raiz(); if (!h) return false;
   const p = await permissao(h, true); estado = { ...estado, permissao: p }; avisa(); return p === "granted";
 }

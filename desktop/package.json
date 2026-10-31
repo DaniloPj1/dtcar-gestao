@@ -28,6 +28,6 @@
     "directories": { "output": "dist" },
     "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "icone.png", "artifactName": "DTCar-Gestao-Setup.${ext}" },
     "nsis": { "oneClick": true, "perMachine": false, "createDesktopShortcut": "always", "createStartMenuShortcut": true, "shortcutName": "DTCar Gestão", "deleteAppDataOnUninstall": false },
-    "publish": [{ "provider": "github", "owner": "DaniloPj1", "repo": "dtcar-gestao", "releaseType": "release" }]
+    "publish": [{ "provider": "github", "owner": "DaniloPj1", "repo": "dtcar-gestao", "releaseType": "release", "tagNamePrefix": "programa-v" }]
   }
 }

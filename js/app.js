@@ -229,7 +229,7 @@ function App() {
         const ult = await backupDaPasta(), dia = new Date().toISOString().slice(0, 10);
         if (!vivo || (ult && ult.dia === dia)) return;
         // sem modo tolerante: se alguma tabela falhar, não grava um "backup completo" pela metade (tenta de novo depois)
-        const b = await montarBackup({ perfil }); delete b.feito; delete b.puladas; if (vivo) await gravarBackupNaPasta(JSON.stringify(b));
+        const b = await montarBackup({ perfil, origem: "servidor" }); delete b.feito; delete b.puladas; if (vivo) await gravarBackupNaPasta(JSON.stringify(b));
       } catch (e) { /* sem internet ou erro: tenta de novo na próxima verificação */ } finally { fazendo = false; }
     };
     const t = setTimeout(fazer, 20000), h = setInterval(fazer, 60 * 60000); // confere de hora em hora (programa aberto de um dia para o outro)

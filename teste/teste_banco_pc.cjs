@@ -79,8 +79,11 @@ app.on("browser-window-created", async (e, w) => {
     chk("recibos sem internet", t.includes("Cliente A"));
     await js(`location.hash = "#/painel"`); await espera(2000); t = ultimoTexto = await js("document.body.innerText");
     chk("painel sem internet: indicadores avisam (sem 'Failed to fetch')", !t.includes("Failed to fetch") && !t.includes("Não foi possível calcular"));
-    const nBackup = await js(`import("./js/telas/backup.js").then(m => m.montarBackup({ perfil: { papel: "admin", nome: "Danilo" }, tolerante: false })).then(b => b.tabelas.ordens.length + "|" + b.tabelas.contas.length)`).catch(e => "ERRO " + e.message);
-    chk("backup sem internet pelo banco do PC (" + nBackup + ")", nBackup === "2|1");
+    const nBackup = await js(`import("./js/telas/backup.js").then(m => m.montarBackup({ perfil: { papel: "admin", nome: "Danilo" }, tolerante: false })).then(b => b.tabelas.ordens.length + "|" + b.tabelas.contas.length + "|" + (b.origem ? "pc" : "servidor"))`).catch(e => "ERRO " + e.message);
+    chk("backup sem internet pelo banco do PC (" + nBackup + ")", nBackup === "2|1|pc");
+    // a réplica nunca lê do banco do PC (carga completa sem internet falha e não mistura)
+    const rep = await js(`import("./js/api.js").then(m => m.api.backup.tabela("ordens")).then(() => "leu", e => "falhou")`);
+    chk("backup.tabela (usada pela réplica) não cai para o banco do PC", rep === "falhou");
     // programa recém-atualizado que nunca abriu com internet: banco do PC vazio → usa a cópia do navegador (não "aguardando liberação")
     await js("window.dtcarDesktop.banco.zerar()");
     w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");

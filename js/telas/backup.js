@@ -1,6 +1,6 @@
 // Backup: cópia completa dos dados em um arquivo e restauração do que estiver faltando
 import { html, useState } from "../lib.js";
-import { api } from "../api.js";
+import { api, estaSemRede } from "../api.js";
 import { useApp, Vazio } from "../ui.js";
 import { fmtDataHora } from "../util.js";
 
@@ -11,19 +11,27 @@ const TABELAS = [["fornecedores", "Fornecedores"], ["clientes", "Clientes"], ["v
   ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"], ["receber", "Contas a receber"]];
 const OPCIONAIS = t => t === "servicos" || t.startsWith("funcionario") || t === "receber"; // tabelas que podem não existir no banco
 
-/** Lê todas as tabelas do servidor no formato de backup (o mesmo que a tela Backup restaura).
- *  tolerante: pula tabela que o usuário não pode ler (em vez de parar), anotando em out.puladas. */
-export async function montarBackup({ perfil, aoProgredir = () => {}, tolerante = false }) {
+/** origem do arquivo inteiro (nunca mistura): "pc" = programa sem internet com o banco do PC carregado; senão, servidor */
+export const origemBackup = () => (api.bancoDoPC && api.bancoPronto && api.backup && api.backup.doPC && estaSemRede() ? "pc" : "servidor");
+
+/** Lê todas as tabelas no formato de backup (o mesmo que a tela Backup restaura), todas da mesma origem.
+ *  tolerante: pula tabela que o usuário não pode ler (em vez de parar), anotando em out.puladas.
+ *  origem "servidor": se a conexão cair no meio, para (não completa com a cópia do PC). */
+export async function montarBackup({ perfil, aoProgredir = () => {}, tolerante = false, origem = origemBackup() }) {
+  const doPC = origem === "pc";
   const out = { sistema: "dtcar-gestao", versao: 5, gerado_em: new Date().toISOString(), gerado_por: perfil.nome, tabelas: {}, puladas: [] };
+  if (doPC) { out.origem = "banco do PC (sem internet)"; out.copia_do_pc_em = await api.backup.copiaDoPCEm(); }
   out.config = await api.config(); out.perfis = await api.perfis();
   const feito = [];
   for (const [t, nome] of TABELAS) {
     aoProgredir({ feito, atual: nome });
-    try { out.tabelas[t] = await api.backup.tabela(t); }
+    try { out.tabelas[t] = doPC ? await api.backup.doPC(t) : await api.backup.tabela(t); }
     catch (e) { if (OPCIONAIS(t) && /does not exist|schema cache|could not find|relation .* not|404/i.test(e.message)) { out.tabelas[t] = []; continue; } // tabela que ainda não existe no banco; falha de rede não
       if (tolerante && !/Sem conexão/.test(e.message)) { out.tabelas[t] = []; out.puladas.push(nome); continue; } throw new Error(nome + ": " + e.message); }
     feito.push([nome, out.tabelas[t].length]);
   }
+  // a conexão caiu durante o backup do servidor (alguma leitura passou para a cópia do PC): não entrega arquivo misturado
+  if (!doPC && estaSemRede() && api.bancoDoPC) throw new Error("a conexão caiu durante o backup. Tente de novo");
   out.feito = feito;
   return out;
 }
@@ -33,7 +41,7 @@ export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo
   const out = await montarBackup({ perfil, aoProgredir }), feito = out.feito; delete out.feito; delete out.puladas;
   const total = Object.values(out.tabelas).reduce((s, l) => s + l.length, 0);
   const { blob, ext } = await compactar(JSON.stringify(out));
-  const d = new Date(), nomeArq = `${prefixo}-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.${ext}`;
+  const d = new Date(), nomeArq = `${prefixo}${out.origem ? "-copia-do-pc" : ""}-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.${ext}`;
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomeArq; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
   await api.salvarConfig({ ...cfg, ultimoBackup: { em: out.gerado_em, por: perfil.nome, registros: total, tamanho: blob.size, arquivo: nomeArq } }).catch(() => {});
   return { nomeArq, total, tamanho: blob.size, feito };
@@ -109,6 +117,7 @@ export function Backup() {
     <section class=${"card" + (diasUlt === null || diasUlt > 7 ? " card-alerta" : "")}>
       <h3>Fazer backup agora</h3>
       <p>Baixa um arquivo com todos os cadastros, O.S., itens, recibos, vendas, estoque e contas a pagar. Guarde em mais de um lugar (pen drive, Google Drive, e-mail). Recomendado: uma vez por semana.</p>
+      ${origemBackup() === "pc" ? html`<div class="aviso">Sem internet: o backup sai da cópia do banco do PC (a última atualização com o servidor), com "copia-do-pc" no nome do arquivo.</div>` : null}
       <div class="acoes"><button type="button" class="btn btn-pri" disabled=${prog && !prog.fim} onClick=${baixar}>${prog && !prog.fim ? "Gerando…" : "Baixar backup"}</button></div>
       ${prog ? html`<ul class="ranking progresso">${prog.feito.map(([n, q]) => html`<li key=${n}><span>${n}</span><b>${q.toLocaleString("pt-BR")}</b></li>`)}${prog.atual ? html`<li><span>${prog.atual}</span><b>…</b></li>` : null}</ul>
         ${prog.fim ? html`<div class="aviso ok">Arquivo <b>${prog.fim.nomeArq}</b> salvo na pasta de downloads: ${prog.fim.total.toLocaleString("pt-BR")} registros, ${kb(prog.fim.tamanho)}.</div>` : null}` : null}

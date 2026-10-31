@@ -83,7 +83,12 @@ function App() {
       if (guardada && (!navigator.onLine || (api.auth.guardadaVencida && api.auth.guardadaVencida(guardada))) && api.testarConexao && !(await api.testarConexao())) {
         definirSemRede(true); setSessao(guardada); return;
       }
-      try { const s = await api.auth.sessao(); setSessao(s || (guardada && (!navigator.onLine || estaSemRede()) ? guardada : null)); }
+      try {
+        const d = api.auth.sessaoDetalhada ? await api.auth.sessaoDetalhada() : { sessao: await api.auth.sessao() };
+        // servidor de login fora do ar (5xx/sem resposta) com login guardado: abre com a cópia; ao reconectar, renova ou pede login
+        if (!d.sessao && guardada && (d.falhaDeRede || !navigator.onLine || estaSemRede())) { definirSemRede(true); setSessao(guardada); }
+        else setSessao(d.sessao || null);
+      }
       catch (e) { setSessao(guardada || null); }
     })();
     pedirPersistencia();
@@ -111,7 +116,8 @@ function App() {
     const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config", "receber"];
     const lista = quais && quais.length ? quais : todos;
     // se o servidor demorar, confere a conexão em paralelo: sem resposta, entra no modo sem rede e usa a cópia do aparelho na hora
-    const vigia = setTimeout(async () => { if (api.testarConexao && !estaSemRede() && !(await api.testarConexao())) definirSemRede(true); }, 3000);
+    let terminou = false;
+    const vigia = setTimeout(async () => { if (api.testarConexao && !estaSemRede() && !(await api.testarConexao()) && !terminou) definirSemRede(true); }, 3000);
     try {
       const res = await Promise.all(lista.map(k => {
         if (k === "config") return api.config();
@@ -138,9 +144,9 @@ function App() {
         return r;
       });
       ultimaCarga.current = Date.now();
-      clearTimeout(vigia); doServidor.current = true; definirSemRede(false); setOffline(null); setTimeout(() => enviarFila(), 500);
+      terminou = true; clearTimeout(vigia); doServidor.current = true; definirSemRede(false); setOffline(null); setTimeout(() => enviarFila(), 500);
     } catch (e) {
-      clearTimeout(vigia);
+      terminou = true; clearTimeout(vigia);
       if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
       definirSemRede(true); // daqui em diante as telas usam a cópia do aparelho sem esperar o servidor
       // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
@@ -173,7 +179,7 @@ function App() {
           const o = fila.shift();
           const c = await api.ordemNoAparelho(o.id);
           if (!c || c.atualizado_em !== o.atualizado_em) {
-            try { await api.guardarOrdem(o.id); if (!(await api.ordemNoAparelho(o.id))) throw new Error("não gravou"); }
+            try { const r = await api.guardarOrdem(o.id), g = await api.ordemNoAparelho(o.id); if (!g || !r || g.atualizado_em !== r.atualizado_em) throw new Error("não gravou"); }
             catch (e) { if (erroDeRede(e)) { vivo = false; return; } falhas++; if (vivo) setGuardadas({ feitas, falhas, total: lista.length }); continue; }
           }
           feitas++; if (vivo) setGuardadas({ feitas, falhas, total: lista.length }); // só conta o que ficou gravado de verdade

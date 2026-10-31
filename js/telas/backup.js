@@ -20,7 +20,8 @@ export async function montarBackup({ perfil, aoProgredir = () => {}, tolerante =
   for (const [t, nome] of TABELAS) {
     aoProgredir({ feito, atual: nome });
     try { out.tabelas[t] = await api.backup.tabela(t); }
-    catch (e) { if (OPCIONAIS(t)) { out.tabelas[t] = []; continue; } if (tolerante && !/Sem conexão/.test(e.message)) { out.tabelas[t] = []; out.puladas.push(nome); continue; } throw new Error(nome + ": " + e.message); }
+    catch (e) { if (OPCIONAIS(t) && /does not exist|schema cache|could not find|relation .* not|404/i.test(e.message)) { out.tabelas[t] = []; continue; } // tabela que ainda não existe no banco; falha de rede não
+      if (tolerante && !/Sem conexão/.test(e.message)) { out.tabelas[t] = []; out.puladas.push(nome); continue; } throw new Error(nome + ": " + e.message); }
     feito.push([nome, out.tabelas[t].length]);
   }
   out.feito = feito;

@@ -85,6 +85,9 @@ function criarApiSupabase() {
     },
     auth: {
       sessao: async () => (await sb.auth.getSession()).data.session,
+      /** sessão e se a falha foi do servidor/rede (renovação do login não respondeu ou deu erro 5xx), e não login inválido */
+      sessaoDetalhada: async () => { const { data, error } = await sb.auth.getSession();
+        return { sessao: data && data.session, falhaDeRede: !!error && (error.name === "AuthRetryableFetchError" || !error.status || error.status >= 500) }; },
       /** login guardado neste aparelho e se já venceu (o token dura 1 hora; sem internet não dá para renovar) */
       guardadaVencida: s => !!(s && s.expires_at && s.expires_at * 1000 < Date.now() + 60000),
       aoMudar: cb => { const { data } = sb.auth.onAuthStateChange((evento, s) => cb(s, evento)); return () => data.subscription.unsubscribe(); },

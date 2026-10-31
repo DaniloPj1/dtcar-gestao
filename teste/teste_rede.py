@@ -38,6 +38,8 @@ class H(BaseHTTPRequestHandler):
     def do_OPTIONS(self): self.send_response(204); self.cors(); self.end_headers()
     def responder(self):
         if estado["modo"] == "pendura": log.append("pendurado " + self.path[:50]); time.sleep(90); return
+        if estado["modo"] == "auth503" and "/auth/v1/token" in self.path:
+            self.send_response(503); self.cors(); self.send_header("Content-Type", "application/json"); self.end_headers(); self.wfile.write(b'{"message":"indisponivel"}'); return
         body = json.dumps(resposta(self.path, self.headers.get("accept"))).encode()
         self.send_response(200); self.cors(); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", str(len(body))); self.end_headers(); self.wfile.write(body)
     do_GET = responder; do_POST = responder; do_HEAD = responder
@@ -87,6 +89,11 @@ try:
         pg2.wait_for_timeout(500)
     dt = time.time() - t0
     chk("login vencido + sem servidor: abre com o login guardado em %.1fs" % dt, abriu and "ENTRAR" not in pg2.inner_text("body") and dt < 14)
+    # servidor no ar, mas a renovação do login responde 503: abre com a cópia (não cai na tela de login)
+    estado["modo"] = "auth503"; pg3 = ctx.new_page()
+    pg3.add_init_script("localStorage.setItem('sb-127-auth-token', %s)" % json.dumps(json.dumps(venc)))
+    pg3.goto(U + "#/ordens"); pg3.wait_for_timeout(40000)
+    chk("renovação do login com erro 503: não cai na tela de login", "ENTRAR" not in pg3.inner_text("body") and "01900" in pg3.inner_text("body"))
     b.close()
 except Exception as e:
     falhas.append("EXCECAO " + str(e).split("\n")[0])

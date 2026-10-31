@@ -3,6 +3,23 @@ const { contextBridge, ipcRenderer } = require("electron");
 contextBridge.exposeInMainWorld("dtcarDesktop", {
   programa: true,
   info: () => ipcRenderer.invoke("programa:info"),
+  banco: {
+    info: () => ipcRenderer.invoke("banco:info"),
+    substituir: (tabela, texto) => ipcRenderer.invoke("banco:substituir", tabela, texto),
+    preparar: (tabela, texto) => ipcRenderer.invoke("banco:preparar", tabela, texto),
+    promover: tabelas => ipcRenderer.invoke("banco:promover", tabelas),
+    descartarPreparo: () => ipcRenderer.invoke("banco:descartarPreparo"),
+    mesclar: (tabela, texto) => ipcRenderer.invoke("banco:mesclar", tabela, texto),
+    remover: (tabela, ids) => ipcRenderer.invoke("banco:remover", tabela, ids),
+    manterSo: (tabela, ids) => ipcRenderer.invoke("banco:manterSo", tabela, ids),
+    listar: tabela => ipcRenderer.invoke("banco:listar", tabela),
+    porOrdem: (tabela, ordemId) => ipcRenderer.invoke("banco:porOrdem", tabela, ordemId),
+    um: (tabela, id) => ipcRenderer.invoke("banco:um", tabela, id),
+    maiorData: tabela => ipcRenderer.invoke("banco:maiorData", tabela),
+    meta: (k, v) => ipcRenderer.invoke("banco:meta", k, v),
+    zerar: () => ipcRenderer.invoke("banco:zerar"),
+    copiaDoDia: () => ipcRenderer.invoke("banco:copiaDoDia"),
+  },
   pasta: {
     info: () => ipcRenderer.invoke("pasta:info"),
     escrever: (rel, texto) => ipcRenderer.invoke("pasta:escrever", rel, texto),

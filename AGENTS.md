@@ -41,8 +41,15 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   programa baixa sozinho as telas novas do site quando há internet (troca só depois que todos os arquivos chegam inteiros).
 - O programa novo (instalador) é gerado pelo GitHub Actions (`.github/workflows/programa-windows.yml`) ao criar uma tag `programa-vX.Y.Z`
   com a mesma versão do `desktop/package.json`; o programa instalado se atualiza sozinho pelo GitHub Releases.
-- Etapa 1 (atual): abre sempre, sem internet, com a pasta Documentos\DTCar Gestão. Etapas seguintes: banco no PC (trabalho 100% offline),
-  sincronização com o online pelas regras de compartilhamento e, depois, opção de rede para um segundo PC.
+- Etapa 1 (feita): abre sempre, sem internet, com a pasta Documentos\DTCar Gestão.
+- Etapa 2a (feita): banco SQLite no PC (`desktop/banco.js`, node:sqlite, sem módulo nativo) com réplica de todas as tabelas
+  (`js/replica.js`: carga completa, depois só o que mudou por `atualizado_em` + tabela `exclusoes` do `supabase/v13.sql`).
+  Sem internet, `js/api.js` (`comBancoDoPC`) lê do banco do PC. Cópia diária do banco em Documentos\DTCar Gestão\banco.
+  Espelho do sistema antigo: quando muda `cfg.ultimoEspelho.em`, o banco do PC é zerado e recarregado.
+- Etapa 2b (próxima): gravar no banco do PC + fila de envio (O.S. sem internet usa número provisório PROV-NN, decisão do Danilo em 31/10;
+  o definitivo é dado pelo servidor ao enviar, por ordem de horário). Depois: regras de conflito e opção de rede para um 2º PC.
+- Programa e telas são independentes: telas novas chegam pelo site; mudança em `desktop/` exige nova versão do programa
+  (`desktop/package.json` + workflow). Telas novas precisam funcionar no programa antigo (testar `window.dtcarDesktop.banco` antes de usar).
 
 ## Como trabalhar
 1. Crie uma branch (`codex/assunto` ou `claude/assunto`) e abra um Pull Request para a `main` explicando em português o que muda para a oficina.
@@ -56,6 +63,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
    Mexeu em rede, modo sem internet ou cópia local? Rode também `python3 teste/teste_rede.py` (camada real do Supabase contra servidor falso local que "pendura").
    Regra de rede: toda chamada ao servidor passa por `fetchComLimite` (tempo-limite, sem repetição); sem internet, as telas usam a cópia do aparelho
    na hora ou mostram "precisa de internet" (`SO_ONLINE` em `js/app.js`). Nenhuma tela pode ficar em "Carregando…" sem fim.
+   Mexeu no banco do PC (`desktop/banco.js`, `js/replica.js`, `comBancoDoPC`)? Rode também
+   `xvfb-run -a desktop/node_modules/electron/dist/electron teste/teste_banco_pc.cjs --no-sandbox` (programa real contra Supabase falso).
    Mexeu em `desktop/`? Rode também `xvfb-run -a node teste/teste_programa.js` (abre o programa sem internet), depois de `npm install` e `node preparar.js` em `desktop/`.
 5. Não mexer em `CNAME`, nas configurações do GitHub Pages, nem nos segredos do repositório.
 6. Revisão cruzada: quando um agente faz a mudança, o outro revisa o PR (regras acima, textos em português, teste passando) antes do Danilo aprovar.

@@ -126,6 +126,8 @@ ipcMain.handle("pasta:ler", async (e, rel) => { try { return await fsp.readFile(
 ipcMain.handle("pasta:listar", async (e, rel) => { try { return await fsp.readdir(caminhoSeguro(rel)); } catch (x) { return []; } });
 ipcMain.handle("pasta:remover", async (e, rel) => { await fsp.rm(caminhoSeguro(rel), { force: true }); return true; });
 ipcMain.handle("pasta:abrir", async () => { await fsp.mkdir(pastaDados(), { recursive: true }); return shell.openPath(pastaDados()); });
+// banco de dados no PC (etapa 2)
+require("./banco.js").registrar(ipcMain, app, pastaDados);
 ipcMain.handle("programa:info", () => ({ versaoPrograma: app.getVersion(), versaoTelas: versaoAtual, telasDoInstalador: raizAtual === siteEmbutido() }));
 
 // ---------- janela ----------

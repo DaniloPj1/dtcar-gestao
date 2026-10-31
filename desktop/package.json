@@ -1,7 +1,7 @@
 {
   "name": "dtcar-gestao",
   "productName": "DTCar Gestão",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "DTCar Gestão para Windows: abre com ou sem internet",
   "author": "DTCar Centro Automotivo",
   "main": "main.js",
@@ -23,7 +23,7 @@
     "appId": "br.com.dtcarcentroautomotivo.gestao",
     "productName": "DTCar Gestão",
     "copyright": "DTCar Centro Automotivo",
-    "files": ["main.js", "preload.js", "icone.png", "package.json"],
+    "files": ["main.js", "preload.js", "banco.js", "icone.png", "package.json"],
     "extraResources": [{ "from": "site", "to": "site" }],
     "directories": { "output": "dist" },
     "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "icone.png", "artifactName": "DTCar-Gestao-Setup.${ext}" },

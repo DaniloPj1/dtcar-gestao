@@ -3,7 +3,7 @@ import { html, useState, useEffect } from "../lib.js";
 import { useApp, Modal } from "../ui.js";
 import { fmtDataHora, lsSet } from "../util.js";
 import { local } from "../local.js";
-import { pastaSuportada, escolherPasta, reconectarPasta, esquecerPasta, gravarDadosNaPasta } from "../pasta.js";
+import { pastaSuportada, escolherPasta, reconectarPasta, esquecerPasta, gravarDadosNaPasta, backupDaPasta } from "../pasta.js";
 
 /** Janela da primeira abertura do programa instalado: cria a pasta de dados no PC */
 export function AssistentePasta({ onFechar }) {
@@ -31,12 +31,13 @@ export function AssistentePasta({ onFechar }) {
 
 /** Tela Sistema › Dados neste computador */
 export function DadosLocais() {
-  const { pasta, pendentes, enviarFila, avisar, confirmar, abrirAssistentePasta } = useApp();
-  const [copia, setCopia] = useState(null), [uso, setUso] = useState(null), [persist, setPersist] = useState(null);
+  const { pasta, pendentes, enviarFila, avisar, confirmar, abrirAssistentePasta, guardadas } = useApp();
+  const [copia, setCopia] = useState(null), [uso, setUso] = useState(null), [persist, setPersist] = useState(null), [bkp, setBkp] = useState(null), [gOs, setGOs] = useState(null);
   useEffect(() => {
-    local.ler("dados").then(c => setCopia(c || false));
+    local.ler("dados").then(c => setCopia(c || false)); backupDaPasta().then(setBkp).catch(() => {}); local.ler("os:guardadas").then(setGOs).catch(() => {});
     if (navigator.storage) { navigator.storage.estimate && navigator.storage.estimate().then(setUso).catch(() => {}); navigator.storage.persisted && navigator.storage.persisted().then(setPersist).catch(() => {}); }
-  }, [pasta && pasta.ultimaGravacao]);
+  }, [pasta && pasta.ultimaGravacao, pasta && pasta.ultimoBackup, guardadas && guardadas.feitas]);
+  const prog = guardadas || gOs;
   const p = pasta || {};
   const gravarAgora = async () => { const c = await local.ler("dados"); if (!c) return avisar("Ainda não há cópia para gravar. Abra o sistema com internet.", true); avisar((await gravarDadosNaPasta(c, true)) ? "Cópia gravada na pasta." : "Não foi possível gravar na pasta.", !p.ultimaGravacao); };
   const religar = async () => { avisar((await reconectarPasta()) ? "Pasta reconectada." : "Permissão não concedida.", false); };
@@ -50,7 +51,9 @@ export function DadosLocais() {
       : !p.configurada ? html`<p>Crie a pasta <b>DTCar Gestão</b> (sugestão: dentro de Documentos) para o sistema guardar uma cópia dos dados em arquivos neste computador.</p>
         <div class="acoes"><button type="button" class="btn btn-pri" onClick=${abrirAssistentePasta}>Criar pasta de dados</button></div>`
       : html`<div class="kv"><div><span>Pasta</span><b>${p.nome}</b></div><div><span>Última gravação</span><b>${p.ultimaGravacao ? fmtDataHora(p.ultimaGravacao) : "ainda não gravou"}</b></div>
-          <div><span>Conteúdo</span><b>dados\\dtcar-dados.json · dados\\fila-envio.json · copias\\ (30 dias)</b></div></div>
+          <div><span>Backup completo</span><b>${bkp ? fmtDataHora(bkp.em) + " (" + (bkp.tamanho / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB)" : "ainda não feito (é feito 1 vez por dia, com internet)"}</b></div>
+          <div><span>Conteúdo</span><b>dados\\dtcar-dados.json · dados\\fila-envio.json · copias\\ (30 dias) · backup\\ (completo, 14 dias)</b></div></div>
+        <p class="sub">O backup completo tem todas as tabelas (O.S. com itens, recibos, vendas, contas, funcionários, notas). Se o online falhar, ele é restaurado pela tela Sistema › Backup.</p>
         ${p.permissao !== "granted" ? html`<div class="aviso">O navegador pediu para confirmar o acesso à pasta depois de reiniciar. Clique em <b>Reconectar</b> e escolha <b>Permitir sempre</b>.</div>` : null}
         ${p.erro ? html`<div class="erros">Último erro ao gravar: ${p.erro}</div>` : null}
         <div class="acoes">${p.permissao !== "granted" ? html`<button type="button" class="btn btn-pri" onClick=${religar}>Reconectar</button>` : html`<button type="button" class="btn" onClick=${gravarAgora}>Gravar agora</button>`}
@@ -61,7 +64,8 @@ export function DadosLocais() {
       : html`<div class="kv"><div><span>Atualizada em</span><b>${fmtDataHora(copia.salvoEm)}</b></div><div><span>O.S.</span><b>${n("ordens")}</b></div><div><span>Clientes</span><b>${n("clientes")}</b></div>
           <div><span>Veículos</span><b>${n("veiculos")}</b></div><div><span>Produtos e serviços</span><b>${n("produtos")}</b></div>
           ${uso && uso.usage ? html`<div><span>Espaço usado</span><b>${(uso.usage / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB</b></div>` : null}
-          <div><span>Protegida contra limpeza</span><b>${persist ? "sim" : "não (instale o programa para proteger)"}</b></div></div>`}
+          <div><span>O.S. em aberto guardadas por inteiro</span><b>${prog ? prog.feitas + " de " + prog.total + (prog.falhas ? " · " + prog.falhas + " com falha (tenta de novo ao abrir com internet)" : prog.feitas < prog.total ? " (copiando…)" : "") : "—"}</b></div>
+          <div><span>Protegida contra limpeza</span><b>${window.dtcarDesktop ? "sim (programa para Windows)" : persist ? "sim" : "não (instale o programa para proteger)"}</b></div></div>`}
     </section>
     <section class="card"><div class="secao-topo"><h2>O.S. abertas sem internet</h2>${pendentes.length ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${enviarFila}>Enviar agora</button>` : null}</div>
       ${pendentes.length ? html`<ul class="res-lista">${pendentes.map(op => html`<li key=${op.id}><b>${op.provisorio}</b> · ${op.ordem.veiculo.placa} · ${op.ordem.cliente.nome} · aberta em ${fmtDataHora(op.criado_em)}${op.erro ? html` · <span class="c-bad">${op.erro}</span>` : null}</li>`)}</ul>`

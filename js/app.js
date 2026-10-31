@@ -1,13 +1,13 @@
 import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js";
-import { api } from "./api.js";
+import { api, definirSemRede, estaSemRede } from "./api.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
 import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
-import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada } from "./pasta.js";
+import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada, gravarBackupNaPasta, backupDaPasta } from "./pasta.js";
 import { AssistentePasta } from "./telas/dadoslocais.js";
 import { OSPendente } from "./telas/pendente.js";
 import { Ctx, Modal, I } from "./ui.js";
-import { cfgCompleta, pode } from "./regras.js";
+import { cfgCompleta, pode, etapaOS } from "./regras.js";
 import { Conexao, Login, Pendente } from "./telas/login.js";
 import { Painel, Ordens } from "./telas/painel.js";
 import { NovaOS, ChecklistOS } from "./telas/entrada.js";
@@ -23,7 +23,7 @@ import { Balcao } from "./telas/balcao.js";
 import { EntradaNFe } from "./telas/compras.js";
 import { Relatorios } from "./telas/relatorios.js";
 import { Financeiro } from "./telas/financeiro.js";
-import { Backup } from "./telas/backup.js";
+import { Backup, montarBackup } from "./telas/backup.js";
 import { NotasSefaz } from "./telas/sefaz.js";
 import { Funcionarios, FuncionarioTela } from "./telas/funcionarios.js";
 import { BarraTopo } from "./telas/topo.js";
@@ -35,6 +35,11 @@ const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/p
 const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", receber: "Contas a receber", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
+// telas que dependem do servidor (sem cópia no aparelho nesta etapa)
+const SO_ONLINE = { financeiro: "As contas a pagar ficam no servidor.", caixa: "A previsão de caixa usa contas, recibos e parcelas do servidor.", recibos: "Os recibos ficam no servidor.",
+  sefaz: "As notas da SEFAZ chegam pelo servidor.", nfe: "A entrada de nota grava estoque e custos no servidor.", relatorios: "Os relatórios são calculados no servidor.",
+  funcionarios: "Funcionários e lançamentos ficam no servidor.", funcionario: "Funcionários e lançamentos ficam no servidor.", backup: "O backup lê tudo do servidor.",
+  importar: "A carga do sistema antigo grava no servidor.", equipe: "A equipe e os acessos ficam no servidor." };
 const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["+", "Novo", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
 const LATERAL = [
   ["Operação", [["/painel", "Painel", "painel"], ["/ordens", "Ordens de serviço", "lista"], ["/entrada", "Nova O.S.", "mais", "entrada"], ["/balcao", "Venda de balcão", "carrinho", "verValores"]]],
@@ -71,9 +76,28 @@ function App() {
   useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
     if (!api) return;
-    api.auth.sessao().then(s => setSessao(s || (!navigator.onLine ? sessaoGuardada() : null))).catch(() => setSessao(sessaoGuardada()));
+    (async () => {
+      // login guardado e vencido (ou sem rede): confere o servidor antes; se não responder, abre direto com o login guardado,
+      // sem esperar as tentativas de renovação (que podiam durar ~30 s e terminar na tela de login)
+      const guardada = sessaoGuardada();
+      if (guardada && (!navigator.onLine || (api.auth.guardadaVencida && api.auth.guardadaVencida(guardada))) && api.testarConexao && !(await api.testarConexao())) {
+        definirSemRede(true); setSessao(guardada); return;
+      }
+      try {
+        const d = api.auth.sessaoDetalhada ? await api.auth.sessaoDetalhada() : { sessao: await api.auth.sessao() };
+        // servidor de login fora do ar (5xx/sem resposta) com login guardado: abre com a cópia; ao reconectar, renova ou pede login
+        if (!d.sessao && guardada && (d.falhaDeRede || !navigator.onLine || estaSemRede())) { definirSemRede(true); setSessao(guardada); }
+        else setSessao(d.sessao || null);
+      }
+      catch (e) { setSessao(guardada || null); }
+    })();
     pedirPersistencia();
-    return api.auth.aoMudar((s, ev) => { if (ev === "PASSWORD_RECOVERY") setModoSenha(true); setSessao(s || null); });
+    return api.auth.aoMudar((s, ev) => {
+      if (ev === "PASSWORD_RECOVERY") setModoSenha(true);
+      // sem internet a renovação do login falha e a biblioteca avisa "sem sessão": continua com o login guardado (só "Sair" desloga)
+      if (!s && ev !== "SIGNED_OUT") { const g = sessaoGuardada(); if (g && (estaSemRede() || !navigator.onLine)) return setSessao(g); }
+      setSessao(s || null);
+    });
   }, []);
   useEffect(() => {
     if (!api || sessao === undefined) return;
@@ -91,6 +115,9 @@ function App() {
   const recarregar = useCallback(async (quais, opt = {}) => {
     const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config", "receber"];
     const lista = quais && quais.length ? quais : todos;
+    // se o servidor demorar, confere a conexão em paralelo: sem resposta, entra no modo sem rede e usa a cópia do aparelho na hora
+    let terminou = false;
+    const vigia = setTimeout(async () => { if (api.testarConexao && !estaSemRede() && !(await api.testarConexao()) && !terminou) definirSemRede(true); }, 3000);
     try {
       const res = await Promise.all(lista.map(k => {
         if (k === "config") return api.config();
@@ -117,9 +144,11 @@ function App() {
         return r;
       });
       ultimaCarga.current = Date.now();
-      doServidor.current = true; setOffline(null); setTimeout(() => enviarFila(), 500);
+      terminou = true; clearTimeout(vigia); doServidor.current = true; definirSemRede(false); setOffline(null); setTimeout(() => enviarFila(), 500);
     } catch (e) {
+      terminou = true; clearTimeout(vigia);
       if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
+      definirSemRede(true); // daqui em diante as telas usam a cópia do aparelho sem esperar o servidor
       // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
       let copia = await local.ler("dados");
       if (!copia) { const p = await lerDaPasta().catch(() => null); if (p && p.copia && p.copia.dados) { copia = p.copia; local.gravar("dados", { salvoEm: copia.salvoEm, dados: copia.dados, config: copia.config }); } }
@@ -135,20 +164,49 @@ function App() {
     const t = setTimeout(() => { const { carregado, ...listas } = dados; const copia = { salvoEm: new Date().toISOString(), dados: listas, config: cfg }; local.gravar("dados", copia); gravarDadosNaPasta(copia); }, 3000);
     return () => clearTimeout(t);
   }, [dados, cfg, offline]);
-  // O.S. em aberto ficam guardadas por inteiro para abrir e imprimir sem internet
+  // O.S. em aberto (orçamento, execução e aguardando pagamento) ficam guardadas por inteiro neste aparelho,
+  // logo depois de entrar, para abrir e imprimir sem internet. O progresso aparece no topo e em "Dados no computador".
+  const [guardadas, setGuardadas] = useState(null); // { feitas, total }
   useEffect(() => {
     if (!dados.carregado || !doServidor.current || offline || !api.guardarOrdem) return;
     let vivo = true;
     const t = setTimeout(async () => {
-      for (const o of dados.ordens.filter(x => ["diagnostico", "aguardando", "execucao", "pronto"].includes(x.status))) {
-        if (!vivo || !navigator.onLine) return;
-        const c = await api.ordemNoAparelho(o.id);
-        if (c && c.atualizado_em === o.atualizado_em) continue;
-        try { await api.guardarOrdem(o.id); } catch (e) { return; }
-      }
-    }, 5000);
+      const lista = dados.ordens.filter(x => !x._pendente && ["orcamento", "execucao", "pagamento"].includes(etapaOS(x)));
+      let feitas = 0, falhas = 0; setGuardadas({ feitas, falhas, total: lista.length });
+      const fila = [...lista];
+      const trabalhar = async () => {
+        while (vivo && fila.length) {
+          const o = fila.shift();
+          const c = await api.ordemNoAparelho(o.id);
+          if (!c || c.atualizado_em !== o.atualizado_em) {
+            try { const r = await api.guardarOrdem(o.id), g = await api.ordemNoAparelho(o.id); if (!g || !r || g.atualizado_em !== r.atualizado_em) throw new Error("não gravou"); }
+            catch (e) { if (erroDeRede(e)) { vivo = false; return; } falhas++; if (vivo) setGuardadas({ feitas, falhas, total: lista.length }); continue; }
+          }
+          feitas++; if (vivo) setGuardadas({ feitas, falhas, total: lista.length }); // só conta o que ficou gravado de verdade
+        }
+      };
+      await Promise.all([trabalhar(), trabalhar(), trabalhar()]); // 3 de cada vez
+      local.gravar("os:guardadas", { feitas, falhas, total: lista.length, em: new Date().toISOString() });
+    }, 1500);
     return () => { vivo = false; clearTimeout(t); };
   }, [dados.ordens, offline]);
+  // backup COMPLETO do servidor na pasta do computador, uma vez por dia (proteção se o online falhar)
+  useEffect(() => {
+    // só o administrador: para os outros papéis as regras de acesso devolvem tabelas vazias (sem erro) e o "backup completo" sairia incompleto
+    if (!dados.carregado || !doServidor.current || offline || !pasta || !pasta.configurada || pasta.permissao !== "granted" || api.tipo !== "supabase" || !pode(perfil, "ajustes")) return;
+    let vivo = true, fazendo = false;
+    const fazer = async () => {
+      if (fazendo || estaSemRede()) return; fazendo = true;
+      try {
+        const ult = await backupDaPasta(), dia = new Date().toISOString().slice(0, 10);
+        if (!vivo || (ult && ult.dia === dia)) return;
+        // sem modo tolerante: se alguma tabela falhar, não grava um "backup completo" pela metade (tenta de novo depois)
+        const b = await montarBackup({ perfil }); delete b.feito; delete b.puladas; if (vivo) await gravarBackupNaPasta(JSON.stringify(b));
+      } catch (e) { /* sem internet ou erro: tenta de novo na próxima verificação */ } finally { fazendo = false; }
+    };
+    const t = setTimeout(fazer, 20000), h = setInterval(fazer, 60 * 60000); // confere de hora em hora (programa aberto de um dia para o outro)
+    return () => { vivo = false; clearTimeout(t); clearInterval(h); };
+  }, [dados.carregado, offline, pasta && pasta.configurada, pasta && pasta.permissao]);
   // envia a fila: ao abrir, ao reconectar e a cada minuto enquanto houver pendências
   const enviarFila = useCallback(async () => {
     const l = await atualizarPendentes(); if (!l.length || !api.sincronizarAbertura) return;
@@ -163,11 +221,17 @@ function App() {
     if (r.comErro.length) setToast({ msg: r.comErro.length + " O.S. sem internet não puderam ser enviadas. Abra a O.S. para ver o motivo.", erro: true });
   }, []);
   useEffect(() => { if (!membro) return; enviarFila(); const t = setInterval(() => { if (navigator.onLine) enviarFila(); }, 60000); return () => clearInterval(t); }, [membro]);
-  // internet voltou: recarrega tudo do servidor
+  // internet voltou: confere o servidor e recarrega tudo (enquanto estiver sem rede, confere a cada 30 s)
+  const reconectar = useCallback(async (avisarSeFalhar) => {
+    const ok = api.testarConexao ? await api.testarConexao() : navigator.onLine;
+    if (!ok) { if (avisarSeFalhar) setToast({ msg: "Ainda sem conexão com o servidor.", erro: true }); return false; }
+    definirSemRede(false); await recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); return true;
+  }, []);
+  useEffect(() => { if (!offline) return; const t = setInterval(() => reconectar(false), 30000); return () => clearInterval(t); }, [offline]);
   useEffect(() => {
     if (!membro) return;
-    const volta = () => { recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); };
-    const caiu = () => setOffline(o => o || { desde: new Date().toISOString(), copia: null });
+    const volta = () => reconectar(false);
+    const caiu = () => { definirSemRede(true); setOffline(o => o || { desde: new Date().toISOString(), copia: null }); };
     window.addEventListener("online", volta); window.addEventListener("offline", caiu);
     return () => { window.removeEventListener("online", volta); window.removeEventListener("offline", caiu); };
   }, [membro]);
@@ -207,11 +271,16 @@ function App() {
     clientes: [...dados.clientes, ...pendOS.filter(op => op.cliente && !dados.clientes.some(c => c.id === op.cliente.id)).map(op => ({ ...op.cliente, _pendente: true }))],
     veiculos: [...dados.veiculos, ...pendOS.filter(op => op.veiculo && !dados.veiculos.some(v => v.id === op.veiculo.id || v.placa === op.veiculo.placa)).map(op => ({ ...op.veiculo, _pendente: true }))],
   };
-  const ctx = { pasta, abrirAssistentePasta: () => setAssistente(true), sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila };
+  const ctx = { guardadas, pasta, abrirAssistentePasta: () => setAssistente(true), sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila };
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
+  // telas que ainda não têm cópia no aparelho (etapa 2 do programa): sem internet, avisam em vez de ficar carregando
+  else if (offline && SO_ONLINE[base]) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>
+    <p>${SO_ONLINE[base]} Os dados desta tela ainda não ficam guardados neste computador (isso vem na próxima etapa do programa). A cópia de segurança completa continua na pasta Documentos\DTCar Gestão.</p>
+    <p class="sub">Sem internet, funcionam: painel, ordens de serviço (consulta e impressão das O.S. guardadas), Nova O.S. com número provisório, clientes, veículos, produtos e contas a receber (consulta).</p>
+    <div class="acoes"><button type="button" class="btn btn-pri" onClick=${() => reconectar(true)}>Tentar conectar</button><button type="button" class="btn" onClick=${() => ir("/painel")}>Ir para o painel</button></div></section></div>`;
   else corpo = {
     painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} params=${params} key=${qs || ""} />`, entrada: () => html`<${NovaOS} />`,
     os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} params=${params} key=${param} />`,
@@ -245,7 +314,7 @@ function App() {
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
     <${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
     <main>${cfg.espelhoLegado !== false ? html`<div class="faixa-transicao" role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}</div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
-    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => recarregar(null, { completo: true })}>Tentar de novo</button></div>` : null}${corpo}</main>
+    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet. <button type="button" class="btn-link" onClick=${() => reconectar(true)}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">
@@ -257,3 +326,4 @@ function App() {
 }
 
 render(html`<${App} />`, document.getElementById("raiz"));
+window.__dtcarMontou = true; // o aviso de "não abriu" do index.html só vale se o sistema nem chegou a montar

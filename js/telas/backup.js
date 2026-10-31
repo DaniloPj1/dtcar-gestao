@@ -11,16 +11,26 @@ const TABELAS = [["fornecedores", "Fornecedores"], ["clientes", "Clientes"], ["v
   ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"], ["receber", "Contas a receber"]];
 const OPCIONAIS = t => t === "servicos" || t.startsWith("funcionario") || t === "receber"; // tabelas que podem não existir no banco
 
-/** Gera o arquivo de backup completo e baixa no computador. Usado pela tela Backup e antes do espelho do sistema antigo. */
-export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo = "dtcar-backup" }) {
-  const out = { sistema: "dtcar-gestao", versao: 5, gerado_em: new Date().toISOString(), gerado_por: perfil.nome, tabelas: {} };
+/** Lê todas as tabelas do servidor no formato de backup (o mesmo que a tela Backup restaura).
+ *  tolerante: pula tabela que o usuário não pode ler (em vez de parar), anotando em out.puladas. */
+export async function montarBackup({ perfil, aoProgredir = () => {}, tolerante = false }) {
+  const out = { sistema: "dtcar-gestao", versao: 5, gerado_em: new Date().toISOString(), gerado_por: perfil.nome, tabelas: {}, puladas: [] };
   out.config = await api.config(); out.perfis = await api.perfis();
   const feito = [];
   for (const [t, nome] of TABELAS) {
     aoProgredir({ feito, atual: nome });
-    try { out.tabelas[t] = await api.backup.tabela(t); } catch (e) { if (OPCIONAIS(t)) { out.tabelas[t] = []; continue; } throw new Error(nome + ": " + e.message); }
+    try { out.tabelas[t] = await api.backup.tabela(t); }
+    catch (e) { if (OPCIONAIS(t) && /does not exist|schema cache|could not find|relation .* not|404/i.test(e.message)) { out.tabelas[t] = []; continue; } // tabela que ainda não existe no banco; falha de rede não
+      if (tolerante && !/Sem conexão/.test(e.message)) { out.tabelas[t] = []; out.puladas.push(nome); continue; } throw new Error(nome + ": " + e.message); }
     feito.push([nome, out.tabelas[t].length]);
   }
+  out.feito = feito;
+  return out;
+}
+
+/** Gera o arquivo de backup completo e baixa no computador. Usado pela tela Backup e antes do espelho do sistema antigo. */
+export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo = "dtcar-backup" }) {
+  const out = await montarBackup({ perfil, aoProgredir }), feito = out.feito; delete out.feito; delete out.puladas;
   const total = Object.values(out.tabelas).reduce((s, l) => s + l.length, 0);
   const { blob, ext } = await compactar(JSON.stringify(out));
   const d = new Date(), nomeArq = `${prefixo}-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.${ext}`;

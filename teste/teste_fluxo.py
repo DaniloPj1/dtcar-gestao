@@ -90,6 +90,18 @@ try:
     chk("caixa: aluguel nas saídas", "Imobiliária" in t and "3.000,00" in t)
     chk("caixa: saldo fica negativo", "fica negativo" in t)
     pg.screenshot(path=SAIDA + "/u7-caixa.png", full_page=True)
+    # O.S. em aberto guardadas por inteiro (inclui aguardando pagamento) e telas que só funcionam online
+    pg.goto(U + "#/dados-locais"); pg.wait_for_timeout(2500)
+    t = pg.inner_text("main")
+    chk("O.S. guardadas no aparelho", "O.S. em aberto guardadas por inteiro" in t and " de " in t)
+    ctx.set_offline(True); pg.evaluate("window.dispatchEvent(new Event('offline'))"); pg.wait_for_timeout(300)
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(800)
+    chk("sem internet: contas a pagar avisa que precisa de internet", "precisa de internet" in pg.inner_text("main"))
+    pg.goto(U + "#/funcionarios"); pg.wait_for_timeout(800)
+    chk("sem internet: funcionários avisa", "precisa de internet" in pg.inner_text("main"))
+    pg.goto(U + "#/ordens"); pg.wait_for_timeout(800)
+    chk("sem internet: aviso falso do index.html não aparece", "não guarda o programa" not in pg.inner_text("body"))
+    ctx.set_offline(False)
     b.close()
     # ===== offline: SW instala, desliga a rede e reabre =====
     b = p.chromium.launch(); ctx = b.new_context(viewport={"width": 1400, "height": 900}); pg = ctx.new_page()

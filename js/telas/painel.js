@@ -183,7 +183,7 @@ export function Painel() {
   useEffect(() => { if (pode(perfil, "cadastrar") && api.sefaz) api.sefaz.novas().then(setSefazNovas).catch(() => {}); }, []);
   const [sefazCfg, setSefazCfg] = useState(null);
   useEffect(() => { if (pode(perfil, "ajustes") && api.sefaz) api.sefaz.config().then(setSefazCfg).catch(() => {}); }, []);
-  useEffect(() => { if (fin) api.contas.abertas().then(setContasAb).catch(() => setContasAb([])); }, [fin]);
+  useEffect(() => { if (fin) api.contas.abertas().then(setContasAb).catch(() => setContasAb("sem-rede")); }, [fin]);
   if (perfil.papel === "mecanico" && !visiveis.some(j => j.k === "minhas")) visiveis = [{ k: "minhas", tam: 12 }, ...visiveis];
   const precisaRes = ver && visiveis.some(j => JANELAS[j.k].res);
   useEffect(() => { if (!precisaRes) return; let vivo = true; setR(null); setRa(null); setErroRes("");
@@ -208,7 +208,7 @@ export function Painel() {
   });
   alertas.sort((a, b) => (a[2] === "bad" ? 0 : 1) - (b[2] === "bad" ? 0 : 1));
   const extras = []; // alertas que não são de O.S.
-  if (fin && contasAb) { const v = contasAb.filter(c => c.vencimento < hoje), h = contasAb.filter(c => c.vencimento === hoje);
+  if (fin && Array.isArray(contasAb)) { const v = contasAb.filter(c => c.vencimento < hoje), h = contasAb.filter(c => c.vencimento === hoje);
     if (v.length) extras.push({ t: v.length + " conta(s) a pagar vencida(s): " + reais(v.reduce((s, c) => s + Number(c.valor), 0)), s: "Registre o pagamento ou renegocie.", cor: "bad", r: "/financeiro" });
     if (h.length) extras.push({ t: h.length + " conta(s) vencem hoje: " + reais(h.reduce((s, c) => s + Number(c.valor), 0)), s: "Contas a pagar", cor: "warn", r: "/financeiro" }); }
   if (pode(perfil, "verValores")) { const rec = (dados.receber || []).filter(p => p.status === "aberta"), v = rec.filter(p => p.vencimento < hoje), h = rec.filter(p => p.vencimento === hoje);
@@ -272,7 +272,7 @@ export function Painel() {
     manutencao: () => manut.length ? html`<ul class="ranking">${manut.slice(0, 7).map(x => html`<li key=${x.v.id}><span>${exPlaca(x.v.placa)} · ${x.c.nome.split(" ")[0]} · ${x.oque}</span><b class=${x.data < hoje ? "c-bad" : ""}>${fmtData(x.data)}</b>
       <a class="btn btn-sm btn-whats" aria-label=${"WhatsApp para " + x.c.nome} href=${linkWhats(x.c.telefone, lembrete(x))} target="_blank" rel="noopener">${I.whats}</a></li>`)}</ul>` : html`<span class="dica">Nenhuma revisão, troca de óleo ou filtro vencendo em 30 dias.</span>`,
     recuperar: () => html`<div class="numero-grande"><b>${recuperar.length}</b><span>sem visita entre 6 meses e 2 anos</span></div>${recuperar.length ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/cadastros?filtro=recuperar")}>Chamar no WhatsApp</button>` : null}`,
-    contas: () => html`<${ContasJanela} l=${contasAb} />`,
+    contas: () => contasAb === "sem-rede" ? html`<span class="dica">Contas a pagar precisam de internet (ficam no servidor nesta etapa).</span>` : html`<${ContasJanela} l=${contasAb} />`,
     aniversarios: () => aniv.length ? html`<ul class="ranking">${aniv.slice(0, 7).map(c => html`<li key=${c.id}><span>${c.nome}</span><b>${c.nascimento.slice(8, 10)}/${c.nascimento.slice(5, 7)}</b></li>`)}</ul>` : html`<span class="dica">Nenhum neste mês.</span>`,
   };
 

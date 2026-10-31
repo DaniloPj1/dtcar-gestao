@@ -1,5 +1,6 @@
 import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js";
 import { api, definirSemRede, estaSemRede } from "./api.js";
+import { replicar, replicaDisponivel } from "./replica.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
 import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
@@ -35,6 +36,8 @@ const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/p
 const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", receber: "Contas a receber", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
+// no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
+const LE_DO_BANCO = ["financeiro", "caixa", "recibos", "sefaz", "funcionarios", "funcionario"];
 // telas que dependem do servidor (sem cópia no aparelho nesta etapa)
 const SO_ONLINE = { financeiro: "As contas a pagar ficam no servidor.", caixa: "A previsão de caixa usa contas, recibos e parcelas do servidor.", recibos: "Os recibos ficam no servidor.",
   sefaz: "As notas da SEFAZ chegam pelo servidor.", nfe: "A entrada de nota grava estoque e custos no servidor.", relatorios: "Os relatórios são calculados no servidor.",
@@ -119,6 +122,8 @@ function App() {
     let terminou = false;
     const vigia = setTimeout(async () => { if (api.testarConexao && !estaSemRede() && !(await api.testarConexao()) && !terminou) definirSemRede(true); }, 3000);
     try {
+      // com banco no PC as leituras não falham sem internet (vêm do banco do PC): então o "sem rede" é conferido aqui
+      if (api.bancoDoPC && estaSemRede()) throw new Error("Failed to fetch (sem internet)");
       const res = await Promise.all(lista.map(k => {
         if (k === "config") return api.config();
         if (k === "perfis") return api.perfis();
@@ -127,6 +132,7 @@ function App() {
         if (desde) return k === "ordens" ? api.ordens(desde) : api.alterados(k, desde);
         return k === "ordens" ? api.ordens() : api[k].listar(k === "clientes" ? "nome" : k === "produtos" ? "descricao" : k === "fornecedores" ? "razao" : "criado_em");
       }));
+      if (api.bancoDoPC && estaSemRede()) throw new Error("Failed to fetch (sem internet)"); // caiu durante a carga
       const novo = {}, parcial = {};
       lista.forEach((k, n) => {
         if (k === "config") return setCfg(cfgCompleta(res[n]));
@@ -149,6 +155,19 @@ function App() {
       terminou = true; clearTimeout(vigia);
       if (!erroDeRede(e)) return setToast({ msg: "Erro ao carregar dados: " + e.message, erro: true });
       definirSemRede(true); // daqui em diante as telas usam a cópia do aparelho sem esperar o servidor
+      // programa com banco no PC: carrega tudo do banco do PC (mais completo que a cópia do navegador)
+      if (api.bancoDoPC && !opt.doBanco) {
+        try {
+          const [cl, ve, pr, fo, or, pe, cf, re] = await Promise.all([api.clientes.listar(), api.veiculos.listar(), api.produtos.listar(), api.fornecedores.listar(), api.ordens(), api.perfis(), api.config(), api.receber.abertas()]);
+          if (or.length || cl.length) {
+            setDados(d => ({ ...d, clientes: cl, veiculos: ve, produtos: pr, fornecedores: fo, ordens: or, perfis: pe, receber: re, carregado: true }));
+            if (cf && Object.keys(cf).length) setCfg(cfgCompleta(cf));
+            const ult = await window.dtcarDesktop.banco.meta("ultima");
+            setOffline(o => o || { desde: new Date().toISOString(), copia: ult, banco: true });
+            return;
+          }
+        } catch (x) { /* banco do PC vazio ou com erro: usa a cópia do navegador abaixo */ }
+      }
       // sem internet: usa a cópia guardada neste aparelho (só na primeira carga; depois mantém o que já está na tela)
       let copia = await local.ler("dados");
       if (!copia) { const p = await lerDaPasta().catch(() => null); if (p && p.copia && p.copia.dados) { copia = p.copia; local.gravar("dados", { salvoEm: copia.salvoEm, dados: copia.dados, config: copia.config }); } }
@@ -190,6 +209,13 @@ function App() {
     }, 1500);
     return () => { vivo = false; clearTimeout(t); };
   }, [dados.ordens, offline]);
+  // banco do PC (programa para Windows): mantém a réplica de todas as tabelas igual ao online (3 s após carregar, depois a cada 5 min)
+  useEffect(() => {
+    if (!replicaDisponivel() || !dados.carregado || !doServidor.current || offline) return;
+    const rodar = () => { if (!estaSemRede()) replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg }); };
+    const t = setTimeout(rodar, 3000), i = setInterval(rodar, 5 * 60000);
+    return () => { clearTimeout(t); clearInterval(i); };
+  }, [dados.carregado, offline, cfg.ultimoEspelho && cfg.ultimoEspelho.em]);
   // backup COMPLETO do servidor na pasta do computador, uma vez por dia (proteção se o online falhar)
   useEffect(() => {
     // só o administrador: para os outros papéis as regras de acesso devolvem tabelas vazias (sem erro) e o "backup completo" sairia incompleto
@@ -277,7 +303,7 @@ function App() {
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   // telas que ainda não têm cópia no aparelho (etapa 2 do programa): sem internet, avisam em vez de ficar carregando
-  else if (offline && SO_ONLINE[base]) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>
+  else if (offline && SO_ONLINE[base] && !(api.bancoDoPC && LE_DO_BANCO.includes(base))) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>
     <p>${SO_ONLINE[base]} Os dados desta tela ainda não ficam guardados neste computador (isso vem na próxima etapa do programa). A cópia de segurança completa continua na pasta Documentos\DTCar Gestão.</p>
     <p class="sub">Sem internet, funcionam: painel, ordens de serviço (consulta e impressão das O.S. guardadas), Nova O.S. com número provisório, clientes, veículos, produtos e contas a receber (consulta).</p>
     <div class="acoes"><button type="button" class="btn btn-pri" onClick=${() => reconectar(true)}>Tentar conectar</button><button type="button" class="btn" onClick=${() => ir("/painel")}>Ir para o painel</button></div></section></div>`;

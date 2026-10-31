@@ -3,6 +3,8 @@ import { html, useState, useEffect } from "../lib.js";
 import { useApp, Modal } from "../ui.js";
 import { fmtDataHora, lsSet } from "../util.js";
 import { local } from "../local.js";
+import { replicaDisponivel, infoReplica, ouvirReplica, replicar } from "../replica.js";
+import { api, estaSemRede } from "../api.js";
 import { pastaSuportada, escolherPasta, reconectarPasta, esquecerPasta, gravarDadosNaPasta, backupDaPasta } from "../pasta.js";
 
 /** Janela da primeira abertura do programa instalado: cria a pasta de dados no PC */
@@ -38,6 +40,11 @@ export function DadosLocais() {
     if (navigator.storage) { navigator.storage.estimate && navigator.storage.estimate().then(setUso).catch(() => {}); navigator.storage.persisted && navigator.storage.persisted().then(setPersist).catch(() => {}); }
   }, [pasta && pasta.ultimaGravacao, pasta && pasta.ultimoBackup, guardadas && guardadas.feitas]);
   const prog = guardadas || gOs;
+  const { cfg } = useApp();
+  const [rep, setRep] = useState(null);
+  useEffect(() => { if (!replicaDisponivel()) return; infoReplica().then(setRep); return ouvirReplica(e => { if (!e.rodando) infoReplica().then(setRep); else setRep(r => ({ ...(r || {}), rodando: true })); }); }, []);
+  const NOMES = { ordens: "O.S.", os_itens: "Itens das O.S.", clientes: "Clientes", veiculos: "Veículos", produtos: "Produtos e serviços", recibos: "Recibos", contas: "Contas a pagar",
+    receber: "Contas a receber", vendas: "Vendas", funcionarios: "Funcionários", funcionario_lanc: "Lançamentos de funcionários", eventos: "Histórico das O.S.", nfe_recebidas: "Notas da SEFAZ", estoque_mov: "Movimentos de estoque" };
   const p = pasta || {};
   const gravarAgora = async () => { const c = await local.ler("dados"); if (!c) return avisar("Ainda não há cópia para gravar. Abra o sistema com internet.", true); avisar((await gravarDadosNaPasta(c, true)) ? "Cópia gravada na pasta." : "Não foi possível gravar na pasta.", !p.ultimaGravacao); };
   const religar = async () => { avisar((await reconectarPasta()) ? "Pasta reconectada." : "Permissão não concedida.", false); };
@@ -59,6 +66,16 @@ export function DadosLocais() {
         <div class="acoes">${p.permissao !== "granted" ? html`<button type="button" class="btn btn-pri" onClick=${religar}>Reconectar</button>` : html`<button type="button" class="btn" onClick=${gravarAgora}>Gravar agora</button>`}
           <button type="button" class="btn" onClick=${abrirAssistentePasta}>Trocar pasta</button><button type="button" class="btn btn-link" onClick=${desligar}>Parar de usar</button></div>`}
     </section>
+    ${replicaDisponivel() ? html`<section class="card"><div class="secao-topo"><h2>Banco de dados no PC</h2>
+        ${rep && rep.rodando ? html`<span class="pill p-info">Atualizando…</span>` : rep && rep.erro ? html`<span class="pill p-warn">Última atualização falhou</span>` : rep && rep.registros ? html`<span class="pill p-ok">Em dia</span>` : html`<span class="pill p-muted">Vazio</span>`}</div>
+      <p class="sub">Réplica de todas as tabelas do online. Sem internet, as telas leem daqui. Uma cópia do banco inteiro vai por dia para Documentos\DTCar Gestão\banco (14 dias).</p>
+      ${rep ? html`<div class="kv"><div><span>Atualizado em</span><b>${rep.ultima ? fmtDataHora(rep.ultima) : "ainda não"}</b></div><div><span>Registros</span><b>${(rep.registros || 0).toLocaleString("pt-BR")}</b></div>
+          <div><span>Tamanho</span><b>${((rep.tamanho || 0) / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} MB</b></div>
+          ${Object.entries(NOMES).filter(([t]) => rep.tabelas && rep.tabelas[t] != null).map(([t, n]) => html`<div key=${t}><span>${n}</span><b>${rep.tabelas[t].toLocaleString("pt-BR")}</b></div>`)}</div>
+        ${rep.erro ? html`<div class="erros">${rep.erro}</div>` : null}
+        ${rep.v13 === false ? html`<div class="aviso">Para o banco do PC buscar só o que mudou (mais rápido), rode o <b>supabase/v13.sql</b> no Supabase. Até lá, as tabelas sem data de alteração são recarregadas inteiras a cada 30 minutos.</div>` : null}` : html`<span class="sub">Lendo…</span>`}
+      <div class="acoes"><button type="button" class="btn" disabled=${(rep && rep.rodando) || estaSemRede()} onClick=${() => replicar(api, { completo: true, espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg })}>Recarregar tudo agora</button></div>
+    </section>` : null}
     <section class="card"><h2>Cópia interna do navegador</h2>
       ${copia === null ? html`<span class="sub">Lendo…</span>` : !copia ? html`<div class="aviso">Ainda não há cópia neste computador. Abra o sistema com internet e aguarde alguns segundos.</div>`
       : html`<div class="kv"><div><span>Atualizada em</span><b>${fmtDataHora(copia.salvoEm)}</b></div><div><span>O.S.</span><b>${n("ordens")}</b></div><div><span>Clientes</span><b>${n("clientes")}</b></div>

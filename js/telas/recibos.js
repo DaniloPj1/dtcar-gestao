@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro, BuscaCliente } from "../ui.js";
 import { norm, soDig, reais, fmtData, fmtDoc, numOS, numRecibo, hojeISO, exPlaca, extenso } from "../util.js";
 import { pode } from "../regras.js";
+import { abaterParcelas } from "./receber.js";
 
 export const referenteOS = o => `pagamento da Ordem de Serviço nº ${String(o.numero).padStart(5, "0")}` +
   (o.veiculo && o.veiculo.placa ? ` – ${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")} placa ${exPlaca(o.veiculo.placa)}` : "");
@@ -30,6 +31,7 @@ export function ReciboModal({ ordem, venda, valor, forma, onFechar, onEmitido })
       const novo = await api.recibos.salvar({ ordem_id: ordem ? ordem.id : null, ...(venda ? { venda_id: venda.id } : {}), cliente_id: r.cliente_id || null, pagador: r.pagador.trim(), doc: soDig(r.doc), valor: Number(r.valor),
         referente: r.referente.trim(), forma: r.forma, data: r.data || hojeISO(), obs: r.obs.trim(), emitido_por: perfil.nome });
       if (ordem) await api.evento(ordem.id, "recibo", `${numRecibo(novo.numero)} emitido: ${reais(novo.valor)} (${novo.forma}).`, perfil.nome).catch(() => {});
+      if (ordem) await abaterParcelas(ordem.id, Number(novo.valor), novo, perfil).catch(() => {}); // abate as parcelas a receber da O.S.
       avisar(numRecibo(novo.numero) + " emitido."); onEmitido ? onEmitido(novo) : onFechar();
     } catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };

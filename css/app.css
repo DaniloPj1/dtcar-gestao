@@ -915,7 +915,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .osr small{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .osr:hover{border-color:var(--brand)}
 .osr.ativo{background:var(--brand-soft);border-color:var(--brand)}
-.osr-diagnostico{border-top-color:#3b82f6}.osr-aguardando{border-top-color:#d97706}.osr-execucao{border-top-color:var(--brand)}.osr-pronto{border-top-color:var(--ok)}.osr-receber{border-top-color:#e0a100}.osr-atraso{border-top-color:var(--bad)}.osr-atraso b{color:var(--bad)}
+.osr-orcamento,.osr-diagnostico{border-top-color:#3b82f6}.osr-pagamento{border-top-color:#e0a100}.osr-fechada{border-top-color:var(--ok)}.osr-aguardando{border-top-color:#d97706}.osr-execucao{border-top-color:var(--brand)}.osr-pronto{border-top-color:var(--ok)}.osr-receber{border-top-color:#e0a100}.osr-atraso{border-top-color:var(--bad)}.osr-atraso b{color:var(--bad)}
 .os-filtros{display:grid;grid-template-columns:minmax(0,1fr) 220px 200px auto;gap:10px;align-items:center;margin-bottom:14px}
 .os-filtros .troca-visao{margin-left:0}
 @media (max-width:900px){.os-filtros{grid-template-columns:1fr 1fr}.os-filtros #busca-os{grid-column:1/-1}}
@@ -942,3 +942,19 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .encerrar-resumo span{font-size:12px;color:var(--muted);font-weight:600}
 .encerrar-resumo b{font-size:17px;font-variant-numeric:tabular-nums}
 .encerrar-resumo .forte{background:var(--brand-soft)}.encerrar-resumo .forte b{color:var(--brand)}
+/* contas a receber, prazo e parcelas */
+.lat-badge{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--bad);color:#fff;font-style:normal;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.bloco-prazo{border:1px solid var(--borda,#d8dde6);border-radius:10px;padding:12px;margin:10px 0}
+.bloco-prazo h4{margin:0 0 6px;font-size:15px}
+.tab-parcelas{width:100%;border-collapse:collapse;margin-top:6px}.tab-parcelas th{text-align:left;font-size:13px;padding:4px}.tab-parcelas td{padding:3px 4px}
+.tab-parcelas .num{text-align:right}.tab-parcelas tfoot td{font-weight:700;padding-top:6px}
+.parcelas-os{margin:10px 0}.parcelas-os h4{margin:4px 0 6px}
+.rec-acoes{display:flex;gap:6px;align-items:center}
+.conta-linha.s-vencida .data-bloco{color:var(--bad)}
+/* previsão de caixa */
+.caixa-mes{display:flex;align-items:center;gap:8px}.caixa-mes b{min-width:130px;text-align:center;text-transform:capitalize}
+.caixa-saldo{display:grid;grid-template-columns:minmax(200px,280px) auto;gap:6px 12px;align-items:end;margin-bottom:12px}.caixa-saldo .linha-check{grid-column:1/-1}.caixa-saldo>.btn{justify-self:start;align-self:center}
+.tab-caixa .num{text-align:right}.tab-caixa tr.neg td{background:color-mix(in srgb,var(--bad) 10%,transparent)}.tab-caixa tr.neg b{color:var(--bad)}
+.caixa-listas{display:grid;grid-template-columns:1fr 1fr;gap:16px}.caixa-listas h4{margin:12px 0 6px}
+@media (max-width:800px){.caixa-listas,.caixa-saldo{grid-template-columns:1fr}}
+.carregando.falha{max-width:520px;margin:60px auto;text-align:center;line-height:1.5}.carregando.falha .btn{margin-top:12px}

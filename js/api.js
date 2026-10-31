@@ -32,7 +32,7 @@ export function traduzErro(e) {
 
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero";
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
-let temV11 = true;
+let temV11 = true, temReceber = true;
 
 function criarApiSupabase() {
   const cx = conexao();
@@ -71,6 +71,8 @@ function criarApiSupabase() {
       return busca(COLS_ORDENS);
     },
     temV11: () => temV11,
+    /** banco com o supabase/v12.sql (receber depois + parcelas) */
+    temV12: () => temV11 && temReceber,
     /** linhas alteradas depois de "desde" (sincronização leve a cada minuto) */
     alterados: async (nome, desde) => todos(() => sb.from(nome).select("*").gt("atualizado_em", desde).order("id")),
     idsDe: async nome => todos(() => sb.from(nome).select("id").order("id")).then(r => r.map(x => x.id)),
@@ -91,6 +93,15 @@ function criarApiSupabase() {
       excluirLanc: async id => ok(await sb.from("funcionario_lanc").delete().eq("id", id)),
       /** O.S. entregues no período, com o mecânico, para calcular a comissão */
       ordensEntregues: async (ini, fim) => todos(() => sb.from("ordens").select("id,numero,mecanico_id,mecanico_nome,entregue_em,cliente,veiculo").eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero")),
+    },
+    /** contas a receber (parcelas das O.S. entregues para pagar depois) — supabase/v12.sql */
+    receber: {
+      abertas: async () => { try { const l = await todos(() => sb.from("receber").select("*").eq("status", "aberta").order("vencimento").order("id")); temReceber = true; return l; }
+        catch (e) { if (/receber|relation|does not exist|schema cache|404/i.test(e.message)) { temReceber = false; return []; } throw e; } },
+      listar: async ({ de, ate, status } = {}) => todos(() => { let q = sb.from("receber").select("*"); if (de) q = q.gte("vencimento", de); if (ate) q = q.lte("vencimento", ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
+      daOrdem: async oid => ok(await sb.from("receber").select("*").eq("ordem_id", oid).order("parcela")),
+      lancar: async linhas => ok(await sb.from("receber").insert(linhas).select()),
+      atualizar: async (id, patch) => ok(await sb.from("receber").update(patch).eq("id", id).select().single()),
     },
     vinculos: { listar: async () => todos(() => sb.from("produto_fornecedor").select("*").order("id")), doProduto: async pid => ok(await sb.from("produto_fornecedor").select("*").eq("produto_id", pid)) },
     notas: {
@@ -137,6 +148,8 @@ function criarApiSupabase() {
     },
     relatorioVendidos: async (ini, fim) => ok(await sb.rpc("relatorio_vendidos", { p_ini: ini, p_fim: fim })),
     painel: async (ini, fim, grupo) => ok(await sb.rpc("painel_resumo", { p_ini: ini, p_fim: fim, p_grupo: grupo })),
+    /** modo espelho: apaga cadastros, O.S., recibos, vendas e estoque antes de carregar o backup do sistema antigo (supabase/v12.sql) */
+    espelhoZerar: async () => ok(await sb.rpc("espelho_legado_zerar")),
     importarLegado: async (tipo, linhas, atualizar) => ok(await sb.rpc("importar_legado", { p_tipo: tipo, p_linhas: linhas, p_atualizar: !!atualizar })),
     ordem: async id => {
       const pend = await local.ler("os:" + id); if (pend && pend._pendente) return pend; // aberta sem internet, ainda não enviada

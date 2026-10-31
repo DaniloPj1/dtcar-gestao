@@ -24,6 +24,17 @@ window.addEventListener("appinstalled", function () { window.__dtcarInstalar = n
 <script src="vendor/jspdf.umd.min.js"></script>
 <script type="module" src="js/app.js"></script>
 <script>
+// se o programa não abrir em 12 s, explica o motivo em vez de ficar em "Carregando…"
+setTimeout(function () {
+  var r = document.getElementById("raiz"); if (!r || !r.querySelector(".carregando")) return;
+  var https = location.protocol === "https:" || location.hostname === "localhost";
+  var msg = !https ? "Este endereço (http) não guarda o programa para uso sem internet. Abra <b>https://gestao.dtcarcentroautomotivo.com.br</b> e instale o ícone por ele."
+    : !navigator.onLine ? "Sem internet, e o programa ainda não está guardado neste computador. Abra uma vez com internet (e espere carregar) para ele funcionar sem conexão."
+    : "O programa está demorando para abrir. Confira a internet e tente de novo.";
+  r.innerHTML = '<div class="carregando falha"><p>' + msg + '</p><button type="button" class="btn btn-pri" onclick="location.reload()">Tentar de novo</button></div>';
+}, 12000);
+</script>
+<script>
 if ("serviceWorker" in navigator && (location.protocol === "https:" || location.hostname === "localhost")) {
   // versão nova publicada: avisa na tela (botão "Atualizar agora"); se o programa estiver em segundo plano, atualiza sozinho
   var tinha = !!navigator.serviceWorker.controller;

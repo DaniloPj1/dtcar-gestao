@@ -3,7 +3,7 @@ import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Foto } from "../ui.js";
 import { fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias, exPlaca, extenso, endCompleto } from "../util.js";
-import { STATUS, pode, TERMO_GARANTIA, TERMO_ORCAMENTO, SITUACAO_CLIENTE, TABELAS_PRECO } from "../regras.js";
+import { STATUS, situacaoOS, pode, TERMO_GARANTIA, TERMO_ORCAMENTO, SITUACAO_CLIENTE, TABELAS_PRECO } from "../regras.js";
 import { diasDoMes, nomeMes, horasSemana, fmtHoras, VINCULOS, calcularMes, com_encargos } from "../folha.js";
 import { dadosDoMes } from "./funcionarios.js";
 
@@ -71,7 +71,7 @@ function ViaOS({ o, cli, vei, valores, via, nVias }) {
     <section class="imp-resumo">
       <div class="imp-grade g2">
         <${Par} r="Responsável" v=${o.mecanico_nome} /><${Par} r="Consultor" v=${o.consultor_nome} />
-        <${Par} r="Situação" v=${STATUS[o.status].t + (o.situacao ? " · " + o.situacao : "")} />${quando ? html`<${Par} r=${quando[0]} v=${quando[1]} />` : null}
+        <${Par} r="Situação" v=${(situacaoOS(o) || STATUS[o.status]).t + (o.situacao ? " · " + o.situacao : "")} />${quando ? html`<${Par} r=${quando[0]} v=${quando[1]} />` : null}
         <${Par} r="Pagamento" v=${o.forma_pagamento} /><${Par} r="Condições" v=${o.condicoes_pagamento} />
         ${orc && o.validade_orcamento ? html`<${Par} r="Válido até" v=${fmtData(o.validade_orcamento)} />` : null}
         ${o.tabela_preco && o.tabela_preco !== "vista" ? html`<${Par} r="Tabela" v=${TABELAS_PRECO[o.tabela_preco]} />` : null}
@@ -132,7 +132,7 @@ function CupomOS({ o, valores }) {
     ${valores ? html`<hr /><div class="c-lin"><span>Produtos</span><span>${reais(t.pecas)}</span></div><div class="c-lin"><span>Serviços</span><span>${reais(t.servicos)}</span></div>
       ${t.terceiros ? html`<div class="c-lin"><span>Terceiros</span><span>${reais(t.terceiros)}</span></div>` : null}${t.desconto ? html`<div class="c-lin"><span>Desconto</span><span>${reais(t.desconto)}</span></div>` : null}
       <div class="c-lin c-tot"><span>TOTAL</span><span>${reais(t.total)}</span></div>` : null}
-    <hr /><div>Situação: ${STATUS[o.status].t}${o.situacao ? " · " + o.situacao : ""}</div>${o.forma_pagamento ? html`<div>Pagamento: ${o.forma_pagamento}</div>` : null}
+    <hr /><div>Situação: ${(situacaoOS(o) || STATUS[o.status]).t}${o.situacao ? " · " + o.situacao : ""}</div>${o.forma_pagamento ? html`<div>Pagamento: ${o.forma_pagamento}</div>` : null}
     ${o.mecanico_nome ? html`<div>Responsável: ${o.mecanico_nome}</div>` : null}
     <div class="c-centro c-peq">Este documento não vale como recibo de pagamento.</div><div class="c-assin">Visto: ________________________</div>
   </article>`;

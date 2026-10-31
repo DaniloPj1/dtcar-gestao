@@ -8,7 +8,26 @@ import { fmtDataHora } from "../util.js";
 const TABELAS = [["fornecedores", "Fornecedores"], ["clientes", "Clientes"], ["veiculos", "Veículos"], ["servicos", "Serviços (cadastro antigo)"], ["produtos", "Produtos e serviços"],
   ["produto_fornecedor", "Códigos dos fornecedores"], ["notas_entrada", "Notas de entrada"], ["ordens", "Ordens de serviço"], ["os_itens", "Itens das O.S."], ["eventos", "Histórico das O.S."],
   ["fotos", "Fotos (referências)"], ["recibos", "Recibos"], ["vendas", "Vendas de balcão"], ["venda_itens", "Itens das vendas"], ["estoque_mov", "Movimentos de estoque"],
-  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"]];
+  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"], ["receber", "Contas a receber"]];
+const OPCIONAIS = t => t === "servicos" || t.startsWith("funcionario") || t === "receber"; // tabelas que podem não existir no banco
+
+/** Gera o arquivo de backup completo e baixa no computador. Usado pela tela Backup e antes do espelho do sistema antigo. */
+export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo = "dtcar-backup" }) {
+  const out = { sistema: "dtcar-gestao", versao: 5, gerado_em: new Date().toISOString(), gerado_por: perfil.nome, tabelas: {} };
+  out.config = await api.config(); out.perfis = await api.perfis();
+  const feito = [];
+  for (const [t, nome] of TABELAS) {
+    aoProgredir({ feito, atual: nome });
+    try { out.tabelas[t] = await api.backup.tabela(t); } catch (e) { if (OPCIONAIS(t)) { out.tabelas[t] = []; continue; } throw new Error(nome + ": " + e.message); }
+    feito.push([nome, out.tabelas[t].length]);
+  }
+  const total = Object.values(out.tabelas).reduce((s, l) => s + l.length, 0);
+  const { blob, ext } = await compactar(JSON.stringify(out));
+  const d = new Date(), nomeArq = `${prefixo}-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.${ext}`;
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomeArq; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
+  await api.salvarConfig({ ...cfg, ultimoBackup: { em: out.gerado_em, por: perfil.nome, registros: total, tamanho: blob.size, arquivo: nomeArq } }).catch(() => {});
+  return { nomeArq, total, tamanho: blob.size, feito };
+}
 const NOME = Object.fromEntries(TABELAS);
 const chaveDe = t => t === "estoque_reserva" ? "item_id" : "id";
 const kb = n => n > 1048576 ? (n / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
@@ -35,22 +54,11 @@ export function Backup() {
   const diasUlt = ult ? Math.floor((Date.now() - new Date(ult.em)) / 86400000) : null;
 
   const baixar = async () => {
-    setErro(""); const p = { feito: [], atual: "" }; setProg({ ...p });
+    setErro(""); setProg({ feito: [], atual: "" });
     try {
-      const out = { sistema: "dtcar-gestao", versao: 5, gerado_em: new Date().toISOString(), gerado_por: perfil.nome, tabelas: {} };
-      out.config = await api.config(); out.perfis = await api.perfis();
-      for (const [t, nome] of TABELAS) {
-        p.atual = nome; setProg({ ...p });
-        try { out.tabelas[t] = await api.backup.tabela(t); } catch (e) { if (t === "servicos" || t.startsWith("funcionario")) { out.tabelas[t] = []; continue; } throw new Error(nome + ": " + e.message); }
-        p.feito.push([nome, out.tabelas[t].length]); setProg({ ...p });
-      }
-      const total = Object.values(out.tabelas).reduce((s, l) => s + l.length, 0);
-      const { blob, ext } = await compactar(JSON.stringify(out));
-      const d = new Date(), nomeArq = `dtcar-backup-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.${ext}`;
-      const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = nomeArq; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 60000);
-      await api.salvarConfig({ ...cfg, ultimoBackup: { em: out.gerado_em, por: perfil.nome, registros: total, tamanho: blob.size, arquivo: nomeArq } }).catch(() => {});
+      const f = await gerarBackup({ cfg, perfil, aoProgredir: p => setProg({ feito: [...p.feito], atual: p.atual }) });
       await recarregar(["config"]);
-      setProg({ ...p, atual: "", fim: { nomeArq, total, tamanho: blob.size } }); avisar("Backup gerado: " + nomeArq);
+      setProg({ feito: f.feito, atual: "", fim: { nomeArq: f.nomeArq, total: f.total, tamanho: f.tamanho } }); avisar("Backup gerado: " + f.nomeArq);
     } catch (e) { setErro("Não foi possível gerar o backup: " + e.message); setProg(null); }
   };
 

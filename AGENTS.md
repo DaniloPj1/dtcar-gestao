@@ -27,9 +27,22 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.
+- **Período de transição (dois sistemas em paralelo):** enquanto `cfg.espelhoLegado` não for `false`, o OS Oficina é o sistema oficial e o
+  DTCar Gestão é só consulta e treino (faixa amarela "Período de transição" em todas as telas). Toda programação nova respeita isso:
+  (a) dado operacional novo (tabela ou coluna com O.S., dinheiro, cadastro ou estoque) entra em `espelho_legado_zerar()` ou é declarado
+  preservado, com o motivo, no SQL e no PR; (b) nada pode levar a equipe a achar que um lançamento aqui é oficial nesse período;
+  (c) o PR diz em uma linha como a mudança se comporta antes e depois da virada.
 - Estoque: a peça sai quando entra na O.S. e volta se for removida, recusada ou cancelada.
 - Garantia de serviço e responsabilidade por peça trazida pelo cliente ficam separadas; nada de cláusula contra o CDC.
 - Não inventar preço, torque, pinagem, código de peça ou regra fiscal.
+
+## Programa para Windows (`desktop/`)
+- Electron. As telas são as mesmas do site: `desktop/preparar.js` copia os arquivos listados no `sw.js` para dentro do instalador, e o
+  programa baixa sozinho as telas novas do site quando há internet (troca só depois que todos os arquivos chegam inteiros).
+- O programa novo (instalador) é gerado pelo GitHub Actions (`.github/workflows/programa-windows.yml`) ao criar uma tag `programa-vX.Y.Z`
+  com a mesma versão do `desktop/package.json`; o programa instalado se atualiza sozinho pelo GitHub Releases.
+- Etapa 1 (atual): abre sempre, sem internet, com a pasta Documentos\DTCar Gestão. Etapas seguintes: banco no PC (trabalho 100% offline),
+  sincronização com o online pelas regras de compartilhamento e, depois, opção de rede para um segundo PC.
 
 ## Como trabalhar
 1. Crie uma branch (`codex/assunto` ou `claude/assunto`) e abra um Pull Request para a `main` explicando em português o que muda para a oficina.
@@ -40,5 +53,6 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
    Arquivo fora da lista quebra a abertura sem internet.
 4. Teste antes de pedir aprovação: `python3 teste/teste_fluxo.py` (Playwright com dados simulados de `teste/mock.js`; não toca no banco real).
    Funcionalidade nova ganha verificação nesse teste ou em um novo arquivo em `teste/`.
+   Mexeu em `desktop/`? Rode também `xvfb-run -a node teste/teste_programa.js` (abre o programa sem internet), depois de `npm install` e `node preparar.js` em `desktop/`.
 5. Não mexer em `CNAME`, nas configurações do GitHub Pages, nem nos segredos do repositório.
 6. Revisão cruzada: quando um agente faz a mudança, o outro revisa o PR (regras acima, textos em português, teste passando) antes do Danilo aprovar.

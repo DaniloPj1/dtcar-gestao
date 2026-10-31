@@ -1,0 +1,24 @@
+# Gera o instalador do DTCar Gestão para Windows e publica no GitHub Releases (o programa instalado se atualiza sozinho).
+# Disparo: tag "programa-vX.Y.Z" (mesma versão do desktop/package.json) ou manualmente em Actions.
+name: Programa para Windows
+on:
+  push:
+    tags: ["programa-v*"]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  instalador:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: npm run publicar
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

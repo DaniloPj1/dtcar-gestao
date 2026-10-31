@@ -94,26 +94,33 @@ export function BarraTopo({ titulo, offline, pend, enviarFila }) {
 }
 
 const ICON_INSTALAR = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M8 20h8M12 16v4M12 7v6M9.5 10.5L12 13l2.5-2.5"/></svg>`;
-export const instalado = () => matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
+export const URL_PROGRAMA = "https://github.com/DaniloPj1/dtcar-gestao/releases/latest/download/DTCar-Gestao-Setup.exe";
+export const noPrograma = () => !!window.dtcarDesktop;
+export const instalado = () => noPrograma() || matchMedia("(display-mode: standalone)").matches || matchMedia("(display-mode: window-controls-overlay)").matches || navigator.standalone === true;
 
 /** Botão "Instalar no computador": usa a instalação do Chrome/Edge; sem ela, mostra o passo a passo */
 export function BotaoInstalar({ classe, texto }) {
   const [evt, setEvt] = useState(window.__dtcarInstalar || null), [ajuda, setAjuda] = useState(false);
   useEffect(() => { const f = () => setEvt(window.__dtcarInstalar || null); window.addEventListener("dtcar-instalavel", f); return () => window.removeEventListener("dtcar-instalavel", f); }, []);
   if (instalado()) return null;
+  const windows = /Windows/.test(navigator.userAgent);
   const instalar = async () => {
-    if (!evt) return setAjuda(true);
+    if (!evt || windows) return setAjuda(true); // no Windows, o recomendado é o programa (abre sempre, mesmo sem internet)
     evt.prompt(); const r = await evt.userChoice.catch(() => null);
     if (r && r.outcome === "accepted") { window.__dtcarInstalar = null; setEvt(null); }
   };
   const edge = /Edg\//.test(navigator.userAgent), cel = /Android|iPhone|iPad/i.test(navigator.userAgent), ios = /iPhone|iPad/i.test(navigator.userAgent);
   return html`<button type="button" class=${classe || "btn btn-sm botao-instalar"} title="Instalar o DTCar Gestão neste aparelho (ícone na área de trabalho, abre sem internet)" onClick=${instalar}>${ICON_INSTALAR}<span>${texto || "Instalar"}</span></button>
     ${ajuda ? html`<${Modal} titulo="Instalar o DTCar Gestão" onFechar=${() => setAjuda(false)}>
-      ${location.protocol !== "https:" ? html`<div class="aviso">A instalação só funciona no endereço com <b>https://</b>. Aguarde o certificado do endereço novo ou use o endereço atual.</div>` : null}
+      ${windows ? html`<div class="info"><b>Recomendado no computador da oficina: o programa para Windows.</b> Ele abre sempre, com ou sem internet, e guarda a cópia dos dados em Documentos\DTCar Gestão.
+        <ol class="passos-pasta"><li>Clique em <b>Baixar o programa</b> e abra o arquivo baixado.</li><li>Se o Windows mostrar “O Windows protegeu o computador”, clique em <b>Mais informações</b> › <b>Executar assim mesmo</b> (o programa ainda não tem assinatura digital paga).</li><li>Entre com o seu login. O ícone <b>DTCar Gestão</b> fica na área de trabalho. Desinstale o ícone antigo do navegador para não confundir.</li></ol>
+        <div class="acoes"><a class="btn btn-pri" href=${URL_PROGRAMA}>Baixar o programa para Windows</a></div></div>
+        ${evt ? html`<p class="sub">Ou instale pelo navegador (depende da memória do navegador para abrir sem internet): <button type="button" class="btn-link" onClick=${() => { setAjuda(false); evt.prompt(); }}>instalar pelo navegador</button></p>` : null}` : null}
+      ${windows ? null : location.protocol !== "https:" ? html`<div class="aviso">A instalação só funciona no endereço com <b>https://</b>. Aguarde o certificado do endereço novo ou use o endereço atual.</div>` : null}
       ${ios ? html`<ol class="passos-pasta"><li>No <b>Safari</b>, toque em <b>Compartilhar</b> (quadrado com seta).</li><li>Escolha <b>Adicionar à Tela de Início</b> e confirme.</li></ol>`
       : cel ? html`<ol class="passos-pasta"><li>No <b>Chrome</b>, toque no menu <b>⋮</b>.</li><li>Escolha <b>Instalar app</b> (ou <b>Adicionar à tela inicial</b>) e confirme.</li></ol>`
-      : edge ? html`<ol class="passos-pasta"><li>No <b>Edge</b>, clique no menu <b>…</b> (canto superior direito).</li><li>Vá em <b>Aplicativos</b> › <b>Instalar este site como um aplicativo</b>.</li><li>Confirme em <b>Instalar</b>. O ícone vai para a área de trabalho e o menu Iniciar.</li></ol>`
-      : html`<ol class="passos-pasta"><li>No <b>Chrome</b>, clique no ícone de instalar na barra de endereço (um monitor com uma seta), ao lado da estrela de favoritos.</li><li>Se não aparecer: menu <b>⋮</b> › <b>Transmitir, salvar e compartilhar</b> › <b>Instalar página como app</b>.</li><li>Confirme em <b>Instalar</b>. O ícone vai para a área de trabalho.</li></ol>`}
+      : edge && !windows ? html`<ol class="passos-pasta"><li>No <b>Edge</b>, clique no menu <b>…</b> (canto superior direito).</li><li>Vá em <b>Aplicativos</b> › <b>Instalar este site como um aplicativo</b>.</li><li>Confirme em <b>Instalar</b>. O ícone vai para a área de trabalho e o menu Iniciar.</li></ol>`
+      : windows ? null : html`<ol class="passos-pasta"><li>No <b>Chrome</b>, clique no ícone de instalar na barra de endereço (um monitor com uma seta), ao lado da estrela de favoritos.</li><li>Se não aparecer: menu <b>⋮</b> › <b>Transmitir, salvar e compartilhar</b> › <b>Instalar página como app</b>.</li><li>Confirme em <b>Instalar</b>. O ícone vai para a área de trabalho.</li></ol>`}
       <p class="sub">Se o navegador não mostrar a opção, o sistema já pode estar instalado neste computador: procure “DTCar Gestão” no menu Iniciar.</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn btn-pri" onClick=${() => setAjuda(false)}>Entendi</button></div></${Modal}>` : null}`;
 }

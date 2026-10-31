@@ -87,6 +87,11 @@ app.on("browser-window-created", async (e, w) => {
     await js(`import("./js/local.js").then(m => m.local.apagarTudo())`);
     w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");
     chk("sem cópia do acesso: tela Sem internet", /sem internet/i.test(t) && !/aguardando libera/i.test(t));
+    // com o acesso guardado mas sem nenhuma cópia dos dados: avisa em vez de "Carregando" sem fim
+    await js(`import("./js/local.js").then(m => m.local.gravar("perfil:u1", ${JSON.stringify(D.perfis[0])}))`);
+    fs.rmSync(path.join(app.getPath("documents"), "DTCar Gestão"), { recursive: true, force: true }); // cópia da pasta também some
+    w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");
+    chk("sem cópia dos dados: aviso (não fica em Carregando)", t.includes("sem cópia dos dados") && !t.includes("Carregando dados"));
   } catch (x) { resultado.falhas.push("EXCECAO " + x.message); }
   fs.writeFileSync(path.join(casa, "resultado.json"), JSON.stringify(resultado, null, 1));
   console.log("RESULTADO " + JSON.stringify(resultado)); srv.close(); app.quit();

@@ -109,7 +109,7 @@ function App() {
     api.meuPerfil(uid).then(async p => {
       if (!p && estaSemRede()) p = await local.ler("perfil:" + uid); // sem internet, nunca "aguardando liberação" por falta de cópia
       setPerfil(p || { id: uid, nome: sessao.user.email, email: sessao.user.email, papel: "pendente" }); if (p) local.gravar("perfil:" + uid, p); })
-      .catch(async e => setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null));
+      .catch(async e => { if (erroDeRede(e)) definirSemRede(true); setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null); });
   }, [sessao && sessao.user && sessao.user.id]);
 
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
@@ -175,7 +175,7 @@ function App() {
       if (!copia) { const p = await lerDaPasta().catch(() => null); if (p && p.copia && p.copia.dados) { copia = p.copia; local.gravar("dados", { salvoEm: copia.salvoEm, dados: copia.dados, config: copia.config }); } }
       setDados(d => d.carregado ? d : copia ? { ...d, ...copia.dados, carregado: true } : d);
       if (copia && copia.config) setCfg(cfgCompleta(copia.config));
-      setOffline(o => o || { desde: new Date().toISOString(), copia: copia ? copia.salvoEm : null });
+      setOffline(o => ({ desde: new Date().toISOString(), copia: copia ? copia.salvoEm : null, ...(o || {}), semCopia: !copia }));
     }
   }, []);
   useEffect(() => { if (membro) recarregar(); }, [membro]);
@@ -307,6 +307,10 @@ function App() {
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;
+  // sem internet e sem nenhuma cópia dos dados neste computador: avisa em vez de ficar em "Carregando" sem fim
+  else if (!dados.carregado && offline && offline.semCopia) corpo = html`<div class="pagina"><section class="card so-online"><h2>Sem internet e sem cópia dos dados</h2>
+    <p>Este computador ainda não tem a cópia dos dados para trabalhar sem internet. Conecte à internet e abra o programa uma vez; depois ele abre sem internet.</p>
+    <button type="button" class="btn" onClick=${() => reconectar(true)}>Tentar de novo</button></section></div>`;
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   // telas que ainda não têm cópia no aparelho (etapa 2 do programa): sem internet, avisam em vez de ficar carregando
   else if (offline && SO_ONLINE[base] && !(api.bancoDoPC && api.bancoPronto && LE_DO_BANCO.includes(base))) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>

@@ -87,6 +87,12 @@ export function Importar() {
     <section class="card"><h2>Importar do OS Oficina 3.0</h2>
       ${espelho ? html`<div class="aviso espelho"><b>Modo espelho ligado.</b> Cada carga deixa o DTCar Gestão <b>exatamente igual</b> ao sistema antigo: clientes, veículos, produtos (com preços e estoque), O.S. com a numeração do antigo, itens e histórico. O que foi lançado só aqui nesses cadastros e O.S. é substituído (um backup é baixado antes). Equipe, ajustes, fornecedores, contas a pagar, notas e funcionários ficam.
           ${cfg.ultimoEspelho ? html`<br /><small>Última carga: ${new Date(cfg.ultimoEspelho.em).toLocaleString("pt-BR")} por ${cfg.ultimoEspelho.por} (${cfg.ultimoEspelho.ordens} O.S.).</small>` : null}
+          <details class="regra-transicao" open><summary>Regra do período de transição (dois sistemas em paralelo)</summary><ol>
+            <li><b>O OS Oficina é o sistema oficial.</b> Toda O.S., recibo, venda e cadastro real é lançado nele.</li>
+            <li><b>O DTCar Gestão é para consulta e treino.</b> O que for lançado aqui é apagado na próxima carga. A faixa amarela no topo de todas as telas lembra isso.</li>
+            <li><b>A carga é feita só pelo administrador</b>, de preferência no fim do expediente, com o backup do OS Oficina do dia.</li>
+            <li><b>A virada tem data marcada:</b> última carga, desligar o espelho e, a partir daí, lançar só no DTCar Gestão. O OS Oficina fica só para consulta.</li>
+          </ol></details>
           <div class="acoes"><button type="button" class="btn btn-sm" onClick=${desligarEspelho}>Desligar espelho (virada para o DTCar Gestão)</button></div></div>`
         : html`<p>Traz do sistema antigo os cadastros completos de clientes, veículos e produtos, e as O.S. novas. Pode repetir sempre que quiser: o que já existe é completado, sem duplicar, e nada que foi alterado no DTCar Gestão é apagado.</p>
           <div class="acoes"><button type="button" class="btn btn-sm" onClick=${ligarEspelho}>Ligar modo espelho</button></div>`}

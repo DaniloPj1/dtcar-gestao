@@ -7,7 +7,10 @@
 import { local } from "./local.js";
 
 const NOME_PASTA = "DTCar Gestão", DIAS_COPIAS = 30;
-export const pastaSuportada = () => typeof window.showDirectoryPicker === "function";
+// No programa para Windows (desktop/), a pasta é sempre Documentos\DTCar Gestão e quem grava é o próprio programa
+const D = typeof window !== "undefined" && window.dtcarDesktop ? window.dtcarDesktop.pasta : null;
+const PROGRAMA = { programa: true };
+export const pastaSuportada = () => !!D || typeof window.showDirectoryPicker === "function";
 
 let estado = { configurada: false, permissao: "", nome: "", ultimaGravacao: null, erro: "" };
 const ouvintes = new Set();
@@ -25,6 +28,12 @@ async function permissao(h, pedir) {
 
 /** Lê a situação ao abrir o programa (sem pedir nada ao usuário) */
 export async function iniciarPasta() {
+  if (D) {
+    try { const i = await D.info(); if (!(await D.ler("LEIA-ME.txt"))) await escrever(PROGRAMA, ["LEIA-ME.txt"], LEIA_ME);
+      estado = { ...estado, configurada: true, nome: i.caminho, permissao: "granted", ultimaGravacao: (await local.ler("pasta:ultima")) || null }; }
+    catch (e) { estado = { ...estado, configurada: false, erro: e.message }; }
+    avisa(); return estado;
+  }
   if (!pastaSuportada()) { estado = { ...estado, configurada: false, permissao: "sem-suporte" }; avisa(); return estado; }
   const h = await raiz();
   estado = { ...estado, configurada: !!h, nome: h ? h.name : "", permissao: h ? await permissao(h, false) : "", ultimaGravacao: (await local.ler("pasta:ultima")) || null };
@@ -32,7 +41,13 @@ export async function iniciarPasta() {
 }
 
 /** Abre a janela do Windows para escolher onde criar a pasta "DTCar Gestão" (precisa de um clique do usuário) */
+const LEIA_ME = "Pasta de dados do DTCar Gestão neste computador.\r\n\r\n" +
+  "dados\\dtcar-dados.json  - cópia completa mais recente dos cadastros e O.S. (atualizada automaticamente)\r\n" +
+  "dados\\fila-envio.json   - O.S. abertas sem internet aguardando envio ao servidor\r\n" +
+  "copias\\                 - uma cópia por dia, guardadas por " + DIAS_COPIAS + " dias\r\n\r\n" +
+  "Não apague nem edite estes arquivos. Copie esta pasta para um pendrive ou para a nuvem com frequência.\r\n";
 export async function escolherPasta() {
+  if (D) { await iniciarPasta(); return PROGRAMA; }
   const base = await window.showDirectoryPicker({ id: "dtcar-dados", mode: "readwrite", startIn: "documents" });
   const h = base.name === NOME_PASTA ? base : await base.getDirectoryHandle(NOME_PASTA, { create: true });
   await h.getDirectoryHandle("dados", { create: true }); await h.getDirectoryHandle("copias", { create: true });
@@ -47,21 +62,24 @@ export async function escolherPasta() {
 }
 /** Religa a permissão (o navegador pode pedir de novo depois de reiniciar) */
 export async function reconectarPasta() {
+  if (D) { await iniciarPasta(); return true; }
   const h = await raiz(); if (!h) return false;
   const p = await permissao(h, true); estado = { ...estado, permissao: p }; avisa(); return p === "granted";
 }
-export async function esquecerPasta() { await local.gravar("pasta:handle", null); estado = { ...estado, configurada: false, nome: "", permissao: "" }; avisa(); }
+export async function esquecerPasta() { if (D) return; await local.gravar("pasta:handle", null); estado = { ...estado, configurada: false, nome: "", permissao: "" }; avisa(); }
 
 async function escrever(h, caminho, texto) {
+  if (h === PROGRAMA) return D.escrever(caminho.join("/"), texto);
   let d = h; for (const p of caminho.slice(0, -1)) d = await d.getDirectoryHandle(p, { create: true });
   const arq = await d.getFileHandle(caminho[caminho.length - 1], { create: true });
   const w = await arq.createWritable(); await w.write(texto); await w.close();
 }
 async function ler(h, caminho) {
+  if (h === PROGRAMA) { try { const t = await D.ler(caminho.join("/")); return t ? JSON.parse(t) : null; } catch (e) { return null; } }
   try { let d = h; for (const p of caminho.slice(0, -1)) d = await d.getDirectoryHandle(p); const f = await (await d.getFileHandle(caminho[caminho.length - 1])).getFile(); return JSON.parse(await f.text()); }
   catch (e) { return null; }
 }
-async function pronta() { const h = await raiz(); if (!h) return null; return (await permissao(h, false)) === "granted" ? h : null; }
+async function pronta() { if (D) return PROGRAMA; const h = await raiz(); if (!h) return null; return (await permissao(h, false)) === "granted" ? h : null; }
 
 let ultimaCopia = 0;
 /** Grava a cópia completa (chamado depois de cada atualização da cópia interna, no máximo a cada 60 s) */
@@ -74,9 +92,11 @@ export async function gravarDadosNaPasta(copia, forcar) {
     const dia = new Date().toISOString().slice(0, 10);
     await escrever(h, ["copias", "dtcar-" + dia + ".json"], txt);
     // apaga cópias diárias mais antigas que o limite
-    const dc = await h.getDirectoryHandle("copias", { create: true }), nomes = [];
-    for await (const [n] of dc.entries()) if (/^dtcar-\d{4}-\d{2}-\d{2}\.json$/.test(n)) nomes.push(n);
-    nomes.sort().reverse().slice(DIAS_COPIAS).forEach(n => dc.removeEntry(n).catch(() => {}));
+    const nomes = [], ok = n => /^dtcar-\d{4}-\d{2}-\d{2}\.json$/.test(n);
+    if (h === PROGRAMA) { (await D.listar("copias")).filter(ok).sort().reverse().slice(DIAS_COPIAS).forEach(n => D.remover("copias/" + n).catch(() => {})); }
+    else { const dc = await h.getDirectoryHandle("copias", { create: true });
+      for await (const [n] of dc.entries()) if (ok(n)) nomes.push(n);
+      nomes.sort().reverse().slice(DIAS_COPIAS).forEach(n => dc.removeEntry(n).catch(() => {})); }
     ultimaCopia = Date.now(); const agora = new Date().toISOString(); await local.gravar("pasta:ultima", agora);
     estado = { ...estado, ultimaGravacao: agora, erro: "" }; avisa(); return true;
   } catch (e) { estado = { ...estado, erro: e.message }; avisa(); return false; }

@@ -1,0 +1,33 @@
+{
+  "name": "dtcar-gestao",
+  "productName": "DTCar Gestão",
+  "version": "1.0.0",
+  "description": "DTCar Gestão para Windows: abre com ou sem internet",
+  "author": "DTCar Centro Automotivo",
+  "main": "main.js",
+  "private": true,
+  "scripts": {
+    "preparar": "node preparar.js",
+    "iniciar": "node preparar.js && electron .",
+    "instalador": "node preparar.js && electron-builder --win --publish never",
+    "publicar": "node preparar.js && electron-builder --win --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  },
+  "devDependencies": {
+    "electron": "43.7.9",
+    "electron-builder": "26.17.0"
+  },
+  "build": {
+    "appId": "br.com.dtcarcentroautomotivo.gestao",
+    "productName": "DTCar Gestão",
+    "copyright": "DTCar Centro Automotivo",
+    "files": ["main.js", "preload.js", "icone.png", "package.json"],
+    "extraResources": [{ "from": "site", "to": "site" }],
+    "directories": { "output": "dist" },
+    "win": { "target": [{ "target": "nsis", "arch": ["x64"] }], "icon": "icone.png", "artifactName": "DTCar-Gestao-Setup.${ext}" },
+    "nsis": { "oneClick": true, "perMachine": false, "createDesktopShortcut": "always", "createStartMenuShortcut": true, "shortcutName": "DTCar Gestão", "deleteAppDataOnUninstall": false },
+    "publish": [{ "provider": "github", "owner": "DaniloPj1", "repo": "dtcar-gestao", "releaseType": "release" }]
+  }
+}

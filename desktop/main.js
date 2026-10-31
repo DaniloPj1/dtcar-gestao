@@ -73,7 +73,11 @@ async function servir(req) {
   const rel = decodeURIComponent(u.pathname).replace(/^\/+/, "") || "index.html";
   let arq; try { arq = confinar(raizAtual, rel); } catch (e) { return new Response("Proibido", { status: 403 }); }
   if (!fs.existsSync(arq)) return new Response("Não encontrado", { status: 404 });
-  return net.fetch(pathToFileURL(arq).toString());
+  // sem cache do navegador: depois de trocar as telas, o "Atualizar agora" carregava os módulos .js antigos guardados na
+  // memória do Chromium (o programa dizia "v25" e rodava a v24). Arquivo local: ler de novo não custa nada.
+  const r = await net.fetch(pathToFileURL(arq).toString());
+  const h = new Headers(r.headers); h.set("Cache-Control", "no-store");
+  return new Response(r.body, { status: r.status, headers: h });
 }
 
 // ---------- atualização das telas pelo site ----------
@@ -102,7 +106,7 @@ async function atualizarSite() {
     for (const d of await fsp.readdir(pastaSites())) if (/^v\d+/.test(d) && d !== nome && d !== path.basename(raizAtual)) await fsp.rm(path.join(pastaSites(), d), { recursive: true, force: true }).catch(() => {});
     trocaPendente = true; // vale na próxima vez que a tela recarregar ("Atualizar agora")
     for (const w of BrowserWindow.getAllWindows()) w.webContents.send("dtcar-nova-versao", v);
-  } catch (e) { /* sem internet ou site fora do ar: segue com a cópia que já está no disco */ }
+  } catch (e) { console.warn("[telas] atualização não concluída:", e && e.message); /* sem internet ou site fora do ar: segue com a cópia que já está no disco */ }
   finally { atualizando = false; }
 }
 

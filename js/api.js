@@ -320,6 +320,12 @@ function comBancoDoPC(a) {
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },
+    // backup sem internet: leitura ESTRITA do banco do PC (erro propaga; nunca vira tabela vazia). backup.tabela continua só do
+    // servidor: a réplica (js/replica.js) usa ela e não pode misturar dados do PC numa carga completa.
+    backup: { ...a.backup, doPC: async t => { if (!(await replicaPronta())) throw new Error("o banco do PC ainda não tem a primeira carga completa");
+      return JSON.parse((await window.dtcarDesktop.banco.listar(t)) || "[]"); },
+      configDoPC: async () => { const c = await window.dtcarDesktop.banco.meta("config"); if (!c) throw new Error("ajustes ausentes no banco do PC"); return JSON.parse(c); },
+      copiaDoPCEm: () => window.dtcarDesktop.banco.meta("ultima") },
     bancoDoPC: true,
     get bancoPronto() { return replicaProntaJa(); },
   };

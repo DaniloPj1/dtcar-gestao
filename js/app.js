@@ -37,7 +37,7 @@ const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de ser
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 // no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
-const LE_DO_BANCO = ["financeiro", "caixa", "recibos", "sefaz", "funcionarios", "funcionario"];
+const LE_DO_BANCO = ["financeiro", "caixa", "recibos", "sefaz", "funcionarios", "funcionario", "backup"];
 // telas que dependem do servidor (sem cópia no aparelho nesta etapa)
 const SO_ONLINE = { financeiro: "As contas a pagar ficam no servidor.", caixa: "A previsão de caixa usa contas, recibos e parcelas do servidor.", recibos: "Os recibos ficam no servidor.",
   sefaz: "As notas da SEFAZ chegam pelo servidor.", nfe: "A entrada de nota grava estoque e custos no servidor.", relatorios: "Os relatórios são calculados no servidor.",
@@ -66,7 +66,7 @@ function App() {
   const doServidor = useRef(false);
   const [pend, setPend] = useState([]); // fila de envio deste aparelho (O.S. abertas sem internet)
   const [pasta, setPasta] = useState(null), [assistente, setAssistente] = useState(false);
-  const [novaVersao, setNovaVersao] = useState(!!window.__dtcarNovaVersao);
+  const [novaVersao, setNovaVersao] = useState(() => !!window.__dtcarNovaVersao || !!(window.dtcarDesktop && window.dtcarDesktop.novaVersao && window.dtcarDesktop.novaVersao()));
   useEffect(() => { const f = () => setNovaVersao(true); window.addEventListener("dtcar-nova-versao", f); return () => window.removeEventListener("dtcar-nova-versao", f); }, []);
   useEffect(() => ouvirPasta(setPasta), []);
   useEffect(() => { iniciarPasta().then(async st => {
@@ -229,7 +229,7 @@ function App() {
         const ult = await backupDaPasta(), dia = new Date().toISOString().slice(0, 10);
         if (!vivo || (ult && ult.dia === dia)) return;
         // sem modo tolerante: se alguma tabela falhar, não grava um "backup completo" pela metade (tenta de novo depois)
-        const b = await montarBackup({ perfil }); delete b.feito; delete b.puladas; if (vivo) await gravarBackupNaPasta(JSON.stringify(b));
+        const b = await montarBackup({ perfil, origem: "servidor" }); delete b.feito; delete b.puladas; if (vivo) await gravarBackupNaPasta(JSON.stringify(b));
       } catch (e) { /* sem internet ou erro: tenta de novo na próxima verificação */ } finally { fazendo = false; }
     };
     const t = setTimeout(fazer, 20000), h = setInterval(fazer, 60 * 60000); // confere de hora em hora (programa aberto de um dia para o outro)
@@ -253,7 +253,7 @@ function App() {
   const reconectar = useCallback(async (avisarSeFalhar) => {
     const ok = api.testarConexao ? await api.testarConexao() : navigator.onLine;
     if (!ok) { if (avisarSeFalhar) setToast({ msg: "Ainda sem conexão com o servidor.", erro: true }); return false; }
-    definirSemRede(false); await recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); return true;
+    definirSemRede(false); await recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); window.dispatchEvent(new Event("dtcar-conectado")); return true;
   }, []);
   useEffect(() => { if (!offline) return; const t = setInterval(() => reconectar(false), 30000); return () => clearInterval(t); }, [offline]);
   useEffect(() => {
@@ -314,8 +314,10 @@ function App() {
   else if (!dados.carregado) corpo = html`<div class="carregando">Carregando dados…</div>`;
   // telas que ainda não têm cópia no aparelho (etapa 2 do programa): sem internet, avisam em vez de ficar carregando
   else if (offline && SO_ONLINE[base] && !(api.bancoDoPC && api.bancoPronto && LE_DO_BANCO.includes(base))) corpo = html`<div class="pagina"><section class="card so-online"><h2>${TITULOS[base] || "Esta tela"} precisa de internet</h2>
-    <p>${SO_ONLINE[base]} Os dados desta tela ainda não ficam guardados neste computador (isso vem na próxima etapa do programa). A cópia de segurança completa continua na pasta Documentos\DTCar Gestão.</p>
-    <p class="sub">Sem internet, funcionam: painel, ordens de serviço (consulta e impressão das O.S. guardadas), Nova O.S. com número provisório, clientes, veículos, produtos e contas a receber (consulta).</p>
+    <p>${SO_ONLINE[base]} ${api.bancoDoPC && api.bancoPronto ? "Ela volta a funcionar sozinha quando a internet voltar." : "Os dados desta tela não ficam guardados neste aparelho."} A cópia de segurança completa continua na pasta Documentos\DTCar Gestão.</p>
+    <p class="sub">${api.bancoDoPC && api.bancoPronto
+      ? "Sem internet, funcionam (consulta): painel, todas as O.S. com impressão, Nova O.S. com número provisório, clientes, veículos, produtos, contas a pagar e a receber, previsão de caixa, recibos, funcionários, Notas da SEFAZ e backup."
+      : "Sem internet, funcionam: painel, ordens de serviço (consulta e impressão das O.S. guardadas), Nova O.S. com número provisório, clientes, veículos, produtos e contas a receber (consulta)."}</p>
     <div class="acoes"><button type="button" class="btn btn-pri" onClick=${() => reconectar(true)}>Tentar conectar</button><button type="button" class="btn" onClick=${() => ir("/painel")}>Ir para o painel</button></div></section></div>`;
   else corpo = {
     painel: () => html`<${Painel} />`, ordens: () => html`<${Ordens} params=${params} key=${qs || ""} />`, entrada: () => html`<${NovaOS} />`,

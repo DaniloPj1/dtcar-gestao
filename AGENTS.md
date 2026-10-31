@@ -52,6 +52,9 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   respondem "sem conexão" e as telas usam a cópia do navegador. Sem internet, falta de perfil nunca vira "aguardando liberação".
 - Etapa 2b (próxima): gravar no banco do PC + fila de envio (O.S. sem internet usa número provisório PROV-NN, decisão do Danilo em 31/10;
   o definitivo é dado pelo servidor ao enviar, por ordem de horário). Depois: regras de conflito e opção de rede para um 2º PC.
+- Telas servidas pelo esquema `app://` sempre com `Cache-Control: no-store` (`servir` em `desktop/main.js`): sem isso o "Atualizar agora"
+  carregava os módulos .js antigos da memória do Chromium (o programa dizia v25 e rodava a v24 — a carga do espelho falhou assim em 31/10).
+  Mexeu na troca de telas? Rode `teste/teste_troca_telas.cjs` (site falso publica v99; confere que o arquivo novo é o que roda).
 - Programa e telas são independentes: telas novas chegam pelo site; mudança em `desktop/` exige nova versão do programa
   (`desktop/package.json` + workflow). Telas novas precisam funcionar no programa antigo (testar `window.dtcarDesktop.banco` antes de usar).
 

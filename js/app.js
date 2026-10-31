@@ -258,8 +258,12 @@ function App() {
     if (!membro) return;
     const volta = () => reconectar(false);
     const caiu = () => { definirSemRede(true); setOffline(o => o || { desde: new Date().toISOString(), copia: null }); };
+    // uma leitura caiu para o banco do PC (a rede falhou no meio): a tela mostra "Sem internet" e passa a usar o banco do PC
+    const semRede = async () => { const ult = replicaDisponivel() ? await window.dtcarDesktop.banco.meta("ultima").catch(() => null) : null;
+      setOffline(o => o || { desde: new Date().toISOString(), copia: ult, banco: !!ult }); };
+    window.addEventListener("dtcar-sem-rede", semRede);
     window.addEventListener("online", volta); window.addEventListener("offline", caiu);
-    return () => { window.removeEventListener("online", volta); window.removeEventListener("offline", caiu); };
+    return () => { window.removeEventListener("online", volta); window.removeEventListener("offline", caiu); window.removeEventListener("dtcar-sem-rede", semRede); };
   }, [membro]);
   useEffect(() => {
     if (!membro) return;

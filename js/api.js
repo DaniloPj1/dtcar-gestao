@@ -39,7 +39,8 @@ let temV11 = true, temReceber = true;
 // Toda chamada ao servidor tem tempo-limite; em modo "sem rede" ela falha na hora (e quem chamou usa a cópia do aparelho).
 let semRede = false;
 const ativos = new Set(); // chamadas em andamento: ao entrar no modo sem rede, são canceladas na hora (a tela usa a cópia do aparelho)
-export const definirSemRede = v => { semRede = !!v; if (semRede) { for (const c of ativos) c.abort(semConexao("sem internet")); ativos.clear(); } };
+export const definirSemRede = v => { const antes = semRede; semRede = !!v;
+  if (semRede) { for (const c of ativos) c.abort(semConexao("sem internet")); ativos.clear(); if (!antes) window.dispatchEvent(new Event("dtcar-sem-rede")); } };
 export const estaSemRede = () => semRede;
 const LIMITE_MS = 15000, LIMITE_ARQUIVO_MS = 120000;
 // erro de rede "final": o nome AbortError faz a biblioteca do Supabase não repetir a tentativa (cada repetição esperava de novo)
@@ -67,6 +68,9 @@ function criarApiSupabase() {
   for (const [obj, nome] of [[sb, "from"], [sb, "rpc"], [sb.storage, "from"]]) { const orig = obj[nome].bind(obj); obj[nome] = (...a) => semRede ? recusa() : orig(...a); }
   const ok = r => { if (r.error) throw traduzErro(r.error); return r.data; };
   const urls = new Map();
+  // por chave (id > último): exclusões entre uma página e outra não fazem pular linhas (o "offset" pulava)
+  const todosPorChave = async (montar, chave = "id") => { const out = []; let ultimo = null;
+    for (;;) { let q = montar(); if (ultimo !== null) q = q.gt(chave, ultimo); const r = ok(await q.order(chave).limit(1000)); out.push(...r); if (r.length < 1000) return out; ultimo = r[r.length - 1][chave]; } };
   // o servidor devolve no máximo 1000 linhas por consulta: busca em páginas
   const todos = async montar => { const out = []; for (let de = 0; ; de += 1000) { const r = ok(await montar().range(de, de + 999)); out.push(...r); if (r.length < 1000) return out; } };
   const tabela = nome => ({
@@ -183,13 +187,14 @@ function criarApiSupabase() {
     relatorioItens: async (ini, fim, base) => todos(() => sb.rpc("relatorio_itens", { p_ini: ini, p_fim: fim, p_base: base || "entrega" }).order("numero").order("item_id")),
     /** réplica no banco do PC (etapa 2): o que mudou desde uma data e o que foi apagado (supabase/v13.sql) */
     replica: {
-      desde: async (tabela, quando) => todos(() => sb.from(tabela).select("*").gte("atualizado_em", quando).order(tabela === "estoque_reserva" ? "item_id" : "id")),
+      desde: async (tabela, quando) => todosPorChave(() => sb.from(tabela).select("*").gte("atualizado_em", quando), tabela === "estoque_reserva" ? "item_id" : "id"),
+      ultimaExclusao: async () => { const r = ok(await sb.from("exclusoes").select("seq").order("seq", { ascending: false }).limit(1)); return r.length ? r[0].seq : 0; },
       exclusoes: async seq => todos(() => sb.from("exclusoes").select("seq,tabela,registro").gt("seq", seq || 0).order("seq")),
       temV13: async () => { const r = await sb.from("exclusoes").select("seq").limit(1); if (!r.error) return true; if (/exclusoes|does not exist|schema cache|404/i.test(r.error.message || "")) return false; throw traduzErro(r.error); },
       ids: async tabela => todos(() => sb.from(tabela).select(tabela === "estoque_reserva" ? "item_id" : "id").order(tabela === "estoque_reserva" ? "item_id" : "id")).then(l => l.map(x => x.id ?? x.item_id)),
     },
     backup: {
-      tabela: async nome => todos(() => sb.from(nome).select("*").order(nome === "estoque_reserva" ? "item_id" : "id")),
+      tabela: async nome => todosPorChave(() => sb.from(nome).select("*"), nome === "estoque_reserva" ? "item_id" : "id"),
       restaurar: async (nome, linhas) => ok(await sb.rpc("restaurar_tabela", { p_tabela: nome, p_linhas: linhas })),
     },
     relatorioVendidos: async (ini, fim) => ok(await sb.rpc("relatorio_vendidos", { p_ini: ini, p_fim: fim })),
@@ -294,9 +299,13 @@ function comBancoDoPC(a) {
     clientes: t("clientes"), veiculos: t("veiculos"), produtos: t("produtos"), fornecedores: t("fornecedores"),
     ordens: ler(a.ordens, L.ordens), alterados: ler(a.alterados, L.alterados), itensDasOrdens: ler(a.itensDasOrdens, L.itensDasOrdens),
     // O.S.: banco do PC primeiro quando sem rede; a cópia da O.S. aberta (local.js) continua valendo como reserva
+    // O.S.: no programa, sem rede vem do banco do PC; a cópia da O.S. aberta (local.js) é só reserva
     ordem: async id => {
       if (semRede) { const o = await L.ordem(id); if (o) return o; return ordemOriginal(id); }
-      try { return await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await L.ordem(id); if (o) return o; } throw e; }
+      let r;
+      try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await L.ordem(id); if (o) return o; } throw e; }
+      if (r && r._local) { definirSemRede(true); const o = await L.ordem(id); if (o) return o; } // a rede caiu e veio a cópia antiga
+      return r;
     },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas) },

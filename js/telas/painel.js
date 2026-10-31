@@ -1,5 +1,6 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
+import { erroDeRede } from "../local.js";
 import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js";
 import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, lsSet, fmtTel, exPlaca, linkWhats } from "../util.js";
 import { STATUS, ABERTOS, ETAPAS, etapaOS, situacaoOS, pode } from "../regras.js";
@@ -186,10 +187,13 @@ export function Painel() {
   useEffect(() => { if (fin) api.contas.abertas().then(setContasAb).catch(() => setContasAb("sem-rede")); }, [fin]);
   if (perfil.papel === "mecanico" && !visiveis.some(j => j.k === "minhas")) visiveis = [{ k: "minhas", tam: 12 }, ...visiveis];
   const precisaRes = ver && visiveis.some(j => JANELAS[j.k].res);
+  // indicadores são calculados no servidor: sem internet, avisa e recalcula sozinho quando a conexão voltar
+  const [conexoes, setConexoes] = useState(0);
+  useEffect(() => { const f = () => setConexoes(n => n + 1); window.addEventListener("dtcar-conectado", f); return () => window.removeEventListener("dtcar-conectado", f); }, []);
   useEffect(() => { if (!precisaRes) return; let vivo = true; setR(null); setRa(null); setErroRes("");
     Promise.all([api.painel(iv.ini.toISOString(), iv.fim.toISOString(), iv.grupo), api.painel(iv.iniA.toISOString(), iv.fimA.toISOString(), iv.grupo)])
-      .then(([a, b]) => { if (vivo) { setR(a); setRa(b); } }).catch(e => vivo && setErroRes(e.message));
-    return () => { vivo = false; }; }, [per, precisaRes]);
+      .then(([a, b]) => { if (vivo) { setR(a); setRa(b); } }).catch(e => vivo && setErroRes(erroDeRede(e) ? "sem-rede" : e.message));
+    return () => { vivo = false; }; }, [per, precisaRes, conexoes]);
   const escolherPer = p => { setPer(p); try { localStorage.setItem("dtcar-periodo", JSON.stringify(p)); } catch (e) {} };
 
   // ---- dados do quadro
@@ -239,7 +243,8 @@ export function Painel() {
     return p ? { v, oque: p[0], data: p[1], c: dados.clientes.find(c => c.id === v.cliente_id) } : null; }).filter(x => x && x.c && soDig(x.c.telefone).length >= 10 && !clientesAbertos.has(x.c.id)).sort((a, b) => a.data.localeCompare(b.data));
   const lembrete = x => `Olá, ${x.c.nome.split(" ")[0]}! Aqui é da ${cfg.nome}.\n\nA ${x.oque} do seu ${[x.v.marca, x.v.modelo].filter(Boolean).join(" ")} (${exPlaca(x.v.placa)}) ${x.data < hoje ? "venceu em" : "vence em"} ${fmtData(x.data)}. Quer agendar? É só responder esta mensagem.`;
 
-  const semRes = () => erroRes ? html`<div class="erros">Não foi possível calcular: ${erroRes}</div>` : html`<div class="esqueleto"></div>`;
+  const semRes = () => erroRes === "sem-rede" ? html`<div class="vazio sub">Sem internet: estes números são calculados no servidor e aparecem sozinhos quando a conexão voltar.</div>`
+    : erroRes ? html`<div class="erros">Não foi possível calcular: ${erroRes}</div>` : html`<div class="esqueleto"></div>`;
   const conteudo = {
     busca: () => html`<${BuscaRapida} />`,
     hoje: () => html`<div class="hoje">

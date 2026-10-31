@@ -1,7 +1,7 @@
 {
   "name": "dtcar-gestao",
   "productName": "DTCar Gestão",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "DTCar Gestão para Windows: abre com ou sem internet",
   "author": "DTCar Centro Automotivo",
   "main": "main.js",

@@ -1,7 +1,9 @@
 // Ponte entre as telas do sistema e o Windows: só o que o sistema precisa (pasta de dados e versão), nada além.
 const { contextBridge, ipcRenderer } = require("electron");
+let novaVersao = false; // o preload roda em outro "mundo": variável no window daqui não aparece para as telas
 contextBridge.exposeInMainWorld("dtcarDesktop", {
   programa: true,
+  novaVersao: () => novaVersao,
   info: () => ipcRenderer.invoke("programa:info"),
   banco: {
     info: () => ipcRenderer.invoke("banco:info"),
@@ -30,4 +32,4 @@ contextBridge.exposeInMainWorld("dtcarDesktop", {
   },
 });
 // telas novas baixadas do site: mostra a faixa "Nova versão disponível" (a mesma do site)
-ipcRenderer.on("dtcar-nova-versao", () => { window.__dtcarNovaVersao = true; window.dispatchEvent(new Event("dtcar-nova-versao")); });
+ipcRenderer.on("dtcar-nova-versao", () => { novaVersao = true; window.dispatchEvent(new Event("dtcar-nova-versao")); });

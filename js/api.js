@@ -320,6 +320,8 @@ function comBancoDoPC(a) {
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },
+    // backup sem internet: monta a partir do banco do PC (restaurar continua precisando do servidor)
+    backup: { ...a.backup, tabela: ler(a.backup.tabela, async t => tabelaLocal(t)) },
     bancoDoPC: true,
     get bancoPronto() { return replicaProntaJa(); },
   };

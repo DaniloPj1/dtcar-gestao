@@ -19,6 +19,15 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+      # cria a versão (tag + release) antes do build: os arquivos sobem em paralelo e cada um tentava criar a release,
+      # o que falhava com "Published releases must have a valid tag" (31/10, versões 1.1.0 e 1.1.1)
+      - name: Criar a versão no GitHub
+        shell: bash
+        run: |
+          v=$(node -p "require('./package.json').version")
+          gh release view "programa-v$v" >/dev/null 2>&1 || gh release create "programa-v$v" --target "$GITHUB_SHA" --title "$v" --notes "Programa DTCar Gestão $v"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Gerar e publicar o instalador
         shell: bash
         run: |

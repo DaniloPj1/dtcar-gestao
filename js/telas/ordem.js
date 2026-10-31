@@ -3,11 +3,12 @@ import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, BuscaCliente } from "../ui.js";
 import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, precoPelaMargem, margemDoPreco, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
-import { STATUS, FLUXO, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
+import { STATUS, FLUXO, ETAPAS, etapaOS, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
 import { FormVeiculo, edVeiculo, SitCliente, FormCliente, edCliente } from "./cadastros.js";
-import { CancelarModal } from "./acoesos.js";
+import { CancelarModal, EncerrarModal } from "./acoesos.js";
 import { ReciboModal } from "./recibos.js";
+import { PrazoReceber, validarPrazo, lancarParcelas, ReceberParcelaModal, CombinarPrazoModal, ParcelasOS, situacaoParcela } from "./receber.js";
 import { BuscaFornecedor } from "./financeiro.js";
 
 /* ---------------- Mensagens de WhatsApp ---------------- */
@@ -177,28 +178,34 @@ function AprovacaoModal({ o, pendentes, onFechar, onConfirmar }) {
 }
 
 /* ---------------- Entrega ---------------- */
-function EntregaModal({ o, cfg, saldo, onFechar, onConfirmar }) {
+function EntregaModal({ o, cfg, saldo, comPrazo = 0, onFechar, onConfirmar }) {
   const [km, setKm] = useState(String(o.km_entrada || ""));
   const [forma, setForma] = useState(o.forma_pagamento || "");
   const [garantia, setGarantia] = useState(String(o.garantia_dias || cfg.garantiaDias || 90));
   const [recibo, setRecibo] = useState(saldo > 0 ? "" : "nada");
-  const [erro, setErro] = useState("");
+  const [erro, setErro] = useState(""), [prazo, setPrazo] = useState(null);
   const assin = useRef(null);
   const recusado = o.status === "recusado";
+  const v12 = !api.temV12 || api.temV12();
+  const falta = arred(Math.max(0, saldo - comPrazo)); // saldo que ainda não tem parcela combinada
+  const usaPrazo = recibo === "depois" && v12 && falta > 0.009;
   const confirmar = () => {
     const k = parseInt(soDig(km), 10);
     if (!(k >= (o.km_entrada || 0))) return setErro("O KM de saída não pode ser menor que o de entrada (" + fmtKm(o.km_entrada) + ").");
     if (saldo > 0 && !recibo) return setErro("Informe se o pagamento foi recebido agora ou fica a receber.");
     if (recibo === "agora" && !forma) return setErro("Informe a forma de pagamento.");
-    onConfirmar({ km: k, forma, garantia: parseInt(garantia, 10) || 0, assin: assin.current, recibo: recibo === "agora" && saldo > 0 });
+    if (usaPrazo) { const ep = validarPrazo(prazo, falta); if (ep) return setErro(ep); }
+    onConfirmar({ km: k, forma: usaPrazo ? prazo.forma : forma, garantia: parseInt(garantia, 10) || 0, assin: assin.current, recibo: recibo === "agora" && saldo > 0, prazo: usaPrazo ? prazo : null });
   };
   return html`<${Modal} titulo=${recusado ? "Registrar retirada" : "Registrar entrega"} onFechar=${onFechar}>
     <div class="total-item"><span>Valor da O.S.</span><b>${reais(o.total)}</b></div>
     ${saldo < o.total ? html`<div class="total-item"><span>Saldo a receber</span><b>${reais(saldo)}</b></div>` : null}
     <${Campo} id="ent-km" rotulo="KM de saída" obrig><input id="ent-km" class="inp" inputmode="numeric" value=${km ? Number(soDig(km)).toLocaleString("pt-BR") : ""} onInput=${e => { setKm(soDig(e.target.value).slice(0, 7)); setErro(""); }} /></${Campo}>
     ${saldo > 0 ? html`<div class="campo"><label>Pagamento <i>*</i></label><${Seg} rotulo="Pagamento" opcoes=${[["Recebido agora", "ok"], ["Receber depois", "warn"]]} valor=${recibo === "agora" ? "Recebido agora" : recibo === "depois" ? "Receber depois" : ""} onEscolha=${v => { setRecibo(v === "Recebido agora" ? "agora" : "depois"); setErro(""); }} />
-      <span class="dica">${recibo === "depois" ? "O veículo sai e a O.S. fica “a receber”. Ela só é finalizada quando o valor for recebido (recibo)." : recibo === "agora" ? "Em seguida abre o recibo de " + reais(saldo) + ". A O.S. é finalizada ao emitir o recibo." : "O carro pode sair antes do pagamento: escolha “Receber depois”."}</span></div>` : null}
-    ${o.total > 0 && recibo !== "nada" ? html`<div class="campo"><label>Forma de pagamento${recibo === "agora" ? html` <i>*</i>` : " (combinada)"}</label><${Seg} rotulo="Forma de pagamento" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>` : null}
+      <span class="dica">${recibo === "depois" ? "O veículo sai e a O.S. fica “a receber” até o pagamento. Combine abaixo o prazo: o sistema avisa quando vencer." : recibo === "agora" ? "Em seguida abre o recibo de " + reais(saldo) + ". A O.S. é finalizada ao emitir o recibo." : "O carro pode sair antes do pagamento: escolha “Receber depois”."}</span></div>` : null}
+    ${usaPrazo ? html`<div class="bloco-prazo"><h4>Prazo de recebimento · ${reais(falta)}</h4><${PrazoReceber} saldo=${falta} valor=${prazo} onMuda=${p => { setPrazo(p); setErro(""); }} /></div>` : null}
+    ${recibo === "depois" && !v12 ? html`<div class="aviso">Para registrar prazo e parcelas, o banco precisa da atualização <b>supabase/v12.sql</b>.</div>` : null}
+    ${o.total > 0 && recibo !== "nada" && !usaPrazo ? html`<div class="campo"><label>Forma de pagamento${recibo === "agora" ? html` <i>*</i>` : " (combinada)"}</label><${Seg} rotulo="Forma de pagamento" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>` : null}
     ${!recusado ? html`<${Campo} id="ent-gar" rotulo="Garantia (dias)" dica="Mínimo legal para serviços: 90 dias (CDC, art. 26, II)."><input id="ent-gar" class="inp" inputmode="numeric" value=${garantia} onInput=${e => setGarantia(soDig(e.target.value))} /></${Campo}>` : null}
     <div class="campo"><label>Assinatura do cliente na retirada</label><${PadAssinatura} apiRef=${assin} altura=${150} /></div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
@@ -231,8 +238,9 @@ export function Ordem({ id, params = {} }) {
   const [sujo, setSujo] = useState(false);
   const [modal, setModal] = useState(null);
   const [ocupado, setOcupado] = useState("");
-  const [recibos, setRecibos] = useState([]);
+  const [recibos, setRecibos] = useState([]), [parcs, setParcs] = useState([]);
   const verValores = pode(perfil, "verValores");
+  const carregarParcelas = () => verValores && api.receber && (!api.temV12 || api.temV12()) ? api.receber.daOrdem(id).then(setParcs).catch(() => {}) : null;
 
   const carregarRecibos = () => verValores ? api.recibos.listar({ ordemId: id }).then(setRecibos).catch(() => {}) : null;
   const carregar = async () => {
@@ -241,12 +249,12 @@ export function Ordem({ id, params = {} }) {
         obs_execucao: r.obs_execucao, obs_internas: r.obs_internas || "", box: r.box || "", contato: r.contato || "", situacao: r.situacao || "", tabela_preco: r.tabela_preco || "vista" });
     } catch (e) { setErroCarga(e.message); }
   };
-  useEffect(() => { setO(null); carregar(); carregarRecibos(); }, [id]);
+  useEffect(() => { setO(null); carregar(); carregarRecibos(); carregarParcelas(); }, [id]);
   // vindo da lista com "Entregar" ou "Receber": abre a janela certa assim que a O.S. carrega
   const acaoInicial = useRef(params.acao);
   useEffect(() => { if (!o || !acaoInicial.current) return; const a = acaoInicial.current; acaoInicial.current = null;
     if (a === "entregar" && ["pronto", "recusado"].includes(o.status)) setModal({ tipo: "entrega" });
-    if (a === "receber" && o.status === "entregue") setModal({ tipo: "recibo" }); }, [o]);
+    if (a === "receber" && ["pronto", "entregue"].includes(o.status)) setModal({ tipo: "encerrar" }); }, [o]);
   if (erroCarga) return html`<div class="pagina"><div class="erros">Não foi possível abrir a O.S.: ${erroCarga}</div><button class="btn" onClick=${() => ir("/ordens")}>Voltar</button></div>`;
   if (!o) return html`<div class="pagina"><div class="carregando">Abrindo O.S.…</div></div>`;
 
@@ -263,6 +271,9 @@ export function Ordem({ id, params = {} }) {
   const tAtual = usaAprov ? tAprov : tOrc;
   const recebido = recibos.filter(r => !r.cancelado).reduce((s, r) => s + Number(r.valor), 0);
   const saldo = arred(Math.max(0, tAtual.total - recebido));
+  const parcAb = parcs.filter(p => p.status === "aberta").sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  const comPrazo = arred(parcAb.reduce((s, p) => s + Number(p.valor), 0)), saldoSemPrazo = arred(Math.max(0, saldo - comPrazo));
+  const proxParc = parcAb[0], sitProx = proxParc ? situacaoParcela(proxParc) : null;
   const setCampo = p => { setCampos(c => ({ ...c, ...p })); setSujo(true); };
   const evento = (tipo, texto) => api.evento(o.id, tipo, texto, perfil.nome).catch(() => {});
   const cliCad = dados.clientes.find(c => c.id === o.cliente_id);
@@ -333,13 +344,22 @@ export function Ordem({ id, params = {} }) {
     const t = totais(novos, campos.desconto, true);
     const registro = { em: new Date().toISOString(), por, forma, obs, assinatura };
     await api.salvarItens(o.id, novos.map(({ _novo, ...i }) => i), removidos);
-    const status = st === "aguardando" ? (algum ? "execucao" : "recusado") : st;
+    const status = st === "aguardando" || st === "diagnostico" ? (algum ? "execucao" : "recusado") : st;
     await api.atualizarOrdem(o.id, { aprovacao: o.aprovacao ? { ...registro, anteriores: (o.aprovacao.anteriores || []).concat([{ ...o.aprovacao, anteriores: undefined }]) } : registro,
       status, total: t.total, custo: t.custo, diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto });
     const aprovados = novos.filter(i => sel[i.id] && pendentes.some(p => p.id === i.id)).length;
     await evento("aprovacao", `${por} aprovou ${aprovados} de ${pendentes.length} itens (${forma}).` + (status === "recusado" ? " Orçamento recusado." : ""));
     setModal(null); avisar(status === "recusado" ? "Nenhum item aprovado: orçamento marcado como recusado." : "Aprovação registrada."); await carregar(); recarregar(["ordens", "produtos"]);
   });
+  // Orçamento → Aprovado: dá para aprovar direto (cliente aprovou no balcão) sem marcar "enviado" antes
+  const aprovarOrcamento = async () => {
+    if (!itens.length) return avisar("Inclua pelo menos uma peça ou serviço antes de aprovar.", true);
+    const semValor = itens.filter(i => !i.fornecida_cliente && !(Number(i.valor_unit) > 0));
+    if (semValor.length) return avisar("Informe o valor de: " + semValor.map(i => i.descricao).join(", ") + ".", true);
+    if (!pendentes.length) return avisar("Não há itens aguardando aprovação.", true);
+    if (sujo) await acao("salvar", () => salvar({}, true));
+    setModal({ tipo: "aprovar" });
+  };
   const recusar = async () => {
     const taxa = Number(cfg.taxaDiagnostico) || 0;
     if (!await confirmar({ titulo: "Orçamento recusado", texto: taxa ? `O orçamento será marcado como recusado e a taxa de diagnóstico de ${reais(taxa)} será lançada para a retirada.` : "O orçamento será marcado como recusado. O veículo fica aguardando retirada.", botao: "Marcar como recusado", perigo: true })) return;
@@ -373,10 +393,10 @@ export function Ordem({ id, params = {} }) {
     const falta = itens.filter(i => i.aprovado === true && !i.executado);
     if (pendentes.length) return avisar("Há itens adicionais aguardando aprovação do cliente. Registre a decisão antes de concluir.", true);
     if (falta.length && !await confirmar({ titulo: "Itens não marcados", texto: falta.length + " item(ns) aprovado(s) não foram marcados como executados: " + falta.map(i => i.descricao).join(", ") + ". Concluir mesmo assim?", botao: "Concluir" })) return;
-    acao("pronto", async () => { await salvar({ status: "pronto" }, true); await evento("pronto", "Serviço concluído. Veículo pronto no pátio, aguardando retirada.");
-      setModal(entregarJa ? { tipo: "entrega" } : { tipo: "enviar", qual: "pronto" }); });
+    acao("pronto", async () => { await salvar({ status: "pronto" }, true); await evento("pronto", "Serviço concluído. Aguardando pagamento.");
+      setModal(entregarJa ? { tipo: "encerrar" } : { tipo: "enviar", qual: "pronto" }); });
   };
-  const confirmarEntrega = ({ km, forma, garantia, assin, recibo }) => acao("entregar", async () => {
+  const confirmarEntrega = ({ km, forma, garantia, assin, recibo, prazo }) => acao("entregar", async () => {
     let assinatura = "";
     if (assin && !assin.vazio()) { const b = await assin.blob(); assinatura = await api.enviarArquivo("assinaturas/" + o.id + "-entrega.png", b, "image/png"); }
     const t = totais(itens, campos.desconto, true);
@@ -384,7 +404,8 @@ export function Ordem({ id, params = {} }) {
     const v = dados.veiculos.find(x => x.id === o.veiculo_id);
     if (v && km > (v.km_atual || 0)) await api.veiculos.salvar({ id: v.id, km_atual: km });
     await evento("entrega", (st === "recusado" ? "Veículo retirado sem execução, com " : "Veículo entregue com ") + fmtKm(km) + (forma ? ". Pagamento: " + forma : "") + ".");
-    setModal(null); await carregar(); recarregar(["ordens", "veiculos", "produtos"]);
+    if (prazo) await lancarParcelas({ ...o, total: t.total }, prazo, perfil);
+    setModal(null); await carregar(); carregarParcelas(); recarregar(["ordens", "veiculos", "produtos", "receber"]);
     if (recibo) setModal({ tipo: "recibo", forma });
     else setModal({ tipo: "enviar", qual: st === "recusado" ? null : "entrega" });
   });
@@ -423,14 +444,16 @@ export function Ordem({ id, params = {} }) {
   // ---- barra de ações por etapa
   const B = (rot, fn, pri, dis) => html`<button type="button" class=${"btn" + (pri ? " btn-pri" : "")} disabled=${!!ocupado || dis} onClick=${fn}>${rot}</button>`;
   let acoes = [];
-  if (st === "diagnostico" && gestor) acoes = [B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, true)];
-  if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Registrar aprovação", () => setModal({ tipo: "aprovar" }), true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar)];
-  if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Pronto no pátio", () => marcarPronto(false), true), pode(perfil, "entregar") ? B("Pronto e entregue", () => marcarPronto(true)) : null, pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
-  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B("Registrar entrega", () => setModal({ tipo: "entrega" }), true), B("Avisar cliente", () => whats("pronto"))];
+  // 4 etapas: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada
+  const etapa = etapaOS(o);
+  if (st === "diagnostico" && gestor) acoes = [pode(perfil, "aprovar") ? B("Aprovar orçamento", aprovarOrcamento, true) : null, B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, !pode(perfil, "aprovar"))];
+  if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar)];
+  if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Serviço concluído", () => marcarPronto(false), true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
+  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", () => setModal({ tipo: "encerrar" }), true), saldo > 0 ? B("Entregar sem receber", () => setModal({ tipo: "entrega" })) : null, B("Avisar cliente", () => whats("pronto"))];
   if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", () => setModal({ tipo: "entrega" }), true)];
-  if (st === "entregue" && pode(perfil, "entregar")) acoes = [saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", () => setModal({ tipo: "recibo" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
+  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", () => setModal({ tipo: "encerrar" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
   acoes = acoes.filter(Boolean);
-  const passo = FLUXO.indexOf(st);
+  const passo = FLUXO.indexOf(etapa);
 
   /* ===== aba Principais informações ===== */
   const mecanicos = dados.perfis.filter(p => p.ativo !== false && ["mecanico", "admin", "consultor"].includes(p.papel));
@@ -512,6 +535,8 @@ export function Ordem({ id, params = {} }) {
       <div class="kv"><div><span>Recebido</span><b class=${recebido > 0 ? "c-ok" : ""}>${reais(recebido)}</b></div><div><span>Saldo</span><b class=${saldo > 0 && st === "entregue" ? "c-bad" : ""}>${reais(saldo)}</b></div></div>
       ${recibos.length ? html`<div class="lista">${recibos.map(r => html`<button type="button" key=${r.id} class=${"linha" + (r.cancelado ? " inativo" : "")} onClick=${() => ir("/imprimir/recibo/" + r.id)}>
         <span class="meio"><strong>${numRecibo(r.numero)}${r.cancelado ? " · cancelado" : ""}</strong><span>${fmtData(r.data)} · ${r.forma}${r.obs ? " · " + r.obs : ""}</span></span><b>${reais(r.valor)}</b></button>`)}</div>` : null}
+      <${ParcelasOS} parcelas=${parcs.filter(p => p.status !== "cancelada")} onReceber=${p => setModal({ tipo: "parcela", p })} />
+      ${st === "entregue" && saldoSemPrazo > 0.009 && pode(perfil, "entregar") && (!api.temV12 || api.temV12()) ? html`<button type="button" class="btn" onClick=${() => setModal({ tipo: "prazo" })}>Combinar prazo para ${reais(saldoSemPrazo)}</button>` : null}
       ${pode(perfil, "entregar") && tAtual.total > 0 && st !== "cancelado" ? html`<button type="button" class="btn" disabled=${saldo <= 0} onClick=${() => setModal({ tipo: "recibo" })}>${saldo > 0 ? "Emitir recibo de pagamento" + (st !== "entregue" ? " (sinal / adiantamento)" : "") : "Pagamento quitado"}</button>` : null}
     </section>` : null}`;
 
@@ -574,10 +599,10 @@ export function Ordem({ id, params = {} }) {
         ${o.cliente.telefone ? html`<a class="btn btn-sm btn-whats" href=${linkWhats(o.cliente.telefone, "Olá, " + primeiroNome(o) + "! ")} target="_blank" rel="noopener">${I.whats} WhatsApp</a>` : null}</div>
       ${legado ? html`<div class="info">O.S. ${legado.numero} importada do OS Oficina 3.0${legado.situacao ? " · situação no sistema anterior: " + legado.situacao : ""}.</div>` : null}
       ${!ck.feito && !legado && podeCk ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
-      ${st === "entregue" && o.recebido !== undefined && !o.finalizada_em && saldo > 0 ? html`<div class="aviso">Veículo entregue em ${fmtDataHora(o.entregue_em)}. <b>Falta receber ${reais(saldo)}</b>. A O.S. é finalizada quando o pagamento for registrado.</div>` : null}
+      ${st === "entregue" && o.recebido !== undefined && !o.finalizada_em && saldo > 0 ? html`<div class="aviso">Veículo entregue em ${fmtDataHora(o.entregue_em)}. <b>Falta receber ${reais(saldo)}</b>${proxParc ? html` · próxima parcela ${reais(proxParc.valor)} em ${fmtData(proxParc.vencimento)} <span class=${"pill p-" + sitProx.cor}>${sitProx.t}</span>` : saldoSemPrazo > 0.009 && verValores ? " · sem prazo combinado" : ""}. A O.S. é finalizada quando o pagamento for registrado.</div>` : null}
       ${st === "entregue" && o.finalizada_em ? html`<div class="info">O.S. finalizada em ${fmtDataHora(o.finalizada_em)}: veículo entregue e pagamento recebido.</div>` : null}
       ${st === "cancelado" && o.motivo_cancelamento ? html`<div class="aviso">Cancelada. Motivo: ${o.motivo_cancelamento}</div>` : null}
-      ${passo >= 0 ? html`<ol class="trilha">${FLUXO.map((s, n) => html`<li key=${s} class=${n < passo ? "feito" : n === passo ? "atual" : ""}>${STATUS[s].curto}</li>`)}</ol>` : html`<div class=${st === "recusado" ? "aviso" : "info"}>${STATUS[st].t}${st === "recusado" && o.entregue_em ? " · veículo retirado em " + fmtDataHora(o.entregue_em) : ""}</div>`}
+      ${passo >= 0 ? html`<ol class="trilha">${ETAPAS.map(([k, t], n) => html`<li key=${k} class=${n < passo || etapa === "fechada" ? "feito" : n === passo ? "atual" : ""}>${t}</li>`)}</ol>` : html`<div class=${st === "recusado" ? "aviso" : "info"}>${STATUS[st].t}${st === "recusado" && o.entregue_em ? " · veículo retirado em " + fmtDataHora(o.entregue_em) : ""}</div>`}
       ${acoes.length ? html`<div class="acoes">${acoes}</div>` : null}
       <div class="docs"><span class="sub">Documentos:</span>
         <button type="button" class="btn-link" disabled=${!!ocupado} onClick=${imprimir}>Imprimir O.S.</button>
@@ -594,8 +619,11 @@ export function Ordem({ id, params = {} }) {
 
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
-    ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
-    ${modal && modal.tipo === "recibo" ? html`<${ReciboModal} ordem=${{ ...o, total: tAtual.total }} valor=${saldo} forma=${modal.forma || o.forma_pagamento} onFechar=${() => setModal(null)} onEmitido=${async r => { setModal(null); await recarregar(["ordens"]); ir("/imprimir/recibo/" + r.id); }} />` : null}
+    ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} comPrazo=${comPrazo} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
+    ${modal && modal.tipo === "encerrar" ? html`<${EncerrarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }} />` : null}
+    ${modal && modal.tipo === "parcela" ? html`<${ReceberParcelaModal} parcela=${modal.p} ordem=${{ ...o, total: tAtual.total }} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }} />` : null}
+    ${modal && modal.tipo === "prazo" ? html`<${CombinarPrazoModal} o=${o} saldo=${saldoSemPrazo} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregarParcelas(); }} />` : null}
+    ${modal && modal.tipo === "recibo" ? html`<${ReciboModal} ordem=${{ ...o, total: tAtual.total }} valor=${saldo} forma=${modal.forma || o.forma_pagamento} onFechar=${() => setModal(null)} onEmitido=${async r => { setModal(null); await recarregar(["ordens", "receber"]); ir("/imprimir/recibo/" + r.id); }} />` : null}
     ${modal && modal.tipo === "imprimir" ? html`<${ImprimirModal} o=${o} verValores=${verValores} onFechar=${() => setModal(null)} />` : null}
     ${modal && modal.tipo === "cliente" ? html`<${Modal} titulo="Trocar cliente da O.S." onFechar=${() => setModal(null)}><${BuscaCliente} id="os-cli" valor="" onEscolha=${trocarCliente} />
       ${pode(perfil, "cadastrar") ? html`<div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => setModal({ tipo: "novocliente", ed: edCliente() })}>+ Cadastrar novo cliente</button></div>` : null}</${Modal}>` : null}

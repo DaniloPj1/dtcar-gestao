@@ -4,7 +4,7 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Seg, Vazio, Placa } from "../ui.js";
 import { norm, reais, qtdFmt, hojeISO, fmtData, numOS, exPlaca, normPlaca } from "../util.js";
-import { pode, STATUS } from "../regras.js";
+import { pode, STATUS, situacaoOS } from "../regras.js";
 import { nomeFavorecido, situacao } from "./financeiro.js";
 
 /* ---------------- catálogo ---------------- */
@@ -137,7 +137,7 @@ function RelHistorico() {
     { t: "Placa", v: o => exPlaca(o.placa) }, { t: "Veículo", v: o => o.veiculo }, { t: "Cliente", v: o => o.cliente }, { t: "Mecânico", v: o => o.mecanico },
     { t: "Serviços", v: o => descServ(o), cls: () => "col-larga" }, { t: "Peças", v: o => o.pecas, f: "reais" }, { t: "Mão de obra", v: o => o.servicos + o.terceiros, f: "reais" },
     { t: "Total", v: o => o.total, f: "reais" }, { t: "Custo peças", v: o => o.custo, f: "reais" },
-    { t: "Margem", v: o => o.total ? (o.total - o.custo) / o.total * 100 : null, f: "pct" }, { t: "Situação", v: o => (STATUS[o.status] || {}).curto || o.status },
+    { t: "Margem", v: o => o.total ? (o.total - o.custo) / o.total * 100 : null, f: "pct" }, { t: "Situação", v: o => (situacaoOS(o) || {}).curto || o.status },
   ];
   const colsIt = [{ t: "O.S.", v: i => String(i._o.numero).padStart(5, "0") }, { t: "Data", v: i => diaDe(base === "entrega" ? i._o.entregue_em : i._o.criado_em), f: "data" }, { t: "Placa", v: i => exPlaca(i._o.placa) },
     { t: "Cliente", v: i => i._o.cliente }, { t: "Tipo", v: i => ({ servico: "Serviço", peca: "Peça", terceiro: "Terceiro" }[i.tipo]) }, { t: "Descrição", v: i => i.descricao, sub: i => i.aprovado === false ? "não aprovado" : i.fornecida_cliente ? "peça do cliente" : "" },

@@ -15,6 +15,8 @@ import { Ordem } from "./telas/ordem.js";
 import { Cadastros, ClienteTela, VeiculoTela } from "./telas/cadastros.js";
 import { Mais, Equipe, Ajustes } from "./telas/admin.js";
 import { Recibos } from "./telas/recibos.js";
+import { ContasReceber, diasAte } from "./telas/receber.js";
+import { PrevisaoCaixa } from "./telas/caixa.js";
 import { Imprimir } from "./telas/imprimir.js";
 import { Importar } from "./telas/importar.js";
 import { Balcao } from "./telas/balcao.js";
@@ -30,14 +32,14 @@ import { DadosLocais } from "./telas/dadoslocais.js";
 try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo balcão" foi substituído pela interface única
 
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador" };
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", receber: "Contas a receber", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["+", "Novo", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
 const LATERAL = [
   ["Operação", [["/painel", "Painel", "painel"], ["/ordens", "Ordens de serviço", "lista"], ["/entrada", "Nova O.S.", "mais", "entrada"], ["/balcao", "Venda de balcão", "carrinho", "verValores"]]],
   ["Cadastros", [["/cadastros", "Clientes", "pessoas"], ["/cadastros?aba=veiculos", "Veículos", "carro"], ["/cadastros?aba=produtos", "Produtos e estoque", "caixa"], ["/cadastros?aba=fornecedores", "Fornecedores", "fabrica"]]],
-  ["Financeiro", [["/financeiro", "Contas a pagar", "dinheiro", "financeiro"], ["/recibos", "Recibos", "recibo", "verValores"], ["/sefaz", "Notas da SEFAZ", "nuvem", "cadastrar"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"], ["/funcionarios", "Funcionários", "pessoas", "financeiro"], ["/relatorios", "Relatórios", "grafico", "verValores"]]],
+  ["Financeiro", [["/receber", "Contas a receber", "dinheiro", "verValores"], ["/financeiro", "Contas a pagar", "dinheiro", "financeiro"], ["/caixa", "Previsão de caixa", "grafico", "financeiro"], ["/recibos", "Recibos", "recibo", "verValores"], ["/sefaz", "Notas da SEFAZ", "nuvem", "cadastrar"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"], ["/funcionarios", "Funcionários", "pessoas", "financeiro"], ["/relatorios", "Relatórios", "grafico", "verValores"]]],
   ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/backup", "Backup", "nuvem", "ajustes"], ["/dados-locais", "Dados no computador", "caixa"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
 ];
 
@@ -46,7 +48,7 @@ function App() {
   const [perfil, setPerfil] = useState(undefined);
   const [rota, setRota] = useState(lerRota());
   const [modoSenha, setModoSenha] = useState(/type=recovery/.test(location.hash));
-  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], fornecedores: [], ordens: [], perfis: [], carregado: false });
+  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], fornecedores: [], ordens: [], perfis: [], receber: [], carregado: false });
   const [novoMenu, setNovoMenu] = useState(false);
   const [cfg, setCfg] = useState(cfgCompleta({}));
   const [toast, setToast] = useState(null);
@@ -87,12 +89,13 @@ function App() {
   /** Carrega tabelas. Para O.S., clientes, veículos e produtos já carregados, busca só o que mudou (rápido);
    *  use { completo: true } depois de excluir registros. */
   const recarregar = useCallback(async (quais, opt = {}) => {
-    const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config"];
+    const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config", "receber"];
     const lista = quais && quais.length ? quais : todos;
     try {
       const res = await Promise.all(lista.map(k => {
         if (k === "config") return api.config();
         if (k === "perfis") return api.perfis();
+        if (k === "receber") return api.receber ? api.receber.abertas().catch(() => []) : [];
         const desde = !opt.completo && SINC.includes(k) && marcas.current[k];
         if (desde) return k === "ordens" ? api.ordens(desde) : api.alterados(k, desde);
         return k === "ordens" ? api.ordens() : api[k].listar(k === "clientes" ? "nome" : k === "produtos" ? "descricao" : k === "fornecedores" ? "razao" : "criado_em");
@@ -195,7 +198,7 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro" };
+  const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", receber: "verValores", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro" };
   const pendOS = pend.filter(op => op.tipo === "abrir_os");
   const dadosVis = !pendOS.length ? dados : {
     ...dados,
@@ -218,10 +221,11 @@ function App() {
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
-    financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, backup: () => html`<${Backup} />`,
+    financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, receber: () => html`<${ContasReceber} />`, caixa: () => html`<${PrevisaoCaixa} />`, backup: () => html`<${Backup} />`,
     funcionarios: () => html`<${Funcionarios} params=${params} key=${qs || ""} />`, funcionario: () => html`<${FuncionarioTela} id=${param} params=${params} key=${param + (qs || "")} />`,
   }[base]?.() || html`<${Painel} />`;
 
+  const vencidasRec = (dados.receber || []).filter(p => p.status === "aberta" && diasAte(p.vencimento) < 0).length;
   const modais = html`
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
@@ -233,7 +237,8 @@ function App() {
       <button type="button" class="lateral-marca" onClick=${() => ir("/painel")} aria-label="Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       ${LATERAL.map(([grupo, itens]) => { const vis = itens.filter(it => !it[3] || pode(perfil, it[3])); return vis.length ? html`<nav key=${grupo} class="lateral-grupo"><span>${grupo}</span>
         ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
-          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span></button>`; })}</nav>` : null; })}
+          const nb = r === "/receber" ? vencidasRec : 0;
+          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class="lat-badge" title=${nb + " parcela(s) vencida(s)"}>${nb}</em>` : null}</button>`; })}</nav>` : null; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>

@@ -63,23 +63,43 @@ export function achados(resp, secoes) {
   return out.sort((a, b) => ordem[a.s] - ordem[b.s]);
 }
 
+// Status gravados no banco (não mudam: o histórico e o backup do sistema antigo usam estes nomes)
 export const STATUS = {
-  diagnostico: { t: "Em diagnóstico", curto: "Diagnóstico", cor: "info" },
-  aguardando: { t: "Aguardando aprovação", curto: "Aguardando", cor: "warn" },
-  execucao: { t: "Em execução", curto: "Execução", cor: "brand" },
-  pronto: { t: "Pronto no pátio", curto: "Pronto", cor: "ok" },
-  entregue: { t: "Entregue", curto: "Entregue", cor: "muted" },
+  diagnostico: { t: "Orçamento", curto: "Orçamento", cor: "info" },
+  aguardando: { t: "Orçamento enviado", curto: "Orçamento", cor: "info" },
+  execucao: { t: "Aprovado · em execução", curto: "Em execução", cor: "brand" },
+  pronto: { t: "Aguardando pagamento", curto: "Aguard. pagamento", cor: "warn" },
+  entregue: { t: "Fechada", curto: "Fechada", cor: "ok" },
   recusado: { t: "Orçamento recusado", curto: "Recusado", cor: "bad" },
   cancelado: { t: "Cancelada", curto: "Cancelada", cor: "muted" },
 };
-export const FLUXO = ["diagnostico", "aguardando", "execucao", "pronto", "entregue"];
-/** Situação mostrada da O.S.: separa "entregue, a receber" de "finalizada" (entregue e paga) */
+/** As 4 etapas que a oficina enxerga: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada */
+export const ETAPAS = [
+  ["orcamento", "Orçamento", "info"],
+  ["execucao", "Aprovado · em execução", "brand"],
+  ["pagamento", "Aguardando pagamento", "warn"],
+  ["fechada", "Fechada", "ok"],
+];
+export const ETAPAS_ABERTAS = ["orcamento", "execucao", "pagamento"];
+/** Etapa da O.S. a partir do status gravado */
+export function etapaOS(o) {
+  if (!o) return "";
+  const s = o.status;
+  if (s === "diagnostico" || s === "aguardando") return "orcamento";
+  if (s === "execucao") return "execucao";
+  if (s === "pronto") return "pagamento";
+  // entregue: fecha quando o pagamento é quitado (sem a coluna "recebido" — banco antigo — conta como fechada)
+  if (s === "entregue") return o.recebido !== undefined && !o.finalizada_em ? "pagamento" : "fechada";
+  return s === "recusado" || s === "cancelado" ? s : "";
+}
+export const FLUXO = ETAPAS.map(e => e[0]);
+/** Situação mostrada da O.S. (etiqueta) */
 export function situacaoOS(o) {
   if (!o) return null;
-  if (o.status === "entregue" && o.recebido !== undefined) {
-    if (o.finalizada_em) return { t: "Finalizada", curto: "Finalizada", cor: "muted" };
-    return { t: "Entregue · a receber", curto: "A receber", cor: "warn" };
-  }
+  const e = etapaOS(o), et = ETAPAS.find(x => x[0] === e);
+  if (e === "pagamento") return { t: "Aguardando pagamento · " + (o.status === "entregue" ? "veículo entregue" : "veículo no pátio"), curto: "Aguard. pagamento", cor: "warn" };
+  if (e === "orcamento") return { t: o.status === "aguardando" ? "Orçamento enviado, aguardando aprovação" : "Orçamento em elaboração", curto: "Orçamento", cor: "info" };
+  if (et) return { t: et[1], curto: e === "execucao" ? "Em execução" : et[1], cor: et[2] };
   return STATUS[o.status] || { t: o.status, curto: o.status, cor: "muted" };
 }
 export const ABERTOS = ["diagnostico", "aguardando", "execucao", "pronto"];

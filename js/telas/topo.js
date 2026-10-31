@@ -62,11 +62,13 @@ function BuscaRapida() {
 
 /** Situação da conexão, da fila e da pasta de dados */
 function Situacao({ offline, pend, enviarFila }) {
-  const { pasta, ir } = useApp();
+  const { pasta, ir, guardadas } = useApp();
+  const guardando = guardadas && guardadas.feitas < guardadas.total;
   const pastaRuim = pasta && pasta.configurada && pasta.permissao !== "granted";
   const [cls, txt, dica] = offline ? ["off", "Sem internet", "Modo consulta. Dá para abrir O.S. nova; ela recebe o número quando a conexão voltar."]
     : pend.length ? ["pend", pend.length + " aguardando envio", "O.S. abertas sem internet. Clique para enviar agora."]
     : pastaRuim ? ["pend", "Reconectar pasta", "O navegador pediu para confirmar o acesso à pasta de dados do PC."]
+    : guardando ? ["pend", "Guardando O.S. " + guardadas.feitas + "/" + guardadas.total, "Copiando as O.S. em aberto para este computador (para abrir sem internet). Não desligue a internet até terminar."]
     : ["on", "Conectado", pasta && pasta.ultimaGravacao ? "Pasta do PC gravada em " + fmtDataHora(pasta.ultimaGravacao) : "Dados sincronizados com o servidor"];
   return html`<button type="button" class=${"situacao s-" + cls} title=${dica} onClick=${() => pend.length && !offline ? enviarFila() : ir("/dados-locais")}><i></i><span>${txt}</span></button>`;
 }

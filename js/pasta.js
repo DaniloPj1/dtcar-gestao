@@ -29,7 +29,7 @@ async function permissao(h, pedir) {
 /** Lê a situação ao abrir o programa (sem pedir nada ao usuário) */
 export async function iniciarPasta() {
   if (D) {
-    try { const i = await D.info(); if (!(await D.ler("LEIA-ME.txt"))) await escrever(PROGRAMA, ["LEIA-ME.txt"], LEIA_ME);
+    try { const i = await D.info(); if ((await D.ler("LEIA-ME.txt")) !== LEIA_ME) await escrever(PROGRAMA, ["LEIA-ME.txt"], LEIA_ME);
       estado = { ...estado, configurada: true, nome: i.caminho, permissao: "granted", ultimaGravacao: (await local.ler("pasta:ultima")) || null }; }
     catch (e) { estado = { ...estado, configurada: false, erro: e.message }; }
     avisa(); return estado;
@@ -44,7 +44,8 @@ export async function iniciarPasta() {
 const LEIA_ME = "Pasta de dados do DTCar Gestão neste computador.\r\n\r\n" +
   "dados\\dtcar-dados.json  - cópia completa mais recente dos cadastros e O.S. (atualizada automaticamente)\r\n" +
   "dados\\fila-envio.json   - O.S. abertas sem internet aguardando envio ao servidor\r\n" +
-  "copias\\                 - uma cópia por dia, guardadas por " + DIAS_COPIAS + " dias\r\n\r\n" +
+  "copias\\                 - uma cópia por dia, guardadas por " + DIAS_COPIAS + " dias\r\n" +
+  "backup\\                 - backup COMPLETO de todas as tabelas, um por dia (14 dias); restaura pela tela Sistema > Backup\r\n\r\n" +
   "Não apague nem edite estes arquivos. Copie esta pasta para um pendrive ou para a nuvem com frequência.\r\n";
 export async function escolherPasta() {
   if (D) { const st = await iniciarPasta(); if (!st.configurada) throw new Error(st.erro || "Não foi possível acessar a pasta Documentos\\DTCar Gestão."); return PROGRAMA; }
@@ -111,3 +112,21 @@ export async function lerDaPasta() {
   const h = await pronta(); if (!h) return null;
   return { copia: await ler(h, ["dados", "dtcar-dados.json"]), fila: ((await ler(h, ["dados", "fila-envio.json"])) || {}).fila || [] };
 }
+
+const DIAS_BACKUP = 14;
+/** Cópia de segurança COMPLETA do servidor (todas as tabelas, no formato da tela Backup), uma por dia em backup\.
+ *  Serve para restaurar tudo se o online falhar. Guarda os últimos 14 dias. */
+export async function gravarBackupNaPasta(texto) {
+  const h = await pronta(); if (!h) return false;
+  const dia = new Date().toISOString().slice(0, 10);
+  await escrever(h, ["backup", "dtcar-backup-" + dia + ".json"], texto);
+  const ok = n => /^dtcar-backup-\d{4}-\d{2}-\d{2}\.json$/.test(n);
+  try {
+    if (h === PROGRAMA) (await D.listar("backup")).filter(ok).sort().reverse().slice(DIAS_BACKUP).forEach(n => D.remover("backup/" + n).catch(() => {}));
+    else { const dc = await h.getDirectoryHandle("backup", { create: true }), nomes = []; for await (const [n] of dc.entries()) if (ok(n)) nomes.push(n);
+      nomes.sort().reverse().slice(DIAS_BACKUP).forEach(n => dc.removeEntry(n).catch(() => {})); }
+  } catch (e) {}
+  const agora = new Date().toISOString(); await local.gravar("pasta:backup", { dia, em: agora, tamanho: texto.length });
+  estado = { ...estado, ultimoBackup: agora }; avisa(); return true;
+}
+export const backupDaPasta = () => local.ler("pasta:backup");

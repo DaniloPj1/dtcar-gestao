@@ -37,6 +37,9 @@
       daOrdem: async oid => db.receber.filter(p => p.ordem_id === oid), lancar: async ls => { const xs = ls.map(l => ({ id: uid(), status: "aberta", criado_em: now(), ...l })); db.receber.push(...xs); return xs; },
       atualizar: async (id, patch) => { const p = db.receber.find(x => x.id === id); Object.assign(p, patch); return p; } },
     espelhoZerar: async () => ({}),
+    ordemNoAparelho: async id => (window.__GUARD = window.__GUARD || {})[id] || null,
+    guardarOrdem: async id => { net(); const o = db.ordens.find(x => x.id === id); (window.__GUARD = window.__GUARD || {})[id] = { ...o }; return o; },
+    testarConexao: async () => navigator.onLine,
     atualizarOrdem: async (id, patch) => { net(); const o = db.ordens.find(x => x.id === id); Object.assign(o, patch, { atualizado_em: new Date().toISOString() });
       if (o.status === "entregue") o.finalizada_em = (o.recebido || 0) >= (o.total || 0) ? (o.finalizada_em || new Date().toISOString()) : null; },
     salvarItens: async (oid, itens, rem) => { db.os_itens = db.os_itens.filter(i => !(rem || []).includes(i.id)); for (const it of itens) { const k = db.os_itens.findIndex(x => x.id === it.id); if (k >= 0) db.os_itens[k] = { ...it, ordem_id: oid }; else db.os_itens.push({ ...it, ordem_id: oid }); } },

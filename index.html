@@ -26,9 +26,12 @@ window.addEventListener("appinstalled", function () { window.__dtcarInstalar = n
 <script>
 // se o programa não abrir em 12 s, explica o motivo em vez de ficar em "Carregando…"
 setTimeout(function () {
+  // só quando o sistema nem chegou a montar (as telas internas também mostram "Carregando…" e não contam)
+  if (window.__dtcarMontou) return;
   var r = document.getElementById("raiz"); if (!r || !r.querySelector(".carregando")) return;
-  var https = location.protocol === "https:" || location.hostname === "localhost";
-  var msg = !https ? "Este endereço (http) não guarda o programa para uso sem internet. Abra <b>https://gestao.dtcarcentroautomotivo.com.br</b> e instale o ícone por ele."
+  var https = location.protocol === "https:" || location.hostname === "localhost" || !!window.dtcarDesktop;
+  var msg = window.dtcarDesktop ? "O programa não conseguiu abrir as telas. Feche e abra de novo; se continuar, reinstale pelo site."
+    : !https ? "Este endereço (http) não guarda o programa para uso sem internet. Abra <b>https://gestao.dtcarcentroautomotivo.com.br</b> e instale o ícone por ele."
     : !navigator.onLine ? "Sem internet, e o programa ainda não está guardado neste computador. Abra uma vez com internet (e espere carregar) para ele funcionar sem conexão."
     : "O programa está demorando para abrir. Confira a internet e tente de novo.";
   r.innerHTML = '<div class="carregando falha"><p>' + msg + '</p><button type="button" class="btn btn-pri" onclick="location.reload()">Tentar de novo</button></div>';

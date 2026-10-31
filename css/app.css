@@ -963,3 +963,4 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (prefers-color-scheme:dark){:root:not([data-tema="claro"]) .faixa-transicao{background:#3a2f0f;color:#f5dc9b;border-color:#5c4a17}}
 :root[data-tema="escuro"] .faixa-transicao{background:#3a2f0f;color:#f5dc9b;border-color:#5c4a17}
 .regra-transicao{margin:8px 0}.regra-transicao ol{margin:6px 0 0 18px;padding:0}.regra-transicao li{margin:3px 0}
+.so-online{max-width:640px;margin:24px auto}.so-online h2{margin-top:0}

@@ -34,10 +34,28 @@ const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_e
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
 let temV11 = true, temReceber = true;
 
+// ---- sem internet: depois que o sistema percebe que caiu, nada fica esperando o servidor ----
+// Toda chamada ao servidor tem tempo-limite; em modo "sem rede" ela falha na hora (e quem chamou usa a cópia do aparelho).
+let semRede = false;
+export const definirSemRede = v => { semRede = !!v; };
+export const estaSemRede = () => semRede;
+const LIMITE_MS = 15000, LIMITE_ARQUIVO_MS = 120000;
+// erro de rede "final": o nome AbortError faz a biblioteca do Supabase não repetir a tentativa (cada repetição esperava de novo)
+const semConexao = motivo => { const e = new Error("Failed to fetch (" + motivo + ")"); e.name = "AbortError"; return e; };
+function fetchComLimite(url, opts = {}) {
+  if (semRede || !navigator.onLine) return Promise.reject(semConexao("sem internet"));
+  const ctl = new AbortController(), lim = /\/storage\/v1\//.test(String(url)) ? LIMITE_ARQUIVO_MS : LIMITE_MS;
+  const t = setTimeout(() => ctl.abort(), lim);
+  if (opts.signal) { if (opts.signal.aborted) ctl.abort(); else opts.signal.addEventListener("abort", () => ctl.abort()); }
+  return fetch(url, { ...opts, signal: ctl.signal })
+    .catch(e => { if (opts.signal && opts.signal.aborted) throw e; throw semConexao(e && e.name === "AbortError" ? "tempo esgotado" : "sem resposta do servidor"); })
+    .finally(() => clearTimeout(t));
+}
+
 function criarApiSupabase() {
   const cx = conexao();
   if (!cx || !window.supabase) return null;
-  const sb = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true } });
+  const sb = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }, global: { fetch: fetchComLimite }, db: { retry: false } });
   const ok = r => { if (r.error) throw traduzErro(r.error); return r.data; };
   const urls = new Map();
   // o servidor devolve no máximo 1000 linhas por consulta: busca em páginas
@@ -50,6 +68,13 @@ function criarApiSupabase() {
   });
   const metodos = {
     tipo: "supabase",
+    /** Confere se o servidor responde (ignora o modo sem rede): usado para sair do modo sem internet */
+    testarConexao: async () => {
+      if (!navigator.onLine) return false;
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 6000);
+      try { const r = await fetch(cx.url + "/auth/v1/health", { headers: { apikey: cx.key }, signal: ctl.signal, cache: "no-store" }); return r.status < 500; }
+      catch (e) { return false; } finally { clearTimeout(t); }
+    },
     auth: {
       sessao: async () => (await sb.auth.getSession()).data.session,
       aoMudar: cb => { const { data } = sb.auth.onAuthStateChange((evento, s) => cb(s, evento)); return () => data.subscription.unsubscribe(); },
@@ -153,8 +178,9 @@ function criarApiSupabase() {
     importarLegado: async (tipo, linhas, atualizar) => ok(await sb.rpc("importar_legado", { p_tipo: tipo, p_linhas: linhas, p_atualizar: !!atualizar })),
     ordem: async id => {
       const pend = await local.ler("os:" + id); if (pend && pend._pendente) return pend; // aberta sem internet, ainda não enviada
+      if (semRede) { if (pend) return { ...pend, _local: true }; throw new Error("Sem internet: esta O.S. não está guardada neste computador. Ela abre quando a conexão voltar."); }
       try { const r = await buscarOrdem(id); local.gravar("os:" + id, r); return r; }
-      catch (e) { if (erroDeRede(e)) { const c = await local.ler("os:" + id); if (c) return { ...c, _local: true }; } throw e; }
+      catch (e) { if (erroDeRede(e)) { const c = await local.ler("os:" + id); if (c) return { ...c, _local: true }; throw new Error("Sem internet: esta O.S. não está guardada neste computador. Ela abre quando a conexão voltar."); } throw e; }
     },
     ordemNoAparelho: async id => local.ler("os:" + id),
     /**

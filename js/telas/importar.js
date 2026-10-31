@@ -57,7 +57,7 @@ export function Importar() {
     try {
       if (espelho) {
         setProg({ rot: "Backup de segurança do DTCar Gestão", pct: 0 });
-        await gerarBackup({ cfg, perfil, prefixo: "dtcar-antes-do-espelho" });
+        await gerarBackup({ cfg, perfil, prefixo: "dtcar-antes-do-espelho", origem: "servidor" }); // nunca a cópia do PC: em seguida o servidor é apagado
         setProg({ rot: "Apagando os dados atuais", pct: 2 });
         r.zerado = await api.espelhoZerar();
       }

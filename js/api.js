@@ -324,6 +324,7 @@ function comBancoDoPC(a) {
     // servidor: a réplica (js/replica.js) usa ela e não pode misturar dados do PC numa carga completa.
     backup: { ...a.backup, doPC: async t => { if (!(await replicaPronta())) throw new Error("o banco do PC ainda não tem a primeira carga completa");
       return JSON.parse((await window.dtcarDesktop.banco.listar(t)) || "[]"); },
+      configDoPC: async () => { const c = await window.dtcarDesktop.banco.meta("config"); if (!c) throw new Error("ajustes ausentes no banco do PC"); return JSON.parse(c); },
       copiaDoPCEm: () => window.dtcarDesktop.banco.meta("ultima") },
     bancoDoPC: true,
     get bancoPronto() { return replicaProntaJa(); },

@@ -21,7 +21,9 @@ export async function montarBackup({ perfil, aoProgredir = () => {}, tolerante =
   const doPC = origem === "pc";
   const out = { sistema: "dtcar-gestao", versao: 5, gerado_em: new Date().toISOString(), gerado_por: perfil.nome, tabelas: {}, puladas: [] };
   if (doPC) { out.origem = "banco do PC (sem internet)"; out.copia_do_pc_em = await api.backup.copiaDoPCEm(); }
-  out.config = await api.config(); out.perfis = await api.perfis();
+  // tudo da mesma origem, inclusive ajustes e equipe (a conexão pode voltar no meio de um backup feito do PC)
+  if (doPC) { out.config = await api.backup.configDoPC(); out.perfis = await api.backup.doPC("perfis"); }
+  else { out.config = await api.config(); out.perfis = await api.perfis(); }
   const feito = [];
   for (const [t, nome] of TABELAS) {
     aoProgredir({ feito, atual: nome });
@@ -37,8 +39,8 @@ export async function montarBackup({ perfil, aoProgredir = () => {}, tolerante =
 }
 
 /** Gera o arquivo de backup completo e baixa no computador. Usado pela tela Backup e antes do espelho do sistema antigo. */
-export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo = "dtcar-backup" }) {
-  const out = await montarBackup({ perfil, aoProgredir }), feito = out.feito; delete out.feito; delete out.puladas;
+export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo = "dtcar-backup", origem }) {
+  const out = await montarBackup({ perfil, aoProgredir, ...(origem ? { origem } : {}) }), feito = out.feito; delete out.feito; delete out.puladas;
   const total = Object.values(out.tabelas).reduce((s, l) => s + l.length, 0);
   const { blob, ext } = await compactar(JSON.stringify(out));
   const d = new Date(), nomeArq = `${prefixo}${out.origem ? "-copia-do-pc" : ""}-${d.toISOString().slice(0, 10)}-${String(d.getHours()).padStart(2, "0")}${String(d.getMinutes()).padStart(2, "0")}.${ext}`;

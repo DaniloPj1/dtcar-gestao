@@ -1,6 +1,6 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
 import { local, erroDeRede } from "./local.js";
-import { replicaDisponivel, leitorLocal as L, tabelaLocal } from "./replica.js";
+import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal } from "./replica.js";
 
 const LS_CONEXAO = "dtcar-conexao";
 export function conexao() {
@@ -287,24 +287,30 @@ function criarApiSupabase() {
  */
 function comBancoDoPC(a) {
   if (!a || !replicaDisponivel()) return a;
+  replicaPronta(); // já deixa marcado se o banco do PC tem a 1ª carga completa
+  // banco do PC ainda sem a 1ª carga completa: responde "sem conexão" para a tela usar a cópia do navegador (não devolve lista vazia)
+  const doPC = localFn => async (...args) => { if (!(await replicaPronta())) throw semConexao("banco do PC ainda sem carga"); return localFn(...args); };
   const ler = (servidor, localFn) => async (...args) => {
-    if (semRede) return localFn(...args);
-    try { return await servidor(...args); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); return localFn(...args); } throw e; }
+    if (semRede) return doPC(localFn)(...args);
+    try { return await servidor(...args); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); return doPC(localFn)(...args); } throw e; }
   };
+  // perfil fora do banco do PC nunca vira "acesso aguardando liberação": cai para o perfil guardado no aparelho
+  const perfilDoPC = async uid => { const p = await L.meuPerfil(uid); if (!p) throw semConexao("perfil fora do banco do PC"); return p; };
+  const ordemDoPC = async id => ((await replicaPronta()) ? L.ordem(id) : null);
   const t = nome => ({ ...a[nome], listar: ler(a[nome].listar, L.listar(nome)) });
   const ordemOriginal = a.ordem;
   return {
     ...a,
-    meuPerfil: ler(a.meuPerfil, L.meuPerfil), perfis: ler(a.perfis, L.perfis), config: ler(a.config, L.config),
+    meuPerfil: ler(a.meuPerfil, perfilDoPC), perfis: ler(a.perfis, L.perfis), config: ler(a.config, L.config),
     clientes: t("clientes"), veiculos: t("veiculos"), produtos: t("produtos"), fornecedores: t("fornecedores"),
     ordens: ler(a.ordens, L.ordens), alterados: ler(a.alterados, L.alterados), itensDasOrdens: ler(a.itensDasOrdens, L.itensDasOrdens),
     // O.S.: banco do PC primeiro quando sem rede; a cópia da O.S. aberta (local.js) continua valendo como reserva
     // O.S.: no programa, sem rede vem do banco do PC; a cópia da O.S. aberta (local.js) é só reserva
     ordem: async id => {
-      if (semRede) { const o = await L.ordem(id); if (o) return o; return ordemOriginal(id); }
+      if (semRede) { const o = await ordemDoPC(id); if (o) return o; return ordemOriginal(id); }
       let r;
-      try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await L.ordem(id); if (o) return o; } throw e; }
-      if (r && r._local) { definirSemRede(true); const o = await L.ordem(id); if (o) return o; } // a rede caiu e veio a cópia antiga
+      try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } throw e; }
+      if (r && r._local) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } // a rede caiu e veio a cópia antiga
       return r;
     },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm) },
@@ -315,6 +321,7 @@ function comBancoDoPC(a) {
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },
     bancoDoPC: true,
+    get bancoPronto() { return replicaProntaJa(); },
   };
 }
 export const api = window.__API_MOCK || comBancoDoPC(criarApiSupabase());

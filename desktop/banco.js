@@ -29,7 +29,7 @@ const lista = rows => "[" + rows.map(r => r.dados).join(",") + "]"; // devolve t
 
 function registrar(ipcMain, app, pastaDados) {
   const pronto = () => abrir(app.getPath("userData"));
-  ipcMain.handle("banco:info", () => { pronto(); const n = db.prepare("select tabela, count(*) n from linhas group by tabela").all();
+  ipcMain.handle("banco:info", () => { pronto(); const n = db.prepare("select tabela, count(*) n from linhas where tabela not like '%~novo' group by tabela").all();
     return { arquivo, tamanho: fs.existsSync(arquivo) ? fs.statSync(arquivo).size : 0, tabelas: Object.fromEntries(n.map(x => [x.tabela, x.n])) }; });
   // substitui a tabela inteira (carga completa)
   ipcMain.handle("banco:substituir", (e, tabela, texto) => { pronto(); const linhas = JSON.parse(texto);
@@ -42,6 +42,12 @@ function registrar(ipcMain, app, pastaDados) {
   ipcMain.handle("banco:manterSo", (e, tabela, ids) => { pronto(); const tem = new Set(ids.map(String));
     const locais = db.prepare("select id from linhas where tabela = ?").all(tabela).map(r => r.id).filter(id => !tem.has(id));
     const d = db.prepare("delete from linhas where tabela = ? and id = ?"); transacao(() => { for (const id of locais) d.run(tabela, id); }); return locais.length; });
+  // carga completa em duas fases: grava em "<tabela>~novo" e só troca todas juntas no fim (falha no meio não mistura cargas)
+  ipcMain.handle("banco:preparar", (e, tabela, texto) => { pronto(); const linhas = JSON.parse(texto);
+    transacao(() => { db.prepare("delete from linhas where tabela = ?").run(tabela + "~novo"); gravarLinhas(tabela + "~novo", linhas); }); return linhas.length; });
+  ipcMain.handle("banco:promover", (e, tabelas) => { pronto(); transacao(() => { for (const t of tabelas) {
+    db.prepare("delete from linhas where tabela = ?").run(t); db.prepare("update linhas set tabela = ? where tabela = ?").run(t, t + "~novo"); } }); return true; });
+  ipcMain.handle("banco:descartarPreparo", () => { pronto(); db.prepare("delete from linhas where tabela like '%~novo'").run(); return true; });
   ipcMain.handle("banco:listar", (e, tabela) => { pronto(); return lista(db.prepare("select dados from linhas where tabela = ?").all(tabela)); });
   ipcMain.handle("banco:porOrdem", (e, tabela, ordemId) => { pronto(); return lista(db.prepare("select dados from linhas where tabela = ? and ordem_id = ?").all(tabela, String(ordemId))); });
   ipcMain.handle("banco:um", (e, tabela, id) => { pronto(); const r = db.prepare("select dados from linhas where tabela = ? and id = ?").get(tabela, String(id)); return r ? r.dados : null; });

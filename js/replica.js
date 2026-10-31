@@ -42,7 +42,9 @@ export async function replicar(api, { completo = false, espelho = null, config =
     const v13 = await api.replica.temV13();
     const agora = Date.now(), ultimaCompleta = Number(await B.meta("completa:em")) || 0;
     const cicloCompleto = completo || agora - ultimaCompleta > (v13 ? 6 * 3600000 : 30 * 60000); // conferência completa de 6 em 6 h (cobre linha gravada com data anterior à marca)
-    let total = 0;
+    let total = 0; const preparadas = [], marcas = {};
+    const duasFases = !!B.preparar; // programa 1.1+: carga completa troca todas as tabelas juntas no fim
+    if (duasFases) await B.descartarPreparo();
     // exclusões: marca o ponto ANTES de ler as tabelas (o que for apagado durante a leitura é removido logo depois)
     const seqInicio = v13 ? (Number(await B.meta("exclusoes:seq")) || (cicloCompleto ? await api.replica.ultimaExclusao() : 0)) : 0;
     for (const t of TABELAS_REPLICA) {
@@ -53,13 +55,15 @@ export async function replicar(api, { completo = false, espelho = null, config =
       try {
         linhas = incremental ? await api.replica.desde(t, new Date(new Date(marca).getTime() - MARGEM_MS).toISOString()) : await api.backup.tabela(t);
       } catch (e) { if (OPCIONAL(t) && !/Sem conexão|Failed to fetch/i.test(e.message)) continue; throw e; }
-      if (incremental) { if (linhas.length) await B.mesclar(t, JSON.stringify(linhas)); }
-      else await B.substituir(t, JSON.stringify(linhas));
       const m = maior(linhas, "atualizado_em") || maior(linhas, "criado_em");
-      if (m && (!marca || m > marca)) await B.meta("marca:" + t, m); else if (!marca) await B.meta("marca:" + t, new Date(0).toISOString());
-      if (linhas.length || !incremental) limpar(t); // carga completa sempre renova a leitura (a tabela pode ter ficado vazia)
+      const novaMarca = m && (!marca || m > marca) ? m : marca || new Date(0).toISOString();
+      if (incremental) { if (linhas.length) await B.mesclar(t, JSON.stringify(linhas)); await B.meta("marca:" + t, novaMarca); if (linhas.length) limpar(t); }
+      else if (duasFases) { await B.preparar(t, JSON.stringify(linhas)); preparadas.push(t); marcas[t] = novaMarca; }
+      else { await B.substituir(t, JSON.stringify(linhas)); await B.meta("marca:" + t, novaMarca); limpar(t); }
       total += linhas.length;
     }
+    // todas as tabelas da carga completa chegaram: troca de uma vez (falha antes disso não mexe no banco do PC)
+    if (preparadas.length) { await B.promover(preparadas); for (const t of preparadas) { await B.meta("marca:" + t, marcas[t]); limpar(t); } }
     // exclusões feitas no online desde a última vez (v13); sem v13, a conferência completa resolve
     if (v13) {
       const l = await api.replica.exclusoes(seqInicio), por = {};

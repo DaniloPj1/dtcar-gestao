@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld("dtcarDesktop", {
   banco: {
     info: () => ipcRenderer.invoke("banco:info"),
     substituir: (tabela, texto) => ipcRenderer.invoke("banco:substituir", tabela, texto),
+    preparar: (tabela, texto) => ipcRenderer.invoke("banco:preparar", tabela, texto),
+    promover: tabelas => ipcRenderer.invoke("banco:promover", tabelas),
+    descartarPreparo: () => ipcRenderer.invoke("banco:descartarPreparo"),
     mesclar: (tabela, texto) => ipcRenderer.invoke("banco:mesclar", tabela, texto),
     remover: (tabela, ids) => ipcRenderer.invoke("banco:remover", tabela, ids),
     manterSo: (tabela, ids) => ipcRenderer.invoke("banco:manterSo", tabela, ids),

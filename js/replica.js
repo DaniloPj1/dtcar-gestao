@@ -37,6 +37,23 @@ export async function tabelaLocal(t) {
   return cache.get(t);
 }
 const limpar = t => (t ? cache.delete(t) : cache.clear());
+
+// ---------- gravações locais (etapa 3: alterações feitas sem internet, que vão para a fila de envio) ----------
+export async function gravarLocal(t, linhas) { if (!B || !linhas.length) return; await B.mesclar(t, JSON.stringify(linhas)); limpar(t); }
+export async function removerLocal(t, ids) { if (!B || !ids.length) return; await B.remover(t, ids.map(String)); limpar(t); }
+export async function metaLocal(k) { return B ? B.meta(k) : null; }
+export async function umLocal(t, id) { if (!B) return null; const s = await B.um(t, id); return s ? JSON.parse(s) : null; }
+/** troca a cópia de uma O.S. no banco do PC pela do servidor (ao descartar alterações feitas sem internet) */
+export async function trocarOrdemLocal(o) {
+  const { itens = [], fotos = [], eventos = [], _local, ...ordem } = o;
+  await gravarLocal("ordens", [ordem]);
+  for (const [t, linhas] of [["os_itens", itens], ["fotos", fotos], ["eventos", eventos]]) {
+    const manter = new Set(linhas.map(l => String(l.id)));
+    await removerLocal(t, (await porOrdemLocal(t, o.id)).map(l => String(l.id)).filter(id => !manter.has(id)));
+    await gravarLocal(t, linhas);
+  }
+}
+export async function porOrdemLocal(t, ordemId) { if (!B) return []; return JSON.parse((await B.porOrdem(t, ordemId)) || "[]"); }
 const maior = (linhas, campo) => linhas.reduce((m, l) => (l[campo] && (!m || l[campo] > m) ? l[campo] : m), null);
 
 /** Atualiza o banco do PC a partir do online. completo: recarrega tudo. espelho: data da última carga do sistema antigo (zera se mudou). */
@@ -49,6 +66,8 @@ export async function replicar(api, { completo = false, espelho = null, config =
     const espelhoNovo = espelho && (await B.meta("espelho")) !== espelho;
     if (espelhoNovo) { completo = true; await B.meta("exclusoes:seq", null); }
     const v13 = await api.replica.temV13();
+    // etapa 3: alterar O.S. sem internet só com a função de envio do servidor (supabase/v15.sql)
+    if (api.replica.temV15) await B.meta("v15", String(await api.replica.temV15()));
     const agora = Date.now(), ultimaCompleta = Number(await B.meta("completa:em")) || 0;
     const cicloCompleto = completo || agora - ultimaCompleta > (v13 ? 6 * 3600000 : 30 * 60000); // conferência completa de 6 em 6 h (cobre linha gravada com data anterior à marca)
     let total = 0; const preparadas = [], marcas = {};

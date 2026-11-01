@@ -66,7 +66,7 @@ function Situacao({ offline, pend, enviarFila }) {
   const guardando = guardadas && guardadas.feitas + (guardadas.falhas || 0) < guardadas.total;
   const pastaRuim = pasta && pasta.configurada && pasta.permissao !== "granted";
   const [cls, txt, dica] = offline ? ["off", "Sem internet", "Modo consulta. Dá para abrir O.S. nova; ela recebe o número quando a conexão voltar."]
-    : pend.length ? ["pend", pend.length + " aguardando envio", "O.S. abertas sem internet. Clique para enviar agora."]
+    : pend.length ? ["pend", pend.length + " aguardando envio", pend.some(op => op.conflito) ? "Há alteração com conflito: veja em Dados no computador." : "O.S. abertas e alterações feitas sem internet. Clique para enviar agora."]
     : pastaRuim ? ["pend", "Reconectar pasta", "O navegador pediu para confirmar o acesso à pasta de dados do PC."]
     : guardadas && guardadas.falhas && !guardando ? ["pend", guardadas.falhas + " O.S. não guardadas no PC", "Algumas O.S. não puderam ser copiadas para este computador. Veja em Dados no computador."]
     : guardando ? ["pend", "Guardando O.S. " + guardadas.feitas + "/" + guardadas.total, "Copiando as O.S. em aberto para este computador (para abrir sem internet). Não desligue a internet até terminar."]

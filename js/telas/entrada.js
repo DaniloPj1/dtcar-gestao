@@ -1,8 +1,8 @@
 // Abertura rápida de O.S. e checklist de entrada (opcional, feito a partir da O.S.)
 import { html, useState, useEffect, useRef, useCallback } from "../lib.js";
-import { api } from "../api.js";
+import { api, estaSemRede } from "../api.js";
 import { fila, servidorResponde } from "../fila.js";
-import { local } from "../local.js";
+import { local, erroDeRede } from "../local.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, SecaoChecklist, PadAssinatura, Foto } from "../ui.js";
 import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
 import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
@@ -290,11 +290,14 @@ export function ChecklistOS({ id }) {
   const concluir = async () => {
     for (let et = 0; et < 3; et++) { const r = validar(et); if (r.erros.length) { muda({ etapa: et }); setVal(r); return rolar(); } }
     if (Object.values(enviando).some(Boolean)) return avisar("Aguarde o envio das fotos terminar.", true);
+    // sem internet: fotos (novas ou removidas) e assinatura só com internet; nada é gravado pela metade e o rascunho fica guardado
+    const novasFotos = f.fotos.some(x => x.caminho && !x.fotoId), assinou = assinRef.current && !assinRef.current.vazio();
+    if (estaSemRede() && (f.removidas.length || novasFotos || assinou)) return avisar("Sem internet: fotos e assinatura do checklist só podem ser gravadas com internet. O rascunho fica guardado; conclua quando a conexão voltar.", true);
     setSalvando(true);
     try {
       let assinatura = o.assinatura_entrada || "";
       if (assinRef.current && !assinRef.current.vazio()) { const b = await assinRef.current.blob(); if (b) assinatura = await api.enviarArquivo("assinaturas/" + id + "-entrada-" + Date.now() + ".png", b, "image/png"); }
-      for (const r of f.removidas) { try { await api.excluirFoto(r); } catch (e) {} }
+      for (const r of f.removidas) { try { await api.excluirFoto(r); } catch (e) { if (erroDeRede(e)) throw e; } }
       await api.incluirFotos(f.fotos.filter(x => x.caminho && !x.fotoId).map(x => ({ ordem_id: id, caminho: x.caminho, rotulo: x.rotulo, etapa: "entrada", largura: x.w, altura: x.h })));
       const jaFeito = !!(o.checkin && o.checkin.feito);
       await api.atualizarOrdem(id, {

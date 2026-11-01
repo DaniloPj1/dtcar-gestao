@@ -228,7 +228,7 @@ function ImprimirModal({ o, verValores, onFechar }) {
 
 /* ---------------- Tela da O.S. ---------------- */
 export function Ordem({ id, params = {} }) {
-  const { cfg, perfil, dados, avisar, confirmar, ir, recarregar } = useApp();
+  const { cfg, perfil, dados, avisar, confirmar, ir, recarregar, pendentes: filaPend = [] } = useApp();
   const [o, setO] = useState(null);
   const [erroCarga, setErroCarga] = useState("");
   const [aba, setAba] = useState("principal");
@@ -250,6 +250,8 @@ export function Ordem({ id, params = {} }) {
     } catch (e) { setErroCarga(e.message); }
   };
   useEffect(() => { setO(null); carregar(); carregarRecibos(); carregarParcelas(); }, [id]);
+  // etapa 3: alterações desta O.S. feitas sem internet foram enviadas: recarrega (agora do online)
+  useEffect(() => { const f = () => { if (!sujo) carregar(); }; window.addEventListener("dtcar-fila-enviada", f); return () => window.removeEventListener("dtcar-fila-enviada", f); }, [id, sujo]);
   // vindo da lista com "Entregar" ou "Receber": abre a janela certa assim que a O.S. carrega
   const acaoInicial = useRef(params.acao);
   useEffect(() => { if (!o || !acaoInicial.current) return; const a = acaoInicial.current; acaoInicial.current = null;
@@ -590,8 +592,12 @@ export function Ordem({ id, params = {} }) {
   const podeSalvar = sujo && (editaInfo || st === "execucao");
   const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
   const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
+  const minhasOff = filaPend.filter(op => op.ordem_id === o.id), conflitoOff = minhasOff.filter(op => op.conflito || op.erro);
   return html`<div class="pagina">
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
+    ${minhasOff.length ? html`<div class=${conflitoOff.length ? "erros" : "aviso"}>${conflitoOff.length
+      ? html`<b>Alteração feita sem internet com conflito:</b> ${conflitoOff[0].erro} <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`
+      : html`<b>${minhasOff.length} alteração(ões) desta O.S. feita(s) sem internet</b> aguardando envio ao online. Já aparecem aqui.`}</div>` : null}
     <section class="card cab-os">
       <div class="det-cab"><button type="button" class="botao-limpo" title="Ficha do veículo" disabled=${!o.veiculo_id} onClick=${() => ir("/veiculo/" + o.veiculo_id)}><${Placa} placa=${o.veiculo.placa} grande /></button><div class="meio"><h2>${o.veiculo.marca} ${o.veiculo.modelo} ${o.veiculo.ano}</h2>
         <div class="sub">${numOS(o.numero)} · entrada ${fmtDataHora(o.criado_em)} · há ${tempoDesde(o.criado_em)}${o.box ? " · box " + o.box : ""}</div></div><div class="pills"><${Status} s=${st} o=${o} />${o.situacao ? html`<span class="pill p-info">${o.situacao}</span>` : null}</div></div>

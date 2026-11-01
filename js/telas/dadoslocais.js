@@ -3,7 +3,9 @@ import { html, useState, useEffect } from "../lib.js";
 import { useApp, Modal } from "../ui.js";
 import { fmtDataHora, lsSet } from "../util.js";
 import { local } from "../local.js";
-import { replicaDisponivel, infoReplica, ouvirReplica, replicar } from "../replica.js";
+import { replicaDisponivel, infoReplica, ouvirReplica, replicar, trocarOrdemLocal } from "../replica.js";
+import { fila } from "../fila.js";
+import { ehAlteracao, descreverAlteracao, comTrava, replicarComFila } from "../alteracoes.js";
 import { api, estaSemRede } from "../api.js";
 import { pastaSuportada, escolherPasta, reconectarPasta, esquecerPasta, gravarDadosNaPasta, backupDaPasta } from "../pasta.js";
 
@@ -33,7 +35,29 @@ export function AssistentePasta({ onFechar }) {
 
 /** Tela Sistema › Dados neste computador */
 export function DadosLocais() {
-  const { pasta, pendentes, enviarFila, avisar, confirmar, abrirAssistentePasta, guardadas } = useApp();
+  const { pasta, pendentes, enviarFila, avisar, confirmar, abrirAssistentePasta, guardadas, atualizarPendentes, recarregar } = useApp();
+  const abertasOff = pendentes.filter(op => op.tipo === "abrir_os"), alteracoes = pendentes.filter(ehAlteracao);
+  // alterações de O.S. feitas sem internet: a primeira com problema trava as seguintes da mesma O.S.
+  const travadaPor = {}; for (const op of [...alteracoes].sort((a, b) => (a.criado_em < b.criado_em ? -1 : 1))) if (!travadaPor[op.ordem_id] && (op.conflito || op.erro)) travadaPor[op.ordem_id] = op.id;
+  const forcar = async op => {
+    if (!await confirmar({ titulo: "Enviar mesmo assim", texto: "A alteração feita sem internet vai por cima do que foi mudado no online nesta O.S. (" + op.erro + ")", botao: "Enviar por cima" })) return;
+    await fila.forcar(op.id); await atualizarPendentes(); await enviarFila();
+  };
+  const descartar = async op => {
+    const daOS = alteracoes.filter(x => x.ordem_id === op.ordem_id);
+    if (!await confirmar({ titulo: "Descartar alterações", texto: "As " + daOS.length + " alteração(ões) feitas sem internet nesta O.S. serão descartadas e a O.S. volta a ficar igual ao online.", botao: "Descartar", perigo: true })) return;
+    try {
+      // para o envio e espera o que estiver em andamento; depois traz a O.S. do online, tira da fila e troca a cópia do PC
+      // de uma vez (nada lê, grava ou envia a O.S. no meio)
+      await fila.semEnvio(async () => { const o = await api.ordemDoServidor(op.ordem_id);
+        await comTrava(async () => { for (const x of (await fila.listar()).filter(y => ehAlteracao(y) && y.ordem_id === op.ordem_id)) await fila.remover(x.id); await trocarOrdemLocal(o); }); });
+      await atualizarPendentes(); recarregar(["ordens"]); avisar("Alterações descartadas.");
+    } catch (e) {
+      // a O.S. não existe mais no online (ex.: carga do sistema antigo): só tira da fila
+      if (/não existe|JSON object requested|0 rows|multiple \(or no\) rows/i.test(e.message)) { for (const x of daOS) await fila.remover(x.id); await atualizarPendentes(); return avisar("Alterações descartadas (a O.S. não existe mais no online)."); }
+      avisar("Não foi possível descartar: " + e.message, true);
+    }
+  };
   const [copia, setCopia] = useState(null), [uso, setUso] = useState(null), [persist, setPersist] = useState(null), [bkp, setBkp] = useState(null), [gOs, setGOs] = useState(null);
   useEffect(() => {
     local.ler("dados").then(c => setCopia(c || false)); backupDaPasta().then(setBkp).catch(() => {}); local.ler("os:guardadas").then(setGOs).catch(() => {});
@@ -74,7 +98,7 @@ export function DadosLocais() {
           ${Object.entries(NOMES).filter(([t]) => rep.tabelas && rep.tabelas[t] != null).map(([t, n]) => html`<div key=${t}><span>${n}</span><b>${rep.tabelas[t].toLocaleString("pt-BR")}</b></div>`)}</div>
         ${rep.erro ? html`<div class="erros">${rep.erro}</div>` : null}
         ${rep.v13 === false ? html`<div class="aviso">Para o banco do PC buscar só o que mudou (mais rápido), rode o <b>supabase/v13.sql</b> no Supabase. Até lá, as tabelas sem data de alteração são recarregadas inteiras a cada 30 minutos.</div>` : null}` : html`<span class="sub">Lendo…</span>`}
-      <div class="acoes"><button type="button" class="btn" disabled=${(rep && rep.rodando) || estaSemRede()} onClick=${() => replicar(api, { completo: true, espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg })}>Recarregar tudo agora</button></div>
+      <div class="acoes"><button type="button" class="btn" disabled=${(rep && rep.rodando) || estaSemRede()} onClick=${() => replicarComFila(() => replicar(api, { completo: true, espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg }))}>Recarregar tudo agora</button></div>
     </section>` : null}
     <section class="card"><h2>Cópia interna do navegador</h2>
       ${copia === null ? html`<span class="sub">Lendo…</span>` : !copia ? html`<div class="aviso">Ainda não há cópia neste computador. Abra o sistema com internet e aguarde alguns segundos.</div>`
@@ -84,8 +108,17 @@ export function DadosLocais() {
           <div><span>O.S. em aberto guardadas por inteiro</span><b>${prog ? prog.feitas + " de " + prog.total + (prog.falhas ? " · " + prog.falhas + " com falha (tenta de novo ao abrir com internet)" : prog.feitas < prog.total ? " (copiando…)" : "") : "—"}</b></div>
           <div><span>Protegida contra limpeza</span><b>${window.dtcarDesktop ? "sim (programa para Windows)" : persist ? "sim" : "não (instale o programa para proteger)"}</b></div></div>`}
     </section>
-    <section class="card"><div class="secao-topo"><h2>O.S. abertas sem internet</h2>${pendentes.length ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${enviarFila}>Enviar agora</button>` : null}</div>
-      ${pendentes.length ? html`<ul class="res-lista">${pendentes.map(op => html`<li key=${op.id}><b>${op.provisorio}</b> · ${op.ordem.veiculo.placa} · ${op.ordem.cliente.nome} · aberta em ${fmtDataHora(op.criado_em)}${op.erro ? html` · <span class="c-bad">${op.erro}</span>` : null}</li>`)}</ul>`
+    <section class="card"><div class="secao-topo"><h2>Alterações de O.S. feitas sem internet</h2>${alteracoes.length ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${enviarFila}>Enviar agora</button>` : null}</div>
+      <p class="sub">Vão para o online na ordem em que foram feitas. Se alguém mudou a mesma O.S. no online nesse meio tempo, é conflito: escolha enviar por cima ou descartar o que foi feito aqui.</p>
+      ${alteracoes.length ? html`<ul class="res-lista">${alteracoes.map(op => html`<li key=${op.id}>${descreverAlteracao(op)} · ${fmtDataHora(op.criado_em)}
+          ${op.conflito || op.erro ? html` · <span class="c-bad">${op.erro}</span>
+            <span class="acoes-inline">${op.conflito ? html`<button type="button" class="btn btn-sm" onClick=${() => forcar(op)}>Enviar por cima</button>`
+              : html`<button type="button" class="btn btn-sm" onClick=${async () => { await fila.tentarDeNovo(op.id); await atualizarPendentes(); enviarFila(); }}>Tentar de novo</button>`}<button type="button" class="btn btn-sm" onClick=${() => descartar(op)}>Descartar desta O.S.</button></span>`
+          : travadaPor[op.ordem_id] && travadaPor[op.ordem_id] !== op.id ? html` · <span class="sub">aguardando a alteração anterior desta O.S.</span>` : html` · <span class="sub">aguardando envio</span>`}</li>`)}</ul>`
+        : html`<span class="sub">Nenhuma alteração aguardando envio.</span>`}
+    </section>
+    <section class="card"><div class="secao-topo"><h2>O.S. abertas sem internet</h2>${abertasOff.length ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${enviarFila}>Enviar agora</button>` : null}</div>
+      ${abertasOff.length ? html`<ul class="res-lista">${abertasOff.map(op => html`<li key=${op.id}><b>${op.provisorio}</b> · ${op.ordem.veiculo.placa} · ${op.ordem.cliente.nome} · aberta em ${fmtDataHora(op.criado_em)}${op.erro ? html` · <span class="c-bad">${op.erro}</span>` : null}</li>`)}</ul>`
         : html`<span class="sub">Nenhuma O.S. aguardando envio. Tudo está no servidor.</span>`}
     </section>
   </div>`;

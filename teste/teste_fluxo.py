@@ -82,7 +82,9 @@ try:
     pg.goto(U + "#/importar"); pg.wait_for_timeout(1000)
     chk("importar: espelho ligado", "Modo espelho ligado" in pg.inner_text("main"))
     # previsão de caixa
-    pg.evaluate("window.__DB.contas.push({ id: 'k9', descricao: 'Aluguel', favorecido: 'Imobiliária', valor: 3000, vencimento: '2026-11-10', status: 'aberta' })")
+    # dia 10 do mês que vem (o teste clica em "Próximo mês"; data fixa quebrava quando o mês virava)
+    pg.evaluate("(() => { const d = new Date(); d.setDate(1); d.setMonth(d.getMonth() + 1); d.setDate(10); const v = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-10';"
+                " window.__DB.contas.push({ id: 'k9', descricao: 'Aluguel', favorecido: 'Imobiliária', valor: 3000, vencimento: v, status: 'aberta' }); })()")
     pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
     pg.click(".caixa-mes button[aria-label='Próximo mês']"); pg.wait_for_timeout(1200)
     pg.fill("#cx-saldo", "1.000,00"); pg.wait_for_timeout(400)

@@ -27,7 +27,7 @@ const D = {
   funcionarios: [{ id: "f1", nome: "Carlos Mecânico", ativo: true, criado_em: agora, atualizado_em: agora }],
   recibos: [{ id: "r1", numero: 10, ordem_id: "o2", valor: 100, data: hoje, forma: "PIX", pagador: "Cliente A", criado_em: agora, atualizado_em: agora }],
 };
-let modo = "ok", cfgSrv = {};
+let modo = "ok", cfgSrv = {}; const atraso = { ms: 0, rota: "" }; // resposta lenta de propósito (teste de concorrência)
 const sessao = (() => { const b = o => Buffer.from(JSON.stringify(o)).toString("base64url"); const exp = Math.floor(Date.now() / 1000) + 3600;
   return { access_token: b({ alg: "HS256" }) + "." + b({ sub: "u1", exp, role: "authenticated" }) + ".x", token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "r",
     user: { id: "u1", email: "d@x", aud: "authenticated", role: "authenticated" } }; })();
@@ -93,7 +93,8 @@ const srv = http.createServer((req, res) => {
       else { const n = { ...l, id: l.id != null ? l.id : ++seqEvento, criado_em: l.criado_em || agoraJa, atualizado_em: agoraJa }; D[t].push(n); out.push(n); } }
     escritas.push([req.method, t, linhas]); body = obj ? out[0] || null : out; }
   else if (t && D[t]) { let l = filtrar(D[t], u.searchParams); const lim = Number(u.searchParams.get("limit")); if (lim) l = l.slice(0, lim); body = obj ? l[0] || null : l; }
-  res.writeHead(req.method === "POST" ? 201 : 200, { "Content-Type": "application/json" }); res.end(JSON.stringify(body));
+  const responder = () => { res.writeHead(req.method === "POST" ? 201 : 200, { "Content-Type": "application/json" }); res.end(JSON.stringify(body)); };
+  if (atraso.ms && atraso.rota && (u.pathname + u.search).includes(atraso.rota)) setTimeout(responder, atraso.ms); else responder();
   });
 });
 const escritas = [];
@@ -232,6 +233,28 @@ app.on("browser-window-created", async (e, w) => {
       await Promise.all([fila.adicionar({ id: "x1", tipo: "evento_os", ordem_id: "zz", criado_em: "2020-01-02" }), fila.remover("x0"), fila.adicionar({ id: "x2", tipo: "evento_os", ordem_id: "zz", criado_em: "2020-01-03" })]);
       const ids = (await fila.listar()).map(x => x.id).join(","); for (const id of ["x1", "x2"]) await fila.remover(id); return ids; })()`);
     chk("fila: incluir e tirar ao mesmo tempo não perde nenhuma (" + fl + ")", fl === "x1,x2");
+    // resposta do online que chega depois de uma alteração entrar na fila: a tela recebe a versão do PC (não a velha)
+    atraso.ms = 1500; atraso.rota = "ordens?select=*&id=eq.o1";
+    const velha = await offlineJs(`const p = api.ordem("o1"); await new Promise(r => setTimeout(r, 300));
+      const { alterarOrdemOffline } = await import("./js/alteracoes.js"); await alterarOrdemOffline("o1", { obs_internas: "entrou na fila no meio" });
+      return (await p).obs_internas;`);
+    atraso.ms = 0;
+    chk("resposta velha do online não volta para a tela (" + velha + ")", velha === "entrou na fila no meio");
+    // descartar espera o envio em andamento terminar (nada é enviado depois do descarte)
+    atraso.ms = 1500; atraso.rota = "rpc/sincronizar_alteracao_os";
+    const ordemDesc = await js(`(async () => { const { fila } = await import("./js/fila.js"); const { api } = await import("./js/api.js"); const marcas = [];
+      const p = fila.processar(api).then(() => marcas.push("envio terminou")); await new Promise(r => setTimeout(r, 300));
+      await fila.semEnvio(async () => marcas.push("descarte rodou")); await p; return marcas.join(" > "); })()`);
+    atraso.ms = 0;
+    chk("descartar espera o envio em andamento (" + ordemDesc + ")", ordemDesc === "envio terminou > descarte rodou");
+    await limparFila();
+    // o aparelho não consegue guardar a fila: a alteração não é aceita (e o banco do PC não muda)
+    await offline();
+    const semGuardar = await offlineJs(`const { local } = await import("./js/local.js"); const g = local.gravar; local.gravar = async () => false;
+      try { await api.atualizarOrdem("o1", { obs_internas: "não pode ficar" }); return "aceitou"; } catch (e) { return e.message; } finally { local.gravar = g; }`);
+    const noPC = await js(`window.dtcarDesktop.banco.um("ordens", "o1").then(t => JSON.parse(t).obs_internas)`);
+    chk("fila que não grava: alteração recusada e banco do PC intacto (" + noPC + ")", /Não foi possível guardar a fila/.test(semGuardar) && noPC !== "não pode ficar");
+    await online(4000); await limparFila();
     // sem o supabase/v15.sql no servidor: sem internet continua só consulta, com aviso
     await js(`window.dtcarDesktop.banco.meta("v15", "false")`); await offline();
     const semV15 = await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "sem v15" }); return "gravou";`);

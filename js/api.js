@@ -360,7 +360,11 @@ function comBancoDoPC(a) {
       try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } throw e; }
       if (r && r._local) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } // a rede caiu e veio a cópia antiga
       // abriu do online: o banco do PC passa a ter exatamente o que está na tela (base das alterações se a internet cair)
-      if (r && !r._pendente && await replicaPronta()) { try { await comTrava(async () => { if (!(await temPendente(id))) await trocarOrdemLocal(r); }); } catch (e) { /* a réplica corrige */ } }
+      // (se surgiu alteração na fila enquanto o online respondia, vale a versão do PC: a resposta já está velha)
+      if (r && !r._pendente && await replicaPronta()) {
+        try { const doPC = await comTrava(async () => { if (await temPendente(id)) return ordemDoPC(id); await trocarOrdemLocal(r); return null; }); if (doPC) return doPC; }
+        catch (e) { /* a réplica corrige */ }
+      }
       return r;
     },
     /** a O.S. como está no online, sem olhar a fila (resolver conflito: descartar o que foi feito aqui) */

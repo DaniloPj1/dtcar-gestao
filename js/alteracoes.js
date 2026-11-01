@@ -36,6 +36,7 @@ export const mesmoConteudo = (base, atual) => Object.keys(base).every(k => iguai
 // leitura da O.S. com pendência acontecem uma de cada vez (nunca a tela lê ou grava no meio de uma troca)
 let trava = Promise.resolve();
 export function comTrava(fn) { const r = trava.then(fn, fn); trava = r.catch(() => {}); return r; }
+fila.definirTrava(comTrava); // o envio da fila também espera a vez
 
 /** o servidor tem a função de envio (supabase/v15.sql)? Sem ela, sem internet o programa só consulta */
 export async function podeAlterarSemInternet() { try { return (await metaLocal("v15")) === "true"; } catch (e) { return false; } }

@@ -13,9 +13,17 @@ const mudou = () => { try { window.dispatchEvent(new Event("dtcar-fila")); } cat
 // tira a anterior não pode fazer uma das duas sumir
 let cadeia = Promise.resolve();
 const serial = fn => { const r = cadeia.then(fn, fn); cadeia = r.catch(() => {}); return r; };
-const mudar = f => serial(async () => { const l = f((await local.ler(CHAVE)) || []); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; });
+// só segue depois de a fila estar gravada de verdade (se o aparelho não conseguir guardar, a alteração não é aceita)
+const mudar = f => serial(async () => { const l = f((await local.ler(CHAVE)) || []);
+  if (!(await local.gravar(CHAVE, l))) throw new Error("Não foi possível guardar a fila de envio neste computador. A alteração não foi feita.");
+  gravarFilaNaPasta(l); mudou(); return l; });
+// etapa 3: o envio roda dentro da trava do banco do PC (js/alteracoes.js define): nunca no meio de uma réplica ou de um descarte
+let trava = fn => fn(), envio = null, pausas = 0;
 
 export const fila = {
+  definirTrava: t => { trava = t; },
+  /** descartar alterações: para o envio, espera o que estiver em andamento terminar e só então roda fn */
+  semEnvio: async fn => { pausas++; try { if (envio) await envio.catch(() => {}); return await fn(); } finally { pausas--; } },
   listar: async () => (await local.ler(CHAVE)) || [],
   /** número provisório sequencial deste aparelho (não se repete) */
   proximoProvisorio: () => { const n = (Number(lsGet("dtcar-prov-seq")) || 0) + 1; lsSet("dtcar-prov-seq", n); return "PROV-" + String(n).padStart(2, "0"); },
@@ -33,15 +41,22 @@ export const fila = {
    * Devolve { enviadas: [{ op, res }], comErro, restantes }.
    */
   processar: async (api) => {
-    if (ocupado) return null;
+    if (ocupado || pausas) return null;
     ocupado = true;
+    try { envio = trava(() => enviar(api)); return await envio; }
+    finally { ocupado = false; envio = null; }
+  },
+};
+
+async function enviar(api) {
     const enviadas = [];
-    try {
+    {
       let l = await fila.listar();
       l.sort((a, b) => (a.criado_em < b.criado_em ? -1 : a.criado_em > b.criado_em ? 1 : a.seq - b.seq));
       // etapa 3: alteração de uma O.S. que deu conflito ou erro trava as seguintes da MESMA O.S. (nunca aplica fora de ordem)
       const travadas = new Set();
       for (const op of l) {
+        if (pausas) break; // um descarte está esperando
         const os = op.tipo === "abrir_os" ? null : op.ordem_id;
         if (os && travadas.has(os)) continue;
         if ((op.conflito && !op.forcar) || (op.erro && op.tentativas >= 3)) { if (os) travadas.add(os); continue; }
@@ -63,9 +78,8 @@ export const fila = {
       }
       const restantes = await fila.listar();
       return { enviadas, comErro: restantes.filter(x => x.erro), restantes };
-    } finally { ocupado = false; }
-  },
-};
+    }
+}
 
 /** Confere se o servidor responde (navigator.onLine pode dizer "online" com a internet do provedor caída) */
 export async function servidorResponde(api, ms = 4000) {

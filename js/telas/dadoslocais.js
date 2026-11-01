@@ -47,9 +47,10 @@ export function DadosLocais() {
     const daOS = alteracoes.filter(x => x.ordem_id === op.ordem_id);
     if (!await confirmar({ titulo: "Descartar alterações", texto: "As " + daOS.length + " alteração(ões) feitas sem internet nesta O.S. serão descartadas e a O.S. volta a ficar igual ao online.", botao: "Descartar", perigo: true })) return;
     try {
-      const o = await api.ordemDoServidor(op.ordem_id);
-      // tira da fila e troca a cópia do PC pela do online de uma vez (nada lê ou grava a O.S. no meio)
-      await comTrava(async () => { for (const x of daOS) await fila.remover(x.id); await trocarOrdemLocal(o); });
+      // para o envio e espera o que estiver em andamento; depois traz a O.S. do online, tira da fila e troca a cópia do PC
+      // de uma vez (nada lê, grava ou envia a O.S. no meio)
+      await fila.semEnvio(async () => { const o = await api.ordemDoServidor(op.ordem_id);
+        await comTrava(async () => { for (const x of (await fila.listar()).filter(y => ehAlteracao(y) && y.ordem_id === op.ordem_id)) await fila.remover(x.id); await trocarOrdemLocal(o); }); });
       await atualizarPendentes(); recarregar(["ordens"]); avisar("Alterações descartadas.");
     } catch (e) {
       // a O.S. não existe mais no online (ex.: carga do sistema antigo): só tira da fila

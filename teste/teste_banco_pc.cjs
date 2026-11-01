@@ -240,6 +240,14 @@ app.on("browser-window-created", async (e, w) => {
       return (await p).obs_internas;`);
     atraso.ms = 0;
     chk("resposta velha do online não volta para a tela (" + velha + ")", velha === "entrou na fila no meio");
+    // idem quando a alteração já foi enviada (fila vazia) antes de a resposta velha chegar: busca de novo
+    atraso.ms = 1500; atraso.rota = "ordens?select=*&id=eq.o1";
+    const velha2 = await offlineJs(`const { fila } = await import("./js/fila.js"); await fila.processar(api);
+      const p = api.ordem("o1"); await new Promise(r => setTimeout(r, 300));
+      const { alterarOrdemOffline } = await import("./js/alteracoes.js"); await alterarOrdemOffline("o1", { obs_internas: "enviada no meio" });
+      await fila.processar(api); const n = (await fila.listar()).length; return (await p).obs_internas + "|" + n;`);
+    atraso.ms = 0;
+    chk("resposta velha depois do envio: busca de novo (" + velha2 + ")", velha2 === "enviada no meio|0" && o1.obs_internas === "enviada no meio");
     // descartar espera o envio em andamento terminar (nada é enviado depois do descarte)
     atraso.ms = 1500; atraso.rota = "rpc/sincronizar_alteracao_os";
     const ordemDesc = await js(`(async () => { const { fila } = await import("./js/fila.js"); const { api } = await import("./js/api.js"); const marcas = [];

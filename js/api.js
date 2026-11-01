@@ -1,6 +1,7 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
 import { local, erroDeRede } from "./local.js";
 import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
+import { versaoOS, tocarOS } from "./fila.js";
 import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente, comTrava, podeAlterarSemInternet } from "./alteracoes.js";
 
 const LS_CONEXAO = "dtcar-conexao";
@@ -331,6 +332,7 @@ function comBancoDoPC(a) {
         definirSemRede(true); return offline(...args, { sempre: true });
       }
       // gravou no online: copia já para o banco do PC (se a internet cair logo depois, a base das alterações está certa)
+      tocarOS(args[0]); // quem estava lendo esta O.S. do online fica sabendo que a resposta dele é anterior a esta gravação
       if (copiar && pronta) try { await comTrava(() => copiar(r, ...args)); } catch (e) { /* a réplica corrige em seguida */ }
       return r;
     }
@@ -354,18 +356,23 @@ function comBancoDoPC(a) {
     ordem: async id => {
       // leitura do banco do PC sempre com a trava (nunca no meio de uma réplica ou de uma troca)
       if (semRede) { const o = await comTrava(() => ordemDoPC(id)); if (o) return o; return ordemOriginal(id); }
-      // O.S. com alteração ainda na fila: a versão deste PC (com o trabalho pendente) é a que vale aqui até ser enviada
-      if (await replicaPronta() && await temPendente(id)) { const o = await comTrava(() => ordemDoPC(id)); if (o) return o; }
-      let r;
-      try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } throw e; }
-      if (r && r._local) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } // a rede caiu e veio a cópia antiga
-      // abriu do online: o banco do PC passa a ter exatamente o que está na tela (base das alterações se a internet cair)
-      // (se surgiu alteração na fila enquanto o online respondia, vale a versão do PC: a resposta já está velha)
-      if (r && !r._pendente && await replicaPronta()) {
-        try { const doPC = await comTrava(async () => { if (await temPendente(id)) return ordemDoPC(id); await trocarOrdemLocal(r); return null; }); if (doPC) return doPC; }
-        catch (e) { /* a réplica corrige */ }
+      for (let vez = 0; vez < 2; vez++) {
+        // O.S. com alteração ainda na fila: a versão deste PC (com o trabalho pendente) é a que vale aqui até ser enviada
+        if (await replicaPronta() && await temPendente(id)) { const o = await comTrava(() => ordemDoPC(id)); if (o) return o; }
+        const v0 = versaoOS(id);
+        let r;
+        try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } throw e; }
+        if (r && r._local) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } // a rede caiu e veio a cópia antiga
+        if (!r || r._pendente || r._local || !(await replicaPronta())) return r;
+        // abriu do online: o banco do PC passa a ter exatamente o que está na tela (base das alterações se a internet cair).
+        // Se a O.S. mudou aqui enquanto o online respondia (alteração na fila, enviada ou gravada), a resposta está velha: busca de novo.
+        let velha = false;
+        try { await comTrava(async () => { if (versaoOS(id) !== v0 || await temPendente(id)) { velha = true; return; } await trocarOrdemLocal(r); }); }
+        catch (e) { return r; /* a réplica corrige */ }
+        if (!velha) return r;
       }
-      return r;
+      const o = await comTrava(() => ordemDoPC(id)); if (o) return o; // mudou de novo no meio: vale a do PC
+      return ordemOriginal(id);
     },
     /** a O.S. como está no online, sem olhar a fila (resolver conflito: descartar o que foi feito aqui) */
     ordemDoServidor: async id => { if (semRede) throw new Error("é preciso internet para trazer a O.S. do online"); const r = await ordemOriginal(id);

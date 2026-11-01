@@ -17,6 +17,11 @@ const serial = fn => { const r = cadeia.then(fn, fn); cadeia = r.catch(() => {})
 const mudar = f => serial(async () => { const l = f((await local.ler(CHAVE)) || []);
   if (!(await local.gravar(CHAVE, l))) throw new Error("Não foi possível guardar a fila de envio neste computador. A alteração não foi feita.");
   gravarFilaNaPasta(l); mudou(); return l; });
+// versão de cada O.S. neste PC: muda a cada alteração incluída, enviada ou removida da fila (e a cada gravação online daqui).
+// Quem leu a O.S. do online antes de uma mudança sabe que a resposta ficou velha.
+const versoes = new Map();
+export const versaoOS = id => versoes.get(id) || 0;
+export const tocarOS = id => { if (id) versoes.set(id, versaoOS(id) + 1); };
 // etapa 3: o envio roda dentro da trava do banco do PC (js/alteracoes.js define): nunca no meio de uma réplica ou de um descarte
 let trava = fn => fn(), envio = null, pausas = 0;
 
@@ -27,12 +32,12 @@ export const fila = {
   listar: async () => (await local.ler(CHAVE)) || [],
   /** número provisório sequencial deste aparelho (não se repete) */
   proximoProvisorio: () => { const n = (Number(lsGet("dtcar-prov-seq")) || 0) + 1; lsSet("dtcar-prov-seq", n); return "PROV-" + String(n).padStart(2, "0"); },
-  adicionar: op => mudar(l => l.concat([{ ...op, seq: l.length ? Math.max(...l.map(x => x.seq || 0)) + 1 : 1, tentativas: 0, erro: "" }])),
+  adicionar: op => mudar(l => { tocarOS(op.ordem_id); return l.concat([{ ...op, seq: l.length ? Math.max(...l.map(x => x.seq || 0)) + 1 : 1, tentativas: 0, erro: "" }]); }),
   /** resolução de conflito: envia esta alteração por cima do que mudou no online */
-  forcar: id => mudar(l => l.map(x => x.id === id ? { ...x, forcar: true, conflito: false, erro: "", tentativas: 0 } : x)),
+  forcar: id => mudar(l => l.map(x => x.id === id ? (tocarOS(x.ordem_id), { ...x, forcar: true, conflito: false, erro: "", tentativas: 0 }) : x)),
   /** erro que não é conflito (ex.: falha passageira do servidor): tenta de novo do zero */
   tentarDeNovo: id => mudar(l => l.map(x => x.id === id ? { ...x, erro: "", tentativas: 0 } : x)),
-  remover: id => mudar(l => l.filter(x => x.id !== id)),
+  remover: id => mudar(l => l.filter(x => { if (x.id === id) tocarOS(x.ordem_id || x.id); return x.id !== id; })),
   /** recupera a fila gravada na pasta do PC quando o navegador perdeu a dele (reenviar não duplica) */
   restaurar: l => serial(async () => { if (l && l.length && !(await fila.listar()).length) { await local.gravar(CHAVE, l); return true; } return false; }),
   /**

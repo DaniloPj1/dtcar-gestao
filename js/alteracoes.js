@@ -123,9 +123,9 @@ export async function temPendente(ordemId) { return (await fila.listar()).some(o
 /** descrição curta de uma alteração da fila (tela Dados no computador e faixa da O.S.) */
 export function descreverAlteracao(op) {
   const os = "O.S. " + String(op.numero || "").padStart(5, "0");
-  if (op.tipo === "alterar_os") return os + ": " + (op.patch.status ? "etapa / dados" : "dados") + " (" + Object.keys(op.patch).length + " campo(s))";
-  if (op.tipo === "itens_os") return os + ": " + op.itens.length + " peça(s)/serviço(s) incluídos ou alterados" + (op.removidos.length ? ", " + op.removidos.length + " removido(s)" : "");
-  if (op.tipo === "evento_os") return os + ": histórico — " + op.evento.texto;
+  if (op.tipo === "alterar_os") { const p = op.patch || {}; return os + ": " + (p.status ? "etapa / dados" : "dados") + " (" + Object.keys(p).length + " campo(s))"; }
+  if (op.tipo === "itens_os") return os + ": " + (op.itens || []).length + " peça(s)/serviço(s) incluídos ou alterados" + ((op.removidos || []).length ? ", " + op.removidos.length + " removido(s)" : "");
+  if (op.tipo === "evento_os") return os + ": histórico — " + ((op.evento && op.evento.texto) || "");
   return os;
 }
 export const ehAlteracao = op => op.tipo === "alterar_os" || op.tipo === "itens_os" || op.tipo === "evento_os";

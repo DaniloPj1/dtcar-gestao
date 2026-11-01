@@ -1,6 +1,26 @@
 import { html, useState } from "../lib.js";
-import { api, salvarConexaoLocal } from "../api.js";
-import { Campo, Texto } from "../ui.js";
+import { api, salvarConexaoLocal, estaSemRede } from "../api.js";
+import { erroDeRede } from "../local.js";
+import { guardarAcesso, conferirAcesso, temAcessoGuardado, entrarNoPC, sairDoPC } from "../acesso.js";
+
+/** entra pelo servidor; sem internet, confere a senha guardada neste computador e abre com o banco do PC */
+export async function entrarComOuSemInternet(email, senha) {
+  const online = !estaSemRede() && navigator.onLine && (!api.testarConexao || await api.testarConexao());
+  if (online) {
+    try {
+      const r = await api.auth.entrar(email, senha);
+      sairDoPC();
+      if (r && r.user) await guardarAcesso(email, senha, r.user.id).catch(() => false); // para poder entrar sem internet depois
+      return "online";
+    } catch (x) { if (!erroDeRede(x)) throw x; }
+  }
+  const a = await conferirAcesso(email, senha);
+  if (a) { entrarNoPC(a); location.reload(); return "pc"; }
+  throw new Error(await temAcessoGuardado(email)
+    ? "Sem internet: a senha não confere com a guardada neste computador."
+    : "Sem internet: este computador ainda não tem o seu acesso guardado. Entre uma vez com internet (depois disso dá para entrar sem internet).");
+}
+import { Campo, Texto, Modal } from "../ui.js";
 
 function Moldura({ children }) {
   return html`<div class="tela-login"><div class="login-caixa">
@@ -31,7 +51,7 @@ export function Login({ modo: modoInicial }) {
   const enviar = async e => {
     e.preventDefault(); setMsg(null); setOcupado(true);
     try {
-      if (modo === "entrar") await api.auth.entrar(email.trim(), senha);
+      if (modo === "entrar") await entrarComOuSemInternet(email.trim(), senha);
       else if (modo === "criar") {
         if (!nome.trim()) throw new Error("Informe seu nome.");
         const r = await api.auth.cadastrar(nome.trim(), email.trim(), senha);
@@ -45,6 +65,7 @@ export function Login({ modo: modoInicial }) {
   return html`<${Moldura}>
     <h1>${titulos[modo]}</h1>
     ${modo === "criar" ? html`<p class="sub">Depois de criar, o administrador precisa liberar seu acesso.</p>` : null}
+    ${modo === "entrar" && (estaSemRede() || !navigator.onLine) ? html`<p class="sub">Sem internet: entre com a sua senha; este computador confere (se você já entrou aqui com internet antes).</p>` : null}
     <form onSubmit=${enviar} class="form-login">
       ${modo === "criar" ? html`<${Campo} id="lg-nome" rotulo="Seu nome"><${Texto} id="lg-nome" autocomplete="name" valor=${nome} onMuda=${setNome} /></${Campo}>` : null}
       ${modo !== "nova" ? html`<${Campo} id="lg-email" rotulo="E-mail"><${Texto} id="lg-email" type="email" autocomplete="email" valor=${email} onMuda=${setEmail} /></${Campo}>` : null}
@@ -75,4 +96,26 @@ export function Pendente({ perfil, sair, semInternet }) {
     <button type="button" class="btn btn-bloco" onClick=${() => location.reload()}>Já fui liberado</button>
     <button type="button" class="btn-link" onClick=${sair}>Sair</button>
   </${Moldura}>`;
+}
+
+/** confirma a senha com internet e guarda a conferência neste computador (para poder entrar sem internet depois) */
+export function GuardarAcessoModal({ email, onFechar, onFeito }) {
+  const [senha, setSenha] = useState(""), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
+  const confirmar = async e => {
+    e.preventDefault(); setErro(""); setOcupado(true);
+    try {
+      const r = await api.auth.entrar(email, senha);
+      if (!(r && r.user) || !(await guardarAcesso(email, senha, r.user.id))) throw new Error("Não foi possível guardar o acesso neste computador.");
+      onFeito && onFeito();
+    } catch (x) { setErro(erroDeRede(x) ? "Precisa de internet para conferir a senha." : x.message); } finally { setOcupado(false); }
+  };
+  return html`<${Modal} titulo="Entrar sem internet neste computador" onFechar=${onFechar}>
+    <p>Digite a sua senha uma vez, com internet. O computador guarda só uma conferência dela (a senha não fica gravada) e passa a deixar você entrar mesmo sem internet.</p>
+    <form onSubmit=${confirmar}>
+      <${Campo} id="ga-senha" rotulo=${"Senha de " + email}><${Texto} id="ga-senha" type="password" autocomplete="current-password" valor=${senha} onMuda=${setSenha} /></${Campo}>
+      ${erro ? html`<div class="erros">${erro}</div>` : null}
+      <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Agora não</button>
+        <button type="submit" class="btn btn-pri" disabled=${ocupado || !senha}>${ocupado ? "Conferindo…" : "Guardar acesso"}</button></div>
+    </form>
+  </${Modal}>`;
 }

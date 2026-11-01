@@ -102,7 +102,9 @@ function criarApiSupabase() {
       cadastrar: async (nome, email, senha) => ok(await sb.auth.signUp({ email, password: senha, options: { data: { nome }, emailRedirectTo: location.origin + location.pathname } })),
       recuperar: async email => ok(await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname })),
       novaSenha: async senha => ok(await sb.auth.updateUser({ password: senha })),
-      sair: async () => { await sb.auth.signOut(); },
+      // sem internet a biblioteca não apaga o login guardado (precisa avisar o servidor): apaga aqui também
+      sair: async () => { try { await sb.auth.signOut(); } catch (e) {}
+        try { for (const k of Object.keys(localStorage)) if (/^sb-.*-auth-token$/.test(k)) localStorage.removeItem(k); } catch (e) {} },
     },
     meuPerfil: async uid => ok(await sb.from("perfis").select("*").eq("id", uid).maybeSingle()),
     perfis: async () => ok(await sb.from("perfis").select("*").order("nome")),

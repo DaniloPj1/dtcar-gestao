@@ -121,6 +121,9 @@ function App() {
       .catch(async e => { if (erroDeRede(e)) definirSemRede(true); setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null); });
   }, [sessao && sessao.user && sessao.user.id]);
 
+  // login de agora (a tela usa nas conferências que rodam depois: cargas, réplica, reconexão, saída)
+  const sessaoAtual = useRef(sessao); sessaoAtual.current = sessao;
+  const loginOnline = () => !!(sessaoAtual.current && sessaoAtual.current.user && !sessaoAtual.current.pc && !sessaoDoPC());
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
   // programa para Windows: o acesso deste usuário está guardado para entrar sem internet?
   useEffect(() => { if (membro && sessao && sessao.user && sessao.user.email && window.dtcarDesktop) temAcessoGuardado(sessao.user.email).then(setAcessoNoPC).catch(() => {}); }, [membro, sessao && sessao.user && sessao.user.id]);
@@ -129,6 +132,8 @@ function App() {
   /** Carrega tabelas. Para O.S., clientes, veículos e produtos já carregados, busca só o que mudou (rápido);
    *  use { completo: true } depois de excluir registros. */
   const recarregar = useCallback(async (quais, opt = {}) => {
+    // sem login com internet (saiu, ou entrou sem internet) o servidor devolveria listas vazias: nunca trocar os dados por elas
+    if (!estaSemRede() && !loginOnline()) return;
     const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config", "receber"];
     const lista = quais && quais.length ? quais : todos;
     // se o servidor demorar, confere a conexão em paralelo: sem resposta, entra no modo sem rede e usa a cópia do aparelho na hora
@@ -228,7 +233,7 @@ function App() {
   useEffect(() => {
     if (!replicaDisponivel() || !dados.carregado || !doServidor.current || offline) return;
     const rodar = async () => {
-      if (estaSemRede()) return;
+      if (estaSemRede() || !loginOnline()) return; // réplica só com login feito com internet
       // alterações feitas sem internet ainda na fila: envia primeiro; o que sobrar (conflito) é aplicado de novo no banco do PC
       // depois da réplica, que traz a versão do online (a tela continua mostrando o trabalho pendente)
       if ((await fila.listar()).some(ehAlteracao)) await enviarFila();
@@ -281,6 +286,7 @@ function App() {
     const ok = api.testarConexao ? await api.testarConexao() : navigator.onLine;
     if (!ok) { if (avisarSeFalhar) setToast({ msg: "Ainda sem conexão com o servidor.", erro: true }); setVoltouInternet(false); return false; }
     if (sessaoDoPC()) { setVoltouInternet(true); return false; } // entrou sem internet: é preciso entrar de novo com a senha
+    if (!loginOnline()) return false; // saiu: nada a recarregar
     definirSemRede(false); await recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); window.dispatchEvent(new Event("dtcar-conectado")); return true;
   }, []);
   useEffect(() => { if (!offline) return; const t = setInterval(() => reconectar(false), 30000); return () => clearInterval(t); }, [offline]);
@@ -319,20 +325,23 @@ function App() {
   const ir = useCallback(r => { if (lerRota() === r) { setRota(r); window.scrollTo(0, 0); } else location.hash = r; }, []);
   const sair = useCallback(async () => {
     const semNet = estaSemRede() || !navigator.onLine || !!sessaoDoPC();
-    const pendentes = (await fila.listar()).length, guardado = await temAcessoGuardado();
+    const atual = sessaoAtual.current, email = atual && atual.user && atual.user.email;
+    const pendentes = (await fila.listar()).length, guardado = !!email && await temAcessoGuardado(email);
     if (semNet || pendentes) {
       const texto = [semNet ? (guardado ? "Sem internet: para entrar de novo, use a mesma senha (este computador confere)." : "Sem internet e sem acesso guardado neste computador: depois de sair, só dá para entrar de novo com internet.") : "",
         pendentes ? pendentes + " alteração(ões)/O.S. feitas sem internet continuam guardadas neste computador e vão para o online quando alguém entrar com internet." : ""].filter(Boolean).join(" ");
       if (!(await new Promise(res => setConf({ titulo: "Sair do sistema", texto, botao: "Sair mesmo assim", perigo: !guardado && semNet, res })))) return;
     }
-    sairDoPC(); await api.auth.sair().catch(() => {}); setPerfil(null); setSessao(null); location.hash = "#/painel";
+    await sairAgora();
   }, []);
+  // recarrega a tela: para as cargas, a réplica e as conferências que estavam rodando com o login que saiu
+  const sairAgora = useCallback(async () => { sairDoPC(); await api.auth.sair().catch(() => {}); setPerfil(null); setSessao(null); location.hash = "#/painel"; location.reload(); }, []);
 
   if (!api) return html`<${Conexao} />`;
   if (sessao === undefined || (sessao && perfil === undefined)) return html`<div class="carregando">Carregando…</div>`;
   if (modoSenha && sessao) return html`<${Login} modo="nova" />`;
   if (!sessao) return html`<${Login} />`;
-  if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sair} semInternet=${estaSemRede() || !navigator.onLine} />`;
+  if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sairAgora} semInternet=${estaSemRede() || !navigator.onLine} />`;
 
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");

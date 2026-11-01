@@ -59,6 +59,8 @@ const maior = (linhas, campo) => linhas.reduce((m, l) => (l[campo] && (!m || l[c
 /** Atualiza o banco do PC a partir do online. completo: recarrega tudo. espelho: data da última carga do sistema antigo (zera se mudou). */
 export async function replicar(api, { completo = false, espelho = null, config = null } = {}) {
   if (!B || !api.replica || estado.rodando) return estado;
+  // só com login feito com internet: sem ele o servidor devolve listas vazias e elas apagariam o banco do PC
+  try { if (api.auth && api.auth.sessao && !(await api.auth.sessao())) return estado; } catch (e) { return estado; }
   estado = { ...estado, rodando: true, erro: "" }; avisa();
   try {
     // carga nova do sistema antigo: recarrega TUDO, tabela por tabela (cada uma troca inteira numa transação).

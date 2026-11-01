@@ -17,13 +17,16 @@ async function derivar(senha, sal, voltas) {
 const iguais = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 
 /** depois de entrar com internet: guarda a conferência da senha deste usuário neste aparelho */
+// só no programa para Windows (o computador da oficina): no navegador, que pode ser de qualquer pessoa, não guarda nada
 export async function guardarAcesso(email, senha, uid, nome) {
-  if (!email || !senha || !uid || !(crypto && crypto.subtle)) return false;
+  if (!window.dtcarDesktop || !email || !senha || !uid || !(crypto && crypto.subtle)) return false;
   const sal = crypto.getRandomValues(new Uint8Array(16)), hash = await derivar(senha, sal, VOLTAS);
   const todos = (await local.ler(CHAVE)) || {};
   todos[norm(email)] = { uid, nome: nome || "", sal: b64(sal), hash: b64(hash), voltas: VOLTAS, em: new Date().toISOString() };
   return local.gravar(CHAVE, todos);
 }
+/** apaga a conferência guardada deste e-mail (a senha mudou e não deu para guardar a nova) */
+export async function esquecerAcesso(email) { const t = (await local.ler(CHAVE)) || {}; if (!t[norm(email)]) return true; delete t[norm(email)]; return local.gravar(CHAVE, t); }
 /** o acesso deste e-mail está guardado neste aparelho? */
 export async function temAcessoGuardado(email) { const t = (await local.ler(CHAVE)) || {}; return email ? !!t[norm(email)] : Object.keys(t).length > 0; }
 /** confere a senha sem internet; devolve { uid, email } ou null */

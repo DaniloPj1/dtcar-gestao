@@ -81,6 +81,10 @@ const srv = http.createServer((req, res) => {
   let body = obj ? null : [];
   const t = m && m[1], agoraJa = new Date().toISOString();
   if (u.pathname.includes("/auth/v1/health")) body = { ok: true };
+  else if (u.pathname.includes("/auth/v1/token")) { const b = JSON.parse(txt || "{}"); if (b.password && b.password !== "senha-certa") { res.writeHead(400, { "Content-Type": "application/json" }); return res.end(JSON.stringify({ error: "invalid_grant", error_description: "Invalid login credentials" })); } body = sessao; }
+  else if (u.pathname.includes("/auth/v1/logout")) body = {};
+  else if (u.pathname.includes("/auth/v1/user") && req.method === "PUT") body = sessao.user;
+  else if (t && D[t] && !String(req.headers.authorization || "").includes(sessao.access_token)) body = obj ? null : [];
   else if (t === "config") body = obj ? { id: 1, dados: cfgSrv } : [{ id: 1, dados: cfgSrv, atualizado_em: agora }];
   else if (t === "exclusoes") body = [];
   else if (t === "rpc" && /\/rpc\/sincronizar_alteracao_os/.test(u.pathname)) { const b = JSON.parse(txt || "{}"); body = rpcSinc(b.p_op || {}, !!b.p_forcar); }
@@ -102,9 +106,10 @@ srv.listen(PORTA);
 
 const { app, BrowserWindow } = require("electron");
 const espera = ms => new Promise(r => setTimeout(r, ms));
-const resultado = { ok: [], falhas: [] }; let ultimoTexto = ""; const chk = (n, c) => resultado[c ? "ok" : "falhas"].push(c ? n : n + " ⟶ " + ultimoTexto.slice(ultimoTexto.indexOf("Sistema") > 0 ? ultimoTexto.indexOf("Backup") : 0, 900).replace(/\n/g, " | "));
+const resultado = { ok: [], falhas: [] }; let ultimoTexto = ""; const chk = (n, c) => (console.log((c ? "OK " : "FALHA ") + n), 0) || resultado[c ? "ok" : "falhas"].push(c ? n : n + " ⟶ " + ultimoTexto.slice(ultimoTexto.indexOf("Sistema") > 0 ? ultimoTexto.indexOf("Backup") : 0, 900).replace(/\n/g, " | "));
 app.on("browser-window-created", async (e, w) => {
   const js = c => w.webContents.executeJavaScript(c);
+  w.webContents.on("console-message", (e, l, m) => { const msg = String(m || (e && e.message) || ""); if (/error|erro|Uncaught|TypeError|ReferenceError/i.test(msg)) console.log("CONSOLE", msg.slice(0, 300)); });
   const carregou = () => new Promise(r => w.webContents.once("did-finish-load", r));
   try {
     await carregou();
@@ -268,7 +273,49 @@ app.on("browser-window-created", async (e, w) => {
     const semV15 = await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "sem v15" }); return "gravou";`);
     chk("sem v15.sql: alteração sem internet recusada com aviso", /v15\.sql/.test(semV15));
     await js(`window.dtcarDesktop.banco.meta("v15", "true")`); await online(4000); await limparFila();
-    modo = "fora"; w.webContents.reload(); await carregou(); await espera(5000);
+    // ---------- entrar sem internet: o PC confere a senha ----------
+    await js(`import("./js/acesso.js").then(m => m.guardarAcesso("d@x", "senha-certa", "u1"))`); // como se tivesse entrado antes com internet
+    await offline(); await js(`location.hash = "#/painel"`); await espera(1000);
+    await js(`[...document.querySelectorAll("button")].find(b => b.textContent.trim() === "Sair").click()`); await espera(800);
+    t = ultimoTexto = await js("document.body.innerText");
+    chk("Sair sem internet avisa antes", t.includes("Sair mesmo assim") && t.includes("mesma senha"));
+    const recarregouAoSair = carregou();
+    await js(`[...document.querySelectorAll("button")].find(b => b.textContent.trim() === "Sair mesmo assim").click()`); await recarregouAoSair; await espera(8000);
+    t = ultimoTexto = await js("document.body.innerText");
+    chk("saiu: tela de entrar, com a dica de sem internet", t.includes("E-mail") && /este computador confere/.test(t));
+    // saiu e a internet voltou sem ninguém entrar: o servidor devolve listas vazias (sem login); o banco do PC não pode ser apagado
+    const antesSair = (await js(`window.dtcarDesktop.banco.listar("ordens")`)).length;
+    modo = "ok"; await js(`window.dispatchEvent(new Event("online"))`); await espera(4000);
+    await js(`Promise.all([import("./js/replica.js"), import("./js/api.js")]).then(([r, a]) => r.replicar(a.api, { completo: true }))`).catch(() => {});
+    const depoisSair = (await js(`window.dtcarDesktop.banco.listar("ordens")`)).length;
+    chk("saiu e a internet voltou sem login: banco do PC intacto (" + antesSair + " → " + depoisSair + ")", antesSair > 0 && depoisSair === antesSair);
+    modo = "fora";
+    const errada = await js(`import("./js/telas/login.js").then(m => m.entrarComOuSemInternet("d@x", "errada")).then(() => "entrou", e => e.message)`);
+    chk("sem internet, senha errada: recusa", /não confere/.test(errada));
+    js(`import("./js/telas/login.js").then(m => m.entrarComOuSemInternet("d@x", "senha-certa"))`).catch(() => {});
+    await carregou(); await espera(5000);
+    t = ultimoTexto = await js("document.body.innerText");
+    chk("sem internet, senha certa: entra com o banco do PC", t.includes("Sem internet") && !t.includes("E-mail") && t.includes("Danilo"));
+    await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "feito com entrada do PC" });`);
+    modo = "ok"; await js(`window.dispatchEvent(new Event("online"))`); await espera(3000);
+    t = ultimoTexto = await js("document.body.innerText");
+    const nFila = await js(`import("./js/fila.js").then(m => m.fila.listar()).then(l => l.length)`);
+    chk("internet voltou com entrada do PC: pede para entrar de novo e não envia sem login", t.includes("A internet voltou") && t.includes("Entrar com internet") && nFila === 1 && o1.obs_internas !== "feito com entrada do PC");
+    await js(`[...document.querySelectorAll("button")].find(b => b.textContent.trim() === "Entrar com internet").click()`); await carregou(); await espera(2500);
+    const viaOnline = await js(`import("./js/api.js").then(m => m.definirSemRede(true)).then(() => import("./js/telas/login.js")).then(m => m.entrarComOuSemInternet("d@x", "senha-certa"))`).catch(e => e.message);
+    chk("tela no modo sem internet mas servidor respondendo: entra pelo servidor (" + viaOnline + ")", viaOnline === "online");
+    await espera(9000);
+    t = ultimoTexto = await js("document.body.innerText");
+    const nFila2 = await js(`import("./js/fila.js").then(m => m.fila.listar()).then(l => l.length)`);
+    chk("entrou de novo com internet: envia o que foi feito (" + nFila2 + ", " + o1.obs_internas + ")", nFila2 === 0 && o1.obs_internas === "feito com entrada do PC" && !t.includes("E-mail"));
+    // nova senha pelo link de recuperação: a senha antiga deixa de abrir sem internet; a nova abre
+    const troca = await js(`(async () => { await (await import("./js/telas/login.js")).trocarSenha("senha-nova"); const a = await import("./js/acesso.js");
+      return [!!(await a.conferirAcesso("d@x", "senha-certa")), !!(await a.conferirAcesso("d@x", "senha-nova"))].join(); })()`);
+    chk("nova senha: a antiga não confere mais, a nova confere (" + troca + ")", troca === "false,true");
+    // internet cai sem o Windows avisar (adaptadores virtuais): em até ~30 s a tela mostra "Sem internet"
+    modo = "fora"; await espera(36000); t = ultimoTexto = await js("document.body.innerText");
+    chk("queda sem aviso do Windows: mostra Sem internet em até 30 s", t.includes("Sem internet"));
+    w.webContents.reload(); await carregou(); await espera(5000);
     // programa recém-atualizado que nunca abriu com internet: banco do PC vazio → usa a cópia do navegador (não "aguardando liberação")
     await js("window.dtcarDesktop.banco.zerar()");
     w.webContents.reload(); await carregou(); await espera(6000); t = ultimoTexto = await js("document.body.innerText");

@@ -5,12 +5,13 @@ import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js
 import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
 import { ehAlteracao, replicarComFila, definirGeracaoEspelho } from "./alteracoes.js";
+import { sessaoDoPC, sairDoPC, temAcessoGuardado } from "./acesso.js";
 import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada, gravarBackupNaPasta, backupDaPasta } from "./pasta.js";
 import { AssistentePasta } from "./telas/dadoslocais.js";
 import { OSPendente } from "./telas/pendente.js";
 import { Ctx, Modal, I } from "./ui.js";
 import { cfgCompleta, pode, etapaOS } from "./regras.js";
-import { Conexao, Login, Pendente } from "./telas/login.js";
+import { Conexao, Login, Pendente, GuardarAcessoModal } from "./telas/login.js";
 import { Painel, Ordens } from "./telas/painel.js";
 import { NovaOS, ChecklistOS } from "./telas/entrada.js";
 import { Ordem } from "./telas/ordem.js";
@@ -64,6 +65,8 @@ function App() {
   const [conf, setConf] = useState(null);
   const ultimaCarga = useRef(0);
   const [offline, setOffline] = useState(null); // { desde, copia } quando o servidor não responde
+  const [voltouInternet, setVoltouInternet] = useState(false); // entrou sem internet e a conexão voltou: pedir para entrar de novo
+  const [acessoNoPC, setAcessoNoPC] = useState(true), [guardarAcesso, setGuardarAcesso] = useState(false); // senha conferida neste PC?
   const doServidor = useRef(false);
   const [pend, setPend] = useState([]); // fila de envio deste aparelho (O.S. abertas sem internet)
   const [pasta, setPasta] = useState(null), [assistente, setAssistente] = useState(false);
@@ -84,6 +87,9 @@ function App() {
     (async () => {
       // login guardado e vencido (ou sem rede): confere o servidor antes; se não responder, abre direto com o login guardado,
       // sem esperar as tentativas de renovação (que podiam durar ~30 s e terminar na tela de login)
+      // entrou sem internet (senha conferida no PC): abre com o banco do PC, sem falar com o servidor
+      const doPC = !sessaoGuardada() && sessaoDoPC();
+      if (doPC) { definirSemRede(true); setSessao(doPC); return; }
       const guardada = sessaoGuardada();
       if (guardada && (!navigator.onLine || (api.auth.guardadaVencida && api.auth.guardadaVencida(guardada))) && api.testarConexao && !(await api.testarConexao())) {
         definirSemRede(true); setSessao(guardada); return;
@@ -100,7 +106,8 @@ function App() {
     return api.auth.aoMudar((s, ev) => {
       if (ev === "PASSWORD_RECOVERY") setModoSenha(true);
       // sem internet a renovação do login falha e a biblioteca avisa "sem sessão": continua com o login guardado (só "Sair" desloga)
-      if (!s && ev !== "SIGNED_OUT") { const g = sessaoGuardada(); if (g && (estaSemRede() || !navigator.onLine)) return setSessao(g); }
+      if (!s && ev !== "SIGNED_OUT") { const g = sessaoGuardada(); if (g && (estaSemRede() || !navigator.onLine)) return setSessao(g);
+        const p = sessaoDoPC(); if (p) { definirSemRede(true); return setSessao(p); } }
       setSessao(s || null);
     });
   }, []);
@@ -114,12 +121,19 @@ function App() {
       .catch(async e => { if (erroDeRede(e)) definirSemRede(true); setPerfil(erroDeRede(e) ? (await local.ler("perfil:" + uid)) || null : null); });
   }, [sessao && sessao.user && sessao.user.id]);
 
+  // login de agora (a tela usa nas conferências que rodam depois: cargas, réplica, reconexão, saída)
+  const sessaoAtual = useRef(sessao); sessaoAtual.current = sessao;
+  const loginOnline = () => !!(sessaoAtual.current && sessaoAtual.current.user && !sessaoAtual.current.pc && !sessaoDoPC());
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
+  // programa para Windows: o acesso deste usuário está guardado para entrar sem internet?
+  useEffect(() => { if (membro && sessao && sessao.user && sessao.user.email && window.dtcarDesktop) temAcessoGuardado(sessao.user.email).then(setAcessoNoPC).catch(() => {}); }, [membro, sessao && sessao.user && sessao.user.id]);
   const marcas = useRef({}); // maior atualizado_em já recebido por tabela (relógio do servidor)
   const marcar = (k, linhas) => { for (const l of linhas) if (l.atualizado_em && (!marcas.current[k] || l.atualizado_em > marcas.current[k])) marcas.current[k] = l.atualizado_em; };
   /** Carrega tabelas. Para O.S., clientes, veículos e produtos já carregados, busca só o que mudou (rápido);
    *  use { completo: true } depois de excluir registros. */
   const recarregar = useCallback(async (quais, opt = {}) => {
+    // sem login com internet (saiu, ou entrou sem internet) o servidor devolveria listas vazias: nunca trocar os dados por elas
+    if (!estaSemRede() && !loginOnline()) return;
     const todos = ["clientes", "veiculos", "produtos", "fornecedores", "ordens", "perfis", "config", "receber"];
     const lista = quais && quais.length ? quais : todos;
     // se o servidor demorar, confere a conexão em paralelo: sem resposta, entra no modo sem rede e usa a cópia do aparelho na hora
@@ -219,7 +233,7 @@ function App() {
   useEffect(() => {
     if (!replicaDisponivel() || !dados.carregado || !doServidor.current || offline) return;
     const rodar = async () => {
-      if (estaSemRede()) return;
+      if (estaSemRede() || !loginOnline()) return; // réplica só com login feito com internet
       // alterações feitas sem internet ainda na fila: envia primeiro; o que sobrar (conflito) é aplicado de novo no banco do PC
       // depois da réplica, que traz a versão do online (a tela continua mostrando o trabalho pendente)
       if ((await fila.listar()).some(ehAlteracao)) await enviarFila();
@@ -247,7 +261,7 @@ function App() {
   }, [dados.carregado, offline, pasta && pasta.configurada, pasta && pasta.permissao]);
   // envia a fila: ao abrir, ao reconectar e a cada minuto enquanto houver pendências
   const enviarFila = useCallback(async () => {
-    const l = await atualizarPendentes(); if (!l.length || !api.sincronizarAbertura) return;
+    const l = await atualizarPendentes(); if (!l.length || !api.sincronizarAbertura || sessaoDoPC()) return; // entrou sem internet: envia depois de entrar com internet
     const r = await fila.processar(api); if (!r) return;
     await atualizarPendentes();
     const numeradas = r.enviadas.filter(x => x.op.tipo === "abrir_os"), alteradas = r.enviadas.filter(x => ehAlteracao(x.op));
@@ -270,10 +284,18 @@ function App() {
   // internet voltou: confere o servidor e recarrega tudo (enquanto estiver sem rede, confere a cada 30 s)
   const reconectar = useCallback(async (avisarSeFalhar) => {
     const ok = api.testarConexao ? await api.testarConexao() : navigator.onLine;
-    if (!ok) { if (avisarSeFalhar) setToast({ msg: "Ainda sem conexão com o servidor.", erro: true }); return false; }
+    if (!ok) { if (avisarSeFalhar) setToast({ msg: "Ainda sem conexão com o servidor.", erro: true }); setVoltouInternet(false); return false; }
+    if (sessaoDoPC()) { setVoltouInternet(true); return false; } // entrou sem internet: é preciso entrar de novo com a senha
+    if (!loginOnline()) return false; // saiu: nada a recarregar
     definirSemRede(false); await recarregar(null, { completo: true }); setTimeout(enviarFila, 1500); window.dispatchEvent(new Event("dtcar-conectado")); return true;
   }, []);
   useEffect(() => { if (!offline) return; const t = setInterval(() => reconectar(false), 30000); return () => clearInterval(t); }, [offline]);
+  // com "Conectado" na tela, confere o servidor a cada 30 s: o Windows pode dizer que há rede (outros adaptadores) sem haver internet
+  useEffect(() => {
+    if (!membro || offline || !api.testarConexao) return;
+    const t = setInterval(async () => { if (!estaSemRede() && !(await api.testarConexao())) definirSemRede(true); }, 30000);
+    return () => clearInterval(t);
+  }, [membro, offline]);
   useEffect(() => {
     if (!membro) return;
     const volta = () => reconectar(false);
@@ -301,13 +323,25 @@ function App() {
   const avisar = useCallback((msg, erro) => setToast({ msg, erro: !!erro }), []);
   const confirmar = useCallback(o => new Promise(res => setConf({ ...o, res })), []);
   const ir = useCallback(r => { if (lerRota() === r) { setRota(r); window.scrollTo(0, 0); } else location.hash = r; }, []);
-  const sair = useCallback(async () => { await api.auth.sair(); setPerfil(null); setSessao(null); location.hash = "#/painel"; }, []);
+  const sair = useCallback(async () => {
+    const semNet = estaSemRede() || !navigator.onLine || !!sessaoDoPC();
+    const atual = sessaoAtual.current, email = atual && atual.user && atual.user.email;
+    const pendentes = (await fila.listar()).length, guardado = !!email && await temAcessoGuardado(email);
+    if (semNet || pendentes) {
+      const texto = [semNet ? (guardado ? "Sem internet: para entrar de novo, use a mesma senha (este computador confere)." : "Sem internet e sem acesso guardado neste computador: depois de sair, só dá para entrar de novo com internet.") : "",
+        pendentes ? pendentes + " alteração(ões)/O.S. feitas sem internet continuam guardadas neste computador e vão para o online quando alguém entrar com internet." : ""].filter(Boolean).join(" ");
+      if (!(await new Promise(res => setConf({ titulo: "Sair do sistema", texto, botao: "Sair mesmo assim", perigo: !guardado && semNet, res })))) return;
+    }
+    await sairAgora();
+  }, []);
+  // recarrega a tela: para as cargas, a réplica e as conferências que estavam rodando com o login que saiu
+  const sairAgora = useCallback(async () => { sairDoPC(); await api.auth.sair().catch(() => {}); setPerfil(null); setSessao(null); location.hash = "#/painel"; location.reload(); }, []);
 
   if (!api) return html`<${Conexao} />`;
   if (sessao === undefined || (sessao && perfil === undefined)) return html`<div class="carregando">Carregando…</div>`;
   if (modoSenha && sessao) return html`<${Login} modo="nova" />`;
   if (!sessao) return html`<${Login} />`;
-  if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sair} semInternet=${estaSemRede() || !navigator.onLine} />`;
+  if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sairAgora} semInternet=${estaSemRede() || !navigator.onLine} />`;
 
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
@@ -373,6 +407,9 @@ function App() {
     <main>${cfg.espelhoLegado !== false ? html`<div class="faixa-transicao" role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}</div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pendOS.length ? html`<div class="faixa-offline" role="status"><b>${pendOS.length} O.S. aberta(s) sem internet aguardando envio</b> (${pendOS.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}${!offline && pendAlt.length ? html`<div class="faixa-offline" role="status">${conflitos.length
       ? html`<b>${conflitos.length} alteração(ões) feita(s) sem internet com conflito</b>: alguém mudou a mesma O.S. no online. <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`
       : html`<b>${pendAlt.length} alteração(ões) feita(s) sem internet aguardando envio.</b> <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button>`}</div>` : null}
+    ${voltouInternet ? html`<div class="faixa-offline" role="status"><b>A internet voltou.</b> Você entrou sem internet: entre de novo com a sua senha para o sistema voltar a falar com o online${pend.length ? " e enviar o que foi feito sem internet (" + pend.length + ")" : ""}. <button type="button" class="btn btn-sm btn-pri" onClick=${() => { sairDoPC(); location.reload(); }}>Entrar com internet</button></div>` : null}
+    ${!offline && !acessoNoPC && sessao && sessao.user ? html`<div class="faixa-versao" role="status"><b>Entrar sem internet:</b> confirme a sua senha uma vez para este computador deixar você entrar mesmo sem internet. <button type="button" class="btn btn-sm btn-pri" onClick=${() => setGuardarAcesso(true)}>Confirmar senha</button></div>` : null}
+    ${guardarAcesso ? html`<${GuardarAcessoModal} email=${sessao.user.email} onFechar=${() => setGuardarAcesso(false)} onFeito=${() => { setGuardarAcesso(false); setAcessoNoPC(true); setToast({ msg: "Pronto: neste computador dá para entrar sem internet.", erro: false }); }} />` : null}
     ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " aguardando envio." : ""} ${api.bancoDoPC && api.bancoPronto ? "Banco de dados do PC" : "Modo consulta"}: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. ${api.bancoDoPC && api.bancoPronto ? "Dá para abrir O.S. nova (número provisório) e, nas O.S. abertas, lançar peças e serviços, alterar dados e mudar a etapa: tudo vai para o online quando a conexão voltar. Entregar, receber, recibos e fotos só com internet." : "Dá para abrir O.S. nova (número provisório); as demais alterações só com internet."}${api.bancoDoPC && !api.bancoPronto ? " O banco de dados do PC ainda não foi carregado: abra o programa uma vez com internet e espere a carga (Sistema › Dados no computador)." : ""} <button type="button" class="btn-link" onClick=${() => reconectar(true)}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>

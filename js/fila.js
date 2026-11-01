@@ -7,13 +7,17 @@ import { gravarFilaNaPasta } from "./pasta.js";
 
 const CHAVE = "fila";
 let ocupado = false;
+// a fila mudou: a tela atualiza a faixa "aguardando envio" e os avisos da O.S.
+const mudou = () => { try { window.dispatchEvent(new Event("dtcar-fila")); } catch (e) {} };
 
 export const fila = {
   listar: async () => (await local.ler(CHAVE)) || [],
   /** número provisório sequencial deste aparelho (não se repete) */
   proximoProvisorio: () => { const n = (Number(lsGet("dtcar-prov-seq")) || 0) + 1; lsSet("dtcar-prov-seq", n); return "PROV-" + String(n).padStart(2, "0"); },
-  adicionar: async op => { const l = await fila.listar(); l.push({ ...op, seq: l.length ? Math.max(...l.map(x => x.seq || 0)) + 1 : 1, tentativas: 0, erro: "" }); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); return l; },
-  remover: async id => { const l = (await fila.listar()).filter(x => x.id !== id); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); return l; },
+  adicionar: async op => { const l = await fila.listar(); l.push({ ...op, seq: l.length ? Math.max(...l.map(x => x.seq || 0)) + 1 : 1, tentativas: 0, erro: "" }); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; },
+  /** resolução de conflito: envia esta alteração por cima do que mudou no online */
+  forcar: async id => { const l = (await fila.listar()).map(x => x.id === id ? { ...x, forcar: true, conflito: false, erro: "", tentativas: 0 } : x); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; },
+  remover: async id => { const l = (await fila.listar()).filter(x => x.id !== id); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; },
   /** recupera a fila gravada na pasta do PC quando o navegador perdeu a dele (reenviar não duplica) */
   restaurar: async l => { if (l && l.length && !(await fila.listar()).length) { await local.gravar(CHAVE, l); return true; } return false; },
   /**
@@ -28,21 +32,28 @@ export const fila = {
     try {
       let l = await fila.listar();
       l.sort((a, b) => (a.criado_em < b.criado_em ? -1 : a.criado_em > b.criado_em ? 1 : a.seq - b.seq));
+      // etapa 3: alteração de uma O.S. que deu conflito ou erro trava as seguintes da MESMA O.S. (nunca aplica fora de ordem)
+      const travadas = new Set();
       for (const op of l) {
-        if (op.erro && op.tentativas >= 3) continue;
+        const os = op.tipo === "abrir_os" ? null : op.ordem_id;
+        if (os && travadas.has(os)) continue;
+        if ((op.conflito && !op.forcar) || (op.erro && op.tentativas >= 3)) { if (os) travadas.add(os); continue; }
         try {
-          const res = op.tipo === "abrir_os" ? await api.sincronizarAbertura(op) : null;
+          const res = op.tipo === "abrir_os" ? await api.sincronizarAbertura(op) : await api.sincronizarAlteracao(op);
           await fila.remover(op.id);
           enviadas.push({ op, res });
           // guarda o histórico de numeração (para o aviso e para quem procurar pelo provisório)
-          const hist = (await local.ler("numeradas")) || [];
-          hist.unshift({ provisorio: op.provisorio, numero: res && res.numero, id: op.id, placa: op.ordem && op.ordem.veiculo && op.ordem.veiculo.placa, em: new Date().toISOString() });
-          await local.gravar("numeradas", hist.slice(0, 200));
+          if (op.tipo === "abrir_os") {
+            const hist = (await local.ler("numeradas")) || [];
+            hist.unshift({ provisorio: op.provisorio, numero: res && res.numero, id: op.id, placa: op.ordem && op.ordem.veiculo && op.ordem.veiculo.placa, em: new Date().toISOString() });
+            await local.gravar("numeradas", hist.slice(0, 200));
+          }
         } catch (e) {
           if (erroDeRede(e)) break;
+          if (os) travadas.add(os);
           const atual = await fila.listar();
           const i = atual.findIndex(x => x.id === op.id);
-          if (i >= 0) { atual[i] = { ...atual[i], erro: e.message, tentativas: (atual[i].tentativas || 0) + 1 }; await local.gravar(CHAVE, atual); }
+          if (i >= 0) { atual[i] = { ...atual[i], erro: e.message, conflito: !!e.conflito, forcar: false, tentativas: (atual[i].tentativas || 0) + 1 }; await local.gravar(CHAVE, atual); gravarFilaNaPasta(atual); mudou(); }
         }
       }
       const restantes = await fila.listar();

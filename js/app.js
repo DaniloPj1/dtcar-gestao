@@ -4,6 +4,7 @@ import { replicar, replicaDisponivel } from "./replica.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
 import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
+import { ehAlteracao } from "./alteracoes.js";
 import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada, gravarBackupNaPasta, backupDaPasta } from "./pasta.js";
 import { AssistentePasta } from "./telas/dadoslocais.js";
 import { OSPendente } from "./telas/pendente.js";
@@ -75,6 +76,7 @@ function App() {
     if (!st.configurada && pastaSuportada() && instalado && !lsGet("dtcar-pasta-adiada")) setAssistente(true);
   }); }, []);
   const atualizarPendentes = useCallback(async () => { const l = await fila.listar(); setPend(l); return l; }, []);
+  useEffect(() => { const f = () => atualizarPendentes(); window.addEventListener("dtcar-fila", f); return () => window.removeEventListener("dtcar-fila", f); }, []);
 
   useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
@@ -214,7 +216,13 @@ function App() {
   // banco do PC (programa para Windows): mantém a réplica de todas as tabelas igual ao online (3 s após carregar, depois a cada 5 min)
   useEffect(() => {
     if (!replicaDisponivel() || !dados.carregado || !doServidor.current || offline) return;
-    const rodar = () => { if (!estaSemRede()) replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg }); };
+    const rodar = async () => {
+      if (estaSemRede()) return;
+      // alterações feitas sem internet ainda na fila (sem conflito): envia primeiro; a réplica só roda com a fila resolvida
+      const esperando = (await fila.listar()).filter(op => ehAlteracao(op) && !op.conflito && !(op.erro && op.tentativas >= 3));
+      if (esperando.length) { await enviarFila(); if ((await fila.listar()).some(op => ehAlteracao(op) && !op.conflito && !(op.erro && op.tentativas >= 3))) return; }
+      replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg });
+    };
     const t = setTimeout(rodar, 3000), i = setInterval(rodar, 5 * 60000);
     return () => { clearTimeout(t); clearInterval(i); };
   }, [dados.carregado, offline, cfg.ultimoEspelho && cfg.ultimoEspelho.em]);
@@ -240,13 +248,19 @@ function App() {
     const l = await atualizarPendentes(); if (!l.length || !api.sincronizarAbertura) return;
     const r = await fila.processar(api); if (!r) return;
     await atualizarPendentes();
+    const numeradas = r.enviadas.filter(x => x.op.tipo === "abrir_os"), alteradas = r.enviadas.filter(x => ehAlteracao(x.op));
     if (r.enviadas.length) {
-      setToast({ msg: r.enviadas.map(x => x.op.provisorio + " virou O.S. " + x.res.numero).join(" · "), erro: false });
-      await recarregar(["clientes", "veiculos", "ordens"]);
-      const aqui = r.enviadas.find(x => location.hash === "#/os/" + x.op.id);
+      const msgs = numeradas.map(x => x.op.provisorio + " virou O.S. " + x.res.numero);
+      if (alteradas.length) msgs.push(alteradas.length + " alteração(ões) feita(s) sem internet enviada(s) ao online");
+      setToast({ msg: msgs.join(" · "), erro: false });
+      await recarregar(["clientes", "veiculos", "ordens", "produtos"]);
+      const aqui = numeradas.find(x => location.hash === "#/os/" + x.op.id);
       if (aqui && aqui.res.id !== aqui.op.id) location.hash = "#/os/" + aqui.res.id;
+      if (alteradas.length) window.dispatchEvent(new Event("dtcar-fila-enviada")); // a O.S. aberta na tela recarrega
     }
-    if (r.comErro.length) setToast({ msg: r.comErro.length + " O.S. sem internet não puderam ser enviadas. Abra a O.S. para ver o motivo.", erro: true });
+    const errOS = r.comErro.filter(x => x.tipo === "abrir_os"), errAlt = r.comErro.filter(ehAlteracao);
+    if (errOS.length) setToast({ msg: errOS.length + " O.S. sem internet não puderam ser enviadas. Abra a O.S. para ver o motivo.", erro: true });
+    else if (errAlt.length) setToast({ msg: errAlt.length + " alteração(ões) feita(s) sem internet não puderam ser enviadas (conflito com o online). Resolva em Sistema › Dados no computador.", erro: true });
   }, []);
   useEffect(() => { if (!membro) return; enviarFila(); const t = setInterval(() => { if (navigator.onLine) enviarFila(); }, 60000); return () => clearInterval(t); }, [membro]);
   // internet voltou: confere o servidor e recarrega tudo (enquanto estiver sem rede, confere a cada 30 s)
@@ -296,6 +310,7 @@ function App() {
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
   const restrito = { ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", receber: "verValores", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro" };
   const pendOS = pend.filter(op => op.tipo === "abrir_os");
+  const pendAlt = pend.filter(ehAlteracao), conflitos = pendAlt.filter(op => op.conflito || (op.erro && op.tentativas >= 3));
   const dadosVis = !pendOS.length ? dados : {
     ...dados,
     ordens: [...pendOS.map(op => ({ ...op.ordem, numero: op.provisorio, total: 0, desconto: 0, atualizado_em: op.criado_em, _pendente: true, _provisorio: op.provisorio }))
@@ -351,8 +366,10 @@ function App() {
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
     <${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
-    <main>${cfg.espelhoLegado !== false ? html`<div class="faixa-transicao" role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}</div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pend.length ? html`<div class="faixa-offline" role="status"><b>${pend.length} O.S. aberta(s) sem internet aguardando envio</b> (${pend.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}
-    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " O.S. aguardando envio." : ""} Modo consulta: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. Dá para abrir O.S. nova (número provisório); as demais alterações só com internet.${api.bancoDoPC && !api.bancoPronto ? " O banco de dados do PC ainda não foi carregado: abra o programa uma vez com internet e espere a carga (Sistema › Dados no computador)." : ""} <button type="button" class="btn-link" onClick=${() => reconectar(true)}>Tentar de novo</button></div>` : null}${corpo}</main>
+    <main>${cfg.espelhoLegado !== false ? html`<div class="faixa-transicao" role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}</div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pendOS.length ? html`<div class="faixa-offline" role="status"><b>${pendOS.length} O.S. aberta(s) sem internet aguardando envio</b> (${pendOS.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}${!offline && pendAlt.length ? html`<div class="faixa-offline" role="status">${conflitos.length
+      ? html`<b>${conflitos.length} alteração(ões) feita(s) sem internet com conflito</b>: alguém mudou a mesma O.S. no online. <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`
+      : html`<b>${pendAlt.length} alteração(ões) feita(s) sem internet aguardando envio.</b> <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button>`}</div>` : null}
+    ${offline ? html`<div class="faixa-offline" role="status"><b>Sem internet.</b>${pend.length ? " " + pend.length + " aguardando envio." : ""} ${api.bancoDoPC && api.bancoPronto ? "Banco de dados do PC" : "Modo consulta"}: ${offline.copia ? "dados salvos neste aparelho em " + fmtDataHora(offline.copia) : "dados carregados antes da queda"}. ${api.bancoDoPC && api.bancoPronto ? "Dá para abrir O.S. nova (número provisório) e, nas O.S. abertas, lançar peças e serviços, alterar dados e mudar a etapa: tudo vai para o online quando a conexão voltar. Entregar, receber, recibos e fotos só com internet." : "Dá para abrir O.S. nova (número provisório); as demais alterações só com internet."}${api.bancoDoPC && !api.bancoPronto ? " O banco de dados do PC ainda não foi carregado: abra o programa uma vez com internet e espere a carga (Sistema › Dados no computador)." : ""} <button type="button" class="btn-link" onClick=${() => reconectar(true)}>Tentar de novo</button></div>` : null}${corpo}</main>
     <nav class="nav" aria-label="Navegação principal"><div class="nav-in">${NAV.map(([r, t, ic]) => html`<button key=${r} type="button" class=${r === "+" ? "nav-novo" : ""} aria-current=${"/" + base === r ? "page" : undefined} onClick=${() => r === "+" ? setNovoMenu(true) : ir(r)}>
       ${r === "+" ? html`<span class="circ">${I[ic]}</span>` : I[ic]}<span>${t}</span></button>`)}</div></nav>
     ${novoMenu ? html`<${Modal} titulo="Novo" onFechar=${() => setNovoMenu(false)}><div class="lista">

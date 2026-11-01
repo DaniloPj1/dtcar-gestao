@@ -1,6 +1,7 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
 import { local, erroDeRede } from "./local.js";
-import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal } from "./replica.js";
+import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal } from "./replica.js";
+import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais } from "./alteracoes.js";
 
 const LS_CONEXAO = "dtcar-conexao";
 export function conexao() {
@@ -240,6 +241,47 @@ function criarApiSupabase() {
         texto: `O.S. aberta sem internet em ${new Date(op.criado_em).toLocaleString("pt-BR")} como ${op.provisorio}; recebeu o número ${o.numero} ao sincronizar.` }));
       return { id: o.id, numero: o.numero, nova };
     },
+    /**
+     * Etapa 3: envia uma alteração de O.S. feita sem internet (js/alteracoes.js). Regras de conflito:
+     *  - campos/etapa: cada campo só é gravado se no online ele ainda está como estava quando foi alterado aqui
+     *    (ou já está igual ao que foi feito aqui — reenvio). Se alguém mudou no online, é conflito: nada é gravado.
+     *  - peças/serviços: item criado aqui entra sempre; item alterado/removido aqui é conflito se foi alterado no online
+     *    depois. O.S. fechada ou cancelada no online também é conflito.
+     *  - histórico: entra uma vez (reenvio não duplica).
+     *  op.forcar (decisão do usuário em "Dados no computador"): grava por cima, sem conferir.
+     */
+    sincronizarAlteracao: async op => {
+      const conflito = msg => { const e = new Error("Conflito: " + msg); e.conflito = true; return e; };
+      const igual = iguais;
+      const mesmaData = (a, b) => a === b || (!!a && !!b && Date.parse(a) === Date.parse(b));
+      const os = ok(await sb.from("ordens").select("*").eq("id", op.ordem_id).maybeSingle());
+      if (!os) throw conflito("a O.S. não existe mais no online (apagada ou substituída pela carga do sistema antigo)");
+      if (op.tipo === "alterar_os") {
+        if (!op.forcar) {
+          const mudou = Object.keys(op.patch).filter(k => !igual(os[k], op.antes[k]) && !igual(os[k], op.patch[k]));
+          if (mudou.length) throw conflito("no online alteraram " + mudou.join(", ") + " desta O.S. enquanto este computador estava sem internet");
+        }
+        ok(await sb.from("ordens").update(op.patch).eq("id", op.ordem_id));
+      } else if (op.tipo === "itens_os") {
+        if (!op.forcar && os.status !== op.antes.status && ["entregue", "cancelado"].includes(os.status))
+          throw conflito("a O.S. foi " + (os.status === "entregue" ? "entregue" : "cancelada") + " no online");
+        const ids = [...op.itens.map(i => String(i.id)), ...op.removidos];
+        const srv = new Map((ids.length ? ok(await sb.from("os_itens").select("*").in("id", ids)) : []).map(i => [String(i.id), i]));
+        if (!op.forcar) for (const id of ids) {
+          const base = op.antes.itens[id], s = srv.get(id), meu = op.itens.find(i => String(i.id) === id);
+          if (base === "novo" || !s) { if (base !== "novo" && meu) throw conflito("o item “" + meu.descricao + "” foi removido no online"); continue; }
+          const jaIgual = meu && Object.keys(meu).every(k => k === "atualizado_em" || k === "criado_em" || igual(s[k], meu[k])); // reenvio: já está como foi feito aqui
+          if (!jaIgual && !mesmaData(s.atualizado_em || s.criado_em, base)) throw conflito("o item “" + (s.descricao || id) + "” foi alterado no online");
+        }
+        if (op.removidos.length) ok(await sb.from("os_itens").delete().in("id", op.removidos));
+        if (op.itens.length) ok(await sb.from("os_itens").upsert(op.itens.map(({ atualizado_em, ...i }) => i))); // a data é do servidor
+      } else if (op.tipo === "evento_os") {
+        const ev = op.evento;
+        const ja = ok(await sb.from("eventos").select("id").eq("ordem_id", ev.ordem_id).eq("tipo", ev.tipo).eq("criado_em", ev.criado_em).limit(1));
+        if (!ja.length) ok(await sb.from("eventos").insert(ev));
+      } else throw new Error("Alteração desconhecida: " + op.tipo);
+      return { ordem_id: op.ordem_id };
+    },
     guardarOrdem: async id => { const r = await buscarOrdem(id); await local.gravar("os:" + id, r); return r; },
   };
   async function buscarOrdem(id) {
@@ -262,11 +304,12 @@ function criarApiSupabase() {
       return out;
     },
     criarOrdem: async dados => ok(await sb.from("ordens").insert(dados).select("id,numero").single()),
-    atualizarOrdem: async (id, patch) => ok(await sb.from("ordens").update(patch).eq("id", id)),
+    // devolvem as linhas gravadas (o programa copia para o banco do PC na hora: base certa para conferir conflitos depois)
+    atualizarOrdem: async (id, patch) => ok(await sb.from("ordens").update(patch).eq("id", id).select()),
     excluirOrdem: async id => ok(await sb.from("ordens").delete().eq("id", id)),
     salvarItens: async (ordemId, itens, removidos) => {
       if (removidos && removidos.length) ok(await sb.from("os_itens").delete().in("id", removidos));
-      if (itens.length) ok(await sb.from("os_itens").upsert(itens.map((i, n) => ({ ...Object.fromEntries(Object.entries(i).filter(([k]) => !k.startsWith("_"))), ordem_id: ordemId, posicao: i.posicao ?? n }))));
+      return itens.length ? ok(await sb.from("os_itens").upsert(itens.map((i, n) => ({ ...Object.fromEntries(Object.entries(i).filter(([k]) => !k.startsWith("_"))), ordem_id: ordemId, posicao: i.posicao ?? n }))).select()) : [];
     },
     incluirFotos: async linhas => linhas.length ? ok(await sb.from("fotos").insert(linhas)) : null,
     excluirFoto: async foto => { ok(await sb.from("fotos").delete().eq("id", foto.id)); await sb.storage.from("fotos").remove([foto.caminho]); },
@@ -297,6 +340,21 @@ function comBancoDoPC(a) {
   // perfil fora do banco do PC nunca vira "acesso aguardando liberação": cai para o perfil guardado no aparelho
   const perfilDoPC = async uid => { const p = await L.meuPerfil(uid); if (!p) throw semConexao("perfil fora do banco do PC"); return p; };
   const ordemDoPC = async id => ((await replicaPronta()) ? L.ordem(id) : null);
+  // etapa 3: gravações da O.S. sem internet vão para o banco do PC + fila de envio (js/alteracoes.js).
+  // Com internet, grava direto no servidor; se a rede cair no meio, entra na fila (o envio confere o que já foi gravado).
+  const escreve = (servidor, offline, copiar) => async (...args) => {
+    if (!semRede) {
+      let r;
+      try { r = await servidor(...args); }
+      catch (e) { if (!erroDeRede(e) || !(await replicaPronta())) throw e; definirSemRede(true); return escreve(servidor, offline, copiar)(...args); }
+      // gravou no online: copia já para o banco do PC (se a internet cair logo depois, a base das alterações está certa)
+      if (copiar) try { if (await replicaPronta()) await copiar(r, ...args); } catch (e) { /* a réplica corrige em seguida */ }
+      return r;
+    }
+    if (!(await replicaPronta())) throw new Error("Sem conexão com a internet: o banco do PC ainda não foi carregado. A alteração só pode ser feita com internet.");
+    return offline(...args);
+  };
+  const soOnline = (servidor, msg) => async (...args) => { if (semRede) throw new Error(msg); return servidor(...args); };
   const t = nome => ({ ...a[nome], listar: ler(a[nome].listar, L.listar(nome)) });
   const ordemOriginal = a.ordem;
   return {
@@ -320,6 +378,12 @@ function comBancoDoPC(a) {
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },
+    atualizarOrdem: escreve(a.atualizarOrdem, alterarOrdemOffline, async r => { if (Array.isArray(r) && r.length) await gravarLocal("ordens", r); }),
+    salvarItens: escreve(a.salvarItens, salvarItensOffline, async (r, ordemId, itens, removidos) => { if (removidos && removidos.length) await removerLocal("os_itens", removidos); if (Array.isArray(r) && r.length) await gravarLocal("os_itens", r); }),
+    evento: escreve(a.evento, eventoOffline),
+    enviarArquivo: soOnline(a.enviarArquivo, "Sem internet: fotos e assinaturas só podem ser enviadas com internet."),
+    // envio da fila: depois que o histórico entrou no online, tira a cópia provisória do banco do PC (a réplica traz a definitiva)
+    sincronizarAlteracao: async op => { const r = await a.sincronizarAlteracao(op); if (op.tipo === "evento_os" && op.local_id) await removerLocal("eventos", [op.local_id]); return r; },
     // backup sem internet: leitura ESTRITA do banco do PC (erro propaga; nunca vira tabela vazia). backup.tabela continua só do
     // servidor: a réplica (js/replica.js) usa ela e não pode misturar dados do PC numa carga completa.
     backup: { ...a.backup, doPC: async t => { if (!(await replicaPronta())) throw new Error("o banco do PC ainda não tem a primeira carga completa");

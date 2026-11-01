@@ -37,6 +37,22 @@ export async function tabelaLocal(t) {
   return cache.get(t);
 }
 const limpar = t => (t ? cache.delete(t) : cache.clear());
+
+// ---------- gravações locais (etapa 3: alterações feitas sem internet, que vão para a fila de envio) ----------
+export async function gravarLocal(t, linhas) { if (!B || !linhas.length) return; await B.mesclar(t, JSON.stringify(linhas)); limpar(t); }
+export async function removerLocal(t, ids) { if (!B || !ids.length) return; await B.remover(t, ids.map(String)); limpar(t); }
+export async function umLocal(t, id) { if (!B) return null; const s = await B.um(t, id); return s ? JSON.parse(s) : null; }
+/** troca a cópia de uma O.S. no banco do PC pela do servidor (ao descartar alterações feitas sem internet) */
+export async function trocarOrdemLocal(o) {
+  const { itens = [], fotos = [], eventos = [], _local, ...ordem } = o;
+  await gravarLocal("ordens", [ordem]);
+  for (const [t, linhas] of [["os_itens", itens], ["fotos", fotos], ["eventos", eventos]]) {
+    const manter = new Set(linhas.map(l => String(l.id)));
+    await removerLocal(t, (await porOrdemLocal(t, o.id)).map(l => String(l.id)).filter(id => !manter.has(id)));
+    await gravarLocal(t, linhas);
+  }
+}
+export async function porOrdemLocal(t, ordemId) { if (!B) return []; return JSON.parse((await B.porOrdem(t, ordemId)) || "[]"); }
 const maior = (linhas, campo) => linhas.reduce((m, l) => (l[campo] && (!m || l[campo] > m) ? l[campo] : m), null);
 
 /** Atualiza o banco do PC a partir do online. completo: recarrega tudo. espelho: data da última carga do sistema antigo (zera se mudou). */

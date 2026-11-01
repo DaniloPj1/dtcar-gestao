@@ -10,7 +10,7 @@
 //   - O.S. com número provisório (PROV-NN) continua com a tela própria até ser numerada.
 // Enquanto uma O.S. tem alteração na fila, TUDO dela passa pela fila (mesmo com internet), para nada ser gravado fora de ordem.
 import { fila } from "./fila.js";
-import { gravarLocal, removerLocal, umLocal, porOrdemLocal, leitorLocal } from "./replica.js";
+import { gravarLocal, removerLocal, umLocal, porOrdemLocal, leitorLocal, metaLocal } from "./replica.js";
 import { uuid } from "./util.js";
 
 const FECHADAS = ["entregue", "cancelado"];
@@ -32,8 +32,22 @@ const SEM_DATA = ["atualizado_em", "criado_em"];
 export const conteudoItem = i => Object.fromEntries(Object.entries(i || {}).filter(([k]) => !SEM_DATA.includes(k) && !k.startsWith("_")));
 export const mesmoConteudo = (base, atual) => Object.keys(base).every(k => iguais(base[k], atual[k]));
 
-/** geração da carga do sistema antigo (espelho) em que a alteração foi feita: outra carga recria as O.S. com os mesmos ids */
-async function geracaoEspelho() { try { const c = await leitorLocal.config(); return (c && c.ultimoEspelho && c.ultimoEspelho.em) || null; } catch (e) { return null; } }
+// trava única para o banco do PC: gravações daqui, troca de uma O.S. pela versão do online, réplica + reaplicação da fila e a
+// leitura da O.S. com pendência acontecem uma de cada vez (nunca a tela lê ou grava no meio de uma troca)
+let trava = Promise.resolve();
+export function comTrava(fn) { const r = trava.then(fn, fn); trava = r.catch(() => {}); return r; }
+
+/** o servidor tem a função de envio (supabase/v15.sql)? Sem ela, sem internet o programa só consulta */
+export async function podeAlterarSemInternet() { try { return (await metaLocal("v15")) === "true"; } catch (e) { return false; } }
+
+// geração da carga do sistema antigo (espelho) em que a alteração foi feita: outra carga recria as O.S. com os mesmos ids.
+// Vale a dos ajustes que a tela está usando (vêm do online quando há internet); sem eles, a do banco do PC.
+let geracaoTela;
+export const definirGeracaoEspelho = g => { geracaoTela = g || null; };
+async function geracaoEspelho() {
+  if (geracaoTela !== undefined) return geracaoTela;
+  try { const c = await leitorLocal.config(); return (c && c.ultimoEspelho && c.ultimoEspelho.em) || null; } catch (e) { return null; }
+}
 
 async function ordemAberta(id) {
   const o = await umLocal("ordens", id);
@@ -43,7 +57,8 @@ async function ordemAberta(id) {
 }
 
 /** campos e etapa da O.S. (api.atualizarOrdem). sempre: enfileira mesmo sem diferença para o banco do PC (falha no meio do envio online) */
-export async function alterarOrdemOffline(id, patch, { sempre = false } = {}) {
+export const alterarOrdemOffline = (id, patch, opt) => comTrava(() => alterarOrdem(id, patch, opt));
+async function alterarOrdem(id, patch, { sempre = false } = {}) {
   if (patch.status === "entregue" || CAMPOS_ENTREGA.some(k => k in patch))
     throw new Error("Sem internet: entregar, retirar, receber e fechar a O.S. precisam de internet (recibo e pagamento ficam no servidor).");
   const o = await ordemAberta(id);
@@ -54,7 +69,8 @@ export async function alterarOrdemOffline(id, patch, { sempre = false } = {}) {
 }
 
 /** peças e serviços (api.salvarItens): só o que mudou de verdade vai para a fila (sempre: todos os enviados) */
-export async function salvarItensOffline(ordemId, itens, removidos = [], { sempre = false } = {}) {
+export const salvarItensOffline = (ordemId, itens, removidos, opt) => comTrava(() => salvarItens(ordemId, itens, removidos || [], opt));
+async function salvarItens(ordemId, itens, removidos = [], { sempre = false } = {}) {
   const o = await ordemAberta(ordemId);
   const atuais = new Map((await porOrdemLocal("os_itens", ordemId)).map(i => [String(i.id), i]));
   const linhas = itens.map((i, n) => {
@@ -73,7 +89,8 @@ export async function salvarItensOffline(ordemId, itens, removidos = [], { sempr
 }
 
 /** histórico da O.S. (api.evento). criado_em vem de quem chamou: é a identidade do evento (reenvio não duplica) */
-export async function eventoOffline(ordem_id, tipo, texto, usuario_nome, criado_em = agora()) {
+export const eventoOffline = (ordem_id, tipo, texto, usuario_nome, criado_em) => comTrava(() => evento(ordem_id, tipo, texto, usuario_nome, criado_em || agora()));
+async function evento(ordem_id, tipo, texto, usuario_nome, criado_em) {
   const o = await umLocal("ordens", ordem_id);
   const local_id = "local-" + uuid();
   await fila.adicionar({ id: uuid(), tipo: "evento_os", ordem_id, numero: o ? o.numero : "", criado_em, espelho: await geracaoEspelho(), local_id, evento: { ordem_id, tipo, texto, usuario_nome, criado_em } });
@@ -81,7 +98,10 @@ export async function eventoOffline(ordem_id, tipo, texto, usuario_nome, criado_
 }
 
 /** a réplica trouxe a versão do online: aplica de novo no banco do PC o que ainda está na fila (a tela continua mostrando o trabalho pendente) */
-export async function reaplicarPendentes() {
+export const reaplicarPendentes = () => comTrava(reaplicar);
+/** réplica do online + reaplicação da fila, sem ninguém ler ou gravar a O.S. no meio */
+export const replicarComFila = fn => comTrava(async () => { try { return await fn(); } finally { await reaplicar(); } });
+async function reaplicar() {
   const l = (await fila.listar()).filter(ehAlteracao).sort((a, b) => (a.criado_em < b.criado_em ? -1 : a.criado_em > b.criado_em ? 1 : a.seq - b.seq));
   for (const op of l) {
     try {

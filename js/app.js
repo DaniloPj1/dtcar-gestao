@@ -4,7 +4,7 @@ import { replicar, replicaDisponivel } from "./replica.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
 import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
-import { ehAlteracao, reaplicarPendentes } from "./alteracoes.js";
+import { ehAlteracao, replicarComFila, definirGeracaoEspelho } from "./alteracoes.js";
 import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada, gravarBackupNaPasta, backupDaPasta } from "./pasta.js";
 import { AssistentePasta } from "./telas/dadoslocais.js";
 import { OSPendente } from "./telas/pendente.js";
@@ -213,6 +213,8 @@ function App() {
     }, 1500);
     return () => { vivo = false; clearTimeout(t); };
   }, [dados.ordens, offline]);
+  // geração da carga do sistema antigo que a tela está usando (marca as alterações feitas sem internet)
+  useEffect(() => { if (dados.carregado) definirGeracaoEspelho(cfg.ultimoEspelho && cfg.ultimoEspelho.em); }, [dados.carregado, cfg.ultimoEspelho && cfg.ultimoEspelho.em]);
   // banco do PC (programa para Windows): mantém a réplica de todas as tabelas igual ao online (3 s após carregar, depois a cada 5 min)
   useEffect(() => {
     if (!replicaDisponivel() || !dados.carregado || !doServidor.current || offline) return;
@@ -221,8 +223,7 @@ function App() {
       // alterações feitas sem internet ainda na fila: envia primeiro; o que sobrar (conflito) é aplicado de novo no banco do PC
       // depois da réplica, que traz a versão do online (a tela continua mostrando o trabalho pendente)
       if ((await fila.listar()).some(ehAlteracao)) await enviarFila();
-      await replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg });
-      await reaplicarPendentes();
+      await replicarComFila(() => replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg }));
     };
     const t = setTimeout(rodar, 3000), i = setInterval(rodar, 5 * 60000);
     return () => { clearTimeout(t); clearInterval(i); };

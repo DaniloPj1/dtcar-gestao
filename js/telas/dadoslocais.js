@@ -5,7 +5,7 @@ import { fmtDataHora, lsSet } from "../util.js";
 import { local } from "../local.js";
 import { replicaDisponivel, infoReplica, ouvirReplica, replicar, trocarOrdemLocal } from "../replica.js";
 import { fila } from "../fila.js";
-import { ehAlteracao, descreverAlteracao } from "../alteracoes.js";
+import { ehAlteracao, descreverAlteracao, comTrava, replicarComFila } from "../alteracoes.js";
 import { api, estaSemRede } from "../api.js";
 import { pastaSuportada, escolherPasta, reconectarPasta, esquecerPasta, gravarDadosNaPasta, backupDaPasta } from "../pasta.js";
 
@@ -47,14 +47,13 @@ export function DadosLocais() {
     const daOS = alteracoes.filter(x => x.ordem_id === op.ordem_id);
     if (!await confirmar({ titulo: "Descartar alterações", texto: "As " + daOS.length + " alteração(ões) feitas sem internet nesta O.S. serão descartadas e a O.S. volta a ficar igual ao online.", botao: "Descartar", perigo: true })) return;
     try {
-      const o = await api.ordem(op.ordem_id).catch(e => { if (/não está guardada|Sem conexão/i.test(e.message)) throw new Error("é preciso internet para trazer a O.S. do online"); throw e; });
-      if (o && !o._local) await trocarOrdemLocal(o);
-      else if (o) throw new Error("é preciso internet para trazer a O.S. do online");
-      for (const x of daOS) await fila.remover(x.id);
+      const o = await api.ordemDoServidor(op.ordem_id);
+      // tira da fila e troca a cópia do PC pela do online de uma vez (nada lê ou grava a O.S. no meio)
+      await comTrava(async () => { for (const x of daOS) await fila.remover(x.id); await trocarOrdemLocal(o); });
       await atualizarPendentes(); recarregar(["ordens"]); avisar("Alterações descartadas.");
     } catch (e) {
       // a O.S. não existe mais no online (ex.: carga do sistema antigo): só tira da fila
-      if (/não existe|JSON object requested|0 rows/i.test(e.message)) { for (const x of daOS) await fila.remover(x.id); await atualizarPendentes(); return avisar("Alterações descartadas (a O.S. não existe mais no online)."); }
+      if (/não existe|JSON object requested|0 rows|multiple \(or no\) rows/i.test(e.message)) { for (const x of daOS) await fila.remover(x.id); await atualizarPendentes(); return avisar("Alterações descartadas (a O.S. não existe mais no online)."); }
       avisar("Não foi possível descartar: " + e.message, true);
     }
   };
@@ -98,8 +97,7 @@ export function DadosLocais() {
           ${Object.entries(NOMES).filter(([t]) => rep.tabelas && rep.tabelas[t] != null).map(([t, n]) => html`<div key=${t}><span>${n}</span><b>${rep.tabelas[t].toLocaleString("pt-BR")}</b></div>`)}</div>
         ${rep.erro ? html`<div class="erros">${rep.erro}</div>` : null}
         ${rep.v13 === false ? html`<div class="aviso">Para o banco do PC buscar só o que mudou (mais rápido), rode o <b>supabase/v13.sql</b> no Supabase. Até lá, as tabelas sem data de alteração são recarregadas inteiras a cada 30 minutos.</div>` : null}` : html`<span class="sub">Lendo…</span>`}
-      <div class="acoes">${alteracoes.length ? html`<p class="sub">Há alterações feitas sem internet na fila: envie ou resolva antes de recarregar tudo (a carga traria a versão do online por cima delas).</p>` : null}
-        <button type="button" class="btn" disabled=${(rep && rep.rodando) || estaSemRede() || alteracoes.length > 0} onClick=${() => replicar(api, { completo: true, espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg })}>Recarregar tudo agora</button></div>
+      <div class="acoes"><button type="button" class="btn" disabled=${(rep && rep.rodando) || estaSemRede()} onClick=${() => replicarComFila(() => replicar(api, { completo: true, espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg }))}>Recarregar tudo agora</button></div>
     </section>` : null}
     <section class="card"><h2>Cópia interna do navegador</h2>
       ${copia === null ? html`<span class="sub">Lendo…</span>` : !copia ? html`<div class="aviso">Ainda não há cópia neste computador. Abra o sistema com internet e aguarde alguns segundos.</div>`
@@ -113,7 +111,8 @@ export function DadosLocais() {
       <p class="sub">Vão para o online na ordem em que foram feitas. Se alguém mudou a mesma O.S. no online nesse meio tempo, é conflito: escolha enviar por cima ou descartar o que foi feito aqui.</p>
       ${alteracoes.length ? html`<ul class="res-lista">${alteracoes.map(op => html`<li key=${op.id}>${descreverAlteracao(op)} · ${fmtDataHora(op.criado_em)}
           ${op.conflito || op.erro ? html` · <span class="c-bad">${op.erro}</span>
-            <span class="acoes-inline">${op.conflito ? html`<button type="button" class="btn btn-sm" onClick=${() => forcar(op)}>Enviar por cima</button>` : null}<button type="button" class="btn btn-sm" onClick=${() => descartar(op)}>Descartar desta O.S.</button></span>`
+            <span class="acoes-inline">${op.conflito ? html`<button type="button" class="btn btn-sm" onClick=${() => forcar(op)}>Enviar por cima</button>`
+              : html`<button type="button" class="btn btn-sm" onClick=${async () => { await fila.tentarDeNovo(op.id); await atualizarPendentes(); enviarFila(); }}>Tentar de novo</button>`}<button type="button" class="btn btn-sm" onClick=${() => descartar(op)}>Descartar desta O.S.</button></span>`
           : travadaPor[op.ordem_id] && travadaPor[op.ordem_id] !== op.id ? html` · <span class="sub">aguardando a alteração anterior desta O.S.</span>` : html` · <span class="sub">aguardando envio</span>`}</li>`)}</ul>`
         : html`<span class="sub">Nenhuma alteração aguardando envio.</span>`}
     </section>

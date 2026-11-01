@@ -9,17 +9,24 @@ const CHAVE = "fila";
 let ocupado = false;
 // a fila mudou: a tela atualiza a faixa "aguardando envio" e os avisos da O.S.
 const mudou = () => { try { window.dispatchEvent(new Event("dtcar-fila")); } catch (e) {} };
+// toda mudança da fila (ler a lista, alterar, gravar) acontece uma de cada vez: incluir uma alteração enquanto o envio
+// tira a anterior não pode fazer uma das duas sumir
+let cadeia = Promise.resolve();
+const serial = fn => { const r = cadeia.then(fn, fn); cadeia = r.catch(() => {}); return r; };
+const mudar = f => serial(async () => { const l = f((await local.ler(CHAVE)) || []); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; });
 
 export const fila = {
   listar: async () => (await local.ler(CHAVE)) || [],
   /** número provisório sequencial deste aparelho (não se repete) */
   proximoProvisorio: () => { const n = (Number(lsGet("dtcar-prov-seq")) || 0) + 1; lsSet("dtcar-prov-seq", n); return "PROV-" + String(n).padStart(2, "0"); },
-  adicionar: async op => { const l = await fila.listar(); l.push({ ...op, seq: l.length ? Math.max(...l.map(x => x.seq || 0)) + 1 : 1, tentativas: 0, erro: "" }); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; },
+  adicionar: op => mudar(l => l.concat([{ ...op, seq: l.length ? Math.max(...l.map(x => x.seq || 0)) + 1 : 1, tentativas: 0, erro: "" }])),
   /** resolução de conflito: envia esta alteração por cima do que mudou no online */
-  forcar: async id => { const l = (await fila.listar()).map(x => x.id === id ? { ...x, forcar: true, conflito: false, erro: "", tentativas: 0 } : x); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; },
-  remover: async id => { const l = (await fila.listar()).filter(x => x.id !== id); await local.gravar(CHAVE, l); gravarFilaNaPasta(l); mudou(); return l; },
+  forcar: id => mudar(l => l.map(x => x.id === id ? { ...x, forcar: true, conflito: false, erro: "", tentativas: 0 } : x)),
+  /** erro que não é conflito (ex.: falha passageira do servidor): tenta de novo do zero */
+  tentarDeNovo: id => mudar(l => l.map(x => x.id === id ? { ...x, erro: "", tentativas: 0 } : x)),
+  remover: id => mudar(l => l.filter(x => x.id !== id)),
   /** recupera a fila gravada na pasta do PC quando o navegador perdeu a dele (reenviar não duplica) */
-  restaurar: async l => { if (l && l.length && !(await fila.listar()).length) { await local.gravar(CHAVE, l); return true; } return false; },
+  restaurar: l => serial(async () => { if (l && l.length && !(await fila.listar()).length) { await local.gravar(CHAVE, l); return true; } return false; }),
   /**
    * Envia a fila em ordem (horário de abertura, depois sequência do aparelho). Para no primeiro erro de rede.
    * Erros de dados ficam marcados na operação para revisão e não travam as seguintes.
@@ -51,9 +58,7 @@ export const fila = {
         } catch (e) {
           if (erroDeRede(e)) break;
           if (os) travadas.add(os);
-          const atual = await fila.listar();
-          const i = atual.findIndex(x => x.id === op.id);
-          if (i >= 0) { atual[i] = { ...atual[i], erro: e.message, conflito: !!e.conflito, forcar: false, tentativas: (atual[i].tentativas || 0) + 1 }; await local.gravar(CHAVE, atual); gravarFilaNaPasta(atual); mudou(); }
+          await mudar(l => l.map(x => x.id === op.id ? { ...x, erro: e.message, conflito: !!e.conflito, forcar: false, tentativas: (x.tentativas || 0) + 1 } : x));
         }
       }
       const restantes = await fila.listar();

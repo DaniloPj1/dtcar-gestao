@@ -37,6 +37,41 @@ const filtrar = (l, sp) => { for (const [k, v] of sp) { if (["select", "order", 
   else if (v.startsWith("in.(")) { const s = new Set(v.slice(4, -1).split(",").map(x => x.replace(/^"|"$/g, ""))); l = l.filter(x => s.has(String(x[k]))); } }
   return l; };
 let seqEvento = 100;
+// a função do supabase/v15.sql, imitada aqui (a de verdade é testada no Postgres pelo teste/teste_v15.sh)
+const canon = v => v == null ? null : typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) && !isNaN(Date.parse(v)) ? new Date(v).toISOString()
+  : Array.isArray(v) ? v.map(canon) : typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => [k, canon(v[k])])) : v;
+const igualJ = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+const SEM = k => k === "atualizado_em" || k === "criado_em";
+function rpcSinc(op, forcar) {
+  if (op.tipo === "ping") return { ok: "pong" };
+  const o = D.ordens.find(x => x.id === op.ordem_id); if (!o) return { conflito: "a O.S. não existe mais no online" };
+  if (!forcar && "espelho" in op && ((cfgSrv.ultimoEspelho && cfgSrv.ultimoEspelho.em) || "") !== (op.espelho || "")) return { conflito: "houve uma carga nova do sistema antigo depois desta alteração" };
+  const agoraJa = new Date().toISOString(), fechou = b => ["entregue", "cancelado"].includes(o.status) && o.status !== b ? { conflito: "a O.S. foi " + (o.status === "entregue" ? "entregue" : "cancelada") + " no online" } : null;
+  if (op.tipo === "alterar_os") {
+    const ks = Object.keys(op.patch);
+    if (ks.every(k => igualJ(o[k], op.patch[k]))) return { ok: true, reenvio: true };
+    if (!forcar) { const f = fechou(op.status_base); if (f) return f; const mud = ks.filter(k => !igualJ(o[k], op.antes[k]) && !igualJ(o[k], op.patch[k])); if (mud.length) return { conflito: "no online alteraram " + mud.join(", ") }; }
+    Object.assign(o, op.patch, { atualizado_em: agoraJa }); escritas.push(["RPC", "ordens", op.patch]); return { ok: true };
+  }
+  if (op.tipo === "itens_os") {
+    if (!forcar) { const f = fechou(op.antes.status); if (f) return f;
+      for (const it of op.itens) { const base = op.antes.itens[it.id], cur = D.os_itens.find(x => x.id === it.id);
+        if (!cur) { if (base && typeof base === "object") return { conflito: "o item “" + it.descricao + "” foi removido no online" }; continue; }
+        if (Object.keys(it).every(k => SEM(k) || igualJ(cur[k], it[k]))) continue;
+        if (!base || typeof base !== "object") return { conflito: "o item “" + cur.descricao + "” já existe no online com outro conteúdo" };
+        if (!Object.keys(base).every(k => SEM(k) || igualJ(cur[k], base[k]))) return { conflito: "o item “" + cur.descricao + "” foi alterado no online" }; }
+      for (const id of op.removidos) { const base = op.antes.itens[id], cur = D.os_itens.find(x => x.id === id); if (!cur || !base || typeof base !== "object") continue;
+        if (!Object.keys(base).every(k => SEM(k) || igualJ(cur[k], base[k]))) return { conflito: "o item “" + cur.descricao + "” foi alterado no online" }; } }
+    D.os_itens = D.os_itens.filter(x => !(op.removidos.includes(x.id) && x.ordem_id === o.id));
+    for (const it0 of op.itens) { const { atualizado_em, criado_em, ...it } = it0, cur = D.os_itens.find(x => x.id === it.id);
+      if (cur) Object.assign(cur, it, { ordem_id: o.id, atualizado_em: agoraJa }); else D.os_itens.push({ ...it, ordem_id: o.id, criado_em: agoraJa, atualizado_em: agoraJa }); }
+    escritas.push(["RPC", "os_itens", op.itens.length]); return { ok: true };
+  }
+  if (op.tipo === "evento_os") { const ev = op.evento;
+    if (!D.eventos.some(e => e.ordem_id === o.id && e.tipo === ev.tipo && Date.parse(e.criado_em) === Date.parse(ev.criado_em))) D.eventos.push({ ...ev, id: ++seqEvento, atualizado_em: agoraJa });
+    return { ok: true }; }
+  return { conflito: "tipo desconhecido" };
+}
 const srv = http.createServer((req, res) => {
   if (modo === "fora") { req.socket.destroy(); return; }
   res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "*"); res.setHeader("Access-Control-Allow-Methods", "*");
@@ -48,6 +83,7 @@ const srv = http.createServer((req, res) => {
   if (u.pathname.includes("/auth/v1/health")) body = { ok: true };
   else if (t === "config") body = obj ? { id: 1, dados: cfgSrv } : [{ id: 1, dados: cfgSrv, atualizado_em: agora }];
   else if (t === "exclusoes") body = [];
+  else if (t === "rpc" && /\/rpc\/sincronizar_alteracao_os/.test(u.pathname)) { const b = JSON.parse(txt || "{}"); body = rpcSinc(b.p_op || {}, !!b.p_forcar); }
   else if (t === "rpc") body = {};
   else if (t && D[t] && req.method === "PATCH") { const alvo = filtrar(D[t], u.searchParams); const p = JSON.parse(txt || "{}"); for (const r of alvo) Object.assign(r, p, { atualizado_em: agoraJa }); escritas.push([req.method, t, p]); body = obj ? alvo[0] || null : alvo; }
   else if (t && D[t] && req.method === "DELETE") { const alvo = new Set(filtrar(D[t], u.searchParams)); D[t] = D[t].filter(r => !alvo.has(r)); escritas.push([req.method, t, [...alvo].map(r => r.id)]); body = []; }
@@ -187,7 +223,20 @@ app.on("browser-window-created", async (e, w) => {
     const local1 = await js(`window.dtcarDesktop.banco.um("ordens", "o1").then(t => JSON.parse(t).reclamacao)`);
     chk("O.S. entregue no online: conflito (" + ft.slice(0, 80) + ")", /foi entregue no online/.test(ft) && o1.reclamacao !== "feito sem internet");
     chk("réplica com conflito pendente: o banco do PC continua com o trabalho pendente (" + local1 + ")", local1 === "feito sem internet");
+    // descartar com internet: a O.S. do online vem mesmo com pendência (a tela de resolução não fica presa na versão do PC)
+    const dupla = await offlineJs(`const a = await api.ordem("o1"), b = await api.ordemDoServidor("o1"); return a.reclamacao + "|" + b.reclamacao;`);
+    chk("com conflito: api.ordem mostra a versão do PC e ordemDoServidor a do online (" + dupla + ")", dupla === "feito sem internet|" + o1.reclamacao);
     o1.status = "pronto"; await limparFila();
+    // fila: incluir e tirar ao mesmo tempo não perde nenhuma
+    const fl = await js(`(async () => { const { fila } = await import("./js/fila.js"); await fila.adicionar({ id: "x0", tipo: "evento_os", ordem_id: "zz", criado_em: "2020-01-01" });
+      await Promise.all([fila.adicionar({ id: "x1", tipo: "evento_os", ordem_id: "zz", criado_em: "2020-01-02" }), fila.remover("x0"), fila.adicionar({ id: "x2", tipo: "evento_os", ordem_id: "zz", criado_em: "2020-01-03" })]);
+      const ids = (await fila.listar()).map(x => x.id).join(","); for (const id of ["x1", "x2"]) await fila.remover(id); return ids; })()`);
+    chk("fila: incluir e tirar ao mesmo tempo não perde nenhuma (" + fl + ")", fl === "x1,x2");
+    // sem o supabase/v15.sql no servidor: sem internet continua só consulta, com aviso
+    await js(`window.dtcarDesktop.banco.meta("v15", "false")`); await offline();
+    const semV15 = await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "sem v15" }); return "gravou";`);
+    chk("sem v15.sql: alteração sem internet recusada com aviso", /v15\.sql/.test(semV15));
+    await js(`window.dtcarDesktop.banco.meta("v15", "true")`); await online(4000); await limparFila();
     modo = "fora"; w.webContents.reload(); await carregou(); await espera(5000);
     // programa recém-atualizado que nunca abriu com internet: banco do PC vazio → usa a cópia do navegador (não "aguardando liberação")
     await js("window.dtcarDesktop.banco.zerar()");

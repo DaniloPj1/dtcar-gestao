@@ -4,7 +4,7 @@ import { replicar, replicaDisponivel } from "./replica.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
 import { fmtDataHora, lsGet } from "./util.js";
 import { fila } from "./fila.js";
-import { ehAlteracao } from "./alteracoes.js";
+import { ehAlteracao, reaplicarPendentes } from "./alteracoes.js";
 import { iniciarPasta, gravarDadosNaPasta, lerDaPasta, ouvirPasta, pastaSuportada, gravarBackupNaPasta, backupDaPasta } from "./pasta.js";
 import { AssistentePasta } from "./telas/dadoslocais.js";
 import { OSPendente } from "./telas/pendente.js";
@@ -218,10 +218,11 @@ function App() {
     if (!replicaDisponivel() || !dados.carregado || !doServidor.current || offline) return;
     const rodar = async () => {
       if (estaSemRede()) return;
-      // alterações feitas sem internet ainda na fila (sem conflito): envia primeiro; a réplica só roda com a fila resolvida
-      const esperando = (await fila.listar()).filter(op => ehAlteracao(op) && !op.conflito && !(op.erro && op.tentativas >= 3));
-      if (esperando.length) { await enviarFila(); if ((await fila.listar()).some(op => ehAlteracao(op) && !op.conflito && !(op.erro && op.tentativas >= 3))) return; }
-      replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg });
+      // alterações feitas sem internet ainda na fila: envia primeiro; o que sobrar (conflito) é aplicado de novo no banco do PC
+      // depois da réplica, que traz a versão do online (a tela continua mostrando o trabalho pendente)
+      if ((await fila.listar()).some(ehAlteracao)) await enviarFila();
+      await replicar(api, { espelho: cfg.espelhoLegado !== false && cfg.ultimoEspelho ? cfg.ultimoEspelho.em : null, config: cfg });
+      await reaplicarPendentes();
     };
     const t = setTimeout(rodar, 3000), i = setInterval(rodar, 5 * 60000);
     return () => { clearTimeout(t); clearInterval(i); };
@@ -263,6 +264,8 @@ function App() {
     else if (errAlt.length) setToast({ msg: errAlt.length + " alteração(ões) feita(s) sem internet não puderam ser enviadas (conflito com o online). Resolva em Sistema › Dados no computador.", erro: true });
   }, []);
   useEffect(() => { if (!membro) return; enviarFila(); const t = setInterval(() => { if (navigator.onLine) enviarFila(); }, 60000); return () => clearInterval(t); }, [membro]);
+  // gravação com internet que entrou na fila (a O.S. tinha alteração pendente): envia na hora
+  useEffect(() => { const f = () => enviarFila(); window.addEventListener("dtcar-enviar-fila", f); return () => window.removeEventListener("dtcar-enviar-fila", f); }, []);
   // internet voltou: confere o servidor e recarrega tudo (enquanto estiver sem rede, confere a cada 30 s)
   const reconectar = useCallback(async (avisarSeFalhar) => {
     const ok = api.testarConexao ? await api.testarConexao() : navigator.onLine;

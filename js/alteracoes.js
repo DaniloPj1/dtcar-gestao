@@ -5,22 +5,35 @@
 //
 // Regras do que pode ser feito sem internet (o resto continua precisando do servidor, com aviso claro):
 //   - O.S. em aberto (orçamento, aprovado/execução, aguardando pagamento): editar dados, peças e serviços, mudar a etapa, cancelar.
-//   - Não: entregar/receber/fechar (recibo e pagamento ficam no servidor), mexer em O.S. fechada ou cancelada, fotos e assinaturas.
+//   - Não: entregar/retirar/receber/fechar (recibo e pagamento ficam no servidor), mexer em O.S. fechada ou cancelada,
+//     fotos e assinaturas.
 //   - O.S. com número provisório (PROV-NN) continua com a tela própria até ser numerada.
+// Enquanto uma O.S. tem alteração na fila, TUDO dela passa pela fila (mesmo com internet), para nada ser gravado fora de ordem.
 import { fila } from "./fila.js";
-import { gravarLocal, removerLocal, umLocal, porOrdemLocal } from "./replica.js";
+import { gravarLocal, removerLocal, umLocal, porOrdemLocal, leitorLocal } from "./replica.js";
 import { uuid } from "./util.js";
 
 const FECHADAS = ["entregue", "cancelado"];
+// campos da entrega/retirada (inclusive de O.S. recusada, que continua "recusado"): só com internet
+const CAMPOS_ENTREGA = ["entregue_em", "km_saida", "assinatura_entrega", "garantia_dias", "forma_pagamento"];
 const agora = () => new Date().toISOString();
-// mesma comparação do envio (js/api.js), pelo conteúdo: o banco devolve objetos (jsonb) com as chaves em outra ordem e
-// datas com hora noutro formato ("…Z" × "…+00:00"); sem isso, uma alteração reenviada ou em sequência viraria conflito falso
+
+// comparação pelo conteúdo: o banco devolve objetos (jsonb) com as chaves em outra ordem e datas com hora noutro formato
+// ("…Z" × "…+00:00"); sem isso, uma alteração reenviada ou em sequência viraria conflito falso
 const canon = v => v == null ? null
   : typeof v === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(v) && !isNaN(Date.parse(v)) ? new Date(v).toISOString()
   : Array.isArray(v) ? v.map(canon)
   : typeof v === "object" ? Object.fromEntries(Object.keys(v).sort().filter(k => v[k] !== undefined).map(k => [k, canon(v[k])]))
   : v;
 export const iguais = (a, b) => JSON.stringify(canon(a)) === JSON.stringify(canon(b));
+// conteúdo de um item sem as datas do servidor (a base da conferência de conflito é o conteúdo, não a data:
+// várias alterações seguidas do mesmo item feitas aqui não entram em conflito entre si)
+const SEM_DATA = ["atualizado_em", "criado_em"];
+export const conteudoItem = i => Object.fromEntries(Object.entries(i || {}).filter(([k]) => !SEM_DATA.includes(k) && !k.startsWith("_")));
+export const mesmoConteudo = (base, atual) => Object.keys(base).every(k => iguais(base[k], atual[k]));
+
+/** geração da carga do sistema antigo (espelho) em que a alteração foi feita: outra carga recria as O.S. com os mesmos ids */
+async function geracaoEspelho() { try { const c = await leitorLocal.config(); return (c && c.ultimoEspelho && c.ultimoEspelho.em) || null; } catch (e) { return null; } }
 
 async function ordemAberta(id) {
   const o = await umLocal("ordens", id);
@@ -29,18 +42,19 @@ async function ordemAberta(id) {
   return o;
 }
 
-/** campos e etapa da O.S. (api.atualizarOrdem) */
-export async function alterarOrdemOffline(id, patch) {
-  if (patch.status === "entregue") throw new Error("Sem internet: entregar, receber e fechar a O.S. precisam de internet (recibo e pagamento ficam no servidor).");
+/** campos e etapa da O.S. (api.atualizarOrdem). sempre: enfileira mesmo sem diferença para o banco do PC (falha no meio do envio online) */
+export async function alterarOrdemOffline(id, patch, { sempre = false } = {}) {
+  if (patch.status === "entregue" || CAMPOS_ENTREGA.some(k => k in patch))
+    throw new Error("Sem internet: entregar, retirar, receber e fechar a O.S. precisam de internet (recibo e pagamento ficam no servidor).");
   const o = await ordemAberta(id);
   const antes = Object.fromEntries(Object.keys(patch).map(k => [k, o[k] ?? null]));
-  if (Object.keys(patch).every(k => iguais(o[k], patch[k]))) return; // nada mudou
-  await fila.adicionar({ id: uuid(), tipo: "alterar_os", ordem_id: id, numero: o.numero, criado_em: agora(), patch, antes });
+  if (!sempre && Object.keys(patch).every(k => iguais(o[k], patch[k]))) return; // nada mudou
+  await fila.adicionar({ id: uuid(), tipo: "alterar_os", ordem_id: id, numero: o.numero, criado_em: agora(), espelho: await geracaoEspelho(), status_base: o.status, patch, antes });
   await gravarLocal("ordens", [{ ...o, ...patch }]);
 }
 
-/** peças e serviços (api.salvarItens): só o que mudou de verdade vai para a fila */
-export async function salvarItensOffline(ordemId, itens, removidos = []) {
+/** peças e serviços (api.salvarItens): só o que mudou de verdade vai para a fila (sempre: todos os enviados) */
+export async function salvarItensOffline(ordemId, itens, removidos = [], { sempre = false } = {}) {
   const o = await ordemAberta(ordemId);
   const atuais = new Map((await porOrdemLocal("os_itens", ordemId)).map(i => [String(i.id), i]));
   const linhas = itens.map((i, n) => {
@@ -48,23 +62,42 @@ export async function salvarItensOffline(ordemId, itens, removidos = []) {
     if (!l.id) l.id = uuid();
     return l;
   });
-  const mudaram = linhas.filter(l => { const a = atuais.get(String(l.id)); return !a || Object.keys(l).some(k => !iguais(a[k], l[k])); });
-  const rem = removidos.map(String).filter(id => atuais.has(id));
+  const mudaram = sempre ? linhas : linhas.filter(l => { const a = atuais.get(String(l.id)); return !a || Object.keys(conteudoItem(l)).some(k => !iguais(a[k], l[k])); });
+  const rem = (removidos || []).map(String).filter(id => sempre || atuais.has(id));
   if (!mudaram.length && !rem.length) return;
-  // como estava cada item (data da última alteração no servidor; "novo" = criado aqui): base para conferir conflito no envio
-  const base = Object.fromEntries([...mudaram.map(l => String(l.id)), ...rem].map(id => { const a = atuais.get(id); return [id, a ? a.atualizado_em || a.criado_em || null : "novo"]; }));
-  await fila.adicionar({ id: uuid(), tipo: "itens_os", ordem_id: ordemId, numero: o.numero, criado_em: agora(), itens: mudaram, removidos: rem, antes: { status: o.status, itens: base } });
+  // base de cada item: o conteúdo como estava aqui ("novo" = criado aqui; null = não estava no banco do PC)
+  const base = Object.fromEntries([...mudaram.map(l => String(l.id)), ...rem].map(id => { const a = atuais.get(id); return [id, a ? conteudoItem(a) : (rem.includes(id) ? null : "novo")]; }));
+  await fila.adicionar({ id: uuid(), tipo: "itens_os", ordem_id: ordemId, numero: o.numero, criado_em: agora(), espelho: await geracaoEspelho(), itens: mudaram, removidos: rem, antes: { status: o.status, itens: base } });
   await gravarLocal("os_itens", mudaram.map(l => ({ ...(atuais.get(String(l.id)) || {}), ...l })));
   await removerLocal("os_itens", rem);
 }
 
-/** histórico da O.S. (api.evento): fica com um número provisório no banco do PC até ser enviado */
-export async function eventoOffline(ordem_id, tipo, texto, usuario_nome) {
-  const o = await umLocal("ordens", ordem_id); if (!o) return; // histórico de O.S. que não está no PC: não trava a ação principal
-  const criado_em = agora(), local_id = "local-" + uuid();
-  await fila.adicionar({ id: uuid(), tipo: "evento_os", ordem_id, numero: o.numero, criado_em, local_id, evento: { ordem_id, tipo, texto, usuario_nome, criado_em } });
-  await gravarLocal("eventos", [{ id: local_id, ordem_id, tipo, texto, usuario_nome, criado_em }]);
+/** histórico da O.S. (api.evento). criado_em vem de quem chamou: é a identidade do evento (reenvio não duplica) */
+export async function eventoOffline(ordem_id, tipo, texto, usuario_nome, criado_em = agora()) {
+  const o = await umLocal("ordens", ordem_id);
+  const local_id = "local-" + uuid();
+  await fila.adicionar({ id: uuid(), tipo: "evento_os", ordem_id, numero: o ? o.numero : "", criado_em, espelho: await geracaoEspelho(), local_id, evento: { ordem_id, tipo, texto, usuario_nome, criado_em } });
+  if (o) await gravarLocal("eventos", [{ id: local_id, ordem_id, tipo, texto, usuario_nome, criado_em }]);
 }
+
+/** a réplica trouxe a versão do online: aplica de novo no banco do PC o que ainda está na fila (a tela continua mostrando o trabalho pendente) */
+export async function reaplicarPendentes() {
+  const l = (await fila.listar()).filter(ehAlteracao).sort((a, b) => (a.criado_em < b.criado_em ? -1 : a.criado_em > b.criado_em ? 1 : a.seq - b.seq));
+  for (const op of l) {
+    try {
+      if (op.tipo === "alterar_os") { const o = await umLocal("ordens", op.ordem_id); if (o) await gravarLocal("ordens", [{ ...o, ...op.patch }]); }
+      else if (op.tipo === "itens_os") {
+        const atuais = new Map((await porOrdemLocal("os_itens", op.ordem_id)).map(i => [String(i.id), i]));
+        await gravarLocal("os_itens", op.itens.map(i => ({ ...(atuais.get(String(i.id)) || {}), ...i }))); await removerLocal("os_itens", op.removidos);
+      } else if (op.tipo === "evento_os" && op.local_id) {
+        if (await umLocal("ordens", op.ordem_id)) await gravarLocal("eventos", [{ id: op.local_id, ...op.evento }]);
+      }
+    } catch (e) { /* a próxima réplica tenta de novo */ }
+  }
+}
+
+/** a O.S. tem alteração na fila (inclusive em conflito)? Então tudo dela passa pela fila, na ordem. */
+export async function temPendente(ordemId) { return (await fila.listar()).some(op => ehAlteracao(op) && op.ordem_id === ordemId); }
 
 /** descrição curta de uma alteração da fila (tela Dados no computador e faixa da O.S.) */
 export function descreverAlteracao(op) {

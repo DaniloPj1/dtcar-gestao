@@ -27,7 +27,7 @@ const D = {
   funcionarios: [{ id: "f1", nome: "Carlos Mecânico", ativo: true, criado_em: agora, atualizado_em: agora }],
   recibos: [{ id: "r1", numero: 10, ordem_id: "o2", valor: 100, data: hoje, forma: "PIX", pagador: "Cliente A", criado_em: agora, atualizado_em: agora }],
 };
-let modo = "ok";
+let modo = "ok", cfgSrv = {};
 const sessao = (() => { const b = o => Buffer.from(JSON.stringify(o)).toString("base64url"); const exp = Math.floor(Date.now() / 1000) + 3600;
   return { access_token: b({ alg: "HS256" }) + "." + b({ sub: "u1", exp, role: "authenticated" }) + ".x", token_type: "bearer", expires_in: 3600, expires_at: exp, refresh_token: "r",
     user: { id: "u1", email: "d@x", aud: "authenticated", role: "authenticated" } }; })();
@@ -46,7 +46,7 @@ const srv = http.createServer((req, res) => {
   let body = obj ? null : [];
   const t = m && m[1], agoraJa = new Date().toISOString();
   if (u.pathname.includes("/auth/v1/health")) body = { ok: true };
-  else if (t === "config") body = obj ? { dados: {} } : [{ id: 1, dados: {}, atualizado_em: agora }];
+  else if (t === "config") body = obj ? { id: 1, dados: cfgSrv } : [{ id: 1, dados: cfgSrv, atualizado_em: agora }];
   else if (t === "exclusoes") body = [];
   else if (t === "rpc") body = {};
   else if (t && D[t] && req.method === "PATCH") { const alvo = filtrar(D[t], u.searchParams); const p = JSON.parse(txt || "{}"); for (const r of alvo) Object.assign(r, p, { atualizado_em: agoraJa }); escritas.push([req.method, t, p]); body = obj ? alvo[0] || null : alvo; }
@@ -145,7 +145,49 @@ app.on("browser-window-created", async (e, w) => {
     modo = "ok"; await js(`window.dispatchEvent(new Event("online"))`); await espera(8000);
     const f3 = await js(`import("./js/fila.js").then(m => m.fila.listar()).then(l => l.map(x => x.tipo + ":" + (x.conflito ? "C" : "-")).join(";"))`);
     chk("conflito em item detectado (" + rItem + " → " + f3 + "), item do online intacto", f3 === "itens_os:C" && i1.qtd === 2 && i1.valor_unit === 99);
-    await js(`(async () => { const { fila } = await import("./js/fila.js"); for (const op of await fila.listar()) await fila.remover(op.id); })()`);
+    const offline = async () => { modo = "fora"; await js(`import("./js/api.js").then(m => m.definirSemRede(true))`); };
+    const online = async (ms = 8000) => { modo = "ok"; await js(`window.dispatchEvent(new Event("online"))`); await espera(ms); };
+    const filaTxt = () => js(`import("./js/fila.js").then(m => m.fila.listar()).then(l => l.map(x => x.tipo + ":" + (x.conflito ? "C" : "-") + (x.conflito ? ":" + x.erro : "")).join(";"))`);
+    // limpa a fila e, com internet, abre a O.S. do online (o banco do PC fica igual ao que a tela mostra)
+    const limparFila = () => js(`(async () => { const { fila } = await import("./js/fila.js"); for (const op of await fila.listar()) await fila.remover(op.id);
+      const { api } = await import("./js/api.js"); await api.ordem("o1"); })()`);
+    const offlineJs = c => js(`(async () => { const { api } = await import("./js/api.js"); ${c} })()`).catch(e => "ERRO " + e.message);
+    await limparFila();
+    // várias alterações seguidas do mesmo item sem internet não entram em conflito entre si
+    await offline();
+    await offlineJs(`let o = await api.ordem("o1"); await api.salvarItens("o1", o.itens.map(i => i.id === "i1" ? { ...i, qtd: 5 } : i), []);
+      o = await api.ordem("o1"); await api.salvarItens("o1", o.itens.map(i => i.id === "i1" ? { ...i, qtd: 6 } : i), []);`);
+    await online();
+    let ft = await filaTxt();
+    chk("alterações seguidas do mesmo item: enviadas sem conflito falso (" + ft + ")", ft === "" && D.os_itens.find(i => i.id === "i1").qtd === 6);
+    // com alteração em conflito, gravar de novo com internet entra na fila atrás (não passa na frente)
+    await offline();
+    await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "A (PC)" });`);
+    o1.obs_internas = "S (online)"; o1.atualizado_em = new Date().toISOString();
+    await online();
+    await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "B (PC, com internet)" });`); await espera(2500);
+    ft = await filaTxt();
+    chk("O.S. com conflito: gravação com internet vai para a fila atrás (" + ft.replace(/:Conflito.*?(;|$)/g, "$1") + ")", ft.split(";").length === 2 && o1.obs_internas === "S (online)");
+    await js(`(async () => { const { fila } = await import("./js/fila.js"); const [op] = await fila.listar(); await fila.forcar(op.id); const { api } = await import("./js/api.js"); await fila.processar(api); })()`); await espera(500);
+    chk("enviar por cima e depois a seguinte: fica a última feita aqui", o1.obs_internas === "B (PC, com internet)" && (await filaTxt()) === "");
+    // carga nova do sistema antigo depois da alteração: conflito (as O.S. são recriadas com os mesmos ids)
+    await limparFila(); await offline();
+    await offlineJs(`await api.atualizarOrdem("o1", { obs_internas: "antes da carga" });`);
+    cfgSrv = { ultimoEspelho: { em: new Date().toISOString() } };
+    await online();
+    ft = await filaTxt();
+    chk("carga nova do sistema antigo: conflito (" + ft.slice(0, 90) + ")", /carga nova do sistema antigo/.test(ft) && o1.obs_internas !== "antes da carga");
+    await limparFila(); await espera(4000); // a nova carga continua valendo (a réplica já trouxe a geração nova para o banco do PC)
+    // O.S. entregue no online depois da alteração: conflito; e a réplica não apaga a alteração pendente no banco do PC
+    await offline();
+    await offlineJs(`await api.atualizarOrdem("o1", { reclamacao: "feito sem internet" });`);
+    o1.status = "entregue"; o1.atualizado_em = new Date().toISOString();
+    await online(9000);
+    ft = await filaTxt();
+    const local1 = await js(`window.dtcarDesktop.banco.um("ordens", "o1").then(t => JSON.parse(t).reclamacao)`);
+    chk("O.S. entregue no online: conflito (" + ft.slice(0, 80) + ")", /foi entregue no online/.test(ft) && o1.reclamacao !== "feito sem internet");
+    chk("réplica com conflito pendente: o banco do PC continua com o trabalho pendente (" + local1 + ")", local1 === "feito sem internet");
+    o1.status = "pronto"; await limparFila();
     modo = "fora"; w.webContents.reload(); await carregou(); await espera(5000);
     // programa recém-atualizado que nunca abriu com internet: banco do PC vazio → usa a cópia do navegador (não "aguardando liberação")
     await js("window.dtcarDesktop.banco.zerar()");

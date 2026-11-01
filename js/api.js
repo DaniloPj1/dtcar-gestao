@@ -1,7 +1,7 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
 import { local, erroDeRede } from "./local.js";
-import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal } from "./replica.js";
-import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais } from "./alteracoes.js";
+import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
+import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente } from "./alteracoes.js";
 
 const LS_CONEXAO = "dtcar-conexao";
 export function conexao() {
@@ -243,44 +243,74 @@ function criarApiSupabase() {
     },
     /**
      * Etapa 3: envia uma alteração de O.S. feita sem internet (js/alteracoes.js). Regras de conflito:
-     *  - campos/etapa: cada campo só é gravado se no online ele ainda está como estava quando foi alterado aqui
-     *    (ou já está igual ao que foi feito aqui — reenvio). Se alguém mudou no online, é conflito: nada é gravado.
-     *  - peças/serviços: item criado aqui entra sempre; item alterado/removido aqui é conflito se foi alterado no online
-     *    depois. O.S. fechada ou cancelada no online também é conflito.
-     *  - histórico: entra uma vez (reenvio não duplica).
+     *  - carga nova do sistema antigo (espelho) depois da alteração: conflito (as O.S. são recriadas com os mesmos ids).
+     *  - O.S. apagada, ou entregue/cancelada no online depois da alteração: conflito (exceto reenvio do que já está lá).
+     *  - campos/etapa: cada campo só é gravado se no online ele ainda está como estava aqui (ou já igual ao feito aqui).
+     *  - peças/serviços: item criado aqui entra sempre; item alterado/removido aqui é conflito se o conteúdo dele mudou no online.
+     *  - gravação condicionada à data de alteração lida na conferência (outra sessão gravando no meio: confere de novo).
+     *  - histórico: entra uma vez (a data de criação é a identidade; reenvio não duplica).
      *  op.forcar (decisão do usuário em "Dados no computador"): grava por cima, sem conferir.
      */
     sincronizarAlteracao: async op => {
       const conflito = msg => { const e = new Error("Conflito: " + msg); e.conflito = true; return e; };
       const igual = iguais;
-      const mesmaData = (a, b) => a === b || (!!a && !!b && Date.parse(a) === Date.parse(b));
-      const os = ok(await sb.from("ordens").select("*").eq("id", op.ordem_id).maybeSingle());
-      if (!os) throw conflito("a O.S. não existe mais no online (apagada ou substituída pela carga do sistema antigo)");
-      if (op.tipo === "alterar_os") {
-        if (!op.forcar) {
-          const mudou = Object.keys(op.patch).filter(k => !igual(os[k], op.antes[k]) && !igual(os[k], op.patch[k]));
-          if (mudou.length) throw conflito("no online alteraram " + mudou.join(", ") + " desta O.S. enquanto este computador estava sem internet");
+      const SEM_DATA = k => k === "atualizado_em" || k === "criado_em";
+      if (!op.forcar && op.espelho !== undefined) {
+        const c = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle());
+        const ger = (c && c.dados && c.dados.ultimoEspelho && c.dados.ultimoEspelho.em) || null;
+        if ((ger || null) !== (op.espelho || null)) throw conflito("houve uma carga nova do sistema antigo depois desta alteração (a O.S. foi recarregada)");
+      }
+      for (let tentativa = 0; tentativa < 3; tentativa++) {
+        const os = ok(await sb.from("ordens").select("*").eq("id", op.ordem_id).maybeSingle());
+        if (!os) throw conflito("a O.S. não existe mais no online (apagada ou substituída pela carga do sistema antigo)");
+        if (op.tipo === "alterar_os") {
+          const jaFeito = Object.keys(op.patch).every(k => igual(os[k], op.patch[k]));
+          if (jaFeito) return { ordem_id: op.ordem_id }; // reenvio: já está como foi feito aqui
+          if (!op.forcar) {
+            if (["entregue", "cancelado"].includes(os.status) && os.status !== op.status_base)
+              throw conflito("a O.S. foi " + (os.status === "entregue" ? "entregue" : "cancelada") + " no online");
+            const mudou = Object.keys(op.patch).filter(k => !igual(os[k], op.antes[k]) && !igual(os[k], op.patch[k]));
+            if (mudou.length) throw conflito("no online alteraram " + mudou.join(", ") + " desta O.S. enquanto este computador estava sem internet");
+          }
+          if (op.forcar) { ok(await sb.from("ordens").update(op.patch).eq("id", op.ordem_id)); return { ordem_id: op.ordem_id }; }
+          const r = ok(await sb.from("ordens").update(op.patch).eq("id", op.ordem_id).eq("atualizado_em", os.atualizado_em).select("id"));
+          if (r.length) return { ordem_id: op.ordem_id };
+          continue; // alguém gravou entre a conferência e a gravação: confere de novo
         }
-        ok(await sb.from("ordens").update(op.patch).eq("id", op.ordem_id));
-      } else if (op.tipo === "itens_os") {
-        if (!op.forcar && os.status !== op.antes.status && ["entregue", "cancelado"].includes(os.status))
-          throw conflito("a O.S. foi " + (os.status === "entregue" ? "entregue" : "cancelada") + " no online");
-        const ids = [...op.itens.map(i => String(i.id)), ...op.removidos];
-        const srv = new Map((ids.length ? ok(await sb.from("os_itens").select("*").in("id", ids)) : []).map(i => [String(i.id), i]));
-        if (!op.forcar) for (const id of ids) {
-          const base = op.antes.itens[id], s = srv.get(id), meu = op.itens.find(i => String(i.id) === id);
-          if (base === "novo" || !s) { if (base !== "novo" && meu) throw conflito("o item “" + meu.descricao + "” foi removido no online"); continue; }
-          const jaIgual = meu && Object.keys(meu).every(k => k === "atualizado_em" || k === "criado_em" || igual(s[k], meu[k])); // reenvio: já está como foi feito aqui
-          if (!jaIgual && !mesmaData(s.atualizado_em || s.criado_em, base)) throw conflito("o item “" + (s.descricao || id) + "” foi alterado no online");
+        if (op.tipo === "itens_os") {
+          if (!op.forcar && ["entregue", "cancelado"].includes(os.status) && os.status !== op.antes.status)
+            throw conflito("a O.S. foi " + (os.status === "entregue" ? "entregue" : "cancelada") + " no online");
+          const ids = [...op.itens.map(i => String(i.id)), ...op.removidos];
+          const srv = new Map((ids.length ? ok(await sb.from("os_itens").select("*").in("id", ids)) : []).map(i => [String(i.id), i]));
+          if (!op.forcar) for (const id of ids) {
+            const base = op.antes.itens[id], s = srv.get(id), meu = op.itens.find(i => String(i.id) === id);
+            if (!s) { if (meu && base && base !== "novo") throw conflito("o item “" + meu.descricao + "” foi removido no online"); continue; }
+            if (base === "novo" || base == null) continue; // criado aqui (reenvio) ou removido sem base: segue
+            const jaIgual = meu && Object.keys(meu).every(k => SEM_DATA(k) || igual(s[k], meu[k]));
+            const intacto = Object.keys(base).every(k => igual(s[k], base[k]));
+            if (!jaIgual && !intacto) throw conflito("o item “" + (s.descricao || id) + "” foi alterado no online");
+          }
+          // grava item a item, condicionado à data lida (se alguém gravou no meio, confere tudo de novo)
+          let mexeram = false;
+          const cond = (q, s) => (op.forcar || !s.atualizado_em ? q : q.eq("atualizado_em", s.atualizado_em)); // por cima: sem condição
+          for (const id of op.removidos) { const s = srv.get(id); if (!s) continue;
+            const r = ok(await cond(sb.from("os_itens").delete().eq("id", id), s).select("id")); if (!r.length) { mexeram = true; break; } }
+          if (mexeram) continue;
+          for (const it of op.itens) { const { atualizado_em, criado_em, ...linha } = it, s = srv.get(String(it.id));
+            if (!s) { ok(await sb.from("os_itens").upsert(linha)); continue; } // novo (a data é do servidor)
+            const r = ok(await cond(sb.from("os_itens").update(linha).eq("id", it.id), s).select("id")); if (!r.length) { mexeram = true; break; } }
+          if (mexeram) continue;
+          return { ordem_id: op.ordem_id };
         }
-        if (op.removidos.length) ok(await sb.from("os_itens").delete().in("id", op.removidos));
-        if (op.itens.length) ok(await sb.from("os_itens").upsert(op.itens.map(({ atualizado_em, ...i }) => i))); // a data é do servidor
-      } else if (op.tipo === "evento_os") {
-        const ev = op.evento;
-        const ja = ok(await sb.from("eventos").select("id").eq("ordem_id", ev.ordem_id).eq("tipo", ev.tipo).eq("criado_em", ev.criado_em).limit(1));
-        if (!ja.length) ok(await sb.from("eventos").insert(ev));
-      } else throw new Error("Alteração desconhecida: " + op.tipo);
-      return { ordem_id: op.ordem_id };
+        if (op.tipo === "evento_os") {
+          const ev = op.evento;
+          const ja = ok(await sb.from("eventos").select("id").eq("ordem_id", ev.ordem_id).eq("tipo", ev.tipo).eq("criado_em", ev.criado_em).limit(1));
+          if (!ja.length) ok(await sb.from("eventos").insert(ev));
+          return { ordem_id: op.ordem_id };
+        }
+        throw new Error("Alteração desconhecida: " + op.tipo);
+      }
+      throw new Error("a O.S. está sendo alterada no online agora; tenta de novo no próximo envio");
     },
     guardarOrdem: async id => { const r = await buscarOrdem(id); await local.gravar("os:" + id, r); return r; },
   };
@@ -313,7 +343,7 @@ function criarApiSupabase() {
     },
     incluirFotos: async linhas => linhas.length ? ok(await sb.from("fotos").insert(linhas)) : null,
     excluirFoto: async foto => { ok(await sb.from("fotos").delete().eq("id", foto.id)); await sb.storage.from("fotos").remove([foto.caminho]); },
-    evento: async (ordem_id, tipo, texto, usuario_nome) => ok(await sb.from("eventos").insert({ ordem_id, tipo, texto, usuario_nome })),
+    evento: async (ordem_id, tipo, texto, usuario_nome, criado_em) => ok(await sb.from("eventos").insert({ ordem_id, tipo, texto, usuario_nome, ...(criado_em ? { criado_em } : {}) })),
     enviarArquivo: async (caminho, blob, tipo) => { ok(await sb.storage.from("fotos").upload(caminho, blob, { contentType: tipo, upsert: false })); return caminho; },
     removerArquivos: async caminhos => { if (caminhos.length) await sb.storage.from("fotos").remove(caminhos); },
     urlArquivo: async caminho => {
@@ -342,17 +372,28 @@ function comBancoDoPC(a) {
   const ordemDoPC = async id => ((await replicaPronta()) ? L.ordem(id) : null);
   // etapa 3: gravações da O.S. sem internet vão para o banco do PC + fila de envio (js/alteracoes.js).
   // Com internet, grava direto no servidor; se a rede cair no meio, entra na fila (o envio confere o que já foi gravado).
+  // args[0] é sempre o id da O.S.
+  const pedirEnvio = () => { try { window.dispatchEvent(new Event("dtcar-enviar-fila")); } catch (e) {} };
   const escreve = (servidor, offline, copiar) => async (...args) => {
-    if (!semRede) {
+    const pronta = await replicaPronta();
+    // O.S. com alteração na fila (mesmo em conflito): esta também vai para a fila, atrás das outras (nunca fora de ordem)
+    const naFila = pronta && await temPendente(args[0]);
+    if (!semRede && !naFila) {
       let r;
       try { r = await servidor(...args); }
-      catch (e) { if (!erroDeRede(e) || !(await replicaPronta())) throw e; definirSemRede(true); return escreve(servidor, offline, copiar)(...args); }
+      catch (e) {
+        if (!erroDeRede(e) || !pronta) throw e;
+        // a rede caiu no meio: pode ter gravado ou não. Vai para a fila do jeito que foi pedido (o envio confere o que já está lá)
+        definirSemRede(true); return offline(...args, { sempre: true });
+      }
       // gravou no online: copia já para o banco do PC (se a internet cair logo depois, a base das alterações está certa)
-      if (copiar) try { if (await replicaPronta()) await copiar(r, ...args); } catch (e) { /* a réplica corrige em seguida */ }
+      if (copiar) try { if (pronta) await copiar(r, ...args); } catch (e) { /* a réplica corrige em seguida */ }
       return r;
     }
-    if (!(await replicaPronta())) throw new Error("Sem conexão com a internet: o banco do PC ainda não foi carregado. A alteração só pode ser feita com internet.");
-    return offline(...args);
+    if (!pronta) throw new Error("Sem conexão com a internet: o banco do PC ainda não foi carregado. A alteração só pode ser feita com internet.");
+    const r = await offline(...args);
+    if (!semRede) pedirEnvio(); // com internet: envia a fila agora
+    return r;
   };
   const soOnline = (servidor, msg) => async (...args) => { if (semRede) throw new Error(msg); return servidor(...args); };
   const t = nome => ({ ...a[nome], listar: ler(a[nome].listar, L.listar(nome)) });
@@ -366,9 +407,13 @@ function comBancoDoPC(a) {
     // O.S.: no programa, sem rede vem do banco do PC; a cópia da O.S. aberta (local.js) é só reserva
     ordem: async id => {
       if (semRede) { const o = await ordemDoPC(id); if (o) return o; return ordemOriginal(id); }
+      // O.S. com alteração ainda na fila: a versão deste PC (com o trabalho pendente) é a que vale aqui até ser enviada
+      if (await replicaPronta() && await temPendente(id)) { const o = await ordemDoPC(id); if (o) return o; }
       let r;
       try { r = await ordemOriginal(id); } catch (e) { if (erroDeRede(e)) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } throw e; }
       if (r && r._local) { definirSemRede(true); const o = await ordemDoPC(id); if (o) return o; } // a rede caiu e veio a cópia antiga
+      // abriu do online: o banco do PC passa a ter exatamente o que está na tela (base das alterações se a internet cair)
+      if (r && !r._pendente && await replicaPronta() && !(await temPendente(id))) { try { await trocarOrdemLocal(r); } catch (e) { /* a réplica corrige */ } }
       return r;
     },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm) },
@@ -379,8 +424,10 @@ function comBancoDoPC(a) {
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },
     atualizarOrdem: escreve(a.atualizarOrdem, alterarOrdemOffline, async r => { if (Array.isArray(r) && r.length) await gravarLocal("ordens", r); }),
-    salvarItens: escreve(a.salvarItens, salvarItensOffline, async (r, ordemId, itens, removidos) => { if (removidos && removidos.length) await removerLocal("os_itens", removidos); if (Array.isArray(r) && r.length) await gravarLocal("os_itens", r); }),
-    evento: escreve(a.evento, eventoOffline),
+    salvarItens: (ordemId, itens, removidos = []) => escreve(a.salvarItens, salvarItensOffline, async (r, ordemId, itens, removidos) => { if (removidos && removidos.length) await removerLocal("os_itens", removidos); if (Array.isArray(r) && r.length) await gravarLocal("os_itens", r); })(ordemId, itens, removidos),
+    // histórico: a data de criação é definida aqui e vale para o online e para a fila (se a resposta se perder, o reenvio não duplica)
+    evento: (ordem_id, tipo, texto, usuario_nome) => { const criado_em = new Date().toISOString();
+      return escreve((o, t, x, u) => a.evento(o, t, x, u, criado_em), (o, t, x, u) => eventoOffline(o, t, x, u, criado_em))(ordem_id, tipo, texto, usuario_nome); },
     enviarArquivo: soOnline(a.enviarArquivo, "Sem internet: fotos e assinaturas só podem ser enviadas com internet."),
     // envio da fila: depois que o histórico entrou no online, tira a cópia provisória do banco do PC (a réplica traz a definitiva)
     sincronizarAlteracao: async op => { const r = await a.sincronizarAlteracao(op); if (op.tipo === "evento_os" && op.local_id) await removerLocal("eventos", [op.local_id]); return r; },

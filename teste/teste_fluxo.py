@@ -109,6 +109,14 @@ try:
     chk("caixa: mês futuro parte do saldo esperado no início do mês", "saldo esperado em" in t and esp.lstrip("-") in t)
     pg.click(".caixa-mes .btn-link"); pg.wait_for_timeout(1200)
     chk("caixa: transferência listada no mês", "Sicredi → PicPay PJ" in pg.inner_text("main"))
+    # atualizar os saldos depois não some com a transferência do mês
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1200)
+    chk("caixa: transferência continua listada após atualizar saldos", "Sicredi → PicPay PJ" in pg.inner_text("main"))
+    # falha ao ler os movimentos: saldo indisponível e sem gravar nova referência
+    pg.evaluate("window.__FALHA_RECIBOS = true"); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    chk("caixa: falha na leitura deixa o saldo indisponível", "Saldo das contas indisponível" in pg.inner_text("main") and pg.is_disabled("button:has-text('Atualizar saldos')"))
+    pg.evaluate("window.__FALHA_RECIBOS = false")
     # pagamento pede a conta de onde saiu o dinheiro
     pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
     pg.click(".conta-linha:has-text('Imobiliária')"); pg.wait_for_timeout(500)

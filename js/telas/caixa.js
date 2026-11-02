@@ -116,7 +116,9 @@ export function PrevisaoCaixa() {
       const pagarAtrasadas = atual ? abertas.filter(c => c.vencimento < ini) : [];
       // mês futuro: tudo o que vence de hoje até a véspera do mês (e o que já está atrasado) muda o saldo de partida
       const pagarAntes = !atual && ini > hoje ? abertas.filter(c => c.vencimento < ini) : [];
-      setD({ pagar, pagas, recibos: recibos.filter(r => !r.cancelado), receber, pagarAtrasadas, pagarAntes });
+      // histórico de transferências do mês escolhido (independe da data do saldo informado)
+      const transfMes = api.transferencias ? await api.transferencias.listar({ de: ini, ate: fim }) : [];
+      setD({ pagar, pagas, recibos: recibos.filter(r => !r.cancelado), receber, pagarAtrasadas, pagarAntes, transfMes });
     } catch (e) { setErro(e.message); }
   })(); }, [mes, recarga]);
 
@@ -127,11 +129,11 @@ export function PrevisaoCaixa() {
     try {
       const [recibos, pagas, transf] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde) : api.recibos.listar({ de: desde })), api.contas.listar({ de: desde, campo: "pago_em", status: "paga" }), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
       setMov({ recibos, pagas, transf });
-    } catch (e) { setMov({ recibos: [], pagas: [], transf: [], erro: e.message }); }
+    } catch (e) { setMov({ erro: e.message }); } // sem os movimentos não há saldo atual (nem nova referência)
   })(); }, [desde, recarga, cfg.contasFinanceiras]);
-  const saldos = useMemo(() => mov ? saldosPorConta(contasCfg, mov) : null, [mov, cfg.contasFinanceiras]);
+  const saldos = useMemo(() => mov && !mov.erro ? saldosPorConta(contasCfg, mov) : null, [mov, cfg.contasFinanceiras]);
   const totalAtual = saldos ? arred(saldos.reduce((s, c) => s + c.atual, 0)) : 0;
-  const semConta = mov ? { rec: mov.recibos.filter(r => !r.cancelado && !r.conta_destino && r.data >= desde), pag: mov.pagas.filter(x => !x.conta_origem && x.pago_em >= desde) } : { rec: [], pag: [] };
+  const semConta = mov && !mov.erro ? { rec: mov.recibos.filter(r => !r.cancelado && !r.conta_destino && r.data >= desde), pag: mov.pagas.filter(x => !x.conta_origem && x.pago_em >= desde) } : { rec: [], pag: [] };
 
   const r = useMemo(() => {
     if (!d) return null;
@@ -169,7 +171,7 @@ export function PrevisaoCaixa() {
   const trocaMes = n => { const [a, m] = mes.split("-").map(Number); const x = new Date(a, m - 1 + n, 1); setMes(iso(x).slice(0, 7)); };
   const [a, m] = mes.split("-").map(Number);
   const ultimaAtual = contasCfg.reduce((m, c) => (c.em && (!m || c.em > m) ? c.em : m), null);
-  const transfMes = mov ? mov.transf.filter(t => t.data >= ini && t.data <= fim) : [];
+  const transfMes = d ? d.transfMes || [] : [];
 
   return html`<div class="pagina larga-media financeiro caixa">
     <div class="painel-topo"><div><h1>Previsão de caixa</h1><span class="sub">Entradas e saídas de ${MESES[m - 1]} de ${a}</span></div>
@@ -190,14 +192,15 @@ export function PrevisaoCaixa() {
         <button type="button" class="btn btn-sm" onClick=${() => setModal("transf")} disabled=${api.temV18 && api.temV18() === false}>Transferir entre contas</button>
         <button type="button" class="btn btn-sm btn-pri" onClick=${() => setModal("saldos")} disabled=${!saldos}>Atualizar saldos</button></div>
       ${api.temV18 && api.temV18() === false ? html`<div class="aviso">Para o saldo de cada conta acompanhar recibos, pagamentos e transferências, rode o <code>supabase/v18.sql</code> no Supabase.</div>` : null}
-      ${!saldos ? html`<div class="esqueleto"></div>` : html`<div class="grade-dados"><table class="tab-caixa"><thead><tr><th>Conta</th><th class="num">Saldo informado</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Transferências</th><th class="num">Saldo atual</th></tr></thead>
+      ${mov && mov.erro ? html`<div class="erros">Saldo das contas indisponível: não foi possível ler recibos, pagamentos e transferências (${mov.erro}). A previsão abaixo parte de R$ 0,00 até a leitura voltar.</div>`
+        : !saldos ? html`<div class="esqueleto"></div>` : html`<div class="grade-dados"><table class="tab-caixa"><thead><tr><th>Conta</th><th class="num">Saldo informado</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Transferências</th><th class="num">Saldo atual</th></tr></thead>
         <tbody>${saldos.map(c => html`<tr key=${c.nome} class=${c.atual < 0 ? "neg" : ""}><td><b>${c.nome}</b><br /><small class="sub">${c.em ? "informado em " + new Date(c.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "saldo ainda não informado"}</small></td>
           <td class="num">${reais(c.saldo || 0)}</td><td class="num c-ok">${c.ent ? reais(c.ent) : ""}</td><td class="num c-bad">${c.sai ? reais(c.sai) : ""}</td>
           <td class="num">${c.tEnt || c.tSai ? reais(arred(c.tEnt - c.tSai)) : ""}</td><td class="num"><b>${reais(c.atual)}</b></td></tr>`)}
           <tr class="tot"><td><b>Total</b></td><td></td><td></td><td></td><td></td><td class="num"><b>${reais(totalAtual)}</b></td></tr></tbody></table></div>
         ${!ultimaAtual ? html`<span class="dica">Clique em <b>Atualizar saldos</b> e informe quanto há hoje em cada conta.</span>` : (Date.now() - new Date(ultimaAtual)) / 86400000 >= 7 ? html`<span class="dica">Saldos informados há mais de 7 dias: confira com os extratos e atualize.</span>` : null}
         ${semConta.rec.length || semConta.pag.length ? html`<div class="aviso">${semConta.rec.length ? semConta.rec.length + " recibo(s) (" + reais(soma(semConta.rec)) + ")" : ""}${semConta.rec.length && semConta.pag.length ? " e " : ""}${semConta.pag.length ? semConta.pag.length + " pagamento(s) (" + reais(soma(semConta.pag.map(x => ({ valor: x.valor_pago ?? x.valor })))) + ")" : ""} sem a conta informada não entram no saldo por conta.</div>` : null}
-        ${mov && mov.erro ? html`<div class="erros">Não foi possível ler os movimentos: ${mov.erro}</div>` : null}`}
+`}
       ${transfMes.length ? html`<h4>Transferências de ${MESES[m - 1]}</h4><div class="lista">${transfMes.map(t => html`<div class="linha" key=${t.id}><span class="meio"><strong>${t.de_conta} → ${t.para_conta}</strong><span>${fmtData(t.data)}${t.obs ? " · " + t.obs : ""}${t.criado_por ? " · " + t.criado_por : ""}</span></span><b>${reais(t.valor)}</b>
         <button type="button" class="btn-link perigo" onClick=${async () => { if (await confirmar({ titulo: "Excluir transferência", texto: t.de_conta + " → " + t.para_conta + ": " + reais(t.valor), botao: "Excluir", perigo: true })) excluirTransf(t); }}>Excluir</button></div>`)}</div>` : null}
       <div class="caixa-saldo">

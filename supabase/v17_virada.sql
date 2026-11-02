@@ -3,12 +3,13 @@
 --
 -- Rode UMA VEZ, no SQL Editor do Supabase, LOGO DEPOIS da última carga do
 -- OS Oficina (modo espelho) e ANTES de lançar qualquer coisa nova.
--- Se rodar de novo, não duplica nada (O.S. já ajustadas são puladas).
+-- Se rodar de novo, não duplica nada (O.S. já ajustadas ficam marcadas e são puladas).
 -- Se qualquer O.S. não estiver como no backup 000123, NADA é gravado
 -- e aparece o erro com o número da O.S.
 --
--- 1. Regra nova: O.S. do sistema antigo marcada "a receber" NÃO conta como paga
---    (até a v16, toda O.S. entregue do OS Oficina era tratada como quitada).
+-- 1. Regra nova: O.S. do sistema antigo marcada "a_receber" NÃO conta como paga ao ser entregue
+--    (até a v16, toda O.S. entregue do OS Oficina era tratada como quitada). A marca vai em todas
+--    as O.S. antigas que continuam abertas (a receber, pátio, execução, orçamento).
 -- 2. Acerta as 42 O.S. abertas do OS Oficina conforme o Danilo informou em 02/11:
 --    - "desconto" que era entrada já recebida vira recibo de entrada (data da abertura)
 --      e o valor da O.S. volta a ser o valor cheio;
@@ -107,13 +108,19 @@ begin
   for m in select * from virada_mapa order by numero loop
     select * into o from public.ordens where numero = m.numero;
     if not found then
-      if m.acao = 'excluir' then pulados := pulados + 1; continue; end if;
+      -- orçamento já excluído por uma execução anterior deste ajuste
+      if m.acao = 'excluir' and exists (select 1 from public.ordens where checkin->'legado'->>'virada' = 'true') then pulados := pulados + 1; continue; end if;
       raise exception 'O.S. % não encontrada. Rode a carga do backup 000123 antes deste ajuste.', m.numero;
     end if;
     if o.checkin->'legado' is null then raise exception 'O.S. % não veio do OS Oficina. Ajuste cancelado.', m.numero; end if;
-    if o.status not in ('diagnostico', 'aguardando') or m.acao = 'manter' then pulados := pulados + 1; continue; end if; -- já ajustada
-    if abs(o.total - m.total_antes) > 0.009 or abs(o.desconto - m.desc_antes) > 0.009 then
-      raise exception 'O.S. % está diferente do backup 000123 (total %, desconto %). Ajuste cancelado.', m.numero, o.total, o.desconto;
+    if o.checkin->'legado'->>'virada' = 'true' then pulados := pulados + 1; continue; end if; -- já ajustada por este script
+    if o.status not in ('diagnostico', 'aguardando') or abs(o.total - m.total_antes) > 0.009 or abs(o.desconto - m.desc_antes) > 0.009 then
+      raise exception 'O.S. % está diferente do backup 000123 (situação %, total %, desconto %). Ajuste cancelado.', m.numero, o.status, o.total, o.desconto;
+    end if;
+    if m.acao = 'manter' then
+      -- orçamento que continua aberto: quando for entregue no DTCar Gestão, só fecha com o pagamento
+      update public.ordens set checkin = jsonb_set(jsonb_set(checkin, '{legado,a_receber}', 'true'::jsonb), '{legado,virada}', 'true'::jsonb), atualizado_em = now() where id = o.id;
+      pulados := pulados + 1; continue;
     end if;
     nome := coalesce(nullif(o.cliente->>'nome', ''), 'Cliente');
 
@@ -139,7 +146,9 @@ begin
       aprovacao = coalesce(aprovacao, jsonb_build_object('em', criado_em, 'por', nome, 'forma', 'Sistema anterior', 'obs', 'Registrada na virada (02/11/2026)', 'assinatura', '')),
       entregue_em = case when st = 'entregue' then coalesce(entregue_em, criado_em) else null end,
       estoque_baixado = false,
-      checkin = case when m.acao = 'receber' then jsonb_set(checkin, '{legado,a_receber}', 'true'::jsonb) else checkin end,
+      -- a_receber: segue a regra normal (fecha quando os recibos quitam o total). Vale para tudo que continua aberto
+      -- (entregue a receber, pátio, execução); só a 1783, fechada a pedido, conta como paga como as demais antigas.
+      checkin = jsonb_set(case when m.acao <> 'fechar' then jsonb_set(checkin, '{legado,a_receber}', 'true'::jsonb) else checkin end, '{legado,virada}', 'true'::jsonb),
       obs_internas = trim(both E'\n' from obs_internas || E'\n' || 'Virada 02/11/2026: ' || m.nota),
       atualizado_em = now()
     where id = o.id;

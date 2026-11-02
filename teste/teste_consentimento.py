@@ -4,7 +4,15 @@ import http.server, json, os, threading, functools
 from playwright.sync_api import sync_playwright
 
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(http.server.SimpleHTTPRequestHandler, directory=RAIZ))
+import time
+class Servidor(http.server.SimpleHTTPRequestHandler):
+    # /auth/v1/oauth/authorizations/*: manda os cabeçalhos e só o começo do JSON, e pendura (corpo nunca termina)
+    def do_GET(self):
+        if self.path.startswith("/auth/v1/oauth/authorizations/"):
+            self.send_response(200); self.send_header("Content-Type", "application/json"); self.send_header("Content-Length", "500"); self.end_headers()
+            self.wfile.write(b'{"authorization_id": "AU'); self.wfile.flush(); time.sleep(40); return
+        return super().do_GET()
+srv = http.server.ThreadingHTTPServer(("127.0.0.1", 0), functools.partial(Servidor, directory=RAIZ))
 srv.RequestHandlerClass.log_message = lambda *a: None
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 BASE = f"http://127.0.0.1:{srv.server_port}/consentimento.html"
@@ -90,6 +98,19 @@ with sync_playwright() as pw:
     pg.wait_for_selector("#pedido:not([hidden])"); pg.click("#autorizar")
     pg.wait_for_function("document.getElementById('erroPedido').textContent.length > 0", timeout=25000)
     confere("servidor pendurado na aprovação: erro e botões liberados", "a tempo" in pg.inner_text("#erroPedido") and pg.is_enabled("#autorizar"), pg.inner_text("#erroPedido"))
+    b.close()
+
+    # corpo da resposta pendurado: o "Supabase" é o próprio servidor de teste (cabeçalhos chegam, o JSON não termina)
+    b = pw.chromium.launch(); pg = b.new_page()
+    local = f"http://127.0.0.1:{srv.server_port}"
+    pg.route("**/js/config.js", lambda r: r.fulfill(status=200, headers={"content-type": "text/javascript"},
+             body='window.DTCAR_CONFIG = { SUPABASE_URL: "' + local + '", SUPABASE_ANON_KEY: "sb_publishable_teste" };'))
+    pg.goto(BASE)
+    chave = pg.evaluate("u => window.supabase.createClient(u, 'x').auth.storageKey", local)
+    pg.evaluate("([k, s]) => localStorage.setItem(k, JSON.stringify(s))", [chave, SESSAO])
+    inicio = time.time(); pg.goto(BASE + "?authorization_id=AUTH1")
+    pg.wait_for_selector("#final:not([hidden])", timeout=30000)
+    confere("corpo da resposta pendurado: para no tempo-limite e oferece Tentar de novo", pg.is_visible("#deNovo") and time.time() - inicio < 25, f"{time.time() - inicio:.0f} s")
     b.close()
 
 print("\n".join("OK " + x for x in ok)); print("FALHAS", falhas)

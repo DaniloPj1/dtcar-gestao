@@ -72,11 +72,16 @@
   const fim = (t, titulo, tentar) => { $("titulo").textContent = titulo || "Autorizar acesso"; $("msgFinal").textContent = t; $("deNovo").hidden = !tentar; mostra("final"); };
   // regra de rede do sistema: toda chamada com tempo-limite e sem repetição (nada fica em "Carregando…" para sempre)
   const LIMITE_MS = 15000;
+  // o prazo vale também para a leitura do corpo da resposta (o cronômetro não é desligado quando chegam os cabeçalhos);
+  // o erro com nome AbortError faz a biblioteca do Supabase não repetir a tentativa — mesmo transporte de js/api.js
+  const semConexao = motivo => { const e = new Error("Failed to fetch (" + motivo + ")"); e.name = "AbortError"; return e; };
   const fetchComLimite = (url, opc = {}) => {
-    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), LIMITE_MS);
-    if (opc.signal) opc.signal.addEventListener("abort", () => ctl.abort());
-    return fetch(url, { ...opc, signal: ctl.signal }).catch(e => { throw new Error(e && e.name === "AbortError" ? "o servidor não respondeu a tempo" : "sem conexão com o servidor"); }).finally(() => clearTimeout(t));
+    const ctl = new AbortController(), t = setTimeout(() => ctl.abort(semConexao("o servidor não respondeu a tempo")), LIMITE_MS);
+    if (opc.signal) { if (opc.signal.aborted) ctl.abort(); else opc.signal.addEventListener("abort", () => ctl.abort()); }
+    return fetch(url, { ...opc, signal: ctl.signal })
+      .catch(e => { clearTimeout(t); if (opc.signal && opc.signal.aborted) throw e; throw semConexao(e && e.name === "AbortError" ? "o servidor não respondeu a tempo" : "sem conexão com o servidor"); });
   };
+  const limpa = m => String(m || "").replace(/^Failed to fetch \((.*)\)$/, "$1");
   const semRede = m => /a tempo|sem conexão|fetch|network|abort/i.test(String(m || ""));
   const id = new URLSearchParams(location.search).get("authorization_id");
   if (!id) return fim("Endereço incompleto: falta o código da autorização. Volte ao app do Claude e conecte de novo.", "Não foi possível continuar");
@@ -86,7 +91,7 @@
   async function detalhes() {
     $("titulo").textContent = "Autorizar acesso"; mostra("carregando");
     const { data, error } = await sb.auth.oauth.getAuthorizationDetails(id);
-    if (error) return semRede(error.message) ? fim("Sem resposta do servidor (" + error.message + "). Confira a internet e tente de novo.", "Não foi possível continuar", true)
+    if (error) return semRede(error.message) ? fim("Sem resposta do servidor: " + limpa(error.message) + ". Confira a internet e tente de novo.", "Não foi possível continuar", true)
       : fim("Não foi possível ler o pedido de autorização: " + error.message + ". Volte ao app do Claude e conecte de novo.", "Não foi possível continuar"); 
     if (!data.authorization_id && data.redirect_url) { fim("Acesso já autorizado. Voltando ao app…", "Tudo certo"); location.href = data.redirect_url; return; }
     $("cliente").textContent = (data.client && data.client.name) || "Um aplicativo";
@@ -102,7 +107,7 @@
     $("autorizar").disabled = $("recusar").disabled = true; $("erroPedido").textContent = "";
     const fn = aprovar ? sb.auth.oauth.approveAuthorization : sb.auth.oauth.denyAuthorization;
     const { data, error } = await fn.call(sb.auth.oauth, id, { skipBrowserRedirect: true });
-    if (error) { $("erroPedido").textContent = "Não foi possível concluir: " + error.message; $("autorizar").disabled = $("recusar").disabled = false; return; }
+    if (error) { $("erroPedido").textContent = "Não foi possível concluir: " + limpa(error.message); $("autorizar").disabled = $("recusar").disabled = false; return; }
     fim(aprovar ? "Acesso autorizado. Voltando ao app do Claude…" : "Acesso recusado. Voltando ao app…", aprovar ? "Tudo certo" : "Recusado");
     location.href = data.redirect_url;
   }

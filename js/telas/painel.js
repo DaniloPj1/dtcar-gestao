@@ -383,7 +383,7 @@ export function Ordens({ params = {} }) {
   const prox = useMemo(() => { const m = {}; (dados.receber || []).filter(p => p.status === "aberta").forEach(p => { if (!m[p.ordem_id] || p.vencimento < m[p.ordem_id].vencimento) m[p.ordem_id] = p; }); return m; }, [dados.receber]);
   const recVencida = o => prox[o.id] && prox[o.id].vencimento < hojeISO();
   const lista = useMemo(() => { const n = norm(q), p = normPlaca(q), d = soDig(q);
-    const l = dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? ["orcamento", "execucao", "pagamento"].includes(etapaOS(o)) && !(o.legado && o.status === "entregue") : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado
+    const l = dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? ["orcamento", "execucao", "pagamento"].includes(etapaOS(o)) && !(o.legado && o.status === "entregue" && !o.legado_receber) : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado
         : ETAPAS.some(e => e[0] === filtro) ? naEtapa(o, filtro) : filtro === "rec-vencido" ? recVencida(o) : filtro === "finalizadas" ? o.status === "entregue" && !!o.finalizada_em : filtro === "atrasadas" ? ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO() : o.status === filtro))
       && (!n || norm(o.cliente.nome).includes(n) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || norm(o.veiculo.modelo).includes(n) || (d && String(o.numero) === String(+d)) || norm(o.reclamacao).includes(n) || norm(o.mecanico_nome).includes(n)));
     const cmp = { recentes: (a, b) => (b.criado_em || "").localeCompare(a.criado_em || ""), antigas: (a, b) => (a.criado_em || "").localeCompare(b.criado_em || ""),

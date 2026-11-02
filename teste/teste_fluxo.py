@@ -112,6 +112,14 @@ try:
     pg.click("[role=dialog] .seg[aria-label='Conta de saída'] button:has-text('PicPay PJ')")
     pg.click("[role=dialog] button:has-text('Confirmar pagamento')"); pg.wait_for_timeout(1000)
     chk("pagamento guarda a conta de saída", pg.evaluate("window.__DB.contas.find(c => c.id === 'k9').conta_origem") == "PicPay PJ")
+    # o pagamento sai do saldo da conta; editar a conta paga depois não desconta de novo
+    pg.evaluate("(() => { const c = window.__DB.contas.find(c => c.id === 'k9'); c.pago_em = new Date().toISOString().slice(0, 10); })()")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    linha = pg.inner_text(".tab-caixa tr:has-text('PicPay PJ')")
+    chk("caixa: pagamento sai da conta escolhida", "3.000,00" in linha and "2.500,00" in linha)
+    pg.evaluate("(async () => { await window.__API_MOCK.contas.salvar({ id: 'k9', obs: 'editada depois' }); })()") if pg.evaluate("!!window.__API_MOCK") else pg.evaluate("(() => { const c = window.__DB.contas.find(c => c.id === 'k9'); c.obs = 'editada depois'; c.atualizado_em = new Date(Date.now() + 60000).toISOString(); })()")
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(500); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    chk("caixa: editar conta paga não desconta de novo", "2.500,00" in pg.inner_text(".tab-caixa tr:has-text('PicPay PJ')"))
     pg.screenshot(path=SAIDA + "/u7-caixa.png", full_page=True)
     # O.S. em aberto guardadas por inteiro (inclui aguardando pagamento) e telas que só funcionam online
     pg.goto(U + "#/dados-locais"); pg.wait_for_timeout(2500)

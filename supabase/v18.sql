@@ -19,6 +19,17 @@
 -- 1. de qual conta saiu o pagamento / em qual conta entrou o recibo
 alter table public.contas add column if not exists conta_origem text not null default '';
 alter table public.recibos add column if not exists conta_destino text not null default '';
+-- instante em que a baixa foi registrada (não muda quando a conta paga é editada depois); usado no saldo por conta
+alter table public.contas add column if not exists pago_registrado_em timestamptz;
+create or replace function public.contas_registra_baixa() returns trigger language plpgsql as $$
+begin
+  if new.status = 'paga' and (tg_op = 'INSERT' or old.status is distinct from 'paga') then new.pago_registrado_em := coalesce(new.pago_registrado_em, now());
+  elsif new.status <> 'paga' then new.pago_registrado_em := null;
+  end if;
+  return new;
+end $$;
+drop trigger if exists contas_registra_baixa on public.contas;
+create trigger contas_registra_baixa before insert or update of status on public.contas for each row execute function public.contas_registra_baixa();
 
 -- 2. transferências entre contas da empresa
 create table if not exists public.transferencias (
@@ -61,6 +72,12 @@ begin
     raise exception 'Tabela não permitida: %', p_tabela;
   end if;
   perform set_config('dtcar.sem_estoque', '1', true);
+  -- backup feito antes da v18 não tem as colunas novas: sem isso elas viriam nulas e a linha seria recusada
+  if p_tabela = 'contas' then
+    p_linhas := (select coalesce(jsonb_agg(jsonb_build_object('conta_origem', '') || jsonb_strip_nulls(e)), '[]'::jsonb) from jsonb_array_elements(p_linhas) e);
+  elsif p_tabela = 'recibos' then
+    p_linhas := (select coalesce(jsonb_agg(jsonb_build_object('conta_destino', '') || jsonb_strip_nulls(e)), '[]'::jsonb) from jsonb_array_elements(p_linhas) e);
+  end if;
   select string_agg(quote_ident(a.attname), ', ' order by a.attnum) into cols
   from pg_attribute a where a.attrelid = ('public.' || p_tabela)::regclass and a.attnum > 0 and not a.attisdropped and a.attgenerated = '';
   execute format('select count(*) from public.%I', p_tabela) into antes;

@@ -133,6 +133,8 @@ function criarApiSupabase() {
     recibos: {
       listar: async ({ ordemId, de, ate } = {}) => { let q = sb.from("recibos").select("*"); if (ordemId) q = q.eq("ordem_id", ordemId); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
       um: async id => ok(await sb.from("recibos").select("*").eq("id", id).single()),
+      /** todos os recibos a partir de uma data, sem limite (saldo por conta) */
+      desde: async de => todos(() => sb.from("recibos").select("*").gte("data", de).order("data").order("id")),
       salvar: async r => semColunaV18(r, "conta_destino", async x => { const { id, ...resto } = x; return id ? ok(await sb.from("recibos").update(resto).eq("id", id).select().single()) : ok(await sb.from("recibos").insert(resto).select().single()); }),
     },
     estoque: {
@@ -396,7 +398,7 @@ function comBancoDoPC(a) {
     /** a O.S. como está no online, sem olhar a fila (resolver conflito: descartar o que foi feito aqui) */
     ordemDoServidor: async id => { if (semRede) throw new Error("é preciso internet para trazer a O.S. do online"); const r = await ordemOriginal(id);
       if (!r || r._local || r._pendente) throw new Error("é preciso internet para trazer a O.S. do online"); return r; },
-    recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm) },
+    recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm), desde: ler(a.recibos.desde, L.recibosDesde) },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },

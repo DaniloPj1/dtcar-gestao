@@ -20,7 +20,8 @@ function saldosPorConta(contas, mov) {
   const depois = (c, data, registrado) => !c.em || (registrado ? data >= dataDe(c.em) && registrado > c.em : data > dataDe(c.em));
   return contas.map(c => {
     const ent = soma(mov.recibos.filter(r => !r.cancelado && r.conta_destino === c.nome && depois(c, r.data, r.criado_em)));
-    const sai = arred(mov.pagas.filter(x => x.conta_origem === c.nome && depois(c, x.pago_em, x.atualizado_em)).reduce((s, x) => s + Number(x.valor_pago ?? x.valor), 0));
+    // pago_registrado_em (v18) é o instante da baixa e não muda quando a conta paga é editada depois
+    const sai = arred(mov.pagas.filter(x => x.conta_origem === c.nome && depois(c, x.pago_em, x.pago_registrado_em)).reduce((s, x) => s + Number(x.valor_pago ?? x.valor), 0));
     const tSai = soma(mov.transf.filter(t => t.de_conta === c.nome && depois(c, t.data, t.criado_em)));
     const tEnt = soma(mov.transf.filter(t => t.para_conta === c.nome && depois(c, t.data, t.criado_em)));
     return { ...c, ent, sai, tEnt, tSai, atual: arred(Number(c.saldo || 0) + ent - sai + tEnt - tSai) };
@@ -121,7 +122,7 @@ export function PrevisaoCaixa() {
   useEffect(() => { (async () => {
     setMov(null);
     try {
-      const [recibos, pagas, transf] = await Promise.all([api.recibos.listar({ de: desde }), api.contas.listar({ de: desde, campo: "pago_em", status: "paga" }), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
+      const [recibos, pagas, transf] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde) : api.recibos.listar({ de: desde })), api.contas.listar({ de: desde, campo: "pago_em", status: "paga" }), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
       setMov({ recibos, pagas, transf });
     } catch (e) { setMov({ recibos: [], pagas: [], transf: [], erro: e.message }); }
   })(); }, [desde, recarga, cfg.contasFinanceiras]);

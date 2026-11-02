@@ -101,6 +101,12 @@ try:
     chk("caixa: transferência muda o saldo das contas e não o total", "700,00" in t and "500,00" in t and "1.200,00" in t and "-R$" in t)
     chk("caixa: aluguel nas saídas", "Imobiliária" in t and "3.000,00" in t)
     chk("caixa: saldo fica negativo", "fica negativo" in t)
+    # mês futuro: parte do saldo de hoje + entradas − saídas até a véspera do mês
+    esp = pg.evaluate("""(() => { const d = new Date(); const ini = new Date(d.getFullYear(), d.getMonth() + 1, 1); const iso = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+      const i = iso(ini), h = iso(d); const sai = window.__DB.contas.filter(c => c.status === 'aberta' && c.vencimento < i).reduce((s, c) => s + c.valor, 0);
+      const ent = window.__DB.receber.filter(p => p.status === 'aberta' && p.vencimento >= h && p.vencimento < i).reduce((s, p) => s + Number(p.valor), 0);
+      return (1200 + ent - sai).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); })()""")
+    chk("caixa: mês futuro parte do saldo esperado no início do mês", "saldo esperado em" in t and esp.lstrip("-") in t)
     pg.click(".caixa-mes .btn-link"); pg.wait_for_timeout(1200)
     chk("caixa: transferência listada no mês", "Sicredi → PicPay PJ" in pg.inner_text("main"))
     # pagamento pede a conta de onde saiu o dinheiro
@@ -112,6 +118,12 @@ try:
     pg.click("[role=dialog] .seg[aria-label='Conta de saída'] button:has-text('PicPay PJ')")
     pg.click("[role=dialog] button:has-text('Confirmar pagamento')"); pg.wait_for_timeout(1000)
     chk("pagamento guarda a conta de saída", pg.evaluate("window.__DB.contas.find(c => c.id === 'k9').conta_origem") == "PicPay PJ")
+    # filtro "Saiu da conta" só vale na consulta: nas abertas não esconde as pendentes
+    abertas = pg.evaluate("window.__DB.contas.filter(c => c.status === 'aberta').length")
+    pg.evaluate("localStorage.setItem('dtcar-fin-filtros', JSON.stringify({ cx: 'PicPay PJ', forma: 'PIX' }))")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(300); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
+    chk("filtro de conta de saída não esconde as abertas", abertas == 0 or pg.locator(".conta-linha").count() == abertas)
+    pg.evaluate("localStorage.removeItem('dtcar-fin-filtros')")
     # o pagamento sai do saldo da conta; editar a conta paga depois não desconta de novo
     pg.evaluate("(() => { const c = window.__DB.contas.find(c => c.id === 'k9'); c.pago_em = new Date().toISOString().slice(0, 10); })()")
     pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)

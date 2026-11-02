@@ -112,8 +112,11 @@ export function PrevisaoCaixa() {
         api.receber && (!api.temV12 || api.temV12()) ? api.receber.listar({ ate: fim }).catch(() => []) : [],
       ]);
       // contas a pagar vencidas de meses anteriores ainda em aberto também saem do caixa
-      const pagarAtrasadas = atual ? (await api.contas.abertas()).filter(c => c.vencimento < ini) : [];
-      setD({ pagar, pagas, recibos: recibos.filter(r => !r.cancelado), receber, pagarAtrasadas });
+      const abertas = atual || ini > hoje ? await api.contas.abertas() : [];
+      const pagarAtrasadas = atual ? abertas.filter(c => c.vencimento < ini) : [];
+      // mês futuro: tudo o que vence de hoje até a véspera do mês (e o que já está atrasado) muda o saldo de partida
+      const pagarAntes = !atual && ini > hoje ? abertas.filter(c => c.vencimento < ini) : [];
+      setD({ pagar, pagas, recibos: recibos.filter(r => !r.cancelado), receber, pagarAtrasadas, pagarAntes });
     } catch (e) { setErro(e.message); }
   })(); }, [mes, recarga]);
 
@@ -136,7 +139,9 @@ export function PrevisaoCaixa() {
     const aPagar = d.pagar.filter(c => c.status === "aberta").concat(d.pagarAtrasadas);
     const recAbertas = d.receber.filter(p => p.status === "aberta");
     const aReceber = recAbertas.filter(p => p.vencimento >= ini && p.vencimento <= fim);
-    const recVencidas = recAbertas.filter(p => p.vencimento < (atual ? hoje : ini));
+    const futuro = !atual && !passado;
+    const recVencidas = recAbertas.filter(p => p.vencimento < (atual || futuro ? hoje : ini));
+    const recAntes = futuro ? recAbertas.filter(p => p.vencimento >= hoje && p.vencimento < ini) : [];
     // O.S. aguardando pagamento com saldo sem parcela combinada
     const cobertoPorOS = {}; recAbertas.forEach(p => { cobertoPorOS[p.ordem_id] = (cobertoPorOS[p.ordem_id] || 0) + Number(p.valor); });
     const semPrazo = dados.ordens.filter(o => etapaOS(o) === "pagamento").map(o => ({ o, valor: arred(Math.max(0, Number(o.total || 0) - Number(o.recebido || 0) - (cobertoPorOS[o.id] || 0))) })).filter(x => x.valor > 0.009);
@@ -147,7 +152,8 @@ export function PrevisaoCaixa() {
     if (incVencRec) recVencidas.forEach(p => add(inicioProj, "e", p.valor));
     if (incSemPrazo) semPrazo.forEach(x => add(inicioProj, "e", x.valor));
     aPagar.forEach(c => add(c.vencimento, "s", c.valor));
-    const saldoIni = totalAtual;
+    // mês futuro: parte do saldo de hoje + o que entra − o que sai até a véspera do mês
+    const saldoIni = futuro ? arred(totalAtual + soma(recAntes) - soma(d.pagarAntes)) : totalAtual;
     let saldo = saldoIni, pior = null;
     const linhas = [];
     for (let t = new Date(inicioProj + "T12:00:00"); iso(t) <= fim; t.setDate(t.getDate() + 1)) {
@@ -157,7 +163,7 @@ export function PrevisaoCaixa() {
       if (!pior || saldo < pior.saldo) pior = { k, saldo };
     }
     const entradasPrev = arred(Object.values(dia).reduce((s, x) => s + x.e, 0)), saidasPrev = arred(Object.values(dia).reduce((s, x) => s + x.s, 0));
-    return { recebido, pago, aPagar, aReceber, recVencidas, semPrazo, linhas, pior, saldoIni, saldoFim: saldo, entradasPrev, saidasPrev };
+    return { recebido, pago, aPagar, aReceber, recVencidas, semPrazo, linhas, pior, saldoIni, saldoFim: saldo, entradasPrev, saidasPrev, futuro, recAntes };
   }, [d, totalAtual, incVencRec, incSemPrazo, dados.ordens]);
   const excluirTransf = async t => { try { await api.transferencias.excluir(t.id); avisar("Transferência excluída."); setRecarga(x => x + 1); } catch (e) { avisar(e.message, true); } };
   const trocaMes = n => { const [a, m] = mes.split("-").map(Number); const x = new Date(a, m - 1 + n, 1); setMes(iso(x).slice(0, 7)); };
@@ -195,7 +201,7 @@ export function PrevisaoCaixa() {
       ${transfMes.length ? html`<h4>Transferências de ${MESES[m - 1]}</h4><div class="lista">${transfMes.map(t => html`<div class="linha" key=${t.id}><span class="meio"><strong>${t.de_conta} → ${t.para_conta}</strong><span>${fmtData(t.data)}${t.obs ? " · " + t.obs : ""}${t.criado_por ? " · " + t.criado_por : ""}</span></span><b>${reais(t.valor)}</b>
         <button type="button" class="btn-link perigo" onClick=${async () => { if (await confirmar({ titulo: "Excluir transferência", texto: t.de_conta + " → " + t.para_conta + ": " + reais(t.valor), botao: "Excluir", perigo: true })) excluirTransf(t); }}>Excluir</button></div>`)}</div>` : null}
       <div class="caixa-saldo">
-        <span class="dica">A previsão parte do saldo atual somado das contas: <b>${reais(totalAtual)}</b>.</span>
+        <span class="dica">${r.futuro ? html`A previsão parte do saldo esperado em ${fmtData(ini)}: <b>${reais(r.saldoIni)}</b> (saldo de hoje ${reais(totalAtual)}, + ${reais(soma(r.recAntes))} a receber e − ${reais(soma(d.pagarAntes))} a pagar até ${fmtData(ini)}).` : html`A previsão parte do saldo atual somado das contas: <b>${reais(totalAtual)}</b>.`}</span>
         <label class="linha-check"><input type="checkbox" checked=${incVencRec} onChange=${e => setIncVencRec(e.target.checked)} /><span>Contar parcelas vencidas a receber (${reais(soma(r.recVencidas))}) como se entrassem hoje</span></label>
         <label class="linha-check"><input type="checkbox" checked=${incSemPrazo} onChange=${e => setIncSemPrazo(e.target.checked)} /><span>Contar O.S. aguardando pagamento sem prazo (${reais(soma(r.semPrazo))})</span></label>
       </div>

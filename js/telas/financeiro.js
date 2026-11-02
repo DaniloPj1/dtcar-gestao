@@ -312,9 +312,10 @@ export function Financeiro({ params = {} }) {
   const passa = c => {
     if (f.cat && (c.categoria || "Sem categoria") !== f.cat) return false;
     if (f.fav && fav(c) !== f.fav) return false;
-    if (f.forma && (c.forma_pagamento || "") !== f.forma) return false;
+    // forma e conta de saída só existem depois da baixa: filtram só a consulta (nas abertas esconderiam tudo)
+    if (aba === "consulta" && f.forma && (c.forma_pagamento || "") !== f.forma) return false;
     if (f.origem && c.origem !== f.origem) return false;
-    if (f.cx && (c.conta_origem || "") !== f.cx) return false;
+    if (aba === "consulta" && f.cx && (c.conta_origem || "") !== f.cx) return false;
     if (f.q) { const n = norm(f.q); if (!(norm(c.descricao).includes(n) || norm(fav(c)).includes(n) || norm(c.documento).includes(n) || norm(c.obs).includes(n) || String(c.valor).includes(f.q.replace(/\./g, "").replace(",", ".")))) return false; }
     if (aba === "consulta" && f.sit) {
       const g = situacao(c, hoje).g;
@@ -331,7 +332,7 @@ export function Financeiro({ params = {} }) {
   const lista = base.filter(passa).sort((a, b) => f.campo === "pago_em" && aba === "consulta" ? (b.pago_em || "").localeCompare(a.pago_em || "") : a.vencimento.localeCompare(b.vencimento));
   const opcoes = (fn) => [...new Set([...(abertas || []), ...(consulta || [])].map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const categorias = opcoes(c => c.categoria || "Sem categoria"), favorecidos = opcoes(fav), formas = opcoes(c => c.forma_pagamento), contasSaida = opcoes(c => c.conta_origem);
-  const ativos = ["q", "cat", "fav", "forma", "origem", "cx", "sit"].filter(k => f[k]).length;
+  const ativos = ["q", "cat", "fav", "origem", ...(aba === "consulta" ? ["forma", "cx", "sit"] : [])].filter(k => f[k]).length;
   const totPago = lista.filter(c => c.status === "paga").reduce((s, c) => s + Number(c.valor_pago ?? c.valor), 0);
   const totAberto = soma(lista.filter(c => c.status === "aberta")), totVencido = soma(lista.filter(c => c.status === "aberta" && c.vencimento < hoje));
   const porCategoria = useMemo(() => { const g = new Map(); for (const c of lista.filter(c => c.status !== "cancelada")) g.set(c.categoria || "Sem categoria", (g.get(c.categoria || "Sem categoria") || 0) + Number(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)); return [...g.entries()].sort((a, b) => b[1] - a[1]); }, [lista]);

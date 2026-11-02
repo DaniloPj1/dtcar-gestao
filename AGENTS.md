@@ -40,8 +40,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   **lista de campos permitidos** do v19 (sem telefone, documento, e-mail, endereço, assinaturas, cópia do cliente na O.S., `checkin`);
   não lê segredos, certificado, perfis, `config` nem lançamentos dos funcionários. `agente_acoes`: só `desfeita_em`/`desfeita_por` mudam.
   Tabela ou coluna nova que o agente deva ler precisa entrar no v-seguinte com `grant select` e a política `<tabela>_agente_ler`.
-  Plano completo: documento "Etapa — Agente de IA no DTCar Gestão". **Estoque oficial = DTCar Gestão** (decisão D2, 02/11/2026):
-  a NF de compra dá entrada aqui (Notas da SEFAZ › Dar entrada no estoque).
+  Plano completo: documento "Etapa — Agente de IA no DTCar Gestão". **Estoque da oficina = DTCar Gestão** (decisão D2, 02/11/2026):
+  a NF de compra dá entrada aqui (Notas da SEFAZ › Dar entrada no estoque). O **ObjetivaWeb continua com o estoque fiscal**: é por lá que a
+  oficina emite as NF de venda (o DTCar Gestão não emite NF), então a mesma NF de compra também entra lá. São dois estoques com papéis
+  diferentes; o sistema não deve tentar sincronizar um com o outro.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.

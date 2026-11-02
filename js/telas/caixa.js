@@ -17,7 +17,9 @@ const contasDoCfg = cfg => (cfg.contasFinanceiras && cfg.contasFinanceiras.lengt
 /** Saldo atual de cada conta = saldo informado + recibos que entraram nela − contas pagas por ela ± transferências, registrados depois do saldo informado */
 function saldosPorConta(contas, mov) {
   // conta o que foi registrado depois do saldo informado (sem o horário do registro: só o que tem data posterior)
-  const depois = (c, data, registrado) => !c.em || (registrado ? data >= dataDe(c.em) && registrado > c.em : data > dataDe(c.em));
+  // e até o momento da leitura (mov.lidoEm): saldo e referência gravada representam o mesmo instante
+  const ate = registrado => !mov.lidoEm || !registrado || registrado <= mov.lidoEm;
+  const depois = (c, data, registrado) => ate(registrado) && (!c.em || (registrado ? data >= dataDe(c.em) && registrado > c.em : data > dataDe(c.em)));
   return contas.map(c => {
     const ent = soma(mov.recibos.filter(r => !r.cancelado && r.conta_destino === c.nome && depois(c, r.data, r.criado_em)));
     // pago_registrado_em (v18) é o instante da baixa e não muda quando a conta paga é editada depois

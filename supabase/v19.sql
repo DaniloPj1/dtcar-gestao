@@ -149,10 +149,17 @@ begin
   end loop;
 end $$;
 revoke delete on public.agente_acoes from authenticated;
+-- o histórico só pode ser marcado como desfeito: os demais campos não mudam depois de gravados
+revoke update on public.agente_acoes from authenticated;
+grant update (desfeita_em, desfeita_por) on public.agente_acoes to authenticated;
 
 -- 4. papel só de leitura do agente (sem login até a Fase 1). Toda transação dele é só leitura
 --    (default_transaction_read_only). Antes de ligar o login na Fase 1, conferir também as funções
 --    que ele pode chamar (as funções do sistema já exigem administrador ou membro da equipe).
+--    Dados pessoais: nas tabelas que têm (clientes, O.S., recibos, vendas, veículos, funcionários) o
+--    papel só lê a LISTA DE CAMPOS PERMITIDOS abaixo; coluna nova nessas tabelas fica fora até ser
+--    incluída aqui. Ficam de fora por inteiro: segredos, certificado, perfis, ajustes (config, que
+--    guarda de tudo), lançamentos dos funcionários e o registro de exclusões.
 do $$ begin
   if not exists (select 1 from pg_roles where rolname = 'agente_leitura') then
     create role agente_leitura nologin noinherit;
@@ -163,28 +170,45 @@ alter role agente_leitura set statement_timeout = '15s';
 grant usage on schema public to agente_leitura;
 do $$
 declare t text; cols text;
+  -- tabela → campos permitidos (sem telefone, documento, e-mail, endereço, assinatura, cópia dos dados do cliente na O.S. etc.)
+  permitidos jsonb := jsonb_build_object(
+    'clientes', jsonb_build_array('id', 'codigo', 'nome', 'fantasia', 'tipo_cliente', 'situacao', 'restricao', 'cidade', 'uf', 'origem', 'criado_em', 'atualizado_em'),
+    'ordens', jsonb_build_array('id', 'numero', 'status', 'situacao', 'cliente_id', 'veiculo_id', 'veiculo', 'km_entrada', 'km_saida', 'combustivel', 'funcionando',
+      'reclamacao', 'diagnostico', 'consultor_id', 'consultor_nome', 'mecanico_id', 'mecanico_nome', 'previsao_entrega', 'previsao_hora', 'condicoes_pagamento',
+      'orcamento_enviado_em', 'validade_orcamento', 'desconto', 'total', 'custo', 'recebido', 'forma_pagamento', 'garantia_dias', 'entregue_em', 'finalizada_em',
+      'obs_execucao', 'obs_internas', 'box', 'tabela_preco', 'estoque_baixado', 'motivo_cancelamento', 'criado_por', 'criado_em', 'atualizado_em'),
+    'recibos', jsonb_build_array('id', 'numero', 'ordem_id', 'cliente_id', 'pagador', 'valor', 'referente', 'forma', 'data', 'obs', 'emitido_por', 'cancelado',
+      'cancelado_motivo', 'criado_em', 'venda_id', 'atualizado_em', 'conta_destino'),
+    'vendas', jsonb_build_array('id', 'numero', 'cliente_id', 'tabela_preco', 'subtotal', 'desconto', 'total', 'custo', 'forma_pagamento', 'obs', 'status',
+      'vendedor_nome', 'criado_por', 'criado_em', 'cancelada_em', 'cancelada_motivo', 'atualizado_em'),
+    'veiculos', jsonb_build_array('id', 'placa', 'marca', 'modelo', 'ano', 'ano_fab', 'ano_mod', 'cor', 'motor', 'chassi', 'combustivel', 'cliente_id', 'km_atual',
+      'obs', 'revisao_data', 'revisao_km', 'oleo_data', 'oleo_km', 'filtro_data', 'filtro_km', 'criado_em', 'atualizado_em'),
+    'funcionarios', jsonb_build_array('id', 'nome', 'apelido', 'funcao', 'vinculo', 'admissao', 'demissao', 'ativo', 'perfil_id', 'comissao_pct', 'jornada',
+      'criado_em', 'atualizado_em'));
+  fora text[] := array['segredos', 'sefaz_config', 'perfis', 'config', 'funcionario_lanc', 'exclusoes'];
 begin
   for t in select c.relname from pg_class c join pg_namespace s on s.oid = c.relnamespace
-           where s.nspname = 'public' and c.relkind in ('r', 'p')
-             and c.relname not in ('segredos', 'sefaz_config', 'perfis', 'exclusoes') loop
-    execute format('revoke all on public.%I from agente_leitura', t);
-    if t = 'clientes' then
-      -- sem telefone, documento, e-mail e endereço
+           where s.nspname = 'public' and c.relkind in ('r', 'p') loop
+    execute format('revoke all on public.%I from agente_leitura', t);   -- também tira os campos liberados antes
+    execute format('drop policy if exists %I on public.%I', t || '_agente_ler', t);
+    if t = any(fora) then continue; end if;
+    if permitidos ? t then
+      -- só os campos da lista que existem na tabela
       select string_agg(quote_ident(a.attname), ', ' order by a.attnum) into cols from pg_attribute a
-        where a.attrelid = 'public.clientes'::regclass and a.attnum > 0 and not a.attisdropped
-          and a.attname not in ('telefone', 'doc', 'email', 'endereco');
-      execute format('grant select (%s) on public.clientes to agente_leitura', cols);
+        where a.attrelid = ('public.' || t)::regclass and a.attnum > 0 and not a.attisdropped
+          and a.attname in (select jsonb_array_elements_text(permitidos -> t));
+      if cols is null then continue; end if;
+      execute format('grant select (%s) on public.%I to agente_leitura', cols, t);
     else
       execute format('grant select on public.%I to agente_leitura', t);
     end if;
     -- as tabelas têm RLS: sem esta política o papel não veria nenhuma linha
-    execute format('drop policy if exists %I on public.%I', t || '_agente_ler', t);
     if exists (select 1 from pg_class where oid = ('public.' || t)::regclass and relrowsecurity) then
       execute format('create policy %I on public.%I for select to agente_leitura using (true)', t || '_agente_ler', t);
     end if;
   end loop;
 end $$;
--- nunca: segredos, certificado, perfis de acesso
+-- nunca: segredos, certificado e perfis de acesso (reforço)
 revoke all on public.segredos, public.sefaz_config, public.perfis from agente_leitura;
 
 -- 5. fotos das pré-notas (pasta privada, só o administrador)

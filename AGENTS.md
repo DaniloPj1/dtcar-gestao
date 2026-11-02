@@ -36,8 +36,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - **Agente de IA (Claude), v19 — Fase 0:** `pre_notas`/`pre_notas_itens` (compra sem NF, custo provisório, ligada à O.S. por
   `ordem_id` + `os_numero` + `placa`, sem chave estrangeira para tabelas que o espelho apaga), `agente_acoes` (histórico com antes/depois;
   ninguém apaga, só marca "desfeita"), `agente_regras` (correspondências aprendidas com as correções do Danilo) e o papel
-  `agente_leitura` (só leitura, sem login até a Fase 1; não lê telefone/documento/e-mail/endereço de clientes, segredos, certificado e perfis).
-  Tabela nova criada depois da v19 que o agente deva ler precisa de `grant select` e da política `<tabela>_agente_ler` para `agente_leitura`.
+  `agente_leitura` (só leitura, sem login até a Fase 1). Em clientes, O.S., recibos, vendas, veículos e funcionários ele só lê a
+  **lista de campos permitidos** do v19 (sem telefone, documento, e-mail, endereço, assinaturas, cópia do cliente na O.S., `checkin`);
+  não lê segredos, certificado, perfis, `config` nem lançamentos dos funcionários. `agente_acoes`: só `desfeita_em`/`desfeita_por` mudam.
+  Tabela ou coluna nova que o agente deva ler precisa entrar no v-seguinte com `grant select` e a política `<tabela>_agente_ler`.
   Plano completo: documento "Etapa — Agente de IA no DTCar Gestão". **Estoque oficial = DTCar Gestão** (decisão D2, 02/11/2026):
   a NF de compra dá entrada aqui (Notas da SEFAZ › Dar entrada no estoque).
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).

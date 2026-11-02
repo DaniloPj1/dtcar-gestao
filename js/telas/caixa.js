@@ -135,8 +135,9 @@ export function PrevisaoCaixa() {
     setMov(null);
     const lidoEm = new Date().toISOString(); // momento da leitura: o saldo sugerido vale para este instante
     try {
-      const [recibos, pagas, transf] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde) : api.recibos.listar({ de: desde })), api.contas.listar({ de: desde, campo: "pago_em", status: "paga" }), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
-      setMov({ recibos, pagas, transf, lidoEm });
+      const [recibos, pagas, transf] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde, lidoEm) : api.recibos.listar({ de: desde })), (api.contas.pagasDesde ? api.contas.pagasDesde(desde) : api.contas.listar({ de: desde, campo: "pago_em", status: "paga" })), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
+      const unicos = l => [...new Map(l.map(x => [x.id, x])).values()]; // leitura paginada nunca soma o mesmo lançamento duas vezes
+      setMov({ recibos: unicos(recibos), pagas: unicos(pagas), transf: unicos(transf), lidoEm });
     } catch (e) { setMov({ erro: e.message }); } // sem os movimentos não há saldo atual (nem nova referência)
   })(); }, [desde, recarga, cfg.contasFinanceiras]);
   const saldos = useMemo(() => mov && !mov.erro ? saldosPorConta(contasCfg, mov) : null, [mov, cfg.contasFinanceiras]);

@@ -134,7 +134,8 @@ function criarApiSupabase() {
       listar: async ({ ordemId, de, ate } = {}) => { let q = sb.from("recibos").select("*"); if (ordemId) q = q.eq("ordem_id", ordemId); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
       um: async id => ok(await sb.from("recibos").select("*").eq("id", id).single()),
       /** todos os recibos a partir de uma data, sem limite (saldo por conta) */
-      desde: async de => todos(() => sb.from("recibos").select("*").gte("data", de).order("data").order("id")),
+      // paginação por id (não se desloca) + corte pelo registro (ate): o que for lançado durante a leitura não entra
+      desde: async (de, ate) => todosPorChave(() => { let q = sb.from("recibos").select("*").gte("data", de); if (ate) q = q.lte("criado_em", ate); return q; }),
       salvar: async r => semColunaV18(r, "conta_destino", async x => { const { id, ...resto } = x; return id ? ok(await sb.from("recibos").update(resto).eq("id", id).select().single()) : ok(await sb.from("recibos").insert(resto).select().single()); }),
     },
     estoque: {
@@ -174,6 +175,8 @@ function criarApiSupabase() {
     contas: {
       listar: async ({ de, ate, campo = "vencimento", status } = {}) => todos(() => { let q = sb.from("contas").select("*"); if (de) q = q.gte(campo, de); if (ate) q = q.lte(campo, ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
       abertas: async () => todos(() => sb.from("contas").select("*").eq("status", "aberta").order("vencimento").order("id")),
+      /** contas pagas a partir de uma data, paginadas por id (saldo por conta) */
+      pagasDesde: async de => todosPorChave(() => sb.from("contas").select("*").eq("status", "paga").gte("pago_em", de)),
       salvar: async c => semColunaV18(c, "conta_origem", async x => { const { id, ...resto } = x; return id ? ok(await sb.from("contas").update(resto).eq("id", id).select().single()) : ok(await sb.from("contas").insert(resto).select().single()); }),
       excluir: async id => ok(await sb.from("contas").delete().eq("id", id)),
       lancar: async linhas => ok(await sb.rpc("lancar_contas", { p_linhas: linhas })),
@@ -181,7 +184,7 @@ function criarApiSupabase() {
     },
     /** transferências entre as contas da empresa (supabase/v18.sql); sem a v18, lista vazia */
     transferencias: {
-      listar: async ({ de, ate } = {}) => { try { const l = await todos(() => { let q = sb.from("transferencias").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }); temV18 = true; return l; }
+      listar: async ({ de, ate } = {}) => { try { const l = (await todosPorChave(() => { let q = sb.from("transferencias").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q; })).sort((a, b) => a.data.localeCompare(b.data)); temV18 = true; return l; }
         catch (e) { if (/transferencias|relation|does not exist|schema cache|404/i.test(e.message)) { temV18 = false; return []; } throw e; } },
       salvar: async t => { const { id, ...resto } = t; try { return id ? ok(await sb.from("transferencias").update(resto).eq("id", id).select().single()) : ok(await sb.from("transferencias").insert(resto).select().single()); }
         catch (e) { if (/transferencias|relation|does not exist|schema cache|404/i.test(e.message)) throw new Error("Para registrar transferências, rode o supabase/v18.sql no Supabase."); throw e; } },
@@ -400,7 +403,7 @@ function comBancoDoPC(a) {
       if (!r || r._local || r._pendente) throw new Error("é preciso internet para trazer a O.S. do online"); return r; },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm), desde: ler(a.recibos.desde, L.recibosDesde) },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
-    contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas) },
+    contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },
     vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },

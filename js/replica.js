@@ -145,7 +145,7 @@ export const leitorLocal = {
   itensDasOrdens: async ids => { const s = new Set(ids); return (await tabelaLocal("os_itens")).filter(i => s.has(i.ordem_id)); },
   recibosListar: async ({ ordemId, de, ate } = {}) => ordena(porData((await tabelaLocal("recibos")).filter(r => !ordemId || r.ordem_id === ordemId), "data", de, ate), (a, b) => (b.numero || 0) - (a.numero || 0)).slice(0, 1000),
   reciboUm: async id => (await tabelaLocal("recibos")).find(r => r.id === id) || null,
-  recibosDesde: async de => porData(await tabelaLocal("recibos"), "data", de, null),
+  recibosDesde: async (de, ate) => porData(await tabelaLocal("recibos"), "data", de, null).filter(r => !ate || !r.criado_em || r.criado_em <= ate),
   transferenciasListar: async ({ de, ate } = {}) => ordena(porData(await tabelaLocal("transferencias"), "data", de, ate), (a, b) => (a.data || "").localeCompare(b.data || "")),
   contasListar: async ({ de, ate, campo = "vencimento", status } = {}) => ordena(porData((await tabelaLocal("contas")).filter(c => !status || c.status === status), campo, de, ate), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),
   contasAbertas: async () => ordena((await tabelaLocal("contas")).filter(c => c.status === "aberta"), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),

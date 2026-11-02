@@ -126,7 +126,7 @@ const cmpData = (a, b) => { const x = valorData(a), y = valorData(b); if (typeof
 const porData = (l, campo, de, ate, ateExclusivo) => l.filter(x => { const v = x[campo]; if ((de || ate) && !v) return false;
   return (!de || cmpData(v, de) >= 0) && (!ate || (ateExclusivo ? cmpData(v, ate) < 0 : cmpData(v, ate) <= 0)); });
 const ordena = (l, f) => [...l].sort(f);
-const resumoOrdem = o => ({ ...o, ck_feito: o.checkin ? o.checkin.feito : undefined, legado: o.checkin && o.checkin.legado ? o.checkin.legado.numero : undefined });
+const resumoOrdem = o => ({ ...o, ck_feito: o.checkin ? o.checkin.feito : undefined, legado: o.checkin && o.checkin.legado ? o.checkin.legado.numero : undefined, legado_receber: o.checkin && o.checkin.legado ? o.checkin.legado.a_receber : undefined });
 export const leitorLocal = {
   meuPerfil: async uid => (await tabelaLocal("perfis")).find(p => p.id === uid) || null,
   perfis: async () => tabelaLocal("perfis"),

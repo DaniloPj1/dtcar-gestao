@@ -212,11 +212,24 @@ begin
     end loop;
   end;
   execute format('select count(*) from public.%I', p_tabela) into depois;
+  -- registro que voltou e tinha estornos (foi excluído depois de entrar no saldo): grava o efeito do estado restaurado
+  -- (Σ estornos = efeito atual − efeito na referência; o registro estava ausente, efeito atual 0 → soma-se o efeito do que voltou)
   if array_length(ausentes, 1) > 0 then
-    execute format('insert into public.estornos_saldo (conta, valor, origem, registro, original_em)
-      select e.conta, -sum(e.valor), ''restauracao'', e.registro, min(e.original_em) from public.estornos_saldo e
-      where e.registro = any($1) and exists (select 1 from public.%I t where t.id = e.registro)
-      group by e.conta, e.registro having sum(e.valor) <> 0', p_tabela) using ausentes;
+    if p_tabela = 'transferencias' then
+      insert into public.estornos_saldo (conta, valor, origem, registro, original_em)
+      select x.conta, x.valor, 'restauracao', t.id, t.criado_em from public.transferencias t
+        cross join lateral (values (t.de_conta, -t.valor), (t.para_conta, t.valor)) x(conta, valor)
+        where t.id = any(ausentes) and exists (select 1 from public.estornos_saldo e where e.registro = t.id);
+    elsif p_tabela = 'recibos' then
+      insert into public.estornos_saldo (conta, valor, origem, registro, original_em)
+      select r.conta_destino, r.valor, 'restauracao', r.id, r.criado_em from public.recibos r
+        where r.id = any(ausentes) and not r.cancelado and r.conta_destino <> '' and exists (select 1 from public.estornos_saldo e where e.registro = r.id);
+    elsif p_tabela = 'contas' then
+      insert into public.estornos_saldo (conta, valor, origem, registro, original_em)
+      select c.conta_origem, -coalesce(c.valor_pago, c.valor), 'restauracao', c.id,
+             coalesce(c.pago_registrado_em, (select min(e.original_em) from public.estornos_saldo e where e.registro = c.id)) from public.contas c
+        where c.id = any(ausentes) and c.status = 'paga' and c.conta_origem <> '' and exists (select 1 from public.estornos_saldo e where e.registro = c.id);
+    end if;
   end if;
   return jsonb_build_object('incluidos', depois - antes, 'erros', erros);
 end $$;

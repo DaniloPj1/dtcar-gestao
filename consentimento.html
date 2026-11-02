@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Autorizar acesso — DTCar Gestão</title>
+<link rel="icon" href="icons/favicon.png">
+<style>
+  /* Tela de autorização do conector do Claude (OAuth do Supabase Auth). Azul, preto e cinza-escuro da DTCar. */
+  :root { --fundo: #eef1f5; --cartao: #fff; --texto: #12161c; --suave: #5b6573; --borda: #d6dbe2; --azul: #0b5bd3; --azul-esc: #0847a6; --erro: #b42318; --aviso-f: #fff7e6; --aviso-b: #f2c46b; }
+  @media (prefers-color-scheme: dark) { :root { --fundo: #0f1217; --cartao: #1a1f27; --texto: #e8ecf2; --suave: #9aa4b2; --borda: #2c3440; --azul: #3d86f5; --azul-esc: #2f6fd1; --erro: #ff7a6b; --aviso-f: #2b2414; --aviso-b: #8a6a22; } }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; background: var(--fundo); color: var(--texto);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { width: 100%; max-width: 420px; background: var(--cartao); border: 1px solid var(--borda); border-radius: 14px; padding: 24px; }
+  .marca { font-weight: 800; letter-spacing: .04em; font-size: 13px; color: var(--suave); text-transform: uppercase; margin-bottom: 6px; }
+  h1 { font-size: 21px; margin: 0 0 14px; }
+  p { margin: 0 0 12px; }
+  .suave { color: var(--suave); font-size: 14px; }
+  ul { margin: 0 0 14px; padding-left: 20px; } li { margin-bottom: 4px; }
+  label { display: block; font-size: 14px; font-weight: 600; margin: 10px 0 4px; }
+  input { width: 100%; padding: 11px 12px; border: 1px solid var(--borda); border-radius: 9px; font: inherit; background: transparent; color: var(--texto); }
+  .botoes { display: flex; gap: 10px; margin-top: 18px; }
+  button { flex: 1; padding: 12px 14px; border-radius: 9px; border: 1px solid var(--borda); background: transparent; color: var(--texto); font: inherit; font-weight: 700; cursor: pointer; }
+  button.pri { background: var(--azul); border-color: var(--azul); color: #fff; } button.pri:hover { background: var(--azul-esc); }
+  button:disabled { opacity: .55; cursor: default; }
+  .erro { color: var(--erro); font-size: 14px; margin-top: 10px; }
+  .aviso { background: var(--aviso-f); border: 1px solid var(--aviso-b); border-radius: 9px; padding: 10px 12px; font-size: 14px; margin-bottom: 12px; }
+  code { font-size: 13px; word-break: break-all; }
+  [hidden] { display: none !important; }
+</style>
+<script src="js/config.js"></script>
+<script src="vendor/supabase.js"></script>
+</head>
+<body>
+<main>
+  <div class="marca">DTCar Gestão</div>
+  <h1 id="titulo">Autorizar acesso</h1>
+  <div id="carregando"><p class="suave">Carregando…</p></div>
+
+  <form id="entrar" hidden>
+    <p>Entre com o seu usuário do DTCar Gestão para continuar.</p>
+    <label for="email">E-mail</label><input id="email" type="email" autocomplete="username" required>
+    <label for="senha">Senha</label><input id="senha" type="password" autocomplete="current-password" required>
+    <div class="botoes"><button class="pri" type="submit">Entrar</button></div>
+    <div class="erro" id="erroEntrar"></div>
+  </form>
+
+  <section id="pedido" hidden>
+    <p><b id="cliente"></b> quer acessar o DTCar Gestão como <b id="usuario"></b>.</p>
+    <p class="suave">Depois de autorizado, o agente poderá:</p>
+    <ul>
+      <li>consultar O.S., clientes, estoque, contas a receber e a pagar, saldos e notas da SEFAZ;</li>
+      <li>abrir O.S. — sempre mostrando antes e só depois do seu “sim”;</li>
+      <li>preparar o texto da O.S. ou do recibo para o WhatsApp (quem envia é você).</li>
+    </ul>
+    <p class="suave">Ele não paga, não transfere, não apaga e não mexe em conta paga. Tudo o que gravar fica no histórico do agente.</p>
+    <p class="suave">Retorno para: <code id="destino"></code></p>
+    <div class="aviso" id="avisoDestino" hidden>Atenção: o retorno não é o app do Claude (claude.ai). Só autorize se foi você quem pediu essa conexão.</div>
+    <div class="aviso" id="avisoPapel" hidden>Só o administrador pode usar o agente. Com este usuário, as consultas serão recusadas.</div>
+    <div class="botoes"><button type="button" id="recusar">Recusar</button><button type="button" class="pri" id="autorizar">Autorizar</button></div>
+    <div class="erro" id="erroPedido"></div>
+  </section>
+
+  <section id="final" hidden><p id="msgFinal"></p></section>
+</main>
+<script>
+(async () => {
+  const $ = id => document.getElementById(id);
+  const mostra = qual => ["carregando", "entrar", "pedido", "final"].forEach(s => { $(s).hidden = s !== qual; });
+  const fim = (t, titulo) => { $("titulo").textContent = titulo || "Autorizar acesso"; $("msgFinal").textContent = t; mostra("final"); };
+  const id = new URLSearchParams(location.search).get("authorization_id");
+  if (!id) return fim("Endereço incompleto: falta o código da autorização. Volte ao app do Claude e conecte de novo.", "Não foi possível continuar");
+  const cfg = window.DTCAR_CONFIG;
+  const sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+
+  async function detalhes() {
+    $("titulo").textContent = "Autorizar acesso"; mostra("carregando");
+    const { data, error } = await sb.auth.oauth.getAuthorizationDetails(id);
+    if (error) return fim("Não foi possível ler o pedido de autorização: " + error.message + ". Volte ao app do Claude e conecte de novo.", "Não foi possível continuar");
+    if (!data.authorization_id && data.redirect_url) { fim("Acesso já autorizado. Voltando ao app…", "Tudo certo"); location.href = data.redirect_url; return; }
+    $("cliente").textContent = (data.client && data.client.name) || "Um aplicativo";
+    $("usuario").textContent = (data.user && data.user.email) || "você";
+    let host = ""; try { host = new URL(data.redirect_uri).host; } catch (e) { host = data.redirect_uri || "?"; }
+    $("destino").textContent = host;
+    $("avisoDestino").hidden = host === "claude.ai";
+    const { data: perfil } = await sb.from("perfis").select("papel, ativo").eq("id", data.user.id).maybeSingle();
+    $("avisoPapel").hidden = !!(perfil && perfil.ativo && perfil.papel === "admin");
+    mostra("pedido");
+  }
+  async function decidir(aprovar) {
+    $("autorizar").disabled = $("recusar").disabled = true; $("erroPedido").textContent = "";
+    const fn = aprovar ? sb.auth.oauth.approveAuthorization : sb.auth.oauth.denyAuthorization;
+    const { data, error } = await fn.call(sb.auth.oauth, id, { skipBrowserRedirect: true });
+    if (error) { $("erroPedido").textContent = "Não foi possível concluir: " + error.message; $("autorizar").disabled = $("recusar").disabled = false; return; }
+    fim(aprovar ? "Acesso autorizado. Voltando ao app do Claude…" : "Acesso recusado. Voltando ao app…", aprovar ? "Tudo certo" : "Recusado");
+    location.href = data.redirect_url;
+  }
+  $("autorizar").onclick = () => decidir(true);
+  $("recusar").onclick = () => decidir(false);
+  $("entrar").onsubmit = async e => {
+    e.preventDefault(); $("erroEntrar").textContent = "";
+    const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
+    if (error) { $("erroEntrar").textContent = /invalid/i.test(error.message) ? "E-mail ou senha incorretos." : "Não foi possível entrar: " + error.message; return; }
+    detalhes();
+  };
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) detalhes(); else { $("titulo").textContent = "Entrar"; mostra("entrar"); }
+})();
+</script>
+</body>
+</html>

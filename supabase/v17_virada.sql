@@ -100,7 +100,9 @@ do $$
 declare
   m record; o record; novo_desc numeric; novo_total numeric; saldo numeric; venc date[]; n int; k int; v numeric; acum numeric;
   nome text; st text; feitos int := 0; pulados int := 0; rec_id uuid;
+  ja_rodou boolean; -- este ajuste já foi aplicado antes? (conferido ANTES de qualquer alteração)
 begin
+  select exists (select 1 from public.ordens where checkin->'legado'->>'virada' = 'true') into ja_rodou;
   perform set_config('dtcar.sem_estoque', '1', true); -- O.S. do sistema antigo não mexem no estoque
   -- conferência: as 42 O.S. abertas do backup são exatamente as do mapa
   if (select count(*) from virada_mapa) <> 42 then raise exception 'Mapa da virada incompleto.'; end if;
@@ -109,7 +111,7 @@ begin
     select * into o from public.ordens where numero = m.numero;
     if not found then
       -- orçamento já excluído por uma execução anterior deste ajuste
-      if m.acao = 'excluir' and exists (select 1 from public.ordens where checkin->'legado'->>'virada' = 'true') then pulados := pulados + 1; continue; end if;
+      if m.acao = 'excluir' and ja_rodou then pulados := pulados + 1; continue; end if;
       raise exception 'O.S. % não encontrada. Rode a carga do backup 000123 antes deste ajuste.', m.numero;
     end if;
     if o.checkin->'legado' is null then raise exception 'O.S. % não veio do OS Oficina. Ajuste cancelado.', m.numero; end if;

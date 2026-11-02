@@ -965,3 +965,41 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .regra-transicao{margin:8px 0}.regra-transicao ol{margin:6px 0 0 18px;padding:0}.regra-transicao li{margin:3px 0}
 .so-online{max-width:640px;margin:24px auto}.so-online h2{margin-top:0}
 .acoes-inline{display:inline-flex;gap:6px;margin-left:6px;vertical-align:middle}
+/* ===== Celular (até 640px). Tudo aqui vale só em tela estreita: no PC e no programa para Windows nada muda. ===== */
+.faixa-trans-mais{display:none}
+@media (max-width:640px){
+  /* faixa do período de transição: recolhida mostra só a frase principal; "Ver detalhes" abre o texto inteiro */
+  .faixa-transicao{padding:8px 12px}
+  .faixa-transicao:not(.aberta){font-size:0}
+  .faixa-transicao:not(.aberta) > b:first-child{font-size:13.5px}
+  .faixa-transicao:not(.aberta) > .btn-link{display:none}
+  .faixa-trans-mais{display:inline;border:0;background:none;padding:0 0 0 6px;font:inherit;font-size:13.5px;font-weight:700;color:var(--brand);text-decoration:underline;cursor:pointer}
+  .faixa-transicao.aberta .faixa-trans-mais{display:block;padding:4px 0 0}
+  /* lista de O.S.: cartão empilhado (veículo e cliente em largura total; placa, valor e etapa na linha de baixo; botões no rodapé) */
+  .linha-os-acoes{flex-wrap:wrap;gap:0}
+  .linha-os-acoes .los-corpo{flex:1 1 100%;flex-wrap:wrap;align-items:center;gap:8px 10px;padding:12px 12px 8px}
+  .linha-os-acoes .los-corpo .meio{order:1;flex:1 1 100%}
+  .linha-os-acoes .los-corpo .placa{display:inline-flex;order:2;min-width:0}
+  .linha-os-acoes .los-corpo .placa .faixa{font-size:6px;letter-spacing:.2em;padding:1px 0}
+  .linha-os-acoes .los-corpo .placa .num{font-size:15px;padding:1px 7px 2px}
+  .linha-os-acoes .los-corpo .dir{order:3;margin-left:auto;flex-direction:row;flex-wrap:wrap;align-items:center;justify-content:flex-end;gap:4px 8px}
+  .los-acoes{flex:1 1 100%;min-width:0;flex-direction:row;align-items:center;gap:8px;padding:0 12px 12px}
+  .los-acoes > .btn{flex:1 1 auto;min-height:38px}
+  .los-acoes .menu-os-lista{flex:0 0 auto}
+  .los-acoes .menu-os-lista .btn-mais{width:auto;min-height:38px;padding:0 14px}
+  /* filtros da lista sem texto cortado */
+  .os-filtros select.inp{font-size:15px;padding-left:10px;padding-right:6px}
+  /* tela da O.S.: botão principal em largura total, os outros dois por linha, "Cliente recusou" separado em vermelho */
+  .cab-os .acoes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .cab-os .acoes .btn{width:100%;min-width:0;padding:0 10px;white-space:normal;line-height:1.2;text-align:center}
+  .cab-os .acoes .btn-pri,.cab-os .acoes .btn-recusa{grid-column:1/-1}
+  .cab-os .acoes .btn-recusa{color:var(--bad);border-color:var(--bad);background:none;margin-top:4px}
+  /* etapas da O.S.: 4 colunas e nomes em até 2 linhas, sem "..." */
+  .cab-os .trilha{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .cab-os .trilha li{white-space:normal;overflow:visible;text-overflow:clip;font-size:11px;line-height:1.2}
+  /* abas: todas visíveis, quebrando em linhas, em vez de ficarem escondidas à direita */
+  .abas{flex-wrap:wrap;overflow-x:visible}
+  .abas button{flex:1 1 auto;min-height:36px;padding:0 10px;font-size:14px}
+  /* aviso de O.S. importada do sistema antigo: mais compacto */
+  .cab-os > .info{font-size:13px;padding:8px 10px}
+}

@@ -1,0 +1,48 @@
+# Layout no celular (até 640px) com dados simulados (teste/mock.js). Confere também que o PC continua no layout de sempre.
+# Uso: python3 teste/teste_celular.py   (precisa de: pip install playwright && playwright install chromium)
+import subprocess, time, sys, os
+from playwright.sync_api import sync_playwright
+RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+srv = subprocess.Popen([sys.executable, "-m", "http.server", "8766", "-d", RAIZ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+time.sleep(1); ok = []; falhas = []; erros = []
+def chk(n, c): (ok if c else falhas).append(n)
+U = "http://localhost:8766/"
+try:
+  with sync_playwright() as p:
+    b = p.chromium.launch()
+    # ---- celular
+    pg = b.new_context(viewport={"width": 393, "height": 852}).new_page()
+    pg.on("pageerror", lambda e: erros.append(str(e)))
+    pg.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    pg.goto(U + "#/ordens"); pg.wait_for_timeout(2000)
+    alt = pg.evaluate("document.querySelector('.faixa-transicao').getBoundingClientRect().height")
+    chk("celular: faixa de transição recolhida (uma frase)", alt < 70)
+    pg.click(".faixa-trans-mais"); pg.wait_for_timeout(300)
+    chk("celular: 'Ver detalhes' abre o texto inteiro", pg.evaluate("document.querySelector('.faixa-transicao').getBoundingClientRect().height") > alt + 60)
+    chk("celular: texto completo continua na faixa", "não lance testes" in pg.inner_text(".faixa-transicao"))
+    larg = pg.evaluate("Math.min(...[...document.querySelectorAll('.linha-os-acoes .los-corpo .meio')].map(e => e.getBoundingClientRect().width))")
+    chk("celular: veículo e cliente em largura total no cartão", larg > 280)
+    chk("celular: placa visível na lista", pg.evaluate("getComputedStyle(document.querySelector('.linha-os-acoes .placa')).display") != "none")
+    h = pg.evaluate("Math.max(...[...document.querySelectorAll('.linha-os-acoes')].map(e => e.getBoundingClientRect().height))")
+    chk("celular: cartão de O.S. compacto (até 260px)", h <= 260)
+    pg.goto(U + "#/os/o4"); pg.wait_for_timeout(1800)
+    larg_pri = pg.evaluate("document.querySelector('.cab-os .acoes .btn-pri').getBoundingClientRect().width")
+    larg_cab = pg.evaluate("document.querySelector('.cab-os .acoes').getBoundingClientRect().width")
+    chk("celular: 'Aprovar orçamento' em largura total", abs(larg_pri - larg_cab) < 2)
+    cores = pg.evaluate("(() => { const r = getComputedStyle(document.querySelector('.cab-os .btn-recusa')), n = getComputedStyle(document.querySelector('.cab-os .acoes .btn:not(.btn-pri):not(.btn-recusa)')); return [r.color, r.borderTopColor, n.color, r.gridColumnStart]; })()")
+    chk("celular: 'Cliente recusou' separado em vermelho", cores[0] == cores[1] and cores[0] != cores[2])
+    chk("celular: etapas sem '...'", pg.evaluate("[...document.querySelectorAll('.cab-os .trilha li')].every(l => l.scrollWidth <= l.clientWidth + 1)"))
+    # ---- PC: nada do celular aparece
+    pc = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    pc.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    pc.goto(U + "#/ordens"); pc.wait_for_timeout(2000)
+    chk("PC: botão 'Ver detalhes' escondido", pc.evaluate("getComputedStyle(document.querySelector('.faixa-trans-mais')).display") == "none")
+    chk("PC: faixa de transição inteira", "não lance testes" in pc.inner_text(".faixa-transicao") and pc.evaluate("getComputedStyle(document.querySelector('.faixa-transicao')).fontSize") == "14px")
+    chk("PC: botões da O.S. em coluna ao lado", pc.evaluate("getComputedStyle(document.querySelector('.los-acoes')).flexDirection") == "column")
+    pc.goto(U + "#/os/o4"); pc.wait_for_timeout(1800)
+    chk("PC: 'Cliente recusou' sem destaque vermelho", pc.evaluate("getComputedStyle(document.querySelector('.cab-os .acoes')).display") == "flex")
+    b.close()
+finally:
+  srv.terminate()
+print("OK", len(ok)); print("FALHAS", falhas); print("erros de página:", erros or "nenhum")
+sys.exit(1 if falhas or erros else 0)

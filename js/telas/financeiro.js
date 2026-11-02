@@ -3,7 +3,7 @@ import { html, useState, useEffect, useMemo, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro, Abas, Foto } from "../ui.js";
 import { norm, soDig, reais, fmtData, fmtDoc, hojeISO, uuid, arred, parseValor } from "../util.js";
-import { pode } from "../regras.js";
+import { pode, nomesContas } from "../regras.js";
 import { lerBoleto, fmtLinha, lerPDFBoleto, temCamera } from "../boleto.js";
 import { lerNFe } from "../nfe.js";
 import { FormFornecedor } from "./compras.js";
@@ -180,13 +180,15 @@ function LinkAnexo({ caminho }) {
 /* ---------------- pagamento ---------------- */
 function PagarModal({ conta, onFechar, onPago }) {
   const { cfg, avisar } = useApp();
-  const [p, setP] = useState({ pago_em: hojeISO(), juros: 0, desconto: 0, forma_pagamento: conta.codigo_barras ? "Boleto" : "", obs: conta.obs || "" });
+  const contasCx = nomesContas(cfg);
+  const [p, setP] = useState({ pago_em: hojeISO(), juros: 0, desconto: 0, forma_pagamento: conta.codigo_barras ? "Boleto" : "", obs: conta.obs || "", conta_origem: conta.conta_origem || (cfg.contaPagamento && contasCx.includes(cfg.contaPagamento) ? cfg.contaPagamento : "") });
   const [salvando, setSalvando] = useState(false), [erro, setErro] = useState("");
   const total = arred(Number(conta.valor) + Number(p.juros || 0) - Number(p.desconto || 0));
   const formas = [...new Set(["Boleto", "PIX", "Transferência", "Débito em conta", ...(cfg.formasPagamento || [])])];
   const atraso = dias(p.pago_em, conta.vencimento);
-  const salvar = async () => { if (!p.pago_em) return setErro("Informe a data do pagamento."); setSalvando(true);
-    try { await api.contas.salvar({ id: conta.id, status: "paga", pago_em: p.pago_em, juros: arred(p.juros), desconto: arred(p.desconto), valor_pago: total, forma_pagamento: p.forma_pagamento, obs: p.obs }); avisar("Pagamento registrado."); onPago(); }
+  const salvar = async () => { if (!p.pago_em) return setErro("Informe a data do pagamento."); if (!p.conta_origem) return setErro("Informe de qual conta saiu o pagamento."); setSalvando(true);
+    try { await api.contas.salvar({ id: conta.id, status: "paga", pago_em: p.pago_em, juros: arred(p.juros), desconto: arred(p.desconto), valor_pago: total, forma_pagamento: p.forma_pagamento, conta_origem: p.conta_origem, obs: p.obs });
+      avisar(api.temV18 && api.temV18() === false ? "Pagamento registrado. Para guardar a conta de saída, rode o supabase/v18.sql." : "Pagamento registrado."); onPago(); }
     catch (e) { setErro(e.message); } finally { setSalvando(false); } };
   return html`<${Modal} titulo="Registrar pagamento" onFechar=${onFechar}>
     <div class="total-item"><span>${conta.descricao}<small class="sub"> · vencimento ${fmtData(conta.vencimento)}</small></span><b>${reais(conta.valor)}</b></div>
@@ -197,6 +199,7 @@ function PagarModal({ conta, onFechar, onPago }) {
       <${Campo} id="pg-desc" rotulo="Desconto"><${Dinheiro} id="pg-desc" valor=${p.desconto} onMuda=${v => setP(x => ({ ...x, desconto: v }))} /></${Campo}>
     </div>
     <div class="campo"><label>Pago com</label><${Seg} rotulo="Forma de pagamento" opcoes=${formas.map(x => [x, "info"])} valor=${p.forma_pagamento} onEscolha=${v => setP(x => ({ ...x, forma_pagamento: v }))} /></div>
+    <div class="campo"><label>Saiu de qual conta <i>*</i></label><${Seg} rotulo="Conta de saída" opcoes=${contasCx.map(x => [x, "info"])} valor=${p.conta_origem} onEscolha=${v => { setP(x => ({ ...x, conta_origem: v })); setErro(""); }} /></div>
     <${Campo} id="pg-obs" rotulo="Observação"><${Texto} id="pg-obs" valor=${p.obs} onMuda=${v => setP(x => ({ ...x, obs: v }))} /></${Campo}>
     <div class="total-item tot"><span>Valor pago</span><b>${reais(total)}</b></div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
@@ -227,7 +230,8 @@ function ContaDetalhe({ conta, onFechar, onMudou }) {
       ${conta.parcelas > 1 ? html`<div><span>Parcela</span><b>${conta.parcela} de ${conta.parcelas}</b></div>` : null}
       ${conta.emissao ? html`<div><span>Emissão</span><b>${fmtData(conta.emissao)}</b></div>` : null}
       ${conta.status === "paga" ? html`<div><span>Valor pago</span><b>${reais(conta.valor_pago)}${Number(conta.juros) ? " (juros " + reais(conta.juros) + ")" : ""}${Number(conta.desconto) ? " (desc. " + reais(conta.desconto) + ")" : ""}</b></div>
-        <div><span>Pago com</span><b>${conta.forma_pagamento || "—"}</b></div>` : null}
+        <div><span>Pago com</span><b>${conta.forma_pagamento || "—"}</b></div>
+        <div><span>Saiu da conta</span><b>${conta.conta_origem || "não informada"}</b></div>` : null}
       <div><span>Lançada por</span><b>${conta.criado_por || "—"} · ${{ manual: "manual", boleto: "leitura do boleto", nfe: "duplicata da NF-e", os: "serviço de terceiro na O.S.", recorrente: "conta mensal", parcelado: "parcelamento" }[conta.origem] || conta.origem}</b></div>
     </div>
     ${conta.linha_digitavel && conta.status === "aberta" ? html`<${CopiarCodigo} conta=${conta} />` : null}
@@ -237,7 +241,7 @@ function ContaDetalhe({ conta, onFechar, onMudou }) {
       ${conta.status !== "cancelada" ? html`<button type="button" class="btn-link perigo" onClick=${async () => { if (await confirmar({ titulo: "Cancelar conta", texto: "A conta deixa de contar como dívida, mas continua no histórico.", botao: "Cancelar conta", perigo: true })) acao(() => api.contas.salvar({ id: conta.id, status: "cancelada" }), "Conta cancelada."); }}>Cancelar conta</button>`
         : html`<button type="button" class="btn-link perigo" onClick=${async () => { if (await confirmar({ titulo: "Excluir conta", texto: "A conta some de vez, inclusive dos relatórios.", botao: "Excluir", perigo: true })) acao(() => api.contas.excluir(conta.id), "Conta excluída."); }}>Excluir</button>`}
       <span class="espaco"></span>
-      ${conta.status === "paga" ? html`<button type="button" class="btn" onClick=${async () => { if (await confirmar({ titulo: "Desfazer pagamento", texto: "A conta volta a ficar em aberto.", botao: "Desfazer" })) acao(() => api.contas.salvar({ id: conta.id, status: "aberta", pago_em: null, valor_pago: null, juros: 0, desconto: 0 }), "Pagamento desfeito."); }}>Desfazer pagamento</button>` : null}
+      ${conta.status === "paga" ? html`<button type="button" class="btn" onClick=${async () => { if (await confirmar({ titulo: "Desfazer pagamento", texto: "A conta volta a ficar em aberto.", botao: "Desfazer" })) acao(() => api.contas.salvar({ id: conta.id, status: "aberta", pago_em: null, valor_pago: null, juros: 0, desconto: 0, ...(conta.conta_origem !== undefined ? { conta_origem: "" } : {}) }), "Pagamento desfeito."); }}>Desfazer pagamento</button>` : null}
       ${conta.status === "cancelada" ? html`<button type="button" class="btn" onClick=${() => acao(() => api.contas.salvar({ id: conta.id, status: "aberta" }), "Conta reaberta.")}>Reabrir</button>` : null}
       <button type="button" class="btn" onClick=${() => setModo("editar")}>Alterar</button>
       ${conta.status === "aberta" ? html`<button type="button" class="btn btn-pri" onClick=${() => setModo("pagar")}>Registrar pagamento</button>` : null}
@@ -286,7 +290,7 @@ const PERIODOS = [
 const SITUACOES = [["", "Todas"], ["aberta", "Em aberto"], ["vencida", "Vencidas"], ["hoje", "Vencem hoje"], ["avencer", "A vencer"], ["paga", "Pagas"], ["cancelada", "Canceladas"]];
 const ORIGENS_CONTA = { manual: "Lançamento manual", boleto: "Boleto", nfe: "Duplicata de nota", os: "Terceiro da O.S.", recorrente: "Despesa fixa", parcelado: "Parcelado" };
 const LS_FILTROS = "dtcar-fin-filtros";
-const FILTROS_VAZIOS = { q: "", cat: "", fav: "", forma: "", origem: "", sit: "", periodo: "mes", campo: "vencimento", de: "", ate: "" };
+const FILTROS_VAZIOS = { q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "", periodo: "mes", campo: "vencimento", de: "", ate: "" };
 
 export function Financeiro({ params = {} }) {
   const { dados } = useApp();
@@ -295,7 +299,7 @@ export function Financeiro({ params = {} }) {
   const [f, setF] = useState(() => { try { return { ...FILTROS_VAZIOS, ...(JSON.parse(localStorage.getItem(LS_FILTROS) || "null") || {}), ...(params.aba === "pagas" ? { sit: "paga", campo: "pago_em" } : {}) }; } catch (e) { return { ...FILTROS_VAZIOS }; } });
   const [nova, setNova] = useState(params.nova ? { modo: params.nova } : null), [det, setDet] = useState(null), [dup, setDup] = useState(false);
   const muda = o => setF(x => { const n = { ...x, ...o }; try { localStorage.setItem(LS_FILTROS, JSON.stringify(n)); } catch (e) {} return n; });
-  const limpar = () => muda({ q: "", cat: "", fav: "", forma: "", origem: "", sit: "" });
+  const limpar = () => muda({ q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "" });
   const intervalo = () => { const per = PERIODOS.find(x => x[0] === f.periodo); return per && per[2] ? per[2]() : [f.de || hojeISO().slice(0, 7) + "-01", f.ate || hojeISO()]; };
   const [de, ate] = intervalo();
   const carregar = () => {
@@ -308,8 +312,10 @@ export function Financeiro({ params = {} }) {
   const passa = c => {
     if (f.cat && (c.categoria || "Sem categoria") !== f.cat) return false;
     if (f.fav && fav(c) !== f.fav) return false;
-    if (f.forma && (c.forma_pagamento || "") !== f.forma) return false;
+    // forma e conta de saída só existem depois da baixa: filtram só a consulta (nas abertas esconderiam tudo)
+    if (aba === "consulta" && f.forma && (c.forma_pagamento || "") !== f.forma) return false;
     if (f.origem && c.origem !== f.origem) return false;
+    if (aba === "consulta" && f.cx && (c.conta_origem || "") !== f.cx) return false;
     if (f.q) { const n = norm(f.q); if (!(norm(c.descricao).includes(n) || norm(fav(c)).includes(n) || norm(c.documento).includes(n) || norm(c.obs).includes(n) || String(c.valor).includes(f.q.replace(/\./g, "").replace(",", ".")))) return false; }
     if (aba === "consulta" && f.sit) {
       const g = situacao(c, hoje).g;
@@ -325,22 +331,22 @@ export function Financeiro({ params = {} }) {
   const base = aba === "abertas" ? ab : (consulta || []);
   const lista = base.filter(passa).sort((a, b) => f.campo === "pago_em" && aba === "consulta" ? (b.pago_em || "").localeCompare(a.pago_em || "") : a.vencimento.localeCompare(b.vencimento));
   const opcoes = (fn) => [...new Set([...(abertas || []), ...(consulta || [])].map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b));
-  const categorias = opcoes(c => c.categoria || "Sem categoria"), favorecidos = opcoes(fav), formas = opcoes(c => c.forma_pagamento);
-  const ativos = ["q", "cat", "fav", "forma", "origem", "sit"].filter(k => f[k]).length;
+  const categorias = opcoes(c => c.categoria || "Sem categoria"), favorecidos = opcoes(fav), formas = opcoes(c => c.forma_pagamento), contasSaida = opcoes(c => c.conta_origem);
+  const ativos = ["q", "cat", "fav", "origem", ...(aba === "consulta" ? ["forma", "cx", "sit"] : [])].filter(k => f[k]).length;
   const totPago = lista.filter(c => c.status === "paga").reduce((s, c) => s + Number(c.valor_pago ?? c.valor), 0);
   const totAberto = soma(lista.filter(c => c.status === "aberta")), totVencido = soma(lista.filter(c => c.status === "aberta" && c.vencimento < hoje));
   const porCategoria = useMemo(() => { const g = new Map(); for (const c of lista.filter(c => c.status !== "cancelada")) g.set(c.categoria || "Sem categoria", (g.get(c.categoria || "Sem categoria") || 0) + Number(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)); return [...g.entries()].sort((a, b) => b[1] - a[1]); }, [lista]);
   const exportar = () => {
     const esc = v => '"' + String(v ?? "").replace(/"/g, '""') + '"', n2 = v => String(Number(v || 0).toFixed(2)).replace(".", ",");
-    const linhas = [["Vencimento", "Favorecido", "Descrição", "Categoria", "Documento", "Parcela", "Valor", "Situação", "Pago em", "Valor pago", "Forma de pagamento", "Origem"].map(esc).join(";")];
-    for (const c of lista) linhas.push([fmtData(c.vencimento), fav(c), c.descricao, c.categoria, c.documento, c.parcelas > 1 ? c.parcela + "/" + c.parcelas : "", n2(c.valor), situacao(c, hoje).t, c.pago_em ? fmtData(c.pago_em) : "", c.status === "paga" ? n2(c.valor_pago ?? c.valor) : "", c.forma_pagamento, ORIGENS_CONTA[c.origem] || c.origem].map(esc).join(";"));
+    const linhas = [["Vencimento", "Favorecido", "Descrição", "Categoria", "Documento", "Parcela", "Valor", "Situação", "Pago em", "Valor pago", "Forma de pagamento", "Saiu da conta", "Origem"].map(esc).join(";")];
+    for (const c of lista) linhas.push([fmtData(c.vencimento), fav(c), c.descricao, c.categoria, c.documento, c.parcelas > 1 ? c.parcela + "/" + c.parcelas : "", n2(c.valor), situacao(c, hoje).t, c.pago_em ? fmtData(c.pago_em) : "", c.status === "paga" ? n2(c.valor_pago ?? c.valor) : "", c.forma_pagamento, c.conta_origem || "", ORIGENS_CONTA[c.origem] || c.origem].map(esc).join(";"));
     const blob = new Blob(["﻿" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "contas-dtcar-" + de + "-a-" + ate + ".csv"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 20000);
   };
   const linha = c => { const s = situacao(c, hoje); const d = new Date(c.vencimento + "T12:00:00");
     return html`<button type="button" key=${c.id} class=${"linha conta-linha s-" + s.g} onClick=${() => setDet(c)}>
       <span class="data-bloco"><b>${String(d.getDate()).padStart(2, "0")}</b><small>${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small></span>
-      <span class="meio"><strong>${fav(c)}</strong><span>${[c.descricao !== fav(c) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.codigo_barras ? "boleto" : "", c.forma_pagamento && c.status === "paga" ? c.forma_pagamento : ""].filter(Boolean).join(" · ")}</span></span>
+      <span class="meio"><strong>${fav(c)}</strong><span>${[c.descricao !== fav(c) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.codigo_barras ? "boleto" : "", c.forma_pagamento && c.status === "paga" ? c.forma_pagamento : "", c.conta_origem && c.status === "paga" ? "saiu de " + c.conta_origem : ""].filter(Boolean).join(" · ")}</span></span>
       <span class="dir"><b class=${c.status === "cancelada" ? "riscado" : ""}>${reais(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)}</b><span class=${"pill p-" + s.cor}>${s.t}</span></span></button>`; };
   const sel = (k, rot, ops, rotulos) => html`<label class="filtro"><span>${rot}</span><select class="inp" value=${f[k]} onChange=${e => muda({ [k]: e.target.value })}><option value="">Todos</option>${ops.map(x => html`<option value=${x}>${rotulos ? rotulos[x] || x : x}</option>`)}</select></label>`;
   const carregando = aba === "abertas" ? !abertas : !consulta;
@@ -369,7 +375,7 @@ export function Financeiro({ params = {} }) {
           <div class="fin-sel">
             <label class="filtro fin-busca"><span>Buscar</span><input id="busca-conta" class="inp" type="search" placeholder="Descrição, documento, observação ou valor" value=${f.q} onInput=${e => muda({ q: e.target.value })} /></label>
             ${sel("fav", "Fornecedor / favorecido", favorecidos)}${sel("cat", "Categoria", categorias)}
-            ${aba === "consulta" ? sel("forma", "Forma de pagamento", formas) : null}${sel("origem", "Origem", Object.keys(ORIGENS_CONTA), ORIGENS_CONTA)}
+            ${aba === "consulta" ? sel("forma", "Forma de pagamento", formas) : null}${aba === "consulta" && contasSaida.length ? sel("cx", "Saiu da conta", contasSaida) : null}${sel("origem", "Origem", Object.keys(ORIGENS_CONTA), ORIGENS_CONTA)}
             ${ativos ? html`<button type="button" class="btn btn-sm fin-limpar" onClick=${limpar}>Limpar filtros (${ativos})</button>` : null}
           </div>
         </div>

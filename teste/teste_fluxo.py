@@ -90,10 +90,76 @@ try:
                 " window.__DB.contas.push({ id: 'k9', descricao: 'Aluguel', favorecido: 'Imobiliária', valor: 3000, vencimento: v, status: 'aberta' }); })()")
     pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
     pg.click(".caixa-mes button[aria-label='Próximo mês']"); pg.wait_for_timeout(1200)
-    pg.fill("#cx-saldo", "1.000,00"); pg.wait_for_timeout(400)
+    # saldo por conta (v18): informa os saldos, transfere entre contas e confere
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.fill("#sc-0", "1.000,00"); pg.fill("#sc-1", "200,00"); pg.fill("#sc-2", "0,00")
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1200)
+    chk("caixa: saldos por conta guardados", pg.evaluate("(window.__DB.config.contasFinanceiras || []).map(c => c.nome + '=' + c.saldo).join(',')") == "Sicredi=1000,PicPay PJ=200,Espécie=0")
+    pg.click("button:has-text('Transferir entre contas')"); pg.wait_for_timeout(500)
+    pg.fill("#tr-valor", "300,00"); pg.click("[role=dialog] button:has-text('Registrar transferência')"); pg.wait_for_timeout(1200)
     t = pg.inner_text("main")
+    chk("caixa: transferência muda o saldo das contas e não o total", "700,00" in t and "500,00" in t and "1.200,00" in t and "-R$" in t)
     chk("caixa: aluguel nas saídas", "Imobiliária" in t and "3.000,00" in t)
     chk("caixa: saldo fica negativo", "fica negativo" in t)
+    # mês futuro: parte do saldo de hoje + entradas − saídas até a véspera do mês
+    esp = pg.evaluate("""(() => { const d = new Date(); const ini = new Date(d.getFullYear(), d.getMonth() + 1, 1); const iso = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+      const i = iso(ini), h = iso(d); const sai = window.__DB.contas.filter(c => c.status === 'aberta' && c.vencimento < i).reduce((s, c) => s + c.valor, 0);
+      const ent = window.__DB.receber.filter(p => p.status === 'aberta' && p.vencimento >= h && p.vencimento < i).reduce((s, p) => s + Number(p.valor), 0);
+      return (1200 + ent - sai).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); })()""")
+    chk("caixa: mês futuro parte do saldo esperado no início do mês", "saldo esperado em" in t and esp.lstrip("-") in t)
+    pg.click(".caixa-mes .btn-link"); pg.wait_for_timeout(1200)
+    chk("caixa: transferência listada no mês", "Sicredi → PicPay PJ" in pg.inner_text("main"))
+    # atualizar os saldos depois não some com a transferência do mês
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1200)
+    chk("caixa: transferência continua listada após atualizar saldos", "Sicredi → PicPay PJ" in pg.inner_text("main"))
+    # recibo lançado em outro aparelho com a janela de saldos aberta continua contando depois de guardar
+    antes = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.evaluate("window.__DB.recibos.push({ id: 'rx1', numero: 99, valor: 300, forma: 'PIX', conta_destino: 'Sicredi', data: new Date().toISOString().slice(0, 10), criado_em: new Date().toISOString(), cancelado: false })")
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1500)
+    depois = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
+    num = lambda t: float(t.split("R$")[-1].strip().replace(".", "").replace(",", "."))
+    chk("caixa: recibo lançado com a janela aberta não se perde", abs(num(depois) - num(antes) - 300) < 0.01)
+    # e não conta duas vezes depois de recarregar
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    chk("caixa: recibo lançado durante a leitura não conta duas vezes", pg.inner_text(".tab-caixa tr:has-text('Sicredi')") == depois)
+    # recibo que já estava no saldo informado e é cancelado depois: o estorno sai da conta
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1500)
+    ref = pg.evaluate("window.__DB.config.contasFinanceiras.find(c => c.nome === 'Sicredi').saldo")
+    pg.wait_for_timeout(50); pg.evaluate("(async () => { await window.__API.recibos.salvar({ id: 'rx1', cancelado: true }); })()") if pg.evaluate("!!window.__API") else None
+    pg.evaluate("(() => { const o = window.__DB.recibos.find(r => r.id === 'rx1'); if (!o.cancelado) { o.cancelado = true; (window.__DB.estornos = window.__DB.estornos || []).push({ id: 'e1', conta: 'Sicredi', valor: -300, origem: 'recibo', registro: 'rx1', original_em: o.criado_em, registrado_em: new Date().toISOString() }); } })()")
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    sic = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
+    chk("caixa: recibo cancelado depois sai do saldo da conta", ("{:,.2f}".format(ref - 300).replace(",", "X").replace(".", ",").replace("X", ".")) in sic)
+    # falha ao ler os movimentos: saldo indisponível e sem gravar nova referência
+    pg.evaluate("window.__FALHA_RECIBOS = true"); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    chk("caixa: falha na leitura deixa o saldo indisponível", "Saldo das contas indisponível" in pg.inner_text("main") and pg.is_disabled("button:has-text('Atualizar saldos')"))
+    pg.evaluate("window.__FALHA_RECIBOS = false")
+    # pagamento pede a conta de onde saiu o dinheiro
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
+    pg.click(".conta-linha:has-text('Imobiliária')"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Registrar pagamento')"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Confirmar pagamento')"); pg.wait_for_timeout(400)
+    chk("pagamento sem conta de saída: pede a conta", "de qual conta saiu" in pg.inner_text("[role=dialog]"))
+    pg.click("[role=dialog] .seg[aria-label='Conta de saída'] button:has-text('PicPay PJ')")
+    pg.click("[role=dialog] button:has-text('Confirmar pagamento')"); pg.wait_for_timeout(1000)
+    chk("pagamento guarda a conta de saída", pg.evaluate("window.__DB.contas.find(c => c.id === 'k9').conta_origem") == "PicPay PJ")
+    # filtro "Saiu da conta" só vale na consulta: nas abertas não esconde as pendentes
+    abertas = pg.evaluate("window.__DB.contas.filter(c => c.status === 'aberta').length")
+    pg.evaluate("localStorage.setItem('dtcar-fin-filtros', JSON.stringify({ cx: 'PicPay PJ', forma: 'PIX' }))")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(300); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
+    chk("filtro de conta de saída não esconde as abertas", abertas == 0 or pg.locator(".conta-linha").count() == abertas)
+    pg.evaluate("localStorage.removeItem('dtcar-fin-filtros')")
+    # o pagamento sai do saldo da conta; editar a conta paga depois não desconta de novo
+    pg.evaluate("(() => { const c = window.__DB.contas.find(c => c.id === 'k9'); c.pago_em = new Date().toISOString().slice(0, 10); })()")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    linha = pg.inner_text(".tab-caixa tr:has-text('PicPay PJ')")
+    chk("caixa: pagamento sai da conta escolhida", "3.000,00" in linha and "2.500,00" in linha)
+    pg.evaluate("(async () => { await window.__API_MOCK.contas.salvar({ id: 'k9', obs: 'editada depois' }); })()") if pg.evaluate("!!window.__API_MOCK") else pg.evaluate("(() => { const c = window.__DB.contas.find(c => c.id === 'k9'); c.obs = 'editada depois'; c.atualizado_em = new Date(Date.now() + 60000).toISOString(); })()")
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(500); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    chk("caixa: editar conta paga não desconta de novo", "2.500,00" in pg.inner_text(".tab-caixa tr:has-text('PicPay PJ')"))
     pg.screenshot(path=SAIDA + "/u7-caixa.png", full_page=True)
     # O.S. em aberto guardadas por inteiro (inclui aguardando pagamento) e telas que só funcionam online
     pg.goto(U + "#/dados-locais"); pg.wait_for_timeout(2500)

@@ -162,3 +162,13 @@ export function termoEntradaFinal(cfg) {
     ? t + " Caso o orçamento não seja aprovado, será cobrada taxa de diagnóstico de R$ " + Number(cfg.taxaDiagnostico).toLocaleString("pt-BR", { minimumFractionDigits: 2 }) + "."
     : t;
 }
+
+/** Contas da empresa (bancos e caixa) usadas no saldo por conta, nos pagamentos, recibos e transferências (Ajustes: contasFinanceiras) */
+export const CONTAS_PADRAO = ["Sicredi", "PicPay PJ", "Espécie"];
+export const nomesContas = cfg => { const l = (cfg && cfg.contasFinanceiras) || []; return l.length ? l.map(c => c.nome) : CONTAS_PADRAO; };
+/** conta sugerida para um recebimento: dinheiro vai para a conta de espécie/caixa; o resto para a conta padrão de recebimento */
+export function contaSugerida(cfg, forma) {
+  const nomes = nomesContas(cfg);
+  if (/dinheiro/i.test(forma || "")) { const e = nomes.find(n => /esp[eé]cie|caixa|dinheiro/i.test(n)); if (e) return e; }
+  return (cfg && cfg.contaRecebimento && nomes.includes(cfg.contaRecebimento)) ? cfg.contaRecebimento : nomes.find(n => !/esp[eé]cie|caixa|dinheiro/i.test(n)) || nomes[0] || "";
+}

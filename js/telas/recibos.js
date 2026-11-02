@@ -3,11 +3,19 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro, BuscaCliente } from "../ui.js";
 import { norm, soDig, reais, fmtData, fmtDoc, numOS, numRecibo, hojeISO, exPlaca, extenso } from "../util.js";
-import { pode } from "../regras.js";
+import { pode, nomesContas, contaSugerida } from "../regras.js";
 import { abaterParcelas } from "./receber.js";
 
 export const referenteOS = o => `pagamento da Ordem de Serviço nº ${String(o.numero).padStart(5, "0")}` +
   (o.veiculo && o.veiculo.placa ? ` – ${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")} placa ${exPlaca(o.veiculo.placa)}` : "");
+
+/** Em qual conta da empresa o dinheiro entrou (saldo por conta, supabase/v18.sql). Sugere pela forma de pagamento até o usuário escolher. */
+export function ContaEntrada({ forma, valor, onMuda }) {
+  const { cfg } = useApp(); const nomes = nomesContas(cfg);
+  const [manual, setManual] = useState(false);
+  useEffect(() => { if (!manual) onMuda(contaSugerida(cfg, forma)); }, [forma]);
+  return html`<div class="campo"><label>Entrou em qual conta <i>*</i></label><${Seg} rotulo="Conta de entrada" opcoes=${nomes.map(x => [x, "info"])} valor=${valor} onEscolha=${v => { setManual(true); onMuda(v); }} /></div>`;
+}
 
 /** Emite recibo. ordem: O.S. (opcional); valor: sugestão (saldo da O.S.) */
 export function ReciboModal({ ordem, venda, valor, forma, onFechar, onEmitido }) {
@@ -17,7 +25,7 @@ export function ReciboModal({ ordem, venda, valor, forma, onFechar, onEmitido })
     cliente_id: ordem ? ordem.cliente_id || "" : venda ? venda.cliente_id || "" : "", pagador: ordem ? (ordem.cliente || {}).nome || "" : venda ? (venda.cliente || {}).nome || "" : "",
     doc: fmtDoc((cli0 && cli0.doc) || (ordem && ordem.cliente && ordem.cliente.doc) || (venda && venda.cliente && venda.cliente.doc) || ""),
     valor: Number(valor) > 0 ? Number(valor) : 0, referente: ordem ? referenteOS(ordem) : venda ? "pagamento da venda de balcão nº " + String(venda.numero).padStart(5, "0") : "",
-    forma: forma || (ordem && ordem.forma_pagamento) || "", data: hojeISO(), obs: "" }));
+    forma: forma || (ordem && ordem.forma_pagamento) || "", conta_destino: "", data: hojeISO(), obs: "" }));
   const [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
   const set = p => { setR(x => ({ ...x, ...p })); setErro(""); };
   const escolherCliente = id => { const c = dados.clientes.find(x => x.id === id); set({ cliente_id: id, ...(c ? { pagador: c.nome, doc: fmtDoc(c.doc) } : {}) }); };
@@ -26,10 +34,11 @@ export function ReciboModal({ ordem, venda, valor, forma, onFechar, onEmitido })
     if (!(Number(r.valor) > 0)) return setErro("Informe o valor recebido.");
     if (!r.referente.trim()) return setErro("Informe a que se refere o pagamento.");
     if (!r.forma) return setErro("Informe a forma de pagamento.");
+    if (!r.conta_destino) return setErro("Informe em qual conta o dinheiro entrou.");
     setSalvando(true);
     try {
       const novo = await api.recibos.salvar({ ordem_id: ordem ? ordem.id : null, ...(venda ? { venda_id: venda.id } : {}), cliente_id: r.cliente_id || null, pagador: r.pagador.trim(), doc: soDig(r.doc), valor: Number(r.valor),
-        referente: r.referente.trim(), forma: r.forma, data: r.data || hojeISO(), obs: r.obs.trim(), emitido_por: perfil.nome });
+        referente: r.referente.trim(), forma: r.forma, conta_destino: r.conta_destino, data: r.data || hojeISO(), obs: r.obs.trim(), emitido_por: perfil.nome });
       if (ordem) await api.evento(ordem.id, "recibo", `${numRecibo(novo.numero)} emitido: ${reais(novo.valor)} (${novo.forma}).`, perfil.nome).catch(() => {});
       if (ordem) await abaterParcelas(ordem.id, Number(novo.valor), novo, perfil).catch(() => {}); // abate as parcelas a receber da O.S.
       avisar(numRecibo(novo.numero) + " emitido."); onEmitido ? onEmitido(novo) : onFechar();
@@ -46,6 +55,7 @@ export function ReciboModal({ ordem, venda, valor, forma, onFechar, onEmitido })
     ${Number(r.valor) > 0 ? html`<span class="dica">${extenso(r.valor)}</span>` : null}
     <${Campo} id="r-ref" rotulo="Referente a" obrig><${Area} id="r-ref" style=${{ minHeight: "64px" }} valor=${r.referente} onMuda=${v => set({ referente: v })} /></${Campo}>
     <div class="campo"><label>Forma de pagamento <i>*</i></label><${Seg} rotulo="Forma de pagamento" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${r.forma} onEscolha=${v => set({ forma: v })} /></div>
+    <${ContaEntrada} forma=${r.forma} valor=${r.conta_destino} onMuda=${v => set({ conta_destino: v })} />
     <${Campo} id="r-obs" rotulo="Observação"><${Texto} id="r-obs" placeholder="ex.: parcela 1 de 2, sinal" valor=${r.obs} onMuda=${v => set({ obs: v })} /></${Campo}>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><button type="button" class="btn btn-pri" disabled=${salvando} onClick=${emitir}>${salvando ? "Emitindo…" : "Emitir e imprimir"}</button></div>
@@ -71,7 +81,7 @@ export function Recibos() {
     <section class="card"><div class="secao-topo"><h3>${validos.length} recibo(s) · ${reais(total)}</h3></div>
       ${porForma.length > 1 ? html`<ul class="ranking">${porForma.map(([f, v]) => html`<li key=${f}><span>${f}</span><b>${reais(v)}</b></li>`)}</ul>` : null}
       ${!lista ? html`<span class="dica">Carregando…</span>` : filtrados.length ? html`<div class="lista">${filtrados.map(r => html`<button type="button" key=${r.id} class=${"linha" + (r.cancelado ? " inativo" : "")} onClick=${() => ir("/imprimir/recibo/" + r.id)}>
-        <span class="cod">${String(r.numero).padStart(5, "0")}</span><span class="meio"><strong>${r.pagador}${r.cancelado ? html` <span class="pill p-bad">Cancelado</span>` : null}</strong><span>${fmtData(r.data)} · ${r.forma} · ${r.referente}</span></span>
+        <span class="cod">${String(r.numero).padStart(5, "0")}</span><span class="meio"><strong>${r.pagador}${r.cancelado ? html` <span class="pill p-bad">Cancelado</span>` : null}</strong><span>${fmtData(r.data)} · ${r.forma}${r.conta_destino ? " → " + r.conta_destino : ""} · ${r.referente}</span></span>
         <span class="dir"><b>${reais(r.valor)}</b></span></button>`)}</div>` : html`<${Vazio}>Nenhum recibo neste mês.</${Vazio}>`}
     </section>
     ${novo ? html`<${ReciboModal} onFechar=${() => setNovo(false)} onEmitido=${r => { setNovo(false); ir("/imprimir/recibo/" + r.id); }} />` : null}

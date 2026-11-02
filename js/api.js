@@ -195,6 +195,11 @@ function criarApiSupabase() {
       desde: async (de, ate) => { try { return await todosPorChave(() => { let q = sb.from("estornos_saldo").select("*").gte("registrado_em", de); if (ate) q = q.lte("registrado_em", ate); return q; }); }
         catch (e) { if (/estornos_saldo|relation|does not exist|schema cache|404/i.test(e.message)) return []; throw e; } },
     },
+    /** saldo de cada conta calculado no banco numa consulta só (supabase/v18.sql) */
+    saldosContas: async () => ok(await sb.rpc("saldos_contas")),
+    /** grava a nova referência dos saldos na mesma transação do cálculo; saldo null = manter o calculado */
+    guardarSaldosContas: async (contas, pagar, receber, por) => { try { return ok(await sb.rpc("guardar_saldos_contas", { p_contas: contas, p_pagar: pagar || "", p_receber: receber || "", p_por: por || "" })); }
+      catch (e) { if (/guardar_saldos_contas|function|schema cache|404/i.test(e.message)) throw new Error("Para guardar os saldos por conta, rode o supabase/v18.sql no Supabase."); throw e; } },
     /** banco com o supabase/v18.sql (saldo por conta e transferências); null = ainda não sabe */
     temV18: () => temV18,
     sefaz: {

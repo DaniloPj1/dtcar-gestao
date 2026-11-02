@@ -125,10 +125,62 @@ end $$;
 drop trigger if exists transferencias_estorno_saldo on public.transferencias;
 create trigger transferencias_estorno_saldo after delete on public.transferencias for each row execute function public.transferencias_estorno_saldo();
 
+-- 2c. saldo de cada conta calculado no banco, numa única consulta (estado consistente), e gravação da nova
+--     referência na mesma transação. Regras: conta o que foi registrado depois do saldo informado (em), com data
+--     a partir do dia da referência; estornos de lançamentos que já estavam no saldo informado.
+create or replace function public.saldos_contas() returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare cfg jsonb; r jsonb := '[]'::jsonb; c jsonb; v_nome text; v_em timestamptz; v_dia date; v_saldo numeric;
+  v_ent numeric; v_sai numeric; v_te numeric; v_ts numeric; v_est numeric;
+begin
+  if not public.e_admin() then raise exception 'Apenas o administrador vê o saldo das contas.'; end if;
+  select dados into cfg from public.config where id = 1;
+  for c in select * from jsonb_array_elements(coalesce(cfg->'contasFinanceiras', '[]'::jsonb)) loop
+    v_nome := c->>'nome'; v_em := nullif(c->>'em', '')::timestamptz; v_saldo := coalesce(nullif(c->>'saldo', '')::numeric, 0);
+    v_dia := (v_em at time zone 'America/Sao_Paulo')::date;
+    select coalesce(sum(valor), 0) into v_ent from public.recibos
+      where not cancelado and conta_destino = v_nome and (v_em is null or (criado_em > v_em and data >= v_dia));
+    select coalesce(sum(coalesce(valor_pago, valor)), 0) into v_sai from public.contas
+      where status = 'paga' and conta_origem = v_nome
+        and (v_em is null or (pago_registrado_em is not null and pago_registrado_em > v_em and pago_em >= v_dia) or (pago_registrado_em is null and pago_em > v_dia));
+    select coalesce(sum(valor) filter (where para_conta = v_nome), 0), coalesce(sum(valor) filter (where de_conta = v_nome), 0) into v_te, v_ts
+      from public.transferencias where (de_conta = v_nome or para_conta = v_nome) and (v_em is null or (criado_em > v_em and data >= v_dia));
+    select coalesce(sum(valor), 0) into v_est from public.estornos_saldo
+      where conta = v_nome and v_em is not null and original_em is not null and original_em <= v_em and registrado_em > v_em;
+    r := r || jsonb_build_array(jsonb_build_object('nome', v_nome, 'saldo', v_saldo, 'em', c->'em', 'por', c->'por',
+      'ent', v_ent + greatest(v_est, 0), 'sai', v_sai - least(v_est, 0), 'tEnt', v_te, 'tSai', v_ts, 'est', v_est,
+      'atual', v_saldo + v_ent - v_sai + v_te - v_ts + v_est));
+  end loop;
+  return r;
+end $$;
+grant execute on function public.saldos_contas() to authenticated;
+
+-- p_contas: [{nome, antigo, saldo}] — saldo nulo = manter o saldo calculado agora (mesma transação); com valor = extrato de agora
+create or replace function public.guardar_saldos_contas(p_contas jsonb, p_pagar text, p_receber text, p_por text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare atuais jsonb; novas jsonb := '[]'::jsonb; c jsonb; v_saldo numeric; v_total numeric := 0;
+begin
+  if not public.e_admin() then raise exception 'Apenas o administrador atualiza o saldo das contas.'; end if;
+  perform 1 from public.config where id = 1 for update; -- uma atualização de saldos por vez
+  atuais := public.saldos_contas();
+  for c in select * from jsonb_array_elements(p_contas) loop
+    if coalesce(trim(c->>'nome'), '') = '' then raise exception 'Dê um nome para cada conta.'; end if;
+    if c->'saldo' is null or jsonb_typeof(c->'saldo') = 'null' then
+      select coalesce((x->>'atual')::numeric, 0) into v_saldo from jsonb_array_elements(atuais) x where x->>'nome' = coalesce(c->>'antigo', c->>'nome');
+      v_saldo := coalesce(v_saldo, 0);
+    else v_saldo := (c->>'saldo')::numeric; end if;
+    v_total := v_total + v_saldo;
+    novas := novas || jsonb_build_array(jsonb_build_object('nome', trim(c->>'nome'), 'saldo', round(v_saldo, 2), 'em', now(), 'por', coalesce(p_por, '')));
+  end loop;
+  update public.config set dados = dados || jsonb_build_object('contasFinanceiras', novas, 'contaPagamento', coalesce(p_pagar, ''), 'contaRecebimento', coalesce(p_receber, ''),
+    'caixaSaldo', jsonb_build_object('valor', round(v_total, 2), 'em', now(), 'por', coalesce(p_por, ''))), atualizado_em = now() where id = 1;
+  return novas;
+end $$;
+grant execute on function public.guardar_saldos_contas(jsonb, text, text, text) to authenticated;
+
 -- 3. backup: a restauração passa a aceitar as transferências
 create or replace function public.restaurar_tabela(p_tabela text, p_linhas jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare cols text; antes bigint; depois bigint; r jsonb; erros int := 0; q text;
+declare cols text; antes bigint; depois bigint; r jsonb; erros int := 0; q text; ausentes uuid[] := '{}';
 begin
   if not public.e_admin() then raise exception 'Apenas o administrador restaura backup.'; end if;
   if p_tabela not in ('fornecedores', 'clientes', 'veiculos', 'servicos', 'produtos', 'produto_fornecedor', 'notas_entrada', 'ordens', 'os_itens', 'eventos', 'fotos',
@@ -145,6 +197,11 @@ begin
   end if;
   select string_agg(quote_ident(a.attname), ', ' order by a.attnum) into cols
   from pg_attribute a where a.attrelid = ('public.' || p_tabela)::regclass and a.attnum > 0 and not a.attisdropped and a.attgenerated = '';
+  -- registros que vão voltar (ainda não existem): se tinham estornos (foram excluídos), a volta compensa
+  if p_tabela in ('transferencias', 'recibos', 'contas') then
+    execute format('select coalesce(array_agg((x->>''id'')::uuid), ''{}'') from jsonb_array_elements($1) x where not exists (select 1 from public.%I t where t.id = (x->>''id'')::uuid)', p_tabela)
+      into ausentes using p_linhas;
+  end if;
   execute format('select count(*) from public.%I', p_tabela) into antes;
   q := format('insert into public.%1$I (%2$s) overriding system value select %2$s from jsonb_populate_recordset(null::public.%1$I, $1) on conflict do nothing', p_tabela, cols);
   begin
@@ -155,6 +212,12 @@ begin
     end loop;
   end;
   execute format('select count(*) from public.%I', p_tabela) into depois;
+  if array_length(ausentes, 1) > 0 then
+    execute format('insert into public.estornos_saldo (conta, valor, origem, registro, original_em)
+      select e.conta, -sum(e.valor), ''restauracao'', e.registro, min(e.original_em) from public.estornos_saldo e
+      where e.registro = any($1) and exists (select 1 from public.%I t where t.id = e.registro)
+      group by e.conta, e.registro having sum(e.valor) <> 0', p_tabela) using ausentes;
+  end if;
   return jsonb_build_object('incluidos', depois - antes, 'erros', erros);
 end $$;
 grant execute on function public.restaurar_tabela(text, jsonb) to authenticated;

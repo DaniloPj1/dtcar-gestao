@@ -119,7 +119,8 @@ try:
     pg.evaluate("window.__DB.recibos.push({ id: 'rx1', numero: 99, valor: 300, forma: 'PIX', conta_destino: 'Sicredi', data: new Date().toISOString().slice(0, 10), criado_em: new Date().toISOString(), cancelado: false })")
     pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1500)
     depois = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
-    chk("caixa: recibo lançado com a janela aberta não se perde", "300,00" in depois and antes != depois)
+    num = lambda t: float(t.split("R$")[-1].strip().replace(".", "").replace(",", "."))
+    chk("caixa: recibo lançado com a janela aberta não se perde", abs(num(depois) - num(antes) - 300) < 0.01)
     # e não conta duas vezes depois de recarregar
     pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
     chk("caixa: recibo lançado durante a leitura não conta duas vezes", pg.inner_text(".tab-caixa tr:has-text('Sicredi')") == depois)

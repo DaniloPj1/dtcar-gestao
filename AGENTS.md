@@ -30,7 +30,9 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (`nomesContas`/`contaSugerida` em `js/regras.js`). Pagamento grava `contas.conta_origem` (obrigatório na baixa), recibo grava `recibos.conta_destino`
   (componente `ContaEntrada` em `js/telas/recibos.js`, sugerido pela forma) e transferências ficam na tabela `transferencias`.
   Saldo atual de cada conta = saldo informado + recibos − pagamentos ± transferências registrados depois e até a leitura, ± estornos
-  (`estornos_saldo`, gravados por gatilho quando um lançamento já incluído no saldo é cancelado/desfeito/excluído) (`saldosPorConta` em `js/telas/caixa.js`).
+  (`estornos_saldo`, gravados por gatilho quando um lançamento já incluído no saldo é cancelado/desfeito/excluído; a restauração de backup compensa).
+  O cálculo oficial é no banco, numa consulta só: `saldos_contas()`; a nova referência é gravada na mesma transação por `guardar_saldos_contas()`
+  (saldo null = manter o calculado). `saldosPorConta` em `js/telas/caixa.js` é só a estimativa sem conexão (não permite guardar).
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.

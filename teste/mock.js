@@ -55,6 +55,18 @@
     contas: { abertas: async () => db.contas.filter(c => c.status === "aberta"), listar: async ({ de, ate, campo = "vencimento", status } = {}) => db.contas.filter(c => (!de || (c[campo] || "") >= de) && (!ate || (c[campo] || "") <= ate) && (!status || c.status === status) && (campo !== "pago_em" || c[campo])), salvar: async c => { if (c.id) { const o = db.contas.find(x => x.id === c.id); const antes = o.status; Object.assign(o, c, { atualizado_em: now() }); if (o.status === "paga" && antes !== "paga") o.pago_registrado_em = now(); if (o.status !== "paga") o.pago_registrado_em = null; return o; } const x = { id: uid(), status: "aberta", ...c }; db.contas.push(x); return x; } },
     transferencias: { listar: async ({ de, ate } = {}) => (db.transferencias || []).filter(t => (!de || t.data >= de) && (!ate || t.data <= ate)), salvar: async t => { const x = { id: uid(), criado_em: now(), ...t }; (db.transferencias = db.transferencias || []).push(x); return x; }, excluir: async id => { db.transferencias = db.transferencias.filter(t => t.id !== id); } },
     temV18: () => true,
+    // mesmas regras da função saldos_contas do v18 (no servidor, numa consulta só)
+    saldosContas: async () => { if (window.__FALHA_RECIBOS) throw new Error("sem conexão"); const dia = em => em ? new Date(em).toISOString().slice(0, 10) : "";
+      return (db.config.contasFinanceiras || []).map(c => { const em = c.em, d0 = dia(em), dep = (data, reg) => !em || (reg ? reg > em && data >= d0 : data > d0);
+        const s = l => l.reduce((t, x) => t + Number(x), 0);
+        const ent = s((db.recibos || []).filter(r => !r.cancelado && r.conta_destino === c.nome && dep(r.data, r.criado_em || "9")).map(r => r.valor));
+        const sai = s(db.contas.filter(x => x.status === "paga" && x.conta_origem === c.nome && dep(x.pago_em, x.pago_registrado_em)).map(x => x.valor_pago ?? x.valor));
+        const tEnt = s((db.transferencias || []).filter(t => t.para_conta === c.nome && dep(t.data, t.criado_em)).map(t => t.valor)), tSai = s((db.transferencias || []).filter(t => t.de_conta === c.nome && dep(t.data, t.criado_em)).map(t => t.valor));
+        const est = s((db.estornos || []).filter(e => e.conta === c.nome && em && e.original_em && e.original_em <= em && e.registrado_em > em).map(e => e.valor));
+        return { ...c, ent: ent + Math.max(est, 0), sai: sai - Math.min(est, 0), tEnt, tSai, est, atual: Math.round((Number(c.saldo) + ent - sai + tEnt - tSai + est) * 100) / 100 }; }); },
+    guardarSaldosContas: async (contas, pagar, receber, por) => { const at = await window.__API_MOCK.saldosContas(); const em = new Date().toISOString();
+      const novas = contas.map(c => ({ nome: c.nome, saldo: c.saldo == null ? ((at.find(x => x.nome === (c.antigo || c.nome)) || {}).atual || 0) : c.saldo, em, por }));
+      db.config = { ...db.config, contasFinanceiras: novas, contaPagamento: pagar, contaRecebimento: receber, caixaSaldo: { valor: novas.reduce((t, c) => t + c.saldo, 0), em, por } }; return novas; },
     estornos: { desde: async (de, ate) => (db.estornos || []).filter(e => e.registrado_em >= de && (!ate || e.registrado_em <= ate)) },
     sefaz: { novas: async () => 0, config: async () => null },
     painel: async () => ({}), contasAbertas: async () => [],

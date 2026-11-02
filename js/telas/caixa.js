@@ -58,7 +58,7 @@ function TransferenciaModal({ contas, onFechar, onFeito }) {
 }
 
 /** Edição dos saldos: nome de cada conta e saldo de agora; contas padrão para pagar e receber */
-function SaldosModal({ linhas, lidoEm, onFechar, onSalvo }) {
+function SaldosModal({ linhas, onFechar, onSalvo }) {
   const { cfg, perfil, avisar, recarregar } = useApp();
   const [l, setL] = useState(linhas.map(c => ({ nome: c.nome, saldo: c.atual, antigo: c.nome })));
   const [pg, setPg] = useState(cfg.contaPagamento || ""), [rc, setRc] = useState(cfg.contaRecebimento || "");
@@ -70,15 +70,11 @@ function SaldosModal({ linhas, lidoEm, onFechar, onSalvo }) {
     if (new Set(nomes.map(n => n.toLowerCase())).size !== nomes.length) return setErro("Há contas com o mesmo nome.");
     setSalvando(true);
     try {
-      const agora = new Date().toISOString();
-      // saldo mantido como sugerido: vale para o momento da leitura (o que for lançado depois continua contando);
-      // saldo digitado (extrato de agora): vale a partir de agora
+      // saldo igual ao sugerido = manter: o banco grava o saldo calculado no mesmo instante da nova referência
       const sug = new Map(linhas.map(c => [c.nome, c.atual]));
       const contas = l.map(c => { const igual = sug.has(c.antigo) && Math.abs(arred(c.saldo) - sug.get(c.antigo)) < 0.005;
-        return { nome: c.nome.trim(), saldo: arred(c.saldo), em: igual && lidoEm ? lidoEm : agora, por: perfil.nome }; });
-      const em = contas.reduce((m, c) => (c.em > m ? c.em : m), "");
-      const total = arred(contas.reduce((s, c) => s + c.saldo, 0));
-      await api.salvarConfig({ ...cfg, contasFinanceiras: contas, contaPagamento: nomes.includes(pg) ? pg : "", contaRecebimento: nomes.includes(rc) ? rc : "", caixaSaldo: { valor: total, em, por: perfil.nome } });
+        return { nome: c.nome.trim(), antigo: c.antigo || "", saldo: igual ? null : arred(c.saldo) }; });
+      await api.guardarSaldosContas(contas, nomes.includes(pg) ? pg : "", nomes.includes(rc) ? rc : "", perfil.nome);
       await recarregar(["config"]); avisar("Saldos atualizados."); onSalvo();
     } catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };
@@ -144,7 +140,14 @@ export function PrevisaoCaixa() {
       setMov({ recibos: unicos(recibos), pagas: unicos(pagas), transf: unicos(transf), estornos: unicos(estornos), lidoEm });
     } catch (e) { setMov({ erro: e.message }); } // sem os movimentos não há saldo atual (nem nova referência)
   })(); }, [desde, recarga, cfg.contasFinanceiras]);
-  const saldos = useMemo(() => mov && !mov.erro ? saldosPorConta(contasCfg, mov) : null, [mov, cfg.contasFinanceiras]);
+  // saldo de cada conta: calculado no banco (consistente); sem internet ou sem o v18, estimado aqui com a cópia local
+  const [doBanco, setDoBanco] = useState(null);
+  useEffect(() => { let vivo = true; setDoBanco(null);
+    (async () => { try { const r = cfg.contasFinanceiras && cfg.contasFinanceiras.length ? await api.saldosContas() : null; if (vivo) setDoBanco(r ? r.map(c => ({ ...c, saldo: Number(c.saldo), ent: Number(c.ent), sai: Number(c.sai), tEnt: Number(c.tEnt), tSai: Number(c.tSai), atual: Number(c.atual) })) : false); }
+      catch (e) { if (vivo) setDoBanco(false); } })();
+    return () => { vivo = false; }; }, [recarga, cfg.contasFinanceiras]);
+  const estimado = doBanco === false;
+  const saldos = useMemo(() => doBanco ? doBanco : doBanco === false && mov && !mov.erro ? saldosPorConta(contasCfg, mov) : null, [doBanco, mov, cfg.contasFinanceiras]);
   const totalAtual = saldos ? arred(saldos.reduce((s, c) => s + c.atual, 0)) : 0;
   const semConta = mov && !mov.erro ? { rec: mov.recibos.filter(r => !r.cancelado && !r.conta_destino && r.data >= desde), pag: mov.pagas.filter(x => !x.conta_origem && x.pago_em >= desde) } : { rec: [], pag: [] };
 
@@ -203,9 +206,10 @@ export function PrevisaoCaixa() {
     <section class="card">
       <div class="caixa-contas-topo"><h3>Saldo por conta</h3><span class="espaco"></span>
         <button type="button" class="btn btn-sm" onClick=${() => setModal("transf")} disabled=${api.temV18 && api.temV18() === false}>Transferir entre contas</button>
-        <button type="button" class="btn btn-sm btn-pri" onClick=${() => setModal("saldos")} disabled=${!saldos}>Atualizar saldos</button></div>
+        <button type="button" class="btn btn-sm btn-pri" onClick=${() => setModal("saldos")} disabled=${!saldos || (estimado && cfg.contasFinanceiras && cfg.contasFinanceiras.length)}>Atualizar saldos</button></div>
+      ${estimado && cfg.contasFinanceiras && cfg.contasFinanceiras.length && saldos ? html`<div class="aviso">Saldos estimados com a cópia deste aparelho (sem conexão com o banco de dados). Para atualizar os saldos, conecte-se à internet.</div>` : null}
       ${api.temV18 && api.temV18() === false ? html`<div class="aviso">Para o saldo de cada conta acompanhar recibos, pagamentos e transferências, rode o <code>supabase/v18.sql</code> no Supabase.</div>` : null}
-      ${mov && mov.erro ? html`<div class="erros">Saldo das contas indisponível: não foi possível ler recibos, pagamentos e transferências (${mov.erro}). A previsão abaixo parte de R$ 0,00 até a leitura voltar.</div>`
+      ${!doBanco && mov && mov.erro ? html`<div class="erros">Saldo das contas indisponível: não foi possível ler recibos, pagamentos e transferências (${mov.erro}). A previsão abaixo parte de R$ 0,00 até a leitura voltar.</div>`
         : !saldos ? html`<div class="esqueleto"></div>` : html`<div class="grade-dados"><table class="tab-caixa"><thead><tr><th>Conta</th><th class="num">Saldo informado</th><th class="num">Entradas</th><th class="num">Saídas</th><th class="num">Transferências</th><th class="num">Saldo atual</th></tr></thead>
         <tbody>${saldos.map(c => html`<tr key=${c.nome} class=${c.atual < 0 ? "neg" : ""}><td><b>${c.nome}</b><br /><small class="sub">${c.em ? "informado em " + new Date(c.em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "saldo ainda não informado"}</small></td>
           <td class="num">${reais(c.saldo || 0)}</td><td class="num c-ok">${c.ent ? reais(c.ent) : ""}</td><td class="num c-bad">${c.sai ? reais(c.sai) : ""}</td>
@@ -237,6 +241,6 @@ export function PrevisaoCaixa() {
       </section>
     </div>`}
     ${modal === "transf" ? html`<${TransferenciaModal} contas=${contasCfg.map(c => c.nome)} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); setRecarga(x => x + 1); }} />` : null}
-    ${modal === "saldos" && saldos ? html`<${SaldosModal} linhas=${saldos} lidoEm=${mov && mov.lidoEm} onFechar=${() => setModal(null)} onSalvo=${() => { setModal(null); setRecarga(x => x + 1); }} />` : null}
+    ${modal === "saldos" && saldos ? html`<${SaldosModal} linhas=${saldos} onFechar=${() => setModal(null)} onSalvo=${() => { setModal(null); setRecarga(x => x + 1); }} />` : null}
   </div>`;
 }

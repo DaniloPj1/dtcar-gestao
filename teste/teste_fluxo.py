@@ -113,6 +113,13 @@ try:
     pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
     pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1200)
     chk("caixa: transferência continua listada após atualizar saldos", "Sicredi → PicPay PJ" in pg.inner_text("main"))
+    # recibo lançado em outro aparelho com a janela de saldos aberta continua contando depois de guardar
+    antes = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.evaluate("window.__DB.recibos.push({ id: 'rx1', numero: 99, valor: 300, forma: 'PIX', conta_destino: 'Sicredi', data: new Date().toISOString().slice(0, 10), criado_em: new Date(Date.now() + 1000).toISOString(), cancelado: false })")
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1500)
+    depois = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
+    chk("caixa: recibo lançado com a janela aberta não se perde", "300,00" in depois and antes != depois)
     # falha ao ler os movimentos: saldo indisponível e sem gravar nova referência
     pg.evaluate("window.__FALHA_RECIBOS = true"); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
     chk("caixa: falha na leitura deixa o saldo indisponível", "Saldo das contas indisponível" in pg.inner_text("main") and pg.is_disabled("button:has-text('Atualizar saldos')"))

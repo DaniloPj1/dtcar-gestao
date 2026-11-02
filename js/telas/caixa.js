@@ -54,7 +54,7 @@ function TransferenciaModal({ contas, onFechar, onFeito }) {
 }
 
 /** Edição dos saldos: nome de cada conta e saldo de agora; contas padrão para pagar e receber */
-function SaldosModal({ linhas, onFechar, onSalvo }) {
+function SaldosModal({ linhas, lidoEm, onFechar, onSalvo }) {
   const { cfg, perfil, avisar, recarregar } = useApp();
   const [l, setL] = useState(linhas.map(c => ({ nome: c.nome, saldo: c.atual, antigo: c.nome })));
   const [pg, setPg] = useState(cfg.contaPagamento || ""), [rc, setRc] = useState(cfg.contaRecebimento || "");
@@ -66,8 +66,13 @@ function SaldosModal({ linhas, onFechar, onSalvo }) {
     if (new Set(nomes.map(n => n.toLowerCase())).size !== nomes.length) return setErro("Há contas com o mesmo nome.");
     setSalvando(true);
     try {
-      const em = new Date().toISOString();
-      const contas = l.map(c => ({ nome: c.nome.trim(), saldo: arred(c.saldo), em, por: perfil.nome }));
+      const agora = new Date().toISOString();
+      // saldo mantido como sugerido: vale para o momento da leitura (o que for lançado depois continua contando);
+      // saldo digitado (extrato de agora): vale a partir de agora
+      const sug = new Map(linhas.map(c => [c.nome, c.atual]));
+      const contas = l.map(c => { const igual = sug.has(c.antigo) && Math.abs(arred(c.saldo) - sug.get(c.antigo)) < 0.005;
+        return { nome: c.nome.trim(), saldo: arred(c.saldo), em: igual && lidoEm ? lidoEm : agora, por: perfil.nome }; });
+      const em = contas.reduce((m, c) => (c.em > m ? c.em : m), "");
       const total = arred(contas.reduce((s, c) => s + c.saldo, 0));
       await api.salvarConfig({ ...cfg, contasFinanceiras: contas, contaPagamento: nomes.includes(pg) ? pg : "", contaRecebimento: nomes.includes(rc) ? rc : "", caixaSaldo: { valor: total, em, por: perfil.nome } });
       await recarregar(["config"]); avisar("Saldos atualizados."); onSalvo();
@@ -126,9 +131,10 @@ export function PrevisaoCaixa() {
   const desde = contasCfg.reduce((m, c) => (c.em && dataDe(c.em) < m ? dataDe(c.em) : m), hoje);
   useEffect(() => { (async () => {
     setMov(null);
+    const lidoEm = new Date().toISOString(); // momento da leitura: o saldo sugerido vale para este instante
     try {
       const [recibos, pagas, transf] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde) : api.recibos.listar({ de: desde })), api.contas.listar({ de: desde, campo: "pago_em", status: "paga" }), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
-      setMov({ recibos, pagas, transf });
+      setMov({ recibos, pagas, transf, lidoEm });
     } catch (e) { setMov({ erro: e.message }); } // sem os movimentos não há saldo atual (nem nova referência)
   })(); }, [desde, recarga, cfg.contasFinanceiras]);
   const saldos = useMemo(() => mov && !mov.erro ? saldosPorConta(contasCfg, mov) : null, [mov, cfg.contasFinanceiras]);
@@ -224,6 +230,6 @@ export function PrevisaoCaixa() {
       </section>
     </div>`}
     ${modal === "transf" ? html`<${TransferenciaModal} contas=${contasCfg.map(c => c.nome)} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); setRecarga(x => x + 1); }} />` : null}
-    ${modal === "saldos" && saldos ? html`<${SaldosModal} linhas=${saldos} onFechar=${() => setModal(null)} onSalvo=${() => { setModal(null); setRecarga(x => x + 1); }} />` : null}
+    ${modal === "saldos" && saldos ? html`<${SaldosModal} linhas=${saldos} lidoEm=${mov && mov.lidoEm} onFechar=${() => setModal(null)} onSalvo=${() => { setModal(null); setRecarga(x => x + 1); }} />` : null}
   </div>`;
 }

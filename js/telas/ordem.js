@@ -444,12 +444,12 @@ export function Ordem({ id, params = {} }) {
   };
 
   // ---- barra de ações por etapa
-  const B = (rot, fn, pri, dis) => html`<button type="button" class=${"btn" + (pri ? " btn-pri" : "")} disabled=${!!ocupado || dis} onClick=${fn}>${rot}</button>`;
+  const B = (rot, fn, pri, dis, extra) => html`<button type="button" class=${"btn" + (pri ? " btn-pri" : "") + (extra ? " " + extra : "")} disabled=${!!ocupado || dis} onClick=${fn}>${rot}</button>`;
   let acoes = [];
   // 4 etapas: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada
   const etapa = etapaOS(o);
   if (st === "diagnostico" && gestor) acoes = [pode(perfil, "aprovar") ? B("Aprovar orçamento", aprovarOrcamento, true) : null, B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, !pode(perfil, "aprovar"))];
-  if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar)];
+  if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar, false, false, "btn-recusa")];
   if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Serviço concluído", () => marcarPronto(false), true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
   if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", () => setModal({ tipo: "encerrar" }), true), saldo > 0 ? B("Entregar sem receber", () => setModal({ tipo: "entrega" })) : null, B("Avisar cliente", () => whats("pronto"))];
   if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", () => setModal({ tipo: "entrega" }), true)];

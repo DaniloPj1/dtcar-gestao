@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Area, Modal, Seg, Dinheiro, I } from "../ui.js";
 import { numOS, somaDias, totais, reais, soDig, fmtKm, hojeISO, arred, linkWhats, fmtData } from "../util.js";
-import { referenteOS } from "./recibos.js";
+import { referenteOS, ContaEntrada } from "./recibos.js";
 import { pode } from "../regras.js";
 import { PrazoReceber, validarPrazo, lancarParcelas, abaterParcelas, semPrazo } from "./receber.js";
 
@@ -92,7 +92,7 @@ export async function avancarEtapa(o, etapa, { perfil, cfg }) {
 export function EncerrarModal({ o, onFechar, onFeito }) {
   const { cfg, perfil, dados, avisar, recarregar, ir } = useApp();
   const [r, setR] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
-  const [km, setKm] = useState(""), [forma, setForma] = useState(o.forma_pagamento || ""), [valor, setValor] = useState(0), [receber, setReceber] = useState(true), [imprimir, setImprimir] = useState(true), [prazo, setPrazo] = useState(null);
+  const [km, setKm] = useState(""), [forma, setForma] = useState(o.forma_pagamento || ""), [contaDest, setContaDest] = useState(""), [valor, setValor] = useState(0), [receber, setReceber] = useState(true), [imprimir, setImprimir] = useState(true), [prazo, setPrazo] = useState(null);
   const v12 = !api.temV12 || api.temV12();
   useEffect(() => { (async () => {
     try {
@@ -111,7 +111,7 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
     if (r.pend.length) return setErro("Há itens aguardando aprovação do cliente. Abra a O.S. e registre a decisão antes de encerrar.");
     const k = parseInt(soDig(km), 10);
     if (!jaEntregue && !(k >= (r.ord.km_entrada || 0))) return setErro("O KM de saída não pode ser menor que o de entrada (" + fmtKm(r.ord.km_entrada) + ").");
-    if (receber && r.saldo > 0) { if (!forma) return setErro("Informe a forma de pagamento."); if (!(Number(valor) > 0)) return setErro("Informe o valor recebido."); if (Number(valor) > r.saldo + 0.009) return setErro("O valor é maior que o saldo de " + reais(r.saldo) + "."); }
+    if (receber && r.saldo > 0) { if (!forma) return setErro("Informe a forma de pagamento."); if (!contaDest) return setErro("Informe em qual conta o dinheiro entrou."); if (!(Number(valor) > 0)) return setErro("Informe o valor recebido."); if (Number(valor) > r.saldo + 0.009) return setErro("O valor é maior que o saldo de " + reais(r.saldo) + "."); }
     if (falta > 0.009) { const ep = validarPrazo(prazo, falta); if (ep) return setErro(ep); }
     setOcupado(true);
     try {
@@ -124,7 +124,7 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
       if (receber && r.saldo > 0) {
         const cli = dados.clientes.find(c => c.id === r.ord.cliente_id);
         recibo = await api.recibos.salvar({ ordem_id: o.id, cliente_id: r.ord.cliente_id || null, pagador: (r.ord.cliente || {}).nome || "", doc: soDig((cli && cli.doc) || (r.ord.cliente || {}).doc || ""), valor: Number(valor),
-          referente: referenteOS({ ...r.ord, total: r.t.total }), forma, data: hojeISO(), obs: "", emitido_por: perfil.nome });
+          referente: referenteOS({ ...r.ord, total: r.t.total }), forma, conta_destino: contaDest, data: hojeISO(), obs: "", emitido_por: perfil.nome });
         await api.evento(o.id, "recibo", "Recibo " + String(recibo.numero).padStart(5, "0") + " emitido: " + reais(recibo.valor) + " (" + forma + ").", perfil.nome);
         if (r.parc.length) await abaterParcelas(o.id, recibo.valor, recibo, perfil);
       }
@@ -145,6 +145,7 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
       ${r.saldo > 0 ? html`
         <div class="campo"><label>Pagamento</label><${Seg} rotulo="Pagamento" opcoes=${[["Receber agora", "ok"], [jaEntregue ? "Combinar prazo" : "Entregar e receber depois", "warn"]]} valor=${receber ? "Receber agora" : jaEntregue ? "Combinar prazo" : "Entregar e receber depois"} onEscolha=${v => { setReceber(v === "Receber agora"); setErro(""); }} /></div>
         ${receber ? html`<div class="campo"><label>Forma de pagamento <i>*</i></label><${Seg} rotulo="Forma" opcoes=${(cfg.formasPagamento || []).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>
+          <${ContaEntrada} forma=${forma} valor=${contaDest} onMuda=${v => { setContaDest(v); setErro(""); }} />
           <${Campo} id="enc-valor" rotulo="Valor recebido" dica=${Number(valor) < r.saldo - 0.009 ? "Pagamento parcial: a O.S. continua a receber " + reais(r.saldo - Number(valor)) + "." : "Quitando o saldo, a O.S. é finalizada."}><${Dinheiro} id="enc-valor" valor=${valor} onMuda=${v => { setValor(v); setErro(""); }} /></${Campo}>
           <label class="linha-check"><input type="checkbox" checked=${imprimir} onChange=${e => setImprimir(e.target.checked)} /><span>Abrir o recibo para imprimir</span></label>` : null}`
       : html`<div class="info">Nada a receber: a O.S. será finalizada${jaEntregue ? "" : " ao registrar a entrega"}.</div>`}

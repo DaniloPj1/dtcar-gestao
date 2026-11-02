@@ -8,8 +8,8 @@ import { fmtDataHora } from "../util.js";
 const TABELAS = [["fornecedores", "Fornecedores"], ["clientes", "Clientes"], ["veiculos", "Veículos"], ["servicos", "Serviços (cadastro antigo)"], ["produtos", "Produtos e serviços"],
   ["produto_fornecedor", "Códigos dos fornecedores"], ["notas_entrada", "Notas de entrada"], ["ordens", "Ordens de serviço"], ["os_itens", "Itens das O.S."], ["eventos", "Histórico das O.S."],
   ["fotos", "Fotos (referências)"], ["recibos", "Recibos"], ["vendas", "Vendas de balcão"], ["venda_itens", "Itens das vendas"], ["estoque_mov", "Movimentos de estoque"],
-  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"], ["receber", "Contas a receber"]];
-const OPCIONAIS = t => t === "servicos" || t.startsWith("funcionario") || t === "receber"; // tabelas que podem não existir no banco
+  ["estoque_reserva", "Estoque reservado em O.S."], ["contas", "Contas a pagar"], ["nfe_recebidas", "Notas da SEFAZ"], ["nfe_os_vinculos", "Notas vinculadas às O.S."], ["funcionarios", "Funcionários"], ["funcionario_lanc", "Lançamentos dos funcionários"], ["receber", "Contas a receber"], ["transferencias", "Transferências entre contas"]];
+const OPCIONAIS = t => t === "servicos" || t.startsWith("funcionario") || t === "receber" || t === "transferencias"; // tabelas que podem não existir no banco
 
 /** origem do arquivo inteiro (nunca mistura): "pc" = programa sem internet com o banco do PC carregado; senão, servidor */
 export const origemBackup = () => (api.bancoDoPC && api.bancoPronto && api.backup && api.backup.doPC && estaSemRede() ? "pc" : "servidor");

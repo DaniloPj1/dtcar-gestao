@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { useApp, Campo, Modal, Seg, Dinheiro, Vazio, Abas } from "../ui.js";
 import { reais, fmtData, hojeISO, somaDias, arred, soDig, norm, numOS, linkWhats, fmtTel } from "../util.js";
 import { pode } from "../regras.js";
-import { referenteOS } from "./recibos.js";
+import { referenteOS, ContaEntrada } from "./recibos.js";
 
 const DIA = 86400000;
 export const diasAte = iso => Math.round((new Date(iso + "T12:00:00") - new Date(hojeISO() + "T12:00:00")) / DIA);
@@ -97,17 +97,18 @@ export const semPrazo = (saldo, abertas, pago) => { const A = abertas.reduce((s,
 export function ReceberParcelaModal({ parcela, ordem, onFechar, onFeito }) {
   const { cfg, perfil, dados, avisar, recarregar, ir } = useApp();
   const [forma, setForma] = useState(parcela.forma === "Promissória" || parcela.forma === "Boleto" ? "" : parcela.forma || ""), [valor, setValor] = useState(Number(parcela.valor)), [data, setData] = useState(hojeISO());
-  const [imprimir, setImprimir] = useState(true), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
+  const [imprimir, setImprimir] = useState(true), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false), [contaDest, setContaDest] = useState("");
   const juros = arred(Math.max(0, Number(valor) - Number(parcela.valor)));
   const confirmar = async () => {
     if (!forma) return setErro("Informe a forma de pagamento.");
+    if (!contaDest) return setErro("Informe em qual conta o dinheiro entrou.");
     if (!(Number(valor) > 0)) return setErro("Informe o valor recebido.");
     setOcupado(true);
     try {
       const o = ordem || dados.ordens.find(x => x.id === parcela.ordem_id) || { id: parcela.ordem_id, numero: "", cliente: { nome: parcela.cliente_nome } };
       const cli = dados.clientes.find(c => c.id === (parcela.cliente_id || o.cliente_id));
       const rec = await api.recibos.salvar({ ordem_id: parcela.ordem_id || null, cliente_id: parcela.cliente_id || null, pagador: parcela.cliente_nome || (o.cliente || {}).nome || "", doc: soDig((cli && cli.doc) || ""), valor: Number(valor),
-        referente: (o.numero ? referenteOS(o) : "pagamento") + (parcela.parcelas > 1 ? " (parcela " + parcela.parcela + "/" + parcela.parcelas + ")" : ""), forma, data, obs: juros ? "Inclui " + reais(juros) + " de juros/multa." : "", emitido_por: perfil.nome });
+        referente: (o.numero ? referenteOS(o) : "pagamento") + (parcela.parcelas > 1 ? " (parcela " + parcela.parcela + "/" + parcela.parcelas + ")" : ""), forma, conta_destino: contaDest, data, obs: juros ? "Inclui " + reais(juros) + " de juros/multa." : "", emitido_por: perfil.nome });
       const resto = arred(Number(parcela.valor) - Number(valor));
       await baixarParcela(parcela, Math.min(Number(valor), Number(parcela.valor)), rec, perfil);
       if (parcela.ordem_id) await api.evento(parcela.ordem_id, "recibo", "Parcela " + parcela.parcela + "/" + parcela.parcelas + " recebida: " + reais(valor) + " (" + forma + ")" + (resto > 0.009 ? ". Restam " + reais(resto) + "." : "."), perfil.nome).catch(() => {});
@@ -119,6 +120,7 @@ export function ReceberParcelaModal({ parcela, ordem, onFechar, onFeito }) {
     <p class="sub">${parcela.cliente_nome} · ${parcela.descricao} · combinado: ${parcela.forma}</p>
     <div class="encerrar-resumo"><div><span>Valor da parcela</span><b>${reais(parcela.valor)}</b></div><div><span>Vencimento</span><b>${fmtData(parcela.vencimento)}</b></div><div class="forte"><span>Situação</span><b>${situacaoParcela(parcela).t}</b></div></div>
     <div class="campo"><label>Forma de pagamento <i>*</i></label><${Seg} rotulo="Forma" opcoes=${formasReceber(cfg).map(x => [x, "info"])} valor=${forma} onEscolha=${v => { setForma(v); setErro(""); }} /></div>
+    <${ContaEntrada} forma=${forma} valor=${contaDest} onMuda=${v => { setContaDest(v); setErro(""); }} />
     <div class="grade">
       <${Campo} id="rp-valor" rotulo="Valor recebido" dica=${Number(valor) < Number(parcela.valor) - 0.009 ? "Parcial: ficam " + reais(Number(parcela.valor) - Number(valor)) + " em aberto nesta parcela." : juros ? "Inclui " + reais(juros) + " de juros/multa." : ""}><${Dinheiro} id="rp-valor" valor=${valor} onMuda=${setValor} /></${Campo}>
       <${Campo} id="rp-data" rotulo="Data do recebimento"><input id="rp-data" type="date" class="inp" value=${data} onInput=${e => setData(e.target.value)} /></${Campo}>

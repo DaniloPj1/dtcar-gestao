@@ -35,7 +35,13 @@ export function traduzErro(e) {
 
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero,legado_receber:checkin->legado->a_receber";
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
-let temV11 = true, temReceber = true;
+let temV11 = true, temReceber = true, temV18 = null;
+/** grava sem a coluna nova da v18 (conta de origem/destino) se o banco ainda não tiver o supabase/v18.sql */
+async function semColunaV18(linha, coluna, gravar) {
+  if (temV18 === false || !(coluna in linha)) { const { [coluna]: _, ...resto } = linha; return gravar(temV18 === false ? resto : linha); }
+  try { return await gravar(linha); }
+  catch (e) { if (!new RegExp(coluna).test(e.message)) throw e; temV18 = false; const { [coluna]: _, ...resto } = linha; return gravar(resto); }
+}
 
 // ---- sem internet: depois que o sistema percebe que caiu, nada fica esperando o servidor ----
 // Toda chamada ao servidor tem tempo-limite; em modo "sem rede" ela falha na hora (e quem chamou usa a cópia do aparelho).
@@ -127,7 +133,7 @@ function criarApiSupabase() {
     recibos: {
       listar: async ({ ordemId, de, ate } = {}) => { let q = sb.from("recibos").select("*"); if (ordemId) q = q.eq("ordem_id", ordemId); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
       um: async id => ok(await sb.from("recibos").select("*").eq("id", id).single()),
-      salvar: async r => { const { id, ...resto } = r; return id ? ok(await sb.from("recibos").update(resto).eq("id", id).select().single()) : ok(await sb.from("recibos").insert(resto).select().single()); },
+      salvar: async r => semColunaV18(r, "conta_destino", async x => { const { id, ...resto } = x; return id ? ok(await sb.from("recibos").update(resto).eq("id", id).select().single()) : ok(await sb.from("recibos").insert(resto).select().single()); }),
     },
     estoque: {
       movimentos: async produtoId => ok(await sb.from("estoque_mov").select("*").eq("produto_id", produtoId).order("criado_em", { ascending: false }).limit(200)),
@@ -166,11 +172,21 @@ function criarApiSupabase() {
     contas: {
       listar: async ({ de, ate, campo = "vencimento", status } = {}) => todos(() => { let q = sb.from("contas").select("*"); if (de) q = q.gte(campo, de); if (ate) q = q.lte(campo, ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
       abertas: async () => todos(() => sb.from("contas").select("*").eq("status", "aberta").order("vencimento").order("id")),
-      salvar: async c => { const { id, ...resto } = c; return id ? ok(await sb.from("contas").update(resto).eq("id", id).select().single()) : ok(await sb.from("contas").insert(resto).select().single()); },
+      salvar: async c => semColunaV18(c, "conta_origem", async x => { const { id, ...resto } = x; return id ? ok(await sb.from("contas").update(resto).eq("id", id).select().single()) : ok(await sb.from("contas").insert(resto).select().single()); }),
       excluir: async id => ok(await sb.from("contas").delete().eq("id", id)),
       lancar: async linhas => ok(await sb.rpc("lancar_contas", { p_linhas: linhas })),
       porCodigo: async cod => cod ? ok(await sb.from("contas").select("id,descricao,valor,vencimento,status").eq("codigo_barras", cod).neq("status", "cancelada").maybeSingle()) : null,
     },
+    /** transferências entre as contas da empresa (supabase/v18.sql); sem a v18, lista vazia */
+    transferencias: {
+      listar: async ({ de, ate } = {}) => { try { const l = await todos(() => { let q = sb.from("transferencias").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }); temV18 = true; return l; }
+        catch (e) { if (/transferencias|relation|does not exist|schema cache|404/i.test(e.message)) { temV18 = false; return []; } throw e; } },
+      salvar: async t => { const { id, ...resto } = t; try { return id ? ok(await sb.from("transferencias").update(resto).eq("id", id).select().single()) : ok(await sb.from("transferencias").insert(resto).select().single()); }
+        catch (e) { if (/transferencias|relation|does not exist|schema cache|404/i.test(e.message)) throw new Error("Para registrar transferências, rode o supabase/v18.sql no Supabase."); throw e; } },
+      excluir: async id => ok(await sb.from("transferencias").delete().eq("id", id)),
+    },
+    /** banco com o supabase/v18.sql (saldo por conta e transferências); null = ainda não sabe */
+    temV18: () => temV18,
     sefaz: {
       config: async () => ok(await sb.from("sefaz_config").select("*").eq("id", 1).maybeSingle()),
       salvarConfig: async patch => ok(await sb.from("sefaz_config").update(patch).eq("id", 1)),
@@ -381,6 +397,7 @@ function comBancoDoPC(a) {
     ordemDoServidor: async id => { if (semRede) throw new Error("é preciso internet para trazer a O.S. do online"); const r = await ordemOriginal(id);
       if (!r || r._local || r._pendente) throw new Error("é preciso internet para trazer a O.S. do online"); return r; },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm) },
+    transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },
     vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },

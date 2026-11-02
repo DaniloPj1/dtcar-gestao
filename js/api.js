@@ -190,6 +190,11 @@ function criarApiSupabase() {
         catch (e) { if (/transferencias|relation|does not exist|schema cache|404/i.test(e.message)) throw new Error("Para registrar transferências, rode o supabase/v18.sql no Supabase."); throw e; } },
       excluir: async id => ok(await sb.from("transferencias").delete().eq("id", id)),
     },
+    /** estornos registrados pelo banco (recibo cancelado, pagamento desfeito, transferência excluída) a partir de um instante */
+    estornos: {
+      desde: async (de, ate) => { try { return await todosPorChave(() => { let q = sb.from("estornos_saldo").select("*").gte("registrado_em", de); if (ate) q = q.lte("registrado_em", ate); return q; }); }
+        catch (e) { if (/estornos_saldo|relation|does not exist|schema cache|404/i.test(e.message)) return []; throw e; } },
+    },
     /** banco com o supabase/v18.sql (saldo por conta e transferências); null = ainda não sabe */
     temV18: () => temV18,
     sefaz: {
@@ -403,6 +408,7 @@ function comBancoDoPC(a) {
       if (!r || r._local || r._pendente) throw new Error("é preciso internet para trazer a O.S. do online"); return r; },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm), desde: ler(a.recibos.desde, L.recibosDesde) },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
+    estornos: { ...a.estornos, desde: ler(a.estornos.desde, L.estornosDesde) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },
     vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },

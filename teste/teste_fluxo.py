@@ -123,6 +123,15 @@ try:
     # e não conta duas vezes depois de recarregar
     pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
     chk("caixa: recibo lançado durante a leitura não conta duas vezes", pg.inner_text(".tab-caixa tr:has-text('Sicredi')") == depois)
+    # recibo que já estava no saldo informado e é cancelado depois: o estorno sai da conta
+    pg.click("button:has-text('Atualizar saldos')"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Guardar saldos')"); pg.wait_for_timeout(1500)
+    ref = pg.evaluate("window.__DB.config.contasFinanceiras.find(c => c.nome === 'Sicredi').saldo")
+    pg.wait_for_timeout(50); pg.evaluate("(async () => { await window.__API.recibos.salvar({ id: 'rx1', cancelado: true }); })()") if pg.evaluate("!!window.__API") else None
+    pg.evaluate("(() => { const o = window.__DB.recibos.find(r => r.id === 'rx1'); if (!o.cancelado) { o.cancelado = true; (window.__DB.estornos = window.__DB.estornos || []).push({ id: 'e1', conta: 'Sicredi', valor: -300, origem: 'recibo', registro: 'rx1', original_em: o.criado_em, registrado_em: new Date().toISOString() }); } })()")
+    pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
+    sic = pg.inner_text(".tab-caixa tr:has-text('Sicredi')")
+    chk("caixa: recibo cancelado depois sai do saldo da conta", ("{:,.2f}".format(ref - 300).replace(",", "X").replace(".", ",").replace("X", ".")) in sic)
     # falha ao ler os movimentos: saldo indisponível e sem gravar nova referência
     pg.evaluate("window.__FALHA_RECIBOS = true"); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(300); pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)
     chk("caixa: falha na leitura deixa o saldo indisponível", "Saldo das contas indisponível" in pg.inner_text("main") and pg.is_disabled("button:has-text('Atualizar saldos')"))

@@ -60,6 +60,71 @@ drop policy if exists transferencias_gravar on public.transferencias;
 create policy transferencias_ler on public.transferencias for select to authenticated using (public.e_admin());
 create policy transferencias_gravar on public.transferencias for all to authenticated using (public.e_admin()) with check (public.e_admin());
 
+-- 2b. estornos: quando um lançamento que já pode estar no saldo informado é desfeito, o banco registra o estorno
+--     (recibo cancelado, pagamento desfeito/cancelado, transferência excluída). O saldo por conta aplica o estorno
+--     só se o lançamento original foi registrado antes do saldo informado e o estorno depois (original_em / registrado_em).
+create table if not exists public.estornos_saldo (
+  id uuid primary key default gen_random_uuid(),
+  conta text not null,
+  valor numeric(12, 2) not null,           -- efeito no saldo da conta (+ volta para a conta, − sai da conta)
+  origem text not null,                    -- recibo, pagamento, transferencia
+  registro uuid,
+  original_em timestamptz,                 -- quando o lançamento original foi registrado
+  registrado_em timestamptz not null default now(),
+  atualizado_em timestamptz not null default now()
+);
+create index if not exists estornos_saldo_registrado on public.estornos_saldo (registrado_em);
+create index if not exists estornos_saldo_atualizado on public.estornos_saldo (atualizado_em);
+drop trigger if exists estornos_saldo_exclusao on public.estornos_saldo;
+create trigger estornos_saldo_exclusao after delete on public.estornos_saldo for each row execute function public.registra_exclusao();
+grant select on public.estornos_saldo to authenticated;
+alter table public.estornos_saldo enable row level security;
+drop policy if exists estornos_saldo_ler on public.estornos_saldo;
+create policy estornos_saldo_ler on public.estornos_saldo for select to authenticated using (public.e_admin());
+
+create or replace function public.recibos_estorno_saldo() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' then
+    if new.conta_destino <> '' and new.cancelado and not old.cancelado then
+      insert into public.estornos_saldo (conta, valor, origem, registro, original_em) values (new.conta_destino, -new.valor, 'recibo', new.id, new.criado_em);
+    elsif new.conta_destino <> '' and old.cancelado and not new.cancelado then
+      insert into public.estornos_saldo (conta, valor, origem, registro, original_em) values (new.conta_destino, new.valor, 'recibo', new.id, new.criado_em);
+    end if;
+    return new;
+  end if;
+  if old.conta_destino <> '' and not old.cancelado then
+    insert into public.estornos_saldo (conta, valor, origem, registro, original_em) values (old.conta_destino, -old.valor, 'recibo', old.id, old.criado_em);
+  end if;
+  return old;
+end $$;
+drop trigger if exists recibos_estorno_saldo on public.recibos;
+create trigger recibos_estorno_saldo after update of cancelado or delete on public.recibos for each row execute function public.recibos_estorno_saldo();
+
+create or replace function public.contas_estorno_saldo() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'UPDATE' then
+    if old.status = 'paga' and new.status <> 'paga' and old.conta_origem <> '' then
+      insert into public.estornos_saldo (conta, valor, origem, registro, original_em) values (old.conta_origem, coalesce(old.valor_pago, old.valor), 'pagamento', old.id, old.pago_registrado_em);
+    end if;
+    return new;
+  end if;
+  if old.status = 'paga' and old.conta_origem <> '' then
+    insert into public.estornos_saldo (conta, valor, origem, registro, original_em) values (old.conta_origem, coalesce(old.valor_pago, old.valor), 'pagamento', old.id, old.pago_registrado_em);
+  end if;
+  return old;
+end $$;
+drop trigger if exists contas_estorno_saldo on public.contas;
+create trigger contas_estorno_saldo after update of status or delete on public.contas for each row execute function public.contas_estorno_saldo();
+
+create or replace function public.transferencias_estorno_saldo() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.estornos_saldo (conta, valor, origem, registro, original_em)
+  values (old.de_conta, old.valor, 'transferencia', old.id, old.criado_em), (old.para_conta, -old.valor, 'transferencia', old.id, old.criado_em);
+  return old;
+end $$;
+drop trigger if exists transferencias_estorno_saldo on public.transferencias;
+create trigger transferencias_estorno_saldo after delete on public.transferencias for each row execute function public.transferencias_estorno_saldo();
+
 -- 3. backup: a restauração passa a aceitar as transferências
 create or replace function public.restaurar_tabela(p_tabela text, p_linhas jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
@@ -68,7 +133,7 @@ begin
   if not public.e_admin() then raise exception 'Apenas o administrador restaura backup.'; end if;
   if p_tabela not in ('fornecedores', 'clientes', 'veiculos', 'servicos', 'produtos', 'produto_fornecedor', 'notas_entrada', 'ordens', 'os_itens', 'eventos', 'fotos',
                       'recibos', 'vendas', 'venda_itens', 'estoque_mov', 'estoque_reserva', 'contas', 'nfe_recebidas', 'nfe_os_vinculos',
-                      'funcionarios', 'funcionario_lanc', 'receber', 'transferencias') then
+                      'funcionarios', 'funcionario_lanc', 'receber', 'transferencias', 'estornos_saldo') then
     raise exception 'Tabela não permitida: %', p_tabela;
   end if;
   perform set_config('dtcar.sem_estoque', '1', true);

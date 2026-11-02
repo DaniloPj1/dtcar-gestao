@@ -18,8 +18,8 @@ export async function replicaPronta() {
 // mesma lista do backup (quem é referenciado vem antes) + equipe e ajustes
 export const TABELAS_REPLICA = ["perfis", "fornecedores", "clientes", "veiculos", "servicos", "produtos", "produto_fornecedor", "notas_entrada",
   "ordens", "os_itens", "eventos", "fotos", "recibos", "vendas", "venda_itens", "estoque_mov", "estoque_reserva", "contas", "nfe_recebidas",
-  "nfe_os_vinculos", "funcionarios", "funcionario_lanc", "receber", "transferencias"];
-const OPCIONAL = t => t === "servicos" || t.startsWith("funcionario") || t === "receber" || t === "transferencias";
+  "nfe_os_vinculos", "funcionarios", "funcionario_lanc", "receber", "transferencias", "estornos_saldo"];
+const OPCIONAL = t => t === "servicos" || t.startsWith("funcionario") || t === "receber" || t === "transferencias" || t === "estornos_saldo";
 // antes do supabase/v13.sql, só estas têm "atualizado_em"; as demais são recarregadas inteiras de 30 em 30 min
 const COM_DATA_ANTIGA = ["ordens", "clientes", "veiculos", "produtos", "fornecedores", "contas", "funcionarios", "receber", "nfe_recebidas"];
 const MARGEM_MS = 60000; // folga: busca de novo o último minuto (transação demorada grava a data do início; gravar a mesma linha 2 vezes não faz mal)
@@ -145,6 +145,7 @@ export const leitorLocal = {
   itensDasOrdens: async ids => { const s = new Set(ids); return (await tabelaLocal("os_itens")).filter(i => s.has(i.ordem_id)); },
   recibosListar: async ({ ordemId, de, ate } = {}) => ordena(porData((await tabelaLocal("recibos")).filter(r => !ordemId || r.ordem_id === ordemId), "data", de, ate), (a, b) => (b.numero || 0) - (a.numero || 0)).slice(0, 1000),
   reciboUm: async id => (await tabelaLocal("recibos")).find(r => r.id === id) || null,
+  estornosDesde: async (de, ate) => (await tabelaLocal("estornos_saldo")).filter(e => e.registrado_em >= de && (!ate || e.registrado_em <= ate)),
   recibosDesde: async (de, ate) => porData(await tabelaLocal("recibos"), "data", de, null).filter(r => !ate || !r.criado_em || r.criado_em <= ate),
   transferenciasListar: async ({ de, ate } = {}) => ordena(porData(await tabelaLocal("transferencias"), "data", de, ate), (a, b) => (a.data || "").localeCompare(b.data || "")),
   contasListar: async ({ de, ate, campo = "vencimento", status } = {}) => ordena(porData((await tabelaLocal("contas")).filter(c => !status || c.status === status), campo, de, ate), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),

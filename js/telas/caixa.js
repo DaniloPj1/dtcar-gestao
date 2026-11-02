@@ -26,7 +26,9 @@ function saldosPorConta(contas, mov) {
     const sai = arred(mov.pagas.filter(x => x.conta_origem === c.nome && depois(c, x.pago_em, x.pago_registrado_em)).reduce((s, x) => s + Number(x.valor_pago ?? x.valor), 0));
     const tSai = soma(mov.transf.filter(t => t.de_conta === c.nome && depois(c, t.data, t.criado_em)));
     const tEnt = soma(mov.transf.filter(t => t.para_conta === c.nome && depois(c, t.data, t.criado_em)));
-    return { ...c, ent, sai, tEnt, tSai, atual: arred(Number(c.saldo || 0) + ent - sai + tEnt - tSai) };
+    // estornos: lançamento que já estava no saldo informado (original antes da referência) e foi desfeito depois
+    const est = arred((mov.estornos || []).filter(e => e.conta === c.nome && c.em && e.original_em && e.original_em <= c.em && e.registrado_em > c.em && ate(e.registrado_em)).reduce((s, e) => s + Number(e.valor), 0));
+    return { ...c, ent: arred(ent + Math.max(0, est)), sai: arred(sai - Math.min(0, est)), tEnt, tSai, est, atual: arred(Number(c.saldo || 0) + ent - sai + tEnt - tSai + est) };
   });
 }
 
@@ -131,13 +133,15 @@ export function PrevisaoCaixa() {
 
   // movimentos desde o saldo informado mais antigo (para o saldo atual de cada conta)
   const desde = contasCfg.reduce((m, c) => (c.em && dataDe(c.em) < m ? dataDe(c.em) : m), hoje);
+  const primeiraRef = contasCfg.reduce((m, c) => (c.em && (!m || c.em < m) ? c.em : m), null); // estornos só importam depois da referência mais antiga
   useEffect(() => { (async () => {
     setMov(null);
     const lidoEm = new Date().toISOString(); // momento da leitura: o saldo sugerido vale para este instante
     try {
-      const [recibos, pagas, transf] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde, lidoEm) : api.recibos.listar({ de: desde })), (api.contas.pagasDesde ? api.contas.pagasDesde(desde) : api.contas.listar({ de: desde, campo: "pago_em", status: "paga" })), api.transferencias ? api.transferencias.listar({ de: desde }) : []]);
+      const [recibos, pagas, transf, estornos] = await Promise.all([(api.recibos.desde ? api.recibos.desde(desde, lidoEm) : api.recibos.listar({ de: desde })), (api.contas.pagasDesde ? api.contas.pagasDesde(desde) : api.contas.listar({ de: desde, campo: "pago_em", status: "paga" })), api.transferencias ? api.transferencias.listar({ de: desde }) : [],
+        api.estornos ? api.estornos.desde(primeiraRef || desde, lidoEm) : []]);
       const unicos = l => [...new Map(l.map(x => [x.id, x])).values()]; // leitura paginada nunca soma o mesmo lançamento duas vezes
-      setMov({ recibos: unicos(recibos), pagas: unicos(pagas), transf: unicos(transf), lidoEm });
+      setMov({ recibos: unicos(recibos), pagas: unicos(pagas), transf: unicos(transf), estornos: unicos(estornos), lidoEm });
     } catch (e) { setMov({ erro: e.message }); } // sem os movimentos não há saldo atual (nem nova referência)
   })(); }, [desde, recarga, cfg.contasFinanceiras]);
   const saldos = useMemo(() => mov && !mov.erro ? saldosPorConta(contasCfg, mov) : null, [mov, cfg.contasFinanceiras]);

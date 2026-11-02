@@ -14,7 +14,7 @@ def confere(nome, cond, extra=""): (ok if cond else falhas).append(nome + (f" ({
 USUARIO = {"id": "00000000-0000-0000-0000-000000000001", "email": "danilo@dtcar.test", "aud": "authenticated", "role": "authenticated"}
 SESSAO = {"access_token": "tok", "refresh_token": "ref", "token_type": "bearer", "expires_in": 3600, "expires_at": 9999999999, "user": USUARIO}
 
-def cenario(pw, *, papel="admin", ja_autorizado=False, retorno="https://claude.ai/api/mcp/auth_callback", logado=False, auth_id="AUTH1"):
+def cenario(pw, *, pendurar=None, papel="admin", ja_autorizado=False, retorno="https://claude.ai/api/mcp/auth_callback", logado=False, auth_id="AUTH1"):
     b = pw.chromium.launch(); ctx = b.new_context(); pg = ctx.new_page()
     estado = {"consent": None, "senha": None}
     def supa(route):
@@ -25,6 +25,7 @@ def cenario(pw, *, papel="admin", ja_autorizado=False, retorno="https://claude.a
             estado["senha"] = json.loads(req.post_data or "{}").get("password")
             if estado["senha"] != "certa": return route.fulfill(status=400, headers=cors, json={"error": "invalid_grant", "error_description": "Invalid login credentials", "msg": "Invalid login credentials"})
             return route.fulfill(status=200, headers=cors, json=SESSAO)
+        if pendurar and pendurar in u: return  # nunca responde (servidor "pendurado")
         if u.endswith("/consent"):
             estado["consent"] = json.loads(req.post_data or "{}").get("action")
             return route.fulfill(status=200, headers=cors, json={"redirect_url": retorno + "?code=COD&state=EST" if estado["consent"] == "approve" else retorno + "?error=access_denied"})
@@ -78,6 +79,17 @@ with sync_playwright() as pw:
     b, pg, est = cenario(pw, logado=True, ja_autorizado=True)
     pg.wait_for_url("https://claude.ai/**")
     confere("já autorizado antes: volta direto", "code=JA" in pg.url and est["consent"] is None)
+    b.close()
+
+    b, pg, est = cenario(pw, logado=True, pendurar="/oauth/authorizations/AUTH1")
+    pg.wait_for_selector("#final:not([hidden])", timeout=25000)
+    confere("servidor pendurado na leitura: aviso e Tentar de novo", "não respondeu a tempo" in pg.inner_text("#final") and pg.is_visible("#deNovo"), pg.inner_text("#final"))
+    b.close()
+
+    b, pg, est = cenario(pw, logado=True, pendurar="/consent")
+    pg.wait_for_selector("#pedido:not([hidden])"); pg.click("#autorizar")
+    pg.wait_for_function("document.getElementById('erroPedido').textContent.length > 0", timeout=25000)
+    confere("servidor pendurado na aprovação: erro e botões liberados", "a tempo" in pg.inner_text("#erroPedido") and pg.is_enabled("#autorizar"), pg.inner_text("#erroPedido"))
     b.close()
 
 print("\n".join("OK " + x for x in ok)); print("FALHAS", falhas)

@@ -209,7 +209,7 @@ end $$;
 -- 8. texto pronto para mandar a O.S. ou o recibo ao cliente (o envio é feito pelo Danilo)
 create or replace function public.agente_preparar_envio(p_numero int, p_tipo text default 'os') returns jsonb
 language plpgsql stable security invoker set search_path = public as $$
-declare o public.ordens; tel text; nome text; txt text; it record; rc record; n int := 0;
+declare o public.ordens; tel text; nome text; txt text; it record; rc record; n int := 0; aprov boolean; pend text := ''; t_pend numeric := 0;
 begin
   perform public.agente_exige_admin();
   select * into o from public.ordens where numero = p_numero;
@@ -226,8 +226,17 @@ begin
   else
     txt := 'Olá, ' || nome || '! Segue a O.S. ' || o.numero || ' da DTCar Centro Automotivo — ' || trim(concat_ws(' ', o.veiculo->>'marca', o.veiculo->>'modelo'))
       || ' ' || coalesce(o.veiculo->>'placa', '') || E'\n';
-    for it in select i.descricao, i.qtd, round(coalesce(i.qtd, 0) * coalesce(i.valor_unit, 0) - coalesce(i.desconto, 0), 2) t from public.os_itens i
-              where i.ordem_id = o.id and coalesce(i.aprovado, true) order by i.posicao, i.criado_em loop
+    -- mesmo critério das telas (js/telas/ordem.js, usaAprov): depois de aprovada, o total é só do que o cliente aprovou
+    -- e os adicionais ainda sem resposta vão numa parte separada, fora do total; no orçamento, entra tudo o que não foi recusado
+    aprov := o.status in ('execucao', 'pronto', 'entregue', 'recusado');
+    for it in select i.descricao, i.qtd, i.aprovado, round(coalesce(i.qtd, 0) * coalesce(i.valor_unit, 0) - coalesce(i.desconto, 0), 2) t from public.os_itens i
+              where i.ordem_id = o.id and i.aprovado is distinct from false order by i.posicao, i.criado_em loop
+      if aprov and it.aprovado is null then
+        pend := pend || E'\n• ' || it.descricao || case when it.qtd <> 1 then ' (' || translate(trim(trailing '.' from trim(trailing '0' from to_char(it.qtd, 'FM999990.000'))), '.', ',') || ')' else '' end
+          || case when it.t <> 0 then ': ' || public.agente_reais(it.t) else '' end;
+        t_pend := t_pend + it.t;
+        continue;
+      end if;
       n := n + 1;
       txt := txt || E'\n• ' || it.descricao || case when it.qtd <> 1 then ' (' || translate(trim(trailing '.' from trim(trailing '0' from to_char(it.qtd, 'FM999990.000'))), '.', ',') || ')' else '' end
         || case when it.t <> 0 then ': ' || public.agente_reais(it.t) else '' end;
@@ -238,6 +247,9 @@ begin
       txt := txt || E'\nJá recebido: ' || public.agente_reais(o.recebido) || E'\nFalta: ' || public.agente_reais(o.total - o.recebido);
     end if;
     if o.status in ('diagnostico', 'aguardando') then txt := txt || E'\n\nPodemos seguir com o serviço?'; end if;
+    if pend <> '' then
+      txt := txt || E'\n\n*Adicionais aguardando sua aprovação (fora do total acima):*' || pend || E'\nAdicionais: ' || public.agente_reais(t_pend) || E'\nPodemos incluir?';
+    end if;
   end if;
   return jsonb_build_object('os', o.numero, 'tipo', coalesce(p_tipo, 'os'), 'cliente', o.cliente->>'nome', 'telefone', tel,
     'telefone_ok', length(tel) between 10 and 11, 'texto', txt, 'itens', n, 'id', o.id);

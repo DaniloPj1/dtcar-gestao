@@ -35,7 +35,7 @@ export function traduzErro(e) {
 
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero,legado_receber:checkin->legado->a_receber";
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
-let temV11 = true, temReceber = true, temV18 = null;
+let temV11 = true, temReceber = true, temV18 = null, temBoletos = null;
 /** grava sem a coluna nova da v18 (conta de origem/destino) se o banco ainda não tiver o supabase/v18.sql */
 async function semColunaV18(linha, coluna, gravar) {
   if (temV18 === false || !(coluna in linha)) { const { [coluna]: _, ...resto } = linha; return gravar(temV18 === false ? resto : linha); }
@@ -162,9 +162,30 @@ function criarApiSupabase() {
         catch (e) { if (/receber|relation|does not exist|schema cache|404/i.test(e.message)) { temReceber = false; return []; } throw e; } },
       listar: async ({ de, ate, status } = {}) => todos(() => { let q = sb.from("receber").select("*"); if (de) q = q.gte("vencimento", de); if (ate) q = q.lte("vencimento", ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
       daOrdem: async oid => ok(await sb.from("receber").select("*").eq("ordem_id", oid).order("parcela")),
+      um: async id => ok(await sb.from("receber").select("*").eq("id", id).single()),
       lancar: async linhas => ok(await sb.from("receber").insert(linhas).select()),
       atualizar: async (id, patch) => ok(await sb.from("receber").update(patch).eq("id", id).select().single()),
     },
+    /** boletos Sicredi por arquivo (CNAB240 híbrido) — supabase/v28.sql */
+    boletos: {
+      listar: async () => { try { const l = await todos(() => sb.from("boletos").select("*").order("criado_em", { ascending: false }).order("id")); temBoletos = true; return l; }
+        catch (e) { if (/boletos|relation|does not exist|schema cache|404/i.test(e.message)) { temBoletos = false; return []; } throw e; } },
+      daOrdem: async oid => ok(await sb.from("boletos").select("*").eq("ordem_id", oid).order("vencimento")),
+      porNossoNumero: async lista => lista.length ? ok(await sb.from("boletos").select("*").in("nosso_numero", lista)) : [],
+      incluir: async linhas => ok(await sb.from("boletos").insert(linhas).select()),
+      atualizar: async (id, patch) => ok(await sb.from("boletos").update(patch).eq("id", id).select().single()),
+      /** marca como pago só se ainda não estava pago (o mesmo pagamento nunca vira dois recibos); devolve a linha ou null */
+      reservarPagamento: async (id, patch) => { const r = ok(await sb.from("boletos").update({ ...patch, situacao: "pago" }).eq("id", id).neq("situacao", "pago").select()); return r[0] || null; },
+      excluir: async id => ok(await sb.from("boletos").delete().eq("id", id)),
+      proximo: async chave => ok(await sb.rpc("cobranca_proximo", { p_chave: chave })),
+      arquivos: {
+        listar: async () => ok(await sb.from("boletos_arquivos").select("id,tipo,nome,sequencia,resumo,criado_por,criado_em").order("criado_em", { ascending: false }).limit(100)),
+        um: async id => ok(await sb.from("boletos_arquivos").select("*").eq("id", id).single()),
+        porHash: async hash => ok(await sb.from("boletos_arquivos").select("id,nome,criado_em").eq("hash", hash).maybeSingle()),
+        salvar: async a => { const { id, ...resto } = a; return id ? ok(await sb.from("boletos_arquivos").update(resto).eq("id", id).select().single()) : ok(await sb.from("boletos_arquivos").insert(resto).select().single()); },
+      },
+    },
+    temBoletos: () => temBoletos,
     vinculos: { listar: async () => todos(() => sb.from("produto_fornecedor").select("*").order("id")), doProduto: async pid => ok(await sb.from("produto_fornecedor").select("*").eq("produto_id", pid)) },
     notas: {
       existe: async chave => chave ? ok(await sb.from("notas_entrada").select("id,numero,criado_em,usuario_nome").eq("chave", chave).maybeSingle()) : null,

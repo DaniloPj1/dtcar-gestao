@@ -19,9 +19,9 @@ export async function replicaPronta() {
 export const TABELAS_REPLICA = ["perfis", "fornecedores", "clientes", "veiculos", "servicos", "produtos", "produto_fornecedor", "notas_entrada",
   "ordens", "os_itens", "eventos", "fotos", "recibos", "vendas", "venda_itens", "estoque_mov", "estoque_reserva", "contas", "nfe_recebidas",
   "nfe_os_vinculos", "funcionarios", "funcionario_lanc", "receber", "transferencias", "estornos_saldo",
-  "pre_notas", "pre_notas_itens", "agente_regras", "agente_acoes"];
+  "pre_notas", "pre_notas_itens", "agente_regras", "agente_acoes", "boletos"];
 const OPCIONAL = t => t === "servicos" || t.startsWith("funcionario") || t === "receber" || t === "transferencias" || t === "estornos_saldo"
-  || t.startsWith("pre_notas") || t.startsWith("agente_");
+  || t.startsWith("pre_notas") || t.startsWith("agente_") || t === "boletos";
 // antes do supabase/v13.sql, só estas têm "atualizado_em"; as demais são recarregadas inteiras de 30 em 30 min
 const COM_DATA_ANTIGA = ["ordens", "clientes", "veiculos", "produtos", "fornecedores", "contas", "funcionarios", "receber", "nfe_recebidas"];
 const MARGEM_MS = 60000; // folga: busca de novo o último minuto (transação demorada grava a data do início; gravar a mesma linha 2 vezes não faz mal)

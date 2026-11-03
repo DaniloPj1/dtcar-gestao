@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -82,6 +82,17 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
   (instalação num HOME temporário).
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
+- **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
+  "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,
+  código de barras, linha digitável, Pix copia e cola a partir da URL do segmento Y03); `js/boletopdf.js` faz o PDF (texto, barras I25
+  103×13 mm a 5 mm da margem e centro a 12 mm do rodapé; QR desenhado por `js/qr.js`, gerador próprio — não trocar por pacote de fora).
+  Carteira em `cfg.cobranca` (cooperativa 0523, posto 16, beneficiário 85453, conta 85453-7, byte 2, chave Pix aleatória, juros, multa).
+  Nosso Número e número da remessa só pela função `cobranca_proximo` (nunca repete, nem depois de restaurar backup). Tabelas `boletos` e
+  `boletos_arquivos` são **preservadas** pelo espelho (boleto registrado no banco continua valendo) e não têm chave estrangeira.
+  Retorno: o mesmo arquivo (SHA-256) não é lido duas vezes; liquidação (06, 17, 61) vira recibo na conta da carteira e baixa a parcela,
+  e `reservarPagamento` impede recibo em dobro. Juros e multa sempre a partir do dia seguinte ao vencimento (data posterior tira o QR Code).
+  Testes: `node teste/teste_cnab.mjs` (exemplos do manual e arquivo-modelo do Portal de Homologação), `python3 teste/teste_boletos.py`
+  e `bash teste/teste_v28.sh` (Postgres local).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.
 - **Período de transição (dois sistemas em paralelo):** enquanto `cfg.espelhoLegado` não for `false`, o OS Oficina é o sistema oficial e o

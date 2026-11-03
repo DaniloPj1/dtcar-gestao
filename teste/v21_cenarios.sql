@@ -52,5 +52,12 @@ begin
   -- 7. O.S. inexistente
   begin perform public.agente_lancar_itens_os('{"numero":9999,"itens":[{"tipo":"servico","descricao":"X","qtd":1,"valor_unit":1}]}', false); assert false, '7 sem erro';
   exception when raise_exception then null; end;
-  raise notice 'OK: v21 (7 cenários)';
+  -- 8. produto marcado para não vender sem estoque: bloqueia (como a tela); os outros só avisam
+  insert into public.produtos (codigo, descricao, custo, estoque_atual, vender_sem_estoque) values (501, 'FILTRO X', 10, 1, false);
+  r := public.agente_lancar_itens_os('{"numero":1904,"itens":[{"tipo":"peca","descricao":"Filtro","qtd":2,"valor_unit":30,"codigo":"501"}]}', true);
+  assert not coalesce((r->>'gravado')::boolean, false) and r::text like '%não ser vendido sem estoque%', '8 bloqueio sem estoque: ' || r::text;
+  assert (select estoque_atual from public.produtos where codigo = 501) = 1, '8 estoque mexido';
+  r := public.agente_lancar_itens_os('{"numero":1904,"itens":[{"tipo":"peca","descricao":"Filtro","qtd":1,"valor_unit":30,"codigo":"501"}]}', false);
+  assert (r->>'pode_lancar')::boolean, '8 com estoque suficiente: ' || r::text;
+  raise notice 'OK: v21 (8 cenários)';
 end $$;

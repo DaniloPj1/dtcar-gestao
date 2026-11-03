@@ -9,6 +9,8 @@
 //   conferir    — volta a conectar com a sessão guardada (prova de que dá para conectar sob demanda)
 //   desconectar — desvincula o aparelho e apaga a sessão
 // Ainda não envia nem recebe mensagens (etapas seguintes).
+// Revezamento (v24): quando o motor do Android está com a vez, a função não conecta com a sessão guardada
+// (conferir responde pelo último sinal do motor; desconectar vira pedido ao motor).
 //
 // Só o administrador (token do usuário, conferido aqui). As chaves da sessão ficam numa tabela que
 // ninguém do sistema lê (v22): a função usa a chave de servidor só para essa tabela e para a situação.
@@ -103,6 +105,30 @@ export function sessaoNoBanco(adm: Db) {
   };
 }
 
+/** Revezamento com o motor do Android (v24): quem está com a vez é o único que conecta com a sessão guardada.
+ *  Sem o v24 no banco não existe motor: as consultas falham e a função segue como antes (sem reservar). */
+export function vezNoBanco(adm: Db) {
+  const id = crypto.randomUUID();
+  return {
+    id,
+    /** O motor está com a vez agora? (e se está conectado, pelo último sinal dele) */
+    async motor(): Promise<{ ativo: boolean; conectado: boolean; visto_s: number | null; aparelho: string }> {
+      const { data, error } = await adm.from("whatsapp_conexao").select("dono, dono_ate, motor_visto, motor_info").eq("id", 1);
+      const c = !error && Array.isArray(data) ? data[0] : null;
+      const ativo = !!(c && c.dono === "android" && c.dono_ate && new Date(c.dono_ate).getTime() > Date.now());
+      return { ativo, conectado: !!(c && c.motor_info && c.motor_info.conectado), aparelho: (c && c.motor_info && c.motor_info.aparelho) || "Android",
+        visto_s: c && c.motor_visto ? Math.max(0, Math.round((Date.now() - new Date(c.motor_visto).getTime()) / 1000)) : null };
+    },
+    /** Pega a vez para a função. false = outro está com ela; sem o v24 devolve true (não há motor). */
+    async pegar(segundos: number): Promise<boolean> {
+      const { data, error } = await adm.rpc("whatsapp_pegar_vez", { p_dono: "supabase", p_id: id, p_segundos: segundos });
+      return error ? true : data !== false;
+    },
+    async soltar() { try { await adm.rpc("whatsapp_soltar_vez", { p_id: id }); } catch (_) { /* vence sozinha */ } },
+  };
+}
+const ocupada = (ms: number) => ({ ok: false, ms, resposta: "ocupada", detalhe: "A conexão está em uso por outra tentativa. Tente de novo em 1 minuto." });
+
 async function situacao(adm: Db, patch: Record<string, unknown>) {
   const { error } = await adm.from("whatsapp_conexao").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", 1);
   if (error) console.error("situação do WhatsApp não gravada", error.message);
@@ -153,6 +179,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
   const inicio = performance.now();
   const ms = () => Math.round(performance.now() - inicio);
   const sessao = sessaoNoBanco(adm);
+  const vez = vezNoBanco(adm);
 
   if (acao === "testar") {
     // sessão nova só na memória: conecta e espera o WhatsApp oferecer o pareamento; nada é gravado e nenhum celular é contatado
@@ -178,11 +205,14 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     }
     const atual = await sessao.carregar();
     if (vinculado(atual.creds)) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
+    if ((await vez.motor()).ativo) return json({ erro: "O motor do Android está com a conexão. Desconecte antes de parear de novo." }, 409);
     // uma tentativa por vez. A execução da função dura no máximo 150 s (plano grátis), contando a preparação, a espera e o
     // fim: a reserva cobre a execução inteira (160 s a partir de agora) e a espera termina aos 140 s, antes do limite
     const t0 = Date.now();
     const reserva = await sessao.reservar(160000);
     if (!reserva) return json({ erro: "Já há um pareamento em andamento. Use o código ou o QR pedido antes, ou espere uns 2 minutos e peça outro." }, 409);
+    // segura a vez da conexão durante o pareamento: o motor só assume depois que esta tentativa terminar
+    if (!(await vez.pegar(160))) { await sessao.liberar(reserva); return json({ erro: "A conexão está em uso. Tente de novo em 2 minutos." }, 409); }
     // só vale enquanto esta tentativa for a dona da reserva (uma tentativa antiga não mexe na situação de uma nova)
     const minha = async () => (await sessao.reservaAtual()) === reserva;
     const situacaoSeMinha = async (patch: Record<string, unknown>) => { if (await minha()) await situacao(adm, patch); };
@@ -192,7 +222,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     const salvarSeMinha = async () => { if (await minha()) await salvarCreds(); };
     let s = abrir(creds, keys, salvarSeMinha);
     const r = await proximo(s, 30000);
-    if (r.tipo !== "qr") { console.error("parear: sem resposta", r); fechar(s); await sessao.liberar(reserva); return json({ erro: "O WhatsApp não respondeu (" + (r.msg || r.tipo) + ")." }, 502); }
+    if (r.tipo !== "qr") { console.error("parear: sem resposta", r); fechar(s); await sessao.liberar(reserva); await vez.soltar(); return json({ erro: "O WhatsApp não respondeu (" + (r.msg || r.tipo) + ")." }, 502); }
     let codigo = "";
     if (porQr) {
       // o QR muda a cada 20–60 s: cada novo vai para a tela (whatsapp_conexao.qr_svg), que confere a cada poucos segundos
@@ -203,7 +233,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       await mostrarQr(r.qr || "");
       s.ev.on("connection.update", (u: any) => { if (u.qr) mostrarQr(u.qr).catch((e) => console.error("QR", e)); });
     } else {
-      try { codigo = await s.requestPairingCode(numero); } catch (e) { console.error("pedir código", e); fechar(s); await sessao.liberar(reserva); return json({ erro: "Não foi possível pedir o código: " + (e as Error).message }, 502); }
+      try { codigo = await s.requestPairingCode(numero); } catch (e) { console.error("pedir código", e); fechar(s); await sessao.liberar(reserva); await vez.soltar(); return json({ erro: "Não foi possível pedir o código: " + (e as Error).message }, 502); }
       await situacao(adm, { situacao: "pareando", numero, detalhe: "Código pedido: digite no celular em até 2 minutos." });
     }
     // o pareamento termina no celular: espera em segundo plano (até ~2 min) e guarda a sessão
@@ -222,41 +252,62 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
         await situacaoSeMinha({ situacao: "erro", qr_svg: null, detalhe: "Pareamento não concluído (" + (ev.msg || ev.tipo) + "). Tente de novo." });
       }
       fechar(s);
-      await sessao.liberar(reserva);
-    })().catch(async (e) => { console.error("pareamento", e); fechar(s); await situacaoSeMinha({ situacao: "erro", qr_svg: null, detalhe: "Pareamento falhou: " + (e as Error).message }); await sessao.liberar(reserva); });
+      await sessao.liberar(reserva); await vez.soltar();
+    })().catch(async (e) => { console.error("pareamento", e); fechar(s); await situacaoSeMinha({ situacao: "erro", qr_svg: null, detalhe: "Pareamento falhou: " + (e as Error).message }); await sessao.liberar(reserva); await vez.soltar(); });
     if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(fim);
     return json({ codigo: codigo || undefined, qr: porQr || undefined, ms: ms(), validade_s: Math.max(30, Math.round((t0 + 140000 - Date.now()) / 1000)) });
   }
 
   if (acao === "conferir") {
+    // com o motor do Android na vez, quem responde pela conexão é ele (a função não conecta: seriam duas conexões)
+    const m = await vez.motor();
+    if (m.ativo) {
+      const resultado = { ok: m.conectado, ms: ms(), resposta: "motor", em: new Date().toISOString(),
+        detalhe: (m.conectado ? "O motor do Android está conectado" : "O motor do Android está com a vez, mas sem conexão agora") + ` (último sinal há ${m.visto_s ?? "?"} s).` };
+      await situacao(adm, { ultimo_teste: { acao, ...resultado } });
+      return json(resultado);
+    }
     const { creds, keys, salvarCreds } = await sessao.carregar();
     if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
-    const s = abrir(creds, keys, salvarCreds);
-    const r = await proximo(s, 40000);
-    const ok = r.tipo === "open";
-    if (ok) await esperar(1500);
-    fechar(s);
-    if (r.tipo === "close" && r.codigo === DisconnectReason.loggedOut) {
-      await sessao.apagar();
-      await situacao(adm, { situacao: "desligado", numero: "", detalhe: "O celular desvinculou este aparelho. Pareie de novo." });
-      return json({ ok: false, ms: ms(), detalhe: "Desvinculado pelo celular." });
-    }
-    const resultado = { ok, ms: ms(), resposta: r.tipo, detalhe: r.msg || "", em: new Date().toISOString() };
-    await situacao(adm, { ultimo_teste: { acao, ...resultado }, ...(ok ? { situacao: "conectado", detalhe: "Conferido: a sessão guardada conectou." } : { situacao: "erro", detalhe: "Conferência falhou: " + (r.msg || r.tipo) }) });
-    return json(resultado);
+    if (!(await vez.pegar(60))) return json(ocupada(ms()));
+    try {
+      const s = abrir(creds, keys, salvarCreds);
+      const r = await proximo(s, 40000);
+      const ok = r.tipo === "open";
+      if (ok) await esperar(1500);
+      fechar(s);
+      if (r.tipo === "close" && r.codigo === DisconnectReason.loggedOut) {
+        await sessao.apagar();
+        await situacao(adm, { situacao: "desligado", numero: "", detalhe: "O celular desvinculou este aparelho. Pareie de novo." });
+        return json({ ok: false, ms: ms(), detalhe: "Desvinculado pelo celular." });
+      }
+      const resultado = { ok, ms: ms(), resposta: r.tipo, detalhe: r.msg || "", em: new Date().toISOString() };
+      await situacao(adm, { ultimo_teste: { acao, ...resultado }, ...(ok ? { situacao: "conectado", dono: "supabase", detalhe: "Conferido: a sessão guardada conectou." } : { situacao: "erro", detalhe: "Conferência falhou: " + (r.msg || r.tipo) }) });
+      return json(resultado);
+    } finally { await vez.soltar(); }
   }
 
   if (acao === "desconectar") {
-    const { creds, keys } = await sessao.carregar();
-    if (vinculado(creds)) {
-      const s = abrir(creds, keys);
-      const r = await proximo(s, 25000);
-      if (r.tipo === "open") { try { await s.logout(); } catch (_) { /* segue apagando */ } }
-      fechar(s);
+    // com o motor na vez: vira pedido para ele (desvincula, apaga a sessão e avisa a tela no próximo sinal, em até 30 s)
+    if ((await vez.motor()).ativo) {
+      await situacao(adm, { pedido: "desconectar", detalhe: "Pedido de desconectar enviado ao motor do Android." });
+      return json({ ok: true, ms: ms(), pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." });
     }
-    await sessao.apagar();
-    await situacao(adm, { situacao: "desligado", numero: "", dono: "", qr_svg: null, detalhe: "Desconectado e sessão apagada." });
-    return json({ ok: true, ms: ms() });
+    if (!(await vez.pegar(60))) return json(ocupada(ms()));
+    try {
+      const { creds, keys } = await sessao.carregar();
+      if (vinculado(creds)) {
+        const s = abrir(creds, keys);
+        const r = await proximo(s, 25000);
+        if (r.tipo === "open") { try { await s.logout(); } catch (_) { /* segue apagando */ } }
+        fechar(s);
+      }
+      await sessao.apagar();
+      await situacao(adm, { situacao: "desligado", numero: "", dono: "", qr_svg: null, detalhe: "Desconectado e sessão apagada." });
+      // pedido antigo ao motor não vale mais (sem o v24 a coluna não existe: ignora)
+      await adm.from("whatsapp_conexao").update({ pedido: null }).eq("id", 1);
+      return json({ ok: true, ms: ms() });
+    } finally { await vez.soltar(); }
   }
 
   return json({ erro: "Ação desconhecida." }, 400);

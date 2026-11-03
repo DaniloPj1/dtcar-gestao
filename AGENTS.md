@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v22.sql`, `v23.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v22.sql`, `v23.sql`, `v24.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -54,8 +54,17 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   também quais cifras o servidor aceita), parear_qr (QR Code gravado em `whatsapp_conexao.qr_svg`, v23), parear (código de 8 letras —
   o Supabase NÃO aceita a cifra aes-256-ctr que ele usa, "Unknown cipher", 03/11/2026; fica para o motor no Android/PC), conferir, desconectar. A sessão fica em `whatsapp_sessao`, que ninguém do sistema lê (só a função, com a
   chave de servidor) e que fica fora do backup; a situação fica em `whatsapp_conexao` (tela Sistema › WhatsApp, administrador).
-  Próximas etapas (decisão do Danilo, 03/11): motor contínuo no programa do PC com revezamento automático, fila de envio com horário
-  comercial, intervalo e limites, ferramentas no conector. Testes: `deno run -A teste/teste_zap.ts`.
+  Ter celular vinculado = `creds.me` (QR Code) ou `creds.registered` (código): função `vinculado()`.
+  **Etapa 2 (v24 + `motor-zap/`):** motor contínuo num Android (Termux + Node 20+; também roda num PC). Ele NÃO usa a chave de servidor:
+  usa a chave publicável + a **chave do motor** (gerada/revogada pelo administrador na tela; o banco guarda só o sha256) e só chama as
+  funções `whatsapp_motor_*` (security definer, conferem a chave). **Revezamento:** `whatsapp_conexao.dono/dono_id/dono_ate`; quem está com
+  a vez renova a cada 30 s (motor: 90 s de validade; só pega a vez se houver celular vinculado). A função zap pega a vez antes de conectar com a
+  sessão guardada (`vezNoBanco`) e, com o motor na vez, não conecta: conferir responde pelo último sinal do motor e desconectar vira
+  `pedido = 'desconectar'`, que o motor executa. Nunca duas conexões com a mesma sessão. O motor se atualiza sozinho (`iniciar.sh` faz
+  `git pull` da `main` a cada reinício, de 12 em 12 h): tudo o que entra na `main` em `motor-zap/` vai para o celular.
+  Próxima etapa: fila de envio com horário comercial, intervalo e limites, guardar mensagens, ferramentas no conector.
+  Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
+  `python3 teste/teste_v24.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh` (instalação num HOME temporário).
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.

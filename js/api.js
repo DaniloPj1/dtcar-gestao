@@ -208,9 +208,17 @@ function criarApiSupabase() {
     temV18: () => temV18,
     // WhatsApp da oficina (supabase/v22.sql + função "zap"): situação e ações (testar, parear, conferir, desconectar)
     whatsapp: {
-      situacao: async () => { const r = await sb.from("whatsapp_conexao").select("*").eq("id", 1).maybeSingle();
+      // com o v24 a tela lê só as colunas liberadas (o resumo da chave do motor fica de fora); sem ele, lê tudo
+      situacao: async () => {
+        let r = await sb.from("whatsapp_conexao").select("id,situacao,numero,dono,detalhe,ultimo_teste,atualizado_em,qr_svg,dono_ate,motor_chave_em,motor_visto,motor_info,pedido").eq("id", 1).maybeSingle();
+        if (r.error && /column|dono_ate|motor_|pedido/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select("*").eq("id", 1).maybeSingle();
         if (r.error && /whatsapp_conexao|schema cache|does not exist/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v22.sql no Supabase.");
         return ok(r) || { situacao: "desligado" }; },
+      /** chave do motor do Android (v24): gera uma nova (a anterior deixa de valer) e devolve UMA vez */
+      novaChaveMotor: async () => { const r = await sb.rpc("whatsapp_motor_nova_chave");
+        if (r.error && /whatsapp_motor_nova_chave|schema cache|404/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v24.sql no Supabase.");
+        return ok(r); },
+      revogarMotor: async () => ok(await sb.rpc("whatsapp_motor_revogar")),
       chamar: async body => {
         const { data, error } = await sb.functions.invoke("zap", { body });
         if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {} if (/not found|404/i.test(m)) m = "A função \"zap\" ainda não foi publicada no Supabase."; throw new Error(m); }

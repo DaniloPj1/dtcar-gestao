@@ -190,6 +190,12 @@ button.linha:disabled{cursor:default;opacity:1}
 .codigo-pareamento{font-size:34px;font-weight:800;letter-spacing:.18em;font-family:ui-monospace,Consolas,monospace;margin:6px 0}
 .zap-situacao{margin-top:10px}
 .qr-pareamento{display:block;width:260px;max-width:100%;height:auto;background:#fff;padding:10px;border-radius:10px;margin:10px 0}
+.motor-instalar{margin:12px 0;border:1px solid var(--line);border-radius:8px;padding:8px 12px;background:var(--surface-2)}
+.motor-instalar summary{cursor:pointer;font-weight:600;min-height:32px;display:flex;align-items:center}
+.motor-instalar ol{padding-left:20px;margin:8px 0;line-height:1.5}
+.motor-instalar .inp,.chave-motor .inp{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
+.motor-instalar code{font-size:13px;word-break:break-all}
+.chave-motor p{margin:0 0 8px}
 
 /* painel */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}

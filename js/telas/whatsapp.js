@@ -57,9 +57,12 @@ export function WhatsApp() {
 
     <div class="card">
       <h3>2. Vincular o celular da oficina</h3>
-      ${st && st.situacao === "conectado" ? html`<p class="sub">Celular vinculado. Use "Conferir" para testar se a sessão guardada conecta de novo.</p>
+      ${st && (st.situacao === "conectado" || st.situacao === "erro") && !codigo ? html`<p class="sub">${st.situacao === "conectado"
+          ? "Celular vinculado. Use \"Conferir\" para testar se a sessão guardada conecta de novo."
+          : "Houve um problema. Confira a conexão de novo; se não voltar, desconecte (apaga a sessão) e vincule outra vez."}</p>
         <div class="acoes"><button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${conferir}>${fazendo === "conferir" ? "Conferindo…" : "Conferir conexão"}</button>
-          <button type="button" class="btn btn-perigo" disabled=${!!fazendo} onClick=${desconectar}>${fazendo === "desconectar" ? "Desconectando…" : "Desconectar"}</button></div>`
+          <button type="button" class="btn btn-perigo" disabled=${!!fazendo} onClick=${desconectar}>${fazendo === "desconectar" ? "Desconectando…" : "Desconectar"}</button></div>` : null}
+      ${st && st.situacao === "conectado" && !codigo ? null
       : codigo ? html`<p>No celular da oficina: <b>WhatsApp › Aparelhos conectados › Conectar aparelho › Conectar com número de telefone</b> e digite:</p>
         <p class="codigo-pareamento" aria-live="polite">${fmtCod(codigo.codigo)}</p>
         <p class="sub">O código vale por cerca de 2 minutos. Esta tela atualiza sozinha quando o celular terminar.</p>`

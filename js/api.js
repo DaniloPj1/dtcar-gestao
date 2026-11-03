@@ -51,11 +51,13 @@ export const definirSemRede = v => { const antes = semRede; semRede = !!v;
   if (semRede) { for (const c of ativos) c.abort(semConexao("sem internet")); ativos.clear(); if (!antes) window.dispatchEvent(new Event("dtcar-sem-rede")); } };
 export const estaSemRede = () => semRede;
 const LIMITE_MS = 15000, LIMITE_ARQUIVO_MS = 120000;
+// WhatsApp (função "zap"): a função espera o WhatsApp responder por até 40 s antes de devolver o resultado
+const LIMITE_ZAP_MS = 60000;
 // erro de rede "final": o nome AbortError faz a biblioteca do Supabase não repetir a tentativa (cada repetição esperava de novo)
 const semConexao = motivo => { const e = new Error("Failed to fetch (" + motivo + ")"); e.name = "AbortError"; return e; };
 function fetchComLimite(url, opts = {}) {
   if (semRede || !navigator.onLine) return Promise.reject(semConexao("sem internet"));
-  const ctl = new AbortController(), lim = /\/storage\/v1\//.test(String(url)) ? LIMITE_ARQUIVO_MS : LIMITE_MS;
+  const ctl = new AbortController(), lim = /\/storage\/v1\//.test(String(url)) ? LIMITE_ARQUIVO_MS : /\/functions\/v1\/zap\b/.test(String(url)) ? LIMITE_ZAP_MS : LIMITE_MS;
   const t = setTimeout(() => { ativos.delete(ctl); ctl.abort(semConexao("tempo esgotado")); }, lim); // o motivo vira o erro, inclusive na leitura do corpo
   ativos.add(ctl);
   if (opts.signal) { if (opts.signal.aborted) ctl.abort(); else opts.signal.addEventListener("abort", () => ctl.abort()); }

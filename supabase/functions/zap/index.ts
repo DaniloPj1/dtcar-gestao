@@ -9,6 +9,7 @@
 //   conferir    — volta a conectar com a sessão guardada (prova de que dá para conectar sob demanda)
 //   desconectar — desvincula o aparelho e apaga a sessão
 // Ainda não envia nem recebe mensagens (etapas seguintes).
+// processar (v25) — sem o motor: guarda as mensagens que chegaram e envia a fila pelas regras, em segundo plano.
 // Revezamento (v24): quando o motor do Android está com a vez, a função não conecta com a sessão guardada
 // (conferir responde pelo último sinal do motor; desconectar vira pedido ao motor).
 //
@@ -29,7 +30,7 @@ const log: any = { level: "error", child() { return log; }, trace() {}, debug() 
   error(...a: unknown[]) { console.error("baileys", ...a); } };
 
 const json = (corpo: unknown, status = 200) => Response.json(corpo, { status });
-const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const esperar = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 // valores da sessão têm bytes (Buffer): grava e lê com o conversor da própria biblioteca
 const paraBanco = (v: unknown) => JSON.parse(JSON.stringify(v, BufferJSON.replacer));
 const doBanco = (v: unknown) => JSON.parse(JSON.stringify(v), BufferJSON.reviver);
@@ -132,6 +133,61 @@ export function vezNoBanco(adm: Db) {
     async soltar() { try { await adm.rpc("whatsapp_soltar_vez", { p_id: id }); } catch (_) { /* vence sozinha */ } },
   };
 }
+// ---------- mensagens (cópia de motor-zap/whats.js: mudou lá, mude aqui; os testes usam os mesmos casos) ----------
+export const conversaIndividual = (jid: unknown) => /@(s\.whatsapp\.net|lid)$/.test(String(jid || ""));
+const digitosJid = (jid: unknown) => String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+export function telefoneDaChave(k: any) {
+  const c = [k && k.remoteJid, k && k.remoteJidAlt, k && k.senderPn, k && k.participantAlt].find((j) => /@s\.whatsapp\.net$/.test(String(j || "")));
+  return c ? digitosJid(c) : "";
+}
+const TIPOS: Record<string, string> = { conversation: "texto", extendedTextMessage: "texto", imageMessage: "imagem", videoMessage: "video", audioMessage: "audio",
+  documentMessage: "documento", stickerMessage: "figurinha", locationMessage: "localizacao", liveLocationMessage: "localizacao",
+  contactMessage: "contato", contactsArrayMessage: "contato", pollCreationMessage: "enquete", pollCreationMessageV3: "enquete" };
+function conteudo(m: any) {
+  let c = m && m.message;
+  for (let i = 0; i < 4 && c; i++) {
+    const dentro = (c.ephemeralMessage || c.viewOnceMessage || c.viewOnceMessageV2 || c.viewOnceMessageV2Extension || c.documentWithCaptionMessage || {}).message;
+    if (!dentro) break; c = dentro;
+  }
+  return c || null;
+}
+export function textoDaMensagem(m: any) {
+  const c = conteudo(m); if (!c) return null;
+  const chave = Object.keys(TIPOS).find((k) => c[k]); if (!chave) return null;
+  const v = c[chave]; const tipo = TIPOS[chave];
+  const txt = typeof v === "string" ? v : (v.text || v.caption || v.name || v.displayName || v.fileName || "");
+  return { tipo, texto: tipo === "texto" ? String(txt) : `[${tipo}]${txt ? " " + txt : ""}` };
+}
+export function paraGuardar(m: any) {
+  const k = m && m.key; if (!k || !k.id || !conversaIndividual(k.remoteJid)) return null;
+  const t = textoDaMensagem(m); if (!t) return null;
+  const ts = Number(m.messageTimestamp && (m.messageTimestamp.low ?? m.messageTimestamp)) || 0;
+  return { msg_id: k.id, jid: k.remoteJid, telefone: telefoneDaChave(k), nome: k.fromMe ? "" : String(m.pushName || "").slice(0, 80),
+    de_mim: !!k.fromMe, texto: t.texto.slice(0, 4000), tipo: t.tipo, em: new Date(ts ? ts * 1000 : Date.now()).toISOString() };
+}
+export function variacoes(tel: string) {
+  const d = String(tel || "").replace(/\D/g, ""); const v = [d];
+  if (/^55\d{2}9\d{8}$/.test(d)) v.push(d.slice(0, 4) + d.slice(5));
+  else if (/^55\d{2}[6-9]\d{7}$/.test(d)) v.push(d.slice(0, 4) + "9" + d.slice(4));
+  return v;
+}
+export async function jidParaEnvio(sock: any, tel: string) {
+  for (const n of variacoes(tel)) {
+    const r = await sock.onWhatsApp(n);
+    const a = Array.isArray(r) ? r.find((x: any) => x && x.exists) : null;
+    if (a) return a.jid as string;
+  }
+  return null;
+}
+export async function enviarTexto(sock: any, jid: string, texto: string, esperarMs: (ms: number) => Promise<void> = esperar) {
+  try { await sock.presenceSubscribe(jid); } catch (_) { /* opcional */ }
+  try { await sock.sendPresenceUpdate("composing", jid); } catch (_) { /* opcional */ }
+  await esperarMs(Math.min(1500 + String(texto).length * 35, 6000));
+  try { await sock.sendPresenceUpdate("paused", jid); } catch (_) { /* opcional */ }
+  const r = await sock.sendMessage(jid, { text: texto });
+  return (r && r.key && r.key.id) || "";
+}
+
 const ocupada = (ms: number) => ({ ok: false, ms, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." });
 
 async function situacao(adm: Db, patch: Record<string, unknown>) {
@@ -313,6 +369,62 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       await adm.from("whatsapp_conexao").update({ pedido: null }).eq("id", 1);
       return json({ ok: true, ms: ms() });
     } finally { await vez.soltar(); }
+  }
+
+  if (acao === "processar") {
+    // Sem o motor do Android: conecta, guarda as mensagens que chegaram, envia o que as regras da fila liberarem
+    // (v25: horário, intervalo, limites) e desconecta. Responde na hora e trabalha em segundo plano (até ~2 min).
+    if ((await vez.motor()).ativo) return json({ ok: true, motor: true, detalhe: "O motor do Android está com a conexão: ele envia e recebe sozinho, na hora." });
+    const { creds, keys, salvarCreds } = await sessao.carregar();
+    if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." });
+    if (!(await vez.pegar(150))) return json(ocupada(ms()));
+    const t0 = Date.now();
+    const trabalho = (async () => {
+      const s = abrir(creds, keys, salvarCreds);
+      const aGuardar: any[] = []; let guardadas = 0, enviadas = 0, motivo = "";
+      s.ev.on("messages.upsert", ({ messages }: any) => { for (const x of messages || []) { const g = paraGuardar(x); if (g) aGuardar.push(g); } });
+      const guardar = async () => {
+        if (!aGuardar.length) return;
+        const lote = aGuardar.splice(0, aGuardar.length);
+        const { data, error } = await adm.rpc("whatsapp_guardar_mensagens", { p_msgs: lote });
+        if (error) { console.error("guardar mensagens", error.message); aGuardar.unshift(...lote); } else guardadas += Number(data) || 0;
+      };
+      const r = await proximo(s, 40000);
+      if (r.tipo !== "open") {
+        fechar(s);
+        if (r.tipo === "close" && r.codigo === DisconnectReason.loggedOut) {
+          await sessao.apagar(); await situacao(adm, { situacao: "desligado", numero: "", detalhe: "O celular desvinculou este aparelho. Pareie de novo." });
+        } else await situacao(adm, { ultimo_teste: { acao, ok: false, detalhe: r.msg || r.tipo, em: new Date().toISOString() } });
+        return;
+      }
+      await esperar(8000); // o WhatsApp entrega o que chegou enquanto estava desconectado
+      while (Date.now() - t0 < 115000) {
+        await guardar();
+        const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
+        if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
+        const prox = p as { mensagem?: { id: number; telefone: string; texto: string }; motivo?: string; proximo_envio?: string };
+        if (!prox || !prox.mensagem) {
+          motivo = (prox && prox.motivo) || "";
+          const ate = prox && prox.motivo === "intervalo" && prox.proximo_envio ? new Date(prox.proximo_envio).getTime() : 0;
+          if (ate && ate - t0 < 112000) { await esperar(Math.max(500, ate - Date.now() + 500)); continue; } // espera o intervalo se couber
+          break;
+        }
+        const m = prox.mensagem; let res: Record<string, unknown>;
+        try {
+          const jid = await jidParaEnvio(s, m.telefone);
+          if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
+          else res = { p_ok: true, p_msg_id: await enviarTexto(s, jid, m.texto), p_jid: jid };
+        } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + (e as Error).message }; }
+        if (res.p_ok) enviadas++;
+        const { error: e2 } = await adm.rpc("whatsapp_resultado", { p_dono: "supabase", p_id: vez.id, p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id ?? null, p_jid: res.p_jid ?? null, p_erro: res.p_erro ?? null });
+        if (e2) console.error("resultado do envio", e2.message);
+        await vez.pegar(150); // renova a vez enquanto trabalha
+      }
+      await esperar(1500); await guardar(); fechar(s);
+      await situacao(adm, { ultimo_teste: { acao, ok: true, enviadas, guardadas, motivo, ms: Date.now() - t0, em: new Date().toISOString() } });
+    })().catch((e) => console.error("processar", e)).finally(() => vez.soltar());
+    if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(trabalho); else await trabalho;
+    return json({ ok: true, iniciado: true, ms: ms(), detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." });
   }
 
   return json({ erro: "Ação desconhecida." }, 400);

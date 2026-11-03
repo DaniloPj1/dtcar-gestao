@@ -4,12 +4,12 @@
 
 /** Só conversa individual (nada de grupo, status, lista de transmissão ou canal). */
 export const conversaIndividual = (jid) => /@(s\.whatsapp\.net|lid)$/.test(String(jid || ""));
-const digitos = (jid) => String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+const digitosJid = (jid) => String(jid || "").split("@")[0].split(":")[0].replace(/\D/g, "");
 
 /** Telefone da conversa: o JID de telefone (@s.whatsapp.net) entre os que a mensagem traz (o WhatsApp às vezes usa @lid). */
 export function telefoneDaChave(k) {
   const c = [k && k.remoteJid, k && k.remoteJidAlt, k && k.senderPn, k && k.participantAlt].find((j) => /@s\.whatsapp\.net$/.test(String(j || "")));
-  return c ? digitos(c) : "";
+  return c ? digitosJid(c) : "";
 }
 
 const TIPOS = { conversation: "texto", extendedTextMessage: "texto", imageMessage: "imagem", videoMessage: "video", audioMessage: "audio",

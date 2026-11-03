@@ -9,8 +9,9 @@ echo $$ > "$PID"
 FILHO=""
 trap '[ -n "$FILHO" ] && kill "$FILHO" 2>/dev/null && wait "$FILHO"; rm -f "$PID" "$HOME/.dtcar-motor-node.pid"; exit 0' INT TERM
 while true; do
-  # log não cresce sem fim: guarda só o último bloco de ~2 MB
-  if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ]; then mv -f "$LOG" "$LOG.1"; fi
+  # log não cresce sem fim: passando de ~2 MB, guarda o final em .1 e esvazia o mesmo arquivo (sem renomear: quem
+  # escreve nele — nohup do início automático — continua no arquivo certo e o "tail -f" segue funcionando)
+  if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ]; then tail -c 500000 "$LOG" > "$LOG.1"; : > "$LOG"; fi
   git -C "$DIR/.." pull --ff-only -q 2>/dev/null || echo "$(date '+%d/%m %H:%M') sem internet para buscar atualização (segue com a versão atual)"
   ATUAL="$(sha256sum "$DIR/package-lock.json" | cut -d' ' -f1)"
   if [ "$ATUAL" != "$(cat "$DIR/.instalado" 2>/dev/null)" ]; then

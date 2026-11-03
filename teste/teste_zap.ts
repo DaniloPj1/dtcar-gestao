@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, vinculado } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -59,6 +59,14 @@ const r3 = await s.reservar(150000);
 confere("reserva vencida é substituída", !!r3 && r3 !== rv1 && (await s.reservaAtual()) === r3);
 await s.liberar(r3!); confere("liberar com o id certo tira a reserva", (await s.reservaAtual()) === null);
 await s.reservar(150000); await s.apagar(); confere("desconectar apaga também a reserva", linhas.size === 0);
+
+// vinculado pelo QR Code: a biblioteca preenche só creds.me (registered continua false)
+const novas = initAuthCreds();
+confere("credenciais novas: não vinculado", !vinculado(novas));
+confere("vinculado pelo QR Code (só creds.me)", vinculado({ ...novas, registered: false, me: { id: "5527992470140:12@s.whatsapp.net" } }));
+confere("vinculado pelo código (registered)", vinculado({ ...novas, registered: true }));
+const vq = sessaoNoBanco(adm as any); const cq = await vq.carregar(); cq.creds.me = { id: "5527992470140:12@s.whatsapp.net", name: "DTCar" }; await cq.salvarCreds();
+confere("sessão do QR guardada volta como vinculada", vinculado((await vq.carregar()).creds)); await vq.apagar();
 
 const r = await atender(new Request("http://localhost/zap", { method: "POST", headers: { "content-type": "application/json" }, body: '{"acao":"testar"}' }));
 confere("sem login: 401", r.status === 401, String(r.status));

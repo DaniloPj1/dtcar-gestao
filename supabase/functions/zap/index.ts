@@ -32,6 +32,10 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const paraBanco = (v: unknown) => JSON.parse(JSON.stringify(v, BufferJSON.replacer));
 const doBanco = (v: unknown) => JSON.parse(JSON.stringify(v), BufferJSON.reviver);
 
+/** Já tem celular vinculado? Pelo QR Code a biblioteca só preenche creds.me ("registered" fica false;
+ *  ele só vira true no pareamento por código). É o mesmo critério que a biblioteca usa para entrar. */
+export const vinculado = (creds: { registered?: boolean; me?: { id?: string } }) => !!(creds && (creds.registered || creds.me?.id));
+
 /** Sessão do WhatsApp guardada no banco (tabela whatsapp_sessao, só a chave de servidor). */
 const RESERVA = "pareamento"; // linha de whatsapp_sessao que reserva o pareamento para uma tentativa só
 
@@ -173,7 +177,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       if (error) return json({ erro: "Falta rodar o supabase/v23.sql no Supabase para o QR Code aparecer na tela." }, 412);
     }
     const atual = await sessao.carregar();
-    if (atual.creds.registered) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
+    if (vinculado(atual.creds)) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
     // uma tentativa por vez. A execução da função dura no máximo 150 s (plano grátis), contando a preparação, a espera e o
     // fim: a reserva cobre a execução inteira (160 s a partir de agora) e a espera termina aos 140 s, antes do limite
     const t0 = Date.now();
@@ -226,7 +230,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
 
   if (acao === "conferir") {
     const { creds, keys, salvarCreds } = await sessao.carregar();
-    if (!creds.registered) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
+    if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
     const s = abrir(creds, keys, salvarCreds);
     const r = await proximo(s, 40000);
     const ok = r.tipo === "open";
@@ -244,7 +248,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
 
   if (acao === "desconectar") {
     const { creds, keys } = await sessao.carregar();
-    if (creds.registered) {
+    if (vinculado(creds)) {
       const s = abrir(creds, keys);
       const r = await proximo(s, 25000);
       if (r.tipo === "open") { try { await s.logout(); } catch (_) { /* segue apagando */ } }

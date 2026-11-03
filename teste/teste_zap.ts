@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, vinculado, vezNoBanco, guardaDaVez } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -67,6 +67,40 @@ confere("vinculado pelo QR Code (só creds.me)", vinculado({ ...novas, registere
 confere("vinculado pelo código (registered)", vinculado({ ...novas, registered: true }));
 const vq = sessaoNoBanco(adm as any); const cq = await vq.carregar(); cq.creds.me = { id: "5527992470140:12@s.whatsapp.net", name: "DTCar" }; await cq.salvarCreds();
 confere("sessão do QR guardada volta como vinculada", vinculado((await vq.carregar()).creds)); await vq.apagar();
+
+// revezamento com o motor do Android (v24)
+const admVez = (linha: unknown, erro: unknown = null, rpcDado: unknown = true) => ({
+  from: () => ({ select: () => ({ eq: () => Promise.resolve({ data: linha ? [linha] : [], error: erro }) }) }),
+  rpc: () => Promise.resolve({ data: rpcDado, error: erro }),
+});
+const futuro = new Date(Date.now() + 60000).toISOString(), passado = new Date(Date.now() - 1000).toISOString();
+let mv = await vezNoBanco(admVez({ dono: "android", dono_ate: futuro, motor_visto: new Date(Date.now() - 10000).toISOString(), motor_info: { conectado: true, aparelho: "A15" } }) as any).motor();
+confere("motor com a vez valendo: ativo e conectado", mv.ativo && mv.conectado && mv.aparelho === "A15" && mv.visto_s! >= 9 && mv.visto_s! <= 11, JSON.stringify(mv));
+mv = await vezNoBanco(admVez({ dono: "android", dono_ate: passado, motor_info: { conectado: true } }) as any).motor();
+confere("vez do motor vencida: não está ativo", !mv.ativo);
+mv = await vezNoBanco(admVez({ dono: "supabase", dono_ate: futuro }) as any).motor();
+confere("vez com o supabase: motor não ativo", !mv.ativo);
+mv = await vezNoBanco(admVez(null, { message: "column dono_ate does not exist" }) as any).motor();
+confere("sem o v24: motor não ativo", !mv.ativo);
+confere("sem o v24 (PGRST202): função segue sem reservar", await vezNoBanco(admVez(null, { code: "PGRST202", message: "Could not find the function public.whatsapp_pegar_vez(p_dono, p_id, p_segundos) in the schema cache" }) as any).pegar(60));
+confere("sem o v24 (42883): função segue sem reservar", await vezNoBanco(admVez(null, { code: "42883", message: "function public.whatsapp_pegar_vez(text, text, integer) does not exist" }) as any).pegar(60));
+confere("reserva com tempo-limite (57014): não conecta", !(await vezNoBanco(admVez(null, { code: "57014", message: "canceling statement due to statement timeout" }) as any).pegar(60)));
+confere("reserva com erro de rede: não conecta", !(await vezNoBanco(admVez(null, { message: "fetch failed" }) as any).pegar(60)));
+confere("resposta vazia: não conecta", !(await vezNoBanco(admVez(null, null, null) as any).pegar(60)));
+confere("outro com a vez: função não pega", !(await vezNoBanco(admVez(null, null, false) as any).pegar(60)));
+confere("vez livre: função pega", await vezNoBanco(admVez(null, null, true) as any).pegar(60));
+
+// guarda da vez da função: não abre depois do prazo e fecha a conexão antes da vez vencer
+{
+  let agora = 1_000_000; const g = guardaDaVez(60, () => agora);
+  confere("guarda: vale logo depois de pegar a vez", g.valida());
+  agora += 51_000; confere("guarda: 10 s antes de vencer já não vale (não abre)", !g.valida());
+  agora = 1_000_000; const g2 = guardaDaVez(1, () => agora); let fechou = false;
+  g2.vigiar({ end: () => { fechou = true; } }); await new Promise((r) => setTimeout(r, 30));
+  confere("guarda: fecha a conexão sozinha no prazo", fechou);
+  const g3 = guardaDaVez(60); let f3 = false; g3.vigiar({ end: () => { f3 = true; } }); g3.parar(); await new Promise((r) => setTimeout(r, 10));
+  confere("guarda: parar desarma", !f3);
+}
 
 const r = await atender(new Request("http://localhost/zap", { method: "POST", headers: { "content-type": "application/json" }, body: '{"acao":"testar"}' }));
 confere("sem login: 401", r.status === 401, String(r.status));

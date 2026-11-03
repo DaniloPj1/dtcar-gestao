@@ -1,7 +1,7 @@
 # Teste de ponta a ponta com dados simulados (teste/mock.js): fluxo da O.S. em 4 etapas, prazo e parcelas,
 # contas a receber, previsão de caixa, modo espelho e abertura sem internet.
 # Uso: python3 teste/teste_fluxo.py   (precisa de: pip install playwright && playwright install chromium)
-import subprocess, time, sys
+import subprocess, time, sys, re
 from playwright.sync_api import sync_playwright
 import os
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # pasta do repositório
@@ -115,6 +115,33 @@ try:
     # sessão com problema: Conferir e Desconectar continuam disponíveis (e o pareamento também)
     pg.evaluate("window.__ZAP.situacao = 'erro'"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)
     chk("whatsapp: com erro mostra Conferir e Desconectar", pg.query_selector("text=Conferir conexão") is not None and pg.query_selector("button:has-text('Desconectar')") is not None and pg.query_selector("text=Mostrar QR Code para vincular") is not None)
+    # etapa 2: motor no Android
+    chk("whatsapp motor: seção aparece, nunca ligado", "Motor no Android" in pg.inner_text("main") and "Nunca ligado" in pg.inner_text("main") and "Chave do motor: nenhuma" in pg.inner_text("main"))
+    pg.click("button:has-text('Gerar chave do motor')"); pg.wait_for_timeout(400)
+    chk("whatsapp motor: gera a chave e mostra uma vez", pg.input_value(".chave-motor .inp").startswith("dtm_") and "aparece só agora" in pg.inner_text("main") and "gerada em" in pg.inner_text("main"))
+    pg.click("button:has-text('Pronto, já colei')"); pg.wait_for_timeout(200)
+    chk("whatsapp motor: chave some da tela", pg.query_selector(".chave-motor") is None)
+    pg.click("button:has-text('Gerar nova chave')"); pg.wait_for_timeout(300)
+    chk("whatsapp motor: nova chave pede confirmação", "deixa de valer" in pg.inner_text("[role=dialog]"))
+    pg.click("[role=dialog] button:has-text('Voltar')"); pg.wait_for_timeout(200)
+    pg.click(".motor-instalar summary"); pg.wait_for_timeout(200)
+    chk("whatsapp motor: passo a passo com o comando", "Termux:Boot" in pg.inner_text("main") and "motor-zap/instalar.sh" in pg.input_value(".motor-instalar .inp"))
+    pg.evaluate("""(() => { const z = window.__ZAP; z.situacao = 'conectado'; z.dono = 'android'; z.dono_ate = new Date(Date.now() + 60000).toISOString();
+      z.motor_visto = new Date(Date.now() - 12000).toISOString(); z.motor_info = { conectado: true, aparelho: 'Galaxy A15 da oficina', versao: '2.0', recebidas: 3 }; })()""")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)
+    tx = pg.inner_text("main")
+    chk("whatsapp motor: ligado e conectado, com a vez", "Ligado e conectado" in tx and "Galaxy A15 da oficina" in tx and "motor do Android" in tx and re.search(r"recebidas desde que ligou:\s*3", tx) is not None)
+    pg.screenshot(path=SAIDA + "/u5d-whatsapp-motor.png", full_page=True)
+    pg.evaluate("window.__ZAP_OCUPADA = true")
+    pg.click("button:has-text('Desconectar')"); pg.wait_for_timeout(200); pg.click("[role=dialog] button:has-text('Desconectar')"); pg.wait_for_timeout(600)
+    chk("whatsapp: desconectar recusado (conexão ocupada) mostra o motivo e não diz que desconectou", "Tente de novo em 1 minuto" in pg.inner_text("main") and "WhatsApp desconectado" not in pg.inner_text("body"))
+    pg.evaluate("window.__ZAP_OCUPADA = false")
+    pg.click("button:has-text('Desconectar')"); pg.wait_for_timeout(200); pg.click("[role=dialog] button:has-text('Desconectar')"); pg.wait_for_timeout(600)
+    chk("whatsapp motor: desconectar vira pedido ao motor", "aguardando o motor" in pg.inner_text("main") and "conectado" == pg.evaluate("window.__ZAP.situacao"))
+    pg.evaluate("window.__ZAP.motor_visto = new Date(Date.now() - 300000).toISOString(); window.__ZAP.pedido = null"); pg.wait_for_timeout(20500)
+    chk("whatsapp motor: sem sinal (atualiza sozinha)", "Sem sinal" in pg.inner_text("main"))
+    pg.click("button:has-text('Revogar chave')"); pg.wait_for_timeout(200); pg.click("[role=dialog] button:has-text('Revogar')"); pg.wait_for_timeout(500)
+    chk("whatsapp motor: revogar tira a chave", "Chave do motor: nenhuma" in pg.inner_text("main"))
     pg.set_viewport_size({"width": 1600, "height": 950}); pg.wait_for_timeout(300)
     alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
     chk("menu: cabe sem rolar em 1600x950 (%d/%d)" % tuple(alt), alt[0] <= alt[1])

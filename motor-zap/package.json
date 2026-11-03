@@ -1,0 +1,13 @@
+{
+  "name": "dtcar-motor-zap",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Motor do WhatsApp da DTCar (Android/Termux ou PC): mantém a conexão e reveza com a função zap do Supabase.",
+  "type": "module",
+  "main": "motor.js",
+  "engines": { "node": ">=20" },
+  "scripts": { "start": "node motor.js", "teste": "node teste_motor.js" },
+  "dependencies": {
+    "baileys": "7.0.0-rc14"
+  }
+}

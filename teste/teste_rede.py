@@ -94,6 +94,13 @@ try:
     pg3.add_init_script("localStorage.setItem('sb-127-auth-token', %s)" % json.dumps(json.dumps(venc)))
     pg3.goto(U + "#/ordens"); pg3.wait_for_timeout(40000)
     chk("renovação do login com erro 503: não cai na tela de login", "ENTRAR" not in pg3.inner_text("body") and "01900" in pg3.inner_text("body"))
+    # Sair: só deste aparelho (scope=local); o padrão global derrubaria o login do conector do Claude
+    estado["modo"] = "ok"; pg4 = ctx.new_page(); saidas = []
+    pg4.on("request", lambda r: saidas.append(r.url) if "/auth/v1/logout" in r.url and r.method == "POST" else None)
+    pg4.add_init_script("localStorage.setItem('sb-127-auth-token', %s)" % json.dumps(json.dumps(sessao)))
+    pg4.goto(U + "#/ordens"); pg4.wait_for_timeout(4000)
+    pg4.evaluate("import('./js/api.js').then(m => m.api.auth.sair())"); pg4.wait_for_timeout(1500)
+    chk("sair: só deste aparelho (%s)" % saidas, len(saidas) == 1 and "scope=local" in saidas[0])
     b.close()
 except Exception as e:
     falhas.append("EXCECAO " + str(e).split("\n")[0])

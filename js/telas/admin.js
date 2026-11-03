@@ -27,6 +27,7 @@ export function Mais() {
       ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
       ${it("/dados-locais", "Dados neste computador", "Pasta de dados no PC, cópia para trabalhar sem internet e O.S. aguardando envio", I.caixa)}
       ${pode(perfil, "ajustes") ? it("/backup", "Backup", "Baixar uma cópia de todos os dados ou restaurar", I.nuvem) : null}
+      ${pode(perfil, "ajustes") ? it("/whatsapp", "WhatsApp da oficina", "Testar a conexão e vincular o celular da oficina", I.whats) : null}
       ${pode(perfil, "ajustes") ? it("/importar", "Importar do OS Oficina 3.0", "Trazer cadastros completos, produtos e O.S. novas do sistema antigo", I.painel) : null}
       <button type="button" class="linha" onClick=${sair}><span class="ic">${I.sair}</span><span class="meio"><strong>Sair</strong><span>Encerrar a sessão neste aparelho</span></span></button>
     </div></section></div>`;

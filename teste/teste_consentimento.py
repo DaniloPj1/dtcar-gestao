@@ -22,7 +22,7 @@ def confere(nome, cond, extra=""): (ok if cond else falhas).append(nome + (f" ({
 USUARIO = {"id": "00000000-0000-0000-0000-000000000001", "email": "danilo@dtcar.test", "aud": "authenticated", "role": "authenticated"}
 SESSAO = {"access_token": "tok", "refresh_token": "ref", "token_type": "bearer", "expires_in": 3600, "expires_at": 9999999999, "user": USUARIO}
 
-def cenario(pw, *, pendurar=None, papel="admin", ja_autorizado=False, retorno="https://claude.ai/api/mcp/auth_callback", logado=False, auth_id="AUTH1"):
+def cenario(pw, *, pendurar=None, papel="admin", ja_autorizado=False, retorno="https://claude.ai/api/mcp/auth_callback", logado=False, auth_id="AUTH1", vencida=False):
     b = pw.chromium.launch(); ctx = b.new_context(); pg = ctx.new_page()
     estado = {"consent": None, "senha": None}
     def supa(route):
@@ -38,6 +38,8 @@ def cenario(pw, *, pendurar=None, papel="admin", ja_autorizado=False, retorno="h
             estado["consent"] = json.loads(req.post_data or "{}").get("action")
             return route.fulfill(status=200, headers=cors, json={"redirect_url": retorno + "?code=COD&state=EST" if estado["consent"] == "approve" else retorno + "?error=access_denied"})
         if "/oauth/authorizations/" in u:
+            if vencida and estado["senha"] is None:  # login guardado, mas o servidor não reconhece mais a sessão
+                return route.fulfill(status=403, headers=cors, json={"code": 403, "error_code": "session_not_found", "msg": "Session from session_id claim in JWT does not exist"})
             if ja_autorizado: return route.fulfill(status=200, headers=cors, json={"redirect_url": retorno + "?code=JA"})
             return route.fulfill(status=200, headers=cors, json={"authorization_id": auth_id, "redirect_uri": retorno, "scope": "email",
                                                                   "client": {"id": "c1", "name": "Claude", "uri": "", "logo_uri": ""}, "user": {"id": USUARIO["id"], "email": USUARIO["email"]}})
@@ -82,6 +84,14 @@ with sync_playwright() as pw:
     confere("não administrador: aviso", pg.is_visible("#avisoPapel"))
     pg.click("#recusar"); pg.wait_for_url("https://outro.exemplo/**")
     confere("recusar: nega e volta com access_denied", est["consent"] == "deny" and "access_denied" in pg.url, pg.url)
+    b.close()
+
+    b, pg, est = cenario(pw, logado=True, vencida=True)
+    pg.wait_for_selector("#entrar:not([hidden])")
+    confere("login guardado vencido: pede para entrar de novo", "vencido" in pg.inner_text("#erroEntrar"), pg.inner_text("#erroEntrar"))
+    pg.fill("#email", "danilo@dtcar.test"); pg.fill("#senha", "certa"); pg.click("#entrar button")
+    pg.wait_for_selector("#pedido:not([hidden])")
+    confere("login vencido: depois de entrar mostra o pedido", "Claude" in pg.inner_text("#cliente"))
     b.close()
 
     b, pg, est = cenario(pw, logado=True, ja_autorizado=True)

@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado, vezNoBanco } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, vinculado, vezNoBanco, guardaDaVez } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -89,6 +89,18 @@ confere("reserva com erro de rede: não conecta", !(await vezNoBanco(admVez(null
 confere("resposta vazia: não conecta", !(await vezNoBanco(admVez(null, null, null) as any).pegar(60)));
 confere("outro com a vez: função não pega", !(await vezNoBanco(admVez(null, null, false) as any).pegar(60)));
 confere("vez livre: função pega", await vezNoBanco(admVez(null, null, true) as any).pegar(60));
+
+// guarda da vez da função: não abre depois do prazo e fecha a conexão antes da vez vencer
+{
+  let agora = 1_000_000; const g = guardaDaVez(60, () => agora);
+  confere("guarda: vale logo depois de pegar a vez", g.valida());
+  agora += 51_000; confere("guarda: 10 s antes de vencer já não vale (não abre)", !g.valida());
+  agora = 1_000_000; const g2 = guardaDaVez(1, () => agora); let fechou = false;
+  g2.vigiar({ end: () => { fechou = true; } }); await new Promise((r) => setTimeout(r, 30));
+  confere("guarda: fecha a conexão sozinha no prazo", fechou);
+  const g3 = guardaDaVez(60); let f3 = false; g3.vigiar({ end: () => { f3 = true; } }); g3.parar(); await new Promise((r) => setTimeout(r, 10));
+  confere("guarda: parar desarma", !f3);
+}
 
 const r = await atender(new Request("http://localhost/zap", { method: "POST", headers: { "content-type": "application/json" }, body: '{"acao":"testar"}' }));
 confere("sem login: 401", r.status === 401, String(r.status));

@@ -1,5 +1,6 @@
 // Sistema › WhatsApp — conexão própria da oficina (etapa 1: teste, pareamento por QR Code e conferência;
-// etapa 2: motor no Android, que mantém a conexão ligada e reveza com o Supabase)
+// etapa 2: motor no Android, que mantém a conexão ligada e reveza com o Supabase;
+// etapa 3: fila de envio com regras contra bloqueio e conversas — quem envia é o Claude, pelo conector, com ordem do Danilo)
 import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { useApp } from "../ui.js";
@@ -9,6 +10,13 @@ const CMD_INSTALAR = "pkg install -y curl && curl -fsSL https://raw.githubuserco
 const seg = iso => iso ? Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 1000)) : null;
 const haQuanto = iso => { const s = seg(iso); if (s === null) return "nunca"; if (s < 60) return "há " + s + " s"; if (s < 3600) return "há " + Math.round(s / 60) + " min"; return fmtDataHora(iso); };
 const vale = iso => !!iso && new Date(iso).getTime() > Date.now();
+const FILA = { pendente: ["Na fila", "info"], enviando: ["Enviando", "info"], enviada: ["Enviada", "ok"], erro: ["Erro", "bad"], cancelada: ["Cancelada", "muted"] };
+const DIAS = ["", "seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
+function regrasTexto(r) {
+  if (!r) return "";
+  const d = (r.dias || []).map(n => DIAS[n]).filter(Boolean);
+  return `Envio: ${d.length ? d.join(", ") : "nenhum dia"}, ${r.inicio}–${r.fim}${(r.dias || []).includes(6) && r.sabado_fim ? ` (sábado até ${r.sabado_fim})` : ""} · intervalo de ${r.intervalo_min} a ${r.intervalo_max} s entre mensagens · até ${r.por_hora} por hora e ${r.por_dia} por dia.`;
+}
 
 const SIT = { desligado: ["Desligado", "muted"], pareando: ["Pareando…", "info"], conectado: ["Vinculado", "ok"], erro: ["Com problema", "bad"] };
 
@@ -16,8 +24,19 @@ export function WhatsApp() {
   const { avisar, confirmar } = useApp();
   const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
   const [pediu, setPediu] = useState(false), [teste, setTeste] = useState(null), [chave, setChave] = useState("");
+  const [fila, setFila] = useState(null), [conversas, setConversas] = useState(null);
   const vivo = useRef(true);
-  const ler = async (limparErro = false) => { try { const s = await api.whatsapp.situacao(); if (vivo.current) { setSt(s); if (limparErro) setErro(""); } return s; } catch (e) { if (vivo.current) setErro(e.message); } };
+  const ler = async (limparErro = false) => {
+    try {
+      const s = await api.whatsapp.situacao();
+      if (vivo.current) { setSt(s); if (limparErro) setErro(""); }
+      if (s && "regras" in s) { // v25: fila e conversas
+        const [f, c] = await Promise.all([api.whatsapp.fila().catch(() => null), api.whatsapp.conversas().catch(() => null)]);
+        if (vivo.current) { setFila(f); setConversas(c); }
+      }
+      return s;
+    } catch (e) { if (vivo.current) setErro(e.message); }
+  };
   // a situação do motor muda sozinha (sinal a cada 30 s): a tela acompanha
   useEffect(() => { ler(true); const t = setInterval(() => ler(), 20000); return () => { vivo.current = false; clearInterval(t); }; }, []);
   // enquanto pareia, confere a situação a cada 3 s: o QR muda a cada 20–60 s e o pareamento termina no celular
@@ -38,6 +57,11 @@ export function WhatsApp() {
     if (!r) return;
     if (r.ok === false) { setErro(r.detalhe || "Não foi possível desconectar agora. Tente de novo em 1 minuto."); return; }
     avisar(r.pedido ? r.detalhe : "WhatsApp desconectado.");
+  };
+  const processar = async () => { const r = await fazer("processar"); if (r) avisar(r.detalhe || "Pronto."); setTimeout(() => ler(), 15000); };
+  const cancelar = async id => {
+    if (!await confirmar({ titulo: "Cancelar mensagem", texto: "A mensagem sai da fila e não é enviada.", botao: "Cancelar mensagem", perigo: true })) return;
+    try { await api.whatsapp.cancelar(id); await ler(); avisar("Mensagem cancelada."); } catch (e) { setErro(e.message); }
   };
   const copiar = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); avisar(msg); } catch (e) { avisar("Não foi possível copiar: selecione o texto e copie.", true); } };
   const gerarChave = async () => {
@@ -61,7 +85,7 @@ export function WhatsApp() {
   return html`<div class="pagina">
     <div class="card">
       <h3>WhatsApp da oficina</h3>
-      <p class="sub">Conexão própria com o WhatsApp do celular da oficina, sem serviço pago. Por enquanto o sistema testa a conexão, vincula o celular e mantém a conexão pelo motor no Android; enviar e guardar mensagens vem na próxima etapa.</p>
+      <p class="sub">Conexão própria com o WhatsApp do celular da oficina, sem serviço pago. O sistema vincula o celular, mantém a conexão (motor no Android ou, sem ele, o Supabase sob demanda) e envia e guarda mensagens pela fila. Envio de PDF vem na próxima etapa.</p>
       <div class="aviso">Conexão <b>não oficial</b>: o WhatsApp pode bloquear o número se perceber uso automático. Use um número da oficina, só com clientes, sem envio em massa.</div>
       ${!st && !erro ? html`<p class="sub">Carregando…</p>` : null}
       ${st ? html`<ul class="res-lista zap-situacao">
@@ -132,6 +156,29 @@ export function WhatsApp() {
           <button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${gerarChave}>${fazendo === "chave" ? "Gerando…" : st.motor_chave_em ? "Gerar nova chave" : "Gerar chave do motor"}</button>
           ${st.motor_chave_em ? html`<button type="button" class="btn btn-perigo" disabled=${!!fazendo} onClick=${revogar}>${fazendo === "revogar" ? "Revogando…" : "Revogar chave"}</button>` : null}
         </div>`}
+    </div>
+
+    <div class="card">
+      <h3>4. Mensagens</h3>
+      <p class="sub">Quem envia é o Claude, pelo conector, quando você pede (só para cliente cadastrado, nada em massa). As mensagens entram nesta fila e saem nas regras abaixo. As respostas dos clientes ficam guardadas para o Claude ler. Cliente que responder PARAR não recebe mais.</p>
+      ${!st ? null : !("regras" in st) ? html`<div class="aviso">Falta rodar o supabase/v25.sql no Supabase para a fila de mensagens.</div>` : html`
+        <p class="sub regras-envio">${regrasTexto(st.regras)}</p>
+        ${!(st.dono === "android" && vale(st.dono_ate)) ? html`<div class="acoes"><button type="button" class="btn" disabled=${!!fazendo} onClick=${processar}>${fazendo === "processar" ? "Iniciando…" : "Buscar mensagens e enviar a fila agora"}</button></div>
+          <p class="sub">Sem o motor do Android ligado, o envio e a busca de mensagens acontecem quando o Claude envia ou lê, ou por este botão (leva até 2 minutos).</p>` : null}
+        <h4>Fila</h4>
+        ${fila === null ? html`<p class="sub">Carregando…</p>` : !fila.length ? html`<p class="sub">Nenhuma mensagem ainda.</p>` : html`<ul class="zap-fila">
+          ${fila.map(f => { const [rot, cor] = FILA[f.status] || [f.status, "muted"]; return html`<li key=${f.id}>
+            <div><span class=${"pill p-" + cor}>${rot}</span> <b>${f.cliente_nome || f.telefone}</b>${f.ordem_numero ? " · O.S. " + f.ordem_numero : ""} <span class="sub">· ${fmtDataHora(f.enviada_em || f.criado_em)}${f.fora_horario ? " · fora do horário" : ""}</span></div>
+            <div class="zap-texto">${f.texto}</div>
+            ${f.erro && f.status !== "cancelada" ? html`<div class="sub erro-zap">${f.erro}</div>` : null}
+            ${f.status === "pendente" ? html`<button type="button" class="btn btn-sm" onClick=${() => cancelar(f.id)}>Cancelar</button>` : null}
+          </li>`; })}</ul>`}
+        <h4>Conversas recentes</h4>
+        ${conversas === null ? html`<p class="sub">Carregando…</p>` : !conversas.length ? html`<p class="sub">Nenhuma mensagem guardada ainda.</p>` : html`<ul class="zap-conversas">
+          ${conversas.map(c => html`<li key=${c.telefone}>
+            <div><b>${c.cliente || c.nome_no_whatsapp || c.telefone}</b> <span class="sub">${c.telefone} · ${fmtDataHora(c.ultima_em)}</span>${c.nao_lidas ? html` <span class="pill p-info">${c.nao_lidas} nova${c.nao_lidas > 1 ? "s" : ""}</span>` : null}</div>
+            <div class="zap-texto">${c.ultima_de_mim ? "Oficina: " : ""}${c.ultima_mensagem}</div>
+          </li>`)}</ul>`}`}
     </div>
   </div>`;
 }

@@ -77,6 +77,7 @@ function criarApiSupabase() {
     : k === "catch" ? f => Promise.reject(semConexao("sem internet")).catch(f) : () => p, apply: () => p }); return p; };
   for (const [obj, nome] of [[sb, "from"], [sb, "rpc"], [sb.storage, "from"]]) { const orig = obj[nome].bind(obj); obj[nome] = (...a) => semRede ? recusa() : orig(...a); }
   const ok = r => { if (r.error) throw traduzErro(r.error); return r.data; };
+  const COLS_ZAP = "id,situacao,numero,dono,detalhe,ultimo_teste,atualizado_em,qr_svg,dono_ate,motor_chave_em,motor_visto,motor_info,pedido"; // WhatsApp (v24)
   const urls = new Map();
   // por chave (id > último): exclusões entre uma página e outra não fazem pular linhas (o "offset" pulava)
   const todosPorChave = async (montar, chave = "id") => { const out = []; let ultimo = null;
@@ -208,9 +209,10 @@ function criarApiSupabase() {
     temV18: () => temV18,
     // WhatsApp da oficina (supabase/v22.sql + função "zap"): situação e ações (testar, parear, conferir, desconectar)
     whatsapp: {
-      // com o v24 a tela lê só as colunas liberadas (o resumo da chave do motor fica de fora); sem ele, lê tudo
+      // com o v24 a tela lê só as colunas liberadas (com o v25, também as regras de envio) (o resumo da chave do motor fica de fora); sem ele, lê tudo
       situacao: async () => {
-        let r = await sb.from("whatsapp_conexao").select("id,situacao,numero,dono,detalhe,ultimo_teste,atualizado_em,qr_svg,dono_ate,motor_chave_em,motor_visto,motor_info,pedido").eq("id", 1).maybeSingle();
+        let r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio").eq("id", 1).maybeSingle();
+        if (r.error && /column|regras|proximo_envio/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select(COLS_ZAP).eq("id", 1).maybeSingle(); // sem o v25
         if (r.error && /column|dono_ate|motor_|pedido/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select("*").eq("id", 1).maybeSingle();
         if (r.error && /whatsapp_conexao|schema cache|does not exist/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v22.sql no Supabase.");
         return ok(r) || { situacao: "desligado" }; },
@@ -219,6 +221,10 @@ function criarApiSupabase() {
         if (r.error && /whatsapp_motor_nova_chave|schema cache|404/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v24.sql no Supabase.");
         return ok(r); },
       revogarMotor: async () => ok(await sb.rpc("whatsapp_motor_revogar")),
+      // fila e mensagens (v25)
+      fila: async () => ok(await sb.from("whatsapp_fila").select("id,telefone,cliente_nome,texto,status,erro,criado_em,enviada_em,origem,ordem_numero,fora_horario").order("id", { ascending: false }).limit(20)),
+      conversas: async () => ok(await sb.rpc("whatsapp_conversas", { p_limite: 10, p_so_nao_lidas: false })) || [],
+      cancelar: async id => ok(await sb.rpc("whatsapp_cancelar", { p_id: id })),
       chamar: async body => {
         const { data, error } = await sb.functions.invoke("zap", { body });
         if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {} if (/not found|404/i.test(m)) m = "A função \"zap\" ainda não foi publicada no Supabase."; throw new Error(m); }

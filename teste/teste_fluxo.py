@@ -142,6 +142,24 @@ try:
     chk("whatsapp motor: sem sinal (atualiza sozinha)", "Sem sinal" in pg.inner_text("main"))
     pg.click("button:has-text('Revogar chave')"); pg.wait_for_timeout(200); pg.click("[role=dialog] button:has-text('Revogar')"); pg.wait_for_timeout(500)
     chk("whatsapp motor: revogar tira a chave", "Chave do motor: nenhuma" in pg.inner_text("main"))
+    # etapa 3: fila e conversas
+    chk("whatsapp fila: sem o v25 avisa", "Falta rodar o supabase/v25.sql" in pg.inner_text("main"))
+    pg.evaluate("""(() => { const z = window.__ZAP; z.regras = { inicio: '08:00', fim: '18:00', sabado_fim: '12:00', dias: [1,2,3,4,5,6], intervalo_min: 25, intervalo_max: 70, por_hora: 20, por_dia: 80 };
+      z.dono = 'supabase'; z.dono_ate = null; const t = new Date().toISOString();
+      window.__ZAP_FILA = [{ id: 3, telefone: '5527999112233', cliente_nome: 'Maria Souza', texto: 'Seu orçamento ficou em R$ 850,00.', status: 'pendente', criado_em: t, ordem_numero: 1904 },
+        { id: 2, telefone: '5527999112233', cliente_nome: 'Maria Souza', texto: 'Seu carro está pronto.', status: 'enviada', criado_em: t, enviada_em: t },
+        { id: 1, telefone: '5527988887777', cliente_nome: 'João', texto: 'Oi', status: 'erro', erro: 'Número sem WhatsApp.', criado_em: t }];
+      window.__ZAP_CONVERSAS = [{ telefone: '5527999112233', cliente: 'Maria Souza', ultima_em: t, nao_lidas: 2, ultima_mensagem: 'Pode fazer!', ultima_de_mim: false }]; })()""")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(700)
+    tx = pg.inner_text("main")
+    chk("whatsapp fila: regras, fila e conversas", "sábado até 12:00" in tx and "Na fila" in tx and "O.S. 1904" in tx and "Número sem WhatsApp" in tx and "Pode fazer!" in tx and "2 novas" in tx)
+    pg.screenshot(path=SAIDA + "/u5e-whatsapp-fila.png", full_page=True)
+    pg.click(".zap-fila button:has-text('Cancelar')"); pg.wait_for_timeout(200); pg.click("[role=dialog] button:has-text('Cancelar mensagem')"); pg.wait_for_timeout(500)
+    chk("whatsapp fila: cancela pendente", "Cancelada" in pg.inner_text(".zap-fila") and pg.query_selector(".zap-fila button:has-text('Cancelar')") is None)
+    pg.click("button:has-text('Buscar mensagens e enviar a fila agora')"); pg.wait_for_timeout(500)
+    chk("whatsapp fila: processar agora chama a função", "processar" in pg.evaluate("window.__ZAP_CHAMADAS"))
+    pg.evaluate("window.__ZAP.dono = 'android'; window.__ZAP.dono_ate = new Date(Date.now() + 60000).toISOString()"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)
+    chk("whatsapp fila: com o motor na vez, sem botão de processar", pg.query_selector("text=Buscar mensagens e enviar a fila agora") is None)
     pg.set_viewport_size({"width": 1600, "height": 950}); pg.wait_for_timeout(300)
     alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
     chk("menu: cabe sem rolar em 1600x950 (%d/%d)" % tuple(alt), alt[0] <= alt[1])

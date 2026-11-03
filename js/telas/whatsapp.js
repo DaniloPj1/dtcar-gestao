@@ -11,14 +11,16 @@ export function WhatsApp() {
   const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
   const [numero, setNumero] = useState("55"), [codigo, setCodigo] = useState(null), [teste, setTeste] = useState(null);
   const vivo = useRef(true);
-  const ler = async () => { try { const s = await api.whatsapp.situacao(); if (vivo.current) { setSt(s); setErro(""); } return s; } catch (e) { if (vivo.current) setErro(e.message); } };
-  useEffect(() => { ler(); return () => { vivo.current = false; }; }, []);
+  const ler = async (limparErro = false) => { try { const s = await api.whatsapp.situacao(); if (vivo.current) { setSt(s); if (limparErro) setErro(""); } return s; } catch (e) { if (vivo.current) setErro(e.message); } };
+  useEffect(() => { ler(true); return () => { vivo.current = false; }; }, []);
   // enquanto pareia, confere a situação a cada 4 s (o pareamento termina no celular)
-  useEffect(() => { if (!codigo) return; const t = setInterval(async () => { const s = await ler(); if (s && s.situacao !== "pareando") { setCodigo(null); clearInterval(t); } }, 4000); return () => clearInterval(t); }, [codigo]);
+  // (também quando a tela é reaberta no meio de um pareamento, sem o código guardado aqui)
+  const pareando = !!codigo || !!(st && st.situacao === "pareando");
+  useEffect(() => { if (!pareando) return; const t = setInterval(async () => { const s = await ler(); if (s && s.situacao !== "pareando") { setCodigo(null); clearInterval(t); } }, 4000); return () => clearInterval(t); }, [pareando]);
   const fazer = async (acao, extra = {}) => {
     setFazendo(acao); setErro("");
-    try { const r = await api.whatsapp.chamar({ acao, ...extra }); await ler(); return r; }
-    catch (e) { setErro(e.message); return null; } finally { setFazendo(""); }
+    try { const r = await api.whatsapp.chamar({ acao, ...extra }); await ler(true); return r; }
+    catch (e) { setErro(e.message); await ler(); return null; } finally { setFazendo(""); }
   };
   const testar = async () => { const r = await fazer("testar"); if (r) setTeste(r); };
   const conferir = async () => { const r = await fazer("conferir"); if (r) setTeste(r); };
@@ -32,7 +34,7 @@ export function WhatsApp() {
     if (await fazer("desconectar")) avisar("WhatsApp desconectado.");
   };
   // "pareando" parado há mais de 3 min: a tentativa acabou sem avisar (a função tem 150 s de vida) — trata como problema
-  if (st && st.situacao === "pareando" && Date.now() - new Date(st.atualizado_em).getTime() > 180000) st.situacao = "erro", st.detalhe = "O pareamento anterior não terminou. Peça um código novo.";
+  if (st && st.situacao === "pareando" && !codigo && Date.now() - new Date(st.atualizado_em).getTime() > 180000) setSt({ ...st, situacao: "erro", detalhe: "O pareamento anterior não terminou. Peça um código novo." });
   const [rot, cor] = SIT[(st && st.situacao) || "desligado"] || SIT.desligado;
   const fmtCod = c => String(c || "").replace(/^(.{4})(.{4})$/, "$1-$2");
   return html`<div class="pagina">

@@ -102,6 +102,11 @@ try:
     pg.fill("#zap-numero", "5527999990000"); pg.click("text=Pedir código de pareamento"); pg.wait_for_timeout(400)
     chk("whatsapp: mostra o código de pareamento", "ABCD-1234" in pg.inner_text("main") and pg.evaluate("window.__ZAP.numero") == "5527999990000")
     pg.screenshot(path=SAIDA + "/u5c-whatsapp.png")
+    # tela reaberta no meio do pareamento (sem o código local): continua consultando e mostra quando terminar
+    pg.evaluate("window.__ZAP.situacao = 'pareando'; window.__ZAP.atualizado_em = new Date().toISOString()")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(500)
+    pg.evaluate("window.__ZAP.situacao = 'conectado'"); pg.wait_for_timeout(4800)
+    chk("whatsapp: reaberta no pareamento, atualiza sozinha ao terminar", pg.query_selector("text=Conferir conexão") is not None and "Vinculado" in pg.inner_text("main"))
     # pareamento parado há mais de 3 min (a função acabou): a tela não fica presa em "Pareando…"
     pg.evaluate("window.__ZAP.situacao = 'pareando'; window.__ZAP.atualizado_em = new Date(Date.now() - 600000).toISOString()")
     pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)

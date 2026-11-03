@@ -47,13 +47,14 @@ function registro(saida) {
   return l;
 }
 
-export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = makeWASocket, saida = console, agora = Date.now } = {}) {
+export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = makeWASocket, saida = console, agora = Date.now,
+                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null } = {}) {
   const id = randomUUID();
   const log = (...a) => saida.log(hora(), ...a);
   const blog = registro(saida);
   const st = { sock: null, aberto: false, conectando: false, parado: false, semVinculo: false, chaveRuim: false,
     ultimoPulsoOk: 0, tentativas: 0, proximaTentativa: 0, desde: null, recebidas: 0, ultimaRecebida: null, erros: 0,
-    numero: "", situacaoGravada: "", inicio: agora() };
+    numero: "", situacaoGravada: "", inicio: agora(), guarda: null };
   let fila = Promise.resolve(); // gravações da sessão em ordem
 
   async function rpc(nome, args) {
@@ -104,6 +105,13 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     const s = st.sock; st.sock = null; st.aberto = false; st.conectando = false; st.desde = null;
     if (s) { log("fechando a conexão:", motivo); try { s.end(undefined); } catch (_) { /* já fechada */ } }
   }
+  // Guarda da vez: cada confirmação do banco vale SEM_PULSO_MS. Se nenhuma nova chegar nesse prazo (banco fora, chamada
+  // pendurada, chave revogada), a conexão fecha sozinha — antes de a vez vencer no banco (90 s) e outro poder conectar.
+  function armarGuarda() {
+    if (st.guarda) relogio.parar(st.guarda);
+    st.guarda = relogio.iniciar(() => { st.guarda = null; if (st.sock) { st.erros++; fechar("sem confirmar a vez com o banco a tempo"); } }, SEM_PULSO_MS);
+  }
+  function desarmarGuarda() { if (st.guarda) { relogio.parar(st.guarda); st.guarda = null; } }
   function agendar() { st.proximaTentativa = agora() + ESPERAS[Math.min(st.tentativas, ESPERAS.length - 1)]; st.tentativas++; }
 
   async function conectar() {
@@ -176,7 +184,13 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
 
   function pararPorChave(e) {
     if (!st.chaveRuim) log("CHAVE DO MOTOR RECUSADA:", e.message, "— gere outra em Sistema › WhatsApp e rode: bash ~/dtcar-gestao/motor-zap/configurar.sh");
-    st.chaveRuim = true; fechar("chave recusada");
+    st.chaveRuim = true; desarmarGuarda(); fechar("chave recusada");
+  }
+  // chave recusada: a cada sinal relê o arquivo de configuração (configurar.sh grava a chave nova)
+  function tentarChaveNova() {
+    if (!recarregar) return;
+    try { const c = recarregar(); if (c && c.chave && c.chave !== config.chave) { config.chave = c.chave; log("chave do motor nova lida do arquivo"); } }
+    catch (e) { /* arquivo com problema: segue com a atual */ }
   }
 
   const info = () => ({ versao: VERSAO, node: process.version, sistema: `${platform()} ${release()}`, aparelho: config.aparelho || hostname(),
@@ -185,6 +199,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
 
   async function pulso() {
     if (st.parado) return;
+    if (st.chaveRuim) tentarChaveNova();
     let r;
     try { r = await rpc("whatsapp_motor_pulso", { ...base(), p_info: info() }); }
     catch (e) {
@@ -197,6 +212,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     }
     st.ultimoPulsoOk = agora();
     if (st.chaveRuim) { st.chaveRuim = false; log("chave do motor aceita de novo"); }
+    if (r && r.vez) armarGuarda(); else desarmarGuarda();
     if (r && r.vinculado === false) {
       if (!st.semVinculo) log("nenhum celular vinculado: vincule pelo QR Code em Sistema › WhatsApp. Esperando…");
       st.semVinculo = true; if (st.sock) fechar("sessão apagada"); return;
@@ -207,7 +223,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   }
 
   async function encerrar(motivo = "encerrando") {
-    st.parado = true; fechar(motivo);
+    st.parado = true; desarmarGuarda(); fechar(motivo);
     try { await fila; await rpc("whatsapp_motor_soltar", base()); } catch (_) { /* a vez vence sozinha em 90 s */ }
   }
 
@@ -219,7 +235,7 @@ async function principal() {
   const args = process.argv.slice(2);
   if (args[0] === "--versao") { console.log(VERSAO); return; }
   const config = lerConfig();
-  const motor = criarMotor({ config });
+  const motor = criarMotor({ config, recarregar: () => lerConfig() });
   if (args[0] === "--teste") { // confere só a chave e o banco, sem conectar ao WhatsApp
     const r = await motor.rpc("whatsapp_motor_pulso", { p_chave: config.chave, p_id: motor.id, p_info: motor.info() });
     await motor.encerrar("teste");

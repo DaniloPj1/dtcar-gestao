@@ -144,6 +144,34 @@ function sessaoVinculada(b) {
   await m.pulso(); confere("chave revogada: não tenta conectar", f.sockets.length === 1);
 }
 
+// 4b) guarda independente do pulso: sem confirmação nova em 70 s, fecha mesmo com a chamada pendurada
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b);
+  const timers = []; const relogio = { iniciar: (fn, ms) => { const t = { fn, ms, ativo: true }; timers.push(t); return t; }, parar: (t) => { t.ativo = false; } };
+  const m = novo(b, f, { relogio });
+  await m.pulso(); await espera(); await f.sockets[0].emitir("connection.update", { connection: "open" }); await espera();
+  const ativos = () => timers.filter((t) => t.ativo);
+  confere("guarda armada com 70 s depois da confirmação", ativos().length === 1 && ativos()[0].ms === 70000);
+  await m.pulso();
+  confere("nova confirmação troca a guarda (só uma ativa)", ativos().length === 1 && timers.length === 2);
+  const venceu = ativos()[0]; venceu.ativo = false; venceu.fn(); // passou o prazo sem nova confirmação (ex.: chamada pendurada)
+  confere("guarda vence: fecha a conexão antes da vez vencer", f.sockets[0].fechado && !m.st.sock);
+  await m.pulso(); confere("confirmação nova arma a guarda de novo", ativos().length === 1);
+  await m.encerrar(); confere("encerrar desarma a guarda", ativos().length === 0);
+}
+
+// 4c) chave trocada: o motor relê o arquivo e volta sozinho
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); let arquivo = { chave: CHAVE };
+  const m = novo(b, f, { recarregar: () => arquivo });
+  await m.pulso(); await espera();
+  b.chaveValida = "dtm_" + "d".repeat(64); await m.pulso();
+  confere("chave revogada: para", m.st.chaveRuim && !m.st.sock);
+  arquivo = { chave: b.chaveValida }; b.con.dono_ate = 0; await m.pulso(); await espera();
+  confere("chave nova no arquivo: volta a funcionar sem reiniciar", !m.st.chaveRuim && f.sockets.length === 2);
+  await m.encerrar();
+}
+
 // 5) configuração
 {
   const d = mkdtempSync(join(tmpdir(), "motor-"));

@@ -44,7 +44,7 @@ export function WhatsApp() {
     try { const c = await api.whatsapp.novaChaveMotor(); setChave(c); await ler(true); } catch (e) { setErro(e.message); } finally { setFazendo(""); }
   };
   const revogar = async () => {
-    if (!await confirmar({ titulo: "Revogar chave do motor", texto: "O motor do Android para de funcionar na hora e o Supabase volta a fazer o serviço sob demanda. Use se o celular do motor sumir ou for trocado.", botao: "Revogar", perigo: true })) return;
+    if (!await confirmar({ titulo: "Revogar chave do motor", texto: "O motor do Android para de funcionar e, em até 90 segundos, o Supabase volta a fazer o serviço sob demanda. Use se o celular do motor sumir ou for trocado.", botao: "Revogar", perigo: true })) return;
     setFazendo("revogar"); setErro("");
     try { await api.whatsapp.revogarMotor(); setChave(""); await ler(true); avisar("Chave do motor revogada."); } catch (e) { setErro(e.message); } finally { setFazendo(""); }
   };

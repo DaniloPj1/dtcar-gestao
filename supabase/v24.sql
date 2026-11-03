@@ -72,10 +72,11 @@ create or replace function public.whatsapp_motor_revogar()
 returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.e_admin() then raise exception 'Só o administrador revoga a chave do motor.'; end if;
-  -- tira a chave e, se o motor estava com a vez, libera (a função zap pode conectar)
+  -- tira a chave na hora, mas NÃO libera a vez: o motor ainda pode estar conectado e só fecha quando o banco recusar
+  -- o próximo sinal (ou pela guarda dele, 70 s depois da última confirmação). A vez vence sozinha em até 90 s e só
+  -- então a função zap pode conectar — nunca duas conexões com a mesma sessão.
   update public.whatsapp_conexao
-     set motor_hash = null, motor_chave_em = null,
-         dono_ate = case when dono = 'android' then null else dono_ate end, atualizado_em = now()
+     set motor_hash = null, motor_chave_em = null, atualizado_em = now()
    where id = 1;
 end $$;
 

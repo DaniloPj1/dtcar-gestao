@@ -36,12 +36,16 @@ confere "motor ligado e mandando pulso" 'grep -q "ligado" "$HOME/dtcar-motor.log
 PID1="$(cat "$HOME/.dtcar-motor.pid")"
 bash "$RAIZ/motor-zap/iniciar.sh" > "$T/segundo.out" 2>&1
 confere "segunda cópia não liga (já rodando)" 'grep -q "já está rodando" "$T/segundo.out" && [ "$(cat "$HOME/.dtcar-motor.pid")" = "$PID1" ]'
+# 1b) trocar a chave com o motor ligado: configurar.sh reinicia o processo do motor
+NODE1="$(cat "$HOME/.dtcar-motor-node.pid")"
+printf '%s\n\n' "$CHAVE" | bash "$HOME/dtcar-gestao/motor-zap/configurar.sh" > "$T/conf.out" 2>&1; sleep 12
+confere "trocar a chave com o motor ligado: reinicia o motor" 'grep -q "Motor reiniciado" "$T/conf.out" && [ "$(cat "$HOME/.dtcar-motor-node.pid")" != "$NODE1" ] && kill -0 "$(cat "$HOME/.dtcar-motor-node.pid")"'
 # 2) motor cai: o iniciar.sh religa em ~10 s
 pkill -f "node motor.js" ; sleep 13
 confere "motor religado depois de cair" '[ "$(pgrep -fc "node motor.js")" -ge 1 ]'
 # 3) parar: solta a vez e encerra tudo
 bash "$RAIZ/motor-zap/parar.sh" > "$T/parar.out" 2>&1; sleep 2
-confere "parar encerra o motor" 'grep -q "Motor parado" "$T/parar.out" && ! pgrep -f "node motor.js" >/dev/null && [ ! -f "$HOME/.dtcar-motor.pid" ]'
+confere "parar encerra o motor" 'grep -q "Motor parado" "$T/parar.out" && ! pgrep -f "node motor.js" >/dev/null && [ ! -f "$HOME/.dtcar-motor.pid" ] && [ ! -f "$HOME/.dtcar-motor-node.pid" ]'
 confere "ao parar, soltou a vez" 'tail -n 3 "$T/chamadas.txt" | grep -q whatsapp_motor_soltar'
 # 4) reinstalar mantém a chave
 DTCAR_REPO="file://$RAIZ" DTCAR_RAMO="$RAMO" bash "$RAIZ/motor-zap/instalar.sh" < /dev/null > "$T/re.out" 2>&1

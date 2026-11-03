@@ -18,3 +18,8 @@ node -e 'const [c, n, a] = process.argv.slice(1); require("fs").writeFileSync(a,
 chmod 600 "$HOME/.dtcar-motor.json"
 echo "-- Conferindo a chave com o banco…"
 ( cd "$DIR" && node motor.js --teste ) || { echo "A chave não foi aceita. Gere outra na tela e rode de novo: bash $DIR/configurar.sh"; exit 1; }
+# motor já ligado: reinicia só o processo do motor para usar a chave nova (o iniciar.sh liga de novo em ~10 s)
+NODE_PID="$HOME/.dtcar-motor-node.pid"
+if [ -f "$NODE_PID" ] && kill -0 "$(cat "$NODE_PID")" 2>/dev/null; then
+  kill "$(cat "$NODE_PID")" && echo "-- Motor reiniciado com a chave nova (volta a funcionar em uns 10 segundos)."
+fi

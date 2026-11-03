@@ -7,7 +7,7 @@ LOG="$HOME/dtcar-motor.log"
 if [ -f "$PID" ] && kill -0 "$(cat "$PID")" 2>/dev/null; then echo "$(date '+%d/%m %H:%M') motor já está rodando (pid $(cat "$PID"))"; exit 0; fi
 echo $$ > "$PID"
 FILHO=""
-trap '[ -n "$FILHO" ] && kill "$FILHO" 2>/dev/null && wait "$FILHO"; rm -f "$PID"; exit 0' INT TERM
+trap '[ -n "$FILHO" ] && kill "$FILHO" 2>/dev/null && wait "$FILHO"; rm -f "$PID" "$HOME/.dtcar-motor-node.pid"; exit 0' INT TERM
 while true; do
   # log não cresce sem fim: guarda só o último bloco de ~2 MB
   if [ -f "$LOG" ] && [ "$(wc -c < "$LOG")" -gt 2000000 ]; then mv -f "$LOG" "$LOG.1"; fi
@@ -18,8 +18,9 @@ while true; do
     ( cd "$DIR" && npm ci --omit=dev --no-audit --no-fund --loglevel=error ) && echo "$ATUAL" > "$DIR/.instalado"
   fi
   ( cd "$DIR" && exec node motor.js ) & FILHO=$!
+  echo "$FILHO" > "$HOME/.dtcar-motor-node.pid"
   wait "$FILHO"; CODIGO=$?
   [ "$CODIGO" = 130 ] && break
   sleep 10
 done
-rm -f "$PID"
+rm -f "$PID" "$HOME/.dtcar-motor-node.pid"

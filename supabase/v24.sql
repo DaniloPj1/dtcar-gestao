@@ -122,7 +122,13 @@ begin
                   and (valor -> 'me' ->> 'id' is not null or coalesce((valor ->> 'registered')::boolean, false)))
     into v_vinculado;
   if v_vinculado then v_vez := public.whatsapp_pegar_vez('android', p_id, 90);
-  else perform public.whatsapp_soltar_vez(p_id); end if;
+  else
+    perform public.whatsapp_soltar_vez(p_id);
+    -- pedido de desconectar com a sessão já apagada: não há mais o que fazer, conclui
+    update public.whatsapp_conexao set pedido = null, situacao = 'desligado', numero = '',
+           detalhe = 'Desconectado (a sessão já estava apagada).', atualizado_em = now()
+     where id = 1 and pedido = 'desconectar';
+  end if;
   select * into v from public.whatsapp_conexao where id = 1;
   return jsonb_build_object('vez', v_vez, 'vinculado', v_vinculado, 'pedido', case when v_vez then v.pedido end,
                             'situacao', v.situacao, 'dono', v.dono, 'dono_ate', v.dono_ate);
@@ -160,11 +166,18 @@ begin
 end $$;
 
 -- O celular desvinculou o aparelho (ou pedido de desconectar): apaga a sessão inteira (só com a vez).
-create or replace function public.whatsapp_motor_apagar_sessao(p_chave text, p_id text)
+-- Com p_detalhe, na MESMA operação marca "desligado" e limpa o pedido (não fica pedido pendente com a sessão já apagada).
+drop function if exists public.whatsapp_motor_apagar_sessao(text, text);
+create or replace function public.whatsapp_motor_apagar_sessao(p_chave text, p_id text, p_detalhe text default null)
 returns void language plpgsql security definer set search_path = public as $$
 begin
   perform public.whatsapp_motor_com_vez(p_chave, p_id);
   delete from public.whatsapp_sessao where chave <> 'pareamento';
+  if p_detalhe is not null then
+    update public.whatsapp_conexao
+       set situacao = 'desligado', numero = '', qr_svg = null, pedido = null, detalhe = left(p_detalhe, 300), atualizado_em = now()
+     where id = 1;
+  end if;
 end $$;
 
 -- Atualiza a situação mostrada na tela (só os campos permitidos; só com a vez).
@@ -187,7 +200,7 @@ begin
   foreach f in array array[
     'whatsapp_motor_conferir(text)', 'whatsapp_motor_com_vez(text, text)', 'whatsapp_motor_pulso(text, text, jsonb)',
     'whatsapp_motor_soltar(text, text)', 'whatsapp_motor_ler(text, text, text[])', 'whatsapp_motor_gravar(text, text, jsonb, text[])',
-    'whatsapp_motor_apagar_sessao(text, text)', 'whatsapp_motor_situacao(text, text, text, text, text, boolean)'] loop
+    'whatsapp_motor_apagar_sessao(text, text, text)', 'whatsapp_motor_situacao(text, text, text, text, text, boolean)'] loop
     execute 'revoke all on function public.' || f || ' from public, authenticated';
     execute 'grant execute on function public.' || f || ' to anon, service_role';
   end loop;

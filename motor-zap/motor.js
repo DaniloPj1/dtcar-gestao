@@ -48,7 +48,7 @@ function registro(saida) {
 }
 
 export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = makeWASocket, saida = console, agora = Date.now,
-                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null } = {}) {
+                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null, esperasGravar = [0, 1000, 3000] } = {}) {
   const id = randomUUID();
   const log = (...a) => saida.log(hora(), ...a);
   const blog = registro(saida);
@@ -56,6 +56,10 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     ultimoPulsoOk: 0, tentativas: 0, proximaTentativa: 0, desde: null, recebidas: 0, ultimaRecebida: null, erros: 0,
     numero: "", situacaoGravada: "", inicio: agora(), guarda: null };
   let fila = Promise.resolve(); // gravações da sessão em ordem
+  // mudanças da sessão ainda não confirmadas pelo banco (chave -> valor serializado; null = apagar). Ficam aqui até
+  // o banco aceitar: as leituras usam estas por cima das do banco e cada gravação/sinal tenta mandar de novo.
+  const pendentes = new Map();
+  const dormir = (ms) => new Promise((r) => setTimeout(r, ms));
 
   async function rpc(nome, args) {
     const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 20000);
@@ -72,9 +76,34 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   const chaveInvalida = (e) => /chave do motor/i.test(e.message || "") || e.codigo === "28000";
 
   // ---------- sessão do WhatsApp no banco (via funções do motor) ----------
-  const ler = async (chaves) => (chaves.length ? await rpc("whatsapp_motor_ler", { ...base(), p_chaves: chaves }) : {}) || {};
-  const gravar = (poe, tira = []) => (fila = fila.then(() => rpc("whatsapp_motor_gravar", { ...base(), p_poe: poe, p_tira: tira }))
-    .catch((e) => { st.erros++; log("não gravou a sessão:", e.message); }));
+  const ler = async (chaves) => {
+    const r = (chaves.length ? await rpc("whatsapp_motor_ler", { ...base(), p_chaves: chaves }) : {}) || {};
+    for (const k of chaves) if (pendentes.has(k)) { const v = pendentes.get(k); if (v === null) delete r[k]; else r[k] = v; }
+    return r;
+  };
+  async function descarregar() {
+    if (!pendentes.size) return;
+    const lote = new Map(pendentes), poe = {}, tira = [];
+    for (const [k, v] of lote) { if (v === null) tira.push(k); else poe[k] = v; }
+    await rpc("whatsapp_motor_gravar", { ...base(), p_poe: poe, p_tira: tira });
+    for (const [k, v] of lote) if (pendentes.get(k) === v) pendentes.delete(k);
+  }
+  /** Grava na ordem; tenta 3 vezes. Se o banco não aceitar, a mudança fica pendente e o erro volta para a biblioteca
+   *  (ela não pode achar que está salvo). */
+  function gravar(poe, tira = []) {
+    for (const k in poe) pendentes.set(k, poe[k]);
+    for (const k of tira) pendentes.set(k, null);
+    fila = fila.catch(() => {}).then(async () => {
+      let ultimo;
+      for (const e of esperasGravar) { if (e) await dormir(e); try { await descarregar(); return; } catch (x) { ultimo = x; } }
+      st.erros++; log(`não gravou a sessão (${pendentes.size} mudança(s) guardadas aqui; tenta de novo):`, ultimo.message);
+      throw ultimo;
+    });
+    return fila;
+  }
+  /** Sinal: manda o que ficou pendente (sem lançar erro). */
+  const tentarPendentes = () => (pendentes.size ? gravar({}).catch(() => {}) : Promise.resolve());
+
   async function carregar() {
     const r = await ler(["creds"]);
     const creds = r.creds ? doBanco(r.creds) : initAuthCreds();
@@ -93,7 +122,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
         await gravar(poe, tira);
       },
     };
-    return { creds, keys, salvarCreds: () => gravar({ creds: paraBanco(creds) }) };
+    return { creds, keys, salvarCreds: () => gravar({ creds: paraBanco(creds) }).catch(() => {}) };
   }
   async function situacao(sit, detalhe, extra = {}) {
     try { await rpc("whatsapp_motor_situacao", { ...base(), p_situacao: sit, p_detalhe: detalhe, p_numero: extra.numero ?? null, p_limpar_pedido: !!extra.limparPedido }); st.situacaoGravada = sit; }
@@ -157,8 +186,9 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       st.sock = null; st.aberto = false; st.conectando = false; st.desde = null;
       if (codigo === DisconnectReason.loggedOut) {
         log("o celular desvinculou este aparelho: apagando a sessão");
-        try { await rpc("whatsapp_motor_apagar_sessao", base()); } catch (x) { log("não apagou a sessão:", x.message); }
-        await situacao("desligado", "O celular desvinculou o aparelho. Vincule de novo pelo QR Code.", { numero: "" });
+        pendentes.clear();
+        try { await fila.catch(() => {}); await rpc("whatsapp_motor_apagar_sessao", { ...base(), p_detalhe: "O celular desvinculou o aparelho. Vincule de novo pelo QR Code." }); }
+        catch (x) { log("não apagou a sessão:", x.message); }
         st.proximaTentativa = agora() + 60000; return;
       }
       if (codigo === DisconnectReason.connectionReplaced) {
@@ -179,10 +209,11 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     fechar("desconectar");
     // só confirma e limpa o pedido depois que a sessão sumiu do banco; se falhar, o pedido fica e o próximo sinal tenta de novo
     // (sem reconectar: proximaTentativa adiada e a conexão já fechada)
-    try { await fila; await rpc("whatsapp_motor_apagar_sessao", base()); }
+    pendentes.clear();
+    // uma operação só no banco: apaga a sessão, marca "desligado" e limpa o pedido
+    try { await fila.catch(() => {}); await rpc("whatsapp_motor_apagar_sessao", { ...base(), p_detalhe: "Desconectado e sessão apagada (pelo motor do Android)." }); }
     catch (e) { st.erros++; log("não apagou a sessão (tenta de novo no próximo sinal):", e.message); st.proximaTentativa = agora() + 60000; return; }
-    await situacao("desligado", "Desconectado e sessão apagada (pelo motor do Android).", { numero: "", limparPedido: true });
-    st.proximaTentativa = agora() + 60000;
+    st.situacaoGravada = "desligado"; st.proximaTentativa = agora() + 60000;
   }
 
   function pararPorChave(e) {
@@ -198,7 +229,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
 
   const info = () => ({ versao: VERSAO, node: process.version, sistema: `${platform()} ${release()}`, aparelho: config.aparelho || hostname(),
     conectado: st.aberto, desde: st.desde, recebidas: st.recebidas, ultima_recebida: st.ultimaRecebida, erros: st.erros,
-    ligado_desde: new Date(st.inicio).toISOString() });
+    ligado_desde: new Date(st.inicio).toISOString(), pendentes: pendentes.size });
 
   async function pulso() {
     if (st.parado) return;
@@ -220,17 +251,24 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       if (!st.semVinculo) log("nenhum celular vinculado: vincule pelo QR Code em Sistema › WhatsApp. Esperando…");
       st.semVinculo = true; if (st.sock) fechar("sessão apagada"); return;
     }
-    if (!r || !r.vez) { if (st.sock) fechar(`a vez está com ${r && r.dono}`); return; }
+    if (!r || !r.vez) {
+      if (st.sock) fechar(`a vez está com ${r && r.dono}`);
+      // outro (a função zap) assumiu: ele carregou a sessão do banco e pode tê-la avançado; mandar as mudanças antigas
+      // daqui por cima estragaria a sessão. Descarta.
+      if (pendentes.size && r && r.dono && r.dono !== "android") { log(`descartando ${pendentes.size} mudança(s) não gravadas: a vez passou para ${r.dono}`); pendentes.clear(); }
+      return;
+    }
     if (r.pedido === "desconectar") return desconectarAPedido();
+    await tentarPendentes();
     if (!st.sock && !st.conectando && agora() >= st.proximaTentativa) await conectar();
   }
 
   async function encerrar(motivo = "encerrando") {
     st.parado = true; desarmarGuarda(); fechar(motivo);
-    try { await fila; await rpc("whatsapp_motor_soltar", base()); } catch (_) { /* a vez vence sozinha em 90 s */ }
+    try { await tentarPendentes(); await fila.catch(() => {}); await rpc("whatsapp_motor_soltar", base()); } catch (_) { /* a vez vence sozinha em 90 s */ }
   }
 
-  return { id, st, pulso, encerrar, info, rpc, _aoMudarConexao: aoMudarConexao };
+  return { id, st, pulso, encerrar, info, rpc, pendentes, _aoMudarConexao: aoMudarConexao };
 }
 
 // ---------- execução direta ----------

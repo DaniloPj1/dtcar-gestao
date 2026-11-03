@@ -35,7 +35,7 @@ function banco() {
     if (!comVez()) return erro("O motor não está com a vez da conexão.", "55000");
     if (nome === "whatsapp_motor_ler") return resp(Object.fromEntries(a.p_chaves.filter((k) => b.sessao.has(k)).map((k) => [k, JSON.parse(b.sessao.get(k))])));
     if (nome === "whatsapp_motor_gravar") { for (const k in a.p_poe) b.sessao.set(k, JSON.stringify(a.p_poe[k])); for (const k of a.p_tira) b.sessao.delete(k); return resp(); }
-    if (nome === "whatsapp_motor_apagar_sessao") { b.sessao.clear(); return resp(); }
+    if (nome === "whatsapp_motor_apagar_sessao") { b.sessao.clear(); if (a.p_detalhe != null) Object.assign(b.con, { situacao: "desligado", numero: "", pedido: null, detalhe: a.p_detalhe }); return resp(); }
     if (nome === "whatsapp_motor_situacao") {
       Object.assign(b.con, { situacao: a.p_situacao, detalhe: a.p_detalhe }); if (a.p_numero != null) b.con.numero = a.p_numero;
       if (a.p_limpar_pedido) b.con.pedido = null; return resp();
@@ -63,7 +63,7 @@ const silencioso = { log() {}, error() {} };
 const fechamento = (codigo) => ({ connection: "close", lastDisconnect: { error: Object.assign(new Error("caiu " + codigo), { output: { statusCode: codigo } }) } });
 
 function novo(b, f, extra = {}) {
-  return criarMotor({ config: { url: "https://x.supabase.co", publica: "pub", chave: CHAVE, aparelho: "Galaxy A15" }, buscar: (u, o) => b.buscar(u, o), criarSocket: f.criar, saida: silencioso, agora: () => b.agora, ...extra });
+  return criarMotor({ config: { url: "https://x.supabase.co", publica: "pub", chave: CHAVE, aparelho: "Galaxy A15" }, buscar: (u, o) => b.buscar(u, o), criarSocket: f.criar, saida: silencioso, agora: () => b.agora, esperasGravar: [0, 0, 0], ...extra });
 }
 // sessão vinculada pelo QR (só creds.me), com bytes no formato do conversor da biblioteca
 function sessaoVinculada(b) {
@@ -120,6 +120,26 @@ function sessaoVinculada(b) {
   confere("falha ao apagar: não reabre a sessão", f.sockets.length === 1);
   b.buscar = original; await m.pulso(); await espera();
   confere("apagar voltou: sessão apagada e pedido limpo", !b.sessao.has("creds") && b.con.pedido === null && b.con.situacao === "desligado");
+}
+
+// 1c) gravação da sessão recusada: a mudança fica pendente, a biblioteca recebe o erro, e o sinal manda de novo
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); const m = novo(b, f);
+  await m.pulso(); await espera(); const s = f.sockets[0]; await s.emitir("connection.update", { connection: "open" }); await espera();
+  const original = b.buscar;
+  b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_gravar") ? { ok: false, status: 503, text: async () => '{"message":"indisponível"}' } : original(url, op));
+  let erro = null; try { await s.opcoes.auth.keys.set({ session: { "xyz": Buffer.from([1, 2]) } }); } catch (e) { erro = e; }
+  confere("gravação recusada: a biblioteca recebe o erro", !!erro && m.pendentes.size === 1 && !b.sessao.has("k:session:xyz"));
+  const lido = await s.opcoes.auth.keys.get("session", ["xyz"]);
+  confere("gravação recusada: leitura usa a mudança pendente", Buffer.isBuffer(lido.xyz) && lido.xyz[1] === 2);
+  await m.pulso(); confere("banco ainda recusando: continua pendente", m.pendentes.size === 1);
+  b.buscar = original; await m.pulso();
+  confere("banco voltou: o sinal grava a pendente", m.pendentes.size === 0 && JSON.parse(b.sessao.get("k:session:xyz")).type === "Buffer");
+  // pendente quando a vez passa para o Supabase: descarta (não sobrescreve a sessão que ele avançou)
+  b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_gravar") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
+  try { await s.opcoes.auth.keys.set({ session: { "abc": Buffer.from([3]) } }); } catch (_) { /* esperado */ }
+  b.buscar = original; Object.assign(b.con, { dono: "supabase", dono_id: "z", dono_ate: b.agora + 60000 }); await m.pulso();
+  confere("vez passou para o Supabase: descarta as pendentes", m.pendentes.size === 0 && !b.sessao.has("k:session:abc"));
 }
 
 // 2) quedas

@@ -160,7 +160,7 @@ export function WhatsApp() {
 
     <div class="card">
       <h3>4. Mensagens</h3>
-      <p class="sub">Quem envia é o Claude, pelo conector, quando você pede (só para cliente cadastrado, nada em massa). As mensagens entram nesta fila e saem nas regras abaixo. As respostas dos clientes ficam guardadas para o Claude ler. Cliente que responder PARAR não recebe mais.</p>
+      <p class="sub">Quem envia é o Claude, pelo conector, quando você pede (para o número que você mandar, nada em massa). As mensagens entram nesta fila e saem nas regras abaixo. As respostas dos clientes ficam guardadas para o Claude ler. Cliente que responder PARAR não recebe mais.</p>
       ${!st ? null : !("regras" in st) ? html`<div class="aviso">Falta rodar o supabase/v25.sql no Supabase para a fila de mensagens.</div>` : html`
         <p class="sub regras-envio">${regrasTexto(st.regras)}</p>
         ${!(st.dono === "android" && vale(st.dono_ate)) ? html`<div class="acoes"><button type="button" class="btn" disabled=${!!fazendo} onClick=${processar}>${fazendo === "processar" ? "Iniciando…" : "Buscar mensagens e enviar a fila agora"}</button></div>

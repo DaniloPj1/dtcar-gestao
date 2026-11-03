@@ -16,7 +16,7 @@ def js(comando, papel="authenticated"):
     except Exception: return s, e
 q = lambda v: "'" + json.dumps(v).replace("'", "''") + "'::jsonb"
 
-for f in ("v24.sql", "v25.sql"):
+for f in ("v24.sql", "v25.sql", "v26.sql"):
     subprocess.run(["psql", "-d", BANCO, "-q", "-v", "ON_ERROR_STOP=1", "-f", os.path.join(RAIZ, "supabase", f)], check=True, capture_output=True)
 SEMPRE = {"inicio": "00:00", "fim": "23:59", "sabado_fim": "23:59", "dias": [1, 2, 3, 4, 5, 6, 7], "intervalo_min": 25, "intervalo_max": 70, "por_hora": 20, "por_dia": 80}
 sql("set session_replication_role = replica; update perfis set papel = 'admin', ativo = true where id = auth.uid()")
@@ -35,13 +35,13 @@ FID = r.get("id")
 r, _ = js(f"select whatsapp_enfileirar({q({'telefone': CTEL, 'texto': 'Olá! Seu carro está pronto.'})}, true)")
 confere("mesma mensagem em 10 min é recusada", r.get("gravado") is False and any("10 minutos" in x for x in r["erros"]), r)
 r, _ = js(f"select whatsapp_enfileirar({q({'telefone': '21 90000-1234', 'texto': 'oi'})}, true)")
-confere("telefone que não é de cliente é recusado", any("cliente cadastrado" in x for x in r["erros"]), r)
+confere("v26: número sem cadastro vai, com aviso", r.get("gravado") is True and any("sem cadastro" in x for x in r["avisos"]), r)
 r, _ = js(f"select whatsapp_enfileirar({q({'cliente_id': CID, 'texto': 'Veja: https://bit.ly/abc'})}, true)")
 confere("link encurtado é recusado", any("encurtado" in x for x in r["erros"]), r)
 r, _ = js(f"select whatsapp_enfileirar({q({'cliente_id': CID, 'texto': 'Pelo cadastro do cliente'})}, false)")
 confere("pelo cliente_id usa o telefone do cadastro", r["telefone"] == "55" + CTEL and not r["erros"], r)
 r, _ = js(f"select whatsapp_enfileirar({q({'cliente_id': CID, 'telefone': '27 98888-7777', 'texto': 'x'})}, false)")
-confere("telefone de outro com cliente_id é recusado", any("não é do cliente" in x or "cliente cadastrado" in x for x in r["erros"]), r)
+confere("v26: telefone diferente do cadastro vai para o informado, com aviso", not r["erros"] and r["telefone"] == "5527988887777" and any("não é o do cadastro" in x for x in r["avisos"]), r)
 if os_num != "0":
     r, _ = js(f"select whatsapp_enfileirar({q({'ordem_numero': int(os_num), 'texto': 'Sobre a O.S.'})}, false)")
     confere("pela O.S. usa o cliente da O.S.", r["cliente"]["id"] == CID and r["ordem_numero"] == int(os_num), r)

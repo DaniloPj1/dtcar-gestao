@@ -177,7 +177,10 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     const s = st.sock;
     if (s && st.aberto) { try { await s.logout(); } catch (e) { log("logout:", e.message); } }
     fechar("desconectar");
-    try { await rpc("whatsapp_motor_apagar_sessao", base()); } catch (e) { log("não apagou a sessão:", e.message); }
+    // só confirma e limpa o pedido depois que a sessão sumiu do banco; se falhar, o pedido fica e o próximo sinal tenta de novo
+    // (sem reconectar: proximaTentativa adiada e a conexão já fechada)
+    try { await fila; await rpc("whatsapp_motor_apagar_sessao", base()); }
+    catch (e) { st.erros++; log("não apagou a sessão (tenta de novo no próximo sinal):", e.message); st.proximaTentativa = agora() + 60000; return; }
     await situacao("desligado", "Desconectado e sessão apagada (pelo motor do Android).", { numero: "", limparPedido: true });
     st.proximaTentativa = agora() + 60000;
   }

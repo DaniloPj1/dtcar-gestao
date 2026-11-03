@@ -63,7 +63,7 @@ const silencioso = { log() {}, error() {} };
 const fechamento = (codigo) => ({ connection: "close", lastDisconnect: { error: Object.assign(new Error("caiu " + codigo), { output: { statusCode: codigo } }) } });
 
 function novo(b, f, extra = {}) {
-  return criarMotor({ config: { url: "https://x.supabase.co", publica: "pub", chave: CHAVE, aparelho: "Galaxy A15" }, buscar: b.buscar, criarSocket: f.criar, saida: silencioso, agora: () => b.agora, ...extra });
+  return criarMotor({ config: { url: "https://x.supabase.co", publica: "pub", chave: CHAVE, aparelho: "Galaxy A15" }, buscar: (u, o) => b.buscar(u, o), criarSocket: f.criar, saida: silencioso, agora: () => b.agora, ...extra });
 }
 // sessão vinculada pelo QR (só creds.me), com bytes no formato do conversor da biblioteca
 function sessaoVinculada(b) {
@@ -106,6 +106,20 @@ function sessaoVinculada(b) {
   b.agora += 120000; await m.pulso();
   confere("sem sessão: não pega a vez nem abre conexão", f.sockets.length === 2 && m.st.semVinculo && b.con.dono_ate === 0);
   await m.encerrar(); confere("encerrar solta a vez", b.chamadas.at(-1) === "whatsapp_motor_soltar" && b.con.dono_ate === 0);
+}
+
+// 1b) pedido de desconectar com falha ao apagar a sessão: mantém o pedido e tenta de novo, sem reconectar
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); const m = novo(b, f);
+  await m.pulso(); await espera(); await f.sockets[0].emitir("connection.update", { connection: "open" }); await espera();
+  b.con.pedido = "desconectar"; const original = b.buscar;
+  b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_apagar_sessao") ? { ok: false, status: 503, text: async () => '{"message":"indisponível"}' } : original(url, op));
+  await m.pulso(); await espera();
+  confere("falha ao apagar: pedido mantido e sessão continua no banco", b.con.pedido === "desconectar" && b.sessao.has("creds") && b.con.situacao !== "desligado");
+  b.agora += 61000; await m.pulso(); await espera();
+  confere("falha ao apagar: não reabre a sessão", f.sockets.length === 1);
+  b.buscar = original; await m.pulso(); await espera();
+  confere("apagar voltou: sessão apagada e pedido limpo", !b.sessao.has("creds") && b.con.pedido === null && b.con.situacao === "desligado");
 }
 
 // 2) quedas

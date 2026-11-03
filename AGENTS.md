@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -64,9 +64,18 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   sessão guardada (`vezNoBanco`) e, com o motor na vez, não conecta: conferir responde pelo último sinal do motor e desconectar vira
   `pedido = 'desconectar'`, que o motor executa. Nunca duas conexões com a mesma sessão. O motor se atualiza sozinho (`iniciar.sh` faz
   `git pull` da `main` a cada reinício, de 12 em 12 h): tudo o que entra na `main` em `motor-zap/` vai para o celular.
-  Próxima etapa: fila de envio com horário comercial, intervalo e limites, guardar mensagens, ferramentas no conector.
+  **Etapa 3 (v25):** `whatsapp_fila` (o Claude põe pelo conector com `whatsapp_enfileirar`, só administrador, só telefone de cliente
+  cadastrado, sem link encurtado, sem repetir em 10 min, respeita PARAR em `whatsapp_optout`), `whatsapp_mensagens` (conversas individuais;
+  mídia só o tipo) e regras em `whatsapp_conexao.regras` (horário comercial de Brasília, intervalo aleatório 25–70 s via `proximo_envio`,
+  limites por hora/dia). Quem tem a vez pega a próxima com `whatsapp_pegar_proxima` (motor: `whatsapp_motor_proxima`) e grava com
+  `whatsapp_resultado`; "enviando" esquecida vira erro (nunca reenvia sozinha). Sem o motor, a ação `processar` da zap faz isso em segundo plano
+  (o conector acorda a zap ao enviar/ler). Funções de mensagem existem em `motor-zap/whats.js` e, copiadas, na `zap/index.ts`: o teste da zap
+  confere que as cópias são iguais (`teste/casos_whats.json`). Tabelas fora do backup e do espelho. Conector: `whatsapp_situacao`,
+  `whatsapp_conversas`, `whatsapp_ler`, `whatsapp_enviar` (prévia com confirmar=false), `whatsapp_cancelar`.
+  Próxima etapa: envio de PDF (O.S., orçamento) e modelos de mensagem.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
-  `python3 teste/teste_v24.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh` (instalação num HOME temporário).
+  `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
+  (instalação num HOME temporário).
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.

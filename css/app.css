@@ -196,6 +196,12 @@ button.linha:disabled{cursor:default;opacity:1}
 .motor-instalar .inp,.chave-motor .inp{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px}
 .motor-instalar code{font-size:13px;word-break:break-all}
 .chave-motor p{margin:0 0 8px}
+.zap-fila,.zap-conversas{list-style:none;padding:0;margin:8px 0 16px}
+.zap-fila li,.zap-conversas li{border-top:1px solid var(--line);padding:10px 0}
+.zap-texto{margin-top:4px;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+.erro-zap{color:var(--bad)}
+.zap-fila .btn-sm{margin-top:6px}
+.regras-envio{background:var(--surface-2);border-radius:8px;padding:8px 10px}
 
 /* painel */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}

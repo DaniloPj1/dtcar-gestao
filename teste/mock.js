@@ -38,11 +38,15 @@
     whatsapp: { situacao: async () => ({ ...(window.__ZAP = window.__ZAP || { situacao: "desligado", numero: "", detalhe: "", atualizado_em: now(), dono_ate: null, motor_chave_em: null, motor_visto: null, motor_info: null, pedido: null }) }),
       novaChaveMotor: async () => { window.__ZAP.motor_chave_em = now(); return "dtm_" + "c".repeat(64); },
       revogarMotor: async () => { window.__ZAP.motor_chave_em = null; },
+      fila: async () => (window.__ZAP_FILA || []).slice(),
+      conversas: async () => (window.__ZAP_CONVERSAS || []).slice(),
+      cancelar: async id => { const f = (window.__ZAP_FILA || []).find(x => x.id === id); if (!f || f.status !== "pendente") throw new Error("Só dá para cancelar mensagem que ainda não saiu (pendente)."); f.status = "cancelada"; f.erro = "Cancelada pelo administrador."; return f; },
       chamar: async b => { (window.__ZAP_CHAMADAS = window.__ZAP_CHAMADAS || []).push(b.acao); const z = window.__ZAP;
         if (b.acao === "testar") { z.detalhe = "Teste de conexão: o WhatsApp respondeu."; return { ok: true, ms: 2300, resposta: "qr", cifras: { ctr: false, gcm: true, cbc: true } }; }
         if (b.acao === "parear_qr") { z.situacao = "pareando"; z.atualizado_em = now(); z.qr_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="2" height="2"/></svg>'; return { qr: true, validade_s: 130 }; }
         if (b.acao === "parear") { z.situacao = "pareando"; z.numero = b.numero; return { codigo: "ABCD1234", validade_s: 120 }; }
         if (b.acao === "conferir") return { ok: true, ms: 3100 };
+        if (b.acao === "processar") return { ok: true, iniciado: true, detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." };
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
         throw new Error("Ação desconhecida."); } },

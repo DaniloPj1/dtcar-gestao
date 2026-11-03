@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado, vezNoBanco, guardaDaVez } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -106,6 +106,23 @@ const r = await atender(new Request("http://localhost/zap", { method: "POST", he
 confere("sem login: 401", r.status === 401, String(r.status));
 const r2 = await atender(new Request("http://localhost/zap", { method: "POST", headers: { "content-type": "application/json", authorization: "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.x" }, body: '{"acao":"testar"}' }));
 confere("token falso: 401", r2.status === 401, String(r2.status));
+
+// funções de mensagem: mesmos casos do teste do motor (cópia de motor-zap/whats.js)
+const casos = JSON.parse(await Deno.readTextFile(new URL("./casos_whats.json", import.meta.url)));
+for (const c of casos.paraGuardar) {
+  const r = paraGuardar(c.m) as Record<string, unknown> | null;
+  confere("paraGuardar: " + c.nome, c.esperado === null ? r === null : !!r && Object.entries(c.esperado).every(([k, v]) => r[k] === v), JSON.stringify(r));
+}
+for (const c of casos.variacoes) confere("variações " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado));
+confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] }, "5527999112233")) === "552799112233@s.whatsapp.net");
+// cópia igual à do motor (mesmo código, fora a tipagem)
+const motorJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
+const zapTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
+const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar| as string/g, "").replace(/\s+/g, " "); };
+for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "variacoes", "jidParaEnvio"]) {
+  const a = nucleo(motorJs, f).replace(/\(x\)/g, "x"), b = nucleo(zapTs, f).replace(/\(x\)/g, "x").replace(/x =>/g, "x =>");
+  confere("cópia igual no motor e na zap: " + f, a.length > 50 && a.replace(/[()]/g, "") === b.replace(/[()]/g, ""), a.length + "/" + b.length);
+}
 
 console.log(ok.map((x) => "OK " + x).join("\n")); console.log("FALHAS", JSON.stringify(falhas));
 setTimeout(() => Deno.exit(falhas.length ? 1 : 0), 100);

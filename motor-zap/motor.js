@@ -8,8 +8,8 @@
 // administrador em Sistema › WhatsApp. Essa chave só dá acesso às funções whatsapp_motor_*
 // (sessão e situação do WhatsApp), nunca aos dados da oficina. Fica em ~/.dtcar-motor.json.
 //
-// Etapa 2: conecta, mantém e conta as mensagens recebidas (sem guardar o conteúdo).
-// Enviar e guardar mensagens vêm na etapa 3.
+// Etapa 2: conecta, mantém e reveza. Etapa 3 (v25): envia a fila (uma mensagem por vez, nas regras do banco:
+// horário, intervalo, limites) com "digitando…", e guarda as mensagens das conversas individuais (texto; mídia só o tipo).
 // Biblioteca: SOMENTE o pacote oficial "baileys" (WhiskeySockets), versão travada no package.json.
 import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto } from "baileys";
 import { readFileSync } from "node:fs";
@@ -17,8 +17,9 @@ import { homedir, hostname, platform, release } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
+import { paraGuardar, jidParaEnvio, enviarTexto } from "./whats.js";
 
-export const VERSAO = "2.0";
+export const VERSAO = "3.0";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
 const ESPERAS = [5, 15, 30, 60, 120, 300].map((s) => s * 1000); // entre tentativas de reconectar
@@ -48,13 +49,14 @@ function registro(saida) {
 }
 
 export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = makeWASocket, saida = console, agora = Date.now,
-                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null, esperasGravar = [0, 1000, 3000] } = {}) {
+                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null, esperasGravar = [0, 1000, 3000], esperarDigitando } = {}) {
   const id = randomUUID();
   const log = (...a) => saida.log(hora(), ...a);
   const blog = registro(saida);
   const st = { sock: null, aberto: false, conectando: false, parado: false, semVinculo: false, chaveRuim: false,
     ultimoPulsoOk: 0, tentativas: 0, proximaTentativa: 0, desde: null, recebidas: 0, ultimaRecebida: null, erros: 0,
-    numero: "", situacaoGravada: "", inicio: agora(), guarda: null, ultimaGravacao: null };
+    numero: "", situacaoGravada: "", inicio: agora(), guarda: null, ultimaGravacao: null,
+    enviadas: 0, ultimoEnvio: null, motivoFila: "", aGuardar: [], resultados: [] };
   let fila = Promise.resolve(); // gravações da sessão em ordem
   // mudanças da sessão ainda não confirmadas pelo banco (chave -> valor serializado; null = apagar). Ficam aqui até
   // o banco aceitar: as leituras usam estas por cima das do banco e cada gravação/sinal tenta mandar de novo.
@@ -165,6 +167,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       s.ev.on("creds.update", () => { salvarCreds(); });
       s.ev.on("connection.update", (u) => aoMudarConexao(s, u));
       s.ev.on("messages.upsert", ({ messages, type }) => {
+        const lista = (messages || []).map(paraGuardar).filter(Boolean);
+        if (lista.length) { st.aGuardar.push(...lista); guardarMensagens(); }
         if (type !== "notify") return;
         const novas = (messages || []).filter((m) => m && m.key && !m.key.fromMe).length;
         if (novas) { st.recebidas += novas; st.ultimaRecebida = new Date().toISOString(); }
@@ -207,6 +211,44 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     }
   }
 
+  // ---------- mensagens e fila (v25) ----------
+  let guardando = null;
+  /** Manda as mensagens recebidas ao banco (em lote). Se falhar, ficam aqui e o próximo sinal tenta de novo. */
+  function guardarMensagens() {
+    if (guardando || !st.aGuardar.length) return guardando || Promise.resolve();
+    const lote = st.aGuardar.splice(0, 200);
+    guardando = rpc("whatsapp_motor_mensagens", { ...base(), p_msgs: lote })
+      .catch((e) => { st.aGuardar.unshift(...lote); if (!/function|does not exist|PGRST202/i.test(e.message)) log("não guardou mensagens (tenta de novo):", e.message); })
+      .finally(() => { guardando = null; });
+    return guardando;
+  }
+  async function mandarResultados() {
+    while (st.resultados.length) {
+      const r = st.resultados[0];
+      try { await rpc("whatsapp_motor_resultado", { ...base(), ...r }); st.resultados.shift(); } catch (e) { log("resultado do envio não gravado (tenta de novo):", e.message); return; }
+    }
+  }
+  /** Pega a próxima mensagem liberada pelas regras do banco e envia (uma por sinal). */
+  async function enviarDaFila() {
+    const s = st.sock; if (!s || !st.aberto) return;
+    // resultado anterior ainda não gravado: ele é que marca o intervalo e os limites — não envia outra antes;
+    // recebidas não gravadas podem ter um PARAR: também não envia até gravar
+    if (st.resultados.length || st.aGuardar.length) return;
+    let r;
+    try { r = await rpc("whatsapp_motor_proxima", base()); }
+    catch (e) { if (!/function|does not exist|PGRST202/i.test(e.message)) log("fila:", e.message); return; } // sem o v25: segue sem fila
+    if (!r || !r.mensagem) { st.motivoFila = (r && r.motivo) || ""; return; }
+    const m = r.mensagem; let res;
+    try {
+      const jid = await jidParaEnvio(s, m.telefone);
+      if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
+      else { const idm = await enviarTexto(s, jid, m.texto, esperarDigitando); res = { p_ok: true, p_msg_id: idm, p_jid: jid }; }
+    } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + e.message }; }
+    if (res.p_ok) { st.enviadas++; st.ultimoEnvio = new Date().toISOString(); log("mensagem", m.id, "enviada"); } else log("mensagem", m.id, "não enviada:", res.p_erro);
+    st.resultados.push({ p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id || null, p_jid: res.p_jid || null, p_erro: res.p_erro || null });
+    await mandarResultados();
+  }
+
   async function desconectarAPedido() {
     log("pedido da tela: desconectar e apagar a sessão");
     const s = st.sock;
@@ -234,7 +276,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
 
   const info = () => ({ versao: VERSAO, node: process.version, sistema: `${platform()} ${release()}`, aparelho: config.aparelho || hostname(),
     conectado: st.aberto, desde: st.desde, recebidas: st.recebidas, ultima_recebida: st.ultimaRecebida, erros: st.erros,
-    ligado_desde: new Date(st.inicio).toISOString(), pendentes: pendentes.size });
+    ligado_desde: new Date(st.inicio).toISOString(), pendentes: pendentes.size,
+    enviadas: st.enviadas, ultimo_envio: st.ultimoEnvio, fila: st.motivoFila, a_guardar: st.aGuardar.length });
 
   async function pulso() {
     if (st.parado) return;
@@ -273,7 +316,9 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     if (!r.continua && st.sock) fechar("a vez foi interrompida: reabre com a sessão do banco");
     if (r.pedido === "desconectar") return desconectarAPedido();
     await tentarPendentes();
+    await mandarResultados(); await guardarMensagens();
     if (!st.sock && !st.conectando && agora() >= st.proximaTentativa) await conectar();
+    else if (st.aberto) await enviarDaFila();
   }
 
   async function encerrar(motivo = "encerrando") {
@@ -281,7 +326,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     try { await tentarPendentes(); await fila.catch(() => {}); await rpc("whatsapp_motor_soltar", base()); } catch (_) { /* a vez vence sozinha em 90 s */ }
   }
 
-  return { id, st, pulso, encerrar, info, rpc, pendentes, _aoMudarConexao: aoMudarConexao };
+  return { id, st, pulso, encerrar, info, rpc, pendentes, guardarMensagens, _aoMudarConexao: aoMudarConexao };
 }
 
 // ---------- execução direta ----------

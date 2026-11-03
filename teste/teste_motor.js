@@ -1,6 +1,8 @@
 // Teste do motor do WhatsApp (motor-zap/motor.js) sem rede: banco e WhatsApp simulados.
 // Rodar: (cd motor-zap && npm ci) && node teste/teste_motor.js
 import { criarMotor, vinculado, lerConfig } from "../motor-zap/motor.js";
+import { paraGuardar, variacoes, jidParaEnvio, enviarTexto } from "../motor-zap/whats.js";
+import { readFileSync } from "node:fs";
 import { DisconnectReason } from "../motor-zap/node_modules/baileys/lib/index.js";
 import { writeFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -13,7 +15,7 @@ const CHAVE = "dtm_" + "a".repeat(64);
 // ---------- banco simulado com as mesmas regras do v24 ----------
 function banco() {
   const b = { sessao: new Map(), con: { situacao: "conectado", numero: "", dono: "", dono_id: null, dono_ate: 0, pedido: null, detalhe: "" },
-    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0 };
+    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], msgs: [] };
   const erro = (msg, code) => ({ ok: false, status: 400, text: async () => JSON.stringify({ message: msg, code }) });
   const resp = (v) => ({ ok: true, status: 200, text: async () => (v === undefined ? "" : JSON.stringify(v)) });
   b.buscar = async (url, op) => {
@@ -32,8 +34,11 @@ function banco() {
       if (vez) Object.assign(b.con, { dono: "android", dono_id: a.p_id, dono_ate: b.agora + 90000 });
       return resp({ vez, continua: vez && continua, sessao_em: new Date(b.sessaoEm).toISOString(), vinculado, pedido: vez ? b.con.pedido : null, dono: b.con.dono, situacao: b.con.situacao });
     }
+    if (nome === "whatsapp_motor_mensagens") { for (const x of a.p_msgs) if (!b.msgs.some((y) => y.msg_id === x.msg_id)) b.msgs.push(x); return resp(a.p_msgs.length); }
+    if (nome === "whatsapp_motor_resultado") { b.resultados.push(a); const f = b.fila.find((x) => x.id === a.p_fila_id); if (f) f.status = a.p_ok ? "enviada" : "erro"; return resp(); }
     if (nome === "whatsapp_motor_soltar") { if (b.con.dono_id === a.p_id) b.con.dono_ate = 0; return resp(); }
     if (!comVez()) return erro("O motor não está com a vez da conexão.", "55000");
+    if (nome === "whatsapp_motor_proxima") { const f = b.fila.find((x) => x.status === "pendente"); if (!f) return resp({ motivo: "fila vazia" }); f.status = "enviando"; return resp({ mensagem: { id: f.id, telefone: f.telefone, texto: f.texto } }); }
     if (nome === "whatsapp_motor_ler") return resp(Object.fromEntries(a.p_chaves.filter((k) => b.sessao.has(k)).map((k) => [k, JSON.parse(b.sessao.get(k))])));
     if (nome === "whatsapp_motor_gravar") { for (const k in a.p_poe) b.sessao.set(k, JSON.stringify(a.p_poe[k])); for (const k of a.p_tira) b.sessao.delete(k); b.sessaoEm = b.agora; return resp(new Date(b.agora).toISOString()); }
     if (nome === "whatsapp_motor_apagar_sessao") { b.sessao.clear(); if (a.p_detalhe != null) Object.assign(b.con, { situacao: "desligado", numero: "", pedido: null, detalhe: a.p_detalhe }); return resp(); }
@@ -54,7 +59,11 @@ function fabrica() {
     const s = { opcoes, fechado: false, saiu: false, user: { id: "5527992470140:7@s.whatsapp.net" },
       ev: { on: (n, fn) => { (ouvintes[n] ||= []).push(fn); } },
       emitir: async (n, v) => { for (const fn of ouvintes[n] || []) await fn(v); },
-      end: () => { s.fechado = true; }, logout: async () => { s.saiu = true; } };
+      end: () => { s.fechado = true; }, logout: async () => { s.saiu = true; },
+      enviadas: [], presencas: [], semWhats: new Set(), so8: new Set(),
+      onWhatsApp: async (n) => [{ exists: !s.semWhats.has(n) && !(s.so8.has(n.slice(0, 4) + "9" + n.slice(4)) === false && s.so8.size && !s.so8.has(n)), jid: n + "@s.whatsapp.net" }],
+      presenceSubscribe: async () => {}, sendPresenceUpdate: async (p, j) => { s.presencas.push(p); },
+      sendMessage: async (jid, c) => { if (s.falhaEnvio) throw new Error("sem rede"); s.enviadas.push({ jid, texto: c.text }); return { key: { id: "M" + s.enviadas.length } }; } };
     f.sockets.push(s); return s;
   };
   return f;
@@ -64,7 +73,7 @@ const silencioso = { log() {}, error() {} };
 const fechamento = (codigo) => ({ connection: "close", lastDisconnect: { error: Object.assign(new Error("caiu " + codigo), { output: { statusCode: codigo } }) } });
 
 function novo(b, f, extra = {}) {
-  return criarMotor({ config: { url: "https://x.supabase.co", publica: "pub", chave: CHAVE, aparelho: "Galaxy A15" }, buscar: (u, o) => b.buscar(u, o), criarSocket: f.criar, saida: silencioso, agora: () => b.agora, esperasGravar: [0, 0, 0], ...extra });
+  return criarMotor({ config: { url: "https://x.supabase.co", publica: "pub", chave: CHAVE, aparelho: "Galaxy A15" }, buscar: (u, o) => b.buscar(u, o), criarSocket: f.criar, saida: silencioso, agora: () => b.agora, esperasGravar: [0, 0, 0], esperarDigitando: async () => {}, ...extra });
 }
 // sessão vinculada pelo QR (só creds.me), com bytes no formato do conversor da biblioteca
 function sessaoVinculada(b) {
@@ -177,6 +186,57 @@ function sessaoVinculada(b) {
   b.buscar = original; await m.pulso(); await espera();
   confere("próximo sinal confirma a vez: abre", f.sockets.length === 1);
   await m.encerrar();
+}
+
+// 1f) fila (v25): envia uma por sinal, com "digitando", grava o resultado; número sem WhatsApp vira erro
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); const m = novo(b, f);
+  b.fila.push({ id: 1, telefone: "5527999112233", texto: "Seu carro está pronto", status: "pendente" }, { id: 2, telefone: "5527988887777", texto: "Orçamento", status: "pendente" });
+  await m.pulso(); await espera(); const s = f.sockets[0]; s.semWhats.add("5527988887777"); s.semWhats.add("552788887777");
+  await m.pulso(); confere("fila: sem conexão aberta não envia", s.enviadas.length === 0 && b.fila[0].status === "pendente");
+  await s.emitir("connection.update", { connection: "open" }); await espera();
+  await m.pulso();
+  confere("fila: envia a primeira com digitando", s.enviadas.length === 1 && s.enviadas[0].jid === "5527999112233@s.whatsapp.net" && s.presencas.includes("composing") && s.presencas.includes("paused"));
+  confere("fila: resultado gravado com o id da mensagem", b.resultados[0].p_ok === true && b.resultados[0].p_msg_id === "M1" && b.fila[0].status === "enviada");
+  await m.pulso();
+  confere("fila: número sem WhatsApp vira erro", s.enviadas.length === 1 && b.resultados[1].p_ok === false && /sem WhatsApp/.test(b.resultados[1].p_erro));
+  b.fila.push({ id: 3, telefone: "5527999112233", texto: "x", status: "pendente" }); s.falhaEnvio = true; await m.pulso();
+  confere("fila: falha ao enviar vira erro (não repete sozinha)", b.resultados[2].p_ok === false && /Falha ao enviar/.test(b.resultados[2].p_erro));
+  // resultado não gravado (banco fora na hora): tenta de novo no próximo sinal
+  s.falhaEnvio = false; b.fila.push({ id: 4, telefone: "5527999112233", texto: "y", status: "pendente" });
+  const original = b.buscar; b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_resultado") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
+  await m.pulso(); confere("fila: resultado não gravado fica guardado", m.st.resultados.length === 1);
+  b.fila.push({ id: 5, telefone: "5527999112233", texto: "z", status: "pendente" }); const antes = s.enviadas.length; await m.pulso();
+  confere("fila: com resultado pendente não envia outra", s.enviadas.length === antes && b.fila.find((x) => x.id === 5).status === "pendente");
+  b.buscar = original; await m.pulso(); confere("fila: resultado guardado vai no próximo sinal (e a seguinte sai)", m.st.resultados.length === 0 && b.resultados.some((x) => x.p_fila_id === 4) && b.fila.find((x) => x.id === 5).status === "enviada");
+  // recebidas: guarda as individuais, ignora grupo
+  await s.emitir("messages.upsert", { type: "notify", messages: [
+    { key: { id: "R1", remoteJid: "5527999112233@s.whatsapp.net" }, pushName: "Cliente", messageTimestamp: 1793736000, message: { conversation: "Obrigado!" } },
+    { key: { id: "G1", remoteJid: "1203@g.us" }, message: { conversation: "grupo" } }] });
+  await espera();
+  confere("recebidas: guarda a individual e ignora grupo", b.msgs.length === 1 && b.msgs[0].texto === "Obrigado!" && b.msgs[0].telefone === "5527999112233");
+  b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_mensagens") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
+  await s.emitir("messages.upsert", { type: "notify", messages: [{ key: { id: "R2", remoteJid: "5527999112233@s.whatsapp.net" }, message: { conversation: "Outra" } }] }); await espera();
+  confere("recebidas: banco fora, ficam aqui", m.st.aGuardar.length === 1);
+  b.fila.push({ id: 6, telefone: "5527999112233", texto: "w", status: "pendente" }); const env = s.enviadas.length; await m.pulso();
+  confere("recebidas não gravadas (pode ter PARAR): não envia", s.enviadas.length === env && b.fila.find((x) => x.id === 6).status === "pendente");
+  b.buscar = original; await m.pulso(); await espera();
+  confere("recebidas: vão no próximo sinal", m.st.aGuardar.length === 0 && b.msgs.some((x) => x.msg_id === "R2"));
+  await m.encerrar();
+}
+
+// 1g) funções comuns (mesmos casos do teste da função zap)
+{
+  const casos = JSON.parse(readFileSync(new URL("./casos_whats.json", import.meta.url), "utf8"));
+  for (const c of casos.paraGuardar) {
+    const r = paraGuardar(c.m);
+    const certo = c.esperado === null ? r === null : r && Object.entries(c.esperado).every(([k, v]) => r[k] === v);
+    confere("paraGuardar: " + c.nome, certo, JSON.stringify(r));
+  }
+  for (const c of casos.variacoes) confere("variações do número " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado), JSON.stringify(variacoes(c.tel)));
+  const sock = { onWhatsApp: async (n) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] };
+  confere("jid: conta antiga sem o 9 é achada", (await jidParaEnvio(sock, "5527999112233")) === "552799112233@s.whatsapp.net");
+  confere("jid: número sem WhatsApp devolve null", (await jidParaEnvio({ onWhatsApp: async () => [] }, "5527999112233")) === null);
 }
 
 // 2) quedas

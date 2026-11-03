@@ -11,13 +11,17 @@ const chamadas: Array<[string, Record<string, unknown> | undefined]> = [];
 const respostas: Record<string, unknown> = {
   agente_preparar_envio: { texto: "Olá, João! Segue a O.S. 1904", telefone: "27999990001", id: "abc", itens: 2 },
   agente_abrir_os: { pode_abrir: true, gravado: false },
+  whatsapp_enfileirar: { gravado: false, erros: [], avisos: [] },
 };
+const acordadas: unknown[] = [];
 const banco: Banco = {
   rpc(fn, args) {
     chamadas.push([fn, args]);
     if (fn === "agente_estoque" && args?.p_texto === "erro") return Promise.resolve({ data: null, error: { message: "O agente só atende o administrador." } });
+    if (fn === "whatsapp_enfileirar" && (args as { p_gravar?: boolean })?.p_gravar) return Promise.resolve({ data: { gravado: true, id: 7 }, error: null });
     return Promise.resolve({ data: respostas[fn] ?? { ok: fn }, error: null });
   },
+  functions: { invoke(nome, op) { acordadas.push([nome, op.body]); return Promise.resolve({ data: { ok: true }, error: null }); } },
 };
 const handler = createMcpHandler(() => criarServidor(banco), { onerror: (e) => console.error(e) });
 const ok: string[] = [], falhas: string[] = [];
@@ -40,10 +44,12 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
-const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber", "lancar_itens_os", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas"];
-confere("11 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber", "lancar_itens_os", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas",
+  "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
+confere("16 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("9 só de leitura, abrir_os e lancar_itens_os gravam", leitura === 9, String(leitura));
+confere("11 só de leitura (gravam: abrir_os, lancar_itens_os, whatsapp_enviar/ler/cancelar)", leitura === 11, String(leitura));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
   chamadas.length = 0;
@@ -104,6 +110,23 @@ confere("descoberta aponta para o login do Supabase", meta.status === 200 && m.a
 confere("resource = endereço do conector", m.resource === "https://vbbklawlbxznsemkgtvg.supabase.co/functions/v1/agente", m.resource);
 const falso = await atender(new Request("http://localhost/agente", { method: "POST", headers: { ...cab, authorization: "Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ4In0.x", "content-type": "application/json" }, body: "{}" }));
 confere("token falso: 401", falso.status === 401, String(falso.status));
+
+// WhatsApp (v25)
+c = await chama("whatsapp_enviar", { texto: "Olá" });
+confere("whatsapp_enviar sem destinatário: erro sem ir ao banco", c.r?.isError === true && !c.fn);
+acordadas.length = 0;
+c = await chama("whatsapp_enviar", { texto: "Seu carro está pronto", numero_os: 1904 });
+confere("whatsapp_enviar padrão = prévia (não grava nem acorda a zap)", c.fn === "whatsapp_enfileirar" && c.args?.p_gravar === false && (c.args?.p as Record<string, unknown>)?.ordem_numero === 1904 && acordadas.length === 0, JSON.stringify(c.args));
+c = await chama("whatsapp_enviar", { texto: "Seu carro está pronto", cliente_id: "00000000-0000-4000-8000-000000000001", confirmar: true, pedido: "avisar" });
+confere("whatsapp_enviar confirmado grava e acorda a zap", c.args?.p_gravar === true && (c.args?.p as Record<string, unknown>)?.fora_horario === false && (c.args?.p as Record<string, unknown>)?.origem === "claude" && JSON.stringify(acordadas) === JSON.stringify([["zap", { acao: "processar" }]]), JSON.stringify(acordadas));
+c = await chama("whatsapp_ler", { telefone: "27999112233" });
+confere("whatsapp_ler → whatsapp_mensagens_de", c.fn === "whatsapp_mensagens_de" && c.args?.p_telefone === "27999112233" && c.args?.p_marcar_lidas === true);
+c = await chama("whatsapp_conversas", { so_nao_lidas: true });
+confere("whatsapp_conversas → whatsapp_conversas", c.fn === "whatsapp_conversas" && c.args?.p_so_nao_lidas === true && c.args?.p_limite === 20);
+c = await chama("whatsapp_situacao", {});
+confere("whatsapp_situacao → whatsapp_resumo", c.fn === "whatsapp_resumo");
+c = await chama("whatsapp_cancelar", { id: 7 });
+confere("whatsapp_cancelar → whatsapp_cancelar", c.fn === "whatsapp_cancelar" && c.args?.p_id === 7);
 
 console.log(ok.map((x) => "OK " + x).join("\n"));
 console.log("FALHAS", JSON.stringify(falhas));

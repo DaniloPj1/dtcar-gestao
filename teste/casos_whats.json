@@ -1,0 +1,22 @@
+{
+  "paraGuardar": [
+    { "nome": "texto simples", "m": { "key": { "id": "A1", "remoteJid": "5527999112233@s.whatsapp.net", "fromMe": false }, "pushName": "Maria", "messageTimestamp": 1793736000, "message": { "conversation": "Oi, o carro ficou pronto?" } },
+      "esperado": { "msg_id": "A1", "telefone": "5527999112233", "nome": "Maria", "de_mim": false, "texto": "Oi, o carro ficou pronto?", "tipo": "texto", "em": "2026-11-03T20:00:00.000Z" } },
+    { "nome": "resposta citando (extendedText)", "m": { "key": { "id": "A2", "remoteJid": "5527999112233@s.whatsapp.net", "fromMe": true }, "messageTimestamp": 1793736000, "message": { "extendedTextMessage": { "text": "Ficou sim" } } },
+      "esperado": { "msg_id": "A2", "de_mim": true, "nome": "", "texto": "Ficou sim", "tipo": "texto" } },
+    { "nome": "conversa por LID com o telefone ao lado", "m": { "key": { "id": "A3", "remoteJid": "123456789012345@lid", "remoteJidAlt": "552799112233@s.whatsapp.net", "fromMe": false }, "messageTimestamp": 1793736000, "message": { "conversation": "Bom dia" } },
+      "esperado": { "msg_id": "A3", "jid": "123456789012345@lid", "telefone": "552799112233", "texto": "Bom dia" } },
+    { "nome": "imagem com legenda", "m": { "key": { "id": "A4", "remoteJid": "5527999112233@s.whatsapp.net" }, "messageTimestamp": 1793736000, "message": { "imageMessage": { "caption": "Olha o barulho" } } },
+      "esperado": { "texto": "[imagem] Olha o barulho", "tipo": "imagem" } },
+    { "nome": "áudio temporário (ephemeral)", "m": { "key": { "id": "A5", "remoteJid": "5527999112233@s.whatsapp.net" }, "messageTimestamp": 1793736000, "message": { "ephemeralMessage": { "message": { "audioMessage": { "seconds": 12 } } } } },
+      "esperado": { "texto": "[audio]", "tipo": "audio" } },
+    { "nome": "grupo não guarda", "m": { "key": { "id": "A6", "remoteJid": "120363000000@g.us", "participant": "5527999112233@s.whatsapp.net" }, "message": { "conversation": "oi grupo" } }, "esperado": null },
+    { "nome": "status não guarda", "m": { "key": { "id": "A7", "remoteJid": "status@broadcast" }, "message": { "conversation": "status" } }, "esperado": null },
+    { "nome": "aviso interno do WhatsApp não guarda", "m": { "key": { "id": "A8", "remoteJid": "5527999112233@s.whatsapp.net" }, "message": { "protocolMessage": { "type": 0 } } }, "esperado": null }
+  ],
+  "variacoes": [
+    { "tel": "5527999112233", "esperado": ["5527999112233", "552799112233"] },
+    { "tel": "552799112233", "esperado": ["552799112233", "5527999112233"] },
+    { "tel": "552733221100", "esperado": ["552733221100"] }
+  ]
+}

@@ -376,9 +376,12 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     // Sem o motor do Android: conecta, guarda as mensagens que chegaram, envia o que as regras da fila liberarem
     // (v25: horário, intervalo, limites) e desconecta. Responde na hora e trabalha em segundo plano (até ~2 min).
     if ((await vez.motor()).ativo) return json({ ok: true, motor: true, detalhe: "O motor do Android está com a conexão: ele envia e recebe sozinho, na hora." });
-    const { creds, keys, salvarCreds } = await sessao.carregar();
-    if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." });
+    // pega a vez ANTES de carregar a sessão (quem usou antes já gravou; ninguém mexe nela enquanto esta trabalha)
     if (!(await vez.pegar(150))) return json(ocupada(ms()));
+    let sessaoAtual;
+    try { sessaoAtual = await sessao.carregar(); } catch (e) { await vez.soltar(); throw e; }
+    const { creds, keys, salvarCreds } = sessaoAtual;
+    if (!vinculado(creds)) { await vez.soltar(); return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." }); }
     const t0 = Date.now();
     const trabalho = (async () => {
       const s = abrir(creds, keys, salvarCreds);

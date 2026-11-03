@@ -59,5 +59,10 @@ begin
   assert (select estoque_atual from public.produtos where codigo = 501) = 1, '8 estoque mexido';
   r := public.agente_lancar_itens_os('{"numero":1904,"itens":[{"tipo":"peca","descricao":"Filtro","qtd":1,"valor_unit":30,"codigo":"501"}]}', false);
   assert (r->>'pode_lancar')::boolean, '8 com estoque suficiente: ' || r::text;
-  raise notice 'OK: v21 (8 cenários)';
+  -- 9. mesmo produto em duas linhas: soma as quantidades antes de liberar (saldo 3, duas linhas de 2)
+  update public.produtos set estoque_atual = 3 where codigo = 501;
+  r := public.agente_lancar_itens_os('{"numero":1904,"itens":[{"tipo":"peca","descricao":"Filtro A","qtd":2,"valor_unit":30,"codigo":"501"},{"tipo":"peca","descricao":"Filtro B","qtd":2,"valor_unit":30,"codigo":"501"}]}', true);
+  assert not coalesce((r->>'gravado')::boolean, false) and r::text like '%já contando 2%', '9 lote: ' || r::text;
+  assert (select estoque_atual from public.produtos where codigo = 501) = 3, '9 estoque mexido';
+  raise notice 'OK: v21 (9 cenários)';
 end $$;

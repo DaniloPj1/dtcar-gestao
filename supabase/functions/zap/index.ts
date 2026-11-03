@@ -328,10 +328,11 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       await situacao(adm, { ultimo_teste: { acao, ...resultado } });
       return json(resultado);
     }
-    const { creds, keys, salvarCreds } = await sessao.carregar();
-    if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
+    // pega a vez ANTES de carregar: quem usou a sessão antes já gravou tudo, e ninguém mexe nela enquanto esta conecta
     if (!(await vez.pegar(60))) return json(ocupada(ms()));
     try {
+      const { creds, keys, salvarCreds } = await sessao.carregar();
+      if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
       const s = abrir(creds, keys, salvarCreds);
       const r = await proximo(s, 40000);
       const ok = r.tipo === "open";

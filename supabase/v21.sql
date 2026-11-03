@@ -31,6 +31,7 @@ declare
   v_adicional boolean; v_aprov boolean; v_pos int; v_novos jsonb := '[]'; v_linhas jsonb := '[]'; v_id uuid;
   t_serv numeric := 0; t_peca numeric := 0; t_terc numeric := 0; t_custo numeric := 0; t_sub numeric; t_total numeric; t_lanc numeric := 0;
   v_perfil public.perfis; r jsonb; v_res jsonb; v_repetido boolean := coalesce((p->>'lancar_mesmo_repetido')::boolean, false);
+  v_consumo jsonb := '{}'; v_ja numeric; -- quanto de cada produto as linhas anteriores deste mesmo pedido já vão tirar do estoque
 begin
   perform public.agente_exige_admin();
   if coalesce(p->>'numero', '') !~ '^\s*[0-9]+\s*$' then raise exception 'Informe o número da O.S.'; end if;
@@ -69,14 +70,19 @@ begin
       if v_desc = '' then v_desc := v_prod.descricao; end if;
       if v_custo is null and not v_cli then v_custo := coalesce(v_prod.custo, 0); end if;
       -- mesma regra da tela da O.S.: produto marcado para não vender sem estoque bloqueia; os outros só avisam
-      if v_prod.controla_estoque and not v_cli and coalesce(v_prod.estoque_atual, 0) < v_qtd then
+      -- conta também o que as linhas anteriores deste pedido já vão tirar do mesmo produto
+      v_ja := coalesce((v_consumo->>v_prod.id::text)::numeric, 0);
+      if v_prod.controla_estoque and not v_cli and coalesce(v_prod.estoque_atual, 0) - v_ja < v_qtd then
         if coalesce(v_prod.vender_sem_estoque, true) then
           avisos := array_append(avisos, v_prod.descricao || ': estoque ' || coalesce(v_prod.estoque_atual, 0) || ', vai ficar negativo.');
         else
-          erros := array_append(erros, v_prod.descricao || ': estoque insuficiente (' || coalesce(v_prod.estoque_atual, 0) || ') e o produto está marcado para não ser vendido sem estoque.');
+          erros := array_append(erros, v_prod.descricao || ': estoque insuficiente (' || coalesce(v_prod.estoque_atual, 0)
+            || case when v_ja > 0 then ', já contando ' || v_ja || ' em outra linha deste pedido' else '' end
+            || ') e o produto está marcado para não ser vendido sem estoque.');
           continue;
         end if;
       end if;
+      if v_prod.controla_estoque and not v_cli then v_consumo := jsonb_set(v_consumo, array[v_prod.id::text], to_jsonb(v_ja + v_qtd)); end if;
     end if;
     if length(v_desc) < 2 then erros := array_append(erros, 'Item ' || n || ': informe a descrição.'); continue; end if;
     v_custo := case when v_cli then 0 else coalesce(v_custo, 0) end;

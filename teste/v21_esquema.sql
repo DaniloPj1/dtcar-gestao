@@ -9,7 +9,7 @@ alter table public.os_itens add column codigo text not null default '', add colu
   add column desconto numeric(10,2) not null default 0, add column produto_id uuid, add column fornecida_cliente boolean not null default false,
   add column qualidade text not null default '', add column adicional boolean not null default false;
 create table public.produtos (id uuid primary key default gen_random_uuid(), codigo int, codigo_barras text, tipo text not null default 'produto', descricao text not null,
-  custo numeric(12,2) not null default 0, estoque_atual numeric(12,3) not null default 0, controla_estoque boolean not null default true, ativo boolean not null default true);
+  custo numeric(12,2) not null default 0, estoque_atual numeric(12,3) not null default 0, controla_estoque boolean not null default true, vender_sem_estoque boolean not null default true, ativo boolean not null default true);
 create table public.estoque_mov (id bigint generated always as identity primary key, produto_id uuid not null, ordem_id uuid, tipo text not null, qtd numeric(12,3) not null,
   saldo numeric(12,3) not null, obs text not null default '', usuario_nome text not null default '', criado_em timestamptz not null default now());
 create table public.estoque_reserva (item_id uuid primary key, ordem_id uuid not null, produto_id uuid not null, qtd numeric(12,3) not null);

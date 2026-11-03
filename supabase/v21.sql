@@ -34,7 +34,9 @@ declare
 begin
   perform public.agente_exige_admin();
   if coalesce(p->>'numero', '') !~ '^\s*[0-9]+\s*$' then raise exception 'Informe o número da O.S.'; end if;
-  select * into o from public.ordens where numero = (p->>'numero')::int order by criado_em desc limit 1;
+  -- trava a O.S. já na leitura: duas chamadas juntas para a mesma O.S. não leem os mesmos itens e totais
+  -- (cada uma espera a anterior terminar e confere repetidos e soma o total com o que a outra lançou)
+  select * into o from public.ordens where numero = (p->>'numero')::int order by criado_em desc limit 1 for update;
   if o.id is null then raise exception 'O.S. % não encontrada.', p->>'numero'; end if;
   if o.status not in ('diagnostico', 'aguardando', 'execucao') then
     erros := array_append(erros, 'A O.S. ' || o.numero || ' está em "' || public.agente_etapa(o) || '": só dá para lançar itens no orçamento ou com o serviço em execução.');
@@ -66,8 +68,14 @@ begin
       if v_prod.id is null then erros := array_append(erros, 'Item ' || n || ': código ' || v_cod || ' não existe no estoque.'); continue; end if;
       if v_desc = '' then v_desc := v_prod.descricao; end if;
       if v_custo is null and not v_cli then v_custo := coalesce(v_prod.custo, 0); end if;
+      -- mesma regra da tela da O.S.: produto marcado para não vender sem estoque bloqueia; os outros só avisam
       if v_prod.controla_estoque and not v_cli and coalesce(v_prod.estoque_atual, 0) < v_qtd then
-        avisos := array_append(avisos, v_prod.descricao || ': estoque ' || coalesce(v_prod.estoque_atual, 0) || ', vai ficar negativo.');
+        if coalesce(v_prod.vender_sem_estoque, true) then
+          avisos := array_append(avisos, v_prod.descricao || ': estoque ' || coalesce(v_prod.estoque_atual, 0) || ', vai ficar negativo.');
+        else
+          erros := array_append(erros, v_prod.descricao || ': estoque insuficiente (' || coalesce(v_prod.estoque_atual, 0) || ') e o produto está marcado para não ser vendido sem estoque.');
+          continue;
+        end if;
       end if;
     end if;
     if length(v_desc) < 2 then erros := array_append(erros, 'Item ' || n || ': informe a descrição.'); continue; end if;

@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -47,8 +47,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - **Conector do agente (Fase 1, v20):** `supabase/functions/agente` é um servidor MCP (Edge Function, "Verify JWT" desligado) que o
   Danilo liga no app do Claude. Login por OAuth 2.1 do Supabase Auth; a tela de autorização é `consentimento.html` (Authorization Path).
   Cada ferramenta chama uma função `agente_*` do v20 com o token do usuário (security invoker, exige administrador). Gravação só em
-  `agente_abrir_os` (prévia com p_gravar=false; grava com true, registra em `eventos` e `agente_acoes`). Testes: `deno run -A teste/teste_agente_mcp.ts`
-  e `python3 teste/teste_consentimento.py`.
+  `agente_abrir_os` (v20) e `agente_lancar_itens_os` (v21: inclui serviços/peças em O.S. em orçamento ou execução, nunca altera nem apaga;
+  grava pela `sincronizar_alteracao_os` do v15; peça com código do estoque dá baixa, sem código é genérica — D3; em O.S. aprovada entra como
+  adicional). Prévia com p_gravar=false; grava com true, registra em `eventos` e `agente_acoes`. Testes: `deno run -A teste/teste_agente_mcp.ts`,
+  `bash teste/teste_v21.sh` e `python3 teste/teste_consentimento.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.

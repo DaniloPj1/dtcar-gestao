@@ -80,10 +80,15 @@ confere("vinculado pelo código (registered): pega a vez", r["vez"] is True and 
 sql("update whatsapp_conexao set pedido = 'desconectar'")
 r, _ = rpc("whatsapp_motor_pulso", f"'{chave}', 'm1'")
 confere("pulso entrega o pedido ao motor com a vez", r["pedido"] == "desconectar", r)
-rpc("whatsapp_motor_apagar_sessao", f"'{chave}', 'm1'")
-rpc("whatsapp_motor_situacao", f"'{chave}', 'm1', 'desligado', 'Desconectado pelo motor', '', true")
+rpc("whatsapp_motor_apagar_sessao", f"'{chave}', 'm1', 'Desconectado pelo motor'")
 s, _ = sql("select (select count(*) from whatsapp_sessao)||'|'||situacao||'|'||coalesce(pedido,'-') from whatsapp_conexao")
 confere("desconectar: sessão apagada, pedido limpo", s == "0|desligado|-", s)
+
+# pedido pendente com a sessão já apagada: o próximo sinal conclui
+sql("update whatsapp_conexao set pedido = 'desconectar', situacao = 'conectado'")
+r, _ = rpc("whatsapp_motor_pulso", f"'{chave}', 'm1'")
+s, _ = sql("select situacao || '|' || coalesce(pedido, '-') from whatsapp_conexao")
+confere("pedido com sessão já apagada: sinal conclui", s == "desligado|-", s)
 
 # --- soltar, vencer e revogar ---
 sql("insert into whatsapp_sessao values ('creds', '{\"me\":{\"id\":\"x\"}}', now())")

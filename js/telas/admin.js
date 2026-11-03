@@ -19,6 +19,7 @@ export function Mais() {
       ${pode(perfil, "cadastrar") ? it("/nfe", "Entrada de nota fiscal (XML)", "Cadastrar produtos e fornecedor e somar o estoque pela NF-e", I.nota) : null}
       ${pode(perfil, "verValores") ? it("/recibos", "Recibos de pagamento", "Consultar, reimprimir, cancelar e emitir recibo avulso", I.recibo) : null}
       ${pode(perfil, "verValores") ? it("/receber", "Contas a receber", "Parcelas das O.S. entregues para pagar depois, vencimentos e cobrança", I.dinheiro) : null}
+      ${pode(perfil, "financeiro") ? it("/boletos", "Boletos Sicredi", "Boleto com Pix: remessa para o banco, retorno e baixa automática", I.recibo) : null}
       ${pode(perfil, "financeiro") ? it("/financeiro", "Contas a pagar", "Boletos, duplicatas das notas e despesas da oficina", I.dinheiro) : null}
       ${pode(perfil, "financeiro") ? it("/caixa", "Previsão de caixa", "Saldo previsto dia a dia até o fim do mês", I.grafico) : null}
       ${pode(perfil, "financeiro") ? it("/funcionarios", "Funcionários", "Cadastro, horário, folha de ponto, vales, comissão e custo da equipe", I.pessoas) : null}

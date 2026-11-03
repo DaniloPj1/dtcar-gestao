@@ -19,6 +19,7 @@ import { Cadastros, ClienteTela, VeiculoTela } from "./telas/cadastros.js";
 import { Mais, Equipe, Ajustes } from "./telas/admin.js";
 import { Recibos } from "./telas/recibos.js";
 import { ContasReceber, diasAte } from "./telas/receber.js";
+import { Boletos } from "./telas/boletos.js";
 import { PrevisaoCaixa } from "./telas/caixa.js";
 import { Imprimir } from "./telas/imprimir.js";
 import { Importar } from "./telas/importar.js";
@@ -36,13 +37,13 @@ import { DadosLocais } from "./telas/dadoslocais.js";
 try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo balcão" foi substituído pela interface única
 
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", receber: "Contas a receber", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp" };
+const TITULOS = { painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 // no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
 const LE_DO_BANCO = ["financeiro", "caixa", "recibos", "sefaz", "funcionarios", "funcionario", "backup"];
 // telas que dependem do servidor (sem cópia no aparelho nesta etapa)
-const SO_ONLINE = { financeiro: "As contas a pagar ficam no servidor.", caixa: "A previsão de caixa usa contas, recibos e parcelas do servidor.", recibos: "Os recibos ficam no servidor.",
+const SO_ONLINE = { boletos: "Os boletos são registrados no banco e ficam no servidor.", financeiro: "As contas a pagar ficam no servidor.", caixa: "A previsão de caixa usa contas, recibos e parcelas do servidor.", recibos: "Os recibos ficam no servidor.",
   sefaz: "As notas da SEFAZ chegam pelo servidor.", nfe: "A entrada de nota grava estoque e custos no servidor.", relatorios: "Os relatórios são calculados no servidor.",
   funcionarios: "Funcionários e lançamentos ficam no servidor.", funcionario: "Funcionários e lançamentos ficam no servidor.", backup: "O backup lê tudo do servidor.",
   importar: "A carga do sistema antigo grava no servidor.", whatsapp: "A conexão do WhatsApp fica no servidor.", equipe: "A equipe e os acessos ficam no servidor." };
@@ -350,7 +351,7 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { whatsapp: "ajustes", ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", receber: "verValores", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro" };
+  const restrito = { whatsapp: "ajustes", ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", receber: "verValores", boletos: "financeiro", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro" };
   const pendOS = pend.filter(op => op.tipo === "abrir_os");
   const pendAlt = pend.filter(ehAlteracao), conflitos = pendAlt.filter(op => op.conflito || (op.erro && op.tentativas >= 3));
   const dadosVis = !pendOS.length ? dados : {
@@ -385,7 +386,7 @@ function App() {
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
-    financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, receber: () => html`<${ContasReceber} />`, caixa: () => html`<${PrevisaoCaixa} />`, backup: () => html`<${Backup} />`,
+    financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, receber: () => html`<${ContasReceber} />`, boletos: () => html`<${Boletos} />`, caixa: () => html`<${PrevisaoCaixa} />`, backup: () => html`<${Backup} />`,
     funcionarios: () => html`<${Funcionarios} params=${params} key=${qs || ""} />`, funcionario: () => html`<${FuncionarioTela} id=${param} params=${params} key=${param + (qs || "")} />`,
   }[base]?.() || html`<${Painel} />`;
 

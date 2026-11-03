@@ -9,17 +9,18 @@ const confere = (n: string, c: boolean, x = "") => (c ? ok : falhas).push(n + (x
 // "banco" em memória com o mesmo jeito de consulta usado pela função
 const linhas = new Map<string, unknown>();
 const q = (op: string, dados?: unknown) => {
-  const b: any = { _op: op, _dados: dados, _in: null as string[] | null, _neq: false,
-    select() { return b; }, in(_c: string, v: string[]) { b._in = v; return b; }, neq() { b._neq = true; return b; }, eq() { return b; },
+  const b: any = { _op: op, _dados: dados, _in: null as string[] | null, _neq: [] as string[],
+    select() { return b; }, in(_c: string, v: string[]) { b._in = v; return b; }, neq(_c: string, v: string) { b._neq.push(v); return b; }, eq() { return b; },
     then(res: (x: unknown) => void) {
       if (b._op === "select") res({ data: [...linhas].filter(([k]) => !b._in || b._in.includes(k)).map(([chave, valor]) => ({ chave, valor: JSON.parse(JSON.stringify(valor)) })), error: null });
       else if (b._op === "upsert") { for (const r of b._dados as any[]) linhas.set(r.chave, r.valor); res({ error: null }); }
-      else if (b._op === "delete") { for (const k of [...linhas.keys()]) if (b._neq || b._in?.includes(k)) linhas.delete(k); res({ error: null }); }
+      else if (b._op === "delete") { for (const k of [...linhas.keys()]) if (b._in ? b._in.includes(k) : !b._neq.includes(k)) linhas.delete(k); res({ error: null }); }
+      else if (b._op === "insert") { const r = b._dados as any; if (linhas.has(r.chave)) res({ error: { message: "duplicate key" } }); else { linhas.set(r.chave, r.valor); res({ error: null }); } }
       else res({ error: null });
     } };
   return b;
 };
-const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => q("upsert", d), delete: () => q("delete"), update: () => q("update") }), rpc: () => q("rpc") };
+const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => q("upsert", d), insert: (d: unknown) => q("insert", d), delete: () => q("delete"), update: () => q("update") }), rpc: () => q("rpc") };
 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
@@ -44,6 +45,20 @@ await s.apagar();
 confere("apagar sessão limpa tudo", linhas.size === 0);
 c = await s.carregar();
 confere("depois de apagar: credenciais novas", !c.creds.registered);
+
+// reserva do pareamento: uma tentativa por vez; a antiga não mexe na nova
+const rv1 = await s.reservar(150000);
+const rv2 = await s.reservar(150000);
+confere("pareamento: primeira reserva vale, segunda é recusada", !!rv1 && rv2 === null);
+confere("pareamento: reserva atual é a primeira", (await s.reservaAtual()) === rv1);
+await c.salvarCreds(); await s.apagar(false);
+confere("limpar sessão para parear mantém a reserva", (await s.reservaAtual()) === rv1 && !linhas.has("creds"));
+await s.liberar("outra"); confere("liberar com id errado não tira a reserva", (await s.reservaAtual()) === rv1);
+linhas.set("pareamento", { id: rv1, ate: Date.now() - 1 });
+const r3 = await s.reservar(150000);
+confere("reserva vencida é substituída", !!r3 && r3 !== rv1 && (await s.reservaAtual()) === r3);
+await s.liberar(r3!); confere("liberar com o id certo tira a reserva", (await s.reservaAtual()) === null);
+await s.reservar(150000); await s.apagar(); confere("desconectar apaga também a reserva", linhas.size === 0);
 
 const r = await atender(new Request("http://localhost/zap", { method: "POST", headers: { "content-type": "application/json" }, body: '{"acao":"testar"}' }));
 confere("sem login: 401", r.status === 401, String(r.status));

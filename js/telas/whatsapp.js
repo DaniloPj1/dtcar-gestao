@@ -66,7 +66,8 @@ export function WhatsApp() {
       : codigo ? html`<p>No celular da oficina: <b>WhatsApp › Aparelhos conectados › Conectar aparelho › Conectar com número de telefone</b> e digite:</p>
         <p class="codigo-pareamento" aria-live="polite">${fmtCod(codigo.codigo)}</p>
         <p class="sub">O código vale por cerca de 2 minutos. Esta tela atualiza sozinha quando o celular terminar.</p>`
-      : html`<p class="sub">Peça um código e digite-o no celular da oficina. Nada é enviado aos clientes.</p>
+      : html`${st && st.situacao === "pareando" ? html`<div class="aviso">Já há um pareamento em andamento (código pedido antes). Use aquele código ou espere uns 2 minutos para pedir outro.</div>` : null}
+        <p class="sub">Peça um código e digite-o no celular da oficina. Nada é enviado aos clientes.</p>
         <${Campo} id="zap-numero" rotulo="Número do WhatsApp da oficina (55 + DDD + número)"><input id="zap-numero" class="inp" inputmode="numeric" value=${numero} onInput=${e => setNumero(soDig(e.target.value))} /></${Campo}>
         <button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${parear}>${fazendo === "parear" ? "Pedindo código…" : "Pedir código de pareamento"}</button>`}
     </div>

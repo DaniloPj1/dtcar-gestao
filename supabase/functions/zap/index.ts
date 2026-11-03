@@ -30,6 +30,8 @@ const paraBanco = (v: unknown) => JSON.parse(JSON.stringify(v, BufferJSON.replac
 const doBanco = (v: unknown) => JSON.parse(JSON.stringify(v), BufferJSON.reviver);
 
 /** Sessão do WhatsApp guardada no banco (tabela whatsapp_sessao, só a chave de servidor). */
+const RESERVA = "pareamento"; // linha de whatsapp_sessao que reserva o pareamento para uma tentativa só
+
 export function sessaoNoBanco(adm: Db) {
   const ler = async (chaves: string[]) => {
     if (!chaves.length) return {} as Record<string, unknown>;
@@ -64,7 +66,33 @@ export function sessaoNoBanco(adm: Db) {
       };
       return { creds, keys, salvarCreds: () => gravar([{ chave: "creds", valor: creds }]) };
     },
-    async apagar() { const { error } = await adm.from("whatsapp_sessao").delete().neq("chave", ""); if (error) throw new Error("sessão: " + error.message); },
+    /** Apaga a sessão (credenciais e chaves). A reserva do pareamento só sai junto quando pedido. */
+    async apagar(comReserva = true) {
+      let q = adm.from("whatsapp_sessao").delete().neq("chave", "");
+      if (!comReserva) q = q.neq("chave", RESERVA);
+      const { error } = await q; if (error) throw new Error("sessão: " + error.message);
+    },
+    /** Reserva exclusiva do pareamento (uma tentativa por vez): grava só se não houver outra válida. Devolve o id ou null. */
+    async reservar(validadeMs: number) {
+      const agora = Date.now();
+      const { data } = await adm.from("whatsapp_sessao").select("chave, valor").in("chave", [RESERVA]);
+      const atual = (data || [])[0] as { valor: { ate: number } } | undefined;
+      if (atual && atual.valor && atual.valor.ate > agora) return null;
+      if (atual) await adm.from("whatsapp_sessao").delete().in("chave", [RESERVA]);
+      const id = crypto.randomUUID();
+      // insert (não upsert): se outra tentativa gravou ao mesmo tempo, a chave já existe e esta é recusada
+      const { error } = await adm.from("whatsapp_sessao").insert({ chave: RESERVA, valor: { id, ate: agora + validadeMs }, atualizado_em: new Date().toISOString() });
+      return error ? null : id;
+    },
+    async reservaAtual(): Promise<string | null> {
+      const { data } = await adm.from("whatsapp_sessao").select("chave, valor").in("chave", [RESERVA]);
+      const v = (data || [])[0]?.valor as { id: string; ate: number } | undefined;
+      return v && v.ate > Date.now() ? v.id : null;
+    },
+    async liberar(id: string) {
+      const { data } = await adm.from("whatsapp_sessao").select("chave, valor").in("chave", [RESERVA]);
+      if ((data || [])[0]?.valor?.id === id) await adm.from("whatsapp_sessao").delete().in("chave", [RESERVA]);
+    },
   };
 }
 
@@ -124,13 +152,23 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
   if (acao === "parear") {
     const numero = String(corpo.numero || "").replace(/\D/g, "");
     if (numero.length < 12 || numero.length > 13 || !numero.startsWith("55")) return json({ erro: "Informe o número com 55 + DDD + número (ex.: 5527999990000)." }, 400);
+    const atual = await sessao.carregar();
+    if (atual.creds.registered) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
+    // uma tentativa por vez: a reserva vale até o fim da espera desta execução
+    const reserva = await sessao.reservar(150000);
+    if (!reserva) return json({ erro: "Já há um pareamento em andamento. Use o código pedido antes ou espere uns 2 minutos e peça outro." }, 409);
+    // só vale enquanto esta tentativa for a dona da reserva (uma tentativa antiga não mexe na situação de uma nova)
+    const minha = async () => (await sessao.reservaAtual()) === reserva;
+    const situacaoSeMinha = async (patch: Record<string, unknown>) => { if (await minha()) await situacao(adm, patch); };
+    // começa de uma sessão limpa (sobras de uma tentativa que não terminou atrapalham o pareamento)
+    await sessao.apagar(false);
     const { creds, keys, salvarCreds } = await sessao.carregar();
-    if (creds.registered) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
-    let s = abrir(creds, keys, salvarCreds);
+    const salvarSeMinha = async () => { if (await minha()) await salvarCreds(); };
+    let s = abrir(creds, keys, salvarSeMinha);
     const r = await proximo(s, 30000);
-    if (r.tipo !== "qr") { fechar(s); return json({ erro: "O WhatsApp não respondeu (" + (r.msg || r.tipo) + ")." }, 502); }
+    if (r.tipo !== "qr") { fechar(s); await sessao.liberar(reserva); return json({ erro: "O WhatsApp não respondeu (" + (r.msg || r.tipo) + ")." }, 502); }
     let codigo: string;
-    try { codigo = await s.requestPairingCode(numero); } catch (e) { fechar(s); return json({ erro: "Não foi possível pedir o código: " + (e as Error).message }, 502); }
+    try { codigo = await s.requestPairingCode(numero); } catch (e) { fechar(s); await sessao.liberar(reserva); return json({ erro: "Não foi possível pedir o código: " + (e as Error).message }, 502); }
     await situacao(adm, { situacao: "pareando", numero, detalhe: "Código pedido: digite no celular em até 2 minutos." });
     // o pareamento termina no celular: espera em segundo plano (até ~2 min) e guarda a sessão
     const fim = (async () => {
@@ -138,17 +176,18 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       let ev = await proximo(s, Math.max(1000, limite - Date.now()), false);
       // depois do pareamento o WhatsApp pede para reconectar (restartRequired): reconecta com a sessão nova
       if (ev.tipo === "close" && ev.codigo === DisconnectReason.restartRequired) {
-        await salvarCreds(); s = abrir(creds, keys, salvarCreds);
+        await salvarSeMinha(); s = abrir(creds, keys, salvarSeMinha);
         ev = await proximo(s, Math.max(1000, limite - Date.now()), false);
       }
       if (ev.tipo === "open") {
-        await salvarCreds(); await esperar(3000);
-        await situacao(adm, { situacao: "conectado", dono: "supabase", numero: String(s.user?.id || numero).split(":")[0].split("@")[0], detalhe: "Celular vinculado." });
+        await salvarSeMinha(); await esperar(3000);
+        await situacaoSeMinha({ situacao: "conectado", dono: "supabase", numero: String(s.user?.id || numero).split(":")[0].split("@")[0], detalhe: "Celular vinculado." });
       } else {
-        await situacao(adm, { situacao: "erro", detalhe: "Pareamento não concluído (" + (ev.msg || ev.tipo) + "). Peça um código novo." });
+        await situacaoSeMinha({ situacao: "erro", detalhe: "Pareamento não concluído (" + (ev.msg || ev.tipo) + "). Peça um código novo." });
       }
       fechar(s);
-    })().catch(async (e) => { fechar(s); await situacao(adm, { situacao: "erro", detalhe: "Pareamento falhou: " + (e as Error).message }); });
+      await sessao.liberar(reserva);
+    })().catch(async (e) => { fechar(s); await situacaoSeMinha({ situacao: "erro", detalhe: "Pareamento falhou: " + (e as Error).message }); await sessao.liberar(reserva); });
     if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(fim);
     return json({ codigo, ms: ms(), validade_s: 120 });
   }

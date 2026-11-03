@@ -3,7 +3,7 @@ import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, BuscaCliente } from "../ui.js";
 import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, precoPelaMargem, margemDoPreco, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
-import { STATUS, FLUXO, ETAPAS, etapaOS, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
+import { STATUS, FLUXO, ETAPAS, ETAPAS_ABERTAS, etapaOS, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
 import { FormVeiculo, edVeiculo, SitCliente, FormCliente, edCliente } from "./cadastros.js";
 import { CancelarModal, EncerrarModal } from "./acoesos.js";
@@ -264,7 +264,10 @@ export function Ordem({ id, params = {} }) {
   const aberta = ABERTOS.includes(st);
   const gestor = pode(perfil, "orcar");
   const editavelOrc = gestor && st === "diagnostico";
-  const podeAdicional = gestor && (st === "execucao" || st === "aguardando");
+  // regra do Danilo (03/11/2026): enquanto a O.S. não estiver fechada (orçamento, execução ou aguardando pagamento),
+  // todo serviço e produto pode ser editado ou excluído; o que entra depois da aprovação já entra aprovado e cobrado
+  const editaItens = gestor && ETAPAS_ABERTAS.includes(etapaOS(o));
+  const jaAprovada = ["execucao", "pronto", "entregue"].includes(st);
   const editaInfo = gestor && aberta;
   const pendentes = itens.filter(i => i.aprovado === null || i.aprovado === undefined);
   const aprovadoAlgum = itens.some(i => i.aprovado === true);
@@ -302,11 +305,14 @@ export function Ordem({ id, params = {} }) {
       condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto, obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
       situacao: campos.situacao, tabela_preco: campos.tabela_preco, total: t.total, custo: t.custo, ...extra });
     if (!silencioso) avisar("O.S. salva.");
+    // item mexido depois da entrega/recebimento: avisa o que precisa de conferência (recibos e parcelas não mudam sozinhos)
+    if (aprov && t.total < recebido - 0.005) avisar(`Atenção: o total (${reais(t.total)}) ficou menor que o já recebido (${reais(recebido)}).`, true);
+    else if (aprov && parcs.some(p => p.status === "aberta") && Math.abs(t.total - (Number(o.total) || 0)) > 0.005) avisar("O total mudou: confira as parcelas a receber desta O.S.", true);
     await carregar(); recarregar(["ordens", "produtos"]);
   };
   const acao = async (rotulo, fn) => { setOcupado(rotulo); try { await fn(); } catch (e) { avisar(e.message, true); } finally { setOcupado(""); } };
 
-  const novoItem = tipo => setModal({ tipo: "item", item: { id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: null, executado: false } });
+  const novoItem = tipo => setModal({ tipo: "item", item: { id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: jaAprovada ? true : null, executado: st === "pronto" || st === "entregue" } });
   const salvarItem = async it => {
     let x = { ...it };
     if (x._cadastrar) {
@@ -436,6 +442,8 @@ export function Ordem({ id, params = {} }) {
     await entregarArquivo(blob, `${nomes[qual]}_${String(o.numero).padStart(5, "0")}_${o.veiculo.placa}.pdf`);
   });
   const imprimir = async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo: "imprimir" }); };
+  // receber, entregar e recibo leem a O.S. do banco: item mexido e ainda não salvo é salvo antes (senão cobraria o total antigo)
+  const abrirSalvo = (tipo, extra = {}) => async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo, ...extra }); };
   const whats = qual => {
     const fn = MSG[qual]; if (!fn) return;
     const lista = qual === "adicionais" ? pendentes : itens.filter(i => i.aprovado !== false);
@@ -451,9 +459,9 @@ export function Ordem({ id, params = {} }) {
   if (st === "diagnostico" && gestor) acoes = [pode(perfil, "aprovar") ? B("Aprovar orçamento", aprovarOrcamento, true) : null, B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, !pode(perfil, "aprovar"))];
   if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar, false, false, "btn-recusa")];
   if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Serviço concluído", () => marcarPronto(false), true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
-  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", () => setModal({ tipo: "encerrar" }), true), saldo > 0 ? B("Entregar sem receber", () => setModal({ tipo: "entrega" })) : null, B("Avisar cliente", () => whats("pronto"))];
-  if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", () => setModal({ tipo: "entrega" }), true)];
-  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", () => setModal({ tipo: "encerrar" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
+  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", abrirSalvo("encerrar"), true), saldo > 0 ? B("Entregar sem receber", abrirSalvo("entrega")) : null, B("Avisar cliente", () => whats("pronto"))];
+  if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", abrirSalvo("entrega"), true)];
+  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", abrirSalvo("encerrar"), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
   acoes = acoes.filter(Boolean);
   const passo = FLUXO.indexOf(etapa);
 
@@ -507,13 +515,13 @@ export function Ordem({ id, params = {} }) {
   const execOn = ["execucao", "pronto", "entregue"].includes(st);
   const grupo = (tipo, titulo) => {
     const g = itens.filter(i => i.tipo === tipo);
-    const podeEditar = editavelOrc || podeAdicional;
+    const podeEditar = editaItens;
     if (!g.length && !podeEditar) return null;
     return html`<div class="grupo-itens"><div class="secao-topo"><h4>${titulo}</h4>${podeEditar ? html`<button type="button" class="btn btn-sm" onClick=${() => novoItem(tipo)}>+ Incluir</button>` : null}</div>
       ${g.length ? html`<div class="lista">${g.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${verValores} mostrarAprov=${st !== "diagnostico"}
         exec=${execOn && i.aprovado === true ? { disabled: st !== "execucao" || !pode(perfil, "executar") || !!ocupado, onMuda: v => marcarExecutado(i, v) } : null}
-        onClick=${(editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined))) ? () => setModal({ tipo: "item", item: i }) : null}
-        onExcluir=${(editavelOrc || (podeAdicional && (i.aprovado === null || i.aprovado === undefined))) ? async () => { if (await confirmar({ titulo: "Excluir item", texto: i.descricao + ". A alteração vale ao salvar a O.S.", botao: "Excluir", perigo: true })) excluirItem(i); } : null} />`)}</div>` : html`<span class="dica">Nenhum item.</span>`}</div>`;
+        onClick=${editaItens ? () => setModal({ tipo: "item", item: i }) : null}
+        onExcluir=${editaItens ? async () => { if (await confirmar({ titulo: "Excluir item", texto: i.descricao + ". A alteração vale ao salvar a O.S.", botao: "Excluir", perigo: true })) excluirItem(i); } : null} />`)}</div>` : html`<span class="dica">Nenhum item.</span>`}</div>`;
   };
   const abaItens = html`
     <section class="card"><div class="secao-topo"><h3>Produtos e serviços</h3>${st === "aguardando" ? html`<span class="sub">Enviado em ${fmtDataHora(o.orcamento_enviado_em)} · válido até ${fmtData(o.validade_orcamento)}</span>` : null}
@@ -539,7 +547,7 @@ export function Ordem({ id, params = {} }) {
         <span class="meio"><strong>${numRecibo(r.numero)}${r.cancelado ? " · cancelado" : ""}</strong><span>${fmtData(r.data)} · ${r.forma}${r.obs ? " · " + r.obs : ""}</span></span><b>${reais(r.valor)}</b></button>`)}</div>` : null}
       <${ParcelasOS} parcelas=${parcs.filter(p => p.status !== "cancelada")} onReceber=${p => setModal({ tipo: "parcela", p })} />
       ${st === "entregue" && saldoSemPrazo > 0.009 && pode(perfil, "entregar") && (!api.temV12 || api.temV12()) ? html`<button type="button" class="btn" onClick=${() => setModal({ tipo: "prazo" })}>Combinar prazo para ${reais(saldoSemPrazo)}</button>` : null}
-      ${pode(perfil, "entregar") && tAtual.total > 0 && st !== "cancelado" ? html`<button type="button" class="btn" disabled=${saldo <= 0} onClick=${() => setModal({ tipo: "recibo" })}>${saldo > 0 ? "Emitir recibo de pagamento" + (st !== "entregue" ? " (sinal / adiantamento)" : "") : "Pagamento quitado"}</button>` : null}
+      ${pode(perfil, "entregar") && tAtual.total > 0 && st !== "cancelado" ? html`<button type="button" class="btn" disabled=${saldo <= 0} onClick=${abrirSalvo("recibo")}>${saldo > 0 ? "Emitir recibo de pagamento" + (st !== "entregue" ? " (sinal / adiantamento)" : "") : "Pagamento quitado"}</button>` : null}
     </section>` : null}`;
 
   /* ===== aba Observações ===== */
@@ -589,7 +597,7 @@ export function Ordem({ id, params = {} }) {
 
   const nItens = itens.filter(i => i.aprovado !== false).length;
 
-  const podeSalvar = sujo && (editaInfo || st === "execucao");
+  const podeSalvar = sujo && (editaInfo || st === "execucao" || editaItens);
   const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
   const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
   const minhasOff = filaPend.filter(op => op.ordem_id === o.id), conflitoOff = minhasOff.filter(op => op.conflito || op.erro);

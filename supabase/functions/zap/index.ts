@@ -100,7 +100,8 @@ export function sessaoNoBanco(adm: Db) {
 }
 
 async function situacao(adm: Db, patch: Record<string, unknown>) {
-  await adm.from("whatsapp_conexao").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", 1);
+  const { error } = await adm.from("whatsapp_conexao").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", 1);
+  if (error) console.error("situação do WhatsApp não gravada", error.message);
 }
 
 /** Quais cifras o servidor aceita. O Supabase recusou "aes-256-ctr" (usada só no pareamento por código, em 03/11/2026);
@@ -166,6 +167,11 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     const numero = String(corpo.numero || "").replace(/\D/g, "");
     if (!porQr && (numero.length < 12 || numero.length > 13 || !numero.startsWith("55"))) return json({ erro: "Informe o número com 55 + DDD + número (ex.: 5527999990000)." }, 400);
     if (!porQr && !cifras().ctr) return json({ erro: "O servidor não aceita o pareamento por código. Use o QR Code." }, 501);
+    if (porQr) {
+      // o QR vai para whatsapp_conexao.qr_svg (v23): sem a coluna, nada apareceria na tela — avisa antes de reservar ou conectar
+      const { error } = await adm.from("whatsapp_conexao").select("qr_svg").eq("id", 1);
+      if (error) return json({ erro: "Falta rodar o supabase/v23.sql no Supabase para o QR Code aparecer na tela." }, 412);
+    }
     const atual = await sessao.carregar();
     if (atual.creds.registered) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
     // uma tentativa por vez. A execução da função dura no máximo 150 s (plano grátis), contando a preparação, a espera e o

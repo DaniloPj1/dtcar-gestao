@@ -36,14 +36,14 @@ async function rpc(method: string, params: unknown, id = 1) {
 
 const ini = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "teste", version: "1" } });
 confere("initialize responde", ini.status === 200 && !!ini.corpo.result?.serverInfo, JSON.stringify(ini.corpo).slice(0, 200));
-confere("instruções do servidor", String(ini.corpo.result?.instructions || "").includes("confirmar=true"));
+confere("instruções do servidor", String(ini.corpo.result?.instructions || "").includes("confirmar=true") && String(ini.corpo.result?.instructions || "").includes("dúvida"));
 
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
-const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas"];
-confere("10 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber", "lancar_itens_os", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas"];
+confere("11 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("9 só de leitura, abrir_os grava", leitura === 9, String(leitura));
+confere("9 só de leitura, abrir_os e lancar_itens_os gravam", leitura === 9, String(leitura));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
   chamadas.length = 0;
@@ -72,6 +72,17 @@ c = await chama("abrir_os", { placa: "ABC1D23", km: 45000, reclamacao: "barulho"
 confere("abrir_os sem confirmar = só prévia", c.fn === "agente_abrir_os" && c.args?.p_gravar === false && (c.args?.p as { km: string }).km === "45000");
 c = await chama("abrir_os", { placa: "ABC1D23", km: "45.000", reclamacao: "barulho", confirmar: true, cliente: { nome: "João", telefone: "27999990001" } });
 confere("abrir_os com confirmar=true grava", c.args?.p_gravar === true && !("confirmar" in (c.args?.p as object)));
+const itens = [{ tipo: "servico", descricao: "Desmontagem suspensão dianteira", valor_unit: 600 }, { tipo: "peca", descricao: "Óleo 90", qtd: 3, valor_unit: 68 }];
+c = await chama("lancar_itens_os", { numero: 1904, itens });
+const pl = c.args?.p as { numero: number; itens: Array<{ qtd: number }> };
+confere("lancar_itens_os sem confirmar = só prévia", c.fn === "agente_lancar_itens_os" && c.args?.p_gravar === false && pl.numero === 1904 && pl.itens.length === 2);
+confere("lancar_itens_os: quantidade padrão 1", pl.itens[0].qtd === 1 && pl.itens[1].qtd === 3);
+c = await chama("lancar_itens_os", { numero: 1904, itens, confirmar: true });
+confere("lancar_itens_os com confirmar=true grava", c.args?.p_gravar === true && !("confirmar" in (c.args?.p as object)));
+c = await chama("lancar_itens_os", { numero: 1904, itens: [] });
+confere("lancar_itens_os sem itens é recusado", c.r?.isError === true || !c.fn);
+c = await chama("lancar_itens_os", { numero: 1904, itens: [{ tipo: "peca", descricao: "x", valor_unit: -1 }] });
+confere("valor negativo é recusado", c.r?.isError === true || !c.fn);
 confere("telefone inválido não gera link", linkWhatsApp("123", "x") === null);
 
 // sem login (pipeline completo): precisa do ambiente das Edge Functions

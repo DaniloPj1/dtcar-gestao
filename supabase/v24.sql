@@ -113,9 +113,11 @@ end $$;
 -- Sem celular vinculado o motor não fica com a vez (o pareamento por QR Code é feito pela função zap).
 create or replace function public.whatsapp_motor_pulso(p_chave text, p_id text, p_info jsonb default '{}'::jsonb)
 returns jsonb language plpgsql security definer set search_path = public as $$
-declare v_vez boolean := false; v_vinculado boolean; v public.whatsapp_conexao;
+declare v_vez boolean := false; v_vinculado boolean; v_continua boolean; v public.whatsapp_conexao;
 begin
   perform public.whatsapp_motor_conferir(p_chave);
+  -- a vez deste motor seguiu sem interrupção desde o último sinal? (se não, outro pode ter usado a sessão no meio)
+  select coalesce(dono = 'android' and dono_id = p_id and dono_ate > now(), false) into v_continua from public.whatsapp_conexao where id = 1;
   update public.whatsapp_conexao set motor_visto = now(), motor_info = coalesce(p_info, '{}'::jsonb) where id = 1;
   -- pelo QR Code a sessão tem creds.me; pelo código, creds.registered
   select exists (select 1 from public.whatsapp_sessao where chave = 'creds'
@@ -130,7 +132,9 @@ begin
      where id = 1 and pedido = 'desconectar';
   end if;
   select * into v from public.whatsapp_conexao where id = 1;
-  return jsonb_build_object('vez', v_vez, 'vinculado', v_vinculado, 'pedido', case when v_vez then v.pedido end,
+  return jsonb_build_object('vez', v_vez, 'continua', v_vez and v_continua, 'vinculado', v_vinculado,
+                            'sessao_em', (select max(atualizado_em) from public.whatsapp_sessao where chave <> 'pareamento'),
+                            'pedido', case when v_vez then v.pedido end,
                             'situacao', v.situacao, 'dono', v.dono, 'dono_ate', v.dono_ate);
 end $$;
 
@@ -150,9 +154,11 @@ begin
                     where chave = any(p_chaves) and chave <> 'pareamento'), '{}'::jsonb);
 end $$;
 
--- Grava (p_poe: {chave: valor}) e apaga (p_tira) chaves da sessão (só com a vez).
+-- Grava (p_poe: {chave: valor}) e apaga (p_tira) chaves da sessão (só com a vez). Devolve a hora do banco da gravação
+-- (o motor compara com sessao_em do sinal para saber se outro mexeu na sessão enquanto ele estava sem a vez).
+drop function if exists public.whatsapp_motor_gravar(text, text, jsonb, text[]);
 create or replace function public.whatsapp_motor_gravar(p_chave text, p_id text, p_poe jsonb, p_tira text[] default '{}')
-returns void language plpgsql security definer set search_path = public as $$
+returns timestamptz language plpgsql security definer set search_path = public as $$
 begin
   perform public.whatsapp_motor_com_vez(p_chave, p_id);
   if p_poe is not null and jsonb_typeof(p_poe) = 'object' then
@@ -163,6 +169,7 @@ begin
   if p_tira is not null and array_length(p_tira, 1) > 0 then
     delete from public.whatsapp_sessao where chave = any(p_tira) and chave <> 'pareamento';
   end if;
+  return now();
 end $$;
 
 -- O celular desvinculou o aparelho (ou pedido de desconectar): apaga a sessão inteira (só com a vez).

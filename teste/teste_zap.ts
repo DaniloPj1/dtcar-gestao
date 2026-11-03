@@ -82,7 +82,11 @@ mv = await vezNoBanco(admVez({ dono: "supabase", dono_ate: futuro }) as any).mot
 confere("vez com o supabase: motor não ativo", !mv.ativo);
 mv = await vezNoBanco(admVez(null, { message: "column dono_ate does not exist" }) as any).motor();
 confere("sem o v24: motor não ativo", !mv.ativo);
-confere("sem o v24: função segue sem reservar", await vezNoBanco(admVez(null, { message: "function whatsapp_pegar_vez does not exist" }) as any).pegar(60));
+confere("sem o v24 (PGRST202): função segue sem reservar", await vezNoBanco(admVez(null, { code: "PGRST202", message: "Could not find the function public.whatsapp_pegar_vez(p_dono, p_id, p_segundos) in the schema cache" }) as any).pegar(60));
+confere("sem o v24 (42883): função segue sem reservar", await vezNoBanco(admVez(null, { code: "42883", message: "function public.whatsapp_pegar_vez(text, text, integer) does not exist" }) as any).pegar(60));
+confere("reserva com tempo-limite (57014): não conecta", !(await vezNoBanco(admVez(null, { code: "57014", message: "canceling statement due to statement timeout" }) as any).pegar(60)));
+confere("reserva com erro de rede: não conecta", !(await vezNoBanco(admVez(null, { message: "fetch failed" }) as any).pegar(60)));
+confere("resposta vazia: não conecta", !(await vezNoBanco(admVez(null, null, null) as any).pegar(60)));
 confere("outro com a vez: função não pega", !(await vezNoBanco(admVez(null, null, false) as any).pegar(60)));
 confere("vez livre: função pega", await vezNoBanco(admVez(null, null, true) as any).pegar(60));
 

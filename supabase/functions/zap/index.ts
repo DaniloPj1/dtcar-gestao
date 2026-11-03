@@ -107,6 +107,9 @@ export function sessaoNoBanco(adm: Db) {
 
 /** Revezamento com o motor do Android (v24): quem está com a vez é o único que conecta com a sessão guardada.
  *  Sem o v24 no banco não existe motor: as consultas falham e a função segue como antes (sem reservar). */
+/** Erro que comprova que a função do v24 não existe no banco (PostgREST PGRST202 / Postgres 42883). */
+export const semV24 = (e: { code?: string; message?: string } | null) =>
+  !!e && (e.code === "PGRST202" || e.code === "42883" || /could not find the function|function .*whatsapp_pegar_vez.* does not exist/i.test(e.message || ""));
 export function vezNoBanco(adm: Db) {
   const id = crypto.randomUUID();
   return {
@@ -119,15 +122,17 @@ export function vezNoBanco(adm: Db) {
       return { ativo, conectado: !!(c && c.motor_info && c.motor_info.conectado), aparelho: (c && c.motor_info && c.motor_info.aparelho) || "Android",
         visto_s: c && c.motor_visto ? Math.max(0, Math.round((Date.now() - new Date(c.motor_visto).getTime()) / 1000)) : null };
     },
-    /** Pega a vez para a função. false = outro está com ela; sem o v24 devolve true (não há motor). */
+    /** Pega a vez para a função. false = outro está com ela OU a reserva falhou (tempo-limite, erro): não conecta.
+     *  Só segue sem reservar quando o erro comprova que o v24 não foi rodado (a função não existe: não há motor). */
     async pegar(segundos: number): Promise<boolean> {
       const { data, error } = await adm.rpc("whatsapp_pegar_vez", { p_dono: "supabase", p_id: id, p_segundos: segundos });
-      return error ? true : data !== false;
+      if (error) return semV24(error);
+      return data === true;
     },
     async soltar() { try { await adm.rpc("whatsapp_soltar_vez", { p_id: id }); } catch (_) { /* vence sozinha */ } },
   };
 }
-const ocupada = (ms: number) => ({ ok: false, ms, resposta: "ocupada", detalhe: "A conexão está em uso por outra tentativa. Tente de novo em 1 minuto." });
+const ocupada = (ms: number) => ({ ok: false, ms, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." });
 
 async function situacao(adm: Db, patch: Record<string, unknown>) {
   const { error } = await adm.from("whatsapp_conexao").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", 1);

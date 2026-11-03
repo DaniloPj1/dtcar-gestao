@@ -2,6 +2,7 @@
 // Cada ferramenta chama uma função do banco (supabase/v20.sql) com o cliente do Supabase
 // já autenticado como o usuário que autorizou o conector: as regras de acesso valem e as
 // funções exigem administrador. Nada aqui apaga, paga ou mexe em conta paga.
+// Gravação: abrir_os (v20) e lancar_itens_os (v21).
 import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
 import { z } from "npm:zod@4.3.6";
 
@@ -14,7 +15,8 @@ export interface Banco {
 
 const INSTRUCOES = `Conector do DTCar Gestão, o sistema da DTCar Centro Automotivo (Colatina/ES).
 Responda ao Danilo em português do Brasil, curto e direto.
-- Antes de abrir uma O.S., chame abrir_os com confirmar=false, mostre a prévia em poucas linhas e só chame com confirmar=true depois de um "sim" explícito do Danilo.
+- Ordem direta e completa do Danilo (abrir O.S., lançar itens): grave direto com confirmar=true e mostre o resultado em poucas linhas.
+- Se faltar dado, houver dúvida ou a ferramenta devolver "erros" (O.S. já aberta, KM menor, item repetido), use confirmar=false, mostre a prévia e espere o "sim".
 - Se a prévia trouxer "erros", pergunte só o que falta. Nunca invente telefone, ano, km ou reclamação.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
 - Valores em reais no padrão brasileiro. Não confunda faturamento com lucro.
@@ -114,7 +116,7 @@ export function criarServidor(db: Banco): McpServer {
 
   s.registerTool("abrir_os", {
     title: "Abrir O.S.",
-    description: "Abre uma O.S. nova. Chame primeiro com confirmar=false (só confere e mostra a prévia). Chame com confirmar=true SOMENTE depois do \"sim\" do Danilo para essa prévia. " +
+    description: "Abre uma O.S. nova. Com confirmar=false só confere e mostra a prévia. Ordem direta e completa do Danilo: chame com confirmar=true; havendo dúvida ou erros na prévia, espere o \"sim\". " +
       "Cliente: use cliente_id de um cliente cadastrado (veja buscar_cliente) ou informe nome e telefone de um cliente novo. Veículo novo precisa de marca, modelo e ano.",
     inputSchema: z.object({
       placa: z.string(), km: z.union([z.number().int().nonnegative(), z.string()]).describe("KM de entrada"),
@@ -133,6 +135,35 @@ export function criarServidor(db: Banco): McpServer {
     if (error) return falha(error.message);
     const r = d as { gravado?: boolean; id?: string };
     return texto(r.gravado && r.id ? { ...r, abrir_no_sistema: SITE + "/#/os/" + r.id } : r);
+  });
+
+  s.registerTool("lancar_itens_os", {
+    title: "Lançar serviços e peças na O.S.",
+    description: "Inclui serviços, peças ou serviços de terceiros numa O.S. em orçamento ou em execução (não altera nem apaga itens existentes). " +
+      "Com confirmar=false só confere e devolve a prévia com total, custo e margem. Ordem direta e completa do Danilo: chame com confirmar=true. " +
+      "Peça com código do estoque (veja consultar_estoque) dá baixa no estoque da oficina; sem código é item genérico e não mexe no estoque. " +
+      "Nunca invente preço ou custo: use só os valores que o Danilo passou. Em O.S. já aprovada os itens entram como adicionais, aguardando o cliente.",
+    inputSchema: z.object({
+      numero: z.number().int().positive().describe("Número da O.S."),
+      itens: z.array(z.object({
+        tipo: z.enum(["servico", "peca", "terceiro"]),
+        descricao: z.string().min(2).describe("Descrição como o Danilo falou"),
+        qtd: z.number().positive().default(1),
+        valor_unit: z.number().nonnegative().describe("Preço de venda unitário em reais"),
+        custo_unit: z.number().nonnegative().optional().describe("Custo unitário, só se o Danilo informou (peça com código usa o custo do estoque)"),
+        codigo: z.string().optional().describe("Código da peça no estoque do DTCar Gestão"),
+        peca_do_cliente: z.boolean().optional(),
+      })).min(1).max(40),
+      lancar_mesmo_repetido: z.boolean().optional().describe("true só se o Danilo confirmou lançar item com a mesma descrição de um já lançado"),
+      pedido: z.string().optional().describe("O pedido do Danilo, resumido, para o histórico"),
+      confirmar: z.boolean().default(false),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ confirmar, ...p }) => {
+    const { data: d, error } = await db.rpc("agente_lancar_itens_os", { p, p_gravar: confirmar === true });
+    if (error) return falha(error.message);
+    const r = d as { id?: string };
+    return texto(r.id ? { ...r, abrir_no_sistema: SITE + "/#/os/" + r.id } : r);
   });
 
   return s;

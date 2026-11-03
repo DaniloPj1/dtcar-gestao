@@ -202,6 +202,18 @@ function criarApiSupabase() {
       catch (e) { if (/guardar_saldos_contas|function|schema cache|404/i.test(e.message)) throw new Error("Para guardar os saldos por conta, rode o supabase/v18.sql no Supabase."); throw e; } },
     /** banco com o supabase/v18.sql (saldo por conta e transferências); null = ainda não sabe */
     temV18: () => temV18,
+    // WhatsApp da oficina (supabase/v22.sql + função "zap"): situação e ações (testar, parear, conferir, desconectar)
+    whatsapp: {
+      situacao: async () => { const r = await sb.from("whatsapp_conexao").select("*").eq("id", 1).maybeSingle();
+        if (r.error && /whatsapp_conexao|schema cache|does not exist/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v22.sql no Supabase.");
+        return ok(r) || { situacao: "desligado" }; },
+      chamar: async body => {
+        const { data, error } = await sb.functions.invoke("zap", { body });
+        if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {} if (/not found|404/i.test(m)) m = "A função \"zap\" ainda não foi publicada no Supabase."; throw new Error(m); }
+        if (data && data.erro) throw new Error(data.erro);
+        return data;
+      },
+    },
     sefaz: {
       config: async () => ok(await sb.from("sefaz_config").select("*").eq("id", 1).maybeSingle()),
       salvarConfig: async patch => ok(await sb.from("sefaz_config").update(patch).eq("id", 1)),

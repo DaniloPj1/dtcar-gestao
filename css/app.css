@@ -187,6 +187,8 @@ button.linha:disabled{cursor:default;opacity:1}
 .p-bad{background:var(--bad-soft);color:var(--bad)}
 .p-info,.p-brand{background:var(--brand-soft);color:var(--brand)}
 .p-muted{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
+.codigo-pareamento{font-size:34px;font-weight:800;letter-spacing:.18em;font-family:ui-monospace,Consolas,monospace;margin:6px 0}
+.zap-situacao{margin-top:10px}
 
 /* painel */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}

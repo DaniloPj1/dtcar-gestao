@@ -65,7 +65,8 @@ begin
     v_custo := round(nullif(it->>'custo_unit', '')::numeric, 2);
     if v_cod <> '' then
       if v_tipo <> 'peca' then erros := array_append(erros, 'Item ' || n || ': código do estoque só vale para peça.'); continue; end if;
-      select * into v_prod from public.produtos pr where pr.tipo = 'produto' and (pr.codigo::text = v_cod or lower(coalesce(pr.codigo_barras, '')) = lower(v_cod)) order by pr.ativo desc limit 1;
+      -- trava o produto até o fim: dois lançamentos juntos do mesmo produto (em O.S. diferentes) não leem o mesmo saldo
+      select * into v_prod from public.produtos pr where pr.tipo = 'produto' and (pr.codigo::text = v_cod or lower(coalesce(pr.codigo_barras, '')) = lower(v_cod)) order by pr.ativo desc limit 1 for update;
       if v_prod.id is null then erros := array_append(erros, 'Item ' || n || ': código ' || v_cod || ' não existe no estoque.'); continue; end if;
       if v_desc = '' then v_desc := v_prod.descricao; end if;
       if v_custo is null and not v_cli then v_custo := coalesce(v_prod.custo, 0); end if;
@@ -86,6 +87,9 @@ begin
     end if;
     if length(v_desc) < 2 then erros := array_append(erros, 'Item ' || n || ': informe a descrição.'); continue; end if;
     v_custo := case when v_cli then 0 else coalesce(v_custo, 0) end;
+    -- peça trazida pelo cliente: sem preço (como no editor da O.S.; a O.S. impressa e o PDF não mostram valor dessas peças)
+    if v_cli and v_val > 0 then avisos := array_append(avisos, v_desc || ': peça do cliente, lançada sem valor.'); end if;
+    if v_cli then v_val := 0; end if;
     if v_tipo = 'peca' and not v_cli and v_custo = 0 then avisos := array_append(avisos, v_desc || ': sem custo (a margem fica superestimada até a nota chegar).'); end if;
     if v_val = 0 and not v_cli then avisos := array_append(avisos, v_desc || ': valor zero.'); end if;
     if exists (select 1 from public.os_itens i where i.ordem_id = o.id and upper(trim(i.descricao)) = upper(v_desc) and i.aprovado is distinct from false)

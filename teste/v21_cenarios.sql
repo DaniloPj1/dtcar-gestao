@@ -64,5 +64,8 @@ begin
   r := public.agente_lancar_itens_os('{"numero":1904,"itens":[{"tipo":"peca","descricao":"Filtro A","qtd":2,"valor_unit":30,"codigo":"501"},{"tipo":"peca","descricao":"Filtro B","qtd":2,"valor_unit":30,"codigo":"501"}]}', true);
   assert not coalesce((r->>'gravado')::boolean, false) and r::text like '%já contando 2%', '9 lote: ' || r::text;
   assert (select estoque_atual from public.produtos where codigo = 501) = 3, '9 estoque mexido';
-  raise notice 'OK: v21 (9 cenários)';
+  -- 10. peça do cliente: entra sem valor (não soma no total)
+  r := public.agente_lancar_itens_os('{"numero":1904,"itens":[{"tipo":"peca","descricao":"Amortecedor do cliente","qtd":1,"valor_unit":300,"peca_do_cliente":true}]}', true);
+  assert (r->>'gravado')::boolean and (select valor_unit from public.os_itens where descricao = 'Amortecedor do cliente') = 0, '10 peça do cliente: ' || r::text;
+  raise notice 'OK: v21 (10 cenários)';
 end $$;

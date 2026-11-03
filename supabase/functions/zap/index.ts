@@ -188,6 +188,23 @@ export async function enviarTexto(sock: any, jid: string, texto: string, esperar
   return (r && r.key && r.key.id) || "";
 }
 
+
+/** Guarda da vez da função: a vez vale `segundos` a partir de agora; com 10 s de folga, nada abre depois disso
+ *  e a conexão aberta é fechada sozinha antes de a vez vencer (nunca duas conexões com a mesma sessão). */
+export function guardaDaVez(segundos: number, agora: () => number = Date.now) {
+  // deno-lint-ignore no-explicit-any
+  let fim = agora() + (segundos - 10) * 1000; let t: ReturnType<typeof setTimeout> | undefined; let sock: { end: (e?: any) => unknown } | null = null;
+  const armar = () => { if (t !== undefined) clearTimeout(t); if (sock) t = setTimeout(() => { try { sock?.end(undefined); } catch (_) { /* já fechada */ } }, Math.max(0, fim - agora())); };
+  return {
+    valida: () => agora() < fim,
+    /** fecha a conexão sozinha quando o prazo acabar */
+    // deno-lint-ignore no-explicit-any
+    vigiar(s: { end: (e?: any) => unknown }) { sock = s; armar(); },
+    /** depois de renovar a vez no banco */
+    renovar(seg: number) { fim = agora() + (seg - 10) * 1000; armar(); },
+    parar() { if (t !== undefined) clearTimeout(t); sock = null; },
+  };
+}
 const ocupada = (ms: number) => ({ ok: false, ms, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." });
 
 async function situacao(adm: Db, patch: Record<string, unknown>) {
@@ -330,10 +347,12 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     }
     // pega a vez ANTES de carregar: quem usou a sessão antes já gravou tudo, e ninguém mexe nela enquanto esta conecta
     if (!(await vez.pegar(60))) return json(ocupada(ms()));
+    const guarda = guardaDaVez(60);
     try {
       const { creds, keys, salvarCreds } = await sessao.carregar();
       if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
-      const s = abrir(creds, keys, salvarCreds);
+      if (!guarda.valida()) return json(ocupada(ms())); // a leitura demorou e a vez está para vencer: não conecta
+      const s = abrir(creds, keys, salvarCreds); guarda.vigiar(s);
       const r = await proximo(s, 40000);
       const ok = r.tipo === "open";
       if (ok) await esperar(1500);
@@ -346,7 +365,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       const resultado = { ok, ms: ms(), resposta: r.tipo, detalhe: r.msg || "", em: new Date().toISOString() };
       await situacao(adm, { ultimo_teste: { acao, ...resultado }, ...(ok ? { situacao: "conectado", dono: "supabase", detalhe: "Conferido: a sessão guardada conectou." } : { situacao: "erro", detalhe: "Conferência falhou: " + (r.msg || r.tipo) }) });
       return json(resultado);
-    } finally { await vez.soltar(); }
+    } finally { guarda.parar(); await vez.soltar(); }
   }
 
   if (acao === "desconectar") {
@@ -356,10 +375,12 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       return json({ ok: true, ms: ms(), pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." });
     }
     if (!(await vez.pegar(60))) return json(ocupada(ms()));
+    const guarda = guardaDaVez(60);
     try {
       const { creds, keys } = await sessao.carregar();
       if (vinculado(creds)) {
-        const s = abrir(creds, keys);
+        if (!guarda.valida()) return json(ocupada(ms()));
+        const s = abrir(creds, keys); guarda.vigiar(s);
         const r = await proximo(s, 25000);
         if (r.tipo === "open") { try { await s.logout(); } catch (_) { /* segue apagando */ } }
         fechar(s);
@@ -369,7 +390,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       // pedido antigo ao motor não vale mais (sem o v24 a coluna não existe: ignora)
       await adm.from("whatsapp_conexao").update({ pedido: null }).eq("id", 1);
       return json({ ok: true, ms: ms() });
-    } finally { await vez.soltar(); }
+    } finally { guarda.parar(); await vez.soltar(); }
   }
 
   if (acao === "processar") {

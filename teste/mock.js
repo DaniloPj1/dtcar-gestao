@@ -37,7 +37,8 @@
     temV11: () => true, temV12: () => true,
     whatsapp: { situacao: async () => ({ ...(window.__ZAP = window.__ZAP || { situacao: "desligado", numero: "", detalhe: "", atualizado_em: now() }) }),
       chamar: async b => { (window.__ZAP_CHAMADAS = window.__ZAP_CHAMADAS || []).push(b.acao); const z = window.__ZAP;
-        if (b.acao === "testar") { z.detalhe = "Teste de conexão: o WhatsApp respondeu."; return { ok: true, ms: 2300, resposta: "qr" }; }
+        if (b.acao === "testar") { z.detalhe = "Teste de conexão: o WhatsApp respondeu."; return { ok: true, ms: 2300, resposta: "qr", cifras: { ctr: false, gcm: true, cbc: true } }; }
+        if (b.acao === "parear_qr") { z.situacao = "pareando"; z.atualizado_em = now(); z.qr_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="2" height="2"/></svg>'; return { qr: true, validade_s: 130 }; }
         if (b.acao === "parear") { z.situacao = "pareando"; z.numero = b.numero; return { codigo: "ABCD1234", validade_s: 120 }; }
         if (b.acao === "conferir") return { ok: true, ms: 3100 };
         if (b.acao === "desconectar") { z.situacao = "desligado"; z.numero = ""; return { ok: true }; }

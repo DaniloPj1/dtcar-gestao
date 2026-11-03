@@ -1,0 +1,12 @@
+-- =====================================================================
+-- DTCar Gestão — v23: WhatsApp, pareamento por QR Code.
+--
+-- O servidor do Supabase não aceita a cifra usada no pareamento por código
+-- ("Unknown cipher aes-256-ctr", 03/11/2026). O pareamento passa a ser por QR
+-- Code: a função "zap" grava o QR do momento (ele muda a cada 20–60 s) e a tela
+-- Sistema › WhatsApp mostra. O QR só serve para vincular um celular a esta
+-- conexão; ele some quando o pareamento termina.
+--
+-- Rode depois do v22. Pode rodar mais de uma vez.
+-- =====================================================================
+alter table public.whatsapp_conexao add column if not exists qr_svg text;

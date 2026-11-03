@@ -189,6 +189,7 @@ button.linha:disabled{cursor:default;opacity:1}
 .p-muted{background:var(--surface-2);color:var(--muted);border:1px solid var(--line)}
 .codigo-pareamento{font-size:34px;font-weight:800;letter-spacing:.18em;font-family:ui-monospace,Consolas,monospace;margin:6px 0}
 .zap-situacao{margin-top:10px}
+.qr-pareamento{display:block;width:260px;max-width:100%;height:auto;background:#fff;padding:10px;border-radius:10px;margin:10px 0}
 
 /* painel */
 .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}

@@ -81,6 +81,20 @@ try:
     # painel
     pg.goto(U + "#/painel"); pg.wait_for_timeout(1500)
     pg.screenshot(path=SAIDA + "/u5-painel.png")
+    # menu lateral: grupo "Sistema" recolhido, sem barra de rolagem numa tela de notebook (1366x768)
+    pg.set_viewport_size({"width": 1366, "height": 768}); pg.wait_for_timeout(400)
+    lat = ".lateral"
+    chk("menu: Sistema recolhido", pg.query_selector(lat + " .lateral-grupo-tit[aria-expanded=false]") is not None and "Backup" not in pg.inner_text(lat))
+    alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
+    chk("menu: cabe na tela sem rolar (%d/%d)" % tuple(alt), alt[0] <= alt[1])
+    pg.screenshot(path=SAIDA + "/u5b-menu.png")
+    pg.click(lat + " .lateral-grupo-tit"); pg.wait_for_timeout(200)
+    chk("menu: abre ao clicar e lembra", "Backup" in pg.inner_text(lat) and pg.evaluate("localStorage.getItem('dtcar-menu-sistema')") == "true")
+    pg.click(lat + " .lateral-grupo-tit"); pg.goto(U + "#/backup"); pg.wait_for_timeout(800)
+    chk("menu: tela do Sistema aberta mostra o grupo", "Backup" in pg.inner_text(lat))
+    pg.set_viewport_size({"width": 1600, "height": 950}); pg.wait_for_timeout(300)
+    alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
+    chk("menu: cabe sem rolar em 1600x950 (%d/%d)" % tuple(alt), alt[0] <= alt[1])
     # importar: modo espelho visível
     pg.goto(U + "#/importar"); pg.wait_for_timeout(1000)
     chk("importar: espelho ligado", "Modo espelho ligado" in pg.inner_text("main"))

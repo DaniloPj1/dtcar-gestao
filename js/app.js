@@ -2,7 +2,7 @@ import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js
 import { api, definirSemRede, estaSemRede } from "./api.js";
 import { replicar, replicaDisponivel } from "./replica.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
-import { fmtDataHora, lsGet } from "./util.js";
+import { fmtDataHora, lsGet, lsSet } from "./util.js";
 import { fila } from "./fila.js";
 import { ehAlteracao, replicarComFila, definirGeracaoEspelho } from "./alteracoes.js";
 import { sessaoDoPC, sairDoPC, temAcessoGuardado } from "./acesso.js";
@@ -60,7 +60,9 @@ function App() {
   const [modoSenha, setModoSenha] = useState(/type=recovery/.test(location.hash));
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], fornecedores: [], ordens: [], perfis: [], receber: [], carregado: false });
   const [novoMenu, setNovoMenu] = useState(false);
-  const [transAberta, setTransAberta] = useState(false); // faixa do período de transição: no celular fica recolhida em uma linha
+  const [transAberta, setTransAberta] = useState(false);
+  // grupo "Sistema" do menu lateral: recolhido por padrão (o menu cabe na tela sem barra de rolagem); a escolha fica guardada no aparelho
+  const [sistemaAberto, setSistemaAberto] = useState(() => lsGet("dtcar-menu-sistema") === true); // faixa do período de transição: no celular fica recolhida em uma linha
   const [cfg, setCfg] = useState(cfgCompleta({}));
   const [toast, setToast] = useState(null);
   const [conf, setConf] = useState(null);
@@ -396,10 +398,15 @@ function App() {
   return html`<${Ctx.Provider} value=${ctx}>
     <aside class="lateral" aria-label="Menu">
       <button type="button" class="lateral-marca" onClick=${() => ir("/painel")} aria-label="Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
-      ${LATERAL.map(([grupo, itens]) => { const vis = itens.filter(it => !it[3] || pode(perfil, it[3])); return vis.length ? html`<nav key=${grupo} class="lateral-grupo"><span>${grupo}</span>
-        ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
+      ${LATERAL.map(([grupo, itens]) => { const vis = itens.filter(it => !it[3] || pode(perfil, it[3])); if (!vis.length) return null;
+        const recolhe = grupo === "Sistema", noGrupo = vis.some(([r]) => rota === r || "/" + base === r.split("?")[0]), aberto = !recolhe || sistemaAberto || noGrupo;
+        return html`<nav key=${grupo} class="lateral-grupo">${recolhe
+          ? html`<button type="button" class="lateral-grupo-tit" aria-expanded=${aberto ? "true" : "false"} disabled=${noGrupo}
+              onClick=${() => { const v = !sistemaAberto; setSistemaAberto(v); lsSet("dtcar-menu-sistema", v); }}>${grupo}<i aria-hidden="true">${aberto ? "▾" : "▸"}</i></button>`
+          : html`<span>${grupo}</span>`}
+        ${!aberto ? null : vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo");
           const nb = r === "/receber" ? vencidasRec : 0;
-          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class="lat-badge" title=${nb + " parcela(s) vencida(s)"}>${nb}</em>` : null}</button>`; })}</nav>` : null; })}
+          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class="lat-badge" title=${nb + " parcela(s) vencida(s)"}>${nb}</em>` : null}</button>`; })}</nav>`; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>

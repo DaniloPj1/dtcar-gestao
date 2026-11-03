@@ -154,8 +154,10 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     if (numero.length < 12 || numero.length > 13 || !numero.startsWith("55")) return json({ erro: "Informe o número com 55 + DDD + número (ex.: 5527999990000)." }, 400);
     const atual = await sessao.carregar();
     if (atual.creds.registered) return json({ erro: "Já existe um aparelho vinculado. Desconecte antes de parear de novo." }, 409);
-    // uma tentativa por vez: a reserva vale até o fim da espera desta execução
-    const reserva = await sessao.reservar(150000);
+    // uma tentativa por vez. A execução da função dura no máximo 150 s (plano grátis), contando a preparação, a espera e o
+    // fim: a reserva cobre a execução inteira (160 s a partir de agora) e a espera termina aos 140 s, antes do limite
+    const t0 = Date.now();
+    const reserva = await sessao.reservar(160000);
     if (!reserva) return json({ erro: "Já há um pareamento em andamento. Use o código pedido antes ou espere uns 2 minutos e peça outro." }, 409);
     // só vale enquanto esta tentativa for a dona da reserva (uma tentativa antiga não mexe na situação de uma nova)
     const minha = async () => (await sessao.reservaAtual()) === reserva;
@@ -172,7 +174,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     await situacao(adm, { situacao: "pareando", numero, detalhe: "Código pedido: digite no celular em até 2 minutos." });
     // o pareamento termina no celular: espera em segundo plano (até ~2 min) e guarda a sessão
     const fim = (async () => {
-      const limite = Date.now() + 125000;
+      const limite = t0 + 140000;
       let ev = await proximo(s, Math.max(1000, limite - Date.now()), false);
       // depois do pareamento o WhatsApp pede para reconectar (restartRequired): reconecta com a sessão nova
       if (ev.tipo === "close" && ev.codigo === DisconnectReason.restartRequired) {
@@ -189,7 +191,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       await sessao.liberar(reserva);
     })().catch(async (e) => { fechar(s); await situacaoSeMinha({ situacao: "erro", detalhe: "Pareamento falhou: " + (e as Error).message }); await sessao.liberar(reserva); });
     if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(fim);
-    return json({ codigo, ms: ms(), validade_s: 120 });
+    return json({ codigo, ms: ms(), validade_s: Math.max(30, Math.round((t0 + 140000 - Date.now()) / 1000)) });
   }
 
   if (acao === "conferir") {

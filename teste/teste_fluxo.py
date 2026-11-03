@@ -102,6 +102,10 @@ try:
     pg.fill("#zap-numero", "5527999990000"); pg.click("text=Pedir código de pareamento"); pg.wait_for_timeout(400)
     chk("whatsapp: mostra o código de pareamento", "ABCD-1234" in pg.inner_text("main") and pg.evaluate("window.__ZAP.numero") == "5527999990000")
     pg.screenshot(path=SAIDA + "/u5c-whatsapp.png")
+    # pareamento parado há mais de 3 min (a função acabou): a tela não fica presa em "Pareando…"
+    pg.evaluate("window.__ZAP.situacao = 'pareando'; window.__ZAP.atualizado_em = new Date(Date.now() - 600000).toISOString()")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)
+    chk("whatsapp: pareamento antigo parado não prende a tela", "não terminou" in pg.inner_text("main") and pg.query_selector("text=Pedir código de pareamento") is not None)
     # sessão com problema: Conferir e Desconectar continuam disponíveis (e o pareamento também)
     pg.evaluate("window.__ZAP.situacao = 'erro'"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)
     chk("whatsapp: com erro mostra Conferir e Desconectar", pg.query_selector("text=Conferir conexão") is not None and pg.query_selector("button:has-text('Desconectar')") is not None and pg.query_selector("text=Pedir código de pareamento") is not None)

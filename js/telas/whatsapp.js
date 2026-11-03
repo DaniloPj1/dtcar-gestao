@@ -31,6 +31,8 @@ export function WhatsApp() {
     if (!await confirmar({ titulo: "Desconectar WhatsApp", texto: "O celular da oficina deixa de estar vinculado ao sistema e a sessão guardada é apagada. Para voltar, será preciso parear de novo.", botao: "Desconectar", perigo: true })) return;
     if (await fazer("desconectar")) avisar("WhatsApp desconectado.");
   };
+  // "pareando" parado há mais de 3 min: a tentativa acabou sem avisar (a função tem 150 s de vida) — trata como problema
+  if (st && st.situacao === "pareando" && Date.now() - new Date(st.atualizado_em).getTime() > 180000) st.situacao = "erro", st.detalhe = "O pareamento anterior não terminou. Peça um código novo.";
   const [rot, cor] = SIT[(st && st.situacao) || "desligado"] || SIT.desligado;
   const fmtCod = c => String(c || "").replace(/^(.{4})(.{4})$/, "$1-$2");
   return html`<div class="pagina">

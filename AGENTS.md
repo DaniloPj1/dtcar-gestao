@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -65,7 +65,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `pedido = 'desconectar'`, que o motor executa. Nunca duas conexões com a mesma sessão. O motor se atualiza sozinho (`iniciar.sh` faz
   `git pull` da `main` a cada reinício, de 12 em 12 h): tudo o que entra na `main` em `motor-zap/` vai para o celular.
   **Etapa 3 (v25):** `whatsapp_fila` (o Claude põe pelo conector com `whatsapp_enfileirar`, só administrador, só telefone de cliente
-  cadastrado, sem link encurtado, sem repetir em 10 min, respeita PARAR em `whatsapp_optout`), `whatsapp_mensagens` (conversas individuais;
+  cadastrado — **v26: qualquer número com DDD** (decisão do Danilo, 03/11: o número é só da oficina e ele é o filtro); sem link encurtado, sem repetir em 10 min, respeita PARAR em `whatsapp_optout`), `whatsapp_mensagens` (conversas individuais;
   mídia só o tipo) e regras em `whatsapp_conexao.regras` (horário comercial de Brasília, intervalo aleatório 25–70 s via `proximo_envio`,
   limites por hora/dia). Quem tem a vez pega a próxima com `whatsapp_pegar_proxima` (motor: `whatsapp_motor_proxima`) e grava com
   `whatsapp_resultado`; "enviando" esquecida vira erro (nunca reenvia sozinha). Sem o motor, a ação `processar` da zap faz isso em segundo plano

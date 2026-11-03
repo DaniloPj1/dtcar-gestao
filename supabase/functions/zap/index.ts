@@ -84,11 +84,12 @@ function abrir(creds: any, keys: any, aoMudarCreds?: () => Promise<void>): Sock 
 }
 const fechar = (s: Sock) => { try { s.end(undefined); } catch (_) { /* já fechado */ } };
 /** Espera o primeiro evento de conexão que interessa: "qr" (pronto para parear), "open" ou "close". */
-function proximo(sock: Sock, ms: number): Promise<{ tipo: "qr" | "open" | "close" | "tempo"; codigo?: number; msg?: string }> {
+// aceitarQr = false: ignora os QR novos que a biblioteca emite a cada 20–60 s (durante o pareamento por código só interessa abrir ou fechar)
+function proximo(sock: Sock, ms: number, aceitarQr = true): Promise<{ tipo: "qr" | "open" | "close" | "tempo"; codigo?: number; msg?: string }> {
   return new Promise((res) => {
     const t = setTimeout(() => res({ tipo: "tempo" }), ms);
     sock.ev.on("connection.update", (u: any) => {
-      if (u.qr) { clearTimeout(t); res({ tipo: "qr" }); }
+      if (u.qr) { if (aceitarQr) { clearTimeout(t); res({ tipo: "qr" }); } }
       else if (u.connection === "open") { clearTimeout(t); res({ tipo: "open" }); }
       else if (u.connection === "close") {
         clearTimeout(t);
@@ -134,11 +135,11 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     // o pareamento termina no celular: espera em segundo plano (até ~2 min) e guarda a sessão
     const fim = (async () => {
       const limite = Date.now() + 125000;
-      let ev = await proximo(s, Math.max(1000, limite - Date.now()));
+      let ev = await proximo(s, Math.max(1000, limite - Date.now()), false);
       // depois do pareamento o WhatsApp pede para reconectar (restartRequired): reconecta com a sessão nova
       if (ev.tipo === "close" && ev.codigo === DisconnectReason.restartRequired) {
         await salvarCreds(); s = abrir(creds, keys, salvarCreds);
-        ev = await proximo(s, Math.max(1000, limite - Date.now()));
+        ev = await proximo(s, Math.max(1000, limite - Date.now()), false);
       }
       if (ev.tipo === "open") {
         await salvarCreds(); await esperar(3000);

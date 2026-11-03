@@ -11,8 +11,8 @@ while true; do
   [[ "$CHAVE" =~ ^dtm_[0-9a-f]{64}$ ]] && break
   echo "Chave com formato errado. Copie de novo pela tela do sistema."
 done
-read -r -p "Nome deste aparelho [Galaxy A15 da oficina]: " NOME
-NOME="${NOME:-Galaxy A15 da oficina}"
+read -r -p "Nome deste aparelho [Android da oficina]: " NOME
+NOME="${NOME:-Android da oficina}"
 umask 077
 node -e 'const [c, n, a] = process.argv.slice(1); require("fs").writeFileSync(a, JSON.stringify({ chave_motor: c, aparelho: n }, null, 2));' "$CHAVE" "$NOME" "$HOME/.dtcar-motor.json"
 chmod 600 "$HOME/.dtcar-motor.json"

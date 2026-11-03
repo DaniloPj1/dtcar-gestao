@@ -35,7 +35,9 @@ export function WhatsApp() {
   const desconectar = async () => {
     if (!await confirmar({ titulo: "Desconectar WhatsApp", texto: "O celular da oficina deixa de estar vinculado ao sistema e a sessão guardada é apagada. Para voltar, será preciso parear de novo.", botao: "Desconectar", perigo: true })) return;
     const r = await fazer("desconectar");
-    if (r) avisar(r.pedido ? r.detalhe : "WhatsApp desconectado.");
+    if (!r) return;
+    if (r.ok === false) { setErro(r.detalhe || "Não foi possível desconectar agora. Tente de novo em 1 minuto."); return; }
+    avisar(r.pedido ? r.detalhe : "WhatsApp desconectado.");
   };
   const copiar = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); avisar(msg); } catch (e) { avisar("Não foi possível copiar: selecione o texto e copie.", true); } };
   const gerarChave = async () => {

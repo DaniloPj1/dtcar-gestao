@@ -43,6 +43,7 @@
         if (b.acao === "parear_qr") { z.situacao = "pareando"; z.atualizado_em = now(); z.qr_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="2" height="2"/></svg>'; return { qr: true, validade_s: 130 }; }
         if (b.acao === "parear") { z.situacao = "pareando"; z.numero = b.numero; return { codigo: "ABCD1234", validade_s: 120 }; }
         if (b.acao === "conferir") return { ok: true, ms: 3100 };
+        if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
         throw new Error("Ação desconhecida."); } },
     receber: { abertas: async () => { net(); return db.receber.filter(p => p.status === "aberta"); }, listar: async ({ status } = {}) => db.receber.filter(p => !status || p.status === status),

@@ -35,6 +35,13 @@
     sincronizarAbertura: async op => { net(); window.__SEQ = (window.__SEQ || 1898) + 1; const o = { ...op.ordem, numero: window.__SEQ }; db.ordens.unshift(o); if (op.cliente) db.clientes.push(op.cliente); if (op.veiculo) db.veiculos.push(op.veiculo); window.__SYNC = (window.__SYNC || []).concat([op.provisorio + "->" + o.numero]); return { id: o.id, numero: o.numero, nova: true }; },
     evento: async (oid, tipo, texto) => { (window.__EV = window.__EV || []).push(tipo + ": " + texto); },
     temV11: () => true, temV12: () => true,
+    whatsapp: { situacao: async () => ({ ...(window.__ZAP = window.__ZAP || { situacao: "desligado", numero: "", detalhe: "", atualizado_em: now() }) }),
+      chamar: async b => { (window.__ZAP_CHAMADAS = window.__ZAP_CHAMADAS || []).push(b.acao); const z = window.__ZAP;
+        if (b.acao === "testar") { z.detalhe = "Teste de conexão: o WhatsApp respondeu."; return { ok: true, ms: 2300, resposta: "qr" }; }
+        if (b.acao === "parear") { z.situacao = "pareando"; z.numero = b.numero; return { codigo: "ABCD1234", validade_s: 120 }; }
+        if (b.acao === "conferir") return { ok: true, ms: 3100 };
+        if (b.acao === "desconectar") { z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
+        throw new Error("Ação desconhecida."); } },
     receber: { abertas: async () => { net(); return db.receber.filter(p => p.status === "aberta"); }, listar: async ({ status } = {}) => db.receber.filter(p => !status || p.status === status),
       daOrdem: async oid => db.receber.filter(p => p.ordem_id === oid), lancar: async ls => { const xs = ls.map(l => ({ id: uid(), status: "aberta", criado_em: now(), ...l })); db.receber.push(...xs); return xs; },
       atualizar: async (id, patch) => { const p = db.receber.find(x => x.id === id); Object.assign(p, patch); return p; } },

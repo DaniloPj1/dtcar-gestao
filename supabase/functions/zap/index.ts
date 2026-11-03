@@ -399,11 +399,11 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     if ((await vez.motor()).ativo) return json({ ok: true, motor: true, detalhe: "O motor do Android está com a conexão: ele envia e recebe sozinho, na hora." });
     // pega a vez ANTES de carregar a sessão (quem usou antes já gravou; ninguém mexe nela enquanto esta trabalha)
     if (!(await vez.pegar(150))) return json(ocupada(ms()));
+    const guarda = guardaDaVez(150); // o prazo conta desde a reserva
     let sessaoAtual;
     try { sessaoAtual = await sessao.carregar(); } catch (e) { await vez.soltar(); throw e; }
     const { creds, keys, salvarCreds } = sessaoAtual;
     if (!vinculado(creds)) { await vez.soltar(); return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." }); }
-    const guarda = guardaDaVez(150);
     if (!guarda.valida()) { await vez.soltar(); return json(ocupada(ms())); }
     const t0 = Date.now();
     const trabalho = (async () => {
@@ -427,6 +427,8 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       await esperar(8000); // o WhatsApp entrega o que chegou enquanto estava desconectado
       while (Date.now() - t0 < 115000 && guarda.valida()) {
         await guardar();
+        // recebidas não gravadas podem ter um PARAR: sem gravar, não envia nada
+        if (aGuardar.length) { motivo = "mensagens recebidas não gravadas: parou"; break; }
         const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
         if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
         const prox = p as { mensagem?: { id: number; telefone: string; texto: string }; motivo?: string; proximo_envio?: string };

@@ -218,6 +218,8 @@ function sessaoVinculada(b) {
   b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_mensagens") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
   await s.emitir("messages.upsert", { type: "notify", messages: [{ key: { id: "R2", remoteJid: "5527999112233@s.whatsapp.net" }, message: { conversation: "Outra" } }] }); await espera();
   confere("recebidas: banco fora, ficam aqui", m.st.aGuardar.length === 1);
+  b.fila.push({ id: 6, telefone: "5527999112233", texto: "w", status: "pendente" }); const env = s.enviadas.length; await m.pulso();
+  confere("recebidas não gravadas (pode ter PARAR): não envia", s.enviadas.length === env && b.fila.find((x) => x.id === 6).status === "pendente");
   b.buscar = original; await m.pulso(); await espera();
   confere("recebidas: vão no próximo sinal", m.st.aGuardar.length === 0 && b.msgs.some((x) => x.msg_id === "R2"));
   await m.encerrar();

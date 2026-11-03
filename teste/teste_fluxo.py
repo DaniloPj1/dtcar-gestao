@@ -92,6 +92,8 @@ try:
     chk("menu: abre ao clicar e lembra", "Backup" in pg.inner_text(lat) and pg.evaluate("localStorage.getItem('dtcar-menu-sistema')") == "true")
     pg.click(lat + " .lateral-grupo-tit"); pg.goto(U + "#/backup"); pg.wait_for_timeout(800)
     chk("menu: tela do Sistema aberta mostra o grupo", "Backup" in pg.inner_text(lat))
+    pg.goto(U + "#/mais"); pg.wait_for_timeout(500)
+    chk("whatsapp: aparece na tela Mais (celular)", "WhatsApp da oficina" in pg.inner_text("main"))
     # Sistema › WhatsApp (etapa 1): testar conexão e pedir código de pareamento
     pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(800)
     chk("whatsapp: item no menu Sistema", "WhatsApp" in pg.inner_text(lat))

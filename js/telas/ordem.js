@@ -442,6 +442,8 @@ export function Ordem({ id, params = {} }) {
     await entregarArquivo(blob, `${nomes[qual]}_${String(o.numero).padStart(5, "0")}_${o.veiculo.placa}.pdf`);
   });
   const imprimir = async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo: "imprimir" }); };
+  // receber, entregar e recibo leem a O.S. do banco: item mexido e ainda não salvo é salvo antes (senão cobraria o total antigo)
+  const abrirSalvo = (tipo, extra = {}) => async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo, ...extra }); };
   const whats = qual => {
     const fn = MSG[qual]; if (!fn) return;
     const lista = qual === "adicionais" ? pendentes : itens.filter(i => i.aprovado !== false);
@@ -457,9 +459,9 @@ export function Ordem({ id, params = {} }) {
   if (st === "diagnostico" && gestor) acoes = [pode(perfil, "aprovar") ? B("Aprovar orçamento", aprovarOrcamento, true) : null, B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, !pode(perfil, "aprovar"))];
   if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar, false, false, "btn-recusa")];
   if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Serviço concluído", () => marcarPronto(false), true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
-  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", () => setModal({ tipo: "encerrar" }), true), saldo > 0 ? B("Entregar sem receber", () => setModal({ tipo: "entrega" })) : null, B("Avisar cliente", () => whats("pronto"))];
-  if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", () => setModal({ tipo: "entrega" }), true)];
-  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", () => setModal({ tipo: "encerrar" }), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
+  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", abrirSalvo("encerrar"), true), saldo > 0 ? B("Entregar sem receber", abrirSalvo("entrega")) : null, B("Avisar cliente", () => whats("pronto"))];
+  if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", abrirSalvo("entrega"), true)];
+  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", abrirSalvo("encerrar"), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
   acoes = acoes.filter(Boolean);
   const passo = FLUXO.indexOf(etapa);
 
@@ -545,7 +547,7 @@ export function Ordem({ id, params = {} }) {
         <span class="meio"><strong>${numRecibo(r.numero)}${r.cancelado ? " · cancelado" : ""}</strong><span>${fmtData(r.data)} · ${r.forma}${r.obs ? " · " + r.obs : ""}</span></span><b>${reais(r.valor)}</b></button>`)}</div>` : null}
       <${ParcelasOS} parcelas=${parcs.filter(p => p.status !== "cancelada")} onReceber=${p => setModal({ tipo: "parcela", p })} />
       ${st === "entregue" && saldoSemPrazo > 0.009 && pode(perfil, "entregar") && (!api.temV12 || api.temV12()) ? html`<button type="button" class="btn" onClick=${() => setModal({ tipo: "prazo" })}>Combinar prazo para ${reais(saldoSemPrazo)}</button>` : null}
-      ${pode(perfil, "entregar") && tAtual.total > 0 && st !== "cancelado" ? html`<button type="button" class="btn" disabled=${saldo <= 0} onClick=${() => setModal({ tipo: "recibo" })}>${saldo > 0 ? "Emitir recibo de pagamento" + (st !== "entregue" ? " (sinal / adiantamento)" : "") : "Pagamento quitado"}</button>` : null}
+      ${pode(perfil, "entregar") && tAtual.total > 0 && st !== "cancelado" ? html`<button type="button" class="btn" disabled=${saldo <= 0} onClick=${abrirSalvo("recibo")}>${saldo > 0 ? "Emitir recibo de pagamento" + (st !== "entregue" ? " (sinal / adiantamento)" : "") : "Pagamento quitado"}</button>` : null}
     </section>` : null}`;
 
   /* ===== aba Observações ===== */

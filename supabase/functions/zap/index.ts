@@ -403,9 +403,11 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     try { sessaoAtual = await sessao.carregar(); } catch (e) { await vez.soltar(); throw e; }
     const { creds, keys, salvarCreds } = sessaoAtual;
     if (!vinculado(creds)) { await vez.soltar(); return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." }); }
+    const guarda = guardaDaVez(150);
+    if (!guarda.valida()) { await vez.soltar(); return json(ocupada(ms())); }
     const t0 = Date.now();
     const trabalho = (async () => {
-      const s = abrir(creds, keys, salvarCreds);
+      const s = abrir(creds, keys, salvarCreds); guarda.vigiar(s);
       const aGuardar: any[] = []; let guardadas = 0, enviadas = 0, motivo = "";
       s.ev.on("messages.upsert", ({ messages }: any) => { for (const x of messages || []) { const g = paraGuardar(x); if (g) aGuardar.push(g); } });
       const guardar = async () => {
@@ -423,7 +425,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
         return;
       }
       await esperar(8000); // o WhatsApp entrega o que chegou enquanto estava desconectado
-      while (Date.now() - t0 < 115000) {
+      while (Date.now() - t0 < 115000 && guarda.valida()) {
         await guardar();
         const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
         if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
@@ -441,11 +443,18 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
           else res = { p_ok: true, p_msg_id: await enviarTexto(s, jid, m.texto), p_jid: jid };
         } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + (e as Error).message }; }
         if (res.p_ok) enviadas++;
-        const { error: e2 } = await adm.rpc("whatsapp_resultado", { p_dono: "supabase", p_id: vez.id, p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id ?? null, p_jid: res.p_jid ?? null, p_erro: res.p_erro ?? null });
-        if (e2) console.error("resultado do envio", e2.message);
-        await vez.pegar(150); // renova a vez enquanto trabalha
+        // o resultado marca a mensagem e o intervalo/limites: sem gravar, não envia mais nada (a mensagem nunca é reenviada:
+        // fica "enviando" e vira "confira no WhatsApp" depois de 5 min)
+        let gravou = false;
+        for (let i = 0; i < 3 && !gravou; i++) {
+          if (i) await esperar(2000);
+          const { error: e2 } = await adm.rpc("whatsapp_resultado", { p_dono: "supabase", p_id: vez.id, p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id ?? null, p_jid: res.p_jid ?? null, p_erro: res.p_erro ?? null });
+          if (e2) console.error("resultado do envio", e2.message); else gravou = true;
+        }
+        if (!gravou) { motivo = "resultado do envio não gravado: parou"; break; }
+        if (await vez.pegar(150)) guarda.renovar(150); else break; // renova a vez enquanto trabalha
       }
-      await esperar(1500); await guardar(); fechar(s);
+      await esperar(1500); await guardar(); guarda.parar(); fechar(s);
       await situacao(adm, { ultimo_teste: { acao, ok: true, enviadas, guardadas, motivo, ms: Date.now() - t0, em: new Date().toISOString() } });
     })().catch((e) => console.error("processar", e)).finally(() => vez.soltar());
     if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(trabalho); else await trabalho;

@@ -231,6 +231,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   /** Pega a próxima mensagem liberada pelas regras do banco e envia (uma por sinal). */
   async function enviarDaFila() {
     const s = st.sock; if (!s || !st.aberto) return;
+    // resultado anterior ainda não gravado: ele é que marca o intervalo e os limites — não envia outra antes
+    if (st.resultados.length) return;
     let r;
     try { r = await rpc("whatsapp_motor_proxima", base()); }
     catch (e) { if (!/function|does not exist|PGRST202/i.test(e.message)) log("fila:", e.message); return; } // sem o v25: segue sem fila

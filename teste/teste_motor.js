@@ -206,7 +206,9 @@ function sessaoVinculada(b) {
   s.falhaEnvio = false; b.fila.push({ id: 4, telefone: "5527999112233", texto: "y", status: "pendente" });
   const original = b.buscar; b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_resultado") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
   await m.pulso(); confere("fila: resultado não gravado fica guardado", m.st.resultados.length === 1);
-  b.buscar = original; await m.pulso(); confere("fila: resultado guardado vai no próximo sinal", m.st.resultados.length === 0 && b.resultados.at(-1).p_fila_id === 4);
+  b.fila.push({ id: 5, telefone: "5527999112233", texto: "z", status: "pendente" }); const antes = s.enviadas.length; await m.pulso();
+  confere("fila: com resultado pendente não envia outra", s.enviadas.length === antes && b.fila.find((x) => x.id === 5).status === "pendente");
+  b.buscar = original; await m.pulso(); confere("fila: resultado guardado vai no próximo sinal (e a seguinte sai)", m.st.resultados.length === 0 && b.resultados.some((x) => x.p_fila_id === 4) && b.fila.find((x) => x.id === 5).status === "enviada");
   // recebidas: guarda as individuais, ignora grupo
   await s.emitir("messages.upsert", { type: "notify", messages: [
     { key: { id: "R1", remoteJid: "5527999112233@s.whatsapp.net" }, pushName: "Cliente", messageTimestamp: 1793736000, message: { conversation: "Obrigado!" } },

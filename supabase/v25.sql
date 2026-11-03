@@ -330,15 +330,16 @@ end $$;
 -- mensagens de um número (mais novas por último); p_marcar_lidas marca as recebidas como lidas
 create or replace function public.whatsapp_mensagens_de(p_telefone text, p_limite int default 30, p_marcar_lidas boolean default true) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare v_chave text := public.whatsapp_chave_tel(p_telefone); v jsonb;
+declare v_chave text := public.whatsapp_chave_tel(p_telefone); v jsonb; v_ids bigint[];
 begin
   if not public.e_admin() then raise exception 'Só o administrador vê o WhatsApp.'; end if;
   if length(regexp_replace(coalesce(p_telefone, ''), '\D', '', 'g')) < 8 then raise exception 'Informe o telefone com DDD.'; end if;
   select coalesce(jsonb_agg(jsonb_build_object('em', em, 'de', case when de_mim then 'oficina' else coalesce(nullif(nome, ''), 'cliente') end,
-                                               'texto', texto, 'tipo', tipo) order by em), '[]'::jsonb)
-    into v from (select * from public.whatsapp_mensagens where public.whatsapp_chave_tel(telefone) = v_chave
+                                               'texto', texto, 'tipo', tipo) order by em), '[]'::jsonb), array_agg(id)
+    into v, v_ids from (select * from public.whatsapp_mensagens where public.whatsapp_chave_tel(telefone) = v_chave
                   order by em desc limit least(greatest(coalesce(p_limite, 30), 1), 200)) t;
-  if p_marcar_lidas then update public.whatsapp_mensagens set lida = true where public.whatsapp_chave_tel(telefone) = v_chave and not lida; end if;
+  -- marca como lidas só as que foram devolvidas (as mais antigas além do limite continuam não lidas)
+  if p_marcar_lidas then update public.whatsapp_mensagens set lida = true where id = any(v_ids) and not lida; end if;
   return jsonb_build_object('telefone', p_telefone, 'mensagens', v,
     'na_fila', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'status', status, 'texto', left(texto, 120), 'erro', erro, 'criado_em', criado_em) order by id), '[]'::jsonb)
                   from public.whatsapp_fila where public.whatsapp_chave_tel(telefone) = v_chave and status in ('pendente', 'enviando', 'erro') and criado_em > now() - interval '7 days'),

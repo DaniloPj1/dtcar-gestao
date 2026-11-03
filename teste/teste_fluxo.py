@@ -65,6 +65,16 @@ try:
     chk("parcial: parcela paga 500 + restante aberto", len(p1) == 2 and any(r["status"] == "paga" and r["valor"] == 500 for r in p1) and any(r["status"] == "aberta" for r in p1))
     chk("recibo da parcela", pg.evaluate("window.__DB.recibos.some(r => r.ordem_id === 'o2' && r.valor === 500)"))
     # O.S.: parcelas + trilha 4 etapas
+    # regra do Danilo (03/11): O.S. aguardando pagamento (o3, no pátio) — itens editáveis; o que entra já vem aprovado e cobrado
+    pg.goto(U + "#/os/o3"); pg.wait_for_timeout(1500)
+    pg.click("button:has-text('Produtos e serviços')"); pg.wait_for_timeout(300)
+    chk("O.S. aguardando pagamento: item aprovado editável e + Incluir", pg.query_selector(".item-os button.meio:not([disabled])") is not None and pg.query_selector(".grupo-itens button:has-text('+ Incluir')") is not None)
+    pg.click(".grupo-itens:has-text('Serviços / mão de obra') button:has-text('+ Incluir')"); pg.wait_for_timeout(400)
+    pg.fill("#cat-busca", "LAVAGEM EXTRA"); pg.click("[role=dialog] button:has-text('Cadastrar só nesta O.S.')"); pg.wait_for_timeout(300)
+    pg.fill("#it-val", "50,00"); pg.click("[role=dialog] button.btn-pri"); pg.wait_for_timeout(300)
+    pg.click(".rodape-acoes button.btn-pri"); pg.wait_for_timeout(1200)
+    novo = pg.evaluate("window.__DB.os_itens.find(i => i.ordem_id === 'o3' && i.descricao === 'LAVAGEM EXTRA')")
+    chk("O.S. aguardando pagamento: item novo já aprovado, executado e somado (300 + 50)", bool(novo) and novo["aprovado"] is True and novo["executado"] is True and ordem("o3")["total"] == 350)
     pg.goto(U + "#/os/o2"); pg.wait_for_timeout(1500)
     t = pg.inner_text("main")
     chk("O.S. trilha 4 etapas", pg.evaluate("[...document.querySelectorAll('.trilha li')].map(l => l.textContent).join('|')") == "Orçamento|Aprovado · em execução|Aguardando pagamento|Fechada")

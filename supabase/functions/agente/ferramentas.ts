@@ -2,7 +2,7 @@
 // Cada ferramenta chama uma função do banco (supabase/v20.sql) com o cliente do Supabase
 // já autenticado como o usuário que autorizou o conector: as regras de acesso valem e as
 // funções exigem administrador. Nada aqui apaga, paga ou mexe em conta paga.
-// Gravação: abrir_os (v20), lancar_itens_os (v21) e whatsapp_enviar (v25: põe na fila do WhatsApp da oficina).
+// Gravação: abrir_os (v20), lancar_itens_os (v21/v27) e whatsapp_enviar (v25: põe na fila do WhatsApp da oficina).
 import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
 import { z } from "npm:zod@4.3.6";
 
@@ -147,10 +147,10 @@ export function criarServidor(db: Banco): McpServer {
 
   s.registerTool("lancar_itens_os", {
     title: "Lançar serviços e peças na O.S.",
-    description: "Inclui serviços, peças ou serviços de terceiros numa O.S. em orçamento ou em execução (não altera nem apaga itens existentes). " +
+    description: "Inclui serviços, peças ou serviços de terceiros numa O.S. aberta: orçamento, execução ou aguardando pagamento (não altera nem apaga itens existentes). " +
       "Com confirmar=false só confere e devolve a prévia com total, custo e margem. Ordem direta e completa do Danilo: chame com confirmar=true. " +
       "Peça com código do estoque (veja consultar_estoque) dá baixa no estoque da oficina; sem código é item genérico e não mexe no estoque. " +
-      "Nunca invente preço ou custo: use só os valores que o Danilo passou. Em O.S. já aprovada os itens entram como adicionais, aguardando o cliente.",
+      "Nunca invente preço ou custo: use só os valores que o Danilo passou. Em O.S. já aprovada (execução ou aguardando pagamento) os itens entram APROVADOS e somam no total (regra do Danilo: o que ele manda acrescentar já está aprovado e é cobrado).",
     inputSchema: z.object({
       numero: z.number().int().positive().describe("Número da O.S."),
       itens: z.array(z.object({

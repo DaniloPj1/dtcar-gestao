@@ -18,12 +18,17 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
   Os status gravados no banco continuam os mesmos (`diagnostico`, `aguardando`, `execucao`, `pronto`, `entregue`, `recusado`, `cancelado`).
   A O.S. só fecha quando o pagamento é quitado (gatilho no banco: `recebido` ≥ `total` com status `entregue`).
+- **Itens da O.S. (regra do Danilo, 03/11/2026):** enquanto a O.S. não estiver Fechada (orçamento, execução ou aguardando pagamento —
+  no pátio ou entregue sem quitar), administrador/consultor editam e excluem qualquer serviço ou produto (`editaItens` em `js/telas/ordem.js`).
+  Item incluído com a O.S. já aprovada (execução, pronto, entregue) **entra aprovado e cobrado** (no pátio/entregue, já executado) —
+  nada fica "aguardando aprovação". Vale também para o agente (`agente_lancar_itens_os`, v27). Mexeu no total depois de receber:
+  a tela avisa para conferir recibos e parcelas (não mudam sozinhos).
 - O.S. do sistema antigo (`checkin.legado`) entregue conta como paga, **exceto** se `checkin.legado.a_receber = true` (v17, virada de 02/11/2026):
   essas seguem a regra normal (fecham quando os recibos quitam o total) e aparecem em "Todas em aberto".
 - **Saldo por conta (v18):** as contas da empresa (Sicredi, PicPay PJ, Espécie…) e o saldo informado de cada uma ficam em `cfg.contasFinanceiras`

@@ -13,7 +13,7 @@ const CHAVE = "dtm_" + "a".repeat(64);
 // ---------- banco simulado com as mesmas regras do v24 ----------
 function banco() {
   const b = { sessao: new Map(), con: { situacao: "conectado", numero: "", dono: "", dono_id: null, dono_ate: 0, pedido: null, detalhe: "" },
-    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6 };
+    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0 };
   const erro = (msg, code) => ({ ok: false, status: 400, text: async () => JSON.stringify({ message: msg, code }) });
   const resp = (v) => ({ ok: true, status: 200, text: async () => (v === undefined ? "" : JSON.stringify(v)) });
   b.buscar = async (url, op) => {
@@ -27,14 +27,15 @@ function banco() {
       const c = b.sessao.has("creds") ? JSON.parse(b.sessao.get("creds")) : null;
       const vinculado = !!(c && ((c.me && c.me.id) || c.registered));
       if (!vinculado) { if (b.con.dono_id === a.p_id) b.con.dono_ate = 0; return resp({ vez: false, vinculado, dono: b.con.dono }); }
+      const continua = b.con.dono === "android" && b.con.dono_id === a.p_id && b.con.dono_ate > b.agora;
       const vez = !b.con.dono_ate || b.con.dono_ate < b.agora || b.con.dono_id === a.p_id;
       if (vez) Object.assign(b.con, { dono: "android", dono_id: a.p_id, dono_ate: b.agora + 90000 });
-      return resp({ vez, vinculado, pedido: vez ? b.con.pedido : null, dono: b.con.dono, situacao: b.con.situacao });
+      return resp({ vez, continua: vez && continua, sessao_em: new Date(b.sessaoEm).toISOString(), vinculado, pedido: vez ? b.con.pedido : null, dono: b.con.dono, situacao: b.con.situacao });
     }
     if (nome === "whatsapp_motor_soltar") { if (b.con.dono_id === a.p_id) b.con.dono_ate = 0; return resp(); }
     if (!comVez()) return erro("O motor não está com a vez da conexão.", "55000");
     if (nome === "whatsapp_motor_ler") return resp(Object.fromEntries(a.p_chaves.filter((k) => b.sessao.has(k)).map((k) => [k, JSON.parse(b.sessao.get(k))])));
-    if (nome === "whatsapp_motor_gravar") { for (const k in a.p_poe) b.sessao.set(k, JSON.stringify(a.p_poe[k])); for (const k of a.p_tira) b.sessao.delete(k); return resp(); }
+    if (nome === "whatsapp_motor_gravar") { for (const k in a.p_poe) b.sessao.set(k, JSON.stringify(a.p_poe[k])); for (const k of a.p_tira) b.sessao.delete(k); b.sessaoEm = b.agora; return resp(new Date(b.agora).toISOString()); }
     if (nome === "whatsapp_motor_apagar_sessao") { b.sessao.clear(); if (a.p_detalhe != null) Object.assign(b.con, { situacao: "desligado", numero: "", pedido: null, detalhe: a.p_detalhe }); return resp(); }
     if (nome === "whatsapp_motor_situacao") {
       Object.assign(b.con, { situacao: a.p_situacao, detalhe: a.p_detalhe }); if (a.p_numero != null) b.con.numero = a.p_numero;
@@ -140,6 +141,42 @@ function sessaoVinculada(b) {
   try { await s.opcoes.auth.keys.set({ session: { "abc": Buffer.from([3]) } }); } catch (_) { /* esperado */ }
   b.buscar = original; Object.assign(b.con, { dono: "supabase", dono_id: "z", dono_ate: b.agora + 60000 }); await m.pulso();
   confere("vez passou para o Supabase: descarta as pendentes", m.pendentes.size === 0 && !b.sessao.has("k:session:abc"));
+}
+
+// 1d) vez interrompida e retomada: pendentes só vão se ninguém mexeu na sessão no meio
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); const m = novo(b, f);
+  await m.pulso(); await espera(); const s = f.sockets[0]; await s.emitir("connection.update", { connection: "open" }); await espera();
+  await s.opcoes.auth.keys.set({ session: { "ok1": Buffer.from([1]) } }); // gravação normal: guarda a hora do banco
+  const original = b.buscar;
+  b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_gravar") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
+  try { await s.opcoes.auth.keys.set({ session: { "velha": Buffer.from([7]) } }); } catch (_) { /* esperado */ }
+  b.buscar = original;
+  // a vez venceu; o zap assumiu, gravou a sessão e soltou antes do próximo sinal do motor
+  b.agora += 100000; b.sessao.set("k:session:velha", JSON.stringify({ type: "Buffer", data: "CQ==" })); b.sessaoEm = b.agora; b.con.dono_ate = 0;
+  await m.pulso();
+  confere("vez retomada depois que o zap mexeu: descarta pendentes antigas", m.pendentes.size === 0 && JSON.parse(b.sessao.get("k:session:velha")).data === "CQ==");
+  // sem ninguém mexer no meio: a pendente vai
+  b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_gravar") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
+  await m.pulso(); await espera(); const s2 = f.sockets.at(-1); await s2.emitir("connection.update", { connection: "open" }); await espera();
+  try { await s2.opcoes.auth.keys.set({ session: { "nova": Buffer.from([5]) } }); } catch (_) { /* esperado */ }
+  b.buscar = original; b.agora += 100000; b.con.dono_ate = 0; await m.pulso();
+  confere("vez retomada sem ninguém mexer: grava a pendente", m.pendentes.size === 0 && b.sessao.has("k:session:nova"));
+  await m.encerrar();
+}
+
+// 1e) a guarda venceu enquanto carregava a sessão: não abre a conexão
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b);
+  const timers = []; const relogio = { iniciar: (fn, ms) => { const t = { fn, ms, ativo: true }; timers.push(t); return t; }, parar: (t) => { t.ativo = false; } };
+  const original = b.buscar;
+  b.buscar = async (url, op) => { if (url.endsWith("whatsapp_motor_ler")) { const t = timers.find((x) => x.ativo); if (t) { t.ativo = false; t.fn(); } } return original(url, op); };
+  const m = novo(b, f, { relogio });
+  await m.pulso(); await espera();
+  confere("guarda venceu durante o carregamento: não abre a conexão", f.sockets.length === 0 && !m.st.sock && !m.st.conectando);
+  b.buscar = original; await m.pulso(); await espera();
+  confere("próximo sinal confirma a vez: abre", f.sockets.length === 1);
+  await m.encerrar();
 }
 
 // 2) quedas

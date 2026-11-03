@@ -54,7 +54,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   const blog = registro(saida);
   const st = { sock: null, aberto: false, conectando: false, parado: false, semVinculo: false, chaveRuim: false,
     ultimoPulsoOk: 0, tentativas: 0, proximaTentativa: 0, desde: null, recebidas: 0, ultimaRecebida: null, erros: 0,
-    numero: "", situacaoGravada: "", inicio: agora(), guarda: null };
+    numero: "", situacaoGravada: "", inicio: agora(), guarda: null, ultimaGravacao: null };
   let fila = Promise.resolve(); // gravações da sessão em ordem
   // mudanças da sessão ainda não confirmadas pelo banco (chave -> valor serializado; null = apagar). Ficam aqui até
   // o banco aceitar: as leituras usam estas por cima das do banco e cada gravação/sinal tenta mandar de novo.
@@ -85,7 +85,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     if (!pendentes.size) return;
     const lote = new Map(pendentes), poe = {}, tira = [];
     for (const [k, v] of lote) { if (v === null) tira.push(k); else poe[k] = v; }
-    await rpc("whatsapp_motor_gravar", { ...base(), p_poe: poe, p_tira: tira });
+    const em = await rpc("whatsapp_motor_gravar", { ...base(), p_poe: poe, p_tira: tira });
+    if (em) st.ultimaGravacao = em; // hora do banco
     for (const [k, v] of lote) if (pendentes.get(k) === v) pendentes.delete(k);
   }
   /** Grava na ordem; tenta 3 vezes. Se o banco não aceitar, a mudança fica pendente e o erro volta para a biblioteca
@@ -148,6 +149,10 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     st.conectando = true;
     try {
       const { creds, keys, salvarCreds } = await carregar();
+      // carregar pode demorar: só abre a conexão se a vez ainda está confirmada (guarda ativa); senão espera o próximo sinal
+      if (!st.guarda || st.parado) { st.conectando = false; log("a vez não está mais confirmada: não abre a conexão agora"); return; }
+      // a sessão em memória agora é a do banco nesta hora (base para saber, depois, se outro mexeu nela)
+      if (st.sessaoEmPulso && (!st.ultimaGravacao || new Date(st.sessaoEmPulso) > new Date(st.ultimaGravacao))) st.ultimaGravacao = st.sessaoEmPulso;
       if (!vinculado(creds)) {
         if (!st.semVinculo) log("nenhum celular vinculado: vincule pelo QR Code em Sistema › WhatsApp. Esperando…");
         st.semVinculo = true; st.conectando = false; st.proximaTentativa = agora() + 60000; return;
@@ -258,6 +263,14 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       if (pendentes.size && r && r.dono && r.dono !== "android") { log(`descartando ${pendentes.size} mudança(s) não gravadas: a vez passou para ${r.dono}`); pendentes.clear(); }
       return;
     }
+    if (r.sessao_em) st.sessaoEmPulso = r.sessao_em;
+    if (!r.continua && pendentes.size) {
+      // a vez foi interrompida e retomada: se a sessão mudou no banco depois da última gravação deste motor, outro (a função
+      // zap) usou e avançou a sessão no meio — as mudanças antigas daqui não podem ir por cima
+      const outroMexeu = !st.ultimaGravacao || (r.sessao_em && new Date(r.sessao_em) > new Date(st.ultimaGravacao));
+      if (outroMexeu) { log(`descartando ${pendentes.size} mudança(s) não gravadas: a sessão foi usada por outro enquanto este motor estava sem a vez`); pendentes.clear(); }
+    }
+    if (!r.continua && st.sock) fechar("a vez foi interrompida: reabre com a sessão do banco");
     if (r.pedido === "desconectar") return desconectarAPedido();
     await tentarPendentes();
     if (!st.sock && !st.conectando && agora() >= st.proximaTentativa) await conectar();

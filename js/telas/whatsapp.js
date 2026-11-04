@@ -4,6 +4,7 @@
 import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { useApp } from "../ui.js";
+import { AbasMensagens } from "./email.js";
 import { fmtDataHora } from "../util.js";
 
 const CMD_INSTALAR = "pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/main/motor-zap/instalar.sh -o instalar.sh && bash instalar.sh";
@@ -83,6 +84,7 @@ export function WhatsApp() {
   const [mRot, mCor] = !st || !st.motor_visto ? ["Nunca ligado", "muted"] : motorVivo ? (info && info.conectado ? ["Ligado e conectado", "ok"] : ["Ligado, sem conexão", "info"]) : ["Sem sinal", "bad"];
   const comVez = st && vale(st.dono_ate) ? (st.dono === "android" ? "motor do Android" : "Supabase (por alguns segundos)") : "ninguém agora — o Supabase conecta quando precisar";
   return html`<div class="pagina">
+    <${AbasMensagens} ativa="whatsapp" />
     <div class="card">
       <h3>WhatsApp da oficina</h3>
       <p class="sub">Conexão própria com o WhatsApp do celular da oficina, sem serviço pago. O sistema vincula o celular, mantém a conexão (motor no Android ou, sem ele, o Supabase sob demanda) e envia e guarda mensagens pela fila. Envio de PDF vem na próxima etapa.</p>

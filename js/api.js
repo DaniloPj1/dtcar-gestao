@@ -260,6 +260,17 @@ function criarApiSupabase() {
         return data;
       },
     },
+    // E-mail da oficina (supabase/v29.sql + função "email"): situação, conectar, regras do filtro; o Claude lê e envia pelo conector
+    email: {
+      chamar: async body => {
+        const { data, error } = await sb.functions.invoke("email", { body });
+        if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {} if (/not found|404/i.test(m)) m = "A função \"email\" ainda não foi publicada no Supabase."; throw new Error(m); }
+        if (data && data.erro) throw new Error(data.erro);
+        return data;
+      },
+      envios: async () => ok(await sb.from("email_envios").select("id,em,tipo,para,assunto,resumo,resposta_a,por").order("id", { ascending: false }).limit(20)) || [],
+      ligar: async v => { const r = await sb.rpc("email_ligar", { p_ligado: !!v }); if (r.error && /email_ligar|schema cache|404/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v29.sql no Supabase."); return ok(r); },
+    },
     sefaz: {
       config: async () => ok(await sb.from("sefaz_config").select("*").eq("id", 1).maybeSingle()),
       salvarConfig: async patch => ok(await sb.from("sefaz_config").update(patch).eq("id", 1)),

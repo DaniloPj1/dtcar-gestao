@@ -89,6 +89,10 @@ try:
     chk("quitou: O.S. fechada e parcelas pagas", bool(ordem("o2").get("finalizada_em")) and all(r["status"] == "paga" for r in rec))
     # aprovar orçamento direto (o4 aguardando) pela lista
     pg.goto(U + "#/ordens"); pg.wait_for_timeout(1200)
+    esperado = pg.evaluate("""(() => import('./js/regras.js').then(r => window.__DB.ordens.filter(o => ['orcamento', 'execucao', 'pagamento'].includes(r.etapaOS(o)) && !(o.legado && o.status === 'entregue' && !o.legado_receber))
+      .reduce((s, o) => s + Number(o.total || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })))()""")
+    chk("O.S.: total em aberto somado como no sistema antigo (" + esperado + ")", esperado in pg.inner_text(".osr-total") and "Total em aberto" in pg.inner_text(".os-resumo"))
+    pg.screenshot(path=SAIDA + "/u4b-lista-os.png")
     pg.click(".linha-os-acoes:has-text('01896') .btn-avancar"); pg.wait_for_timeout(1200)
     chk("aprovar → execução", ordem("o4")["status"] == "execucao")
     # painel

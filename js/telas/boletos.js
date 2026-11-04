@@ -18,6 +18,10 @@ import { baixarParcela } from "./receber.js";
 /** Carteira de cobrança: o que foi conferido no internet banking (03/11/2026) + o que o Danilo ajustar */
 /** Só entram para emissão as parcelas criadas a partir desta data: as anteriores já têm boleto emitido fora (PicPay), decisão do Danilo em 04/11/2026 */
 export const DESDE_PADRAO = "2026-11-04";
+/** Referência que vai nas instruções do boleto (aparece para o cliente e no DDA): O.S., NF (quando houver) e parcela. Só caracteres aceitos pelo banco. */
+export const refBoleto = (osNumero, parcela, parcelas, nf) => { const nfLimpa = String(nf || "").replace(/[^0-9A-Za-z/-]/g, "");
+  if (!osNumero && !nfLimpa) return "";
+  return "REF. " + [osNumero ? "O.S. " + osNumero : "", nfLimpa ? "NF " + nfLimpa : "", parcelas > 1 ? "PARCELA " + parcela + "/" + parcelas : ""].filter(Boolean).join(" - ").slice(0, 75); };
 /** Parcela entra na emissão de boleto Sicredi? (criada a partir de cob.desde) */
 export const parcelaNova = (p, cob) => !cob.desde || String(p.criado_em || "").slice(0, 10) >= cob.desde;
 export const carteira = cfg => ({ cooperativa: "0523", posto: "16", beneficiario: "85453", conta: "85453", contaDv: "7", byte: 2,
@@ -52,6 +56,7 @@ export const msgBoleto = (b, cfg) => `Olá, ${(b.pagador_nome || "").split(" ")[
 export function Boletos() {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const [aba, setAba] = useState("emitir"), [boletos, setBoletos] = useState(null), [arquivos, setArquivos] = useState([]), [erro, setErro] = useState("");
+  const [nfs, setNfs] = useState({});
   const [marcadas, setMarcadas] = useState({}), [ocupado, setOcupado] = useState(""), [resultado, setResultado] = useState(null), [ajustes, setAjustes] = useState(false), [q, setQ] = useState("");
   const cob = carteira(cfg), faltaCarteira = faltaNaCarteira(cob), porApi = cob.modo === "api";
   const ler = async () => { try { const [b, a] = await Promise.all([api.boletos.listar(), api.boletos.arquivos.listar().catch(() => [])]); setBoletos(b); setArquivos(a); } catch (e) { setErro(e.message); } };
@@ -83,7 +88,7 @@ export function Boletos() {
         const seq = teste ? 90001 + i : await api.boletos.proximo("nosso_numero:" + ano);
         const nn = nossoNumero(cob, ano, seq), cb = codigoBarras(cob, nn, l.p.valor, l.p.vencimento);
         linhas.push({ receber_id: l.p.id, ordem_id: l.p.ordem_id || null, os_numero: l.o ? String(l.o.numero) : "", cliente_id: l.c ? l.c.id : l.p.cliente_id || null,
-          pagador_nome: l.pg.nome, pagador_doc: l.pg.doc, pagador: l.pg, descricao: (l.o ? "O.S. " + l.o.numero : l.p.descricao) + (l.p.parcelas > 1 ? " · parcela " + l.p.parcela + "/" + l.p.parcelas : ""),
+          pagador_nome: l.pg.nome, pagador_doc: l.pg.doc, pagador: l.pg, descricao: (l.o ? "O.S. " + l.o.numero : l.p.descricao) + (nfDe(l) ? " · NF " + nfDe(l) : "") + (l.p.parcelas > 1 ? " · parcela " + l.p.parcela + "/" + l.p.parcelas : ""),
           valor: Number(l.p.valor), vencimento: l.p.vencimento, emissao: hoje, nosso_numero: nn, seu_numero: ((l.o ? l.o.numero : "P") + "-" + l.p.parcela).slice(0, 10),
           codigo_barras: cb, linha_digitavel: linhaDigitavel(cb), situacao: "gerado", criado_por: perfil.nome });
       }
@@ -108,9 +113,10 @@ export function Boletos() {
     } catch (e) { setErro(e.message); } finally { setOcupado(""); }
   };
 
+  const nfDe = l => String(nfs[l.p.id] || "").trim();
   /** Dados do boleto a partir da parcela marcada (os mesmos pela API e pelo arquivo) */
   const dadosDaParcela = l => ({ receber_id: l.p.id, ordem_id: l.p.ordem_id || null, os_numero: l.o ? String(l.o.numero) : "", cliente_id: l.c ? l.c.id : l.p.cliente_id || null,
-    pagador_nome: l.pg.nome, pagador_doc: l.pg.doc, pagador: l.pg, descricao: (l.o ? "O.S. " + l.o.numero : l.p.descricao) + (l.p.parcelas > 1 ? " · parcela " + l.p.parcela + "/" + l.p.parcelas : ""),
+    pagador_nome: l.pg.nome, pagador_doc: l.pg.doc, pagador: l.pg, descricao: (l.o ? "O.S. " + l.o.numero : l.p.descricao) + (nfDe(l) ? " · NF " + nfDe(l) : "") + (l.p.parcelas > 1 ? " · parcela " + l.p.parcela + "/" + l.p.parcelas : ""),
     valor: Number(l.p.valor), vencimento: l.p.vencimento, emissao: hojeISO(), seu_numero: ((l.o ? l.o.numero : "P") + "-" + l.p.parcela).slice(0, 10), criado_por: perfil.nome });
 
   /** Pela API: registra um boleto de cada vez e grava logo em seguida (se a gravação falhar, a linha digitável aparece na tela) */
@@ -120,9 +126,9 @@ export function Boletos() {
     const log = [];
     try {
       for (const l of escolhidas) {
-        const d = dadosDaParcela(l);
-        const r = await api.sicredi({ acao: "emitir", ambiente: "producao", boleto: { valor: d.valor, vencimento: d.vencimento, seu_numero: d.seu_numero, especie: cob.especie,
-          juros_mes: cob.jurosMes, multa: cob.multa, mensagem: cob.mensagem, id_titulo: d.receber_id, pagador: { ...l.pg, telefone: (l.c && l.c.telefone) || "" } } });
+        const d = dadosDaParcela(l), ref = refBoleto(d.os_numero, l.p.parcela, l.p.parcelas, nfDe(l));
+        const r = await api.sicredi({ acao: "emitir", ambiente: "producao", boleto: { mensagem: [ref, cob.mensagem].filter(Boolean).join(" - ").slice(0, 80), valor: d.valor, vencimento: d.vencimento, seu_numero: d.seu_numero, especie: cob.especie,
+          juros_mes: cob.jurosMes, multa: cob.multa, id_titulo: d.receber_id, pagador: { ...l.pg, telefone: (l.c && l.c.telefone) || "" } } });
         try {
           const [g] = await api.boletos.incluir([{ ...d, nosso_numero: r.nossoNumero, codigo_barras: r.codigoBarras, linha_digitavel: r.linhaDigitavel, qr_url: r.qrCode || "", txid: r.txid || "",
             situacao: "registrado", ocorrencia: r.qrCode ? "Registrado pela API com QR Code Pix" : "Registrado pela API SEM QR Code — confira o boleto híbrido no Portal PJ" }]);
@@ -274,6 +280,7 @@ export function Boletos() {
         ${linhasEmitir.length ? html`<div class="lista">${linhasEmitir.map(l => html`<label class=${"linha conta-linha" + (l.problemas.length ? " s-vencida" : "")} key=${l.p.id}>
             <input type="checkbox" disabled=${!!l.problemas.length} checked=${!!marcadas[l.p.id]} onChange=${e => setMarcadas({ ...marcadas, [l.p.id]: e.target.checked })} />
             <span class="meio"><strong>${l.pg.nome || l.p.cliente_nome}</strong><span>${[l.p.descricao, l.p.parcelas > 1 ? "parcela " + l.p.parcela + "/" + l.p.parcelas : "", "venc. " + fmtData(l.p.vencimento)].filter(Boolean).join(" · ")}</span>
+              ${l.problemas.length ? null : html`<span class="sub" onClick=${e => e.preventDefault()}>Nº da NF (opcional): <input class="nf-boleto" inputmode="numeric" maxlength="12" style=${{ width: "7em" }} value=${nfs[l.p.id] || ""} onInput=${e => setNfs({ ...nfs, [l.p.id]: e.target.value })} /></span>`}
               ${l.problemas.length ? html`<span class="c-bad">Falta no cadastro: ${l.problemas.join(", ")}. ${l.c ? html`<button type="button" class="btn-link" onClick=${e => { e.preventDefault(); ir("/cliente/" + l.c.id); }}>Abrir cliente</button>` : null}</span>` : null}</span>
             <span class="dir"><b>${reais(l.p.valor)}</b></span></label>`)}</div>
           <div class="acoes"><span class="sub">${escolhidas.length} marcada(s) · ${reais(escolhidas.reduce((s, l) => s + Number(l.p.valor), 0))}</span><span class="espaco"></span>

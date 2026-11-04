@@ -111,6 +111,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   e `bash teste/teste_v28.sh` (Postgres local).
   **Só parcelas novas**: a aba Emitir mostra só as parcelas criadas a partir de `cfg.cobranca.desde` (padrão 04/11/2026); as anteriores já
   têm boleto emitido fora (PicPay) e só aparecem no aviso. Decisão do Danilo em 04/11/2026.
+  **Referência no boleto**: cada parcela tem o campo opcional "Nº da NF"; pela API, a instrução do boleto leva `refBoleto`
+  ("REF. O.S. 1887 - NF 131 - PARCELA 1/2", até 75 caracteres) e a NF entra na descrição. A NF não fica na O.S. (é emitida fora do sistema).
   **API de Cobrança** (alternativa ao arquivo, `cfg.cobranca.modo = "api"`): a função `supabase/functions/sicredi` (Verify JWT
   desligado; exige login e `e_admin`) fala com o Sicredi (doc v3.9.1) e guarda os segredos: `SICREDI_API_KEY_SANDBOX`, `SICREDI_API_KEY`
   e `SICREDI_CODIGO_ACESSO` (o agente nunca lê os valores). Ações: `testar`, `teste_completo` (só Sandbox, com os dados de teste fixos

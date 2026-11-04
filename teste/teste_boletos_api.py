@@ -7,7 +7,7 @@ RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SAIDA = os.path.join(RAIZ, "teste", "telas"); os.makedirs(SAIDA, exist_ok=True)
 srv = subprocess.Popen([sys.executable, "-m", "http.server", "8767", "-d", RAIZ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 time.sleep(1); erros = []; ok = []; falhas = []
-def chk(n, c): (ok if c else falhas).append(n)
+def chk(n, c, x=None): (ok if c else falhas).append(n if c or x is None else n + " (" + str(x) + ")")
 try:
   with sync_playwright() as p:
     b = p.chromium.launch(); ctx = b.new_context(viewport={"width": 1600, "height": 950}, accept_downloads=True); pg = ctx.new_page()
@@ -43,6 +43,8 @@ try:
     pg.select_option("#cb-amb", "producao"); pg.click("[role=dialog] button:has-text('Salvar')"); pg.wait_for_timeout(800)
     chk("carteira salva em produção", pg.evaluate("window.__DB.config.cobranca.ambiente") == "producao" and pg.evaluate("window.__DB.config.cobranca.modo") == "api")
     # registrar 2 boletos
+    pg.fill(".lista label:has-text('parcela 1/2') input.nf-boleto", "131")
+    chk("digitar a NF não marca nem desmarca a parcela", not pg.is_checked(".lista label:has-text('parcela 1/2') input[type=checkbox]"))
     pg.check(".lista label:has-text('parcela 1/2') input[type=checkbox]"); pg.check(".lista label:has-text('parcela 2/2') input[type=checkbox]")
     pg.click("button:has-text('Registrar no Sicredi')"); pg.wait_for_timeout(400)
     chk("confirmação diz que registra agora", "registrados no banco AGORA" in pg.inner_text("[role=dialog]"))
@@ -52,6 +54,9 @@ try:
     chk("2 boletos registrados pela API", len(bol) == 2 and all(x["situacao"] == "registrado" and not x.get("remessa_id") for x in bol))
     chk("boleto com Pix copia e cola da API", bol[0]["qr_url"].startswith("000201") and bol[0]["txid"])
     chk("emitir: juros, multa e pagador vão ao servidor", chamadas[0]["boleto"]["juros_mes"] == 2 and chamadas[0]["boleto"]["multa"] == 2 and chamadas[0]["boleto"]["pagador"]["cep"] == "29700000" and chamadas[0]["ambiente"] == "producao")
+    chk("referência com O.S., NF e parcela vai ao banco", chamadas[0]["boleto"]["mensagem"] == "REF. O.S. 1897 - NF 131 - PARCELA 1/2", chamadas[0]["boleto"].get("mensagem"))
+    chk("sem NF: referência só com O.S. e parcela", chamadas[1]["boleto"]["mensagem"] == "REF. O.S. 1897 - PARCELA 2/2")
+    chk("NF gravada na descrição do boleto", "NF 131" in bol[0]["descricao"] and "NF" not in bol[1]["descricao"])
     chk("emitir: id do título = parcela (rastreio)", chamadas[0]["boleto"]["id_titulo"] == "r1")
     chk("resultado mostra nosso número", "registrado, nosso número" in pg.inner_text("[role=dialog]"))
     pg.screenshot(path=SAIDA + "/ba1-registrado.png")

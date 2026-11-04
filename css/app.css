@@ -1041,3 +1041,14 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .email-regras .res-lista li .btn{margin-left:auto}
 .passos-email{padding-left:20px;line-height:1.5}
 @media (max-width:640px){.email-campos{grid-template-columns:1fr}}
+/* Financeiro › Documentos do RH */
+.card.rh-filtros{flex-direction:row;flex-wrap:wrap;gap:10px 16px;align-items:flex-end;justify-content:flex-start}
+.rh-filtros label{flex:0 1 220px;display:flex;flex-direction:column;gap:4px;font-size:.9rem;min-width:180px}
+.rh-lista{list-style:none;margin:0;padding:0}
+.rh-lista li{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between;padding:10px 0;border-top:1px solid var(--line)}
+.rh-lista li:first-child{border-top:0}
+.rh-doc{display:flex;flex-direction:column;gap:3px;min-width:0;flex:1}
+.rh-doc b{overflow-wrap:anywhere}
+.rh-doc .pill{align-self:flex-start}
+.rh-linha{font-family:ui-monospace,monospace;font-size:.8rem}
+.rh-novo label{display:flex;flex-direction:column;gap:4px;font-size:.9rem;margin-bottom:8px}

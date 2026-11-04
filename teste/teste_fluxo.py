@@ -213,6 +213,30 @@ try:
     pg.set_viewport_size({"width": 1600, "height": 950}); pg.wait_for_timeout(300)
     alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
     chk("menu: cabe sem rolar em 1600x950 (%d/%d)" % tuple(alt), alt[0] <= alt[1])
+    # Financeiro › Documentos do RH (v30): busca no e-mail da contabilidade, lista por mês, imprime e adiciona à mão
+    pg.evaluate("""window.__RH_EMAIL = [
+      { competencia: '2026-10', tipo: 'pro_labore', titulo: 'PRO LABORE 10.2026 - DTCAR', arquivo: '2026-10/a.pdf', nome_arquivo: 'PRO LABORE 10.2026 - DTCAR.pdf', email_data: '2026-11-04T16:38:00Z' },
+      { competencia: '2026-10', tipo: 'recibo', titulo: 'RECIBO 10.2026 - DTCAR', arquivo: '2026-10/b.pdf', nome_arquivo: 'RECIBO 10.2026 - DTCAR.pdf', email_data: '2026-11-04T16:38:00Z' },
+      { competencia: '2026-09', tipo: 'darf', titulo: 'DARF 09.2026 - DTCAR', arquivo: '2026-09/c.pdf', nome_arquivo: 'DARF 09.2026 - DTCAR.pdf', email_data: '2026-10-14T12:00:00Z' }]""")
+    pg.goto(U + "#/funcionarios"); pg.wait_for_timeout(700)
+    chk("rh: menu 'Funcionários e RH' e aba Documentos do RH", "Funcionários e RH" in pg.inner_text(lat) and pg.query_selector("[role=tab]:has-text('Documentos do RH')") is not None)
+    pg.click("[role=tab]:has-text('Documentos do RH')"); pg.wait_for_timeout(1500)
+    tx = pg.inner_text("main")
+    chk("rh: busca sozinha na contabilidade até não restar nada (3 documentos, 2 chamadas)", tx.count("Imprimir") == 3 and len(pg.evaluate("window.__RH_IMPORT")) == 2, tx[:300])
+    chk("rh: usa o e-mail da Loredo por padrão", pg.evaluate("window.__RH_IMPORT[0][0]") == "dploredocontabilidade@gmail.com")
+    chk("rh: agrupa por mês, mais novo primeiro", tx.index("outubro de 2026") < tx.index("setembro de 2026") and "Pró-labore" in tx and "DARF (impostos)" in tx)
+    chk("rh: menu continua marcado em 'Funcionários e RH'", "Funcionários e RH" in pg.inner_text(lat + " [aria-current=page]"))
+    pg.select_option(".rh-filtros select >> nth=1", "darf"); pg.wait_for_timeout(300)
+    chk("rh: filtro por tipo", pg.inner_text("main").count("Imprimir") == 1)
+    pg.select_option(".rh-filtros select >> nth=1", "todos"); pg.wait_for_timeout(200)
+    pg.click(".rh-lista button:has-text('Imprimir') >> nth=0"); pg.wait_for_timeout(800)
+    chk("rh: imprimir baixa o arquivo da pasta privada", len(pg.evaluate("window.__RH_BAIXADOS || []")) >= 1)
+    pg.click("text=+ Adicionar documento"); pg.wait_for_timeout(300)
+    pg.set_input_files(".rh-novo input[type=file]", files=[{"name": "das-10-2026.png", "mimeType": "image/png", "buffer": b"\x89PNG"}])
+    pg.fill(".rh-novo input[inputmode=decimal]", "1.234,56"); pg.click(".rh-novo button[type=submit]"); pg.wait_for_timeout(600)
+    novo = pg.evaluate("window.__RH.find(x => x.origem === 'manual')")
+    chk("rh: adiciona o DAS à mão (do WhatsApp), com valor", novo is not None and novo["tipo"] == "das" and abs(novo["valor"] - 1234.56) < 0.001 and "DAS (Simples Nacional)" in pg.inner_text("main"), novo)
+    pg.screenshot(path=SAIDA + "/u5f-rh.png", full_page=True)
     # importar: modo espelho visível
     pg.goto(U + "#/importar"); pg.wait_for_timeout(1000)
     chk("importar: espelho ligado", "Modo espelho ligado" in pg.inner_text("main"))

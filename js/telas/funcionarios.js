@@ -2,6 +2,7 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Abas, Modal, Vazio, Dinheiro } from "../ui.js";
+import { AbasRH } from "./rh.js";
 import { norm, reais, fmtData, fmtTel, fmtDoc, soDig, validaCPF, hojeISO, parseValor, totalItem, numOS } from "../util.js";
 import { DIAS, VINCULOS, TIPOS_LANC, ENCARGOS_PADRAO, JORNADA_PADRAO, minutosDia, horasSemana, fmtHoras, periodo, mesAtual, nomeMes,
   calcularMes, eMecanicoDa, quintoDiaUtil, com_encargos } from "../folha.js";
@@ -49,6 +50,7 @@ export function Funcionarios({ params }) {
   const res = mes ? lista.map(f => ({ f, r: calcularMes(f, ym, mes[f.id].lancs, mes[f.id].base, cfg.encargos) })) : [];
   const soma = k => res.reduce((s, x) => s + (typeof k === "function" ? k(x.r) : x.r[k]), 0);
   return html`<div class="pagina larga-media">
+    <${AbasRH} ativa="funcionarios" />
     <div class="painel-topo"><div><h1>Funcionários</h1><span class="sub">Folha de ${nomeMes(ym)} · valores de referência para a gestão</span></div>
       <div class="acoes"><${SeletorMes} ym=${ym} onMuda=${setYm} />
         <button type="button" class="btn" onClick=${() => setEncAberto(true)}>Encargos</button>

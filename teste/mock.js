@@ -50,6 +50,12 @@
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
         throw new Error("Ação desconhecida."); } },
+    // Documentos do RH (v30)
+    rh: { listar: async () => (window.__RH = window.__RH || []).slice().sort((a, b) => b.competencia.localeCompare(a.competencia)),
+      baixar: async c => { (window.__RH_BAIXADOS = window.__RH_BAIXADOS || []).push(c); return new Blob(["%PDF-1.4 teste"], { type: "application/pdf" }); },
+      adicionar: async (arq, d) => { const x = { id: uid(), arquivo: d.competencia + "/x-" + arq.name, nome_arquivo: arq.name, tipo_arquivo: arq.type || "application/pdf", tamanho: arq.size, origem: "manual", criado_em: now(), linha_digitavel: "", ...d }; (window.__RH = window.__RH || []).push(x); return x; },
+      atualizar: async (id, patch) => { const x = window.__RH.find(y => y.id === id); Object.assign(x, patch); return x; },
+      excluir: async doc => { window.__RH = window.__RH.filter(y => y.id !== doc.id); } },
     // e-mail da oficina (v29 + função "email")
     email: { chamar: async b => { (window.__EMAIL_CHAMADAS = window.__EMAIL_CHAMADAS || []).push(b.acao);
         const e = window.__EMAIL = window.__EMAIL || { situacao: "desligado", ligado: true, conta: "", nome: "", detalhe: "", conectado_em: null, ultimo_uso: null, enviados_hoje: 0,
@@ -59,6 +65,9 @@
         if (b.acao === "conectar") { if (!e.configurado) throw new Error("Falta cadastrar o segredo MS_CLIENT_ID da função \"email\" no Supabase (Edge Functions › Secrets)."); window.__EMAIL_LOGIN = true; return { url: "about:blank#login-microsoft", validade_min: 10 }; }
         if (b.acao === "desconectar") { Object.assign(e, { situacao: "desligado", conta: "", nome: "" }); return { ok: true }; }
         if (b.acao === "regra") { if (b.alvo === "remetente" && !/@/.test(b.valor)) throw new Error("Remetente precisa ser um e-mail completo (nome@dominio)."); const r = { id: Date.now(), tipo: b.tipo, alvo: b.alvo, valor: String(b.valor).toLowerCase().trim(), obs: b.obs || "", origem: "danilo" }; e.lista_regras.push(r); return r; }
+        if (b.acao === "importar_rh") { (window.__RH_IMPORT = window.__RH_IMPORT || []).push(b.remetentes); const fila = window.__RH_EMAIL || []; const lote = fila.splice(0, 2);
+          for (const x of lote) (window.__RH = window.__RH || []).push({ id: uid(), origem: "email", criado_em: now(), linha_digitavel: "", valor: null, vencimento: null, tipo_arquivo: "image/png", ...x });
+          return { importados: lote.length, restam: fila.length }; }
         if (b.acao === "remover_regra") { e.lista_regras = e.lista_regras.filter(r => r.id !== b.id); return { ok: true }; }
         throw new Error("Ação desconhecida."); },
       envios: async () => (window.__EMAIL_ENVIOS || []).slice(),

@@ -8,6 +8,7 @@
 import { classificar, montarCtx, valorDaRegra, type Msg } from "../supabase/functions/email/filtro.ts";
 import { acharBoletos, acharChavesNFe, lerLinhaBancaria, mod10, mod11Boleto, resumirNFe, vencimentoDoFator } from "../supabase/functions/email/documentos.ts";
 import { retornoLogin, tratar, type Db, type Deps } from "../supabase/functions/email/acoes.ts";
+import { tipoRH, competenciaRH } from "../supabase/functions/email/rh.ts";
 import { createMcpHandler } from "npm:@modelcontextprotocol/server@2.4.0";
 import { criarServidor, type Banco } from "../supabase/functions/agente/ferramentas.ts";
 
@@ -83,6 +84,16 @@ const nf = resumirNFe(xmlNfe);
 confere("NF-e: resumo do XML (chave, número, emitente, valor, itens, duplicatas)", !!nf && nf.chave === chave && nf.numero === "718570" && nf.emitente?.nome === "DPK" && nf.valor === 453.32
   && nf.itens === 2 && nf.duplicatas.length === 2 && nf.duplicatas[1].vencimento === "2027-01-01", nf);
 confere("NF-e: XML que não é nota devolve nada", resumirNFe("<html></html>") === null);
+
+// ---------------- 2b. Documentos do RH: tipo e mês pelo nome do arquivo ----------------
+confere("rh: tipos pelo nome dos PDFs da Loredo", tipoRH("PRO LABORE 10.2026 - DTCAR.pdf") === "pro_labore" && tipoRH("RECIBO ADIANTAMENTO 10.2026 - DTCAR.pdf") === "adiantamento"
+  && tipoRH("RECIBO 10.2026 - DTCAR.pdf") === "recibo" && tipoRH("FOLHA DE PONTO 11.2026 - DTCAR.pdf") === "folha_ponto" && tipoRH("DARF 09.2026 - DTCAR.pdf") === "darf"
+  && tipoRH("FGTS 09.2026 - DTCAR.pdf") === "fgts" && tipoRH("RESUMO LAUDOS - DTCAR.pdf") === "laudo" && tipoRH("CONTROLE DE ENTREGA DE EPI.pdf") === "epi"
+  && tipoRH("PGDAS 10-2026.pdf") === "das" && tipoRH("doc.pdf", "IMPOSTOS E PRO LABORE 09.2026") === "pro_labore" && tipoRH("x.pdf", "Oi") === "outro");
+confere("rh: mês pelo nome, pelo assunto ou pela data do e-mail", competenciaRH("PRO LABORE 10.2026 - DTCAR.pdf", "", "2026-11-04T10:00:00Z") === "2026-10"
+  && competenciaRH("FOLHA DE PONTO 11.2026.pdf", "", "2026-11-04") === "2026-11" && competenciaRH("doc.pdf", "IMPOSTOS 09/2026", "2026-10-14") === "2026-09"
+  && competenciaRH("das_102026.pdf", "", "2026-11-04") === "2026-10" && competenciaRH("RESUMO LAUDOS.pdf", "RESUMO LAUDOS", "2026-09-16T10:00:00Z") === "2026-09"
+  && competenciaRH("NF 12.20261.pdf", "", "2026-05-01") === "2026-05");
 
 // ---------------- 3. ações com Microsoft e banco falsos ----------------
 type Linha = Record<string, unknown>;

@@ -72,8 +72,9 @@ export function lerLinhaArrecadacao(l: string): Boleto {
 export function acharBoletos(texto: string, hoje = new Date()): Boleto[] {
   const achados = new Map<string, Boleto>();
   const t = String(texto || "");
-  // bancário: 5.5 5.6 5.6 1 14 (com ou sem pontos e espaços)
-  for (const m of t.matchAll(/\b\d{5}[.\s]?\d{5}\s*\d{5}[.\s]?\d{6}\s*\d{5}[.\s]?\d{6}\s*\d\s*\d{14}\b/g)) {
+  // bancário: 5.5 5.6 5.6 1 14 (com ou sem pontos e espaços). Sem limite no fim: no PDF do boleto o texto seguinte
+  // costuma vir grudado (ex.: "…16300756-0", o código do banco do próximo campo)
+  for (const m of t.matchAll(/\b\d{5}[.\s]?\d{5}\s*\d{5}[.\s]?\d{6}\s*\d{5}[.\s]?\d{6}\s*\d\s*\d{14}/g)) {
     const d = digitos(m[0]); if (d.length === 47 && !achados.has(d)) achados.set(d, lerLinhaBancaria(d, hoje));
   }
   // arrecadação: 4 blocos de 11 + dígito (começa com 8)

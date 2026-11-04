@@ -69,6 +69,8 @@ const errada = linha.slice(0, 13) + (linha[13] === "9" ? "0" : String(Number(lin
 confere("boleto: um número trocado reprova", !lerLinhaBancaria(errada, hoje).digitos_ok);
 confere("boleto: vencimento depois da virada do fator (fev/2025)", vencimentoDoFator(1000, hoje) === "2025-02-22" && vencimentoDoFator(9999, new Date("2025-01-01")) === "2025-02-21");
 const achados = acharBoletos("Prezado cliente, segue a linha digitável:\n" + linha + "\nVencimento 25/11/2026. Conta de luz: 836200000005 667800481000 180975657313 001589636081", hoje);
+const grudada = acharBoletos("Final: OBJETIVA \" 75691.30078 01020.688105 07469.890110 9 16220000016300756-0 Local de Pagamento", hoje);
+confere("boleto: linha grudada no texto seguinte (PDF real do Sicoob/Objetiva)", grudada.length === 1 && grudada[0].digitos_ok && grudada[0].valor === 163 && grudada[0].vencimento === "2026-11-06" && grudada[0].banco_nome === "Sicoob", grudada);
 confere("arrecadação: dígito geral trocado reprova", !acharBoletos("836200000005 667800481000 180975657313 001589636081".replace(/^8362/, "8363"), hoje).some((b) => b.digitos_ok));
 confere("boleto: acha bancário e de arrecadação no texto", achados.length === 2 && achados[0].digitos_ok && achados[1].tipo === "arrecadacao" && achados[1].digitos_ok, achados);
 const chave = "32261145987005026588550010007185701000000017";

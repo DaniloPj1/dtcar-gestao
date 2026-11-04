@@ -93,6 +93,14 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   e `reservarPagamento` impede recibo em dobro. Juros e multa sempre a partir do dia seguinte ao vencimento (data posterior tira o QR Code).
   Testes: `node teste/teste_cnab.mjs` (exemplos do manual e arquivo-modelo do Portal de Homologação), `python3 teste/teste_boletos.py`
   e `bash teste/teste_v28.sh` (Postgres local).
+  **API de Cobrança** (alternativa ao arquivo, `cfg.cobranca.modo = "api"`): a função `supabase/functions/sicredi` (Verify JWT
+  desligado; exige login e `e_admin`) fala com o Sicredi (doc v3.9.1) e guarda os segredos: `SICREDI_API_KEY_SANDBOX`, `SICREDI_API_KEY`
+  e `SICREDI_CODIGO_ACESSO` (o agente nunca lê os valores). Ações: `testar`, `teste_completo` (só Sandbox, com os dados de teste fixos
+  do Sicredi), `emitir`, `consultar`, `liquidados`, `pdf`, `baixar`. Boleto pela API é registrado na hora (sem remessa) e volta com o
+  Pix copia e cola (EMV) em `qr_url`; "Atualizar pagamentos" consulta cada boleto e lança o recibo pelo mesmo `registrarPagamento` do
+  retorno. Nunca mandar `dataInicioJuros`/`dataInicioMulta` (o Sicredi tira o QR Code). Publicar: colar o `index.ts` no painel do
+  Supabase (Edge Functions) e o Danilo clica em Deploy. Testes: `deno run -A teste/teste_sicredi.ts` (Sicredi falso) e
+  `python3 teste/teste_boletos_api.py` (tela).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.
 - **Período de transição (dois sistemas em paralelo):** enquanto `cfg.espelhoLegado` não for `false`, o OS Oficina é o sistema oficial e o

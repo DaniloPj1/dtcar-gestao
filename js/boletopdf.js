@@ -109,7 +109,8 @@ function pagina(doc, b, cob, emp) {
   fonte("normal", 6); doc.text("Instruções (texto de responsabilidade do beneficiário)", M + 1, y + 2.4);
   fonte("normal", 7.5);
   instrucoes(cob).forEach((t, k) => doc.text(t, M + 1, y + 6.5 + k * 3.6));
-  const emv = b.qr_url ? pixCopiaCola(b.qr_url, emp.nome, emp.cidade || "COLATINA") : "";
+  // pela API o Sicredi devolve o código Pix pronto; pelo arquivo de retorno vem só o endereço (URL) do QR Code
+  const emv = !b.qr_url ? "" : /^000201/.test(b.qr_url) ? b.qr_url : pixCopiaCola(b.qr_url, emp.nome, emp.cidade || "COLATINA");
   if (emv) {
     const m = qrMatriz(emv), lado = 32, mod = lado / (m.length + 8), x0 = M + 145 - lado - 3, y0 = y + 3;
     doc.setFillColor(0, 0, 0);

@@ -186,6 +186,13 @@ function criarApiSupabase() {
       },
     },
     temBoletos: () => temBoletos,
+    /** API de Cobrança do Sicredi pela função "sicredi" (o navegador nunca vê a chave nem o código de acesso) */
+    sicredi: async body => {
+      const { data, error } = await sb.functions.invoke("sicredi", { body });
+      if (error) { let m = error.message; try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {} if (/not found|404/i.test(m)) m = "A função \"sicredi\" ainda não foi publicada no Supabase."; throw new Error(m); }
+      if (data && data.erro) throw new Error(data.erro);
+      return data;
+    },
     vinculos: { listar: async () => todos(() => sb.from("produto_fornecedor").select("*").order("id")), doProduto: async pid => ok(await sb.from("produto_fornecedor").select("*").eq("produto_id", pid)) },
     notas: {
       existe: async chave => chave ? ok(await sb.from("notas_entrada").select("id,numero,criado_em,usuario_nome").eq("chave", chave).maybeSingle()) : null,

@@ -2,6 +2,8 @@
 // Fluxo: escolher parcelas "Boleto" em Contas a receber → gerar o arquivo de remessa → enviar no internet banking
 // (Cobrança › Transferir Arquivos) → no dia seguinte baixar o retorno (Cobrança › Arquivos de Retorno) e importar aqui.
 // O retorno confirma o registro, traz o QR Code Pix e avisa os pagamentos, que viram recibo e baixa da parcela.
+// Com a API do Sicredi (função "sicredi", cfg.cobranca.modo = "api"): o boleto é registrado na hora, já com o QR Code,
+// e "Atualizar pagamentos" consulta cada boleto em aberto no banco (pago vira recibo e baixa da parcela).
 // Tabelas boletos e boletos_arquivos do supabase/v28.sql.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
@@ -15,7 +17,20 @@ import { baixarParcela } from "./receber.js";
 
 /** Carteira de cobrança: o que foi conferido no internet banking (03/11/2026) + o que o Danilo ajustar */
 export const carteira = cfg => ({ cooperativa: "0523", posto: "16", beneficiario: "85453", conta: "85453", contaDv: "7", byte: 2,
-  jurosMes: 0, multa: 0, especie: "03", chavePix: "", contaEntrada: "Sicredi", mensagem: "", ...(cfg.cobranca || {}), cnpj: cfg.cnpj, nome: cfg.nome });
+  jurosMes: 0, multa: 0, especie: "03", chavePix: "", contaEntrada: "Sicredi", mensagem: "", modo: "arquivo", ambiente: "sandbox", ...(cfg.cobranca || {}), cnpj: cfg.cnpj, nome: cfg.nome });
+/** Pela API, a chave Pix é do banco (não vai na remessa) */
+export const faltaNaCarteira = cob => conferirCarteira(cob).filter(x => cob.modo !== "api" || !/Chave Pix/.test(x));
+/** Pix copia e cola: a API devolve o código pronto; o arquivo de retorno traz só o endereço (URL) do QR Code */
+export const emvDoBoleto = (b, cfg) => !b.qr_url ? "" : /^000201/.test(b.qr_url) ? b.qr_url : pixCopiaCola(b.qr_url, cfg.nome, cfg.cidade || "COLATINA");
+/** Situação devolvida pela consulta da API → situação no sistema */
+export function situacaoDaApi(s) {
+  s = String(s || "").toUpperCase();
+  if (s.startsWith("LIQUIDADO")) return { pago: true, forma: s === "LIQUIDADO PIX" ? "Pix" : "Boleto" };
+  if (s === "BAIXADO POR SOLICITACAO") return { situacao: "baixado" };
+  if (s === "REJEITADO") return { situacao: "rejeitado" };
+  if (s.startsWith("EM CARTEIRA") || s === "VENCIDO") return { situacao: "registrado" };
+  return { situacao: null };
+}
 
 const SIT = { gerado: ["Aguardando o banco", "info"], registrado: ["Registrado", "ok"], rejeitado: ["Rejeitado", "bad"], pago: ["Pago", "ok"],
   baixa_pedida: ["Baixa pedida", "warn"], baixado: ["Baixado", "muted"], enviado: ["Aguardando o banco", "info"] };
@@ -28,13 +43,13 @@ const baixar = (nome, conteudo, tipo = "text/plain") => { const u = URL.createOb
 async function sha256(texto) { const h = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(texto)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); }
 const empresa = cfg => ({ nome: cfg.nome, cnpj: cfg.cnpj, endereco: cfg.endereco, cidade: cfg.cidade || "COLATINA" });
 export const msgBoleto = (b, cfg) => `Olá, ${(b.pagador_nome || "").split(" ")[0]}! Aqui é da ${cfg.nome}.\n\nSegue o boleto ${b.descricao ? "(" + b.descricao + ") " : ""}no valor de *${reais(b.valor)}* com vencimento em *${fmtData(b.vencimento)}*.\n\n` +
-  `Linha digitável:\n${linhaFmt(b.linha_digitavel)}` + (b.qr_url ? `\n\nOu pague com Pix (copia e cola):\n${pixCopiaCola(b.qr_url, cfg.nome, cfg.cidade || "COLATINA")}` : "") + `\n\nQualquer dúvida, estamos à disposição.`;
+  `Linha digitável:\n${linhaFmt(b.linha_digitavel)}` + (b.qr_url ? `\n\nOu pague com Pix (copia e cola):\n${emvDoBoleto(b, cfg)}` : "") + `\n\nQualquer dúvida, estamos à disposição.`;
 
 export function Boletos() {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const [aba, setAba] = useState("emitir"), [boletos, setBoletos] = useState(null), [arquivos, setArquivos] = useState([]), [erro, setErro] = useState("");
   const [marcadas, setMarcadas] = useState({}), [ocupado, setOcupado] = useState(""), [resultado, setResultado] = useState(null), [ajustes, setAjustes] = useState(false), [q, setQ] = useState("");
-  const cob = carteira(cfg), faltaCarteira = conferirCarteira(cob);
+  const cob = carteira(cfg), faltaCarteira = faltaNaCarteira(cob), porApi = cob.modo === "api";
   const ler = async () => { try { const [b, a] = await Promise.all([api.boletos.listar(), api.boletos.arquivos.listar().catch(() => [])]); setBoletos(b); setArquivos(a); } catch (e) { setErro(e.message); } };
   useEffect(() => { recarregar(["receber", "clientes"]); ler(); }, []);
 
@@ -52,8 +67,9 @@ export function Boletos() {
   const emitir = async teste => {
     if (faltaCarteira.length) { setAjustes(true); return setErro("Complete os dados da carteira: " + faltaCarteira.join(" ")); }
     if (!escolhidas.length) return setErro("Marque as parcelas que vão virar boleto.");
-    if (!teste && !await confirmar({ titulo: "Registrar " + escolhidas.length + " boleto(s) no Sicredi", texto: "Os boletos ficam registrados no banco e aparecem no DDA do cliente assim que o arquivo for enviado. Confira valores e vencimentos: " +
-      escolhidas.map(l => l.pg.nome + " " + reais(l.p.valor) + " em " + fmtData(l.p.vencimento)).join("; ") + ".", botao: "Gerar arquivo" })) return;
+    if (!teste && !await confirmar({ titulo: "Registrar " + escolhidas.length + " boleto(s) no Sicredi", texto: (porApi ? "Os boletos são registrados no banco AGORA e aparecem no DDA do cliente." : "Os boletos ficam registrados no banco e aparecem no DDA do cliente assim que o arquivo for enviado.") + " Confira valores e vencimentos: " +
+      escolhidas.map(l => l.pg.nome + " " + reais(l.p.valor) + " em " + fmtData(l.p.vencimento)).join("; ") + ".", botao: porApi ? "Registrar" : "Gerar arquivo" })) return;
+    if (porApi && !teste) return emitirPelaApi();
     setOcupado(teste ? "teste" : "emitir"); setErro("");
     try {
       const ano = new Date().getFullYear(), hoje = hojeISO(), linhas = [];
@@ -86,6 +102,78 @@ export function Boletos() {
     } catch (e) { setErro(e.message); } finally { setOcupado(""); }
   };
 
+  /** Dados do boleto a partir da parcela marcada (os mesmos pela API e pelo arquivo) */
+  const dadosDaParcela = l => ({ receber_id: l.p.id, ordem_id: l.p.ordem_id || null, os_numero: l.o ? String(l.o.numero) : "", cliente_id: l.c ? l.c.id : l.p.cliente_id || null,
+    pagador_nome: l.pg.nome, pagador_doc: l.pg.doc, pagador: l.pg, descricao: (l.o ? "O.S. " + l.o.numero : l.p.descricao) + (l.p.parcelas > 1 ? " · parcela " + l.p.parcela + "/" + l.p.parcelas : ""),
+    valor: Number(l.p.valor), vencimento: l.p.vencimento, emissao: hojeISO(), seu_numero: ((l.o ? l.o.numero : "P") + "-" + l.p.parcela).slice(0, 10), criado_por: perfil.nome });
+
+  /** Pela API: registra um boleto de cada vez e grava logo em seguida (se a gravação falhar, a linha digitável aparece na tela) */
+  const emitirPelaApi = async () => {
+    if (cob.ambiente !== "producao") return setErro("A API está no ambiente de teste (Sandbox). Use \"Testar ligação\" em Dados da carteira; para emitir boletos de verdade, troque para Produção.");
+    setOcupado("emitir"); setErro("");
+    const log = [];
+    try {
+      for (const l of escolhidas) {
+        const d = dadosDaParcela(l);
+        const r = await api.sicredi({ acao: "emitir", ambiente: "producao", boleto: { valor: d.valor, vencimento: d.vencimento, seu_numero: d.seu_numero, especie: cob.especie,
+          juros_mes: cob.jurosMes, multa: cob.multa, mensagem: cob.mensagem, id_titulo: d.receber_id, pagador: { ...l.pg, telefone: (l.c && l.c.telefone) || "" } } });
+        try {
+          const [g] = await api.boletos.incluir([{ ...d, nosso_numero: r.nossoNumero, codigo_barras: r.codigoBarras, linha_digitavel: r.linhaDigitavel, qr_url: r.qrCode || "", txid: r.txid || "",
+            situacao: "registrado", ocorrencia: r.qrCode ? "Registrado pela API com QR Code Pix" : "Registrado pela API SEM QR Code — confira o boleto híbrido no Portal PJ" }]);
+          if (g.ordem_id) await api.evento(g.ordem_id, "boleto", "Boleto Sicredi registrado: " + reais(g.valor) + " para " + fmtData(g.vencimento) + " (nosso número " + nossoNumeroFmt(g.nosso_numero) + ").", perfil.nome).catch(() => {});
+          log.push(["ok", d.pagador_nome + " " + reais(d.valor) + ": registrado, nosso número " + nossoNumeroFmt(r.nossoNumero) + (r.qrCode ? ", com Pix." : ", SEM QR Code Pix.")]);
+        } catch (e) {
+          log.push(["bad", d.pagador_nome + " " + reais(d.valor) + ": REGISTRADO NO BANCO, mas não foi gravado aqui (" + e.message + "). Anote: nosso número " + r.nossoNumero + ", linha " + linhaFmt(r.linhaDigitavel) + "."]);
+          break;
+        }
+      }
+    } catch (e) { log.push(["bad", "Parou: " + e.message]); }
+    setMarcadas({}); setResultado({ titulo: "Boletos pela API do Sicredi", linhas: log }); setOcupado(""); await ler();
+  };
+
+  /** Pagamento confirmado pelo banco (retorno ou API): recibo na conta da carteira, baixa da parcela e histórico. Nunca duas vezes. */
+  const registrarPagamento = async (b, { valorPago, valorLiquido, data, dataCredito, forma, ocorrencia, patch = {} }) => {
+    const quem = b.pagador_nome + " " + reais(b.valor), conta = cob.contaEntrada || "Sicredi";
+    const reservado = await api.boletos.reservarPagamento(b.id, { ...patch, valor_pago: valorPago, valor_liquido: valorLiquido || null, data_pagamento: data, data_credito: dataCredito || null, forma_pagamento: forma, ocorrencia });
+    if (!reservado) return ["muted", quem + ": pagamento já registrado antes."];
+    const parcela = b.receber_id ? await api.receber.um(b.receber_id).catch(() => null) : null;
+    if (parcela && parcela.status !== "aberta") { await api.boletos.atualizar(b.id, { ocorrencia: "Pago no banco, mas a parcela já estava recebida no sistema: confira se não há recibo em dobro." });
+      return ["warn", quem + ": pago no banco (" + forma + ", " + fmtData(data) + "), mas a parcela já estava baixada no sistema. Nenhum recibo novo foi feito — confira."]; }
+    try {
+      const o = dados.ordens.find(x => x.id === b.ordem_id);
+      const rec = await api.recibos.salvar({ ordem_id: b.ordem_id || null, cliente_id: b.cliente_id || null, pagador: b.pagador_nome, doc: b.pagador_doc, valor: valorPago,
+        referente: (o ? referenteOS(o) : "pagamento") + (parcela && parcela.parcelas > 1 ? " (parcela " + parcela.parcela + "/" + parcela.parcelas + ")" : ""), forma, conta_destino: conta, data,
+        obs: "Boleto Sicredi " + nossoNumeroFmt(b.nosso_numero) + (valorPago > Number(b.valor) + 0.009 ? "; inclui " + reais(valorPago - b.valor) + " de juros/multa" : "") + ".", emitido_por: perfil.nome });
+      if (parcela) await baixarParcela(parcela, Math.min(valorPago, Number(parcela.valor)), rec, perfil);
+      await api.boletos.atualizar(b.id, { recibo_id: rec.id });
+      if (b.ordem_id) await api.evento(b.ordem_id, "recibo", "Boleto Sicredi pago (" + forma + "): " + reais(valorPago) + " em " + fmtData(data) + ".", perfil.nome).catch(() => {});
+      return ["ok", quem + ": pago por " + forma + " em " + fmtData(data) + " (" + reais(valorPago) + "). Recibo emitido e parcela baixada."];
+    } catch (e) { await api.boletos.atualizar(b.id, { situacao: b.situacao, ocorrencia: "Falha ao registrar o pagamento: " + e.message }).catch(() => {}); throw e; }
+  };
+
+  /** Pela API: consulta no banco cada boleto em aberto registrado pela API */
+  const atualizarPelaApi = async () => {
+    if (cob.ambiente !== "producao") return setErro("A API está no ambiente de teste (Sandbox): não há boletos de verdade para consultar.");
+    const lista = (boletos || []).filter(b => !b.remessa_id && ["registrado", "baixa_pedida"].includes(b.situacao));
+    if (!lista.length) return setResultado({ titulo: "Atualizar pagamentos", linhas: [["muted", "Nenhum boleto da API em aberto."]] });
+    setOcupado("atualizar"); setErro("");
+    const log = [];
+    try {
+      for (const b of lista) {
+        const r = await api.sicredi({ acao: "consultar", ambiente: "producao", nosso_numero: b.nosso_numero });
+        const s = situacaoDaApi(r.situacao), quem = b.pagador_nome + " " + reais(b.valor);
+        if (s.pago) {
+          const liq = r.dadosLiquidacao || {};
+          log.push(await registrarPagamento(b, { valorPago: Number(liq.valor) || Number(b.valor), data: (liq.data || hojeISO()).slice(0, 10), dataCredito: r.dataPrevisaoPagamento || null, forma: s.forma, ocorrencia: "Situação no banco: " + r.situacao }));
+        } else if (s.situacao && s.situacao !== b.situacao) { await api.boletos.atualizar(b.id, { situacao: s.situacao, ocorrencia: "Situação no banco: " + r.situacao }); log.push([s.situacao === "rejeitado" ? "bad" : "ok", quem + ": " + r.situacao + "."]); }
+        else if (!s.situacao) { await api.boletos.atualizar(b.id, { ocorrencia: "Situação no banco: " + r.situacao }); log.push(["warn", quem + ": " + r.situacao + "."]); }
+      }
+      if (!log.length) log.push(["muted", "Nenhum pagamento novo. " + lista.length + " boleto(s) continuam em aberto no banco."]);
+    } catch (e) { log.push(["bad", "Parou: " + e.message]); }
+    setResultado({ titulo: "Atualizar pagamentos (API do Sicredi)", linhas: log }); setOcupado("");
+    await recarregar(["receber", "ordens"]); await ler();
+  };
+
   /** Lê o arquivo de retorno e aplica cada ocorrência */
   const importar = async arquivo => {
     if (!arquivo) return;
@@ -96,7 +184,7 @@ export function Boletos() {
       const ret = lerRetorno(texto);
       if (soDig(ret.cabecalho.cnpj) && soDig(cfg.cnpj) && soDig(ret.cabecalho.cnpj).padStart(14, "0") !== soDig(cfg.cnpj).padStart(14, "0")) throw new Error("O retorno é de outro CNPJ (" + fmtDoc(ret.cabecalho.cnpj) + ").");
       const meus = await api.boletos.porNossoNumero([...new Set(ret.titulos.map(t => t.nosso_numero))]);
-      const mapa = Object.fromEntries(meus.map(b => [b.nosso_numero, b])), log = [], conta = cob.contaEntrada || "Sicredi";
+      const mapa = Object.fromEntries(meus.map(b => [b.nosso_numero, b])), log = [];
       for (const t of ret.titulos) {
         const b = mapa[t.nosso_numero];
         if (!b) { log.push(["warn", nossoNumeroFmt(t.nosso_numero) + ": " + t.descricao + " — boleto não encontrado no sistema."]); continue; }
@@ -104,22 +192,8 @@ export function Boletos() {
         const patch = {}; if (t.qr_url) patch.qr_url = t.qr_url; if (t.txid) patch.txid = t.txid; if (t.tarifa) patch.tarifa = arred(Number(b.tarifa || 0) + t.tarifa);
         const msg = t.descricao + (t.motivos.length ? ": " + t.motivos.join(", ") : "") + (t.qr_situacao ? " (" + t.qr_situacao + ")" : "");
         if (ehLiquidacao(t.movimento)) {
-          const valorPago = t.valor_pago || b.valor, forma = t.movimento === "61" ? "Pix" : "Boleto", data = t.data_ocorrencia || hojeISO();
-          const reservado = await api.boletos.reservarPagamento(b.id, { ...patch, valor_pago: valorPago, valor_liquido: t.valor_liquido || null, data_pagamento: data, data_credito: t.data_credito, forma_pagamento: forma, ocorrencia: msg });
-          if (!reservado) { log.push(["muted", quem + ": pagamento já registrado antes."]); continue; }
-          const parcela = b.receber_id ? await api.receber.um(b.receber_id).catch(() => null) : null;
-          if (parcela && parcela.status !== "aberta") { await api.boletos.atualizar(b.id, { ocorrencia: "Pago no banco, mas a parcela já estava recebida no sistema: confira se não há recibo em dobro." });
-            log.push(["warn", quem + ": pago no banco (" + forma + ", " + fmtData(data) + "), mas a parcela já estava baixada no sistema. Nenhum recibo novo foi feito — confira."]); continue; }
-          try {
-            const o = dados.ordens.find(x => x.id === b.ordem_id);
-            const rec = await api.recibos.salvar({ ordem_id: b.ordem_id || null, cliente_id: b.cliente_id || null, pagador: b.pagador_nome, doc: b.pagador_doc, valor: valorPago,
-              referente: (o ? referenteOS(o) : "pagamento") + (parcela && parcela.parcelas > 1 ? " (parcela " + parcela.parcela + "/" + parcela.parcelas + ")" : ""), forma, conta_destino: conta, data,
-              obs: "Boleto Sicredi " + nossoNumeroFmt(b.nosso_numero) + (valorPago > Number(b.valor) + 0.009 ? "; inclui " + reais(valorPago - b.valor) + " de juros/multa" : "") + ".", emitido_por: perfil.nome });
-            if (parcela) await baixarParcela(parcela, Math.min(valorPago, Number(parcela.valor)), rec, perfil);
-            await api.boletos.atualizar(b.id, { recibo_id: rec.id });
-            if (b.ordem_id) await api.evento(b.ordem_id, "recibo", "Boleto Sicredi pago (" + forma + "): " + reais(valorPago) + " em " + fmtData(data) + ".", perfil.nome).catch(() => {});
-            log.push(["ok", quem + ": pago por " + forma + " em " + fmtData(data) + " (" + reais(valorPago) + "). Recibo emitido e parcela baixada."]);
-          } catch (e) { await api.boletos.atualizar(b.id, { situacao: b.situacao, ocorrencia: "Falha ao registrar o pagamento: " + e.message }).catch(() => {}); throw e; }
+          log.push(await registrarPagamento(b, { valorPago: t.valor_pago || b.valor, valorLiquido: t.valor_liquido, data: t.data_ocorrencia || hojeISO(), dataCredito: t.data_credito,
+            forma: t.movimento === "61" ? "Pix" : "Boleto", ocorrencia: msg, patch }));
           continue;
         }
         if (t.movimento === "02") { if (["gerado", "enviado"].includes(b.situacao)) patch.situacao = "registrado"; }
@@ -137,6 +211,14 @@ export function Boletos() {
   };
 
   const pedirBaixa = async b => {
+    if (!b.remessa_id && cob.modo === "api") {
+      if (!await confirmar({ titulo: "Pedir baixa do boleto", texto: "Pede ao Sicredi, pela API, para cancelar o boleto de " + b.pagador_nome + " (" + reais(b.valor) + "). Depois disso ele não pode mais ser pago. A parcela continua em aberto em Contas a receber.", botao: "Pedir baixa", perigo: true })) return;
+      setOcupado("baixa"); setErro("");
+      try { await api.sicredi({ acao: "baixar", ambiente: "producao", nosso_numero: b.nosso_numero }); await api.boletos.atualizar(b.id, { situacao: "baixa_pedida", ocorrencia: "Baixa pedida pela API em " + fmtDataHora(new Date().toISOString()) });
+        avisar("Baixa pedida ao Sicredi. Em \"Atualizar pagamentos\" o boleto passa para Baixado."); await ler(); }
+      catch (e) { setErro(e.message); } finally { setOcupado(""); }
+      return;
+    }
     if (!await confirmar({ titulo: "Pedir baixa do boleto", texto: "Gera um arquivo pedindo ao Sicredi para cancelar o boleto de " + b.pagador_nome + " (" + reais(b.valor) + "). Depois de enviar o arquivo, o boleto não pode mais ser pago. A parcela continua em aberto em Contas a receber.", botao: "Gerar arquivo de baixa", perigo: true })) return;
     setOcupado("baixa"); setErro("");
     try {
@@ -165,9 +247,11 @@ export function Boletos() {
         ${b.ordem_id ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + b.ordem_id)}>O.S.</button>` : null}</span></div>`; };
 
   return html`<div class="pagina larga-media financeiro">
-    <div class="painel-topo"><div><h1>Boletos Sicredi</h1><span class="sub">Boleto com QR Code Pix · carteira ${codigoBeneficiario(cob)} · arquivo de remessa e retorno</span></div>
-      <button type="button" class="btn" onClick=${() => setAjustes(true)}>Dados da carteira</button></div>
-    ${cfg.espelhoLegado !== false ? html`<div class="aviso">Período de transição: só gere boletos reais depois da virada. Até lá, use o <b>arquivo de teste</b> para a homologação.</div>` : null}
+    <div class="painel-topo"><div><h1>Boletos Sicredi</h1><span class="sub">Boleto com QR Code Pix · carteira ${codigoBeneficiario(cob)} · ${porApi ? "API do Sicredi (" + (cob.ambiente === "producao" ? "produção" : "ambiente de teste") + ")" : "arquivo de remessa e retorno"}</span></div>
+      <span class="rec-acoes">${porApi ? html`<button type="button" class="btn" disabled=${!!ocupado} onClick=${atualizarPelaApi}>${ocupado === "atualizar" ? "Consultando…" : "Atualizar pagamentos"}</button>` : null}
+      <button type="button" class="btn" onClick=${() => setAjustes(true)}>Dados da carteira</button></span></div>
+    ${cfg.espelhoLegado !== false ? html`<div class="aviso">Período de transição: só gere boletos reais depois da virada. Até lá, use ${porApi ? html`o <b>Testar ligação</b> (Dados da carteira)` : html`o <b>arquivo de teste</b>`} para os testes.</div>` : null}
+    ${porApi && cob.ambiente !== "producao" ? html`<div class="aviso">A API está no <b>ambiente de teste do Sicredi (Sandbox)</b>: dá para testar a ligação, mas nenhum boleto de verdade é registrado. Troque para Produção em Dados da carteira quando o Sicredi liberar.</div>` : null}
     ${faltaCarteira.length ? html`<div class="aviso">Falta completar a carteira: ${faltaCarteira.join(" ")} <button type="button" class="btn-link" onClick=${() => setAjustes(true)}>Completar</button></div>` : null}
     <div class="kpis fin-kpis">
       <div class="kpi"><span>Para emitir</span><b class="kpi-din">${reais(candidatas.reduce((s, p) => s + Number(p.valor), 0))}</b><small>${candidatas.length} parcela(s) "Boleto"</small></div>
@@ -186,8 +270,8 @@ export function Boletos() {
               ${l.problemas.length ? html`<span class="c-bad">Falta no cadastro: ${l.problemas.join(", ")}. ${l.c ? html`<button type="button" class="btn-link" onClick=${e => { e.preventDefault(); ir("/cliente/" + l.c.id); }}>Abrir cliente</button>` : null}</span>` : null}</span>
             <span class="dir"><b>${reais(l.p.valor)}</b></span></label>`)}</div>
           <div class="acoes"><span class="sub">${escolhidas.length} marcada(s) · ${reais(escolhidas.reduce((s, l) => s + Number(l.p.valor), 0))}</span><span class="espaco"></span>
-            <button type="button" class="btn" disabled=${!!ocupado} onClick=${() => emitir(true)}>${ocupado === "teste" ? "Gerando…" : "Arquivo de teste (homologação)"}</button>
-            <button type="button" class="btn btn-pri" disabled=${!!ocupado || cfg.espelhoLegado !== false} onClick=${() => emitir(false)}>${ocupado === "emitir" ? "Gerando…" : "Gerar remessa"}</button></div>`
+            ${porApi ? null : html`<button type="button" class="btn" disabled=${!!ocupado} onClick=${() => emitir(true)}>${ocupado === "teste" ? "Gerando…" : "Arquivo de teste (homologação)"}</button>`}
+            <button type="button" class="btn btn-pri" disabled=${!!ocupado || cfg.espelhoLegado !== false || (porApi && cob.ambiente !== "producao")} onClick=${() => emitir(false)}>${ocupado === "emitir" ? (porApi ? "Registrando…" : "Gerando…") : porApi ? "Registrar no Sicredi" : "Gerar remessa"}</button></div>`
           : html`<${Vazio}>Nenhuma parcela "Boleto" para emitir. Ao entregar uma O.S. com pagamento a prazo, escolha a forma Boleto.</${Vazio}>`}
       </div>` : aba === "arquivos" ? html`<div>
         <div class="card-sub" style=${{ margin: "12px 0" }}><h4>Importar retorno do banco</h4>
@@ -213,10 +297,21 @@ export function Boletos() {
 /** Dados da carteira de cobrança (Ajustes do sistema → cfg.cobranca) */
 function CarteiraModal({ cob, onFechar }) {
   const { cfg, avisar, recarregar } = useApp();
-  const [c, setC] = useState({ ...cob }), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
+  const [c, setC] = useState({ ...cob }), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false), [teste, setTeste] = useState(null);
   const set = p => { setC({ ...c, ...p }); setErro(""); };
+  /** Sandbox: emite um boleto de teste do próprio Sicredi, consulta, baixa o PDF e pede a baixa. Nada é gravado aqui. */
+  const testarLigacao = async () => {
+    setOcupado(true); setErro(""); setTeste(null);
+    try { setTeste(await api.sicredi({ acao: "teste_completo", ambiente: "sandbox" })); }
+    catch (x) { setErro(x.message); } finally { setOcupado(false); }
+  };
+  const testarProducao = async () => {
+    setOcupado(true); setErro(""); setTeste(null);
+    try { const r = await api.sicredi({ acao: "testar", ambiente: "producao" }); setTeste({ ok: true, passos: [{ passo: "Entrar no Sicredi em produção (chave + código de acesso)", ok: true, detalhe: "Aceito. Nenhum boleto foi emitido." }] }); }
+    catch (x) { setTeste({ ok: false, passos: [{ passo: "Entrar no Sicredi em produção", ok: false, detalhe: x.message }] }); } finally { setOcupado(false); }
+  };
   const salvar = async () => {
-    const e = conferirCarteira({ ...c, cnpj: cfg.cnpj, nome: cfg.nome }); if (e.length) return setErro(e.join(" "));
+    const e = faltaNaCarteira({ ...c, cnpj: cfg.cnpj, nome: cfg.nome }); if (e.length) return setErro(e.join(" "));
     setOcupado(true);
     try {
       const { cnpj, nome, ...guardar } = c;
@@ -227,6 +322,18 @@ function CarteiraModal({ cob, onFechar }) {
   return html`<${Modal} titulo="Carteira de cobrança Sicredi" onFechar=${onFechar}>
     <p class="sub">Conferido no internet banking em 03/11/2026: beneficiário 0523.16.85453, conta 85453-7. CNPJ e nome vêm de Sistema › Ajustes (${fmtDoc(cfg.cnpj)} · ${cfg.nome}).</p>
     <div class="grade">
+      <${Campo} id="cb-modo" rotulo="Como registrar os boletos"><select id="cb-modo" class="inp" value=${c.modo} onChange=${e => set({ modo: e.target.value })}>
+        <option value="arquivo">Arquivo de remessa e retorno (CNAB)</option><option value="api">API do Sicredi (na hora, com Pix)</option></select></${Campo}>
+      ${c.modo === "api" ? html`<${Campo} id="cb-amb" rotulo="Ambiente da API" dica="Teste = Sandbox do Sicredi (boletos de mentira). Produção = boletos de verdade."><select id="cb-amb" class="inp" value=${c.ambiente} onChange=${e => set({ ambiente: e.target.value })}>
+        <option value="sandbox">Teste (Sandbox)</option><option value="producao">Produção</option></select></${Campo}>` : null}
+    </div>
+    ${c.modo === "api" ? html`<div class="card-sub">
+      <p class="sub">A chave da API e o código de acesso ficam só no servidor (Supabase › Edge Functions › Secrets: SICREDI_API_KEY_SANDBOX, SICREDI_API_KEY e SICREDI_CODIGO_ACESSO). Esta tela nunca mostra nem guarda esses valores.</p>
+      <div class="acoes"><button type="button" class="btn" disabled=${ocupado} onClick=${testarLigacao}>${ocupado ? "Testando…" : "Testar ligação (Sandbox)"}</button>
+        <button type="button" class="btn" disabled=${ocupado} onClick=${testarProducao}>Conferir acesso de produção</button></div>
+      ${teste ? html`<div class="lista">${teste.passos.map((p, i) => html`<div class="linha" key=${i}><span class=${"pill p-" + (p.ok ? "ok" : "bad")}>${p.ok ? "ok" : "falhou"}</span><span class="meio"><strong>${p.passo}</strong><span>${p.detalhe}</span></span></div>`)}</div>` : null}
+    </div>` : null}
+    <div class="grade">
       <${Campo} id="cb-coop" rotulo="Cooperativa"><${Texto} id="cb-coop" valor=${c.cooperativa} onMuda=${v => set({ cooperativa: v })} /></${Campo}>
       <${Campo} id="cb-posto" rotulo="Posto"><${Texto} id="cb-posto" valor=${c.posto} onMuda=${v => set({ posto: v })} /></${Campo}>
       <${Campo} id="cb-ben" rotulo="Código do beneficiário"><${Texto} id="cb-ben" valor=${c.beneficiario} onMuda=${v => set({ beneficiario: v })} /></${Campo}>
@@ -234,7 +341,7 @@ function CarteiraModal({ cob, onFechar }) {
       <${Campo} id="cb-dv" rotulo="Dígito da conta"><${Texto} id="cb-dv" valor=${c.contaDv} onMuda=${v => set({ contaDv: v })} /></${Campo}>
       <${Campo} id="cb-byte" rotulo="Byte do Nosso Número" dica="2 a 9. Não mude depois do primeiro boleto."><${Texto} id="cb-byte" valor=${String(c.byte)} onMuda=${v => set({ byte: v })} /></${Campo}>
     </div>
-    <${Campo} id="cb-pix" rotulo="Chave Pix aleatória da conta Sicredi" dica="Copie em Pix › Minhas chaves. A DTCar tem duas chaves aleatórias ativas (cadastradas em 21/05/2026); use uma delas."><${Texto} id="cb-pix" valor=${c.chavePix} placeholder="ex.: 1a2b3c4d-…" onMuda=${v => set({ chavePix: v.trim() })} /></${Campo}>
+    ${c.modo === "api" ? null : html`<${Campo} id="cb-pix" rotulo="Chave Pix aleatória da conta Sicredi" dica="Copie em Pix › Minhas chaves. A DTCar tem duas chaves aleatórias ativas (cadastradas em 21/05/2026); use uma delas."><${Texto} id="cb-pix" valor=${c.chavePix} placeholder="ex.: 1a2b3c4d-…" onMuda=${v => set({ chavePix: v.trim() })} /></${Campo}>`}
     <div class="grade">
       <${Campo} id="cb-juros" rotulo="Juros ao mês (%)" dica="0 = sem juros. Começa no dia seguinte ao vencimento."><${Texto} id="cb-juros" valor=${String(c.jurosMes)} onMuda=${v => set({ jurosMes: v })} /></${Campo}>
       <${Campo} id="cb-multa" rotulo="Multa (%)" dica="0 = sem multa."><${Texto} id="cb-multa" valor=${String(c.multa)} onMuda=${v => set({ multa: v })} /></${Campo}>

@@ -66,6 +66,16 @@
         porHash: async h => (db.boletos_arquivos || []).find(a => a.hash === h) || null,
         salvar: async a => { const x = { id: uid(), criado_em: now(), ...a }; (db.boletos_arquivos = db.boletos_arquivos || []).push(x); return x; } } },
     temBoletos: () => true,
+    // API do Sicredi (função "sicredi"): respostas como as da documentação v3.9.1; window.__SICREDI guarda as chamadas e o que o "banco" sabe
+    sicredi: async body => { const S = window.__SICREDI = window.__SICREDI || { chamadas: [], situacao: {}, seq: 0 }; S.chamadas.push(body);
+      if (body.acao === "teste_completo") return { ok: true, passos: [{ passo: "Entrar no Sicredi (token)", ok: true, detalhe: "Token recebido (vale 300 s)." }, { passo: "Emitir boleto de teste (R$ 1,00, com Pix)", ok: true, detalhe: "Nosso número 261000019, com QR Code Pix." }] };
+      if (body.acao === "testar") { if (window.__SICREDI_SEM_CODIGO) throw new Error("Falta o código de acesso: gere no internet banking (Cobrança › Código de Acesso) e grave no Supabase como SICREDI_CODIGO_ACESSO."); return { ok: true, ambiente: body.ambiente }; }
+      if (body.acao === "emitir") { const nn = "261" + String(++S.seq).padStart(5, "0") + "0"; S.situacao[nn] = "EM CARTEIRA PIX";
+        return { txid: "tx" + nn, qrCode: "00020101021226930014br.gov.bcb.pix2571pix-qrcode.sicredi.com.br/qr/v2/cobv/" + nn + "5204000053039865802BR5903PIX6006Cidade62070503***6304ABCD",
+          linhaDigitavel: "74891161560000001905231685453109116560000123456".slice(0, 47), codigoBarras: "74891165600001234561126200001905231685453109", cooperativa: "0523", posto: "16", nossoNumero: nn }; }
+      if (body.acao === "consultar") { const st = S.situacao[body.nosso_numero] || "EM CARTEIRA"; return { nossoNumero: body.nosso_numero, situacao: st, dadosLiquidacao: /^LIQUIDADO/.test(st) ? { data: "2026-11-06T10:00:00", valor: S.valorPago || 0 } : null }; }
+      if (body.acao === "baixar") { S.situacao[body.nosso_numero] = "BAIXADO POR SOLICITACAO"; return { statusComando: "MOVIMENTO_ENVIADO" }; }
+      throw new Error("Ação desconhecida."); },
     espelhoZerar: async () => ({}),
     ordemNoAparelho: async id => (window.__GUARD = window.__GUARD || {})[id] || null,
     guardarOrdem: async id => { net(); const o = db.ordens.find(x => x.id === id); (window.__GUARD = window.__GUARD || {})[id] = { ...o }; return o; },

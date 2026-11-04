@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -113,6 +113,13 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   em aberto, cancelar (nunca apaga), incluir à mão e exportar. No **Registrar pagamento** de uma conta, os pedidos em aberto do mesmo fornecedor
   aparecem marcados com a soma e a diferença para o valor da conta; ao confirmar, ficam `conferida` com `conta_id` da conta paga.
   Testes: `bash teste/teste_v31.sh` (Postgres local), `deno run -A teste/teste_agente_mcp.ts` e `python3 teste/teste_fluxo.py`.
+- **Despesa fixa sem fim (v32, pedido do Danilo em 04/11/2026):** "Todo mês (fixa)" no lançamento de conta lança **só uma** conta; a do mês
+  seguinte entra sozinha quando faltam 30 dias (`gerar_despesas_fixas()`, chamada por `api.contas.abertas()` no máximo a cada 5 min; mesmo dia
+  da 1ª conta do grupo, dia 31 vira o último dia do mês curto; não repete: índice único `contas_fixa_mes`). Grupo fixo = `contas.grupo` com
+  `contas.fixa = true` (coluna sem "not null" para backup antigo). Modelo = conta mais recente do grupo (reajuste: alterar o valor dela).
+  Na conta: "Tornar despesa fixa" (`tornar_despesa_fixa`: cancela, sem apagar, as abertas da sequência que vencem depois de 30 dias) e
+  "Encerrar despesa fixa" (`encerrar_despesa_fixa`). A previsão de caixa projeta os meses seguintes sem gravar (`projetarFixas`).
+  Testes: `bash teste/teste_v32.sh` (Postgres local) e `python3 teste/teste_fluxo.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

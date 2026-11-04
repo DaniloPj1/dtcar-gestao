@@ -349,6 +349,25 @@ try:
     chk("pedidos: inclusão à mão com O.S. e placa", bool(novo) and novo["total"] == 417 and novo["os_numero"] == 1898 and novo["placa"] == "QXN1E49" and novo["fornecedor_nome"] == "Moto Capichaba", novo)
     pg.screenshot(path=SAIDA + "/u8-pedidos.png", full_page=True)
     pg.evaluate("localStorage.removeItem('dtcar-pedidos-filtros')")
+    # despesa fixa (v32): aluguel lançado em 12 meses vira fixo e fica só o que vence em até 30 dias
+    pg.evaluate("""(() => { const d = new Date(); for (let i = 0; i < 12; i++) { const x = new Date(d.getFullYear(), d.getMonth() + i, 10, 12);
+      window.__DB.contas.push({ id: 'al' + i, descricao: 'Aluguel do galpão', categoria: 'Fixa', valor: 5500, vencimento: x.toISOString().slice(0, 10), status: 'aberta', origem: 'recorrente', grupo: 'gal', parcela: i + 1, parcelas: 12 }); } })()""")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(300); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
+    pg.click(".conta-linha:has-text('Aluguel do galpão') >> nth=0"); pg.wait_for_timeout(500)
+    pg.click("[role=dialog] button:has-text('Tornar despesa fixa')"); pg.wait_for_timeout(300)
+    pg.click("[role=dialog] button:has-text('Tornar fixa')"); pg.wait_for_timeout(1000)
+    al = pg.evaluate("window.__DB.contas.filter(c => c.grupo === 'gal')")
+    abertas_al = [c for c in al if c["status"] == "aberta"]
+    chk("despesa fixa: só fica o aluguel dos próximos 30 dias", 1 <= len(abertas_al) <= 2 and all(c.get("fixa") for c in abertas_al) and len(al) == 12, [c["vencimento"] + c["status"] for c in al])
+    chk("despesa fixa: lista mostra a marca fixa", "fixa" in pg.inner_text(".conta-linha:has-text('Aluguel do galpão') >> nth=0"))
+    # nova conta "Todo mês (fixa)": lança uma só e marca fixa
+    pg.click("button:has-text('+ Nova conta')"); pg.wait_for_timeout(500)
+    pg.fill("#ct-desc", "Internet"); pg.fill("#ct-val", "150,00"); pg.fill("#ct-venc", "2026-11-20")
+    pg.click("[role=dialog] .seg[aria-label='Repetir'] button:has-text('Todo mês (fixa)')"); pg.wait_for_timeout(200)
+    chk("despesa fixa: o formulário explica", "aparece sozinha 30 dias antes" in pg.inner_text("[role=dialog]"))
+    pg.click("[role=dialog] button.btn-pri"); pg.wait_for_timeout(1000)
+    net = pg.evaluate("window.__DB.contas.filter(c => c.descricao === 'Internet')")
+    chk("despesa fixa: Todo mês lança uma conta só, fixa", len(net) == 1 and net[0].get("fixa") is True, net)
     # O.S. em aberto guardadas por inteiro (inclui aguardando pagamento) e telas que só funcionam online
     pg.goto(U + "#/dados-locais"); pg.wait_for_timeout(2500)
     t = pg.inner_text("main")

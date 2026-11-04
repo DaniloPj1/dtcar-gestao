@@ -386,7 +386,7 @@ function App() {
     "dados-locais": () => html`<${DadosLocais} />`,
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
-    balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, email: () => html`<${Email} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
+    balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, email: () => html`<${Email} params=${params} key=${qs || ""} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
     financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, receber: () => html`<${ContasReceber} />`, boletos: () => html`<${Boletos} />`, caixa: () => html`<${PrevisaoCaixa} />`, backup: () => html`<${Backup} />`,
     funcionarios: () => html`<${Funcionarios} params=${params} key=${qs || ""} />`, funcionario: () => html`<${FuncionarioTela} id=${param} params=${params} key=${param + (qs || "")} />`,
   }[base]?.() || html`<${Painel} />`;

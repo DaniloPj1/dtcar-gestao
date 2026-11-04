@@ -13,24 +13,19 @@ import { PrecisaConectar } from "./microsoft.ts";
 
 const json = (corpo: unknown, status = 200) => Response.json(corpo, { status });
 const env = (k: string) => Deno.env.get(k);
-const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
-
-function pagina(ok: boolean, msg: string) {
-  const html = `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>E-mail da oficina</title><style>body{font-family:system-ui,sans-serif;background:#0f1720;color:#e6edf3;display:grid;place-items:center;min-height:100vh;margin:0;padding:16px}
-.c{max-width:440px;background:#16212c;border:1px solid #2b3a48;border-radius:12px;padding:24px}h1{font-size:20px;margin:0 0 8px;color:${ok ? "#4ade80" : "#f87171"}}
-a{display:inline-block;margin-top:16px;background:#1d6fd8;color:#fff;padding:10px 16px;border-radius:8px;text-decoration:none}</style></head>
-<body><div class="c"><h1>${ok ? "E-mail conectado" : "Não foi possível conectar"}</h1><p>${esc(msg)}</p>
-<a href="${SITE}/#/email">Voltar ao DTCar Gestão</a></div></body></html>`;
-  return new Response(html, { status: ok ? 200 : 400, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "referrer-policy": "no-referrer" } });
+// O Supabase não mostra páginas HTML de funções no endereço padrão (vira texto puro): o retorno do login
+// volta direto para a tela Sistema › E-mail, com o resultado no endereço (a tela mostra o aviso).
+function voltar(ok: boolean, msg: string) {
+  const q = new URLSearchParams({ login: ok ? "ok" : "erro", msg: msg.slice(0, 300) });
+  return new Response(null, { status: 302, headers: { location: SITE + "/#/email?" + q.toString(), "cache-control": "no-store", "referrer-policy": "no-referrer" } });
 }
 
 const retorno = withSupabase({ auth: "none" }, async (req, ctx) => {
   const url = new URL(req.url);
-  if (!url.searchParams.has("state")) return pagina(false, "Endereço de retorno do login da Microsoft. Abra o DTCar Gestão e use Sistema › E-mail › Conectar.");
+  if (!url.searchParams.has("state")) return voltar(false, "Endereço de retorno do login da Microsoft. Use Sistema › E-mail › Conectar Hotmail.");
   const adm = ctx.supabaseAdmin as unknown as Db;
   const r = await retornoLogin(url, { usuario: adm, adm, env });
-  return pagina(r.ok, r.msg);
+  return voltar(r.ok, r.msg);
 });
 
 const acoes = withSupabase({ auth: "user" }, async (req, ctx) => {

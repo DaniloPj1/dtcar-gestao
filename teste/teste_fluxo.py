@@ -90,7 +90,10 @@ try:
     # aprovar orçamento direto (o4 aguardando) pela lista
     pg.goto(U + "#/ordens"); pg.wait_for_timeout(1200)
     esperado = pg.evaluate("""(() => import('./js/regras.js').then(r => window.__DB.ordens.filter(o => ['orcamento', 'execucao', 'pagamento'].includes(r.etapaOS(o)) && !(o.legado && o.status === 'entregue' && !o.legado_receber))
-      .reduce((s, o) => s + Number(o.total || 0), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })))()""")
+      .reduce((s, o) => s + (r.etapaOS(o) === 'pagamento' ? Math.max(0, Number(o.total || 0) - Number(o.recebido || 0)) : Number(o.total || 0)), 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })))()""")
+    soma3 = pg.evaluate("[...document.querySelectorAll('.osr-orcamento small, .osr-execucao small, .osr-pagamento small')].map(e => Number(e.textContent.replace(/[^0-9,]/g, '').replace(',', '.'))).reduce((a, b) => a + b, 0)")
+    tot = pg.evaluate("Number(document.querySelector('.osr-total b').textContent.replace(/[^0-9,]/g, '').replace(',', '.'))")
+    chk("O.S.: total em aberto = soma dos três cartões (orçamento + execução + a receber) [%s = %s]" % (tot, soma3), abs(tot - soma3) < 0.01)
     chk("O.S.: total em aberto somado como no sistema antigo (" + esperado + ")", esperado in pg.inner_text(".osr-total") and "Total em aberto" in pg.inner_text(".os-resumo"))
     pg.screenshot(path=SAIDA + "/u4b-lista-os.png")
     pg.click(".linha-os-acoes:has-text('01896') .btn-avancar"); pg.wait_for_timeout(1200)

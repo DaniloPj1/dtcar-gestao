@@ -52,7 +52,30 @@
         throw new Error("Ação desconhecida."); } },
     receber: { abertas: async () => { net(); return db.receber.filter(p => p.status === "aberta"); }, listar: async ({ status } = {}) => db.receber.filter(p => !status || p.status === status),
       daOrdem: async oid => db.receber.filter(p => p.ordem_id === oid), lancar: async ls => { const xs = ls.map(l => ({ id: uid(), status: "aberta", criado_em: now(), ...l })); db.receber.push(...xs); return xs; },
-      atualizar: async (id, patch) => { const p = db.receber.find(x => x.id === id); Object.assign(p, patch); return p; } },
+      atualizar: async (id, patch) => { const p = db.receber.find(x => x.id === id); Object.assign(p, patch); return p; },
+      um: async id => { const p = db.receber.find(x => x.id === id); if (!p) throw new Error("não encontrada"); return { ...p }; } },
+    // boletos Sicredi (supabase/v28.sql)
+    boletos: { listar: async () => { net(); return (db.boletos = db.boletos || []).slice(); }, daOrdem: async oid => (db.boletos || []).filter(b => b.ordem_id === oid),
+      porNossoNumero: async l => (db.boletos || []).filter(b => l.includes(b.nosso_numero)),
+      incluir: async ls => { db.boletos = db.boletos || []; if (ls.some(l => db.boletos.some(b => b.nosso_numero === l.nosso_numero))) throw new Error("nosso número repetido");
+        const xs = ls.map(l => ({ id: uid(), criado_em: now(), tarifa: 0, qr_url: "", txid: "", ocorrencia: "", ...l })); db.boletos.push(...xs); return xs; },
+      atualizar: async (id, patch) => { const b = db.boletos.find(x => x.id === id); Object.assign(b, patch); return b; },
+      reservarPagamento: async (id, patch) => { const b = db.boletos.find(x => x.id === id); if (b.situacao === "pago") return null; Object.assign(b, patch, { situacao: "pago" }); return b; },
+      proximo: async chave => { window.__CONT = window.__CONT || {}; return (window.__CONT[chave] = (window.__CONT[chave] || 0) + 1); },
+      arquivos: { listar: async () => (db.boletos_arquivos || []).slice().reverse(), um: async id => (db.boletos_arquivos || []).find(a => a.id === id),
+        porHash: async h => (db.boletos_arquivos || []).find(a => a.hash === h) || null,
+        salvar: async a => { const x = { id: uid(), criado_em: now(), ...a }; (db.boletos_arquivos = db.boletos_arquivos || []).push(x); return x; } } },
+    temBoletos: () => true,
+    // API do Sicredi (função "sicredi"): respostas como as da documentação v3.9.1; window.__SICREDI guarda as chamadas e o que o "banco" sabe
+    sicredi: async body => { const S = window.__SICREDI = window.__SICREDI || { chamadas: [], situacao: {}, seq: 0 }; S.chamadas.push(body);
+      if (body.acao === "teste_completo") return { ok: true, passos: [{ passo: "Entrar no Sicredi (token)", ok: true, detalhe: "Token recebido (vale 300 s)." }, { passo: "Emitir boleto de teste (R$ 1,00, com Pix)", ok: true, detalhe: "Nosso número 261000019, com QR Code Pix." }] };
+      if (body.acao === "testar") { if (window.__SICREDI_SEM_CODIGO) throw new Error("Falta o código de acesso: gere no internet banking (Cobrança › Código de Acesso) e grave no Supabase como SICREDI_CODIGO_ACESSO."); return { ok: true, ambiente: body.ambiente }; }
+      if (body.acao === "emitir") { const nn = "261" + String(++S.seq).padStart(5, "0") + "0"; S.situacao[nn] = "EM CARTEIRA PIX";
+        return { txid: "tx" + nn, qrCode: "00020101021226930014br.gov.bcb.pix2571pix-qrcode.sicredi.com.br/qr/v2/cobv/" + nn + "5204000053039865802BR5903PIX6006Cidade62070503***6304ABCD",
+          linhaDigitavel: "74891161560000001905231685453109116560000123456".slice(0, 47), codigoBarras: "74891165600001234561126200001905231685453109", cooperativa: "0523", posto: "16", nossoNumero: nn }; }
+      if (body.acao === "consultar") { const st = S.situacao[body.nosso_numero] || "EM CARTEIRA"; return { nossoNumero: body.nosso_numero, situacao: st, dadosLiquidacao: /^LIQUIDADO/.test(st) ? { data: "2026-11-06T10:00:00", valor: S.valorPago || 0 } : null }; }
+      if (body.acao === "baixar") { S.situacao[body.nosso_numero] = "BAIXADO POR SOLICITACAO"; return { statusComando: "MOVIMENTO_ENVIADO" }; }
+      throw new Error("Ação desconhecida."); },
     espelhoZerar: async () => ({}),
     ordemNoAparelho: async id => (window.__GUARD = window.__GUARD || {})[id] || null,
     guardarOrdem: async id => { net(); const o = db.ordens.find(x => x.id === id); (window.__GUARD = window.__GUARD || {})[id] = { ...o }; return o; },

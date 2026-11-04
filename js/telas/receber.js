@@ -156,7 +156,7 @@ export function ContasReceber() {
         ${p.ordem_id ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + p.ordem_id)}>O.S.</button>` : null}</span></div>`; };
   if (semTabela) return html`<div class="pagina"><div class="aviso">O banco ainda não tem as contas a receber. Rode o arquivo <b>supabase/v12.sql</b> no SQL Editor do Supabase e recarregue a página.${erro ? " (" + erro + ")" : ""}</div></div>`;
   return html`<div class="pagina larga-media financeiro">
-    <div class="painel-topo"><div><h1>Contas a receber</h1><span class="sub">${reais(soma(abertas))} a receber em ${abertas.length} parcela(s)</span></div></div>
+    <div class="painel-topo"><div><h1>Contas a receber</h1><span class="sub">${reais(soma(abertas))} a receber em ${abertas.length} parcela(s)</span></div>${pode(perfil, "financeiro") ? html`<button type="button" class="btn" onClick=${() => ir("/boletos")}>Boletos Sicredi</button>` : null}</div>
     <div class="kpis fin-kpis">
       <div class=${"kpi" + (g("vencida").length ? " kpi-alerta" : "")}><span>Vencidas</span><b class="kpi-din">${reais(soma(g("vencida")))}</b><small>${g("vencida").length} parcela(s)</small></div>
       <div class=${"kpi" + (g("hoje").length ? " kpi-aviso" : "")}><span>Vencem hoje</span><b class="kpi-din">${reais(soma(g("hoje")))}</b><small>${g("hoje").length} parcela(s)</small></div>

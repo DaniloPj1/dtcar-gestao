@@ -1,0 +1,10 @@
+nn1|1
+nn2|2
+outro ano|1
+remessa1|1
+depois do 41|42
+remessa depois da 9|10
+repetido recusado|1
+retorno unico|1
+sem permissao|10
+restaurar aceita boletos|t

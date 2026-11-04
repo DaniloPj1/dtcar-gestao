@@ -14,7 +14,7 @@ const EXEMPLO = { remetente: "cobranca@fornecedor.com.br", dominio: "fornecedor.
 /** WhatsApp e e-mail ficam juntos no menu lateral: abas para trocar entre as duas telas */
 export const AbasMensagens = ({ ativa }) => html`<${Abas} abas=${[["whatsapp", "WhatsApp"], ["email", "E-mail"]]} ativa=${ativa} onTroca=${k => { location.hash = "#/" + k; }} />`;
 
-export function Email() {
+export function Email({ params = {} } = {}) {
   const { avisar, confirmar } = useApp();
   const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
   const [envios, setEnvios] = useState(null), [aguardando, setAguardando] = useState(null); // aguardando = conectado_em de antes do login
@@ -29,6 +29,8 @@ export function Email() {
     } catch (e) { if (vivo.current) setErro(e.message); }
   };
   useEffect(() => { ler(true); return () => { vivo.current = false; }; }, []);
+  // volta do login da Microsoft (a função "email" redireciona para cá com o resultado)
+  const retorno = params.login ? { ok: params.login === "ok", msg: params.msg || "" } : null;
   // depois de abrir o login da Microsoft, confere a cada 4 s até conectar (o login vale 10 minutos)
   useEffect(() => {
     if (!aguardando) return;
@@ -92,6 +94,7 @@ export function Email() {
         <li>Enviados hoje: <b>${st.enviados_hoje || 0}</b> · regras do filtro: <b>${st.regras || 0}</b></li>
         ${st.detalhe ? html`<li>Último aviso: ${st.detalhe}</li>` : null}
       </ul>` : null}
+      ${retorno ? html`<div class=${retorno.ok ? "info" : "aviso"} role="status">${retorno.ok ? "Conectado: " : "Não foi possível conectar: "}${retorno.msg}</div>` : null}
       ${erro ? html`<div class="aviso" role="alert">${erro}</div>` : null}
       ${st && st.configurado ? html`<div class="acoes">
         <button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${conectar}>${fazendo === "conectar" ? "Abrindo…" : st.situacao === "conectado" ? "Conectar outra vez" : "Conectar Hotmail"}</button>

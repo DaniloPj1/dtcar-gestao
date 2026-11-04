@@ -38,7 +38,7 @@ const dominioBate = (dom: string, valor: string) => !!dom && (dom === valor || d
 
 const RX_NF = /\b(nota fiscal|nf-?e|nfs-?e|danfe|xml da nota)\b/;
 const RX_COBRANCA = /\b(boleto|boletos|linha digitavel|fatura|cobranca|duplicata|vencimento|vence|2a via|segunda via|titulo|pagamento pendente)\b/;
-const RX_PEDIDO = /\b(orcamento|cotacao|pedido|proposta)\b/;
+const RX_PEDIDO = /\b(orcamento|cotacao|pedido|proposta|ordem de compra|ordem de servico)\b/;
 const RX_MARKETING = /^(newsletter|news|marketing|promo|promocao|promocoes|ofertas|oferta|novidades|mkt|email-marketing|comunicacao)[@._-]/;
 const extensao = (nome: string) => (normalizar(nome).match(/\.([a-z0-9]+)$/) || [])[1] || "";
 const ehXml = (a: Anexo) => extensao(a.nome) === "xml" || /xml/.test(normalizar(a.tipo));

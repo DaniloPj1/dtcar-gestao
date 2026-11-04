@@ -44,6 +44,29 @@ export function paraGuardar(m) {
     de_mim: !!k.fromMe, texto: t.texto.slice(0, 4000), tipo: t.tipo, em: new Date(ts ? ts * 1000 : Date.now()).toISOString() };
 }
 
+/** Mídia que vale baixar de uma mensagem RECEBIDA: áudio (para transcrever; o arquivo não é guardado) e foto
+ *  (guardada 30 dias). null = nada a baixar. Com "pular", não baixa e registra o motivo. */
+export const LIMITE_AUDIO_S = 600, LIMITE_AUDIO_BYTES = 8 * 1024 * 1024, LIMITE_FOTO_BYTES = 5 * 1024 * 1024;
+const numero = (v) => Number(v && typeof v === "object" ? (v.low ?? v.toString()) : v) || 0;
+export function midiaParaBaixar(m) {
+  const k = m && m.key; if (!k || !k.id || k.fromMe || !conversaIndividual(k.remoteJid)) return null;
+  const c = conteudo(m); if (!c) return null;
+  if (c.audioMessage) {
+    const a = c.audioMessage, segundos = numero(a.seconds), bytes = numero(a.fileLength);
+    const r = { msg_id: k.id, tipo: "audio", mime: String(a.mimetype || "audio/ogg").split(";")[0], segundos };
+    if (segundos > LIMITE_AUDIO_S || bytes > LIMITE_AUDIO_BYTES) r.pular = "Áudio longo demais para transcrever (mais de 10 minutos).";
+    return r;
+  }
+  if (c.imageMessage) {
+    const f = c.imageMessage, bytes = numero(f.fileLength);
+    const mime = String(f.mimetype || "image/jpeg").split(";")[0];
+    const r = { msg_id: k.id, tipo: "imagem", mime: /^image\/(jpeg|png|webp)$/.test(mime) ? mime : "image/jpeg", segundos: 0 };
+    if (bytes > LIMITE_FOTO_BYTES) r.pular = "Foto grande demais para guardar (mais de 5 MB).";
+    return r;
+  }
+  return null;
+}
+
 /** Variações do número brasileiro (com e sem o 9 do celular): o WhatsApp de contas antigas pode não ter o 9. */
 export function variacoes(tel) {
   const d = String(tel || "").replace(/\D/g, ""); const v = [d];

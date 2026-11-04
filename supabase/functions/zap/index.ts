@@ -10,6 +10,10 @@
 //   desconectar — desvincula o aparelho e apaga a sessão
 // Ainda não envia nem recebe mensagens (etapas seguintes).
 // processar (v25) — sem o motor: guarda as mensagens que chegaram e envia a fila pelas regras, em segundo plano.
+// v32 — guarda os "tiques" (entregue, lida, ouvida) das mensagens enviadas; recebe áudio e foto (do motor, com a chave do
+//   motor no cabeçalho x-dtcar-motor, ou baixados aqui no processar): áudio é transcrito pelo Groq (segredo GROQ_API_KEY;
+//   o arquivo não é guardado), foto vai para a pasta privada "whatsapp-midia" por 30 dias. Aceita o agendamento do banco
+//   (cabeçalho x-dtcar-cron, mesmo segredo da SEFAZ): "processar" sem o motor e "limpar_midia" (fotos vencidas).
 // Revezamento (v24): quando o motor do Android está com a vez, a função não conecta com a sessão guardada
 // (conferir responde pelo último sinal do motor; desconectar vira pedido ao motor).
 //
@@ -18,7 +22,8 @@
 // Publicar com "Verify JWT" desligado (a função confere o login com withSupabase).
 // Biblioteca: SOMENTE o pacote oficial "baileys" (WhiskeySockets), com a versão travada.
 import { withSupabase } from "npm:@supabase/server@1.9.2";
-import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto } from "npm:baileys@7.0.0-rc14";
+import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto, downloadMediaMessage } from "npm:baileys@7.0.0-rc14";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { createCipheriv } from "node:crypto";
 import QRCode from "npm:qrcode@1.5.4";
 
@@ -165,6 +170,26 @@ export function paraGuardar(m: any) {
   return { msg_id: k.id, jid: k.remoteJid, telefone: telefoneDaChave(k), nome: k.fromMe ? "" : String(m.pushName || "").slice(0, 80),
     de_mim: !!k.fromMe, texto: t.texto.slice(0, 4000), tipo: t.tipo, em: new Date(ts ? ts * 1000 : Date.now()).toISOString() };
 }
+export const LIMITE_AUDIO_S = 600, LIMITE_AUDIO_BYTES = 8 * 1024 * 1024, LIMITE_FOTO_BYTES = 5 * 1024 * 1024;
+const numero = (v: any) => Number(v && typeof v === "object" ? (v.low ?? v.toString()) : v) || 0;
+export function midiaParaBaixar(m: any) {
+  const k = m && m.key; if (!k || !k.id || k.fromMe || !conversaIndividual(k.remoteJid)) return null;
+  const c = conteudo(m); if (!c) return null;
+  if (c.audioMessage) {
+    const a = c.audioMessage, segundos = numero(a.seconds), bytes = numero(a.fileLength);
+    const r: any = { msg_id: k.id, tipo: "audio", mime: String(a.mimetype || "audio/ogg").split(";")[0], segundos };
+    if (segundos > LIMITE_AUDIO_S || bytes > LIMITE_AUDIO_BYTES) r.pular = "Áudio longo demais para transcrever (mais de 10 minutos).";
+    return r;
+  }
+  if (c.imageMessage) {
+    const f = c.imageMessage, bytes = numero(f.fileLength);
+    const mime = String(f.mimetype || "image/jpeg").split(";")[0];
+    const r: any = { msg_id: k.id, tipo: "imagem", mime: /^image\/(jpeg|png|webp)$/.test(mime) ? mime : "image/jpeg", segundos: 0 };
+    if (bytes > LIMITE_FOTO_BYTES) r.pular = "Foto grande demais para guardar (mais de 5 MB).";
+    return r;
+  }
+  return null;
+}
 export function variacoes(tel: string) {
   const d = String(tel || "").replace(/\D/g, ""); const v = [d];
   if (/^55\d{2}9\d{8}$/.test(d)) v.push(d.slice(0, 4) + d.slice(5));
@@ -245,6 +270,196 @@ function proximo(sock: Sock, ms: number, aceitarQr = true): Promise<{ tipo: "qr"
       }
     });
   });
+}
+
+/** processar — sem o motor do Android: conecta, guarda as mensagens que chegaram (v32: e a mídia, e os tiques), envia o que
+ *  as regras da fila liberarem e desconecta. Responde na hora e trabalha em segundo plano (até ~2 min).
+ *  Chamado pela tela/conector (administrador) ou pelo agendamento do banco (v32). */
+async function processar(adm: Db, ms: () => number): Promise<Response> {
+  const acao = "processar";
+  const sessao = sessaoNoBanco(adm);
+  const vez = vezNoBanco(adm);
+    // Sem o motor do Android: conecta, guarda as mensagens que chegaram, envia o que as regras da fila liberarem
+    // (v25: horário, intervalo, limites) e desconecta. Responde na hora e trabalha em segundo plano (até ~2 min).
+    if ((await vez.motor()).ativo) return json({ ok: true, motor: true, detalhe: "O motor do Android está com a conexão: ele envia e recebe sozinho, na hora." });
+    // pega a vez ANTES de carregar a sessão (quem usou antes já gravou; ninguém mexe nela enquanto esta trabalha)
+    if (!(await vez.pegar(150))) return json(ocupada(ms()));
+    const guarda = guardaDaVez(150); // o prazo conta desde a reserva
+    let sessaoAtual;
+    try { sessaoAtual = await sessao.carregar(); } catch (e) { await vez.soltar(); throw e; }
+    const { creds, keys, salvarCreds } = sessaoAtual;
+    if (!vinculado(creds)) { await vez.soltar(); return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." }); }
+    if (!guarda.valida()) { await vez.soltar(); return json(ocupada(ms())); }
+    const t0 = Date.now();
+    const trabalho = (async () => {
+      const s = abrir(creds, keys, salvarCreds); guarda.vigiar(s);
+      const aGuardar: any[] = []; let guardadas = 0, enviadas = 0, motivo = "";
+      const tiques: any[] = []; const midias: any[] = [];
+      s.ev.on("messages.upsert", ({ messages }: any) => { for (const x of messages || []) {
+        const g = paraGuardar(x); if (g) aGuardar.push(g);
+        const md = midiaParaBaixar(x); if (md && midias.length < 10) midias.push({ ...md, m: x });
+      } });
+      // v32: tiques das enviadas pela oficina
+      s.ev.on("messages.update", (lista: any[]) => { for (const u of lista || []) {
+        const st = u && u.update && u.update.status;
+        if (u && u.key && u.key.fromMe && u.key.id && typeof st === "number") tiques.push({ msg_id: u.key.id, status: st, em: new Date().toISOString() });
+      } });
+      const gravarTiques = async () => {
+        if (!tiques.length) return;
+        const lote = tiques.splice(0, tiques.length);
+        const { error } = await adm.rpc("whatsapp_guardar_entrega", { p_lista: lote });
+        if (error && !/function|does not exist|PGRST202/i.test(error.message)) console.error("tiques", error.message);
+      };
+      const guardar = async () => {
+        if (!aGuardar.length) return;
+        const lote = aGuardar.splice(0, aGuardar.length);
+        const { data, error } = await adm.rpc("whatsapp_guardar_mensagens", { p_msgs: lote });
+        if (error) { console.error("guardar mensagens", error.message); aGuardar.unshift(...lote); } else guardadas += Number(data) || 0;
+      };
+      const r = await proximo(s, 40000);
+      if (r.tipo !== "open") {
+        fechar(s);
+        if (r.tipo === "close" && r.codigo === DisconnectReason.loggedOut) {
+          await sessao.apagar(); await situacao(adm, { situacao: "desligado", numero: "", detalhe: "O celular desvinculou este aparelho. Pareie de novo." });
+        } else await situacao(adm, { ultimo_teste: { acao, ok: false, detalhe: r.msg || r.tipo, em: new Date().toISOString() } });
+        return;
+      }
+      await esperar(8000); // o WhatsApp entrega o que chegou enquanto estava desconectado
+      while (Date.now() - t0 < 115000 && guarda.valida()) {
+        await guardar(); await gravarTiques();
+        // recebidas não gravadas podem ter um PARAR: sem gravar, não envia nada
+        if (aGuardar.length) { motivo = "mensagens recebidas não gravadas: parou"; break; }
+        const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
+        if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
+        const prox = p as { mensagem?: { id: number; telefone: string; texto: string }; motivo?: string; proximo_envio?: string };
+        if (!prox || !prox.mensagem) {
+          motivo = (prox && prox.motivo) || "";
+          const ate = prox && prox.motivo === "intervalo" && prox.proximo_envio ? new Date(prox.proximo_envio).getTime() : 0;
+          if (ate && ate - t0 < 112000) { await esperar(Math.max(500, ate - Date.now() + 500)); continue; } // espera o intervalo se couber
+          break;
+        }
+        const m = prox.mensagem; let res: Record<string, unknown>;
+        try {
+          const jid = await jidParaEnvio(s, m.telefone);
+          if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
+          else res = { p_ok: true, p_msg_id: await enviarTexto(s, jid, m.texto), p_jid: jid };
+        } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + (e as Error).message }; }
+        if (res.p_ok) enviadas++;
+        // o resultado marca a mensagem e o intervalo/limites: sem gravar, não envia mais nada (a mensagem nunca é reenviada:
+        // fica "enviando" e vira "confira no WhatsApp" depois de 5 min)
+        let gravou = false;
+        for (let i = 0; i < 3 && !gravou; i++) {
+          if (i) await esperar(2000);
+          const { error: e2 } = await adm.rpc("whatsapp_resultado", { p_dono: "supabase", p_id: vez.id, p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id ?? null, p_jid: res.p_jid ?? null, p_erro: res.p_erro ?? null });
+          if (e2) console.error("resultado do envio", e2.message); else gravou = true;
+        }
+        if (!gravou) { motivo = "resultado do envio não gravado: parou"; break; }
+        if (await vez.pegar(150)) guarda.renovar(150); else break; // renova a vez enquanto trabalha
+      }
+      await esperar(1500); await guardar(); await gravarTiques();
+      // v32: mídia recebida (só depois de a mensagem estar gravada), no tempo que sobrar da vez
+      for (const md of midias) {
+        if (Date.now() - t0 > 125000 || !guarda.valida()) break;
+        try {
+          if (md.pular) await tratarMidia(adm, { msg_id: md.msg_id, tipo: md.tipo, erro: md.pular });
+          else { const buf = await downloadMediaMessage(md.m, "buffer", {}, { logger: log, reuploadRequest: s.updateMediaMessage } as any);
+            await tratarMidia(adm, { msg_id: md.msg_id, tipo: md.tipo, mime: md.mime, segundos: md.segundos, bytes: new Uint8Array(buf as Uint8Array) }); }
+        } catch (e) { await tratarMidia(adm, { msg_id: md.msg_id, tipo: md.tipo, erro: "Não deu para baixar/processar: " + (e as Error).message }).catch(() => {}); }
+      }
+      guarda.parar(); fechar(s);
+      await situacao(adm, { ultimo_teste: { acao, ok: true, enviadas, guardadas, motivo, ms: Date.now() - t0, em: new Date().toISOString() } });
+    })().catch((e) => console.error("processar", e)).finally(() => vez.soltar());
+    if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(trabalho); else await trabalho;
+    return json({ ok: true, iniciado: true, ms: ms(), detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." });
+  }
+
+// ---------- v32: mídia recebida ----------
+type Midia = { msg_id: string; tipo: string; mime?: string; segundos?: number; bytes?: Uint8Array; erro?: string };
+const EXT: Record<string, string> = { "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp" };
+/** Transcreve o áudio (Groq, Whisper) ou guarda a foto (30 dias) e registra na mensagem. false = mensagem ainda não gravada. */
+export async function tratarMidia(adm: any, md: Midia, buscar: typeof fetch = fetch): Promise<{ ok: boolean; detalhe: string }> {
+  const guardar = async (p: Record<string, unknown>) => {
+    const { data, error } = await adm.rpc("whatsapp_guardar_midia", { p: { msg_id: md.msg_id, ...p } });
+    if (error) throw new Error(/function|does not exist|PGRST202/i.test(error.message) ? "falta rodar o supabase/v32.sql" : error.message);
+    return data === true;
+  };
+  if (md.erro || !md.bytes) { const g = await guardar({ erro: md.erro || "Arquivo não recebido." }); return { ok: g, detalhe: md.erro || "sem arquivo" }; }
+  if (md.tipo === "audio") {
+    if (md.bytes.length > LIMITE_AUDIO_BYTES) { const g = await guardar({ erro: "Áudio grande demais para transcrever." }); return { ok: g, detalhe: "grande" }; }
+    const chave = Deno.env.get("GROQ_API_KEY");
+    if (!chave) { const g = await guardar({ erro: "Transcrição desligada: falta a chave do Groq (GROQ_API_KEY) na função zap.", duracao_s: md.segundos || null }); return { ok: g, detalhe: "sem chave do Groq" }; }
+    const form = new FormData();
+    form.append("file", new Blob([md.bytes as Uint8Array<ArrayBuffer>], { type: md.mime || "audio/ogg" }), "audio." + ((md.mime || "").includes("mpeg") ? "mp3" : (md.mime || "").includes("mp4") ? "m4a" : "ogg"));
+    form.append("model", "whisper-large-v3-turbo"); form.append("language", "pt"); form.append("response_format", "json"); form.append("temperature", "0");
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
+    let texto = "";
+    try {
+      const r = await buscar("https://api.groq.com/openai/v1/audio/transcriptions", { method: "POST", headers: { authorization: "Bearer " + chave }, body: form, signal: ctl.signal });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error((j && j.error && j.error.message) || "HTTP " + r.status);
+      texto = String((j && j.text) || "").trim();
+    } catch (e) {
+      const g = await guardar({ erro: "Transcrição falhou: " + ((e as Error).name === "AbortError" ? "o Groq não respondeu a tempo" : (e as Error).message), duracao_s: md.segundos || null });
+      return { ok: g, detalhe: "falhou" };
+    } finally { clearTimeout(t); }
+    const g = await guardar(texto ? { transcricao: texto, duracao_s: md.segundos || null, mime: md.mime } : { erro: "Áudio sem fala reconhecida.", duracao_s: md.segundos || null });
+    return { ok: g, detalhe: texto ? "transcrito" : "sem fala" };
+  }
+  if (md.tipo === "imagem") {
+    if (md.bytes.length > LIMITE_FOTO_BYTES) { const g = await guardar({ erro: "Foto grande demais para guardar (mais de 5 MB)." }); return { ok: g, detalhe: "grande" }; }
+    const mime = EXT[md.mime || ""] ? md.mime! : "image/jpeg";
+    const d = new Date(); const path = `${d.getUTCFullYear()}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${md.msg_id.replace(/[^A-Za-z0-9_-]/g, "")}.${EXT[mime]}`;
+    const { error } = await adm.storage.from("whatsapp-midia").upload(path, md.bytes, { contentType: mime, upsert: true });
+    if (error) { const g = await guardar({ erro: "Foto não guardada: " + error.message }); return { ok: g, detalhe: "falhou" }; }
+    const g = await guardar({ path, mime });
+    if (!g) await adm.storage.from("whatsapp-midia").remove([path]).catch(() => {}); // mensagem ainda não gravada: o motor manda de novo
+    return { ok: g, detalhe: "guardada" };
+  }
+  const g = await guardar({ erro: "Tipo de mídia não guardado." }); return { ok: g, detalhe: "tipo" };
+}
+
+function chaveServidor(): string {
+  const legado = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY"); if (legado) return legado;
+  try { const k = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}"); return (k.default || Object.values(k)[0] || "") as string; } catch (_) { return ""; }
+}
+const admServidor = () => createClient(Deno.env.get("SUPABASE_URL")!, chaveServidor(), { auth: { persistSession: false } }) as any;
+const b64 = (s: string) => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
+
+/** Motor do Android manda a mídia recebida (cabeçalho x-dtcar-motor com a chave do motor). */
+export async function atenderMotor(req: Request, adm: any = admServidor()): Promise<Response> {
+  const chave = req.headers.get("x-dtcar-motor") || "";
+  if (!/^dtm_[0-9a-f]{64}$/.test(chave)) return json({ erro: "Chave do motor ausente." }, 401);
+  const { error: e1 } = await adm.rpc("whatsapp_motor_conferir", { p_chave: chave });
+  if (e1) return json({ erro: "Chave do motor inválida ou revogada." }, 401);
+  const c = await req.json().catch(() => ({}));
+  if (c.acao !== "midia" || typeof c.msg_id !== "string" || !c.msg_id) return json({ erro: "Pedido inválido." }, 400);
+  if (typeof c.base64 === "string" && c.base64.length > Math.ceil(LIMITE_AUDIO_BYTES * 4 / 3) + 8) return json({ erro: "Arquivo grande demais." }, 413);
+  let bytes: Uint8Array | undefined;
+  try { bytes = typeof c.base64 === "string" && c.base64 ? b64(c.base64) : undefined; } catch (_) { return json({ erro: "Arquivo inválido." }, 400); }
+  const r = await tratarMidia(adm, { msg_id: c.msg_id, tipo: String(c.tipo || ""), mime: c.mime, segundos: Number(c.segundos) || 0, bytes, erro: c.erro ? String(c.erro).slice(0, 200) : undefined });
+  if (!r.ok) return json({ erro: "Mensagem ainda não gravada: mande de novo." }, 409);
+  return json({ ok: true, detalhe: r.detalhe });
+}
+
+/** Agendamento do banco (v32, pg_cron + pg_net): mesmo segredo da SEFAZ (tabela segredos, chave "cron"). */
+export async function atenderAgendamento(req: Request, adm: any = admServidor()): Promise<Response> {
+  const h = req.headers.get("x-dtcar-cron") || "";
+  const { data } = await adm.from("segredos").select("valor").eq("chave", "cron").maybeSingle();
+  if (!h || !data || data.valor !== h) return json({ erro: "Agendamento não autorizado." }, 401);
+  const c = await req.json().catch(() => ({}));
+  const inicio = performance.now(); const ms = () => Math.round(performance.now() - inicio);
+  if (c.acao === "processar") return await processar(adm as Db, ms);
+  if (c.acao === "limpar_midia") {
+    const { data: paths, error } = await adm.rpc("whatsapp_midia_vencida", { p_limite: 200 });
+    if (error) return json({ erro: error.message }, 500);
+    const lista = (paths || []) as string[];
+    if (!lista.length) return json({ ok: true, apagadas: 0 });
+    const { error: e2 } = await adm.storage.from("whatsapp-midia").remove(lista);
+    if (e2) return json({ erro: e2.message }, 500);
+    const { data: n } = await adm.rpc("whatsapp_midia_apagada", { p_paths: lista });
+    return json({ ok: true, apagadas: n });
+  }
+  return json({ erro: "Ação desconhecida." }, 400);
 }
 
 export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
@@ -393,77 +608,15 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     } finally { guarda.parar(); await vez.soltar(); }
   }
 
-  if (acao === "processar") {
-    // Sem o motor do Android: conecta, guarda as mensagens que chegaram, envia o que as regras da fila liberarem
-    // (v25: horário, intervalo, limites) e desconecta. Responde na hora e trabalha em segundo plano (até ~2 min).
-    if ((await vez.motor()).ativo) return json({ ok: true, motor: true, detalhe: "O motor do Android está com a conexão: ele envia e recebe sozinho, na hora." });
-    // pega a vez ANTES de carregar a sessão (quem usou antes já gravou; ninguém mexe nela enquanto esta trabalha)
-    if (!(await vez.pegar(150))) return json(ocupada(ms()));
-    const guarda = guardaDaVez(150); // o prazo conta desde a reserva
-    let sessaoAtual;
-    try { sessaoAtual = await sessao.carregar(); } catch (e) { await vez.soltar(); throw e; }
-    const { creds, keys, salvarCreds } = sessaoAtual;
-    if (!vinculado(creds)) { await vez.soltar(); return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado." }); }
-    if (!guarda.valida()) { await vez.soltar(); return json(ocupada(ms())); }
-    const t0 = Date.now();
-    const trabalho = (async () => {
-      const s = abrir(creds, keys, salvarCreds); guarda.vigiar(s);
-      const aGuardar: any[] = []; let guardadas = 0, enviadas = 0, motivo = "";
-      s.ev.on("messages.upsert", ({ messages }: any) => { for (const x of messages || []) { const g = paraGuardar(x); if (g) aGuardar.push(g); } });
-      const guardar = async () => {
-        if (!aGuardar.length) return;
-        const lote = aGuardar.splice(0, aGuardar.length);
-        const { data, error } = await adm.rpc("whatsapp_guardar_mensagens", { p_msgs: lote });
-        if (error) { console.error("guardar mensagens", error.message); aGuardar.unshift(...lote); } else guardadas += Number(data) || 0;
-      };
-      const r = await proximo(s, 40000);
-      if (r.tipo !== "open") {
-        fechar(s);
-        if (r.tipo === "close" && r.codigo === DisconnectReason.loggedOut) {
-          await sessao.apagar(); await situacao(adm, { situacao: "desligado", numero: "", detalhe: "O celular desvinculou este aparelho. Pareie de novo." });
-        } else await situacao(adm, { ultimo_teste: { acao, ok: false, detalhe: r.msg || r.tipo, em: new Date().toISOString() } });
-        return;
-      }
-      await esperar(8000); // o WhatsApp entrega o que chegou enquanto estava desconectado
-      while (Date.now() - t0 < 115000 && guarda.valida()) {
-        await guardar();
-        // recebidas não gravadas podem ter um PARAR: sem gravar, não envia nada
-        if (aGuardar.length) { motivo = "mensagens recebidas não gravadas: parou"; break; }
-        const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
-        if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
-        const prox = p as { mensagem?: { id: number; telefone: string; texto: string }; motivo?: string; proximo_envio?: string };
-        if (!prox || !prox.mensagem) {
-          motivo = (prox && prox.motivo) || "";
-          const ate = prox && prox.motivo === "intervalo" && prox.proximo_envio ? new Date(prox.proximo_envio).getTime() : 0;
-          if (ate && ate - t0 < 112000) { await esperar(Math.max(500, ate - Date.now() + 500)); continue; } // espera o intervalo se couber
-          break;
-        }
-        const m = prox.mensagem; let res: Record<string, unknown>;
-        try {
-          const jid = await jidParaEnvio(s, m.telefone);
-          if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
-          else res = { p_ok: true, p_msg_id: await enviarTexto(s, jid, m.texto), p_jid: jid };
-        } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + (e as Error).message }; }
-        if (res.p_ok) enviadas++;
-        // o resultado marca a mensagem e o intervalo/limites: sem gravar, não envia mais nada (a mensagem nunca é reenviada:
-        // fica "enviando" e vira "confira no WhatsApp" depois de 5 min)
-        let gravou = false;
-        for (let i = 0; i < 3 && !gravou; i++) {
-          if (i) await esperar(2000);
-          const { error: e2 } = await adm.rpc("whatsapp_resultado", { p_dono: "supabase", p_id: vez.id, p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id ?? null, p_jid: res.p_jid ?? null, p_erro: res.p_erro ?? null });
-          if (e2) console.error("resultado do envio", e2.message); else gravou = true;
-        }
-        if (!gravou) { motivo = "resultado do envio não gravado: parou"; break; }
-        if (await vez.pegar(150)) guarda.renovar(150); else break; // renova a vez enquanto trabalha
-      }
-      await esperar(1500); await guardar(); guarda.parar(); fechar(s);
-      await situacao(adm, { ultimo_teste: { acao, ok: true, enviadas, guardadas, motivo, ms: Date.now() - t0, em: new Date().toISOString() } });
-    })().catch((e) => console.error("processar", e)).finally(() => vez.soltar());
-    if (typeof EdgeRuntime !== "undefined") EdgeRuntime.waitUntil(trabalho); else await trabalho;
-    return json({ ok: true, iniciado: true, ms: ms(), detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." });
-  }
+  if (acao === "processar") return await processar(adm, ms);
 
   return json({ erro: "Ação desconhecida." }, 400);
 });
 
-if (import.meta.main) Deno.serve((req) => atender(req));
+/** Entrada: agendamento do banco, motor (mídia) ou a tela/conector (login do administrador). */
+export function rotear(req: Request) {
+  if (req.method === "POST" && req.headers.get("x-dtcar-cron")) return atenderAgendamento(req);
+  if (req.method === "POST" && req.headers.get("x-dtcar-motor")) return atenderMotor(req);
+  return atender(req);
+}
+if (import.meta.main) Deno.serve((req) => rotear(req));

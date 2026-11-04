@@ -250,6 +250,15 @@ function App() {
     const t = setTimeout(rodar, 3000), i = setInterval(rodar, 5 * 60000);
     return () => { clearTimeout(t); clearInterval(i); };
   }, [dados.carregado, offline, cfg.ultimoEspelho && cfg.ultimoEspelho.em]);
+  // v32: alertas do WhatsApp (motor sem sinal, desvinculado, fila parada) — só o administrador, a cada 5 min
+  const [zapAlertas, setZapAlertas] = useState(null);
+  useEffect(() => {
+    if (!membro || !pode(perfil, "ajustes") || offline || api.tipo !== "supabase" || !api.whatsapp || !api.whatsapp.alertas) return;
+    let vivo = true;
+    const ler = async () => { try { const a = await api.whatsapp.alertas(); if (vivo) setZapAlertas(a); } catch (e) { /* sem o v32 ou sem rede: sem faixa */ } };
+    const t = setTimeout(ler, 4000), i = setInterval(ler, 5 * 60000);
+    return () => { vivo = false; clearTimeout(t); clearInterval(i); };
+  }, [membro, perfil && perfil.papel, offline]);
   // backup COMPLETO do servidor na pasta do computador, uma vez por dia (proteção se o online falhar)
   useEffect(() => {
     // só o administrador: para os outros papéis as regras de acesso devolvem tabelas vazias (sem erro) e o "backup completo" sairia incompleto
@@ -420,6 +429,7 @@ function App() {
     <main>${cfg.espelhoLegado !== false ? html`<div class=${"faixa-transicao" + (transAberta ? " aberta" : "")} role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}<button type="button" class="faixa-trans-mais" aria-expanded=${transAberta ? "true" : "false"} onClick=${() => setTransAberta(!transAberta)}>${transAberta ? "Recolher" : "Ver detalhes"}</button></div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pendOS.length ? html`<div class="faixa-offline" role="status"><b>${pendOS.length} O.S. aberta(s) sem internet aguardando envio</b> (${pendOS.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}${!offline && pendAlt.length ? html`<div class="faixa-offline" role="status">${conflitos.length
       ? html`<b>${conflitos.length} alteração(ões) feita(s) sem internet com conflito</b>: alguém mudou a mesma O.S. no online. <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`
       : html`<b>${pendAlt.length} alteração(ões) feita(s) sem internet aguardando envio.</b> <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button>`}</div>` : null}
+    ${zapAlertas && Object.keys(zapAlertas).length && base !== "whatsapp" ? html`<div class="faixa-zap" role="alert"><b>WhatsApp da oficina:</b> ${Object.values(zapAlertas)[0].texto}${Object.keys(zapAlertas).length > 1 ? " (e mais " + (Object.keys(zapAlertas).length - 1) + ")" : ""} <button type="button" class="btn-link" onClick=${() => ir("/whatsapp")}>Ver</button></div>` : null}
     ${voltouInternet ? html`<div class="faixa-offline" role="status"><b>A internet voltou.</b> Você entrou sem internet: entre de novo com a sua senha para o sistema voltar a falar com o online${pend.length ? " e enviar o que foi feito sem internet (" + pend.length + ")" : ""}. <button type="button" class="btn btn-sm btn-pri" onClick=${() => { sairDoPC(); location.reload(); }}>Entrar com internet</button></div>` : null}
     ${!offline && !acessoNoPC && sessao && sessao.user ? html`<div class="faixa-versao" role="status"><b>Entrar sem internet:</b> confirme a sua senha uma vez para este computador deixar você entrar mesmo sem internet. <button type="button" class="btn btn-sm btn-pri" onClick=${() => setGuardarAcesso(true)}>Confirmar senha</button></div>` : null}
     ${guardarAcesso ? html`<${GuardarAcessoModal} email=${sessao.user.email} onFechar=${() => setGuardarAcesso(false)} onFeito=${() => { setGuardarAcesso(false); setAcessoNoPC(true); setToast({ msg: "Pronto: neste computador dá para entrar sem internet.", erro: false }); }} />` : null}

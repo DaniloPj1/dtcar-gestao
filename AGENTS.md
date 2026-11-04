@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v32.sql`, `v32.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -67,8 +67,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   funções `whatsapp_motor_*` (security definer, conferem a chave). **Revezamento:** `whatsapp_conexao.dono/dono_id/dono_ate`; quem está com
   a vez renova a cada 30 s (motor: 90 s de validade; só pega a vez se houver celular vinculado). A função zap pega a vez antes de conectar com a
   sessão guardada (`vezNoBanco`) e, com o motor na vez, não conecta: conferir responde pelo último sinal do motor e desconectar vira
-  `pedido = 'desconectar'`, que o motor executa. Nunca duas conexões com a mesma sessão. O motor se atualiza sozinho (`iniciar.sh` faz
-  `git pull` da `main` a cada reinício, de 12 em 12 h): tudo o que entra na `main` em `motor-zap/` vai para o celular.
+  `pedido = 'desconectar'`, que o motor executa. Nunca duas conexões com a mesma sessão. O motor se atualiza sozinho a cada reinício (de 12 em
+  12 h), **só por versão aprovada (v32)**: `iniciar.sh` vai para a etiqueta `motor-vX.Y` mais nova (sem nenhuma etiqueta, segue a `main`).
+  Mudou `motor-zap/`? Depois do merge, marque a versão (`git tag motor-vX.Y <commit> && git push origin motor-vX.Y`, com o `VERSAO` do motor.js).
+  Motor de produção: tablet Samsung SM-T515 (Android 9) desde 04/11/2026, sem senha de bloqueio (só deslizar) para o Termux:Boot ligar sozinho.
   **Etapa 3 (v25):** `whatsapp_fila` (o Claude põe pelo conector com `whatsapp_enfileirar`, só administrador, só telefone de cliente
   cadastrado — **v26: qualquer número com DDD** (decisão do Danilo, 03/11: o número é só da oficina e ele é o filtro); sem link encurtado, sem repetir em 10 min, respeita PARAR em `whatsapp_optout`), `whatsapp_mensagens` (conversas individuais;
   mídia só o tipo) e regras em `whatsapp_conexao.regras` (horário comercial de Brasília, intervalo aleatório 25–70 s via `proximo_envio`,
@@ -77,6 +79,17 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (o conector acorda a zap ao enviar/ler). Funções de mensagem existem em `motor-zap/whats.js` e, copiadas, na `zap/index.ts`: o teste da zap
   confere que as cópias são iguais (`teste/casos_whats.json`). Tabelas fora do backup e do espelho. Conector: `whatsapp_situacao`,
   `whatsapp_conversas`, `whatsapp_ler`, `whatsapp_enviar` (prévia com confirmar=false), `whatsapp_cancelar`.
+  **v32 (04/11/2026):** (1) status de entrega: o motor e a zap ouvem `messages.update` e gravam os tiques (`whatsapp_guardar_entrega`,
+  motor: `whatsapp_motor_entrega`) em `entrega/entregue_em/lida_em` de `whatsapp_mensagens` e `whatsapp_fila` (só anda para a frente:
+  enviada → entregue → lida → ouvida; erro só antes da entrega). (2) Alertas: `whatsapp_vigiar()` no pg_cron a cada 5 min (`dtcar-zap-vigia`)
+  grava `whatsapp_conexao.alertas` (motor sem sinal 15 min, desvinculado, erro 15 min, fila parada 30 min); para "motor" põe aviso na fila
+  (origem `sistema`) para `alerta_telefone` (tela) e avisa quando voltar (ou cancela o aviso que não saiu). Sem o motor, o mesmo agendamento
+  acorda a zap (`x-dtcar-cron`, segredo da SEFAZ) para enviar a fila e, no horário, buscar recebidas a cada 15 min. Faixa vermelha para o
+  administrador (`js/app.js`). (3) Conversa ligada ao cadastro: `whatsapp_cliente_do_tel`/`whatsapp_os_abertas` em `whatsapp_conversas` e
+  `whatsapp_mensagens_de`. (4) Mídia recebida: `midiaParaBaixar` (cópia em whats.js e zap); o motor baixa e manda à zap (`x-dtcar-motor` com
+  a chave do motor, ação `midia`); áudio → Groq Whisper (`whisper-large-v3-turbo`, segredo `GROQ_API_KEY` da função zap; sem a chave, registra
+  o motivo), texto vira "[áudio m:ss] ...", arquivo não guardado; foto → pasta privada `whatsapp-midia` por 30 dias (`dtcar-zap-limpar-midia`
+  apaga). (5) `whatsapp_resumo().sem_resposta`: cliente escreveu por último há mais de 2 h (últimos 3 dias). Teste: `python3 teste/teste_v32.py <banco>`.
   Próxima etapa: envio de PDF (O.S., orçamento) e modelos de mensagem.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`

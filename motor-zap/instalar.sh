@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Instala o motor do WhatsApp da DTCar no Android (Termux) — também serve num PC Linux com Node 20+.
 # Uso no Termux:
-#   pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/main/motor-zap/instalar.sh -o instalar.sh && bash instalar.sh
+#   apt update && yes | apt full-upgrade -y -o Dpkg::Options::=--force-confnew && pkg install -y curl && curl -fsSL https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/main/motor-zap/instalar.sh -o instalar.sh && bash instalar.sh
+# (o "full-upgrade" antes evita o erro do Termux novo em que o curl atualizado não acha a OpenSSL — 04/11/2026)
 # Pode rodar de novo: atualiza o código e mantém a chave já configurada.
 set -euo pipefail
 REPO="${DTCAR_REPO:-https://github.com/DaniloPj1/dtcar-gestao.git}"
@@ -21,6 +22,9 @@ command -v git >/dev/null || { echo "ERRO: Git não encontrado."; exit 1; }
 
 echo "-- Baixando o código do motor…"
 if [ -d "$DIR/.git" ]; then
+  # pode estar numa versão aprovada (etiqueta motor-v*, v32): volta ao ramo para atualizar; o iniciar.sh escolhe a versão
+  git -C "$DIR" fetch -q --tags origin || true
+  git -C "$DIR" checkout -q "$RAMO" 2>/dev/null || true
   git -C "$DIR" pull --ff-only -q
 else
   git clone -q --depth 1 --filter=blob:none --sparse -b "$RAMO" "$REPO" "$DIR"

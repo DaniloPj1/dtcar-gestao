@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -113,15 +113,73 @@ for (const c of casos.paraGuardar) {
   const r = paraGuardar(c.m) as Record<string, unknown> | null;
   confere("paraGuardar: " + c.nome, c.esperado === null ? r === null : !!r && Object.entries(c.esperado).every(([k, v]) => r[k] === v), JSON.stringify(r));
 }
+for (const c of casos.midiaParaBaixar) {
+  const r = midiaParaBaixar(c.m) as Record<string, unknown> | null;
+  confere("midiaParaBaixar: " + c.nome, c.esperado === null ? r === null : !!r && Object.entries(c.esperado).every(([k, v]) => (k === "pular" ? (v ? !!r.pular : !r.pular) : r[k] === v)), JSON.stringify(r));
+}
 for (const c of casos.variacoes) confere("variações " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado));
 confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] }, "5527999112233")) === "552799112233@s.whatsapp.net");
 // cópia igual à do motor (mesmo código, fora a tipagem)
 const motorJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
 const zapTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
 const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar| as string/g, "").replace(/\s+/g, " "); };
-for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "variacoes", "jidParaEnvio"]) {
+for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "midiaParaBaixar", "variacoes", "jidParaEnvio"]) {
   const a = nucleo(motorJs, f).replace(/\(x\)/g, "x"), b = nucleo(zapTs, f).replace(/\(x\)/g, "x").replace(/x =>/g, "x =>");
   confere("cópia igual no motor e na zap: " + f, a.length > 50 && a.replace(/[()]/g, "") === b.replace(/[()]/g, ""), a.length + "/" + b.length);
+}
+
+// ---------- v32: mídia (Groq e pasta de fotos simulados) ----------
+{
+  const chamadas: any[] = []; let gravada = true; const enviados: any[] = []; const removidos: any[] = [];
+  const adm = { rpc: async (f: string, a: any) => { chamadas.push([f, a]);
+      if (f === "whatsapp_guardar_midia") return { data: gravada, error: null };
+      if (f === "whatsapp_motor_conferir") return a.p_chave === "dtm_" + "b".repeat(64) ? { data: null, error: null } : { data: null, error: { message: "Chave do motor inválida" } };
+      if (f === "whatsapp_midia_vencida") return { data: ["2026/10/x.jpg"], error: null };
+      if (f === "whatsapp_midia_apagada") return { data: a.p_paths.length, error: null };
+      return { data: null, error: null }; },
+    from: (_t: string) => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { valor: "segredo-cron" } }) }) }) }),
+    storage: { from: (_b: string) => ({ upload: async (p: string, b: Uint8Array, o: any) => { enviados.push([p, b.length, o.contentType]); return { error: null }; },
+                                        remove: async (l: string[]) => { removidos.push(...l); return { error: null }; } }) } };
+  const ultima = () => chamadas.filter((c) => c[0] === "whatsapp_guardar_midia").at(-1)?.[1].p;
+  Deno.env.delete("GROQ_API_KEY");
+  let r = await tratarMidia(adm, { msg_id: "A1", tipo: "audio", mime: "audio/ogg", segundos: 9, bytes: new Uint8Array(100) });
+  confere("áudio sem a chave do Groq: registra o motivo", r.ok && /chave do Groq/.test(ultima().erro) && ultima().duracao_s === 9, JSON.stringify(ultima()));
+  Deno.env.set("GROQ_API_KEY", "gsk_teste");
+  let pedido: any = null;
+  const groq = async (url: any, op: any) => { pedido = { url: String(url), auth: op.headers.authorization, model: op.body.get("model"), lang: op.body.get("language"), arq: op.body.get("file") };
+    return new Response(JSON.stringify({ text: "  O carro tá batendo na frente  " }), { status: 200 }); };
+  r = await tratarMidia(adm, { msg_id: "A2", tipo: "audio", mime: "audio/ogg", segundos: 12, bytes: new Uint8Array(200) }, groq as any);
+  confere("áudio: manda ao Groq (Whisper, português) e grava a transcrição", r.ok && pedido.url.includes("api.groq.com/openai/v1/audio/transcriptions") && pedido.auth === "Bearer gsk_teste"
+    && pedido.model === "whisper-large-v3-turbo" && pedido.lang === "pt" && pedido.arq.size === 200 && ultima().transcricao === "O carro tá batendo na frente" && !ultima().path, JSON.stringify(ultima()));
+  r = await tratarMidia(adm, { msg_id: "A3", tipo: "audio", bytes: new Uint8Array(10) }, (async () => new Response('{"error":{"message":"limite"}}', { status: 429 })) as any);
+  confere("áudio: Groq recusou, registra o erro", r.ok && /Transcrição falhou: limite/.test(ultima().erro), JSON.stringify(ultima()));
+  r = await tratarMidia(adm, { msg_id: "F1", tipo: "imagem", mime: "image/png", bytes: new Uint8Array(300) });
+  confere("foto: vai para a pasta privada e o caminho é gravado", r.ok && enviados.length === 1 && /^\d{4}\/\d{2}\/F1\.png$/.test(enviados[0][0]) && enviados[0][2] === "image/png" && ultima().path === enviados[0][0], JSON.stringify(enviados));
+  gravada = false;
+  r = await tratarMidia(adm, { msg_id: "F2", tipo: "imagem", mime: "image/jpeg", bytes: new Uint8Array(30) });
+  confere("foto de mensagem ainda não gravada: apaga o arquivo e pede de novo", !r.ok && removidos.some((x) => x.includes("F2")));
+  gravada = true;
+  r = await tratarMidia(adm, { msg_id: "F3", tipo: "imagem", bytes: new Uint8Array(6 * 1024 * 1024) });
+  confere("foto grande demais não é guardada", /grande/.test(ultima().erro) && !enviados.some((x) => x[0].includes("F3")));
+  // entrada do motor
+  const pedidoMotor = (h: Record<string, string>, corpo: unknown) => new Request("http://x/zap", { method: "POST", headers: { "content-type": "application/json", ...h }, body: JSON.stringify(corpo) });
+  let resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "c".repeat(64) }, { acao: "midia", msg_id: "A9", tipo: "audio", erro: "x" }), adm);
+  confere("motor com chave errada: 401", resp.status === 401, String(resp.status));
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "b".repeat(64) }, { acao: "midia", msg_id: "A9", tipo: "audio", erro: "Áudio longo" }), adm);
+  confere("motor com a chave: registra", resp.status === 200 && ultima().erro === "Áudio longo", String(resp.status));
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "b".repeat(64) }, { acao: "outra", msg_id: "A9" }), adm);
+  confere("motor: ação desconhecida é recusada", resp.status === 400);
+  gravada = false;
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "b".repeat(64) }, { acao: "midia", msg_id: "A9", tipo: "audio", erro: "x" }), adm);
+  confere("motor: mensagem ainda não gravada devolve 409 (o motor tenta de novo)", resp.status === 409);
+  gravada = true;
+  // agendamento
+  resp = await atenderAgendamento(pedidoMotor({ "x-dtcar-cron": "errado" }, { acao: "limpar_midia" }), adm);
+  confere("agendamento com segredo errado: 401", resp.status === 401);
+  resp = await atenderAgendamento(pedidoMotor({ "x-dtcar-cron": "segredo-cron" }, { acao: "limpar_midia" }), adm);
+  const jr = await resp.json();
+  confere("agendamento limpa as fotos vencidas", resp.status === 200 && jr.apagadas === 1 && removidos.includes("2026/10/x.jpg"), JSON.stringify(jr));
+  Deno.env.delete("GROQ_API_KEY");
 }
 
 console.log(ok.map((x) => "OK " + x).join("\n")); console.log("FALHAS", JSON.stringify(falhas));

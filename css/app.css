@@ -199,6 +199,14 @@ button.linha:disabled{cursor:default;opacity:1}
 .zap-fila,.zap-conversas{list-style:none;padding:0;margin:8px 0 16px}
 .zap-fila li,.zap-conversas li{border-top:1px solid var(--line);padding:10px 0}
 .zap-texto{margin-top:4px;white-space:pre-wrap;word-break:break-word;color:var(--ink)}
+.aviso.aviso-erro{background:var(--bad-soft);color:var(--bad)}
+.zap-alertas p{margin:4px 0}
+.zap-entrega{margin-top:4px}
+.zap-fotos{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:10px;margin:8px 0 16px}
+.zap-fotos figure{margin:0}
+.zap-fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
+.zap-fotos figcaption{margin-top:4px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.faixa-zap{max-width:1180px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad);font-size:14px}
 .erro-zap{color:var(--bad)}
 .zap-fila .btn-sm{margin-top:6px}
 .regras-envio{background:var(--surface-2);border-radius:8px;padding:8px 10px}

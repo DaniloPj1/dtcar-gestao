@@ -44,12 +44,14 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
-const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber", "lancar_itens_os", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas",
+const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("16 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("23 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("11 só de leitura (gravam: abrir_os, lancar_itens_os, whatsapp_enviar/ler/cancelar)", leitura === 11, String(leitura));
+confere("15 só de leitura (gravam: abrir_os, lancar_itens_os, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 15, String(leitura));
+confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
   chamadas.length = 0;

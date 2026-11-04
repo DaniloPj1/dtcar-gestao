@@ -1033,3 +1033,11 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   /* aviso de O.S. importada do sistema antigo: mais compacto */
   .cab-os > .info{font-size:13px;padding:8px 10px}
 }
+/* Sistema › E-mail */
+.email-campos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 12px}
+.email-campos label{display:flex;flex-direction:column;gap:4px;font-size:.9rem;color:var(--ink-2,var(--ink))}
+.email-regras h4,.email-nova-regra h4{margin:14px 0 6px;display:flex;gap:8px;align-items:center}
+.email-regras .res-lista li{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
+.email-regras .res-lista li .btn{margin-left:auto}
+.passos-email{padding-left:20px;line-height:1.5}
+@media (max-width:640px){.email-campos{grid-template-columns:1fr}}

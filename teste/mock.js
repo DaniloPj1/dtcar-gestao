@@ -50,6 +50,19 @@
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
         throw new Error("Ação desconhecida."); } },
+    // e-mail da oficina (v29 + função "email")
+    email: { chamar: async b => { (window.__EMAIL_CHAMADAS = window.__EMAIL_CHAMADAS || []).push(b.acao);
+        const e = window.__EMAIL = window.__EMAIL || { situacao: "desligado", ligado: true, conta: "", nome: "", detalhe: "", conectado_em: null, ultimo_uso: null, enviados_hoje: 0,
+          configurado: false, endereco_retorno: "https://exemplo.supabase.co/functions/v1/email",
+          lista_regras: [{ id: 1, tipo: "fraude", alvo: "nome", valor: "sisbra", obs: "Cobrança fraudulenta no DDA (02/11/2026)", origem: "padrao" }, { id: 2, tipo: "importante", alvo: "dominio", valor: "sicredi.com.br", obs: "Banco", origem: "padrao" }] };
+        if (b.acao === "situacao") return { ...e, regras: e.lista_regras.length, lista_regras: e.lista_regras.slice() };
+        if (b.acao === "conectar") { if (!e.configurado) throw new Error("Falta cadastrar o segredo MS_CLIENT_ID da função \"email\" no Supabase (Edge Functions › Secrets)."); window.__EMAIL_LOGIN = true; return { url: "about:blank#login-microsoft", validade_min: 10 }; }
+        if (b.acao === "desconectar") { Object.assign(e, { situacao: "desligado", conta: "", nome: "" }); return { ok: true }; }
+        if (b.acao === "regra") { if (b.alvo === "remetente" && !/@/.test(b.valor)) throw new Error("Remetente precisa ser um e-mail completo (nome@dominio)."); const r = { id: Date.now(), tipo: b.tipo, alvo: b.alvo, valor: String(b.valor).toLowerCase().trim(), obs: b.obs || "", origem: "danilo" }; e.lista_regras.push(r); return r; }
+        if (b.acao === "remover_regra") { e.lista_regras = e.lista_regras.filter(r => r.id !== b.id); return { ok: true }; }
+        throw new Error("Ação desconhecida."); },
+      envios: async () => (window.__EMAIL_ENVIOS || []).slice(),
+      ligar: async v => { window.__EMAIL.ligado = !!v; return {}; } },
     receber: { abertas: async () => { net(); return db.receber.filter(p => p.status === "aberta"); }, listar: async ({ status } = {}) => db.receber.filter(p => !status || p.status === status),
       daOrdem: async oid => db.receber.filter(p => p.ordem_id === oid), lancar: async ls => { const xs = ls.map(l => ({ id: uid(), status: "aberta", criado_em: now(), ...l })); db.receber.push(...xs); return xs; },
       atualizar: async (id, patch) => { const p = db.receber.find(x => x.id === id); Object.assign(p, patch); return p; },

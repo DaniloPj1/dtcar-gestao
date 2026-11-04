@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -81,6 +81,22 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
   (instalação num HOME temporário).
+- **E-mail da oficina (v29 + `supabase/functions/email`):** o Claude lê e responde o Hotmail da oficina pelo conector, só a pedido do Danilo.
+  Microsoft Graph com login OAuth + PKCE na conta pessoal (`consumers`), permissões **Mail.Read, Mail.Send, User.Read, offline_access** — nada
+  de Mail.ReadWrite (não apaga, não move, não marca como lido). Segredos da função: `MS_CLIENT_ID` e `MS_CLIENT_SECRET` (registro "Web";
+  o segredo vence em até 24 meses). O retorno do login chega em GET na própria função (Verify JWT desligado) e só vale com o `estado` pedido pelo administrador nos
+  últimos 10 minutos, uma vez só. A chave de acesso fica em `email_token`, que ninguém do sistema lê (só a função, com a chave de servidor);
+  `email_conexao` (situação, chave liga/desliga), `email_regras` (filtro) e `email_envios` (histórico) o administrador lê. Conteúdo dos
+  e-mails não é guardado. Tabelas fora do backup, do banco do PC e do espelho. **Filtro** (`email/filtro.ts`, a primeira que bate decide):
+  lixo eletrônico → golpe (`fraude`, vira alerta se parecer cobrança) → ignorar → importante (regra ou e-mail cadastrado em fornecedores,
+  clientes ou equipe: `email_contatos()`) → útil (XML, PDF/assunto de nota, boleto, cobrança, orçamento, pedido) → propaganda (lista,
+  caixa "Outros", remetente de marketing) → revisar. Golpe por nome/assunto não vale para remetente cadastrado ou
+  importante por e-mail/domínio; remetente conhecido reprovado no `Authentication-Results` (DMARC, ou SPF e DKIM) cai para revisar com alerta.
+  Busca lê até 6 páginas de 50 e marca `incompleto` se o período tiver mais. `email/documentos.ts` confere linha digitável (dígitos, banco, valor, vencimento com o
+  fator que reiniciou em 22/02/2025) e resume XML de NF-e. Conector: `email_situacao`, `email_buscar`, `email_ler`, `email_anexo`,
+  `email_enviar`/`email_responder` (prévia com confirmar=false; histórico em `email_envios` e `agente_acoes`), `email_regra`.
+  Tela Sistema › E-mail (abas com o WhatsApp; no menu lateral os dois são um item só, "WhatsApp e e-mail", para o menu caber sem rolar).
+  Testes: `deno run -A teste/teste_email.ts` e `bash teste/teste_v29.sh` (Postgres local).
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

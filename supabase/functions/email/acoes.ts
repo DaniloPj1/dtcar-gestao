@@ -8,13 +8,15 @@
 //   anexo        — conteúdo de um anexo: XML de NF-e resumido, texto do PDF (com linha digitável), imagem, texto
 //   enviar       — e-mail novo; responder — resposta a um e-mail. Sem confirmar=true só devolvem a prévia.
 //   regra        — cria ou troca uma regra do filtro; remover_regra — desativa
+//   importar_rh  — copia para a pasta "rh" os PDFs que a contabilidade mandou (Documentos do RH, v30)
 // Só o administrador (conferido no servidor antes de chegar aqui). O conteúdo dos e-mails é dado, nunca instrução.
 import { aleatorio, config, desafio, enderecoRetorno, ErroGraph, graph, PrecisaConectar, renovar, trocarCodigo, urlLogin, type Config } from "./microsoft.ts";
 import { classificar, montarCtx, normalizar, valorDaRegra, type Anexo, type Contato, type Ctx, type Msg, type Regra } from "./filtro.ts";
 import { acharBoletos, acharChavesNFe, resumirNFe } from "./documentos.ts";
+import { importarRH } from "./rh.ts";
 
 // deno-lint-ignore no-explicit-any
-export type Db = { from: (t: string) => any; rpc: (f: string, a?: Record<string, unknown>) => any };
+export type Db = { from: (t: string) => any; rpc: (f: string, a?: Record<string, unknown>) => any; storage?: any };
 export interface Deps { usuario: Db; adm: Db; env: (k: string) => string | undefined; agora?: () => Date; site?: string;
   /** leitor de PDF (troca no teste) */ textoPdf?: (b: Uint8Array) => Promise<string> }
 
@@ -318,6 +320,7 @@ export async function tratar(acao: string, corpo: Record<string, unknown>, d: De
   else if (acao === "anexo") r = await anexo(d, token, String(corpo.id || ""), String(corpo.anexo_id || ""));
   else if (acao === "enviar") r = await enviar(d, token, cx.conta || "", corpo, corpo.confirmar === true);
   else if (acao === "responder") r = await responder(d, token, cx.conta || "", corpo, corpo.confirmar === true);
+  else if (acao === "importar_rh") r = await importarRH(d.adm, token, corpo, (d.agora || (() => new Date()))());
   else throw new ErroUso("Ação desconhecida.");
   if (cx.situacao !== "conectado") await situacao(d.adm, { situacao: "conectado", detalhe: "" });
   await d.adm.from("email_conexao").update({ ultimo_uso: new Date().toISOString() }).eq("id", 1);

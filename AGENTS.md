@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -97,6 +97,14 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `email_enviar`/`email_responder` (prévia com confirmar=false; histórico em `email_envios` e `agente_acoes`), `email_regra`.
   Tela Sistema › E-mail (abas com o WhatsApp; no menu lateral os dois são um item só, "WhatsApp e e-mail", para o menu caber sem rolar).
   Testes: `deno run -A teste/teste_email.ts` e `bash teste/teste_v29.sh` (Postgres local).
+- **Documentos do RH (v30), Financeiro › Funcionários e RH › Documentos do RH** (`js/telas/rh.js`; no menu lateral um item só,
+  "Funcionários e RH", com abas): PDFs da contabilidade (Loredo) por mês — recibo, adiantamento, pró-labore, folha de ponto, DARF, FGTS, DAS,
+  INSS, laudo, EPI — para abrir e imprimir. Tabela `rh_documentos` e pasta privada `rh` no Supabase, **só administrador** (salário e dado
+  pessoal; nem o `agente_leitura` lê). Chegam do e-mail pela ação `importar_rh` da função "email" (`email/rh.ts`: só os remetentes em
+  `cfg.rh.remetentes`, padrão dploredocontabilidade@gmail.com; só PDF/foto; `email_id`+`anexo_id` únicos; lote de até 12 por chamada com
+  `restam`; tipo e mês pelo nome do arquivo) ou à mão ("+ Adicionar documento", ex.: DAS do WhatsApp). Valor, vencimento e linha digitável das
+  guias são lidos **no navegador** (pdf.js, `lerPDFBoleto`), não na função (limite de processamento do Supabase). Fora do backup, do banco
+  do PC e do espelho. Testes: `deno run -A teste/teste_rh.ts` e `bash teste/teste_v30.sh`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

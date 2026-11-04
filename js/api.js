@@ -260,6 +260,22 @@ function criarApiSupabase() {
         return data;
       },
     },
+    // Documentos do RH (supabase/v30.sql): PDFs da contabilidade na pasta privada "rh" (só administrador)
+    rh: {
+      listar: async () => { const r = await sb.from("rh_documentos").select("*").order("competencia", { ascending: false }).order("tipo").order("criado_em");
+        if (r.error && /rh_documentos|schema cache|does not exist/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v30.sql no Supabase.");
+        return ok(r) || []; },
+      baixar: async caminho => { const r = await sb.storage.from("rh").download(caminho); if (r.error) throw traduzErro(r.error); return r.data; },
+      adicionar: async (arquivo, dados) => {
+        const nome = (arquivo.name || "documento.pdf").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9.]+/g, "-").slice(-80);
+        const caminho = dados.competencia + "/" + crypto.randomUUID() + "-" + nome;
+        ok(await sb.storage.from("rh").upload(caminho, arquivo, { contentType: arquivo.type || "application/pdf", upsert: false }));
+        const r = await sb.from("rh_documentos").insert({ ...dados, arquivo: caminho, nome_arquivo: arquivo.name || "", tipo_arquivo: arquivo.type || "application/pdf", tamanho: arquivo.size || 0, origem: "manual" }).select("*").single();
+        if (r.error) { await sb.storage.from("rh").remove([caminho]); throw traduzErro(r.error); }
+        return r.data; },
+      atualizar: async (id, patch) => ok(await sb.from("rh_documentos").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", id).select("*").single()),
+      excluir: async doc => { ok(await sb.from("rh_documentos").delete().eq("id", doc.id)); await sb.storage.from("rh").remove([doc.arquivo]); },
+    },
     // E-mail da oficina (supabase/v29.sql + função "email"): situação, conectar, regras do filtro; o Claude lê e envia pelo conector
     email: {
       chamar: async body => {

@@ -258,6 +258,18 @@ try:
     novo = pg.evaluate("window.__RH.find(x => x.origem === 'manual')")
     chk("rh: adiciona o DAS à mão (do WhatsApp), com valor", novo is not None and novo["tipo"] == "das" and abs(novo["valor"] - 1234.56) < 0.001 and "DAS (Simples Nacional)" in pg.inner_text("main"), novo)
     pg.screenshot(path=SAIDA + "/u5f-rh.png", full_page=True)
+    # NF anexada à O.S. (v33): PDF + XML, número lido do XML
+    pg.goto(U + "#/os/o2"); pg.wait_for_timeout(1500)
+    pg.click(".docs button:has-text('NF')"); pg.wait_for_timeout(400)
+    pg.set_input_files("[role=dialog] input[type=file]", files=[{"name": "danfe.pdf", "mimeType": "application/pdf", "buffer": b"%PDF-1.4"},
+      {"name": "nota.xml", "mimeType": "text/xml", "buffer": b"<nfeProc><NFe><infNFe><ide><nNF>131</nNF></ide></infNFe></NFe></nfeProc>"}])
+    pg.wait_for_timeout(400)
+    chk("nf: número lido do XML", pg.input_value("[role=dialog] input[inputmode=numeric]") == "131")
+    pg.click("[role=dialog] button[type=submit]"); pg.wait_for_timeout(800)
+    notas = pg.evaluate("window.__NOTAS")
+    chk("nf: PDF e XML anexados ao número da O.S.", len(notas) == 2 and all(n["numero_nf"] == "131" for n in notas) and "NF 131" in pg.inner_text("[role=dialog]"), notas)
+    pg.click("[role=dialog] button:has-text('Fechar')"); pg.wait_for_timeout(300)
+    chk("nf: botão mostra quantas", "NF (2)" in pg.inner_text(".docs"))
     # importar: modo espelho visível
     pg.goto(U + "#/importar"); pg.wait_for_timeout(1000)
     chk("importar: espelho ligado", "Modo espelho ligado" in pg.inner_text("main"))

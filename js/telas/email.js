@@ -150,7 +150,7 @@ export function Email({ params = {} } = {}) {
       <h3>Enviados pelo Claude</h3>
       ${envios === null ? html`<p class="sub">Carregando…</p>` : !envios.length ? html`<p class="sub">Nenhum e-mail enviado ainda.</p>` : html`<ul class="res-lista email-envios">
         ${envios.map(e => html`<li key=${e.id}><div><span class="pill p-info">${e.tipo === "responder" ? "Resposta" : "Novo"}</span> <b>${e.assunto || "(sem assunto)"}</b> <span class="sub">· ${fmtDataHora(e.em)} · para ${e.para}${e.por ? " · confirmado por " + e.por : ""}</span></div>
-          <div class="zap-texto">${e.resumo}</div></li>`)}</ul>`}
+          <div class="zap-texto">${e.resumo}</div>${e.anexos ? html`<div class="sub">📎 ${e.anexos}</div>` : null}</li>`)}</ul>`}
     </div>
   </div>`;
 }

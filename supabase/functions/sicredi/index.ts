@@ -41,7 +41,7 @@ export const ESPECIE: Record<string, string> = { "03": "DUPLICATA_MERCANTIL_INDI
 export type BoletoEntrada = { valor: number; vencimento: string; seu_numero: string; especie?: string; juros_mes?: number; multa?: number; mensagem?: string;
   id_titulo?: string; pagador: { nome: string; doc: string; endereco?: string; cidade?: string; uf?: string; cep?: string; email?: string; telefone?: string } };
 
-/** Monta o corpo do POST /boletos. Juros e multa SEM data de início: com data, o Sicredi tira o QR Code sem avisar. */
+/** Monta o corpo do POST /boletos. Tipos "PERCENTUAL" (o Sicredi recusa "B - PERCENTUAL"). Juros e multa SEM data de início: com data, o Sicredi tira o QR Code sem avisar. */
 export function corpoBoleto(b: BoletoEntrada, beneficiario: string) {
   const erros: string[] = [];
   const doc = so(b.pagador?.doc), valor = Math.round(Number(b.valor) * 100) / 100;
@@ -63,8 +63,8 @@ export function corpoBoleto(b: BoletoEntrada, beneficiario: string) {
     especieDocumento: ESPECIE[String(b.especie || "03")] || "DUPLICATA_MERCANTIL_INDICACAO", tipoCobranca: "HIBRIDO", seuNumero: seu, valor, pagador: pg };
   if (b.id_titulo) corpo.idTituloEmpresa = String(b.id_titulo).slice(0, 25);
   const juros = Number(b.juros_mes || 0), multa = Number(b.multa || 0);
-  if (juros > 0) { corpo.tipoJuros = "B - PERCENTUAL"; corpo.tipoJurosPercentual = "MENSAL"; corpo.juros = juros; }
-  if (multa > 0) { corpo.tipoMulta = "B - PERCENTUAL"; corpo.multa = multa; }
+  if (juros > 0) { corpo.tipoJuros = "PERCENTUAL"; corpo.tipoJurosPercentual = "MENSAL"; corpo.juros = juros; }
+  if (multa > 0) { corpo.tipoMulta = "PERCENTUAL"; corpo.multa = multa; }
   const msg = texto(b.mensagem, 80); if (msg) corpo.mensagens = [msg];
   return corpo;
 }
@@ -79,6 +79,7 @@ export function erroDoSicredi(status: number, corpo: unknown): string {
     const lista = (c.errors || c.erros || c.details) as Array<Record<string, unknown>> | undefined;
     if (Array.isArray(lista)) for (const e of lista.slice(0, 5)) add([e.field || e.campo, e.message || e.mensagem || e.detail].filter(Boolean).join(": "));
     if (!partes.length) add(c.error as string);
+    if (!partes.length) add(JSON.stringify(c).slice(0, 300));
   } else if (typeof corpo === "string") add(corpo.slice(0, 200));
   const base = ({ 400: "Pedido recusado pelo Sicredi", 401: "O Sicredi não aceitou a chave ou o código de acesso", 403: "Acesso negado pelo Sicredi",
     404: "Endereço não encontrado no Sicredi", 415: "Formato recusado", 422: "Regra do Sicredi não atendida", 429: "Muitos pedidos seguidos ao Sicredi; tente de novo em instantes",
@@ -138,7 +139,7 @@ export function clienteSicredi(amb: Ambiente, apiKey: string, cart: Carteira, bu
       return itens;
     },
     pdf: (linha: string) => chamar("GET", "/cobranca/boleto/v1/boletos/pdf", { consulta: { linhaDigitavel: so(linha) }, binario: true }) as Promise<Uint8Array>,
-    baixar: (nn: string) => chamar("PATCH", "/cobranca/boleto/v1/boletos/" + so(nn) + "/baixa", { cabecalhos: { codigoBeneficiario: cart.beneficiario } }),
+    baixar: (nn: string) => chamar("PATCH", "/cobranca/boleto/v1/boletos/" + so(nn) + "/baixa", { corpo: {}, cabecalhos: { codigoBeneficiario: cart.beneficiario } }),
   };
 }
 
@@ -153,7 +154,7 @@ export async function testeCompleto(cli: ReturnType<typeof clienteSicredi>) {
   if (!await passo("Entrar no Sicredi (token)", async () => { const t = await cli.testar(); return "Token recebido (vale " + t.expira_s + " s)."; })) return passos;
   if (!await passo("Emitir boleto de teste (R$ 1,00, com Pix)", async () => {
     emitido = await cli.emitir({ valor: 1, vencimento: venc, seu_numero: "TESTE" + String(Date.now()).slice(-5), especie: "03",
-      pagador: { nome: "CLIENTE TESTE DTCAR", doc: "02738306006", endereco: "RUA DOUTOR VARGAS 150", cidade: "PORTO ALEGRE", uf: "RS", cep: "91250000" } }) as Record<string, string>;
+      pagador: { nome: "CLIENTE TESTE DTCAR", doc: "02738306004", endereco: "RUA DOUTOR VARGAS 150", cidade: "PORTO ALEGRE", uf: "RS", cep: "91250000" } }) as Record<string, string>;
     return "Nosso número " + emitido.nossoNumero + (emitido.qrCode ? ", com QR Code Pix" : ", SEM QR Code") + ".";
   })) return passos;
   await passo("Consultar o boleto", async () => { const c = await cli.consultar(emitido.nossoNumero) as Record<string, unknown>; return "Situação: " + (c?.situacao || "?") + "."; });

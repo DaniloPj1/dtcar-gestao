@@ -98,7 +98,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   e `SICREDI_CODIGO_ACESSO` (o agente nunca lê os valores). Ações: `testar`, `teste_completo` (só Sandbox, com os dados de teste fixos
   do Sicredi), `emitir`, `consultar`, `liquidados`, `pdf`, `baixar`. Boleto pela API é registrado na hora (sem remessa) e volta com o
   Pix copia e cola (EMV) em `qr_url`; "Atualizar pagamentos" consulta cada boleto e lança o recibo pelo mesmo `registrarPagamento` do
-  retorno. Nunca mandar `dataInicioJuros`/`dataInicioMulta` (o Sicredi tira o QR Code). Publicar: colar o `index.ts` no painel do
+  retorno. Nunca mandar `dataInicioJuros`/`dataInicioMulta` (o Sicredi tira o QR Code); `tipoJuros`/`tipoMulta` = "PERCENTUAL"
+  (o Sicredi recusa "B - PERCENTUAL", formato que só aparece na consulta); a baixa (PATCH) vai com corpo `{}`. Conferido no Sandbox em 04/11/2026. Publicar: colar o `index.ts` no painel do
   Supabase (Edge Functions) e o Danilo clica em Deploy. Testes: `deno run -A teste/teste_sicredi.ts` (Sicredi falso) e
   `python3 teste/teste_boletos_api.py` (tela).
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do

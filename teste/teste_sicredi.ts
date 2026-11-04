@@ -13,8 +13,8 @@ const b = { valor: 450.5, vencimento: "2026-12-10", seu_numero: "1897-1", especi
 const c = corpoBoleto(b, "85453") as Record<string, any>;
 confere("híbrido", c.tipoCobranca === "HIBRIDO");
 confere("sem data de início de juros/multa (senão perde o QR)", !("dataInicioJuros" in c) && !("dataInicioMulta" in c));
-confere("juros percentual mensal", c.tipoJuros === "B - PERCENTUAL" && c.tipoJurosPercentual === "MENSAL" && c.juros === 2);
-confere("multa percentual", c.tipoMulta === "B - PERCENTUAL" && c.multa === 2);
+confere("juros percentual mensal", c.tipoJuros === "PERCENTUAL" && c.tipoJurosPercentual === "MENSAL" && c.juros === 2);
+confere("multa percentual", c.tipoMulta === "PERCENTUAL" && c.multa === 2);
 confere("espécie DSI", c.especieDocumento === "DUPLICATA_SERVICO_INDICACAO");
 confere("pagador PJ sem acento e só dígitos", c.pagador.tipoPessoa === "PESSOA_JURIDICA" && c.pagador.documento === "49016409000195" && c.pagador.nome === "JOSE DA CONCEICAO LTDA"
   && c.pagador.uf === "ES" && c.pagador.cep === "29700000" && c.pagador.telefone === "27999990000");

@@ -944,6 +944,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .osr small{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 .osr:hover{border-color:var(--brand)}
 .osr.ativo{background:var(--brand-soft);border-color:var(--brand)}
+.osr-total{border-top-color:var(--ink)}.osr-total b{font-size:22px;font-variant-numeric:tabular-nums}
 .osr-orcamento,.osr-diagnostico{border-top-color:#3b82f6}.osr-pagamento{border-top-color:#e0a100}.osr-fechada{border-top-color:var(--ok)}.osr-aguardando{border-top-color:#d97706}.osr-execucao{border-top-color:var(--brand)}.osr-pronto{border-top-color:var(--ok)}.osr-receber{border-top-color:#e0a100}.osr-atraso{border-top-color:var(--bad)}.osr-atraso b{color:var(--bad)}
 .os-filtros{display:grid;grid-template-columns:minmax(0,1fr) 220px 200px auto;gap:10px;align-items:center;margin-bottom:14px}
 .os-filtros .troca-visao{margin-left:0}

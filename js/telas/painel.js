@@ -382,8 +382,10 @@ export function Ordens({ params = {} }) {
   // próxima parcela em aberto de cada O.S. (contas a receber)
   const prox = useMemo(() => { const m = {}; (dados.receber || []).filter(p => p.status === "aberta").forEach(p => { if (!m[p.ordem_id] || p.vencimento < m[p.ordem_id].vencimento) m[p.ordem_id] = p; }); return m; }, [dados.receber]);
   const recVencida = o => prox[o.id] && prox[o.id].vencimento < hojeISO();
+  // "em aberto" = orçamento, execução e aguardando pagamento (fechadas, recusadas e canceladas ficam de fora)
+  const emAberto = o => ["orcamento", "execucao", "pagamento"].includes(etapaOS(o)) && !(o.legado && o.status === "entregue" && !o.legado_receber);
   const lista = useMemo(() => { const n = norm(q), p = normPlaca(q), d = soDig(q);
-    const l = dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? ["orcamento", "execucao", "pagamento"].includes(etapaOS(o)) && !(o.legado && o.status === "entregue" && !o.legado_receber) : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado
+    const l = dados.ordens.filter(o => (filtro === "todas" || (filtro === "abertas" ? emAberto(o) : filtro === "herdadas" ? ABERTOS.includes(o.status) && o.legado
         : ETAPAS.some(e => e[0] === filtro) ? naEtapa(o, filtro) : filtro === "rec-vencido" ? recVencida(o) : filtro === "finalizadas" ? o.status === "entregue" && !!o.finalizada_em : filtro === "atrasadas" ? ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO() : o.status === filtro))
       && (!n || norm(o.cliente.nome).includes(n) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || norm(o.veiculo.modelo).includes(n) || (d && String(o.numero) === String(+d)) || norm(o.reclamacao).includes(n) || norm(o.mecanico_nome).includes(n)));
     const cmp = { recentes: (a, b) => (b.criado_em || "").localeCompare(a.criado_em || ""), antigas: (a, b) => (a.criado_em || "").localeCompare(b.criado_em || ""),
@@ -394,10 +396,15 @@ export function Ordens({ params = {} }) {
   const soma = lista.reduce((s, o) => s + Number(o.total || 0), 0);
   const resumo = ETAPAS_RESUMO.map(([k, t]) => { const l = dados.ordens.filter(o => naEtapa(o, k) && (k !== "fechada" || doMes(o)));
     return { k, t: k === "fechada" ? "Fechadas no mês" : t, n: l.length, v: l.reduce((s, o) => s + Number(k === "pagamento" ? faltaReceber(o) : o.total || 0), 0) }; });
+  // como no sistema antigo: soma de todas as O.S. em aberto (o valor total de cada uma)
+  const abertas = ver ? dados.ordens.filter(emAberto) : [];
+  const totalAberto = abertas.reduce((s, o) => s + Number(o.total || 0), 0);
   const atrasadas = dados.ordens.filter(o => ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO()).length;
   const nRecVenc = ver ? dados.ordens.filter(recVencida).length : 0;
   return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : " larga-media")}>
-    <div class="os-resumo">${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>
+    <div class="os-resumo">${ver ? html`<button type="button" class=${"osr osr-total" + (filtro === "abertas" ? " ativo" : "")} onClick=${() => setFiltro("abertas")} title="Soma do valor de todas as O.S. em orçamento, em execução e aguardando pagamento">
+        <span>Total em aberto</span><b>${reais(totalAberto)}</b><small>${abertas.length} O.S.</small></button>` : null}
+      ${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>
       <span>${r.t}</span><b>${r.n}</b>${ver ? html`<small>${r.k === "pagamento" ? "a receber " : ""}${reais(r.v)}</small>` : null}</button>`)}
       ${atrasadas ? html`<button type="button" class=${"osr osr-atraso" + (filtro === "atrasadas" ? " ativo" : "")} onClick=${() => setFiltro(filtro === "atrasadas" ? "abertas" : "atrasadas")}><span>Previsão vencida</span><b>${atrasadas}</b><small>ver quais</small></button>` : null}
       ${nRecVenc ? html`<button type="button" class=${"osr osr-atraso" + (filtro === "rec-vencido" ? " ativo" : "")} onClick=${() => setFiltro(filtro === "rec-vencido" ? "abertas" : "rec-vencido")}><span>Recebimento vencido</span><b>${nRecVenc}</b><small>cobrar</small></button>` : null}</div>

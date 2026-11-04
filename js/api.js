@@ -215,6 +215,16 @@ function criarApiSupabase() {
       lancar: async linhas => ok(await sb.rpc("lancar_contas", { p_linhas: linhas })),
       porCodigo: async cod => cod ? ok(await sb.from("contas").select("id,descricao,valor,vencimento,status").eq("codigo_barras", cod).neq("status", "cancelada").maybeSingle()) : null,
     },
+    /** pedidos de compra por fornecedor (cupons, pré-vendas): tabela pre_notas do v19 + colunas de conferência do v31 */
+    preNotas: {
+      listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("pre_notas").select("*").neq("situacao", "cancelada"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }),
+      /** em aberto de um fornecedor (pelo cadastro ou pelo nome sem cadastro), para conferir no pagamento */
+      abertasDo: async (fornecedorId, nome) => { let q = sb.from("pre_notas").select("*").eq("situacao", "aberta");
+        q = fornecedorId ? q.eq("fornecedor_id", fornecedorId) : q.is("fornecedor_id", null).ilike("fornecedor_nome", String(nome || "").replace(/[%_]/g, "")); return ok(await q.order("data").limit(200)); },
+      incluir: async p => ok(await sb.from("pre_notas").insert(p).select().single()),
+      atualizar: async (ids, patch) => { try { return ok(await sb.from("pre_notas").update(patch).in("id", ids).select()); }
+        catch (e) { if (/conferida_em|conferida_por|conta_id|column/i.test(e.message)) throw new Error("Para marcar pedidos como conferidos, rode o supabase/v31.sql no Supabase."); throw e; } },
+    },
     /** transferências entre as contas da empresa (supabase/v18.sql); sem a v18, lista vazia */
     transferencias: {
       listar: async ({ de, ate } = {}) => { try { const l = (await todosPorChave(() => { let q = sb.from("transferencias").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q; })).sort((a, b) => a.data.localeCompare(b.data)); temV18 = true; return l; }

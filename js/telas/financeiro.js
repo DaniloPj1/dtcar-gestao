@@ -7,6 +7,7 @@ import { pode, nomesContas } from "../regras.js";
 import { lerBoleto, fmtLinha, lerPDFBoleto, temCamera } from "../boleto.js";
 import { lerNFe } from "../nfe.js";
 import { FormFornecedor } from "./compras.js";
+import { PedidosNoPagamento } from "./pedidos.js";
 
 const DIA = 86400000;
 const dias = (a, b) => Math.round((new Date(a + "T12:00:00") - new Date(b + "T12:00:00")) / DIA);
@@ -183,16 +184,22 @@ function PagarModal({ conta, onFechar, onPago }) {
   const contasCx = nomesContas(cfg);
   const [p, setP] = useState({ pago_em: hojeISO(), juros: 0, desconto: 0, forma_pagamento: conta.codigo_barras ? "Boleto" : "", obs: conta.obs || "", conta_origem: conta.conta_origem || (cfg.contaPagamento && contasCx.includes(cfg.contaPagamento) ? cfg.contaPagamento : "") });
   const [salvando, setSalvando] = useState(false), [erro, setErro] = useState("");
+  const { perfil } = useApp();
+  const [pedidos, setPedidos] = useState([]); // pedidos de compra do fornecedor marcados para conferir com este pagamento (v31)
   const total = arred(Number(conta.valor) + Number(p.juros || 0) - Number(p.desconto || 0));
   const formas = [...new Set(["Boleto", "PIX", "Transferência", "Débito em conta", ...(cfg.formasPagamento || [])])];
   const atraso = dias(p.pago_em, conta.vencimento);
   const salvar = async () => { if (!p.pago_em) return setErro("Informe a data do pagamento."); if (!p.conta_origem) return setErro("Informe de qual conta saiu o pagamento."); setSalvando(true);
     try { await api.contas.salvar({ id: conta.id, status: "paga", pago_em: p.pago_em, juros: arred(p.juros), desconto: arred(p.desconto), valor_pago: total, forma_pagamento: p.forma_pagamento, conta_origem: p.conta_origem, obs: p.obs });
-      avisar(api.temV18 && api.temV18() === false ? "Pagamento registrado. Para guardar a conta de saída, rode o supabase/v18.sql." : "Pagamento registrado."); onPago(); }
+      let aviso = api.temV18 && api.temV18() === false ? "Pagamento registrado. Para guardar a conta de saída, rode o supabase/v18.sql." : "Pagamento registrado.";
+      if (pedidos.length) { try { await api.preNotas.atualizar(pedidos, { situacao: "conferida", conferida_em: new Date().toISOString(), conferida_por: perfil.nome, conta_id: conta.id }); aviso += " " + pedidos.length + " pedido(s) conferido(s)."; }
+        catch (e) { aviso += " Os pedidos não foram marcados: " + e.message; } }
+      avisar(aviso); onPago(); }
     catch (e) { setErro(e.message); } finally { setSalvando(false); } };
   return html`<${Modal} titulo="Registrar pagamento" onFechar=${onFechar}>
     <div class="total-item"><span>${conta.descricao}<small class="sub"> · vencimento ${fmtData(conta.vencimento)}</small></span><b>${reais(conta.valor)}</b></div>
     ${conta.linha_digitavel ? html`<${CopiarCodigo} conta=${conta} />` : null}
+    <${PedidosNoPagamento} conta=${conta} marcados=${pedidos} onMarca=${setPedidos} />
     <div class="grade">
       <${Campo} id="pg-data" rotulo="Pago em"><input id="pg-data" type="date" class="inp" value=${p.pago_em} onInput=${e => setP(x => ({ ...x, pago_em: e.target.value }))} /></${Campo}>
       <${Campo} id="pg-juros" rotulo="Juros e multa" dica=${atraso > 0 ? "Pago com " + atraso + " dia(s) de atraso." : ""}><${Dinheiro} id="pg-juros" valor=${p.juros} onMuda=${v => setP(x => ({ ...x, juros: v }))} /></${Campo}>
@@ -352,7 +359,7 @@ export function Financeiro({ params = {} }) {
   const carregando = aba === "abertas" ? !abertas : !consulta;
   return html`<div class="pagina larga financeiro">
     <div class="painel-topo"><div><h1>Contas a pagar</h1><span class="sub">${abertas ? reais(soma(ab)) + " em aberto em " + ab.length + " conta(s)" : "Carregando…"}</span></div>
-      <div class="acoes"><button type="button" class="btn" onClick=${() => setDup(true)}>Duplicatas do XML</button><button type="button" class="btn" onClick=${() => setNova({ modo: "pdf" })}>Ler boleto</button><button type="button" class="btn btn-pri" onClick=${() => setNova({ modo: "" })}>+ Nova conta</button></div></div>
+      <div class="acoes"><button type="button" class="btn" onClick=${() => { location.hash = "#/pedidos"; }}>Pedidos de compra</button><button type="button" class="btn" onClick=${() => setDup(true)}>Duplicatas do XML</button><button type="button" class="btn" onClick=${() => setNova({ modo: "pdf" })}>Ler boleto</button><button type="button" class="btn btn-pri" onClick=${() => setNova({ modo: "" })}>+ Nova conta</button></div></div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="kpis fin-kpis">
       <button type="button" class=${"kpi" + (venc.length ? " kpi-alerta" : "")} onClick=${() => { setAba("consulta"); muda({ sit: "vencida", periodo: "ano", campo: "vencimento" }); }}><span>Vencidas</span><b class="kpi-din">${reais(soma(venc))}</b><small>${venc.length} conta(s)</small></button>

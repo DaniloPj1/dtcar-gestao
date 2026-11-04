@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -105,6 +105,14 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `restam`; tipo e mês pelo nome do arquivo) ou à mão ("+ Adicionar documento", ex.: DAS do WhatsApp). Valor, vencimento e linha digitável das
   guias são lidos **no navegador** (pdf.js, `lerPDFBoleto`), não na função (limite de processamento do Supabase). Fora do backup, do banco
   do PC e do espelho. Testes: `deno run -A teste/teste_rh.ts` e `bash teste/teste_v30.sh`.
+- **Pedidos de compra por fornecedor (v31, pedido do Danilo em 04/11/2026):** cupons, pré-vendas e romaneios ficam na `pre_notas` (v19) **sem foto**:
+  fornecedor (cadastro ou só o nome), documento, data, total já com desconto e a O.S. de destino. O Claude registra pelo conector
+  (`registrar_pre_nota` → `agente_registrar_pre_nota`, prévia com confirmar=false; recusa o mesmo documento do mesmo fornecedor sem confirmação) e
+  lista com `pre_notas` (`agente_pre_notas`, por fornecedor e período, com totais). Tela **Contas a pagar › Pedidos de compra** (`#/pedidos`,
+  `js/telas/pedidos.js`, sem item no menu para o menu caber): filtros de período, fornecedor, situação e busca; marcar conferido, voltar para
+  em aberto, cancelar (nunca apaga), incluir à mão e exportar. No **Registrar pagamento** de uma conta, os pedidos em aberto do mesmo fornecedor
+  aparecem marcados com a soma e a diferença para o valor da conta; ao confirmar, ficam `conferida` com `conta_id` da conta paga.
+  Testes: `bash teste/teste_v31.sh` (Postgres local), `deno run -A teste/teste_agente_mcp.ts` e `python3 teste/teste_fluxo.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

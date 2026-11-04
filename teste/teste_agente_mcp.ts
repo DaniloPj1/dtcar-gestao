@@ -45,12 +45,12 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
 const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "notas_da_sefaz", "preparar_envio", "saldos_das_contas",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "notas_da_sefaz", "pre_notas", "preparar_envio", "registrar_pre_nota", "saldos_das_contas",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("23 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("25 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("15 só de leitura (gravam: abrir_os, lancar_itens_os, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 15, String(leitura));
+confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
@@ -91,6 +91,18 @@ c = await chama("lancar_itens_os", { numero: 1904, itens: [] });
 confere("lancar_itens_os sem itens é recusado", c.r?.isError === true || !c.fn);
 c = await chama("lancar_itens_os", { numero: 1904, itens: [{ tipo: "peca", descricao: "x", valor_unit: -1 }] });
 confere("valor negativo é recusado", c.r?.isError === true || !c.fn);
+// pedidos de compra por fornecedor (v31)
+const ped = { fornecedor: "Biancardi", fornecedor_cnpj: "20.149.617/0003-42", documento: "PV 57941", data: "2026-11-03", total: 250.74, os_numero: 1854 };
+c = await chama("registrar_pre_nota", ped);
+confere("registrar_pre_nota sem confirmar = só prévia", c.fn === "agente_registrar_pre_nota" && c.args?.p_gravar === false && (c.args?.p as { total: number }).total === 250.74 && !("confirmar" in (c.args?.p as object)));
+c = await chama("registrar_pre_nota", { ...ped, confirmar: true });
+confere("registrar_pre_nota com confirmar=true grava e traz o link da tela", c.args?.p_gravar === true && JSON.parse(c.r?.content?.[0]?.text || "{}").abrir_no_sistema === "https://gestao.dtcarcentroautomotivo.com.br/#/pedidos");
+c = await chama("registrar_pre_nota", { ...ped, total: 0 });
+confere("registrar_pre_nota: valor zero é recusado", c.r?.isError === true || !c.fn);
+c = await chama("registrar_pre_nota", { ...ped, data: "03/11/2026" });
+confere("registrar_pre_nota: data em formato errado é recusada", c.r?.isError === true || !c.fn);
+c = await chama("pre_notas", { fornecedor: "biancardi" });
+confere("pre_notas: padrão = abertas, sem período", c.fn === "agente_pre_notas" && c.args?.p_situacao === "abertas" && c.args?.p_fornecedor === "biancardi" && c.args?.p_de === null);
 confere("telefone inválido não gera link", linkWhatsApp("123", "x") === null);
 
 // sem login (pipeline completo): precisa do ambiente das Edge Functions

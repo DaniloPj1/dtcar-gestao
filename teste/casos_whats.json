@@ -1,22 +1,351 @@
 {
-  "paraGuardar": [
-    { "nome": "texto simples", "m": { "key": { "id": "A1", "remoteJid": "5527999112233@s.whatsapp.net", "fromMe": false }, "pushName": "Maria", "messageTimestamp": 1793736000, "message": { "conversation": "Oi, o carro ficou pronto?" } },
-      "esperado": { "msg_id": "A1", "telefone": "5527999112233", "nome": "Maria", "de_mim": false, "texto": "Oi, o carro ficou pronto?", "tipo": "texto", "em": "2026-11-03T20:00:00.000Z" } },
-    { "nome": "resposta citando (extendedText)", "m": { "key": { "id": "A2", "remoteJid": "5527999112233@s.whatsapp.net", "fromMe": true }, "messageTimestamp": 1793736000, "message": { "extendedTextMessage": { "text": "Ficou sim" } } },
-      "esperado": { "msg_id": "A2", "de_mim": true, "nome": "", "texto": "Ficou sim", "tipo": "texto" } },
-    { "nome": "conversa por LID com o telefone ao lado", "m": { "key": { "id": "A3", "remoteJid": "123456789012345@lid", "remoteJidAlt": "552799112233@s.whatsapp.net", "fromMe": false }, "messageTimestamp": 1793736000, "message": { "conversation": "Bom dia" } },
-      "esperado": { "msg_id": "A3", "jid": "123456789012345@lid", "telefone": "552799112233", "texto": "Bom dia" } },
-    { "nome": "imagem com legenda", "m": { "key": { "id": "A4", "remoteJid": "5527999112233@s.whatsapp.net" }, "messageTimestamp": 1793736000, "message": { "imageMessage": { "caption": "Olha o barulho" } } },
-      "esperado": { "texto": "[imagem] Olha o barulho", "tipo": "imagem" } },
-    { "nome": "áudio temporário (ephemeral)", "m": { "key": { "id": "A5", "remoteJid": "5527999112233@s.whatsapp.net" }, "messageTimestamp": 1793736000, "message": { "ephemeralMessage": { "message": { "audioMessage": { "seconds": 12 } } } } },
-      "esperado": { "texto": "[audio]", "tipo": "audio" } },
-    { "nome": "grupo não guarda", "m": { "key": { "id": "A6", "remoteJid": "120363000000@g.us", "participant": "5527999112233@s.whatsapp.net" }, "message": { "conversation": "oi grupo" } }, "esperado": null },
-    { "nome": "status não guarda", "m": { "key": { "id": "A7", "remoteJid": "status@broadcast" }, "message": { "conversation": "status" } }, "esperado": null },
-    { "nome": "aviso interno do WhatsApp não guarda", "m": { "key": { "id": "A8", "remoteJid": "5527999112233@s.whatsapp.net" }, "message": { "protocolMessage": { "type": 0 } } }, "esperado": null }
-  ],
-  "variacoes": [
-    { "tel": "5527999112233", "esperado": ["5527999112233", "552799112233"] },
-    { "tel": "552799112233", "esperado": ["552799112233", "5527999112233"] },
-    { "tel": "552733221100", "esperado": ["552733221100"] }
-  ]
+ "paraGuardar": [
+  {
+   "nome": "texto simples",
+   "m": {
+    "key": {
+     "id": "A1",
+     "remoteJid": "5527999112233@s.whatsapp.net",
+     "fromMe": false
+    },
+    "pushName": "Maria",
+    "messageTimestamp": 1793736000,
+    "message": {
+     "conversation": "Oi, o carro ficou pronto?"
+    }
+   },
+   "esperado": {
+    "msg_id": "A1",
+    "telefone": "5527999112233",
+    "nome": "Maria",
+    "de_mim": false,
+    "texto": "Oi, o carro ficou pronto?",
+    "tipo": "texto",
+    "em": "2026-11-03T20:00:00.000Z"
+   }
+  },
+  {
+   "nome": "resposta citando (extendedText)",
+   "m": {
+    "key": {
+     "id": "A2",
+     "remoteJid": "5527999112233@s.whatsapp.net",
+     "fromMe": true
+    },
+    "messageTimestamp": 1793736000,
+    "message": {
+     "extendedTextMessage": {
+      "text": "Ficou sim"
+     }
+    }
+   },
+   "esperado": {
+    "msg_id": "A2",
+    "de_mim": true,
+    "nome": "",
+    "texto": "Ficou sim",
+    "tipo": "texto"
+   }
+  },
+  {
+   "nome": "conversa por LID com o telefone ao lado",
+   "m": {
+    "key": {
+     "id": "A3",
+     "remoteJid": "123456789012345@lid",
+     "remoteJidAlt": "552799112233@s.whatsapp.net",
+     "fromMe": false
+    },
+    "messageTimestamp": 1793736000,
+    "message": {
+     "conversation": "Bom dia"
+    }
+   },
+   "esperado": {
+    "msg_id": "A3",
+    "jid": "123456789012345@lid",
+    "telefone": "552799112233",
+    "texto": "Bom dia"
+   }
+  },
+  {
+   "nome": "imagem com legenda",
+   "m": {
+    "key": {
+     "id": "A4",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "messageTimestamp": 1793736000,
+    "message": {
+     "imageMessage": {
+      "caption": "Olha o barulho"
+     }
+    }
+   },
+   "esperado": {
+    "texto": "[imagem] Olha o barulho",
+    "tipo": "imagem"
+   }
+  },
+  {
+   "nome": "áudio temporário (ephemeral)",
+   "m": {
+    "key": {
+     "id": "A5",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "messageTimestamp": 1793736000,
+    "message": {
+     "ephemeralMessage": {
+      "message": {
+       "audioMessage": {
+        "seconds": 12
+       }
+      }
+     }
+    }
+   },
+   "esperado": {
+    "texto": "[audio]",
+    "tipo": "audio"
+   }
+  },
+  {
+   "nome": "grupo não guarda",
+   "m": {
+    "key": {
+     "id": "A6",
+     "remoteJid": "120363000000@g.us",
+     "participant": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "conversation": "oi grupo"
+    }
+   },
+   "esperado": null
+  },
+  {
+   "nome": "status não guarda",
+   "m": {
+    "key": {
+     "id": "A7",
+     "remoteJid": "status@broadcast"
+    },
+    "message": {
+     "conversation": "status"
+    }
+   },
+   "esperado": null
+  },
+  {
+   "nome": "aviso interno do WhatsApp não guarda",
+   "m": {
+    "key": {
+     "id": "A8",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "protocolMessage": {
+      "type": 0
+     }
+    }
+   },
+   "esperado": null
+  }
+ ],
+ "variacoes": [
+  {
+   "tel": "5527999112233",
+   "esperado": [
+    "5527999112233",
+    "552799112233"
+   ]
+  },
+  {
+   "tel": "552799112233",
+   "esperado": [
+    "552799112233",
+    "5527999112233"
+   ]
+  },
+  {
+   "tel": "552733221100",
+   "esperado": [
+    "552733221100"
+   ]
+  }
+ ],
+ "midiaParaBaixar": [
+  {
+   "nome": "áudio de voz",
+   "m": {
+    "key": {
+     "id": "B1",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "audioMessage": {
+      "seconds": 15,
+      "mimetype": "audio/ogg; codecs=opus",
+      "fileLength": {
+       "low": 24000,
+       "high": 0
+      }
+     }
+    }
+   },
+   "esperado": {
+    "msg_id": "B1",
+    "tipo": "audio",
+    "mime": "audio/ogg",
+    "segundos": 15,
+    "pular": false
+   }
+  },
+  {
+   "nome": "áudio temporário (dentro de ephemeral)",
+   "m": {
+    "key": {
+     "id": "B2",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "ephemeralMessage": {
+      "message": {
+       "audioMessage": {
+        "seconds": 4
+       }
+      }
+     }
+    }
+   },
+   "esperado": {
+    "tipo": "audio",
+    "mime": "audio/ogg",
+    "segundos": 4
+   }
+  },
+  {
+   "nome": "áudio de mais de 10 min é pulado",
+   "m": {
+    "key": {
+     "id": "B3",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "audioMessage": {
+      "seconds": 700
+     }
+    }
+   },
+   "esperado": {
+    "tipo": "audio",
+    "pular": true
+   }
+  },
+  {
+   "nome": "foto",
+   "m": {
+    "key": {
+     "id": "B4",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "imageMessage": {
+      "mimetype": "image/png",
+      "caption": "x"
+     }
+    }
+   },
+   "esperado": {
+    "tipo": "imagem",
+    "mime": "image/png",
+    "pular": false
+   }
+  },
+  {
+   "nome": "foto de visualização única",
+   "m": {
+    "key": {
+     "id": "B5",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "viewOnceMessageV2": {
+      "message": {
+       "imageMessage": {
+        "mimetype": "image/heic"
+       }
+      }
+     }
+    }
+   },
+   "esperado": {
+    "tipo": "imagem",
+    "mime": "image/jpeg"
+   }
+  },
+  {
+   "nome": "foto grande demais é pulada",
+   "m": {
+    "key": {
+     "id": "B6",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "imageMessage": {
+      "fileLength": 6000000
+     }
+    }
+   },
+   "esperado": {
+    "tipo": "imagem",
+    "pular": true
+   }
+  },
+  {
+   "nome": "enviada pela oficina não baixa",
+   "m": {
+    "key": {
+     "id": "B7",
+     "remoteJid": "5527999112233@s.whatsapp.net",
+     "fromMe": true
+    },
+    "message": {
+     "audioMessage": {
+      "seconds": 3
+     }
+    }
+   },
+   "esperado": null
+  },
+  {
+   "nome": "grupo não baixa",
+   "m": {
+    "key": {
+     "id": "B8",
+     "remoteJid": "1203@g.us"
+    },
+    "message": {
+     "imageMessage": {}
+    }
+   },
+   "esperado": null
+  },
+  {
+   "nome": "vídeo e documento não baixam",
+   "m": {
+    "key": {
+     "id": "B9",
+     "remoteJid": "5527999112233@s.whatsapp.net"
+    },
+    "message": {
+     "videoMessage": {
+      "seconds": 3
+     }
+    }
+   },
+   "esperado": null
+  }
+ ]
 }

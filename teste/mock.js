@@ -43,6 +43,10 @@
       novaChaveMotor: async () => { window.__ZAP.motor_chave_em = now(); return "dtm_" + "c".repeat(64); },
       revogarMotor: async () => { window.__ZAP.motor_chave_em = null; },
       fila: async () => (window.__ZAP_FILA || []).slice(),
+      alertas: async () => ((window.__ZAP || {}).alertas) || {},
+      alertaTelefone: async tel => { const d = String(tel || "").replace(/\D/g, ""); if (d && !/^(55)?\d{10,11}$/.test(d)) throw new Error("Telefone inválido: use DDD + número (ex.: 27 99999-0000)."); window.__ZAP.alerta_telefone = d ? (d.length <= 11 ? "55" + d : d) : null; return { alerta_telefone: window.__ZAP.alerta_telefone }; },
+      resumo: async () => ({ sem_resposta: (window.__ZAP_SEM_RESPOSTA || []).slice() }),
+      fotos: async () => (window.__ZAP_FOTOS || []).slice(),
       conversas: async () => (window.__ZAP_CONVERSAS || []).slice(),
       cancelar: async id => { const f = (window.__ZAP_FILA || []).find(x => x.id === id); if (!f || f.status !== "pendente") throw new Error("Só dá para cancelar mensagem que ainda não saiu (pendente)."); f.status = "cancelada"; f.erro = "Cancelada pelo administrador."; return f; },
       chamar: async b => { (window.__ZAP_CHAMADAS = window.__ZAP_CHAMADAS || []).push(b.acao); const z = window.__ZAP;

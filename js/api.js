@@ -249,7 +249,8 @@ function criarApiSupabase() {
     whatsapp: {
       // com o v24 a tela lê só as colunas liberadas (com o v25, também as regras de envio) (o resumo da chave do motor fica de fora); sem ele, lê tudo
       situacao: async () => {
-        let r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio").eq("id", 1).maybeSingle();
+        let r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio,alertas,alerta_telefone,vigiado_em").eq("id", 1).maybeSingle();
+        if (r.error && /column|alertas|alerta_telefone|vigiado_em/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio").eq("id", 1).maybeSingle(); // sem o v32
         if (r.error && /column|regras|proximo_envio/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select(COLS_ZAP).eq("id", 1).maybeSingle(); // sem o v25
         if (r.error && /column|dono_ate|motor_|pedido/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select("*").eq("id", 1).maybeSingle();
         if (r.error && /whatsapp_conexao|schema cache|does not exist/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v22.sql no Supabase.");
@@ -260,7 +261,24 @@ function criarApiSupabase() {
         return ok(r); },
       revogarMotor: async () => ok(await sb.rpc("whatsapp_motor_revogar")),
       // fila e mensagens (v25)
-      fila: async () => ok(await sb.from("whatsapp_fila").select("id,telefone,cliente_nome,texto,status,erro,criado_em,enviada_em,origem,ordem_numero,fora_horario").order("id", { ascending: false }).limit(20)),
+      fila: async () => {
+        const cols = "id,telefone,cliente_nome,texto,status,erro,criado_em,enviada_em,origem,ordem_numero,fora_horario";
+        let r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em").order("id", { ascending: false }).limit(20);
+        if (r.error && /column|entrega|lida_em/i.test(r.error.message)) r = await sb.from("whatsapp_fila").select(cols).order("id", { ascending: false }).limit(20); // sem o v32
+        return ok(r); },
+      // v32: alertas (faixa do administrador), número que recebe os avisos, resumo (sem resposta) e fotos recebidas
+      alertas: async () => { const r = await sb.from("whatsapp_conexao").select("alertas").eq("id", 1).maybeSingle(); if (r.error) return null; return (r.data && r.data.alertas) || {}; },
+      alertaTelefone: async tel => { const r = await sb.rpc("whatsapp_alerta_config", { p_telefone: tel || "" });
+        if (r.error && /whatsapp_alerta_config|schema cache|404/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v32.sql no Supabase.");
+        return ok(r); },
+      resumo: async () => ok(await sb.rpc("whatsapp_resumo")),
+      fotos: async () => {
+        const r = await sb.from("whatsapp_mensagens").select("msg_id,telefone,nome,texto,em,midia_path,midia_expira").not("midia_path", "is", null).order("em", { ascending: false }).limit(12);
+        if (r.error) return [];
+        const lista = r.data || []; if (!lista.length) return [];
+        const u = await sb.storage.from("whatsapp-midia").createSignedUrls(lista.map(x => x.midia_path), 3600);
+        const urls = new Map(((u && u.data) || []).map(x => [x.path, x.signedUrl]));
+        return lista.map(x => ({ ...x, url: urls.get(x.midia_path) || null })); },
       conversas: async () => ok(await sb.rpc("whatsapp_conversas", { p_limite: 10, p_so_nao_lidas: false })) || [],
       cancelar: async id => ok(await sb.rpc("whatsapp_cancelar", { p_id: id })),
       chamar: async body => {

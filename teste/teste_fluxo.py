@@ -180,6 +180,27 @@ try:
     chk("whatsapp fila: processar agora chama a função", "processar" in pg.evaluate("window.__ZAP_CHAMADAS"))
     pg.evaluate("window.__ZAP.dono = 'android'; window.__ZAP.dono_ate = new Date(Date.now() + 60000).toISOString()"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(600)
     chk("whatsapp fila: com o motor na vez, sem botão de processar", pg.query_selector("text=Buscar mensagens e enviar a fila agora") is None)
+    # v32: status de entrega, alertas, conversa ligada ao cadastro, sem resposta, fotos e número dos avisos
+    pg.evaluate("""(() => { const z = window.__ZAP; const t = new Date().toISOString();
+      z.alertas = { motor: { texto: 'O motor do WhatsApp no tablet está sem sinal desde 04/11 08:53.', desde: t } }; z.alerta_telefone = null; z.vigiado_em = t;
+      window.__ZAP_FILA = [{ id: 5, telefone: '5527999112233', cliente_nome: 'Maria Souza', texto: 'Seu carro está pronto.', status: 'enviada', criado_em: t, enviada_em: t, entrega: 'lida', lida_em: t },
+        { id: 4, telefone: '5527999112233', cliente_nome: 'Maria Souza', texto: 'Orçamento enviado.', status: 'enviada', criado_em: t, enviada_em: t, entrega: 'entregue', entregue_em: t }];
+      window.__ZAP_CONVERSAS = [{ telefone: '5527999112233', cliente: 'Maria Souza', cadastrado: true, os_aberta: '1904 · Aprovado · em execução · ABC1D23', ultima_em: t, nao_lidas: 0, ultima_mensagem: 'Seu carro está pronto.', ultima_de_mim: true, ultima_entrega: 'lida' },
+        { telefone: '5521900001111', nome_no_whatsapp: 'Pedro', cadastrado: false, ultima_em: t, nao_lidas: 1, ultima_mensagem: '[áudio 0:12] quanto fica o alinhamento?', ultima_de_mim: false }];
+      window.__ZAP_SEM_RESPOSTA = [{ telefone: '5521900001111', nome_no_whatsapp: 'Pedro', ultima_em: t, ultima_mensagem: '[áudio 0:12] quanto fica o alinhamento?' }];
+      window.__ZAP_FOTOS = [{ msg_id: 'F1', telefone: '5527999112233', nome: 'Maria', em: t, url: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' }]; })()""")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(700)
+    tx = pg.inner_text("main")
+    chk("whatsapp v32: alerta aparece no topo da tela", "Motor do tablet:" in tx and "sem sinal desde 04/11 08:53" in tx)
+    chk("whatsapp v32: tiques na fila (lida, entregue)", "✓✓ Lida" in pg.inner_text(".zap-fila") and "✓✓ Entregue" in pg.inner_text(".zap-fila"))
+    chk("whatsapp v32: conversa com O.S. aberta e número sem cadastro", "O.S. 1904 · Aprovado" in tx and "Sem cadastro" in tx and "[áudio 0:12]" in tx)
+    chk("whatsapp v32: sem resposta e fotos", "Sem resposta há mais de 2 horas" in tx and pg.query_selector(".zap-fotos img") is not None)
+    pg.fill("#zap-tel-alerta", "123"); pg.click("button:has-text('Salvar número')"); pg.wait_for_timeout(400)
+    chk("whatsapp v32: número de alerta inválido é recusado", "Telefone inválido" in pg.inner_text("main"))
+    pg.fill("#zap-tel-alerta", "27 99769-6545"); pg.click("button:has-text('Salvar número')"); pg.wait_for_timeout(500)
+    chk("whatsapp v32: número de alerta salvo", pg.evaluate("window.__ZAP.alerta_telefone") == "5527997696545" and pg.input_value("#zap-tel-alerta") == "5527997696545")
+    pg.screenshot(path=SAIDA + "/u5f-whatsapp-v32.png", full_page=True)
+    pg.evaluate("window.__ZAP.alertas = {}; window.__ZAP_FOTOS = []; window.__ZAP_SEM_RESPOSTA = []")
     # Sistema › E-mail (v29): sem o registro da Microsoft, mostra o passo a passo; conectado, mostra conta, chave e filtro
     pg.goto(U + "#/mais"); pg.wait_for_timeout(400)
     chk("email: aparece na tela Mais", "E-mail da oficina" in pg.inner_text("main"))

@@ -10,16 +10,18 @@
 //
 // Etapa 2: conecta, mantém e reveza. Etapa 3 (v25): envia a fila (uma mensagem por vez, nas regras do banco:
 // horário, intervalo, limites) com "digitando…", e guarda as mensagens das conversas individuais (texto; mídia só o tipo).
+// v32: guarda os "tiques" das mensagens enviadas (entregue, lida, ouvida) e manda à função zap o áudio recebido (para
+// transcrever; o arquivo não é guardado) e a foto recebida (guardada 30 dias). Atualiza só por versão aprovada (iniciar.sh).
 // Biblioteca: SOMENTE o pacote oficial "baileys" (WhiskeySockets), versão travada no package.json.
-import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto } from "baileys";
+import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto, downloadMediaMessage } from "baileys";
 import { readFileSync } from "node:fs";
 import { homedir, hostname, platform, release } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { paraGuardar, jidParaEnvio, enviarTexto } from "./whats.js";
+import { paraGuardar, jidParaEnvio, enviarTexto, midiaParaBaixar } from "./whats.js";
 
-export const VERSAO = "3.0";
+export const VERSAO = "3.1";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
 const ESPERAS = [5, 15, 30, 60, 120, 300].map((s) => s * 1000); // entre tentativas de reconectar
@@ -49,14 +51,16 @@ function registro(saida) {
 }
 
 export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = makeWASocket, saida = console, agora = Date.now,
-                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null, esperasGravar = [0, 1000, 3000], esperarDigitando } = {}) {
+                             relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null, esperasGravar = [0, 1000, 3000], esperarDigitando,
+                             baixarMidia = downloadMediaMessage } = {}) {
   const id = randomUUID();
   const log = (...a) => saida.log(hora(), ...a);
   const blog = registro(saida);
   const st = { sock: null, aberto: false, conectando: false, parado: false, semVinculo: false, chaveRuim: false,
     ultimoPulsoOk: 0, tentativas: 0, proximaTentativa: 0, desde: null, recebidas: 0, ultimaRecebida: null, erros: 0,
     numero: "", situacaoGravada: "", inicio: agora(), guarda: null, ultimaGravacao: null,
-    enviadas: 0, ultimoEnvio: null, motivoFila: "", aGuardar: [], resultados: [] };
+    enviadas: 0, ultimoEnvio: null, motivoFila: "", aGuardar: [], resultados: [],
+    entregas: [], midias: [], midiasFeitas: 0, midiasErro: 0, semEntregaNoBanco: false };
   let fila = Promise.resolve(); // gravações da sessão em ordem
   // mudanças da sessão ainda não confirmadas pelo banco (chave -> valor serializado; null = apagar). Ficam aqui até
   // o banco aceitar: as leituras usam estas por cima das do banco e cada gravação/sinal tenta mandar de novo.
@@ -166,10 +170,20 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       st.sock = s;
       s.ev.on("creds.update", () => { salvarCreds(); });
       s.ev.on("connection.update", (u) => aoMudarConexao(s, u));
+      // v32: tiques das mensagens que a oficina mandou (2 servidor, 3 entregue, 4 lida, 5 ouvida; 0 erro)
+      s.ev.on("messages.update", (lista) => {
+        for (const u of lista || []) {
+          const st2 = u && u.update && u.update.status;
+          if (u && u.key && u.key.fromMe && u.key.id && typeof st2 === "number" && st.entregas.length < 1000)
+            st.entregas.push({ msg_id: u.key.id, status: st2, em: new Date().toISOString() });
+        }
+      });
       s.ev.on("messages.upsert", ({ messages, type }) => {
         const lista = (messages || []).map(paraGuardar).filter(Boolean);
         if (lista.length) { st.aGuardar.push(...lista); guardarMensagens(); }
         if (type !== "notify") return;
+        // v32: áudio e foto recebidos vão para a função zap (depois que a mensagem estiver gravada no banco)
+        for (const m of messages || []) { const md = midiaParaBaixar(m); if (md && st.midias.length < 50) st.midias.push({ ...md, m, tentativas: 0 }); }
         const novas = (messages || []).filter((m) => m && m.key && !m.key.fromMe).length;
         if (novas) { st.recebidas += novas; st.ultimaRecebida = new Date().toISOString(); }
       });
@@ -221,6 +235,58 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       .catch((e) => { st.aGuardar.unshift(...lote); if (!/function|does not exist|PGRST202/i.test(e.message)) log("não guardou mensagens (tenta de novo):", e.message); })
       .finally(() => { guardando = null; });
     return guardando;
+  }
+  /** v32: manda os tiques ao banco (em lote). Sem o v32 no banco, descarta (não há onde guardar). */
+  async function mandarEntregas() {
+    while (st.entregas.length) {
+      const lote = st.entregas.slice(0, 200);
+      try { await rpc("whatsapp_motor_entrega", { ...base(), p_lista: lote }); st.entregas.splice(0, lote.length); st.semEntregaNoBanco = false; }
+      catch (e) {
+        if (/function|does not exist|PGRST202/i.test(e.message)) { st.entregas = []; st.semEntregaNoBanco = true; return; }
+        log("tiques não gravados (tenta de novo):", e.message); return;
+      }
+    }
+  }
+  /** v32: baixa a mídia e manda à função zap (áudio: transcrição; foto: pasta privada por 30 dias). Roda em segundo
+   *  plano (não segura o sinal: a transcrição pode levar dezenas de segundos), uma por vez, até 3 tentativas. */
+  let processandoMidia = null;
+  async function chamarZapMidia(corpo) {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 120000);
+    try {
+      const r = await buscar(`${config.url}/functions/v1/zap`, { method: "POST", signal: ctl.signal,
+        headers: { apikey: config.publica, "content-type": "application/json", "x-dtcar-motor": config.chave }, body: JSON.stringify({ acao: "midia", ...corpo }) });
+      const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (_) { j = null; }
+      if (!r.ok) throw new Error((j && (j.erro || j.detalhe)) || `HTTP ${r.status}`);
+      return j || {};
+    } catch (e) { if (e.name === "AbortError") throw new Error("a função zap não respondeu a tempo"); throw e; }
+    finally { clearTimeout(t); }
+  }
+  function processarMidias() {
+    if (processandoMidia || !st.midias.length || st.aGuardar.length || !st.sock || !st.aberto) return processandoMidia || Promise.resolve();
+    const s = st.sock;
+    processandoMidia = (async () => {
+      while (st.midias.length && st.sock === s && st.aberto && !st.aGuardar.length) {
+        const md = st.midias[0];
+        const base = { msg_id: md.msg_id, tipo: md.tipo, mime: md.mime, segundos: md.segundos };
+        try {
+          if (md.pular) await chamarZapMidia({ ...base, erro: md.pular });
+          else {
+            const buf = await baixarMidia(md.m, "buffer", {}, { logger: blog, reuploadRequest: s.updateMediaMessage });
+            await chamarZapMidia({ ...base, base64: Buffer.from(buf).toString("base64") });
+          }
+          st.midias.shift(); st.midiasFeitas++;
+        } catch (e) {
+          md.tentativas++;
+          log(`mídia ${md.msg_id} (${md.tipo}) não processada, tentativa ${md.tentativas}:`, e.message);
+          if (md.tentativas >= 3) {
+            st.midias.shift(); st.midiasErro++;
+            try { await chamarZapMidia({ ...base, erro: "Não deu para baixar/processar: " + e.message }); } catch (_) { /* fica só o tipo */ }
+          }
+          break; // tenta de novo no próximo sinal
+        }
+      }
+    })().finally(() => { processandoMidia = null; });
+    return processandoMidia;
   }
   async function mandarResultados() {
     while (st.resultados.length) {
@@ -277,7 +343,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   const info = () => ({ versao: VERSAO, node: process.version, sistema: `${platform()} ${release()}`, aparelho: config.aparelho || hostname(),
     conectado: st.aberto, desde: st.desde, recebidas: st.recebidas, ultima_recebida: st.ultimaRecebida, erros: st.erros,
     ligado_desde: new Date(st.inicio).toISOString(), pendentes: pendentes.size,
-    enviadas: st.enviadas, ultimo_envio: st.ultimoEnvio, fila: st.motivoFila, a_guardar: st.aGuardar.length });
+    enviadas: st.enviadas, ultimo_envio: st.ultimoEnvio, fila: st.motivoFila, a_guardar: st.aGuardar.length,
+    midias_feitas: st.midiasFeitas, midias_na_fila: st.midias.length, midias_com_erro: st.midiasErro, tiques_a_gravar: st.entregas.length });
 
   async function pulso() {
     if (st.parado) return;
@@ -316,7 +383,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     if (!r.continua && st.sock) fechar("a vez foi interrompida: reabre com a sessão do banco");
     if (r.pedido === "desconectar") return desconectarAPedido();
     await tentarPendentes();
-    await mandarResultados(); await guardarMensagens();
+    await mandarResultados(); await guardarMensagens(); await mandarEntregas();
+    processarMidias(); // em segundo plano
     if (!st.sock && !st.conectando && agora() >= st.proximaTentativa) await conectar();
     else if (st.aberto) await enviarDaFila();
   }
@@ -326,7 +394,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     try { await tentarPendentes(); await fila.catch(() => {}); await rpc("whatsapp_motor_soltar", base()); } catch (_) { /* a vez vence sozinha em 90 s */ }
   }
 
-  return { id, st, pulso, encerrar, info, rpc, pendentes, guardarMensagens, _aoMudarConexao: aoMudarConexao };
+  return { id, st, pulso, encerrar, info, rpc, pendentes, guardarMensagens, mandarEntregas, processarMidias, _aoMudarConexao: aoMudarConexao };
 }
 
 // ---------- execução direta ----------

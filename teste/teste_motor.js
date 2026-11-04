@@ -1,7 +1,7 @@
 // Teste do motor do WhatsApp (motor-zap/motor.js) sem rede: banco e WhatsApp simulados.
 // Rodar: (cd motor-zap && npm ci) && node teste/teste_motor.js
 import { criarMotor, vinculado, lerConfig } from "../motor-zap/motor.js";
-import { paraGuardar, variacoes, jidParaEnvio, enviarTexto } from "../motor-zap/whats.js";
+import { paraGuardar, variacoes, jidParaEnvio, enviarTexto, midiaParaBaixar } from "../motor-zap/whats.js";
 import { readFileSync } from "node:fs";
 import { DisconnectReason } from "../motor-zap/node_modules/baileys/lib/index.js";
 import { writeFileSync, mkdtempSync } from "node:fs";
@@ -15,10 +15,16 @@ const CHAVE = "dtm_" + "a".repeat(64);
 // ---------- banco simulado com as mesmas regras do v24 ----------
 function banco() {
   const b = { sessao: new Map(), con: { situacao: "conectado", numero: "", dono: "", dono_id: null, dono_ate: 0, pedido: null, detalhe: "" },
-    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], msgs: [] };
+    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0 };
   const erro = (msg, code) => ({ ok: false, status: 400, text: async () => JSON.stringify({ message: msg, code }) });
   const resp = (v) => ({ ok: true, status: 200, text: async () => (v === undefined ? "" : JSON.stringify(v)) });
   b.buscar = async (url, op) => {
+    if (url.endsWith("/functions/v1/zap")) { // v32: mídia recebida (função zap, com a chave do motor no cabeçalho)
+      const a = JSON.parse(op.body); b.chamadas.push("zap:" + a.acao);
+      if (op.headers.apikey !== "pub" || op.headers["x-dtcar-motor"] !== b.chaveValida) return { ok: false, status: 401, text: async () => '{"erro":"chave"}' };
+      if (b.zapFalha > 0) { b.zapFalha--; return { ok: false, status: 500, text: async () => '{"erro":"falhou"}' }; }
+      b.midias.push(a); return resp({ ok: true });
+    }
     const nome = url.split("/rpc/")[1]; const a = JSON.parse(op.body); b.chamadas.push(nome);
     if (op.headers.apikey !== "pub" || op.headers.authorization) return erro("cabeçalho errado");
     if (b.fora) throw new TypeError("fetch failed");
@@ -35,6 +41,7 @@ function banco() {
       return resp({ vez, continua: vez && continua, sessao_em: new Date(b.sessaoEm).toISOString(), vinculado, pedido: vez ? b.con.pedido : null, dono: b.con.dono, situacao: b.con.situacao });
     }
     if (nome === "whatsapp_motor_mensagens") { for (const x of a.p_msgs) if (!b.msgs.some((y) => y.msg_id === x.msg_id)) b.msgs.push(x); return resp(a.p_msgs.length); }
+    if (nome === "whatsapp_motor_entrega") { if (b.semV28) return erro("Could not find the function public.whatsapp_motor_entrega", "PGRST202"); b.entregas.push(...a.p_lista); return resp(a.p_lista.length); }
     if (nome === "whatsapp_motor_resultado") { b.resultados.push(a); const f = b.fila.find((x) => x.id === a.p_fila_id); if (f) f.status = a.p_ok ? "enviada" : "erro"; return resp(); }
     if (nome === "whatsapp_motor_soltar") { if (b.con.dono_id === a.p_id) b.con.dono_ate = 0; return resp(); }
     if (!comVez()) return erro("O motor não está com a vez da conexão.", "55000");
@@ -225,6 +232,50 @@ function sessaoVinculada(b) {
   await m.encerrar();
 }
 
+// 1h) v32: tiques das enviadas e mídia recebida (áudio para transcrever, foto para guardar)
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b);
+  const baixados = []; let falhaBaixar = 0;
+  const m = novo(b, f, { baixarMidia: async (msg) => { if (falhaBaixar > 0) { falhaBaixar--; throw new Error("sem rede"); } baixados.push(msg.key.id); return Buffer.from("ARQ-" + msg.key.id); } });
+  await m.pulso(); await espera(); const s = f.sockets[0]; await s.emitir("connection.update", { connection: "open" }); await espera();
+  await s.emitir("messages.update", [{ key: { id: "M1", fromMe: true }, update: { status: 3 } }, { key: { id: "M1", fromMe: true }, update: { status: 4 } },
+    { key: { id: "X9", fromMe: false }, update: { status: 4 } }, { key: { id: "M2", fromMe: true }, update: { starred: true } }]);
+  await m.pulso();
+  confere("tiques: manda só os das enviadas pela oficina", b.entregas.length === 2 && b.entregas.every((x) => x.msg_id === "M1") && b.entregas[1].status === 4, JSON.stringify(b.entregas));
+  confere("tiques: fila esvazia depois de gravar", m.st.entregas.length === 0);
+  b.semV28 = true; await s.emitir("messages.update", [{ key: { id: "M3", fromMe: true }, update: { status: 3 } }]); await m.pulso();
+  confere("tiques: sem o v32 no banco, descarta sem travar", m.st.entregas.length === 0 && m.st.semEntregaNoBanco);
+  b.semV28 = false;
+  await s.emitir("messages.upsert", { type: "notify", messages: [
+    { key: { id: "AU1", remoteJid: "5527999112233@s.whatsapp.net" }, messageTimestamp: 1793736000, message: { audioMessage: { seconds: 12, mimetype: "audio/ogg; codecs=opus" } } },
+    { key: { id: "FO1", remoteJid: "5527999112233@s.whatsapp.net" }, messageTimestamp: 1793736000, message: { imageMessage: { caption: "painel", mimetype: "image/jpeg" } } },
+    { key: { id: "AU2", remoteJid: "5527999112233@s.whatsapp.net" }, messageTimestamp: 1793736000, message: { audioMessage: { seconds: 900 } } },
+    { key: { id: "AU3", remoteJid: "5527999112233@s.whatsapp.net", fromMe: true }, messageTimestamp: 1793736000, message: { audioMessage: { seconds: 5 } } },
+    { key: { id: "GR1", remoteJid: "1203@g.us" }, message: { audioMessage: { seconds: 5 } } }] });
+  await espera();
+  confere("mídia: guarda as mensagens antes de mandar a mídia", ["AU1", "FO1", "AU2"].every((id) => b.msgs.some((x) => x.msg_id === id)));
+  await m.pulso(); await espera(50); await espera();
+  confere("mídia: áudio e foto recebidos vão para a função zap; enviada pela oficina e grupo não", b.midias.length === 3 && !b.midias.some((x) => x.msg_id === "AU3" || x.msg_id === "GR1"), JSON.stringify(b.midias.map((x) => x.msg_id)));
+  const au = b.midias.find((x) => x.msg_id === "AU1"), fo = b.midias.find((x) => x.msg_id === "FO1"), lg = b.midias.find((x) => x.msg_id === "AU2");
+  confere("mídia: áudio vai em base64 com tipo e duração", au && au.acao === "midia" && au.tipo === "audio" && au.mime === "audio/ogg" && au.segundos === 12 && Buffer.from(au.base64, "base64").toString() === "ARQ-AU1");
+  confere("mídia: foto vai como imagem", fo && fo.tipo === "imagem" && fo.mime === "image/jpeg" && !!fo.base64);
+  confere("mídia: áudio longo não é baixado, só registra o motivo", lg && !lg.base64 && /longo/.test(lg.erro) && !baixados.includes("AU2"));
+  // falha ao baixar: tenta de novo no próximo sinal; depois de 3, desiste e registra o erro
+  falhaBaixar = 3;
+  await s.emitir("messages.upsert", { type: "notify", messages: [{ key: { id: "AU4", remoteJid: "5527999112233@s.whatsapp.net" }, message: { audioMessage: { seconds: 3 } } }] }); await espera();
+  await m.pulso(); await espera(50); confere("mídia: falha ao baixar fica para a próxima", m.st.midias.length === 1 && m.st.midias[0].tentativas === 1, JSON.stringify(m.st.midias.map((x) => [x.msg_id, x.tentativas])));
+  await m.pulso(); await espera(50); await m.pulso(); await espera(50); await espera();
+  const a4 = b.midias.find((x) => x.msg_id === "AU4");
+  confere("mídia: depois de 3 falhas desiste e registra o erro", m.st.midias.length === 0 && a4 && /Não deu/.test(a4.erro) && m.st.midiasErro === 1);
+  // função zap fora: tenta de novo
+  b.zapFalha = 1;
+  await s.emitir("messages.upsert", { type: "notify", messages: [{ key: { id: "FO2", remoteJid: "5527999112233@s.whatsapp.net" }, message: { imageMessage: {} } }] }); await espera();
+  await m.pulso(); await espera(50); confere("mídia: função zap fora, tenta de novo", m.st.midias.length === 1, JSON.stringify(m.st.midias.map((x) => [x.msg_id, x.tentativas])) + b.zapFalha);
+  await m.pulso(); await espera(50); confere("mídia: função zap voltou, vai", m.st.midias.length === 0 && b.midias.some((x) => x.msg_id === "FO2"));
+  await m.pulso(); confere("info do motor mostra a mídia processada", b.info.midias_feitas >= 4 && b.info.midias_com_erro === 1, JSON.stringify(b.info));
+  await m.encerrar();
+}
+
 // 1g) funções comuns (mesmos casos do teste da função zap)
 {
   const casos = JSON.parse(readFileSync(new URL("./casos_whats.json", import.meta.url), "utf8"));
@@ -232,6 +283,11 @@ function sessaoVinculada(b) {
     const r = paraGuardar(c.m);
     const certo = c.esperado === null ? r === null : r && Object.entries(c.esperado).every(([k, v]) => r[k] === v);
     confere("paraGuardar: " + c.nome, certo, JSON.stringify(r));
+  }
+  for (const c of casos.midiaParaBaixar || []) {
+    const r = midiaParaBaixar(c.m);
+    const certo = c.esperado === null ? r === null : r && Object.entries(c.esperado).every(([k, v]) => (k === "pular" ? (v ? !!r.pular : !r.pular) : r[k] === v));
+    confere("midiaParaBaixar: " + c.nome, certo, JSON.stringify(r));
   }
   for (const c of casos.variacoes) confere("variações do número " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado), JSON.stringify(variacoes(c.tel)));
   const sock = { onWhatsApp: async (n) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] };

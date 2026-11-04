@@ -25,7 +25,7 @@ export function instrucoes(cob) {
  * b = linha da tabela "boletos"; cob = cfg.cobranca; emp = { nome, cnpj, endereco }.
  */
 export function pdfBoletos(lista, cob, emp) {
-  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
+  const doc = new globalThis.jspdf.jsPDF({ unit: "mm", format: "a4" });
   lista.forEach((b, i) => { if (i) doc.addPage(); pagina(doc, b, cob, emp); });
   return doc;
 }

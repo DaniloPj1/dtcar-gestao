@@ -10,6 +10,7 @@ import { CancelarModal, EncerrarModal } from "./acoesos.js";
 import { ReciboModal } from "./recibos.js";
 import { PrazoReceber, validarPrazo, lancarParcelas, ReceberParcelaModal, CombinarPrazoModal, ParcelasOS, situacaoParcela } from "./receber.js";
 import { BuscaFornecedor } from "./financeiro.js";
+import { NotasOSModal } from "./notasos.js";
 
 /* ---------------- Mensagens de WhatsApp ---------------- */
 const nomeVeic = o => [o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") + " (" + exPlaca(o.veiculo.placa) + ")";
@@ -237,6 +238,9 @@ export function Ordem({ id, params = {} }) {
   const [campos, setCampos] = useState({});
   const [sujo, setSujo] = useState(false);
   const [modal, setModal] = useState(null);
+  const [nNotas, setNNotas] = useState(0); // NF anexadas (v33); sem o SQL ou sem internet fica 0
+  useEffect(() => { if (!o || !perfil || perfil.papel !== "admin" || !api.notasOS) return;
+    let vivo = true; api.notasOS.listar(o.numero).then(l => vivo && setNNotas(l.length)).catch(() => {}); return () => { vivo = false; }; }, [o && o.numero]);
   const [ocupado, setOcupado] = useState("");
   const [recibos, setRecibos] = useState([]), [parcs, setParcs] = useState([]);
   const verValores = pode(perfil, "verValores");
@@ -623,6 +627,7 @@ export function Ordem({ id, params = {} }) {
         ${ck.feito ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("entrada")}>${ocupado === "pdf-entrada" ? "Gerando…" : "Checklist (PDF)"}</button>` : null}
         ${verValores && itens.length ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("orcamento")}>${ocupado === "pdf-orcamento" ? "Gerando…" : "Orçamento (PDF)"}</button>` : null}
         ${verValores && aprovadoAlgum ? html`<button type="button" class="btn-link" disabled=${!!ocupado} onClick=${() => documento("os")}>${ocupado === "pdf-os" ? "Gerando…" : "O.S. (PDF)"}</button>` : null}
+        ${perfil && perfil.papel === "admin" ? html`<button type="button" class="btn-link" title="PDF e XML da nota emitida no ObjetivaWeb, para enviar junto por e-mail" onClick=${() => setModal({ tipo: "notas" })}>NF${nNotas ? " (" + nNotas + ")" : ""}</button>` : null}
         ${verValores && recibos.some(r => !r.cancelado) ? html`<button type="button" class="btn-link" onClick=${() => setAba("itens")}>Recibos (${recibos.filter(r => !r.cancelado).length})</button>` : null}
         ${st === "diagnostico" && o.cliente.telefone ? html`<button type="button" class="btn-link" onClick=${() => whats("entrada")}>Avisar recebimento</button>` : null}
       </div>
@@ -631,6 +636,7 @@ export function Ordem({ id, params = {} }) {
     ${corpo}
     ${podeSalvar ? html`<div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${carregar}>Descartar alterações</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar O.S."}</button></div></div>` : null}
 
+    ${modal && modal.tipo === "notas" ? html`<${NotasOSModal} o=${o} onFechar=${() => setModal(null)} onMudou=${setNNotas} />` : null}
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
     ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} comPrazo=${comPrazo} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}

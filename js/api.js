@@ -304,6 +304,23 @@ function criarApiSupabase() {
       atualizar: async (id, patch) => ok(await sb.from("rh_documentos").update({ ...patch, atualizado_em: new Date().toISOString() }).eq("id", id).select("*").single()),
       excluir: async doc => { ok(await sb.from("rh_documentos").delete().eq("id", doc.id)); await sb.storage.from("rh").remove([doc.arquivo]); },
     },
+    // NF anexada à O.S. (supabase/v33.sql): PDF e XML da nota emitida no ObjetivaWeb, para mandar por e-mail junto com a O.S.
+    notasOS: {
+      listar: async osNumero => { const r = await sb.from("os_notas").select("*").eq("os_numero", osNumero).order("criado_em");
+        if (r.error && /os_notas|schema cache|does not exist/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v33.sql no Supabase.");
+        return ok(r) || []; },
+      baixar: async caminho => { const r = await sb.storage.from("notas").download(caminho); if (r.error) throw traduzErro(r.error); return r.data; },
+      adicionar: async (arquivo, dados) => {
+        const xml = /\.xml$/i.test(arquivo.name || "") || /xml/.test(arquivo.type || "");
+        const tipo = xml ? "application/xml" : "application/pdf";
+        const nome = (arquivo.name || (xml ? "nf.xml" : "nf.pdf")).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9.]+/g, "-").slice(-80);
+        const caminho = dados.os_numero + "/" + crypto.randomUUID() + "-" + nome;
+        ok(await sb.storage.from("notas").upload(caminho, arquivo, { contentType: tipo, upsert: false }));
+        const r = await sb.from("os_notas").insert({ ...dados, arquivo: caminho, nome_arquivo: arquivo.name || nome, tipo_arquivo: tipo, tamanho: arquivo.size || 0 }).select("*").single();
+        if (r.error) { await sb.storage.from("notas").remove([caminho]); throw traduzErro(r.error); }
+        return r.data; },
+      excluir: async n => { ok(await sb.from("os_notas").delete().eq("id", n.id)); await sb.storage.from("notas").remove([n.arquivo]); },
+    },
     // E-mail da oficina (supabase/v29.sql + função "email"): situação, conectar, regras do filtro; o Claude lê e envia pelo conector
     email: {
       chamar: async body => {
@@ -312,7 +329,10 @@ function criarApiSupabase() {
         if (data && data.erro) throw new Error(data.erro);
         return data;
       },
-      envios: async () => ok(await sb.from("email_envios").select("id,em,tipo,para,assunto,resumo,resposta_a,por").order("id", { ascending: false }).limit(20)) || [],
+      envios: async () => { const q = c => sb.from("email_envios").select(c).order("id", { ascending: false }).limit(20);
+        let r = await q("id,em,tipo,para,assunto,resumo,resposta_a,por,anexos");
+        if (r.error && /anexos/.test(r.error.message)) r = await q("id,em,tipo,para,assunto,resumo,resposta_a,por"); // antes do v33
+        return ok(r) || []; },
       ligar: async v => { const r = await sb.rpc("email_ligar", { p_ligado: !!v }); if (r.error && /email_ligar|schema cache|404/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v29.sql no Supabase."); return ok(r); },
     },
     sefaz: {

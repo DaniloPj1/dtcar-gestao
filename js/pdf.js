@@ -1,5 +1,4 @@
 // Documentos em PDF: checklist de entrada, orçamento e ordem de serviço
-import { api } from "./api.js";
 import { exPlaca, fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias } from "./util.js";
 import { secoesCheckin, achados, QUALIDADE, termoEntradaFinal, TERMO_GARANTIA, TERMO_ORCAMENTO } from "./regras.js";
 
@@ -7,7 +6,15 @@ const AZUL = [10, 75, 208], TINTA = [20, 26, 36], CINZA = [96, 106, 122], LINHA 
 const COR = { ok: [18, 122, 70], warn: [160, 95, 0], bad: [189, 49, 41], info: AZUL, na: CINZA };
 const W = 210, H = 297, M = 12, CW = W - 2 * M, MEIA = (CW - 4) / 2;
 
+// Leitor de imagem trocável: o navegador usa o padrão abaixo; a função "email" do Supabase (que gera o PDF para anexar)
+// troca por um que lê a pasta de fotos direto (lá não existe FileReader nem Image). O api.js é carregado só quando
+// precisa, para este arquivo também rodar fora do navegador.
+let leitorImagem = null;
+export function usarLeitorImagem(f) { leitorImagem = f; }
+
 async function imagem(caminho) {
+  if (leitorImagem) return leitorImagem(caminho);
+  const { api } = await import(new URL("./api.js", import.meta.url).href);
   const url = caminho.startsWith("app:") ? caminho.slice(4) : await api.urlArquivo(caminho);
   const blob = await (await fetch(url)).blob();
   const data = await new Promise((ok, falha) => { const r = new FileReader(); r.onload = () => ok(r.result); r.onerror = falha; r.readAsDataURL(blob); });
@@ -16,7 +23,7 @@ async function imagem(caminho) {
 }
 
 function novoDoc() {
-  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
+  const doc = new globalThis.jspdf.jsPDF({ unit: "mm", format: "a4" });
   const d = { doc, y: M };
   d.cor = c => doc.setTextColor(c[0], c[1], c[2]);
   d.fonte = (estilo, tam) => { doc.setFont("helvetica", estilo); doc.setFontSize(tam); };

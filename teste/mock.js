@@ -58,6 +58,12 @@
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
         throw new Error("Ação desconhecida."); } },
+    // NF anexada à O.S. (v33)
+    notasOS: { listar: async n => (window.__NOTAS = window.__NOTAS || []).filter(x => x.os_numero === n),
+      baixar: async c => new Blob(["%PDF-1.4 nf"], { type: "application/pdf" }),
+      adicionar: async (arq, d) => { const x = { id: uid(), ...d, arquivo: d.os_numero + "/" + arq.name, nome_arquivo: arq.name, tipo_arquivo: /xml/i.test(arq.name) ? "application/xml" : "application/pdf", tamanho: arq.size, criado_em: now() };
+        (window.__NOTAS = window.__NOTAS || []).push(x); return x; },
+      excluir: async n => { window.__NOTAS = window.__NOTAS.filter(y => y.id !== n.id); } },
     // Documentos do RH (v30)
     rh: { listar: async () => (window.__RH = window.__RH || []).slice().sort((a, b) => b.competencia.localeCompare(a.competencia)),
       baixar: async c => { (window.__RH_BAIXADOS = window.__RH_BAIXADOS || []).push(c); return new Blob(["%PDF-1.4 teste"], { type: "application/pdf" }); },

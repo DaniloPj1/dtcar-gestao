@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v32.sql`, `v32.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -110,6 +110,18 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `email_enviar`/`email_responder` (prévia com confirmar=false; histórico em `email_envios` e `agente_acoes`), `email_regra`.
   Tela Sistema › E-mail (abas com o WhatsApp; no menu lateral os dois são um item só, "WhatsApp e e-mail", para o menu caber sem rolar).
   Testes: `deno run -A teste/teste_email.ts` e `bash teste/teste_v29.sh` (Postgres local).
+  **Anexos (v33, `email/anexos.ts`):** `email_enviar`/`email_responder` aceitam `anexos` pelo que o arquivo é, nunca por caminho:
+  `{fonte:"os", numero, documento: os|orcamento|entrada, fotos?}` (o mesmo PDF da tela), `{fonte:"boleto", nosso_numero | os}` (pela O.S.,
+  todos em aberto num PDF; rejeitado não vai), `{fonte:"nf", os | id}` (NF anexada à mão na O.S.), `{fonte:"rh", id}`, `{fonte:"email", id, anexo_id}`.
+  Até 5 arquivos e 3 MB somados (sem Mail.ReadWrite não há sessão de upload); a prévia lista nome/tamanho/origem e os avisos (período de
+  transição, O.S. não entregue, boleto pago/não registrado); o histórico (`email_envios.anexos`) guarda só os nomes. Os PDFs são gerados pelos
+  **mesmos `js/pdf.js` e `js/boletopdf.js` do site**, importados do endereço publicado (`email/site.ts`, juntados no Deploy, jsPDF 2.5.1 =
+  vendor): esses arquivos (e `util.js`, `regras.js`, `cnab.js`, `qr.js`) não podem usar `window`/`document` no carregamento; `pdf.js`
+  aceita leitor de imagem trocável (`usarLeitorImagem`). **Mudou um deles? Publique a função "email" de novo** depois do merge.
+  Datas de `util.js` sempre no fuso de Brasília (a função roda em UTC). Teste: `deno run -A teste/teste_anexos.ts` (PDFs de verdade).
+- **NF anexada à O.S. (v33), O.S. › Documentos › NF:** PDF e XML da nota emitida no ObjetivaWeb (o sistema não emite NF), tabela `os_notas`
+  + pasta privada `notas`, ligadas pelo **número** da O.S. (sem chave estrangeira; preservada pelo espelho: documento fiscal real), só
+  administrador. Número da NF lido do XML (`numeroDaNF` em `js/telas/notasos.js`). Teste: `bash teste/teste_v33.sh`.
 - **Documentos do RH (v30), Financeiro › Funcionários e RH › Documentos do RH** (`js/telas/rh.js`; no menu lateral um item só,
   "Funcionários e RH", com abas): PDFs da contabilidade (Loredo) por mês — recibo, adiantamento, pró-labore, folha de ponto, DARF, FGTS, DAS,
   INSS, laudo, EPI — para abrir e imprimir. Tabela `rh_documentos` e pasta privada `rh` no Supabase, **só administrador** (salário e dado

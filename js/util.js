@@ -34,10 +34,14 @@ export function parseValor(s) {
 }
 export const arred = n => Math.round((Number(n) || 0) * 100) / 100;
 export const fmtKm = n => (n === null || n === undefined || n === "") ? "—" : Number(n).toLocaleString("pt-BR") + " km";
-export const fmtDataHora = iso => iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
-export const fmtData = d => { if (!d) return "—"; const x = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T12:00:00") : new Date(d); return x.toLocaleDateString("pt-BR"); };
+// Datas sempre no horário de Brasília (a oficina): o mesmo resultado no navegador e no PDF gerado pela função do Supabase (que roda em UTC)
+const FUSO = "America/Sao_Paulo";
+export const fmtDataHora = iso => iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZone: FUSO }) : "—";
+export const fmtData = d => { if (!d) return "—"; const x = typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? new Date(d + "T12:00:00Z") : new Date(d); return x.toLocaleDateString("pt-BR", { timeZone: FUSO }); };
+const diaBrasilia = d => new Intl.DateTimeFormat("en-CA", { timeZone: FUSO, year: "numeric", month: "2-digit", day: "2-digit" }).format(d);
 export const hojeISO = () => { const d = new Date(); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
-export const somaDias = (iso, n) => { const d = iso ? new Date(iso) : new Date(); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+export const somaDias = (iso, n) => { const base = typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : diaBrasilia(iso ? new Date(iso) : new Date());
+  const d = new Date(base + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export const numOS = n => "OS " + String(n ?? "").padStart(5, "0");
 export const numRecibo = n => "Recibo " + String(n ?? "").padStart(5, "0");
 export const endCompleto = c => c ? ([[c.rua, c.complemento].filter(Boolean).join(" "), c.bairro, [c.cidade, c.uf].filter(Boolean).join("/"), c.cep ? "CEP " + c.cep : ""].filter(Boolean).join(", ") || c.endereco || "") : "";

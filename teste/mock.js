@@ -20,6 +20,10 @@
       { id: "i4", ordem_id: "o2", tipo: "servico", descricao: "TROCA DE AMORTECEDORES DIANTEIROS", qtd: 1, valor_unit: 350, desconto: 0, aprovado: true, executado: true, posicao: 1 },
       { id: "i5", ordem_id: "o2", tipo: "peca", codigo: "PST-11", descricao: "PASTILHA DE FREIO DIANT", qtd: 1, valor_unit: 260, desconto: 20, aprovado: null, posicao: 2 },{ id: "i1", ordem_id: "o1", tipo: "servico", qtd: 1, valor_unit: 600, desconto: 0, aprovado: true }, { id: "i2", ordem_id: "o1", tipo: "peca", qtd: 1, valor_unit: 300, desconto: 0, aprovado: true }],
     funcionarios: [], funcionario_lanc: [], receber: [], config: {},
+    // pedidos de compra por fornecedor (pre_notas, v19/v31)
+    pre_notas: [{ id: "pn1", data: "2026-10-20", fornecedor_id: "f1", fornecedor_nome: "AutoPeças", documento: "PV 100", total: 500, os_numero: 1898, ordem_id: "o2", placa: "QXN1E49", situacao: "aberta", obs: "" },
+      { id: "pn2", data: "2026-10-22", fornecedor_id: "f1", fornecedor_nome: "AutoPeças", documento: "PV 101", total: 350, os_numero: null, ordem_id: null, placa: "", situacao: "aberta", obs: "" },
+      { id: "pn3", data: "2026-10-23", fornecedor_id: null, fornecedor_nome: "Somax", documento: "Pedido 35136", total: 117, os_numero: 1898, ordem_id: "o2", placa: "QXN1E49", situacao: "aberta", obs: "" }],
   };
   const net = () => { if (!navigator.onLine) throw new Error("TypeError: Failed to fetch"); };
   const tab = n => ({ listar: async () => { net(); return db[n].slice(); }, salvar: async o => { if (o.id) { const i = db[n].findIndex(x => x.id === o.id); db[n][i] = { ...db[n][i], ...o, atualizado_em: now() }; return db[n][i]; } const x = { id: uid(), criado_em: now(), atualizado_em: now(), ...o }; db[n].push(x); return x; }, excluir: async id => { db[n] = db[n].filter(x => x.id !== id); } });
@@ -113,6 +117,10 @@
     notas: { listar: async () => [] },
     estoque: { movimentos: async () => [], movimentar: async (id, tipo, q) => { const p = db.produtos.find(x => x.id === id); p.estoque_atual = tipo === "entrada" ? +p.estoque_atual + q : tipo === "saida" ? +p.estoque_atual - q : q; return p.estoque_atual; } },
     contas: { abertas: async () => db.contas.filter(c => c.status === "aberta"), listar: async ({ de, ate, campo = "vencimento", status } = {}) => db.contas.filter(c => (!de || (c[campo] || "") >= de) && (!ate || (c[campo] || "") <= ate) && (!status || c.status === status) && (campo !== "pago_em" || c[campo])), salvar: async c => { if (c.id) { const o = db.contas.find(x => x.id === c.id); const antes = o.status; Object.assign(o, c, { atualizado_em: now() }); if (o.status === "paga" && antes !== "paga") o.pago_registrado_em = now(); if (o.status !== "paga") o.pago_registrado_em = null; return o; } const x = { id: uid(), status: "aberta", ...c }; db.contas.push(x); return x; } },
+    preNotas: { listar: async ({ de, ate } = {}) => { net(); return db.pre_notas.filter(p => p.situacao !== "cancelada" && (!de || p.data >= de) && (!ate || p.data <= ate)); },
+      abertasDo: async (fid, nome) => db.pre_notas.filter(p => p.situacao === "aberta" && (fid ? p.fornecedor_id === fid : !p.fornecedor_id && p.fornecedor_nome.toLowerCase() === String(nome || "").toLowerCase())),
+      incluir: async p => { const x = { id: uid(), situacao: "aberta", criado_em: now(), ...p }; db.pre_notas.push(x); return x; },
+      atualizar: async (ids, patch) => db.pre_notas.filter(p => ids.includes(p.id)).map(p => Object.assign(p, patch)) },
     transferencias: { listar: async ({ de, ate } = {}) => (db.transferencias || []).filter(t => (!de || t.data >= de) && (!ate || t.data <= ate)), salvar: async t => { const x = { id: uid(), criado_em: now(), ...t }; (db.transferencias = db.transferencias || []).push(x); return x; }, excluir: async id => { db.transferencias = db.transferencias.filter(t => t.id !== id); } },
     temV18: () => true,
     // mesmas regras da função saldos_contas do v18 (no servidor, numa consulta só)

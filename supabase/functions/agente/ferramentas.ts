@@ -2,7 +2,7 @@
 // Cada ferramenta chama uma função do banco (supabase/v20.sql) com o cliente do Supabase
 // já autenticado como o usuário que autorizou o conector: as regras de acesso valem e as
 // funções exigem administrador. Nada aqui apaga, paga ou mexe em conta paga.
-// Gravação: abrir_os (v20), lancar_itens_os (v21/v27), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina)
+// Gravação: abrir_os (v20), lancar_itens_os (v21/v27), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina)
 // e email_enviar/email_responder/email_regra (v29: e-mail da oficina pela função "email").
 import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
 import { z } from "npm:zod@4.3.6";
@@ -22,6 +22,8 @@ Responda ao Danilo em português do Brasil, curto e direto.
 - Ordem direta e completa do Danilo (abrir O.S., lançar itens): grave direto com confirmar=true e mostre o resultado em poucas linhas.
 - Se faltar dado, houver dúvida ou a ferramenta devolver "erros" (O.S. já aberta, KM menor, item repetido), use confirmar=false, mostre a prévia e espere o "sim".
 - Se a prévia trouxer "erros", pergunte só o que falta. Nunca invente telefone, ano, km ou reclamação.
+- Foto de cupom, pré-venda ou pedido de fornecedor que o Danilo mandar: registre com registrar_pre_nota (fornecedor, nº do documento,
+  data e total já com desconto; O.S. se for para uma). Sem guardar a foto. pre_notas lista por fornecedor e período para conferir no acerto.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
 - whatsapp_enviar ENVIA de verdade pelo WhatsApp da oficina (fila com horário comercial e intervalo). Só com ordem do Danilo para
   aquele cliente. Texto ditado ou aprovado por ele: confirmar=true. Texto que você redigiu: mostre e espere o "sim" antes de confirmar.
@@ -178,6 +180,47 @@ export function criarServidor(db: Banco): McpServer {
     if (error) return falha(error.message);
     const r = d as { id?: string };
     return texto(r.id ? { ...r, abrir_no_sistema: SITE + "/#/os/" + r.id } : r);
+  });
+
+  // ---------- Pedidos de compra por fornecedor (v31) ----------
+  s.registerTool("registrar_pre_nota", {
+    title: "Registrar pedido de compra",
+    description: "Registra um cupom, pré-venda ou pedido de compra de um fornecedor (sem a foto): fornecedor, nº do documento, data e valor total já com desconto, " +
+      "e a O.S. de destino quando houver. Serve para conferir o que o fornecedor cobra na hora de pagar. Com confirmar=false só confere e devolve a prévia " +
+      "(fornecedor cadastrado ou não, documento repetido). Foto mandada pelo Danilo com o pedido de lançar: chame com confirmar=true. Nunca invente valor.",
+    inputSchema: z.object({
+      fornecedor: z.string().min(2).describe("Nome do fornecedor como está no documento (ou o nome fantasia)"),
+      fornecedor_cnpj: z.string().optional().describe("CNPJ do fornecedor, se aparecer no documento"),
+      documento: z.string().min(1).describe("Nº do cupom, NFC-e, pré-venda, pedido ou romaneio (ex.: \"PV 57941\")"),
+      data: data.describe("Data do pedido AAAA-MM-DD"),
+      total: z.number().positive().describe("Valor total em reais, já com o desconto"),
+      os_numero: z.number().int().positive().optional().describe("Número da O.S. de destino"),
+      obs: z.string().optional(),
+      registrar_mesmo_repetido: z.boolean().optional().describe("true só se o Danilo confirmou registrar de novo o mesmo documento"),
+      pedido: z.string().optional().describe("O pedido do Danilo, resumido, para o histórico"),
+      confirmar: z.boolean().default(false),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ confirmar, ...p }) => {
+    const { data: d, error } = await db.rpc("agente_registrar_pre_nota", { p: JSON.parse(JSON.stringify(p)), p_gravar: confirmar === true });
+    if (error) return falha(/agente_registrar_pre_nota|schema cache|PGRST202/i.test(error.message) ? "O registro de pedidos de compra ainda não foi ligado (falta rodar o supabase/v31.sql)." : error.message);
+    return texto({ ...(d as Record<string, unknown>), abrir_no_sistema: SITE + "/#/pedidos" });
+  });
+
+  s.registerTool("pre_notas", {
+    title: "Pedidos de compra por fornecedor",
+    description: "Lista os pedidos de compra (cupons e pré-vendas) por fornecedor e período, com o total de cada fornecedor, para conferir antes de pagar. " +
+      "situacao: abertas (ainda não conferidas, padrão), conferidas ou todas. Período padrão: últimos 60 dias.",
+    inputSchema: z.object({
+      fornecedor: z.string().optional().describe("Parte do nome ou o CNPJ"),
+      de: data.optional(), ate: data.optional(),
+      situacao: z.enum(["abertas", "conferidas", "todas"]).default("abertas"),
+    }),
+    annotations: LEITURA,
+  }, async ({ fornecedor, de, ate, situacao }) => {
+    const { data: d, error } = await db.rpc("agente_pre_notas", { p_fornecedor: fornecedor ?? null, p_de: de ?? null, p_ate: ate ?? null, p_situacao: situacao });
+    if (error) return falha(/agente_pre_notas|schema cache|PGRST202/i.test(error.message) ? "A lista de pedidos de compra ainda não foi ligada (falta rodar o supabase/v31.sql)." : error.message);
+    return texto(d);
   });
 
   // ---------- WhatsApp da oficina (v25) ----------

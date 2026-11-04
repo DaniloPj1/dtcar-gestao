@@ -40,9 +40,9 @@ try:
         cobranca: { chavePix: "093a8b6a-6e9d-4ed1-922a-ebb1c4452963", jurosMes: 2, multa: 2 } };
       Object.assign(d.clientes[0], { doc: "52998224725", rua: "Rua das Flores, 100", bairro: "Centro", cep: "29700-000", cidade: "Colatina", uf: "ES" });
       d.clientes.push({ id: "c2", nome: "Sem Endereço Ltda", telefone: "27988887777", doc: "", situacao: "liberado" });
-      d.receber.push({ id: "r1", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01897 · ABC1D23", forma: "Boleto", parcela: 1, parcelas: 2, valor: 450.5, vencimento: "2026-12-10", status: "aberta" },
-        { id: "r2", ordem_id: "o4", cliente_id: "c2", cliente_nome: "Sem Endereço Ltda", descricao: "OS 01896", forma: "Boleto", parcela: 1, parcelas: 1, valor: 300, vencimento: "2026-12-15", status: "aberta" },
-        { id: "r3", ordem_id: "o4", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01896", forma: "Promissória", parcela: 1, parcelas: 1, valor: 99, vencimento: "2026-12-15", status: "aberta" });
+      d.receber.push({ id: "r1", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01897 · ABC1D23", forma: "Boleto", parcela: 1, parcelas: 2, valor: 450.5, vencimento: "2026-12-10", status: "aberta", criado_em: "2026-11-05T09:00:00-03:00" },
+        { id: "r2", ordem_id: "o4", cliente_id: "c2", cliente_nome: "Sem Endereço Ltda", descricao: "OS 01896", forma: "Boleto", parcela: 1, parcelas: 1, valor: 300, vencimento: "2026-12-15", status: "aberta", criado_em: "2026-11-05T09:00:00-03:00" },
+        { id: "r3", ordem_id: "o4", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01896", forma: "Promissória", parcela: 1, parcelas: 1, valor: 99, vencimento: "2026-12-15", status: "aberta", criado_em: "2026-11-05T09:00:00-03:00" });
       d.recibos = []; })()""")
     U = "http://localhost:8766/"
     pg.goto(U + "#/receber"); pg.wait_for_timeout(2000)

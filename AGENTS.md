@@ -109,6 +109,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   e `reservarPagamento` impede recibo em dobro. Juros e multa sempre a partir do dia seguinte ao vencimento (data posterior tira o QR Code).
   Testes: `node teste/teste_cnab.mjs` (exemplos do manual e arquivo-modelo do Portal de Homologação), `python3 teste/teste_boletos.py`
   e `bash teste/teste_v28.sh` (Postgres local).
+  **Só parcelas novas**: a aba Emitir mostra só as parcelas criadas a partir de `cfg.cobranca.desde` (padrão 04/11/2026); as anteriores já
+  têm boleto emitido fora (PicPay) e só aparecem no aviso. Decisão do Danilo em 04/11/2026.
   **API de Cobrança** (alternativa ao arquivo, `cfg.cobranca.modo = "api"`): a função `supabase/functions/sicredi` (Verify JWT
   desligado; exige login e `e_admin`) fala com o Sicredi (doc v3.9.1) e guarda os segredos: `SICREDI_API_KEY_SANDBOX`, `SICREDI_API_KEY`
   e `SICREDI_CODIGO_ACESSO` (o agente nunca lê os valores). Ações: `testar`, `teste_completo` (só Sandbox, com os dados de teste fixos

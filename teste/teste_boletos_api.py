@@ -16,8 +16,9 @@ try:
     pg.add_init_script("""(() => { const d = window.__DB;
       d.config = { nome: "DTCAR CENTRO AUTOMOTIVO LTDA", cnpj: "49016409000195", cidade: "Colatina", espelhoLegado: false, cobranca: { modo: "api", ambiente: "sandbox", jurosMes: 2, multa: 2 } };
       Object.assign(d.clientes[0], { doc: "52998224725", rua: "Rua das Flores, 100", bairro: "Centro", cep: "29700-000", cidade: "Colatina", uf: "ES" });
-      d.receber.push({ id: "r1", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01897", forma: "Boleto", parcela: 1, parcelas: 2, valor: 450.5, vencimento: "2026-12-10", status: "aberta" },
-        { id: "r2", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01897", forma: "Boleto", parcela: 2, parcelas: 2, valor: 450.5, vencimento: "2027-01-10", status: "aberta" });
+      d.receber.push({ id: "r1", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01897", forma: "Boleto", parcela: 1, parcelas: 2, valor: 450.5, vencimento: "2026-12-10", status: "aberta", criado_em: "2026-11-05T09:00:00-03:00" },
+        { id: "r2", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01897", forma: "Boleto", parcela: 2, parcelas: 2, valor: 450.5, vencimento: "2027-01-10", status: "aberta", criado_em: "2026-11-05T09:00:00-03:00" },
+        { id: "r0", ordem_id: "o3", cliente_id: "c1", cliente_nome: "Cliente Teste", descricao: "OS 01823", forma: "Boleto", parcela: 1, parcelas: 1, valor: 1735.95, vencimento: "2026-11-20", status: "aberta", criado_em: "2026-11-02T15:00:00-03:00" });
       d.recibos = []; })()""")
     U = "http://localhost:8767/"
     pg.goto(U + "#/boletos"); pg.wait_for_timeout(2000)
@@ -26,6 +27,8 @@ try:
     chk("aviso de Sandbox", "ambiente de teste do Sicredi (Sandbox)" in corpo)
     chk("sem chave Pix exigida pela API", "Chave Pix" not in corpo)
     chk("Sandbox: botão Registrar desligado", pg.is_disabled("button:has-text('Registrar no Sicredi')"))
+    chk("parcela antiga (boleto já emitido fora) não aparece para emitir", "OS 01823" not in pg.inner_text(".lista") and "Emitir (2)" in corpo)
+    chk("aviso das parcelas antigas", "1 parcela(s) de antes de 04/11/2026" in corpo and "PicPay" in corpo)
     chk("sem arquivo de teste no modo API", pg.query_selector("button:has-text('Arquivo de teste')") is None)
     # teste de ligação
     pg.click("button:has-text('Dados da carteira')"); pg.wait_for_timeout(400)

@@ -46,6 +46,7 @@ confere("filtro: assunto de cobrança sem lista é útil", dec({ assunto: "Fatur
 confere("filtro: 'pedido' em propaganda de lista não passa", dec({ assunto: "Seu pedido com 20% OFF", lista: true }).decisao === "ignorado");
 confere("filtro: caixa Outros do Outlook fica fora", dec({ foco: "other" }).decisao === "ignorado");
 confere("filtro: remetente newsletter@ fica fora", dec({ de_email: "newsletter@loja.com.br" }).decisao === "ignorado");
+confere("filtro: ordem de compra de cliente é útil", dec({ de_email: "compras@granicap.com.br", assunto: "Ordem de Compra nº 12622 - GRANICAP" }).decisao === "util");
 confere("filtro: o resto vai para revisar", dec({ assunto: "Oi, tudo bem?" }).decisao === "revisar");
 confere("filtro: regra de remetente com nome vira só o e-mail", valorDaRegra("remetente", "Financeiro <Boleto@Fornecedor.com.br>") === "boleto@fornecedor.com.br");
 confere("filtro: regra de domínio a partir de e-mail", valorDaRegra("dominio", "vendas@WWW.Loja.com.br") === "loja.com.br");

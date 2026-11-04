@@ -396,13 +396,14 @@ export function Ordens({ params = {} }) {
   const soma = lista.reduce((s, o) => s + Number(o.total || 0), 0);
   const resumo = ETAPAS_RESUMO.map(([k, t]) => { const l = dados.ordens.filter(o => naEtapa(o, k) && (k !== "fechada" || doMes(o)));
     return { k, t: k === "fechada" ? "Fechadas no mês" : t, n: l.length, v: l.reduce((s, o) => s + Number(k === "pagamento" ? faltaReceber(o) : o.total || 0), 0) }; });
-  // como no sistema antigo: soma de todas as O.S. em aberto (o valor total de cada uma)
+  // como no sistema antigo: orçamento + execução + o que falta receber das que aguardam pagamento
+  // (= soma dos três cartões de etapa; o que já foi recebido em parte não entra)
   const abertas = ver ? dados.ordens.filter(emAberto) : [];
-  const totalAberto = abertas.reduce((s, o) => s + Number(o.total || 0), 0);
+  const totalAberto = abertas.reduce((s, o) => s + (etapaOS(o) === "pagamento" ? faltaReceber(o) : Number(o.total || 0)), 0);
   const atrasadas = dados.ordens.filter(o => ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO()).length;
   const nRecVenc = ver ? dados.ordens.filter(recVencida).length : 0;
   return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : " larga-media")}>
-    <div class="os-resumo">${ver ? html`<button type="button" class=${"osr osr-total" + (filtro === "abertas" ? " ativo" : "")} onClick=${() => setFiltro("abertas")} title="Soma do valor de todas as O.S. em orçamento, em execução e aguardando pagamento">
+    <div class="os-resumo">${ver ? html`<button type="button" class=${"osr osr-total" + (filtro === "abertas" ? " ativo" : "")} onClick=${() => setFiltro("abertas")} title="Orçamento + em execução + o que falta receber das O.S. aguardando pagamento">
         <span>Total em aberto</span><b>${reais(totalAberto)}</b><small>${abertas.length} O.S.</small></button>` : null}
       ${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>
       <span>${r.t}</span><b>${r.n}</b>${ver ? html`<small>${r.k === "pagamento" ? "a receber " : ""}${reais(r.v)}</small>` : null}</button>`)}

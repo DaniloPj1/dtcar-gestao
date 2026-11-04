@@ -16,8 +16,12 @@ import { referenteOS } from "./recibos.js";
 import { baixarParcela } from "./receber.js";
 
 /** Carteira de cobrança: o que foi conferido no internet banking (03/11/2026) + o que o Danilo ajustar */
+/** Só entram para emissão as parcelas criadas a partir desta data: as anteriores já têm boleto emitido fora (PicPay), decisão do Danilo em 04/11/2026 */
+export const DESDE_PADRAO = "2026-11-04";
+/** Parcela entra na emissão de boleto Sicredi? (criada a partir de cob.desde) */
+export const parcelaNova = (p, cob) => !cob.desde || String(p.criado_em || "").slice(0, 10) >= cob.desde;
 export const carteira = cfg => ({ cooperativa: "0523", posto: "16", beneficiario: "85453", conta: "85453", contaDv: "7", byte: 2,
-  jurosMes: 0, multa: 0, especie: "03", chavePix: "", contaEntrada: "Sicredi", mensagem: "", modo: "arquivo", ambiente: "sandbox", ...(cfg.cobranca || {}), cnpj: cfg.cnpj, nome: cfg.nome });
+  jurosMes: 0, multa: 0, especie: "03", chavePix: "", contaEntrada: "Sicredi", mensagem: "", modo: "arquivo", ambiente: "sandbox", desde: DESDE_PADRAO, ...(cfg.cobranca || {}), cnpj: cfg.cnpj, nome: cfg.nome });
 /** Pela API, a chave Pix é do banco (não vai na remessa) */
 export const faltaNaCarteira = cob => conferirCarteira(cob).filter(x => cob.modo !== "api" || !/Chave Pix/.test(x));
 /** Pix copia e cola: a API devolve o código pronto; o arquivo de retorno traz só o endereço (URL) do QR Code */
@@ -54,7 +58,9 @@ export function Boletos() {
   useEffect(() => { recarregar(["receber", "clientes"]); ler(); }, []);
 
   const porParcela = useMemo(() => { const m = {}; (boletos || []).forEach(b => { if (b.receber_id && ATIVOS.concat("pago").includes(b.situacao)) m[b.receber_id] = b; }); return m; }, [boletos]);
-  const candidatas = (dados.receber || []).filter(p => p.status === "aberta" && p.forma === "Boleto" && !porParcela[p.id]).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  const emBoleto = (dados.receber || []).filter(p => p.status === "aberta" && p.forma === "Boleto" && !porParcela[p.id]);
+  const candidatas = emBoleto.filter(p => parcelaNova(p, cob)).sort((a, b) => a.vencimento.localeCompare(b.vencimento));
+  const antigas = emBoleto.filter(p => !parcelaNova(p, cob));
   const montar = p => { const o = dados.ordens.find(x => x.id === p.ordem_id), c = dados.clientes.find(x => x.id === (p.cliente_id || (o && o.cliente_id)));
     const pg = pagadorDe(c, o), b = { valor: p.valor, vencimento: p.vencimento, nosso_numero: "000000000", pagador: pg };
     return { p, o, c, pg, problemas: conferirBoleto(b, hojeISO()).filter(x => x !== "Nosso Número") }; };
@@ -264,6 +270,7 @@ export function Boletos() {
       <${Abas} abas=${[["emitir", "Emitir (" + candidatas.length + ")"], ["abertos", "Em aberto (" + grupos.abertos.length + ")"], ["pagos", "Pagos"], ["outros", "Rejeitados e baixados"], ["arquivos", "Retorno e arquivos"]]} ativa=${aba} onTroca=${setAba} />
       ${aba === "emitir" ? html`<div>
         <p class="sub" style=${{ margin: "12px 0" }}>Parcelas em aberto combinadas como <b>Boleto</b> em Contas a receber. O cliente precisa ter CPF/CNPJ e endereço completo com CEP.</p>
+        ${antigas.length ? html`<p class="sub" style=${{ margin: "0 0 12px" }}>${antigas.length} parcela(s) de antes de ${fmtData(cob.desde)} (${reais(antigas.reduce((s, p) => s + Number(p.valor || 0), 0))}) não aparecem aqui: o boleto delas já foi emitido fora (PicPay). Elas continuam em Contas a receber.</p>` : null}
         ${linhasEmitir.length ? html`<div class="lista">${linhasEmitir.map(l => html`<label class=${"linha conta-linha" + (l.problemas.length ? " s-vencida" : "")} key=${l.p.id}>
             <input type="checkbox" disabled=${!!l.problemas.length} checked=${!!marcadas[l.p.id]} onChange=${e => setMarcadas({ ...marcadas, [l.p.id]: e.target.checked })} />
             <span class="meio"><strong>${l.pg.nome || l.p.cliente_nome}</strong><span>${[l.p.descricao, l.p.parcelas > 1 ? "parcela " + l.p.parcela + "/" + l.p.parcelas : "", "venc. " + fmtData(l.p.vencimento)].filter(Boolean).join(" · ")}</span>

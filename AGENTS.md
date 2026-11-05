@@ -105,19 +105,23 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   WhatsApp" ou "Enviar pelo WhatsApp da oficina" (`js/telas/zapos.js`). Mudou `js/mensagens.js`? Troque o commit dele em `email/site.ts`.
   Testes: `python3 teste/teste_v34.py` (Postgres local, sem o banco da oficina), `deno run -A teste/teste_whatsapp_pdf.ts`.
   **v36 (05/11/2026): aviso de resposta, resposta pelo WhatsApp do Danilo e resumo** — sem rodar o Claude (custo zero no plano).
-  Quem decide é o banco: gatilho `whatsapp_mensagens_aviso` → `whatsapp_avisos_tratar` (erro ali nunca impede gravar a mensagem; vira
-  `aviso = 'erro'`). Mensagem da oficina (fila ou celular) abre vigia de 48 h (`whatsapp_vigias`; não para o número de alerta). Chegou mensagem
+  Quem decide é o banco: gatilho `whatsapp_mensagens_aviso` → `whatsapp_avisos_tratar` (erro ali nunca impede gravar a mensagem; o
+  agendamento de 1 min tenta de novo e na 3ª falha vira `aviso = 'erro'`; consultas pelos índices de telefone do v36 — o motor grava em
+  lote e um gatilho lento pararia a fila; mensagem com mais de 6 h vira `antiga`, sem aviso). Mensagem da oficina (fila ou celular) abre vigia de 48 h (`whatsapp_vigias`; não para o número de alerta). Chegou mensagem
   de número com vigia aberta ou de cliente com O.S. (cadastro, telefone gravado na O.S. ou cliente da última mensagem da fila para o número):
   **aviso** no `alerta_telefone` (`whatsapp_avisos` tipo aviso; espera `juntar_s` = 45 s em `whatsapp_fila.liberar_em` para juntar as
   seguidas; áudio espera a transcrição até 3 min). O resto vai para o **resumo** por regras (`whatsapp_resumo_enviar`, pg_cron 08h, 12h e
   17h30 de Brasília; grupos por tipo de contato; palavras de propaganda só contam). Mensagem do próprio Danilo é **comando**
-  (`whatsapp_comando`): liga ao cliente pela mensagem citada (`responde_a`, gravada pelo motor 3.3 e pela zap: `mensagemCitada`, cópia igual)
+  (`whatsapp_comando`; o Danilo é reconhecido pelo número inteiro, `whatsapp_mesmo_numero`, nunca pela chave curta, que um número
+  estrangeiro pode repetir; OK/CANCELAR sem rascunho pronto, figurinha, áudio sem transcrição, citação de algo que não é aviso/rascunho e texto
+  em cima da confirmação só recebem explicação, nunca viram rascunho): liga ao cliente pela mensagem citada (`responde_a`, gravada pelo motor 3.3 e pela zap: `mensagemCitada`, cópia igual)
   ou, sem citação, pelo único cliente com aviso/rascunho em 30 min; texto → **rascunho** que a ação `assistente` da zap (chamada pelo banco
   via pg_net e pelo agendamento de 1 min `dtcar-zap-avisos`) reescreve com o Claude Haiku (segredos `ANTHROPIC_API_KEY` e, opcional,
   `ASSISTENTE_MODELO`; 3 tentativas, depois vai o texto dele marcado "sem revisão da IA"); OK (em cima do rascunho) → `whatsapp_assistente_enviar`
   (origem `assistente`, mesmas proteções do `whatsapp_enfileirar`), OK AGORA/AGORA → fora do horário, CANCELAR, outro texto = correção.
-  Nada vai ao cliente sem o OK; rascunho vence em 24 h. Fila: `interno` (mensagens ao Danilo) sai primeiro, fora dos limites por hora/dia e,
-  com `avisos.fora_horario` (padrão), fora do horário comercial, menos no silêncio 22h–7h. Configuração em `whatsapp_conexao.avisos`
+  Nada vai ao cliente sem o OK; rascunho vence em 24 h. Fila: `interno` (mensagens ao Danilo, inclusive o alerta de motor
+  sem sinal) sai primeiro, fora dos limites por hora/dia (também no `whatsapp_enfileirar`) e, com `avisos.fora_horario` (padrão), fora do
+  horário comercial, menos no silêncio 22h–7h — decidido no `whatsapp_pegar_proxima`, na hora de enviar. IA: nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
   (padrões em `whatsapp_avisos_cfg()`). Tabelas fora do backup, do banco do PC e do espelho. Mudou `paraGuardar`/`mensagemCitada`? Mude
   as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),

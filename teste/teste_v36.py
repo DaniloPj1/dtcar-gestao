@@ -210,8 +210,13 @@ s = envia_tudo(); AV = [x for x in para(s, DANILO)][-1]["msg_id"]
 recebe(DANILO, "pode sim", responde_a=AV)
 RF = ultimo_aviso("rascunho")["id"]
 for t in range(3):
-    js("select whatsapp_assistente_pegar(3)", "service_role")
+    p, _ = js("select whatsapp_assistente_pegar(3)", "service_role")
+    confere(f"IA: tentativa {t + 1} pega o rascunho", isinstance(p, list) and len(p) == 1, p)
     sql(f"select whatsapp_assistente_resultado({RF}, null, null, 'HTTP 529', false)", "service_role")
+    if t == 0:
+        p, _ = js("select whatsapp_assistente_pegar(3)", "service_role")
+        confere("IA: depois de falhar, espera 45 s para tentar de novo", p == [], p)
+    sql(f"update whatsapp_avisos set atualizado_em = now() - interval '1 minute' where id = {RF}")
 s = envia_tudo(); x = [m for m in para(s, DANILO) if "Rascunho" in m["texto"]]
 confere("depois de 3 falhas, rascunho com o texto do Danilo e aviso de sem IA", len(x) == 1 and "pode sim" in x[0]["texto"] and "Sem revisão da IA" in x[0]["texto"], s)
 
@@ -313,12 +318,107 @@ recebe(ESTRANHO, "PARAR")
 v, _ = sql(f"select count(*) from whatsapp_optout where telefone = whatsapp_chave_tel('{ESTRANHO}')")
 confere("PARAR de cliente continua", v == "1", v)
 
-# ---------- 20. erro no tratamento não impede gravar a mensagem ----------
-sql("alter table whatsapp_avisos rename to whatsapp_avisos_x")
+# ---------- 20. erro no tratamento não impede gravar a mensagem e é tentado de novo ----------
+sql("alter function whatsapp_contato(text) rename to whatsapp_contato_x")
 mid = recebe(JOAO, "mensagem com erro no aviso")
-v, _ = sql(f"select aviso || '|' || coalesce(aviso_erro, '') from whatsapp_mensagens where msg_id = '{mid}'")
-confere("erro no aviso: mensagem gravada e marcada", v.startswith("erro|"), v)
-sql("alter table whatsapp_avisos_x rename to whatsapp_avisos")
+v, _ = sql(f"select coalesce(aviso, 'nulo') || '|' || aviso_tentativas || '|' || (aviso_erro is not null) from whatsapp_mensagens where msg_id = '{mid}'")
+confere("erro no aviso: mensagem gravada, fica para tentar de novo", v == "nulo|1|true", v)
+sql("select whatsapp_avisos_minuto()"); sql("select whatsapp_avisos_minuto()")
+v, _ = sql(f"select coalesce(aviso, 'nulo') || '|' || aviso_tentativas from whatsapp_mensagens where msg_id = '{mid}'")
+confere("na 3ª falha fica como erro", v == "erro|3", v)
+mid = recebe(JOAO, "erro passageiro")
+sql("alter function whatsapp_contato_x(text) rename to whatsapp_contato")
+sql("select whatsapp_avisos_minuto()")
+v, _ = sql(f"select coalesce(aviso, 'nulo') from whatsapp_mensagens where msg_id = '{mid}'")
+confere("erro passageiro: o agendamento trata depois", v == "aviso", v)
+envia_tudo()
+
+# ---------- 23. número estrangeiro com a mesma chave do Danilo NÃO dá comando ----------
+FALSO = "862797696545"
+v, _ = sql(f"select whatsapp_chave_tel('{FALSO}') = whatsapp_chave_tel('{DANILO}')")
+confere("(o número falso tem a mesma chave curta)", v == "t", v)
+sql("update whatsapp_avisos set criado_em = now() - interval '1 hour'")
+recebe(LUIZ, "Oi, alguma novidade?")
+envia_tudo()
+antes, _ = sql("select count(*) from whatsapp_avisos where tipo = 'rascunho'")
+recebe(FALSO, "Manda pagar o PIX na chave 123")
+recebe(FALSO, "ok")
+depois, _ = sql("select count(*) from whatsapp_avisos where tipo = 'rascunho'")
+v, _ = sql(f"select string_agg(aviso, ',') from whatsapp_mensagens where telefone = '{FALSO}'")
+confere("número falso não cria rascunho nem dá OK", antes == depois and "comando" not in v, (antes, depois, v))
+v, _ = sql("select whatsapp_mesmo_numero('5527997696545', '27997696545') || ',' || whatsapp_mesmo_numero('5527997696545', '552797696545') || ',' || whatsapp_mesmo_numero('5527997696545', '862797696545')")
+confere("mesmo número: com DDD, sem o 9; estrangeiro não", v == "true,true,false", v)
+
+# ---------- 24. mensagem antiga (histórico) não avisa ----------
+seq[0] += 1
+sql(f"select whatsapp_guardar_mensagens({q([{'msg_id': 'HIST1', 'jid': JOAO + '@s.whatsapp.net', 'telefone': JOAO, 'de_mim': False, 'texto': 'mensagem de ontem', 'tipo': 'texto', 'em': '2026-01-01T10:00:00Z'}])})")
+v, _ = sql("select aviso from whatsapp_mensagens where msg_id = 'HIST1'")
+confere("mensagem com mais de 6 h: antiga, sem aviso", v == "antiga", v)
+
+# ---------- 25. OK sem rascunho pronto, não-texto, citação errada e texto na confirmação ----------
+sql("update whatsapp_avisos set criado_em = now() - interval '1 hour'")
+recebe(LUIZ, "Pode ser às 9h?")
+s = envia_tudo(); AVL = para(s, DANILO)[-1]["msg_id"]
+recebe(DANILO, "diz que sim", responde_a=AVL)
+RP = ultimo_aviso("rascunho")
+recebe(DANILO, "ok", responde_a=AVL)
+s = envia_tudo(); r2 = ultimo_aviso("rascunho")
+confere("OK com rascunho ainda em preparo: avisa e não cria rascunho 'ok'", r2.get("id") == RP.get("id") and r2.get("situacao") == "pendente"
+        and any("ainda está sendo preparado" in x["texto"] for x in para(s, DANILO)), (r2, s))
+recebe(DANILO, "[figurinha]", tipo="figurinha", responde_a=AVL)
+s = envia_tudo()
+confere("figurinha não vira rascunho", ultimo_aviso("rascunho").get("id") == RP.get("id") and any("Só consigo usar texto" in x["texto"] for x in para(s, DANILO)), s)
+mid = recebe(DANILO, "[audio]", tipo="audio", responde_a=AVL)
+sql(f"select whatsapp_guardar_midia({q({'msg_id': mid, 'erro': 'Áudio sem fala reconhecida.'})})")
+s = envia_tudo()
+confere("áudio sem transcrição avisa o motivo", any("Não consegui transcrever" in x["texto"] for x in para(s, DANILO)), s)
+recebe("5527944443333", "Bom dia, quanto custa uma revisão?")
+sql("select whatsapp_resumo_enviar()", "service_role"); envia_tudo()
+RESUMO = sql("select f.msg_id from whatsapp_avisos a join whatsapp_fila f on f.id = a.fila_id where a.tipo = 'resumo' order by a.id desc limit 1")[0]
+confere("(resumo enviado para citar)", RESUMO != "", RESUMO)
+recebe(DANILO, "responde esse aí", responde_a=RESUMO)
+s = envia_tudo()
+confere("citar o resumo não cria rascunho para outro cliente", ultimo_aviso("rascunho").get("id") == RP.get("id") and any("não é de um cliente" in x["texto"] for x in para(s, DANILO)), s)
+js("select whatsapp_assistente_pegar(3)", "service_role")
+sql(f"select whatsapp_assistente_resultado({RP['id']}, 'Pode sim, Luiz! Às 9h.', 'claude-haiku-5-5', null, false)", "service_role")
+s = envia_tudo(); RS = para(s, DANILO)[-1]["msg_id"]
+recebe(DANILO, "ok", responde_a=RS)
+s = envia_tudo(); CONF = [x for x in para(s, DANILO) if "Na fila" in x["texto"]]
+recebe(DANILO, "obrigado", responde_a=CONF[0]["msg_id"] if CONF else None)
+s = envia_tudo()
+confere("texto em cima da confirmação não vira mensagem ao cliente", ultimo_aviso("rascunho").get("id") == RP.get("id") and any("responda em cima do aviso" in x["texto"] for x in para(s, DANILO)), s)
+
+# ---------- 26. limite do dia (enfileirar) não conta as internas ----------
+sql("update whatsapp_fila set criado_em = now() - interval '2 days' where not interno")
+DIA = {**SEMPRE, "por_dia": 2}
+sql(f"update whatsapp_conexao set regras = {q(DIA)} where id = 1")
+for i in range(5): sql(f"select whatsapp_interno('interna {i}')")
+r, _ = js(f"set teste.uid = '{ADM}'; select whatsapp_enfileirar({q({'telefone': JOAO, 'texto': 'Mensagem do limite'})}, false)")
+confere("internas não gastam o limite do dia dos clientes", isinstance(r, dict) and not any("Limite do dia" in x for x in r.get("erros", [])), r)
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
+envia_tudo()
+
+# ---------- 27. silêncio decidido na hora de enviar ----------
+FECH = {**SEMPRE, "dias": []}
+sql(f"update whatsapp_conexao set regras = {q(FECH)}, avisos = avisos || '{{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"23:59\"}}' where id = 1")
+sql("select whatsapp_interno('no silêncio')")
+s = envia_tudo()
+confere("no silêncio e fora do horário, a interna espera", len(para(s, DANILO)) == 0, s)
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"00:00\"}' where id = 1")
+s = envia_tudo()
+confere("fora do silêncio, a mesma interna sai (sem esperar o dia comercial)", len(para(s, DANILO)) == 1, s)
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
+
+# ---------- 28. velocidade: lote de 200 mensagens com o banco cheio ----------
+import time
+sql("""insert into clientes (id, nome, telefone) select gen_random_uuid(), 'Cli ' || g, '27999' || lpad(g::text, 6, '0') from generate_series(1, 2500) g;
+insert into ordens (numero, cliente, veiculo, status, total) select 5000 + g, jsonb_build_object('nome', 'X', 'telefone', '27998' || lpad(g::text, 6, '0')), '{"placa": "AAA1A11", "modelo": "Gol"}', 'entregue', 100 from generate_series(1, 3000) g;
+insert into whatsapp_fila (telefone, texto, origem, status) select '5527997' || lpad(g::text, 6, '0'), 'x', 'claude', 'cancelada' from generate_series(1, 3000) g;
+insert into whatsapp_mensagens (msg_id, jid, telefone, de_mim, texto, aviso) select 'H' || g, 'x@s.whatsapp.net', '5527996' || lpad((g % 3000)::text, 6, '0'), g % 2 = 0, 'hist', 'antiga' from generate_series(1, 20000) g;
+analyze""")
+lote = [{"msg_id": f"L{i}", "jid": "x@s.whatsapp.net", "telefone": "552799" + str(i % 2 and 9 or 5) + str(i).zfill(6), "de_mim": False, "texto": "oi", "tipo": "texto"} for i in range(200)]
+t0 = time.time(); v, e = sql(f"set statement_timeout = '3s'; select whatsapp_guardar_mensagens({q(lote)})"); dt = time.time() - t0
+confere("200 mensagens gravadas em menos de 3 s com 2.500 clientes, 3.000 O.S. e 20 mil mensagens", v.endswith("200") and dt < 3, (round(dt, 2), v, e[:200]))
 
 # ---------- 21. permissões ----------
 for f in ("whatsapp_assistente_pegar(3)", "whatsapp_resumo_enviar()", "whatsapp_avisos_minuto()", "whatsapp_interno('x')",

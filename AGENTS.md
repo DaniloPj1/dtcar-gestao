@@ -105,13 +105,15 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   WhatsApp" ou "Enviar pelo WhatsApp da oficina" (`js/telas/zapos.js`). Mudou `js/mensagens.js`? Troque o commit dele em `email/site.ts`.
   Testes: `python3 teste/teste_v34.py` (Postgres local, sem o banco da oficina), `deno run -A teste/teste_whatsapp_pdf.ts`.
   **v36 (05/11/2026): aviso de resposta, resposta pelo WhatsApp do Danilo e resumo** — sem rodar o Claude (custo zero no plano).
-  Quem decide é o banco: gatilho `whatsapp_mensagens_aviso` → `whatsapp_avisos_tratar` (erro ali nunca impede gravar a mensagem; vira
-  `aviso = 'erro'`). Mensagem da oficina (fila ou celular) abre vigia de 48 h (`whatsapp_vigias`; não para o número de alerta). Chegou mensagem
+  Quem decide é o banco: `whatsapp_avisos_tratar`, chamada FORA da gravação (sem gatilho: a gravação das recebidas nunca espera nem falha
+  pelos avisos) — o motor chama `whatsapp_motor_avisos` (chave do motor, 5 por vez) e a zap `whatsapp_avisos_processar` logo depois de gravar;
+  o agendamento de 1 min trata o resto (50 por vez). Erro numa mensagem vira `aviso = 'erro'`. Mensagem da oficina (fila ou celular) abre vigia de 48 h (`whatsapp_vigias`; não para o número de alerta). Chegou mensagem
   de número com vigia aberta ou de cliente com O.S. (cadastro, telefone gravado na O.S. ou cliente da última mensagem da fila para o número):
   **aviso** no `alerta_telefone` (`whatsapp_avisos` tipo aviso; espera `juntar_s` = 45 s em `whatsapp_fila.liberar_em` para juntar as
   seguidas; áudio espera a transcrição até 3 min). O resto vai para o **resumo** por regras (`whatsapp_resumo_enviar`, pg_cron 08h, 12h e
   17h30 de Brasília; grupos por tipo de contato; palavras de propaganda só contam). Mensagem do próprio Danilo é **comando**
-  (`whatsapp_comando`): liga ao cliente pela mensagem citada (`responde_a`, gravada pelo motor 3.3 e pela zap: `mensagemCitada`, cópia igual)
+  (`whatsapp_comando`, número de alerta comparado com TODOS os dígitos: `whatsapp_e_alerta`): **OK, CANCELAR e AGORA só valem citando a
+  mensagem do próprio rascunho** (AGORA também na confirmação "na fila"); solto ou em cima de aviso → explicação, nada sai. Texto liga ao cliente pela mensagem citada (`responde_a`, gravada pelo motor 3.3 e pela zap: `mensagemCitada`, cópia igual)
   ou, sem citação, pelo único cliente com aviso/rascunho em 30 min; texto → **rascunho** que a ação `assistente` da zap (chamada pelo banco
   via pg_net e pelo agendamento de 1 min `dtcar-zap-avisos`) reescreve com o Claude Haiku (segredos `ANTHROPIC_API_KEY` e, opcional,
   `ASSISTENTE_MODELO`; 3 tentativas, depois vai o texto dele marcado "sem revisão da IA"); OK (em cima do rascunho) → `whatsapp_assistente_enviar`

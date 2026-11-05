@@ -239,7 +239,10 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     if (guardando || !st.aGuardar.length) return guardando || Promise.resolve();
     const lote = st.aGuardar.splice(0, 200);
     guardando = rpc("whatsapp_motor_mensagens", { ...base(), p_msgs: lote })
-      .catch((e) => { st.aGuardar.unshift(...lote); if (!/function|does not exist|PGRST202/i.test(e.message)) log("não guardou mensagens (tenta de novo):", e.message); })
+      // v36: os avisos são tratados numa chamada separada, depois de gravar (a gravação nunca depende deles)
+      .then(() => rpc("whatsapp_motor_avisos", { p_chave: config.chave })
+        .catch((e) => { if (!/function|does not exist|PGRST202/i.test(e.message)) log("avisos (o agendamento de 1 min trata):", e.message); }),
+        (e) => { st.aGuardar.unshift(...lote); if (!/function|does not exist|PGRST202/i.test(e.message)) log("não guardou mensagens (tenta de novo):", e.message); })
       .finally(() => { guardando = null; });
     return guardando;
   }

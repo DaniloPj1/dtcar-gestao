@@ -49,6 +49,7 @@ function banco() {
       if (vez) Object.assign(b.con, { dono: "android", dono_id: a.p_id, dono_ate: b.agora + 90000 });
       return resp({ vez, continua: vez && continua, sessao_em: new Date(b.sessaoEm).toISOString(), vinculado, pedido: vez ? b.con.pedido : null, dono: b.con.dono, situacao: b.con.situacao });
     }
+    if (nome === "whatsapp_motor_avisos") { b.avisosPedidos = (b.avisosPedidos || 0) + 1; return resp(0); }
     if (nome === "whatsapp_motor_mensagens") { for (const x of a.p_msgs) if (!b.msgs.some((y) => y.msg_id === x.msg_id)) b.msgs.push(x); return resp(a.p_msgs.length); }
     if (nome === "whatsapp_motor_entrega") { if (b.semV28) return erro("Could not find the function public.whatsapp_motor_entrega", "PGRST202"); b.entregas.push(...a.p_lista); return resp(a.p_lista.length); }
     if (nome === "whatsapp_motor_resultado") {
@@ -238,6 +239,7 @@ function sessaoVinculada(b) {
     { key: { id: "G1", remoteJid: "1203@g.us" }, message: { conversation: "grupo" } }] });
   await espera();
   confere("recebidas: guarda a individual e ignora grupo", b.msgs.length === 1 && b.msgs[0].texto === "Obrigado!" && b.msgs[0].telefone === "5527999112233");
+  confere("recebidas: depois de gravar, pede o tratamento dos avisos (v36)", b.avisosPedidos >= 1, b.avisosPedidos);
   b.buscar = async (url, op) => (url.endsWith("whatsapp_motor_mensagens") ? { ok: false, status: 503, text: async () => "{}" } : original(url, op));
   await s.emitir("messages.upsert", { type: "notify", messages: [{ key: { id: "R2", remoteJid: "5527999112233@s.whatsapp.net" }, message: { conversation: "Outra" } }] }); await espera();
   confere("recebidas: banco fora, ficam aqui", m.st.aGuardar.length === 1);

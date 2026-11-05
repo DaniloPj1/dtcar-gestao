@@ -164,8 +164,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   abertura, recusadas/canceladas por ano; cadastros, financeiro e vendas) e a planilha `.xlsx` feita à mão (só texto e número; sem ids, `checkin`,
   assinaturas, `ficha`). Situação sempre por extenso. Tudo escapado (nome de cliente com `<script>` vira texto). **Nome de arquivo nunca leva
   cliente nem placa** (só `OS 01850.html`): o zip com senha cifra o conteúdo, mas a lista de nomes fica aberta. A função "email" (`email/backup.ts`,
-  `email/backup_envio.ts`) faz o zip **com senha AES-256** (zip.js 2.24.0, travado; segredo `BACKUP_SENHA` da função, **16+ letras**, aleatória —
-  sem ela nada sai) e manda pelo Hotmail para `cfg.backupLeitura.emails` (até 3; o v35 grava o e-mail da oficina + o e-mail de login dos
+  `email/backup_envio.ts`) faz o zip **com senha AES-256** (zip.js 2.24.0, travado; segredo `BACKUP_SENHA` da função, qualquer senha
+  não vazia — decisão do Danilo em 05/11/2026; sem ela nada sai) e manda pelo Hotmail para `cfg.backupLeitura.emails` (até 3; o v35 grava o e-mail da oficina + o e-mail de login dos
   administradores, lido do `auth.users` para não ficar escrito no código público; tela Sistema › Backup, "Gerar e enviar agora").
   **Passos encadeados, cada um numa chamada própria** (planilha → páginas/zip → enviar), pelos 2 s de processamento da função: o início (pg_cron
   `dtcar-backup-leitura` às 21h UTC = 18h, ou o botão) chama o 1º; cada passo responde 202 na hora, trabalha em segundo plano

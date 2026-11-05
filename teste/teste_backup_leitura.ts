@@ -177,8 +177,10 @@ async function abrirZip(bytes: Uint8Array, senha?: string) {
   const b = banco(dados(10)), { d, enviados } = deps(b, {}, {});
   let msg = ""; try { await iniciar(d, "agendamento"); } catch (e) { msg = (e as Error).message; }
   confere("sem BACKUP_SENHA não começa", /BACKUP_SENHA/.test(msg) && enviados.length === 0 && b.t.backup_execucoes.length === 0, msg);
-  const curta = deps(b, {}, { BACKUP_SENHA: "senha-de-15-let" }); let m2 = ""; try { await iniciar(curta.d, "tela"); } catch (e) { m2 = (e as Error).message; }
-  confere("senha curta (menos de 16) recusada", /16 letras/.test(m2), m2);
+  const vazia = deps(b, {}, { BACKUP_SENHA: "   " }); let m2 = ""; try { await iniciar(vazia.d, "tela"); } catch (e) { m2 = (e as Error).message; }
+  confere("senha só com espaços conta como sem senha (nada sai)", /BACKUP_SENHA/.test(m2), m2);
+  const curta = deps(banco(dados(10)), {}, { BACKUP_SENHA: "1234" }); const rc = await iniciar(curta.d, "tela");
+  confere("senha curta é aceita (decisão do Danilo)", rc.exec > 0);
 }
 // desligado na tela: o agendamento não roda; o botão roda
 {

@@ -501,7 +501,7 @@ end $$;
 -- p_proposta null + p_erro: sem a IA. p_final = não tenta de novo (ou passou de 3 tentativas): vai o texto do Danilo.
 create or replace function public.whatsapp_assistente_resultado(p_id bigint, p_proposta text, p_modelo text, p_erro text, p_final boolean default false)
 returns boolean language plpgsql security definer set search_path = public as $$
-declare a public.whatsapp_avisos; v_txt text; v_sem boolean; v_r jsonb; v_cab text;
+declare a public.whatsapp_avisos; v_txt text; v_sem boolean; v_r jsonb; v_cab text; v_cortou boolean;
 begin
   select * into a from public.whatsapp_avisos where id = p_id and tipo = 'rascunho' for update;
   if a.id is null or a.situacao not in ('pendente', 'gerando') then return false; end if;
@@ -512,13 +512,18 @@ begin
     return false;
   end if;
   if v_sem then v_txt := btrim(a.base); end if;
+  -- o rascunho mostrado ao Danilo e o texto que vai ao cliente com o OK são EXATAMENTE o mesmo: corta antes, nos dois.
+  -- 1.400 caracteres: cabeçalho + texto + rodapé cabem na mensagem interna (2.000), sem cortar o texto.
+  v_cortou := length(v_txt) > 1400;
+  if v_cortou then v_txt := btrim(left(v_txt, 1400)); end if;
   select regras into v_r from public.whatsapp_conexao where id = 1;
   v_cab := '✍️ *Rascunho para ' || coalesce(nullif(a.cliente_nome, ''), a.telefone) || '*'
-           || case when v_sem then E'\n⚠️ _Sem revisão da IA (' || left(coalesce(p_erro, 'motivo desconhecido'), 120) || '): texto como você escreveu._' else '' end;
+           || case when v_sem then E'\n⚠️ _Sem revisão da IA (' || left(coalesce(p_erro, 'motivo desconhecido'), 120) || '): texto como você escreveu._' else '' end
+           || case when v_cortou then E'\n✂️ _Texto longo: vai só até onde aparece abaixo (1.400 caracteres)._' else '' end;
   update public.whatsapp_avisos
-     set proposta = left(v_txt, 2000), situacao = 'aguardando_ok', atualizado_em = now(),
+     set proposta = v_txt, situacao = 'aguardando_ok', atualizado_em = now(),
          ia = case when v_sem then left('sem IA: ' || coalesce(p_erro, '?'), 200) else left(coalesce(p_modelo, 'IA'), 200) end,
-         fila_id = public.whatsapp_interno(v_cab || E'\n\n' || left(v_txt, 1700) || E'\n\n'
+         fila_id = public.whatsapp_interno(v_cab || E'\n\n' || v_txt || E'\n\n'
                      || '_Responda *OK* em cima desta mensagem para enviar, *CANCELAR* para não enviar, ou escreva a correção._'
                      || case when not public.whatsapp_no_horario(v_r) then E'\n_Fora do horário comercial: com OK, sai no próximo horário; com *OK AGORA*, sai já._' else '' end)
    where id = a.id;

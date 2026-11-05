@@ -347,6 +347,21 @@ s = envia_tudo(); v, _ = sql(f"select status from whatsapp_fila where id = {iid}
 confere("fora do silêncio: sai", v == "enviada", v)
 sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
 
+# ---------- 19e. texto longo sem IA: o rascunho mostra exatamente o que vai com o OK (Codex P2) ----------
+sql("update whatsapp_avisos set criado_em = now() - interval '1 hour'")
+recebe(LUIZ, "Pode detalhar o orçamento?")
+s = envia_tudo(); AV = para(s, DANILO)[-1]["msg_id"] if para(s, DANILO) else None
+LONGO = ("Explicação longa do serviço. " * 70)[:1900] + "FIM-OCULTO"
+recebe(DANILO, LONGO, responde_a=AV)
+RL = ultimo_aviso("rascunho")["id"]
+sql(f"select whatsapp_assistente_resultado({RL}, null, null, 'sem chave', true)", "service_role")
+s = envia_tudo(); rr = [x for x in para(s, DANILO) if "Rascunho" in x["texto"]]
+prop, _ = sql(f"select proposta from whatsapp_avisos where id = {RL}")
+confere("texto longo: o rascunho mostra a proposta inteira e avisa do corte", len(rr) == 1 and prop in rr[0]["texto"] and "Texto longo" in rr[0]["texto"] and len(rr[0]["texto"]) <= 2000 and "FIM-OCULTO" not in prop, (len(prop), len(rr[0]["texto"]) if rr else None))
+recebe(DANILO, "ok", responde_a=rr[0]["msg_id"] if rr else None)
+s = envia_tudo(); enviado = para(s, LUIZ)
+confere("texto longo: com o OK vai exatamente o que foi mostrado", len(enviado) == 1 and enviado[0]["texto"] == prop, len(enviado[0]["texto"]) if enviado else None)
+
 # ---------- 20. erro no tratamento não impede gravar a mensagem ----------
 sql("alter table whatsapp_avisos rename to whatsapp_avisos_x")
 mid = recebe(JOAO, "mensagem com erro no aviso")

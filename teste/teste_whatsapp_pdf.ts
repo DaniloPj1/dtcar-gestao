@@ -134,6 +134,9 @@ await deve("nada para mandar", () => w({ numero_os: 1887 }), /texto, um modelo o
   const arq = (chamadasFila.at(-1)!.p as L).arquivo as L;
   confere("prévia com PDF do orçamento: nome, tamanho e caminho AAAA/MM/uuid.pdf, sem guardar", (r.arquivo as L).nome === "Orcamento_01887_ABC1D23.pdf" && Number((r.arquivo as L).kb) > 0
     && /^2026\/11\/[0-9a-f-]{36}\.pdf$/.test(String(arq.path)) && arq.tipo === "application/pdf" && Number(arq.bytes) > 1000 && pastas["whatsapp-envio"].size === 0, { r, arq });
+  const ck = await w({ modelo: "orcamento", numero_os: 1887, anexo: { fonte: "os", documento: "entrada" } });
+  confere("orçamento com outro PDF (checklist): mantém os itens no texto", /Bieleta dianteira/.test(String(ck.texto)), ck.texto);
+  confere("orçamento com PDF: mensagem curta (itens só no PDF)", /Segue o orçamento da OS 01887/.test(String(r.texto)) && !/Bieleta/.test(String(r.texto)) && /291,00/.test(String(r.texto)), r.texto);
   const c = await w({ modelo: "orcamento", numero_os: 1887, anexo: { fonte: "os", documento: "orcamento" }, confirmar: true, pedido: "manda o orçamento" });
   const ult = chamadasFila.at(-1)!; const pa = (ult.p as L).arquivo as L;
   const guardado = pastas["whatsapp-envio"].get(String(pa.path));

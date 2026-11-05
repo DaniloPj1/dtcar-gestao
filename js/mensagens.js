@@ -42,7 +42,11 @@ export const msgCobrancaParcela = (p, cfg, hoje) => `Olá, ${primeiroNome(p.clie
 /** Textos da O.S. Cada um recebe (o, cfg, itens, extra). "o" é a O.S. com cliente e veículo; o total já deve ser o atual. */
 export const MSG = {
   entrada: (o, cfg) => `Olá, ${nomeDaOS(o)}! Aqui é da ${cfg.nome}.\n\nRecebemos seu ${nomeVeic(o)} em ${fmtDataHora(o.criado_em)}, com ${fmtKm(o.km_entrada)}. Número do atendimento: *${numOS(o.numero)}*.\n\nVamos fazer o diagnóstico e enviar o orçamento para sua aprovação antes de executar qualquer serviço.`,
-  orcamento: (o, cfg, itens) => { const t = totais(itens, o.desconto);
+  // extra.comPdf: o PDF do orçamento vai junto — a mensagem fica curta (os itens estão no PDF). Sem PDF (link da tela), lista os itens.
+  orcamento: (o, cfg, itens, extra = {}) => { const t = totais(itens, o.desconto);
+    if (extra.comPdf) return [`Olá, ${nomeDaOS(o)}! Segue o orçamento da ${numOS(o.numero)} do seu ${nomeVeic(o)}.`, "",
+      `*Total: ${reais(t.total)}*`, ...(o.validade_orcamento ? [`Válido até ${fmtData(o.validade_orcamento)}.`] : []), "",
+      "Para aprovar, responda *APROVADO*. Se preferir aprovar só parte dos itens, é só dizer quais."].join("\n");
     return [`Olá, ${nomeDaOS(o)}! O orçamento do seu ${nomeVeic(o)} está pronto (${numOS(o.numero)}).`, "",
       ...(o.diagnostico ? ["*Diagnóstico:* " + o.diagnostico, ""] : []), ...linhasItensMsg(itens),
       ...(t.desconto ? ["Desconto: " + reais(t.desconto)] : []), `*Total: ${reais(t.total)}*`,

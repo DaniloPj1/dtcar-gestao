@@ -58,7 +58,9 @@ async function textoDoModelo(d: DepsZap, p: Record<string, unknown>, avisos: str
   const itensTodos = await lista(d.adm.from("os_itens").select("*").eq("ordem_id", o.id).order("posicao"));
   const itens = m.itensDaMensagem(modelo, itensTodos);
   const st = String(o.status);
-  const extra: Record<string, unknown> = {};
+  // mensagem curta só quando o PDF anexado é o próprio orçamento (os itens e preços estão nele)
+  const an = (p.anexo && typeof p.anexo === "object" ? p.anexo : {}) as Record<string, unknown>;
+  const extra: Record<string, unknown> = { comPdf: an.fonte === "os" && an.documento === "orcamento" };
   if (modelo === "orcamento" && !["diagnostico", "aguardando"].includes(st)) avisos.push(`A O.S. ${num} não está mais em orçamento (situação: ${st}).`);
   if (modelo === "orcamento" && !itens.length) throw new ErroAnexo(`A O.S. ${num} não tem itens no orçamento.`);
   if (modelo === "adicionais" && !itens.length) throw new ErroAnexo(`A O.S. ${num} não tem itens adicionais esperando aprovação.`);

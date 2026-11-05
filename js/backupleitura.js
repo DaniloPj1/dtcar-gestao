@@ -30,8 +30,6 @@ const MESES = ["janeiro", "fevereiro", "marco", "abril", "maio", "junho", "julho
 
 /** Texto seguro dentro do HTML (nome de cliente, descrição, observação: tudo vem de fora) */
 export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
-/** Pedaço de nome de arquivo: sem acento nem símbolo (abre no Windows, no celular e no 7-Zip) */
-const nomeArq = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^A-Za-z0-9 -]/g, "").replace(/\s+/g, " ").trim().slice(0, 40);
 
 /* ---------------- etapa e pasta de cada O.S. ---------------- */
 /** Nome da situação, sempre por extenso (nunca só a cor) */
@@ -48,7 +46,8 @@ export function nomeSituacao(o) {
 /** Pasta da O.S. dentro do zip. Abertas: um arquivo por O.S.; fechadas: um arquivo por mês de abertura; recusadas e canceladas: por ano. */
 export function lugarDaOS(o) {
   const e = etapaOS(o), dia = diaBR(o.criado_em) || "0000-00-00", ano = dia.slice(0, 4), mes = Number(dia.slice(5, 7)) || 1;
-  const sozinha = pasta => ({ pasta, arquivo: `OS ${n5(o.numero)} - ${exPlaca(o.veiculo && o.veiculo.placa) || "sem placa"} - ${nomeArq(o.cliente && o.cliente.nome) || "sem cliente"}.html`, aberta: true });
+  // o nome do arquivo leva SÓ o número: o zip com senha cifra o conteúdo, mas a lista de nomes fica aberta (cliente e placa estão dentro)
+  const sozinha = pasta => ({ pasta, arquivo: `OS ${n5(o.numero)}.html`, aberta: true });
   if (e === "orcamento") return sozinha("OS/1-Orcamento");
   if (e === "execucao") return sozinha("OS/2-Aprovado-em-execucao");
   if (e === "pagamento") return sozinha(o.status === "entregue" ? "OS/4-Entregue-a-receber" : "OS/3-Aguardando-pagamento-no-patio");

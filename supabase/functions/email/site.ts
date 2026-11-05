@@ -7,10 +7,8 @@ import { jsPDF } from "npm:jspdf@2.5.1";
 import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/pdf.js";
 import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/boletopdf.js";
 import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/aa706e82046cbfca7b3fb4c52d7c90810985ccca/js/mensagens.js";
-// v35: backup de leitura (páginas HTML + planilha) — mesmo arquivo do site; mudou js/backupleitura.js, util.js ou regras.js? troque o commit
-import * as backupLeitura from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/2d41183f0434a6326a9155d4d8cd6f8ffb38099b/js/backupleitura.js";
 import type { Geradores } from "./anexos.ts";
-export { backupLeitura, mensagens };
+export { mensagens };
 
 (globalThis as unknown as { jspdf: unknown }).jspdf = { jsPDF };
 export const geradores: Geradores = { pdfOS, pdfOrcamento, pdfEntrada, pdfBoletos, nomePdf, usarLeitorImagem };

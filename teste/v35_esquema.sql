@@ -11,6 +11,9 @@ create schema auth;
 create function auth.uid() returns uuid language sql stable as $$ select nullif(current_setting('teste.uid', true), '')::uuid $$;
 grant usage on schema auth to anon, authenticated, service_role;
 create table public.perfis (id uuid primary key, papel text not null default 'pendente', ativo boolean not null default true);
+create table auth.users (id uuid primary key, email varchar(255));
+insert into auth.users values ('00000000-0000-0000-0000-00000000000a', 'Dono@Exemplo.com'), ('00000000-0000-0000-0000-00000000000b', 'consultor@exemplo.com');
+insert into public.perfis values ('00000000-0000-0000-0000-00000000000a', 'admin', true), ('00000000-0000-0000-0000-00000000000b', 'consultor', true);
 grant select on public.perfis to authenticated;
 create function public.e_admin() returns boolean language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.perfis where id = auth.uid() and papel = 'admin' and ativo) $$;

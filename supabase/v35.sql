@@ -27,6 +27,8 @@ create table if not exists public.backup_execucoes (
   erro text
 );
 create index if not exists backup_execucoes_recentes on public.backup_execucoes (iniciado_em desc);
+-- no máximo UM backup "rodando" (o agendamento e o botão ao mesmo tempo não mandam dois e-mails)
+create unique index if not exists backup_execucoes_uma_rodando on public.backup_execucoes ((true)) where situacao = 'rodando';
 alter table public.backup_execucoes enable row level security;
 revoke all on public.backup_execucoes from anon, authenticated;
 grant select on public.backup_execucoes to authenticated;
@@ -39,10 +41,17 @@ values ('backup-leitura', 'backup-leitura', false, 20971520,
         array['application/zip', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'])
 on conflict (id) do nothing;
 
--- configuração padrão (a tela Backup troca): ligado, para o e-mail da oficina e o do Danilo
+-- configuração padrão (a tela Backup troca): ligado, para o e-mail da oficina e o e-mail de LOGIN do(s) administrador(es)
+-- (lido do cadastro de acesso do Supabase, para o e-mail pessoal não ficar escrito no código, que é público). Até 3.
 update public.config
-   set dados = dados || jsonb_build_object('backupLeitura', jsonb_build_object('ativo', true,
-         'emails', jsonb_build_array('centroautomotivodtcar@hotmail.com', 'danilo.pj1@hotmail.com')))
+   set dados = dados || jsonb_build_object('backupLeitura', jsonb_build_object('ativo', true, 'emails', (
+         select jsonb_agg(e order by o) from (
+           select e, min(o) as o from (
+             select 'centroautomotivodtcar@hotmail.com'::text as e, 0 as o
+             union all
+             select lower(u.email::text), 1 from auth.users u join public.perfis p on p.id = u.id
+              where p.papel = 'admin' and p.ativo and coalesce(u.email, '') <> ''
+           ) t group by e order by min(o), e limit 3) x)))
  where id = 1 and not (dados ? 'backupLeitura');
 
 -- ---------------------------------------------------------------------
@@ -53,7 +62,7 @@ update public.config
 create or replace function public.backup_leitura_vigiar(p_agora timestamptz default now()) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare
-  v_ativo boolean; v_inicio timestamptz; v_ok boolean; v_ult public.backup_execucoes; v_txt text; v_fila bigint;
+  v_ativo boolean; v_inicio timestamptz; v_ok boolean; v_ult public.backup_execucoes; v_txt text; v_fila bigint; v_motivo text;
 begin
   select coalesce((dados -> 'backupLeitura' ->> 'ativo')::boolean, true) into v_ativo from public.config where id = 1;
   if not coalesce(v_ativo, true) then return jsonb_build_object('acao', 'desligado'); end if;
@@ -72,19 +81,21 @@ begin
     || ' Confira em Sistema › Backup e use "Gerar e enviar agora".';
   begin
     v_fila := public.whatsapp_alerta_na_fila(v_txt);
-  exception when undefined_function then v_fila := null;   -- sem o v32: só fica registrado aqui
+    if v_fila is null then v_motivo := 'sem número de alerta cadastrado no WhatsApp (Sistema › WhatsApp)'; end if;
+  exception when undefined_function then v_fila := null; v_motivo := 'sem o v32 (aviso no WhatsApp)';
+            when others then v_fila := null; v_motivo := 'aviso no WhatsApp falhou: ' || left(sqlerrm, 200);
   end;
   if v_ult.id is null then
     insert into public.backup_execucoes (origem, situacao, passo, erro, terminado_em, detalhe)
-    values ('agendamento', 'erro', 'inicio', 'O agendamento das 18h não rodou.', p_agora, jsonb_build_object('avisado_em', p_agora, 'aviso_fila', v_fila));
+    values ('agendamento', 'erro', 'inicio', 'O agendamento das 18h não rodou.', p_agora, jsonb_build_object('avisado_em', p_agora, 'aviso_fila', v_fila, 'aviso_motivo', v_motivo));
   else
-    update public.backup_execucoes set detalhe = detalhe || jsonb_build_object('avisado_em', p_agora, 'aviso_fila', v_fila),
+    update public.backup_execucoes set detalhe = detalhe || jsonb_build_object('avisado_em', p_agora, 'aviso_fila', v_fila, 'aviso_motivo', v_motivo),
       situacao = case when situacao = 'rodando' then 'erro' else situacao end,
       erro = case when situacao = 'rodando' then 'Parou no passo "' || passo || '".' else erro end,
       terminado_em = coalesce(terminado_em, p_agora)
     where id = v_ult.id;
   end if;
-  return jsonb_build_object('acao', 'avisado', 'fila', v_fila);
+  return jsonb_build_object('acao', 'avisado', 'fila', v_fila, 'motivo', v_motivo);
 end $$;
 revoke all on function public.backup_leitura_vigiar(timestamptz) from public, anon, authenticated;
 

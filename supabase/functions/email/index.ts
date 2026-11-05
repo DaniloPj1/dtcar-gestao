@@ -6,14 +6,14 @@
 //   nos últimos 10 minutos (estado guardado em email_token), uma vez só.
 //
 // POST com o cabeçalho x-dtcar-cron (segredo do agendamento, o mesmo da SEFAZ): backup de leitura (v35, backup.ts) —
-//   "backup_leitura" (pg_cron, todo dia às 18h) e "backup_passo" (cada passo numa chamada própria).
+//   "backup_leitura" (pg_cron, todo dia às 18h) e "backup_passo" (cada passo numa chamada própria, encadeados).
 //
 // A chave de acesso da Microsoft fica em email_token, que ninguém do sistema lê (só esta função, com a chave de servidor).
 // Publicar com "Verify JWT" DESLIGADO (o retorno da Microsoft chega sem login; o POST confere o login com withSupabase).
 import { withSupabase } from "npm:@supabase/server@1.9.2";
 import { ErroUso, retornoLogin, SITE, tratar, type Db } from "./acoes.ts";
 import { PrecisaConectar } from "./microsoft.ts";
-import { ErroBackup, iniciar, limparSobras, passo, rodar, type Passo } from "./backup.ts";
+import { ErroBackup, executarEEncadear, iniciar, limparSobras, PASSOS, rodar, type Passo } from "./backup.ts";
 import { depsBackup, segredoCron, segundoPlano } from "./backup_envio.ts";
 
 const json = (corpo: unknown, status = 200) => Response.json(corpo, { status });
@@ -64,7 +64,13 @@ const agendamento = withSupabase({ auth: "none" }, async (req, ctx) => {
       if (!r.ja_rodando) segundoPlano(rodar(db, r.exec));
       return json(r);
     }
-    if (c.acao === "backup_passo") return json(await passo(db, Number(c.exec), String(c.passo) as Passo));
+    if (c.acao === "backup_passo") {
+      // responde na hora e trabalha em segundo plano; no fim, o passo chama o seguinte (backup.ts)
+      const exec = Number(c.exec), p = String(c.passo) as Passo;
+      if (!Number.isInteger(exec) || exec <= 0 || !PASSOS.includes(p)) return json({ erro: "Passo inválido." }, 400);
+      segundoPlano(executarEEncadear(db, exec, p));
+      return json({ aceito: true, exec, passo: p }, 202);
+    }
     return json({ erro: "Ação desconhecida." }, 400);
   } catch (e) {
     const msg = (e as Error).message || "Falha no backup.";

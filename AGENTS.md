@@ -136,18 +136,23 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (sem biblioteca e sem `window`/`document`: roda na função e, no Grau 2, no programa do PC) as páginas HTML navegáveis (`ABRIR-AQUI.html` com busca
   por O.S./placa/cliente com os dados dentro da página; O.S. abertas um arquivo por O.S. em pastas por situação, fechadas um arquivo por mês de
   abertura, recusadas/canceladas por ano; cadastros, financeiro e vendas) e a planilha `.xlsx` feita à mão (só texto e número; sem ids, `checkin`,
-  assinaturas, `ficha`). Situação sempre por extenso. Tudo escapado (nome de cliente com `<script>` vira texto). A função "email" (`email/backup.ts`,
-  `email/backup_envio.ts`) faz o zip **com senha AES-256** (zip.js 2.24.0, travado; segredo `BACKUP_SENHA` da função, 10+ letras — sem ele nada
-  sai) e manda pelo Hotmail para `cfg.backupLeitura.emails` (até 3; padrão oficina + Danilo; tela Sistema › Backup, "Gerar e enviar agora").
-  **3 passos, cada um numa chamada própria** (planilha → páginas/zip → enviar), por causa dos 2 s de processamento da função: o início (pg_cron
-  `dtcar-backup-leitura` às 21h UTC = 18h, ou o botão) roda os passos em segundo plano chamando a própria função com `x-dtcar-cron` (segredo do
-  agendamento, tabela `segredos`). Arquivos temporários na pasta privada `backup-leitura/<execução>/`, apagados depois do envio. Anexo até
-  2,9 MB por e-mail (acima de 3 MB a Microsoft exige Mail.ReadWrite, que não temos); se o zip único passar, sai em dois (páginas e planilha);
-  se uma parte sozinha passar, erro claro. Histórico em `backup_execucoes` (só administrador lê; **fora do backup, do banco do PC e do espelho**:
-  log operacional, como `email_envios`). `backup_leitura_vigiar()` às 18h40 (`dtcar-backup-leitura-vigia`): sem envio ok no dia → aviso no
-  WhatsApp do Danilo (`whatsapp_alerta_na_fila`, v32; sai no próximo horário comercial), um por dia. **Mudou `js/backupleitura.js` (ou `util.js`/
-  `regras.js`)? Troque o commit no `email/site.ts` e publique a função "email" de novo.** Testes: `deno run -A teste/teste_backup_leitura.ts`
-  (zip e planilha de verdade, volume real de 1.910 O.S. com o tempo de cada passo) e `bash teste/teste_v35.sh` (Postgres local).
+  assinaturas, `ficha`). Situação sempre por extenso. Tudo escapado (nome de cliente com `<script>` vira texto). **Nome de arquivo nunca leva
+  cliente nem placa** (só `OS 01850.html`): o zip com senha cifra o conteúdo, mas a lista de nomes fica aberta. A função "email" (`email/backup.ts`,
+  `email/backup_envio.ts`) faz o zip **com senha AES-256** (zip.js 2.24.0, travado; segredo `BACKUP_SENHA` da função, **16+ letras**, aleatória —
+  sem ela nada sai) e manda pelo Hotmail para `cfg.backupLeitura.emails` (até 3; o v35 grava o e-mail da oficina + o e-mail de login dos
+  administradores, lido do `auth.users` para não ficar escrito no código público; tela Sistema › Backup, "Gerar e enviar agora").
+  **Passos encadeados, cada um numa chamada própria** (planilha → páginas/zip → enviar), pelos 2 s de processamento da função: o início (pg_cron
+  `dtcar-backup-leitura` às 21h UTC = 18h, ou o botão) chama o 1º; cada passo responde 202 na hora, trabalha em segundo plano
+  (`EdgeRuntime.waitUntil`) e chama o seguinte com `x-dtcar-cron` (segredo do agendamento, tabela `segredos`) — nenhuma chamada espera as outras.
+  O gerador vem de `email/backupsite.ts` (só o `backupleitura.js`, sem jsPDF). Arquivos temporários na pasta privada `backup-leitura/<execução>/`,
+  apagados depois do envio. Anexo até **2,7 MB** por e-mail (Graph: 3 MB sem sessão de upload, e o pedido vai em base64); zip único maior →
+  o passo das páginas roda de novo noutra chamada e faz dois zips (páginas e planilha); parte sozinha maior → erro claro. Um "rodando" por vez
+  (índice único `backup_execucoes_uma_rodando`). Histórico em `backup_execucoes` (só administrador lê; **fora do backup, do banco do PC e do
+  espelho**: log operacional, como `email_envios`). `backup_leitura_vigiar()` às 18h40 (`dtcar-backup-leitura-vigia`): sem envio ok no dia →
+  aviso no WhatsApp do Danilo (`whatsapp_alerta_na_fila`, v32; sai no próximo horário comercial), um por dia, com o motivo registrado se o
+  aviso não puder sair. **Mudou `js/backupleitura.js` (ou `util.js`/`regras.js`)? Troque o commit no `email/backupsite.ts`, faça o merge com
+  "Create a merge commit" e publique a função "email" de novo.** Testes: `deno run -A teste/teste_backup_leitura.ts` (zip e planilha de verdade,
+  volume real de 1.910 O.S. com o tempo de cada passo) e `bash teste/teste_v35.sh` (Postgres local).
 - **NF anexada à O.S. (v33), O.S. › Documentos › NF:** PDF e XML da nota emitida no ObjetivaWeb (o sistema não emite NF), tabela `os_notas`
   + pasta privada `notas`, ligadas pelo **número** da O.S. (sem chave estrangeira; preservada pelo espelho: documento fiscal real), só
   administrador. Número da NF lido do XML (`numeroDaNF` em `js/telas/notasos.js`). Teste: `bash teste/teste_v33.sh`.

@@ -21,7 +21,7 @@ export function depsBackup(adm: Db, env: (k: string) => string | undefined, cron
   const base = (env("SUPABASE_URL") || "").replace(/\/$/, "");
   return {
     adm, env,
-    gerador: async () => (await import("./site.ts")).backupLeitura as unknown as Gerador,
+    gerador: async () => (await import("./backupsite.ts")) as unknown as Gerador,
     enviarEmail: async (m) => {
       const c = config(env);
       if (!c) throw new Error("Falta cadastrar o segredo MS_CLIENT_ID da função \"email\".");
@@ -32,15 +32,16 @@ export function depsBackup(adm: Db, env: (k: string) => string | undefined, cron
       await graph(token, "/me/sendMail", { metodo: "POST", corpo: { saveToSentItems: false, message: { subject: m.assunto, body: { contentType: "Text", content: m.texto },
         toRecipients: m.para.map(destino), attachments: m.anexos.map((a) => ({ "@odata.type": "#microsoft.graph.fileAttachment", name: a.nome, contentType: "application/zip", contentBytes: paraBase64(a.bytes) })) } } });
     },
+    // o passo responde na hora (202) e trabalha em segundo plano: aqui só se espera o "recebido"
     chamarPasso: async (exec: number, passo: Passo) => {
-      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 140000);
+      const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), 30000);
       try {
         const r = await fetch(base + "/functions/v1/email", { method: "POST", signal: ctl.signal,
           headers: { "content-type": "application/json", "x-dtcar-cron": cron }, body: JSON.stringify({ acao: "backup_passo", exec, passo }) });
         const j = await r.json().catch(() => ({}));
         if (!r.ok) throw new Error((j && j.erro) || `a função respondeu ${r.status}${r.status === 546 ? " (limite de processamento do Supabase)" : ""}`);
       } catch (e) {
-        throw new Error((e as Error).name === "AbortError" ? `o passo "${passo}" passou de 140 s` : (e as Error).message);
+        throw new Error((e as Error).name === "AbortError" ? `a função não respondeu em 30 s ao chamar o passo "${passo}"` : (e as Error).message);
       } finally { clearTimeout(t); }
     },
   };

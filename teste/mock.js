@@ -88,9 +88,9 @@
           return { importados: lote.length, restam: fila.length }; }
         // v35: cópia de leitura (backup_situacao / backup_leitura)
         if (b.acao === "backup_situacao") { const c = (db.config && db.config.backupLeitura) || {}; return { execucoes: (window.__BACKUP_EXEC = window.__BACKUP_EXEC || []).slice().reverse(), senha_cadastrada: window.__BACKUP_SEM_SENHA !== true,
-          config: { ativo: c.ativo !== false, emails: c.emails || ["centroautomotivodtcar@hotmail.com", "danilo.pj1@hotmail.com"] }, horario: "todo dia às 18h" }; }
+          config: { ativo: c.ativo !== false, emails: c.emails || ["centroautomotivodtcar@hotmail.com", "dono@exemplo.com"] }, horario: "todo dia às 18h" }; }
         if (b.acao === "backup_leitura") { const l = window.__BACKUP_EXEC = window.__BACKUP_EXEC || [];
-          l.push({ id: l.length + 1, iniciado_em: now(), terminado_em: now(), origem: "tela", situacao: "ok", passo: "enviar", para: ["centroautomotivodtcar@hotmail.com", "danilo.pj1@hotmail.com"], detalhe: { zips: [{ nome: "DTCar-Backup.zip", bytes: 1130000 }] } });
+          l.push({ id: l.length + 1, iniciado_em: now(), terminado_em: now(), origem: "tela", situacao: "ok", passo: "enviar", para: ["centroautomotivodtcar@hotmail.com", "dono@exemplo.com"], detalhe: { zips: [{ nome: "DTCar-Backup.zip", bytes: 1130000 }] } });
           return { exec: l.length, aviso: "Backup começou: em 1 a 2 minutos chega nos e-mails." }; }
         if (b.acao === "remover_regra") { e.lista_regras = e.lista_regras.filter(r => r.id !== b.id); return { ok: true }; }
         throw new Error("Ação desconhecida."); },

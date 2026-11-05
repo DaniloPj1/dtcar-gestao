@@ -58,7 +58,7 @@ function CopiaLeitura() {
   const { cfg, avisar, recarregar } = useApp();
   const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
   const bl = cfg.backupLeitura || {};
-  const [emails, setEmails] = useState((bl.emails || ["centroautomotivodtcar@hotmail.com", "danilo.pj1@hotmail.com"]).join(", "));
+  const [emails, setEmails] = useState((bl.emails || ["centroautomotivodtcar@hotmail.com"]).join(", "));
   const semRede = estaSemRede();
   const ler = async () => { try { setSt(await api.email.chamar({ acao: "backup_situacao" })); setErro(""); } catch (e) { setErro(/desconhecida/i.test(e.message) ? "Falta publicar a função \"email\" nova no Supabase." : e.message); } };
   useEffect(() => { if (!semRede) ler(); }, []);

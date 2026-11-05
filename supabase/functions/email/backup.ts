@@ -6,9 +6,12 @@
 //   1. planilha — lê os dados e monta o DTCar-dados.xlsx (pasta privada "backup-leitura/<execução>/")
 //   2. paginas  — lê os dados, monta as páginas e fecha o zip com senha (com a planilha dentro, sem comprimir de novo)
 //   3. enviar   — manda o zip pelo Hotmail da oficina (Microsoft Graph) e apaga a pasta temporária
-// Quem chama os passos é o "início" (agendamento ou botão da tela Backup), em segundo plano, uma chamada para cada passo.
-// Anexo: até ~2,9 MB por e-mail (acima de 3 MB a Microsoft exige sessão de upload = permissão Mail.ReadWrite, que não temos).
-// Se o zip único passar disso, sai em dois zips (páginas e planilha), um por e-mail; se um deles sozinho passar, dá erro claro.
+// Encadeados: o início (agendamento ou botão da tela Backup) chama o 1º passo; cada passo responde na hora (202), trabalha em
+// segundo plano e, no fim, chama o seguinte. Assim nenhuma chamada espera as outras (limite de 150 s de duração por chamada).
+// Anexo: até 2,7 MB por e-mail (acima de 3 MB a Microsoft exige sessão de upload = permissão Mail.ReadWrite, que não temos;
+// o pedido vai em base64, +33%, e tem limite de ~4 MB). Se o zip único passar, o passo das páginas roda de novo noutra chamada
+// e faz dois zips (páginas e planilha), um por e-mail — cada chamada fecha um zip grande só; se um deles sozinho passar, erro claro.
+// Nomes dos arquivos dentro do zip não levam cliente nem placa: o zip com senha cifra o conteúdo, mas a lista de nomes fica aberta.
 // Sem a senha (segredo BACKUP_SENHA da função) NADA é enviado: o backup nunca sai sem senha.
 // Histórico em backup_execucoes (v35); o aviso de falha é do banco (backup_leitura_vigiar, 18h40 → WhatsApp do Danilo).
 import { configure, TextReader, Uint8ArrayReader, Uint8ArrayWriter, ZipWriter } from "npm:@zip.js/zip.js@2.24.0";
@@ -20,8 +23,11 @@ export const PASTA = "backup-leitura";
 export const PASSOS = ["planilha", "paginas", "enviar"] as const;
 export type Passo = typeof PASSOS[number];
 /** limite do anexo por e-mail (Graph: 3 MB sem sessão de upload; o base64 do pedido também conta) */
-export const LIMITE_ANEXO = 2_900_000;
-export const DESTINOS_PADRAO = ["centroautomotivodtcar@hotmail.com", "danilo.pj1@hotmail.com"];
+export const LIMITE_ANEXO = 2_700_000;
+/** sem nada configurado: só o e-mail da oficina (o v35 já grava também o e-mail de login do administrador) */
+export const DESTINOS_PADRAO = ["centroautomotivodtcar@hotmail.com"];
+/** senha mínima: o zip AES deriva a chave com só 1000 voltas (PBKDF2-SHA1), então senha curta cai em força bruta */
+export const SENHA_MINIMA = 16;
 const EMAIL_OK = /^[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+$/;
 
 export interface Gerador {
@@ -36,7 +42,7 @@ export interface DepsBackup {
   gerador: () => Promise<Gerador>;
   /** manda o e-mail com os anexos (na função: Microsoft Graph com a chave guardada) */
   enviarEmail: (m: { para: string[]; assunto: string; texto: string; anexos: Array<{ nome: string; bytes: Uint8Array }> }) => Promise<void>;
-  /** chama um passo numa chamada nova da função (no teste: direto) */
+  /** chama um passo numa chamada nova da função, que responde na hora e trabalha em segundo plano (no teste: direto, até o fim) */
   chamarPasso: (exec: number, passo: Passo) => Promise<void>;
   agora?: () => Date;
   /** limite do anexo por e-mail (troca no teste) */
@@ -58,19 +64,23 @@ export async function configBackup(adm: Db): Promise<{ ativo: boolean; emails: s
 }
 export function senhaDoBackup(env: (k: string) => string | undefined): string {
   const s = (env("BACKUP_SENHA") || "").trim();
-  if (s.length < 10) throw new ErroBackup("Falta cadastrar a senha do backup: segredo BACKUP_SENHA da função \"email\" (Supabase › Edge Functions › Secrets), com 10 letras ou mais. Sem ela nada é enviado.");
+  if (s.length < SENHA_MINIMA) throw new ErroBackup(`Falta cadastrar a senha do backup: segredo BACKUP_SENHA da função "email" (Supabase › Edge Functions › Secrets), com ${SENHA_MINIMA} letras ou mais (use uma senha aleatória). Sem ela nada é enviado.`);
   return s;
 }
 
-/** Todas as linhas de uma tabela (de 1000 em 1000, ordem fixa para não pular nem repetir) */
+/** Todas as linhas de uma tabela, em páginas pelo id (continua de onde parou: não pula nem repete se alguém gravar no meio,
+ *  e não corta a tabela se o servidor devolver menos de 1000 por página). Para só com a página vazia. */
 async function tabelaInteira(adm: Db, t: string): Promise<unknown[]> {
-  const out: unknown[] = [];
-  for (let de = 0; ; de += 1000) {
-    const { data, error } = await adm.from(t).select("*").order("id").range(de, de + 999);
+  const out: Array<{ id: string }> = [];
+  for (let volta = 0; volta < 1000; volta++) {
+    let q = adm.from(t).select("*").order("id");
+    if (out.length) q = q.gt("id", out[out.length - 1].id);
+    const { data, error } = await q.limit(1000);
     if (error) throw new Error(t + ": " + error.message);
-    out.push(...(data || []));
-    if (!data || data.length < 1000) return out;
+    if (!data || !data.length) return out;
+    out.push(...data);
   }
+  throw new Error(t + ": tabela grande demais para o backup de leitura.");
 }
 export async function lerDados(adm: Db, tabelas: string[], agora: Date) {
   const lidas = await Promise.all(tabelas.map((t) => tabelaInteira(adm, t)));
@@ -126,25 +136,36 @@ export async function iniciar(d: DepsBackup, origem: "agendamento" | "tela", ped
   if (rodando && rodando[0] && agora.getTime() - new Date(rodando[0].iniciado_em).getTime() < 600000) return { exec: rodando[0].id, ja_rodando: true };
   if (rodando && rodando[0]) await atualizar(d.adm, rodando[0].id, { situacao: "erro", erro: "Parou no meio (passou de 10 minutos).", terminado_em: agora.toISOString() });
   const { data, error } = await d.adm.from("backup_execucoes").insert({ origem, pedido_por: pedidoPor.slice(0, 120), situacao: "rodando", passo: "inicio", para: cfg.emails }).select("id").single();
-  if (error) throw new Error("backup_execucoes: " + error.message);
+  if (error) {
+    // o agendamento e o botão ao mesmo tempo: o índice único do v35 deixa só um "rodando"; o outro vira "já rodando"
+    if (error.code === "23505" || /backup_execucoes_uma_rodando|duplicate key/i.test(error.message)) {
+      const { data: r2 } = await d.adm.from("backup_execucoes").select("id").eq("situacao", "rodando").limit(1);
+      if (r2 && r2[0]) return { exec: r2[0].id as number, ja_rodando: true };
+    }
+    throw new Error("backup_execucoes: " + error.message);
+  }
   return { exec: data.id as number };
 }
 
-/** Roda os 3 passos em sequência (cada um numa chamada nova). Erro em qualquer um encerra a execução com o motivo. */
+/** Começa a corrente de passos (chama o 1º; cada passo chama o seguinte). Falha ao chamar fica registrada. */
 export async function rodar(d: DepsBackup, exec: number): Promise<void> {
-  for (const p of PASSOS) {
-    try {
-      await d.chamarPasso(exec, p);
-      const e = await lerExec(d.adm, exec);
-      if (e.situacao === "erro") return;
-      if (p !== "enviar" && e.passo !== p) throw new Error(`O passo "${p}" não terminou.`);
-    } catch (e) {
-      // o passo já gravou o motivo quando falhou lá dentro; aqui só o que não chegou a ser gravado (rede, função fora do ar)
-      const atual = await lerExec(d.adm, exec).catch(() => null);
-      if (!atual || atual.situacao === "rodando") await atualizar(d.adm, exec, { situacao: "erro", erro: `${p}: ${String((e as Error).message || e).slice(0, 480)}`, terminado_em: agoraDe(d).toISOString() }).catch(() => {});
-      return;
-    }
-  }
+  try { await d.chamarPasso(exec, PASSOS[0]); }
+  catch (e) { await falhou(d, exec, PASSOS[0], "não foi possível começar: " + String((e as Error).message || e)); }
+}
+async function falhou(d: DepsBackup, exec: number, p: string, msg: string) {
+  const atual = await lerExec(d.adm, exec).catch(() => null);
+  // o passo já grava o próprio motivo; aqui só o que não chegou a ser gravado (rede, função fora do ar)
+  if (!atual || atual.situacao === "rodando") await atualizar(d.adm, exec, { situacao: "erro", erro: `${p}: ${msg.slice(0, 480)}`, terminado_em: agoraDe(d).toISOString() }).catch(() => {});
+}
+
+/** Roda um passo e chama o próximo (ou o mesmo de novo, quando o zip precisa ser dividido). Usado na chamada de cada passo. */
+export async function executarEEncadear(d: DepsBackup, exec: number, p: Passo): Promise<void> {
+  let r: Record<string, unknown>;
+  try { r = await passo(d, exec, p); } catch (_) { return; } // passo() já gravou o motivo
+  const prox = r.repetir ? p : PASSOS[PASSOS.indexOf(p) + 1];
+  if (!prox) return;
+  try { await d.chamarPasso(exec, prox); }
+  catch (e) { await falhou(d, exec, prox, "não foi possível chamar este passo: " + String((e as Error).message || e)); }
 }
 
 /** Um passo, na chamada própria. Grava o andamento (tempo e tamanho) em backup_execucoes. */
@@ -170,16 +191,22 @@ export async function passo(d: DepsBackup, exec: number, p: Passo): Promise<Reco
       const { arquivos, resumo } = g.montarPaginas(bk), raiz = g.pastaRaiz(bk.gerado_em) + "/";
       const xlsx = await baixar(d.adm, pasta + "/planilha.xlsx");
       const lista: Array<[string, string | Uint8Array, number?]> = arquivos.map(([n, c]) => [raiz + n, c]);
-      const unico = await zipar([...lista, [raiz + "Planilha/DTCar-dados.xlsx", xlsx, 0]], senha);
-      const limite = d.limiteAnexo ?? LIMITE_ANEXO;
-      if (unico.length <= limite) {
+      const limite = d.limiteAnexo ?? LIMITE_ANEXO, base = g.pastaRaiz(bk.gerado_em);
+      if (!det.dividir) {
+        const unico = await zipar([...lista, [raiz + "Planilha/DTCar-dados.xlsx", xlsx, 0]], senha);
+        if (unico.length > limite) {
+          // grande demais para um e-mail: divide noutra chamada (cada chamada fecha um zip grande só, pelo limite de processamento)
+          det.dividir = true; det.unico_bytes = unico.length;
+          await atualizar(d.adm, exec, { detalhe: det });
+          return { ok: true, passo: p, repetir: true };
+        }
         await guardar(d.adm, pasta + "/1.zip", unico, "application/zip");
-        det.zips = [{ nome: g.pastaRaiz(bk.gerado_em) + ".zip", bytes: unico.length }];
+        det.zips = [{ nome: base + ".zip", bytes: unico.length }];
       } else {
-        // grande demais para um e-mail: páginas num zip e planilha em outro (os dois com senha)
+        // páginas num zip e planilha em outro (os dois com senha); a planilha só é guardada, sem comprimir de novo
         const paginas = await zipar(lista, senha), planilha = await zipar([[raiz + "Planilha/DTCar-dados.xlsx", xlsx, 0]], senha);
-        const zips = [[g.pastaRaiz(bk.gerado_em) + "-paginas.zip", paginas], [g.pastaRaiz(bk.gerado_em) + "-planilha.zip", planilha]] as const;
-        for (const [nome, b] of zips) if (b.length > limite) throw new ErroBackup(`O arquivo ${nome} ficou com ${fmtMB(b.length)}, acima do limite do anexo de e-mail (2,9 MB). Precisa do envio em partes (permissão nova no Hotmail).`);
+        const zips = [[base + "-paginas.zip", paginas], [base + "-planilha.zip", planilha]] as const;
+        for (const [nome, b] of zips) if (b.length > limite) throw new ErroBackup(`O arquivo ${nome} ficou com ${fmtMB(b.length)}, acima do limite do anexo de e-mail (${fmtMB(limite)}). Precisa do envio em partes (permissão nova no Hotmail).`);
         for (let i = 0; i < zips.length; i++) await guardar(d.adm, `${pasta}/${i + 1}.zip`, zips[i][1], "application/zip");
         det.zips = zips.map(([nome, b]) => ({ nome, bytes: b.length }));
       }
@@ -188,7 +215,7 @@ export async function passo(d: DepsBackup, exec: number, p: Passo): Promise<Reco
       const cfg = await configBackup(d.adm), zips = (det.zips || []) as Array<{ nome: string; bytes: number }>;
       if (!zips.length) throw new Error("Nada para enviar (o passo das páginas não guardou o zip).");
       const r = (det.resumo || {}) as Record<string, number>, quando = dataBR(e.gerado_em ? new Date(e.gerado_em) : agoraDe(d));
-      for (let i = 0; i < zips.length; i++) {
+      for (let i = Number(det.enviados || 0); i < zips.length; i++) {
         const bytes = await baixar(d.adm, `${pasta}/${i + 1}.zip`), parte = zips.length > 1 ? ` (${i + 1} de ${zips.length})` : "";
         await d.enviarEmail({ para: cfg.emails, assunto: `Backup de leitura DTCar Gestão — ${quando}${parte}`, anexos: [{ nome: zips[i].nome, bytes }], texto: [
           `Backup de leitura do DTCar Gestão de ${quando}${parte}.`, "",
@@ -196,7 +223,9 @@ export async function passo(d: DepsBackup, exec: number, p: Passo): Promise<Reco
           "", "Como abrir: extraia com o 7-Zip (pede a senha do backup) e abra o arquivo ABRIR-AQUI.html no navegador. Funciona sem internet.",
           "A planilha com todos os dados está em Planilha/DTCar-dados.xlsx.", "",
           "Esta cópia é só para leitura: para restaurar dados no sistema, use o backup .json.gz (Sistema › Backup).",
-          "Tem dados de clientes (LGPD): não encaminhe e não compartilhe a senha.", "", "— Mensagem automática do DTCar Gestão (todo dia às 18h)."].join("\n") });
+          "Tem dados de clientes (LGPD): não encaminhe e não compartilhe a senha.", "", "— Mensagem automática do DTCar Gestão (todo dia às 18h)."].join("\n") })
+          .catch((err) => { throw new Error((i > 0 ? `enviou ${i} de ${zips.length} e-mails; o ${i + 1}º falhou: ` : "") + ((err as Error).message || err)); });
+        det.enviados = i + 1;
       }
       await limparPasta(d.adm, pasta).catch(() => {});
       det.enviado_para = cfg.emails;

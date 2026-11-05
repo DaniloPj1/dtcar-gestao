@@ -4,8 +4,8 @@
 // pelo da main que tem a mudança e publique a função "email" de novo (o teste_anexos confere que o commit existe).
 // jsPDF na mesma versão do vendor/jspdf.umd.min.js do site.
 import { jsPDF } from "npm:jspdf@2.5.1";
-import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/f619be3c56487af58f20adfa18c4d160085375a6/js/pdf.js";
-import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/f619be3c56487af58f20adfa18c4d160085375a6/js/boletopdf.js";
+import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/pdf.js";
+import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/boletopdf.js";
 import type { Geradores } from "./anexos.ts";
 
 (globalThis as unknown as { jspdf: unknown }).jspdf = { jsPDF };

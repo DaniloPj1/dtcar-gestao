@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v36.sql`, `v37.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -158,6 +158,27 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (`email/site.ts`, juntados no Deploy, jsPDF 2.5.1 = vendor; o Supabase recusa importar do endereço do site: "Requires import access"): esses arquivos (e `util.js`, `regras.js`, `cnab.js`, `qr.js`) não podem usar `window`/`document` no carregamento; `pdf.js`
   aceita leitor de imagem trocável (`usarLeitorImagem`). **Mudou um deles? Troque o commit no `site.ts` pelo da main com a mudança e publique a função "email" de novo.**
   Datas de `util.js` sempre no fuso de Brasília (a função roda em UTC). Teste: `deno run -A teste/teste_anexos.ts` (PDFs de verdade).
+- **Backup de leitura por e-mail (v35, pedido do Danilo em 05/11/2026): cópia que se lê SEM o sistema no ar.** `js/backupleitura.js` monta
+  (sem biblioteca e sem `window`/`document`: roda na função e, no Grau 2, no programa do PC) as páginas HTML navegáveis (`ABRIR-AQUI.html` com busca
+  por O.S./placa/cliente com os dados dentro da página; O.S. abertas um arquivo por O.S. em pastas por situação, fechadas um arquivo por mês de
+  abertura, recusadas/canceladas por ano; cadastros, financeiro e vendas) e a planilha `.xlsx` feita à mão (só texto e número; sem ids, `checkin`,
+  assinaturas, `ficha`). Situação sempre por extenso. Tudo escapado (nome de cliente com `<script>` vira texto). **Nome de arquivo nunca leva
+  cliente nem placa** (só `OS 01850.html`): o zip com senha cifra o conteúdo, mas a lista de nomes fica aberta. A função "email" (`email/backup.ts`,
+  `email/backup_envio.ts`) faz o zip **com senha AES-256** (zip.js 2.24.0, travado; segredo `BACKUP_SENHA` da função, **16+ letras**, aleatória —
+  sem ela nada sai) e manda pelo Hotmail para `cfg.backupLeitura.emails` (até 3; o v35 grava o e-mail da oficina + o e-mail de login dos
+  administradores, lido do `auth.users` para não ficar escrito no código público; tela Sistema › Backup, "Gerar e enviar agora").
+  **Passos encadeados, cada um numa chamada própria** (planilha → páginas/zip → enviar), pelos 2 s de processamento da função: o início (pg_cron
+  `dtcar-backup-leitura` às 21h UTC = 18h, ou o botão) chama o 1º; cada passo responde 202 na hora, trabalha em segundo plano
+  (`EdgeRuntime.waitUntil`) e chama o seguinte com `x-dtcar-cron` (segredo do agendamento, tabela `segredos`) — nenhuma chamada espera as outras.
+  O gerador vem de `email/backupsite.ts` (só o `backupleitura.js`, sem jsPDF). Arquivos temporários na pasta privada `backup-leitura/<execução>/`,
+  apagados depois do envio. Anexo até **2,7 MB** por e-mail (Graph: 3 MB sem sessão de upload, e o pedido vai em base64); zip único maior →
+  o passo das páginas roda de novo noutra chamada e faz dois zips (páginas e planilha); parte sozinha maior → erro claro. Um "rodando" por vez
+  (índice único `backup_execucoes_uma_rodando`). Histórico em `backup_execucoes` (só administrador lê; **fora do backup, do banco do PC e do
+  espelho**: log operacional, como `email_envios`). `backup_leitura_vigiar()` às 18h40 (`dtcar-backup-leitura-vigia`): sem envio ok no dia →
+  aviso no WhatsApp do Danilo (`whatsapp_alerta_na_fila`, v32; sai no próximo horário comercial), um por dia, com o motivo registrado se o
+  aviso não puder sair. **Mudou `js/backupleitura.js` (ou `util.js`/`regras.js`)? Troque o commit no `email/backupsite.ts`, faça o merge com
+  "Create a merge commit" e publique a função "email" de novo.** Testes: `deno run -A teste/teste_backup_leitura.ts` (zip e planilha de verdade,
+  volume real de 1.910 O.S. com o tempo de cada passo) e `bash teste/teste_v35.sh` (Postgres local).
 - **NF anexada à O.S. (v33), O.S. › Documentos › NF:** PDF e XML da nota emitida no ObjetivaWeb (o sistema não emite NF), tabela `os_notas`
   + pasta privada `notas`, ligadas pelo **número** da O.S. (sem chave estrangeira; preservada pelo espelho: documento fiscal real), só
   administrador. Número da NF lido do XML (`numeroDaNF` em `js/telas/notasos.js`). Teste: `bash teste/teste_v33.sh`.

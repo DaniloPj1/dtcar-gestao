@@ -66,7 +66,10 @@ async function textoDoModelo(d: DepsZap, p: Record<string, unknown>, avisos: str
   if (modelo === "entrega" && st !== "entregue") avisos.push(`A O.S. ${num} ainda não foi entregue: a data da garantia sai errada.`);
   if (modelo === "cobranca") {
     const parcelas = await lista(d.adm.from("receber").select("*").eq("ordem_id", o.id).eq("status", "aberta").order("vencimento"));
-    const saldo = Math.max(0, Number(o.total || 0) - Number(o.recebido || 0));
+    // O.S. fechada (finalizada_em) ou do sistema antigo entregue sem "a receber" (v17: conta como paga, com recebido 0) = quitada
+    const leg = ((o.checkin || {}) as Record<string, unknown>).legado as Record<string, unknown> | undefined;
+    const quitada = !!o.finalizada_em || (!!leg && leg.a_receber !== true && st === "entregue");
+    const saldo = quitada ? 0 : Math.max(0, Number(o.total || 0) - Number(o.recebido || 0));
     if (!parcelas.length && saldo <= 0.005) throw new ErroAnexo(`A O.S. ${num} não tem nada a receber.`);
     if (!parcelas.length) avisos.push(`A O.S. ${num} não tem parcelas lançadas: a cobrança sai com o saldo de R$ ${saldo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`);
     extra.parcelas = parcelas;

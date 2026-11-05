@@ -100,6 +100,13 @@ const cfg = tabelas.config[0].dados as L;
   confere("cobrança: parcela em aberto, saldo e nome da empresa inteiro", /Parcela 2\/2/.test(t) && /1\.052,71/.test(t) && /01\/12\/2026/.test(t) && !/01\/11\/2026/.test(t)
     && t.startsWith("Olá, Marbrasa Norte Mineradora Ltda!"), t);
   await deve("cobrança de O.S. quitada", () => w({ modelo: "cobranca", numero_os: 1900 }), /nada a receber/);
+  tabelas.ordens.push({ id: "o4", numero: 1500, status: "entregue", criado_em: "2025-01-01T12:00:00Z", cliente: { nome: "Antigo" }, veiculo: { placa: "BBB2B22" },
+    total: 800, recebido: 0, finalizada_em: null, checkin: { legado: { a_receber: false } } });
+  await deve("cobrança de O.S. antiga entregue (conta como paga, recebido 0)", () => w({ modelo: "cobranca", numero_os: 1500 }), /nada a receber/);
+  tabelas.ordens.push({ id: "o5", numero: 1501, status: "entregue", criado_em: "2025-01-01T12:00:00Z", cliente: { nome: "Antigo" }, veiculo: { placa: "BBB2B22" },
+    total: 800, recebido: 300, checkin: { legado: { a_receber: true } } });
+  const ra = await w({ modelo: "cobranca", numero_os: 1501 });
+  confere("O.S. antiga marcada a receber: cobra o saldo", /500,00/.test(String(ra.texto)), ra.texto);
 }
 {
   const r = await w({ modelo: "boas_vindas", cliente_id: "c1", telefone: "27999990000" });

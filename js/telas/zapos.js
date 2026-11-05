@@ -17,11 +17,12 @@ export function EnvioZapModal({ o, qual, onFechar }) {
   const [previa, setPrevia] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState(""), [feito, setFeito] = useState(null);
   const pedido = confirmar => ({ acao: "whatsapp", modelo: qual, numero_os: o.numero, origem: "tela", confirmar,
     ...(editado ? { texto: texto || "", sem_texto: !String(texto || "").trim() } : {}), ...(comPdf && PDF[padrao] ? { anexo: { fonte: "os", documento: padrao } } : {}) });
+  const editadoRef = useRef(false);
   const vez = useRef(0); // só vale a resposta da prévia mais recente (marcar/desmarcar o PDF rápido, digitar)
   const ver = async () => {
     const n = ++vez.current;
     setFazendo("previa"); setErro("");
-    try { const r = await api.email.chamar(pedido(false)); if (n !== vez.current) return; setPrevia(r); if (!editado) setTexto(r.texto || ""); }
+    try { const r = await api.email.chamar(pedido(false)); if (n !== vez.current) return; setPrevia(r); if (!editadoRef.current) setTexto(r.texto || ""); }
     catch (e) { if (n === vez.current) setErro(e.message); } finally { if (n === vez.current) setFazendo(""); }
   };
   useEffect(() => { ver(); }, [comPdf]);
@@ -40,7 +41,7 @@ export function EnvioZapModal({ o, qual, onFechar }) {
     <p class="sub">${(MODELOS[qual] || {}).rotulo || "Mensagem"} · O.S. ${o.numero}${previa && previa.telefone ? " · para " + fmtTel(String(previa.telefone).slice(2)) + (previa.cliente && previa.cliente.nome ? " (" + previa.cliente.nome + ")" : "") : ""}</p>
     ${PDF[padrao] ? html`<label class="linha-check"><input type="checkbox" checked=${comPdf} onChange=${e => setComPdf(e.target.checked)} /><span>Enviar o ${PDF[padrao]} junto${previa && previa.arquivo ? " (" + previa.arquivo.kb + " KB)" : ""}</span></label>` : null}
     ${texto === null ? html`<p class="sub">${fazendo ? "Montando a mensagem…" : ""}</p>` : html`<div class="campo"><label for="zap-texto">Mensagem</label>
-      <${Area} id="zap-texto" valor=${texto} rows="10" onMuda=${v => { setTexto(v); setEditado(true); setPrevia(null); }} /></div>`}
+      <${Area} id="zap-texto" valor=${texto} rows="10" onMuda=${v => { vez.current++; editadoRef.current = true; setFazendo(""); setTexto(v); setEditado(true); setPrevia(null); }} /></div>`}
     ${erros.length ? html`<div class="erros">${linhas(erros)}</div>` : null}
     ${previa && (previa.avisos || []).length ? html`<div class="aviso">${linhas(previa.avisos)}</div>` : null}
     ${erro ? html`<div class="erros">${erro}</div>` : null}

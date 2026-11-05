@@ -8,6 +8,16 @@ import { Dinheiro } from "../ui.js";
 import { lerNFe, triangular } from "../nfe.js";
 import { contasDaNota } from "./financeiro.js";
 
+/** próxima consulta automática: 8h ou 16h de Brasília (UTC-3), nunca antes da espera exigida pela SEFAZ */
+export function proximaAuto(cfg, agora = Date.now()) {
+  const BR = 3 * 3600000, l = new Date(agora - BR), dia = Date.UTC(l.getUTCFullYear(), l.getUTCMonth(), l.getUTCDate());
+  const hs = [-8, 8, 16, 32].map(h => dia + h * 3600000 + BR); // 16h de ontem, 8h, 16h, 8h de amanhã
+  const ultimo = hs.filter(x => x <= agora).pop(), feita = cfg.ultima_consulta ? new Date(cfg.ultima_consulta).getTime() : 0;
+  const t = feita < ultimo ? agora : hs.find(x => x > agora); // horário passou e ainda não consultou: o robô faz em até 10 min
+  const espera = cfg.proxima_consulta ? new Date(cfg.proxima_consulta).getTime() : 0;
+  return new Date(Math.max(t, espera));
+}
+
 const MANIF = { "": "", ciencia: "Ciência registrada", confirmada: "Operação confirmada", desconhecida: "Operação desconhecida", nao_realizada: "Operação não realizada" };
 const lerB64 = arq => new Promise((ok, erro) => { const f = new FileReader(); f.onload = () => ok(String(f.result).split(",")[1] || ""); f.onerror = () => erro(new Error("Não foi possível ler o arquivo.")); f.readAsDataURL(arq); });
 const situacaoXml = n => n.sem_ciencia && !n.tem_xml && !n.manifestacao ? ["Sem ciência (escolha sua)", "muted"] : n.manifestacao_pedida ? ["Enviando à SEFAZ: " + MANIF[n.manifestacao_pedida].toLowerCase(), "info"] : ["desconhecida", "nao_realizada"].includes(n.manifestacao) ? [MANIF[n.manifestacao], "bad"] : n.situacao === "cancelada" ? ["Cancelada pelo emitente", "bad"] : n.situacao === "denegada" ? ["Denegada", "bad"] : n.tem_xml ? ["XML disponível", "ok"]
@@ -161,7 +171,7 @@ function Detalhe({ n, onFechar, onMudou }) {
         ${admin ? html`<div class="acoes"><button type="button" class="btn btn-sm btn-pri" disabled=${!!ocupado} onClick=${() => acao("cie", async () => { await api.sefaz.pedirManifestacao(n.chave, "ciencia", ""); avisar("Ciência pedida: a SEFAZ recebe em até 10 minutos e o XML chega na consulta seguinte."); })}>Dar ciência</button>
           <label class="linha-check"><input type="checkbox" checked=${semC} onChange=${async e => { const v = e.target.checked; setSemC(v); try { await api.sefaz.marcar(n.chave, { sem_ciencia: v }); avisar(v ? "Esta nota não receberá ciência automática." : "A ciência automática volta a valer para esta nota."); } catch (x) { setSemC(!v); avisar(x.message, true); } }} /><span>Não dar ciência nesta nota (a automática pula esta)</span></label></div>`
           : html`<span class="dica">${semC ? "Marcada para não dar ciência." : "A ciência é registrada automaticamente na próxima consulta."}</span>`}</div>`
-      : !n.tem_xml && n.manifestacao === "ciencia" ? html`<span class="dica">A ciência foi registrada: o XML completo chega na próxima consulta (até 1 hora).</span>` : null}
+      : !n.tem_xml && n.manifestacao === "ciencia" ? html`<span class="dica">A ciência foi registrada: o XML completo chega na próxima consulta (8h ou 16h, ou use "Consultar agora").</span>` : null}
     ${vincs.length ? html`<div class="info"><b>Vinculada a O.S.:</b> ${vincs.map(v => { const o = dados.ordens.find(x => x.id === v.ordem_id); return (o ? numOS(o.numero) : "O.S.") + " (" + v.descricao_nf + ", custo " + reais(v.custo_total) + ")"; }).join("; ")}</div>` : null}
     <div class="acoes">
       ${n.tem_xml && n.status !== "lancada" && pode(perfil, "cadastrar") ? html`<button type="button" class="btn btn-pri" onClick=${() => ir("/nfe?sefaz=" + n.chave)}>Dar entrada no estoque</button>` : null}
@@ -204,12 +214,12 @@ export function NotasSefaz() {
   const venceEm = cfg && cfg.validade ? Math.floor((new Date(cfg.validade) - Date.now()) / 86400000) : null;
   const n = k => (lista || []).filter(x => k === "novas" ? x.status === "nova" && x.situacao !== "cancelada" : x.status === k).length;
   return html`<div class="pagina larga-media sefaz">
-    <div class="painel-topo"><div><h1>Notas da SEFAZ</h1><span class="sub">NF-e emitidas para o CNPJ da oficina, buscadas automaticamente de hora em hora</span></div>
+    <div class="painel-topo"><div><h1>Notas da SEFAZ</h1><span class="sub">NF-e emitidas para o CNPJ da oficina, buscadas automaticamente às 8h e às 16h</span></div>
       ${admin && cfg && cfg.validade ? html`<div class="acoes"><button type="button" class="btn btn-pri" disabled=${consultando} onClick=${consultar}>${consultando ? "Consultando…" : "Consultar agora"}</button></div>` : null}</div>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     ${!cfg ? html`<section class="card"><div class="esqueleto"></div></section>` : !cfg.validade ? html`<section class="card card-alerta">
         <h3>Ativar a busca de notas</h3>
-        <p>Com o certificado digital A1 da DTCar, o sistema consulta a SEFAZ de hora em hora e traz todas as notas de compra emitidas para o seu CNPJ, com o XML completo. Daqui você dá entrada no estoque, lança as duplicatas em contas a pagar ou desconhece uma nota que você não comprou.</p>
+        <p>Com o certificado digital A1 da DTCar, o sistema consulta a SEFAZ duas vezes por dia (8h e 16h) e traz todas as notas de compra emitidas para o seu CNPJ, com o XML completo. Daqui você dá entrada no estoque, lança as duplicatas em contas a pagar ou desconhece uma nota que você não comprou.</p>
         <ul class="res-lista"><li>A SEFAZ guarda as notas por 90 dias: a primeira consulta traz os últimos 3 meses.</li><li>Quando não há nota nova, a SEFAZ exige 1 hora de intervalo entre consultas.</li><li>Para liberar o XML, o sistema registra automaticamente a "ciência da operação" (não confirma a compra).</li></ul>
         ${admin ? html`<div class="acoes"><button type="button" class="btn btn-pri" onClick=${() => setCert(true)}>Enviar certificado A1</button></div>` : html`<span class="dica">Peça ao administrador para enviar o certificado.</span>`}</section>`
       : html`<section class="card sefaz-status">
@@ -217,7 +227,7 @@ export function NotasSefaz() {
           <div><span>Certificado</span><b>${cfg.titular}</b><small>${fmtDoc(cfg.cnpj)}</small></div>
           <div><span>Validade</span><b class=${venceEm !== null && venceEm < 30 ? "c-bad" : ""}>${fmtData(cfg.validade)}</b><small>${venceEm < 0 ? "vencido" : venceEm < 30 ? "vence em " + venceEm + " dia(s)" : ""}</small></div>
           <div><span>Última consulta</span><b>${cfg.ultima_consulta ? fmtDataHora(cfg.ultima_consulta) : "ainda não consultou"}</b><small>${cfg.ultimo_status || ""}</small></div>
-          <div><span>Próxima consulta</span><b>${cfg.proxima_consulta && new Date(cfg.proxima_consulta) > new Date() ? fmtDataHora(cfg.proxima_consulta) : "a qualquer momento"}</b><small>${cfg.ativo ? "automática de hora em hora" : "busca automática desligada"}</small></div>
+          <div><span>Próxima consulta</span><b>${cfg.ativo ? fmtDataHora(proximaAuto(cfg)) : cfg.proxima_consulta && new Date(cfg.proxima_consulta) > new Date() ? fmtDataHora(cfg.proxima_consulta) : "quando pedir"}</b><small>${cfg.ativo ? "automática às 8h e às 16h" : "busca automática desligada"}</small></div>
         </div>
         ${cfg.ultimo_erro ? html`<div class="erros">${cfg.ultimo_erro}</div>` : null}
         ${roboParado ? html`<div class="aviso">O robô da SEFAZ ${cfg.worker_em ? "não roda desde " + fmtDataHora(cfg.worker_em) : "ainda não rodou"}. ${cfg.worker_erro ? "Último erro: " + cfg.worker_erro + ". " : ""}Ele roda no GitHub a cada 10 minutos: confira se a chave SUPABASE_SECRET_KEY está cadastrada e se a rotina “SEFAZ – notas de compra” está ativa na aba Actions do repositório.</div>`
@@ -233,7 +243,7 @@ export function NotasSefaz() {
       ${!lista ? html`<div class="esqueleto"></div>` : filtradas.length ? html`<div class="lista">${filtradas.map(x => { const [rot, cor] = situacaoXml(x); return html`<button type="button" key=${x.id} class="linha" onClick=${() => setDet(x)}>
           <span class="meio"><strong>${x.nome_emitente || fmtDoc(x.cnpj_emitente)}</strong><span>NF ${x.numero}${x.emissao ? " · " + fmtData(x.emissao) : ""}${x.manifestacao && x.manifestacao !== "ciencia" ? " · " + MANIF[x.manifestacao] : ""}</span></span>
           <span class="dir"><b>${reais(x.valor)}</b><span class=${"pill p-" + cor}>${rot}</span></span></button>`; })}</div>`
-        : html`<${Vazio}>${aba === "novas" ? (cfg && cfg.validade ? "Nenhuma nota nova. A busca roda de hora em hora." : "Envie o certificado para começar a receber as notas.") : "Nada aqui."}</${Vazio}>`}
+        : html`<${Vazio}>${aba === "novas" ? (cfg && cfg.validade ? "Nenhuma nota nova. A busca roda às 8h e às 16h." : "Envie o certificado para começar a receber as notas.") : "Nada aqui."}</${Vazio}>`}
     </section>
     ${cert ? html`<${Certificado} onFechar=${() => setCert(false)} onEnviado=${() => { setCert(false); carregar(); }} />` : null}
     ${det ? html`<${Detalhe} n=${det} onFechar=${() => { setDet(null); carregar(); }} onMudou=${() => { setDet(null); carregar(); }} />` : null}

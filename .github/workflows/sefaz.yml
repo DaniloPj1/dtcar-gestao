@@ -1,6 +1,7 @@
 name: SEFAZ – notas de compra
 # Consulta a SEFAZ com o certificado A1 da DTCar (veja worker/sefaz.mjs).
-# Roda a cada 10 minutos; a consulta em si só acontece de hora em hora ou quando pedida na tela.
+# Roda a cada 10 minutos (manifestações pedidas na tela); a consulta de notas só acontece às 8h e 16h
+# de Brasília ou quando pedida na tela.
 on:
   schedule:
     - cron: "*/10 * * * *"

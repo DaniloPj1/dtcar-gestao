@@ -4,8 +4,9 @@
 //
 // A cada execução:
 //   1. envia as manifestações pedidas na tela (confirmar, desconhecer, não realizada);
-//   2. consulta a Distribuição DF-e quando liberado (de hora em hora, ou antes se pedido na tela,
-//      sempre respeitando a espera de 1 hora exigida pela SEFAZ);
+//   2. consulta a Distribuição DF-e só 2 vezes por dia (8h e 16h de Brasília) ou quando pedida na tela,
+//      sempre respeitando a espera de 1 hora exigida pela SEFAZ. Poucas consultas deixam a SEFAZ
+//      livre para o ObjetivaWeb (mesmo CNPJ) consultar sem cair em "consumo indevido" (656);
 //   3. registra a ciência da operação das notas novas para liberar o XML completo.
 // Nada de certificado, senha ou chave é impresso no registro.
 import https from "node:https";
@@ -21,6 +22,15 @@ const ACAO_DIST = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nf
 const ACAO_EVENTO = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeRecepcaoEvento4/nfeRecepcaoEvento";
 const RAIZES_ICP = ["v5", "v10", "v11", "v12"].map(v => `http://acraiz.icpbrasil.gov.br/credenciadas/RAIZ/ICP-Brasil${v}.crt`);
 const ESPERA_MIN = 62;
+// Horários da consulta automática (hora de Brasília, UTC-3 o ano todo desde 2019).
+export const HORARIOS = [8, 16];
+/** último horário de consulta automática já alcançado (8h ou 16h de hoje, ou 16h de ontem) */
+export function ultimoHorario(agora = Date.now()) {
+  const BR = 3 * 3600000, local = new Date(agora - BR);
+  const dia = Date.UTC(local.getUTCFullYear(), local.getUTCMonth(), local.getUTCDate());
+  const h = [...HORARIOS].reverse().find(x => local.getUTCHours() >= x);
+  return h === undefined ? dia - 86400000 + HORARIOS[HORARIOS.length - 1] * 3600000 + BR : dia + h * 3600000 + BR;
+}
 export const EVENTOS = {
   ciencia: ["210210", "Ciencia da Operacao"],
   confirmada: ["210200", "Confirmacao da Operacao"],
@@ -118,7 +128,7 @@ async function principal() {
   const agora = Date.now();
   const liberado = !cfg.proxima_consulta || new Date(cfg.proxima_consulta).getTime() <= agora;
   const pedido = cfg.pedido_em && (!cfg.ultima_consulta || new Date(cfg.pedido_em) > new Date(cfg.ultima_consulta));
-  const vez = !cfg.ultima_consulta || agora - new Date(cfg.ultima_consulta).getTime() >= 60 * 60000;
+  const vez = !cfg.ultima_consulta || new Date(cfg.ultima_consulta).getTime() < ultimoHorario(agora);
   const consultar = liberado && ((cfg.ativo && vez) || pedido);
   await db.from("sefaz_config").update({ worker_em: new Date().toISOString() }).eq("id", 1);
   if (!consultar && !pedidas.length) { log("nada a fazer", liberado ? "" : "(aguardando " + cfg.proxima_consulta + ")"); return; }

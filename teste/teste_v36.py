@@ -212,8 +212,13 @@ s = envia_tudo(); AV = [x for x in para(s, DANILO)][-1]["msg_id"]
 recebe(DANILO, "pode sim", responde_a=AV)
 RF = ultimo_aviso("rascunho")["id"]
 for t in range(3):
-    js("select whatsapp_assistente_pegar(3)", "service_role")
+    p, _ = js("select whatsapp_assistente_pegar(3)", "service_role")
+    confere(f"IA: tentativa {t + 1} pega o rascunho", isinstance(p, list) and len(p) == 1, p)
     sql(f"select whatsapp_assistente_resultado({RF}, null, null, 'HTTP 529', false)", "service_role")
+    if t == 0:
+        p, _ = js("select whatsapp_assistente_pegar(3)", "service_role")
+        confere("IA: depois de falhar, espera 45 s para tentar de novo", p == [], p)
+    sql(f"update whatsapp_avisos set atualizado_em = now() - interval '1 minute' where id = {RF}")
 s = envia_tudo(); x = [m for m in para(s, DANILO) if "Rascunho" in m["texto"]]
 confere("depois de 3 falhas, rascunho com o texto do Danilo e aviso de sem IA", len(x) == 1 and "pode sim" in x[0]["texto"] and "Sem revisão da IA" in x[0]["texto"], s)
 
@@ -426,12 +431,50 @@ r = roda("supabase/v36.sql"); v, _ = sql("select coalesce(aviso, 'nulo') from wh
 confere("v36 de novo: pendente continua pendente", r.returncode == 0 and v == "nulo", (r.returncode, v, r.stderr[-200:]))
 sql("select whatsapp_avisos_processar(50)")
 
-# ---------- 20. erro no tratamento não impede gravar a mensagem ----------
-sql("alter table whatsapp_avisos rename to whatsapp_avisos_x")
+# ---------- 20. erro no tratamento não impede gravar a mensagem e é tentado de novo ----------
+sql("alter function whatsapp_contato(text) rename to whatsapp_contato_x")
 mid = recebe(JOAO, "mensagem com erro no aviso")
-v, _ = sql(f"select aviso || '|' || coalesce(aviso_erro, '') from whatsapp_mensagens where msg_id = '{mid}'")
-confere("erro no aviso: mensagem gravada e marcada", v.startswith("erro|"), v)
-sql("alter table whatsapp_avisos_x rename to whatsapp_avisos")
+v, _ = sql(f"select coalesce(aviso, 'nulo') || '|' || aviso_tentativas || '|' || (aviso_erro is not null) from whatsapp_mensagens where msg_id = '{mid}'")
+confere("erro no aviso: mensagem gravada, fica para tentar de novo", v == "nulo|1|true", v)
+sql("select whatsapp_avisos_processar(50)"); sql("select whatsapp_avisos_processar(50)")
+v, _ = sql(f"select coalesce(aviso, 'nulo') || '|' || aviso_tentativas from whatsapp_mensagens where msg_id = '{mid}'")
+confere("na 3ª falha fica como erro", v == "erro|3", v)
+mid = recebe(JOAO, "erro passageiro")
+sql("select whatsapp_avisos_processar(50)")
+sql("alter function whatsapp_contato_x(text) rename to whatsapp_contato")
+sql("select whatsapp_avisos_processar(50)")
+v, _ = sql(f"select coalesce(aviso, 'nulo') from whatsapp_mensagens where msg_id = '{mid}'")
+confere("erro passageiro: a rodada seguinte trata", v == "aviso", v)
+envia_tudo()
+
+# ---------- 20b. mensagem antiga (histórico) não avisa ----------
+sql(f"select whatsapp_guardar_mensagens({q([{'msg_id': 'HIST1', 'jid': JOAO + '@s.whatsapp.net', 'telefone': JOAO, 'de_mim': False, 'texto': 'mensagem de ontem', 'tipo': 'texto'}])})")
+sql("update whatsapp_mensagens set em = now() - interval '10 hours' where msg_id = 'HIST1'")
+sql("select whatsapp_avisos_processar(50)")
+v, _ = sql("select aviso from whatsapp_mensagens where msg_id = 'HIST1'")
+confere("mensagem com mais de 6 h: antiga, sem aviso", v == "antiga", v)
+
+# ---------- 20c. limite do dia (enfileirar) não conta as internas; alerta do motor é interna ----------
+sql("update whatsapp_fila set criado_em = now() - interval '2 days' where not interno")
+sql(f"update whatsapp_conexao set regras = {q({**SEMPRE, 'por_dia': 2})} where id = 1")
+for i in range(5): sql(f"select whatsapp_interno('interna {i}')")
+r, _ = js(f"set teste.uid = '{ADM}'; select whatsapp_enfileirar({q({'telefone': JOAO, 'texto': 'Mensagem do limite'})}, false)")
+confere("internas não gastam o limite do dia dos clientes", isinstance(r, dict) and not any("Limite do dia" in x for x in r.get("erros", [])), r)
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
+iid, _ = sql("select whatsapp_alerta_na_fila('motor sem sinal (teste)')")
+v, _ = sql(f"select interno from whatsapp_fila where id = {iid or 0}")
+confere("alerta de motor sem sinal entra como interna", v == "t", (iid, v))
+envia_tudo()
+
+# ---------- 20d. interna criada no silêncio sai quando o silêncio acaba, mesmo fora do horário comercial ----------
+sql(f"update whatsapp_conexao set regras = {q({**SEMPRE, 'dias': []})}, avisos = avisos || '{{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"23:59\"}}' where id = 1")
+iid, _ = sql("select whatsapp_interno('criada no silêncio')")
+s = envia_tudo()
+confere("no silêncio, a interna espera", len(para(s, DANILO)) == 0, s)
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"00:00\"}' where id = 1")
+s = envia_tudo(); v, _ = sql(f"select status from whatsapp_fila where id = {iid}")
+confere("fim do silêncio: sai sem esperar o dia comercial", v == "enviada", (v, s))
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
 
 # ---------- 21. permissões ----------
 for f in ("whatsapp_assistente_pegar(3)", "whatsapp_resumo_enviar()", "whatsapp_avisos_minuto()", "whatsapp_interno('x')",

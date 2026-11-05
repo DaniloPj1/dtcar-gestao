@@ -1,4 +1,4 @@
-# Teste do supabase/v36.sql (WhatsApp: aviso de resposta, resposta pelo WhatsApp do Danilo com rascunho da IA e resumo)
+# Teste do supabase/v36.sql (+ v39) (WhatsApp: aviso de resposta, resposta pelo WhatsApp do Danilo com rascunho da IA e resumo)
 # num Postgres local, SEM o banco da oficina: monta o esquema mínimo (teste/v34_esquema.sql), roda v22–v26, v32, v34 e
 # o v36 (duas vezes) e confere os cenários.
 # Rodar: PGHOST=... PGPORT=... PGUSER=postgres python3 teste/teste_v36.py
@@ -44,6 +44,7 @@ sql(f"insert into whatsapp_mensagens (msg_id, jid, telefone, de_mim, texto) valu
 sql("insert into whatsapp_mensagens (msg_id, jid, telefone, de_mim, texto, em) values ('ANTIGA2', '5527955554444@s.whatsapp.net', '5527955554444', true, 'Bom dia', now() - interval '10 hours')")
 for i in range(2):
     r = roda("supabase/v36.sql"); confere(f"v36 roda (vez {i + 1})", r.returncode == 0, r.stderr[-400:])
+    r = roda("supabase/v39.sql"); confere(f"v39 roda (vez {i + 1})", r.returncode == 0, r.stderr[-400:])
 v, _ = sql("select aviso from whatsapp_mensagens where msg_id = 'ANTIGA'")
 confere("mensagem de antes do v36 fica como antiga", v == "antiga", v)
 v, _ = sql("select round(extract(epoch from ate - now()) / 3600) from whatsapp_vigias where chave = whatsapp_chave_tel('5527955554444')")
@@ -428,6 +429,7 @@ confere("G: chave errada recusada", "inválida" in e, e[-120:])
 # ---------- 19g. rodar o v36 de novo não apaga as pendências (Codex P1) ----------
 sql(f"select whatsapp_guardar_mensagens({q([{'msg_id': 'PEND-REAPLICA', 'jid': LUIZ + '@s.whatsapp.net', 'telefone': LUIZ, 'texto': 'pendente', 'tipo': 'texto'}])})")
 r = roda("supabase/v36.sql"); v, _ = sql("select coalesce(aviso, 'nulo') from whatsapp_mensagens where msg_id = 'PEND-REAPLICA'")
+roda("supabase/v39.sql")  # v36 de novo desfaz o v39 (mesma função): roda o v39 em seguida, como no banco real
 confere("v36 de novo: pendente continua pendente", r.returncode == 0 and v == "nulo", (r.returncode, v, r.stderr[-200:]))
 sql("select whatsapp_avisos_processar(50)")
 
@@ -474,6 +476,24 @@ confere("no silêncio, a interna espera", len(para(s, DANILO)) == 0, s)
 sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"00:00\"}' where id = 1")
 s = envia_tudo(); v, _ = sql(f"select status from whatsapp_fila where id = {iid}")
 confere("fim do silêncio: sai sem esperar o dia comercial", v == "enviada", (v, s))
+# sem o motor: o agendamento de 1 minuto acorda a zap para a interna liberada fora do horário comercial (Codex P2)
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"23:59\"}' where id = 1")
+iid, _ = sql("select whatsapp_interno('aviso de sábado à noite, sem o motor')")  # nasce no silêncio: fora_horario falso
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"00:00\"}' where id = 1")
+sql("update whatsapp_conexao set dono = '', dono_ate = null, situacao = 'conectado', proximo_envio = null where id = 1")
+sql("delete from net.chamadas")
+r, _ = js("select whatsapp_avisos_minuto()", "service_role")
+v, _ = sql("select count(*) from net.chamadas where body ->> 'acao' = 'processar'")
+confere("sem o motor, fora do horário: acorda a zap para a interna", v == "1" and isinstance(r, dict) and r.get("acordou_zap") is True, (v, r))
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"23:59\"}' where id = 1")
+sql("delete from net.chamadas"); js("select whatsapp_avisos_minuto()", "service_role")
+v, _ = sql("select count(*) from net.chamadas where body ->> 'acao' = 'processar'")
+confere("no silêncio, não acorda", v == "0", v)
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"00:00\"}', dono = 'android', dono_id = 'm1', dono_ate = now() + interval '90 seconds' where id = 1")
+sql("delete from net.chamadas"); js("select whatsapp_avisos_minuto()", "service_role")
+v, _ = sql("select count(*) from net.chamadas where body ->> 'acao' = 'processar'")
+confere("com o motor na vez, não acorda a zap", v == "0", v)
+envia_tudo()
 sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
 
 # ---------- 21. permissões ----------

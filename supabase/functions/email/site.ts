@@ -1,10 +1,11 @@
-// Geradores de PDF do próprio site (os mesmos arquivos que a tela usa), carregados do endereço publicado.
-// O Supabase junta estes arquivos na hora do Deploy: depois de mudar js/pdf.js, js/boletopdf.js, js/util.js,
-// js/regras.js, js/cnab.js ou js/qr.js no site, publique a função "email" de novo para o PDF do e-mail acompanhar.
+// Geradores de PDF do próprio site (os mesmos arquivos que a tela usa), carregados do GitHub NUMA VERSÃO TRAVADA (commit).
+// O Supabase só aceita importar de alguns endereços (raw.githubusercontent.com sim; o endereço do site não).
+// Depois de mudar js/pdf.js, js/boletopdf.js, js/util.js, js/regras.js, js/cnab.js ou js/qr.js: troque o commit abaixo
+// pelo da main que tem a mudança e publique a função "email" de novo (o teste_anexos confere que o commit existe).
 // jsPDF na mesma versão do vendor/jspdf.umd.min.js do site.
 import { jsPDF } from "npm:jspdf@2.5.1";
-import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://gestao.dtcarcentroautomotivo.com.br/js/pdf.js";
-import { nomePdf, pdfBoletos } from "https://gestao.dtcarcentroautomotivo.com.br/js/boletopdf.js";
+import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/f619be3c56487af58f20adfa18c4d160085375a6/js/pdf.js";
+import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/f619be3c56487af58f20adfa18c4d160085375a6/js/boletopdf.js";
 import type { Geradores } from "./anexos.ts";
 
 (globalThis as unknown as { jspdf: unknown }).jspdf = { jsPDF };

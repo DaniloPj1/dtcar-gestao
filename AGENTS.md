@@ -115,9 +115,9 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   todos em aberto num PDF; rejeitado não vai), `{fonte:"nf", os | id}` (NF anexada à mão na O.S.), `{fonte:"rh", id}`, `{fonte:"email", id, anexo_id}`.
   Até 5 arquivos e 3 MB somados (sem Mail.ReadWrite não há sessão de upload); a prévia lista nome/tamanho/origem e os avisos (período de
   transição, O.S. não entregue, boleto pago/não registrado); o histórico (`email_envios.anexos`) guarda só os nomes. Os PDFs são gerados pelos
-  **mesmos `js/pdf.js` e `js/boletopdf.js` do site**, importados do endereço publicado (`email/site.ts`, juntados no Deploy, jsPDF 2.5.1 =
-  vendor): esses arquivos (e `util.js`, `regras.js`, `cnab.js`, `qr.js`) não podem usar `window`/`document` no carregamento; `pdf.js`
-  aceita leitor de imagem trocável (`usarLeitorImagem`). **Mudou um deles? Publique a função "email" de novo** depois do merge.
+  **mesmos `js/pdf.js` e `js/boletopdf.js` do site**, importados do GitHub (raw.githubusercontent.com) **travados num commit** da main
+  (`email/site.ts`, juntados no Deploy, jsPDF 2.5.1 = vendor; o Supabase recusa importar do endereço do site: "Requires import access"): esses arquivos (e `util.js`, `regras.js`, `cnab.js`, `qr.js`) não podem usar `window`/`document` no carregamento; `pdf.js`
+  aceita leitor de imagem trocável (`usarLeitorImagem`). **Mudou um deles? Troque o commit no `site.ts` pelo da main com a mudança e publique a função "email" de novo.**
   Datas de `util.js` sempre no fuso de Brasília (a função roda em UTC). Teste: `deno run -A teste/teste_anexos.ts` (PDFs de verdade).
 - **NF anexada à O.S. (v33), O.S. › Documentos › NF:** PDF e XML da nota emitida no ObjetivaWeb (o sistema não emite NF), tabela `os_notas`
   + pasta privada `notas`, ligadas pelo **número** da O.S. (sem chave estrangeira; preservada pelo espelho: documento fiscal real), só

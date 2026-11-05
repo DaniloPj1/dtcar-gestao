@@ -22,6 +22,8 @@ function Cabecalho({ titulo, numero, direita }) {
 }
 /** Campo impresso só quando preenchido */
 const Par = ({ r, v, largo }) => v === null || v === undefined || String(v).trim() === "" || v === "—" ? null : html`<div class=${"imp-par" + (largo ? " largo" : "")}><span>${r}</span><b>${v}</b></div>`;
+/** Campo em linha corrida (quadros compactos de cliente e veículo), só quando preenchido */
+const Inl = ({ r, v }) => v === null || v === undefined || String(v).trim() === "" || v === "—" ? null : html`<span class="imp-inl"><span>${r}</span> <b>${v}</b></span>`;
 function Assinatura({ nome, img, rotulo }) {
   return html`<div class="imp-assin">${img ? html`<${Foto} caminho=${img} alt="Assinatura" />` : html`<div class="imp-linha-assin"></div>`}<span>${rotulo}${nome ? ": " + nome : ""}</span></div>`;
 }
@@ -53,14 +55,15 @@ function ViaOS({ o, cli, vei, valores, via, nVias }) {
   const linhasTot = [["Produtos", t.pecas], ["Serviços", t.servicos], ["Serviços de terceiros", t.terceiros], ["Desconto", -t.desconto]].filter(([, v]) => Number(v));
   return html`<article class="folha os-a4">
     <${Cabecalho} titulo=${orc ? "ORÇAMENTO" : "ORDEM DE SERVIÇO"} numero=${n5(o.numero)} direita=${html`<span>${fmtDataHora(o.criado_em)}</span>${nVias > 1 ? html`<em>${via === 1 ? "Via do cliente" : "Via da oficina"}</em>` : null}`} />
-    <section class="imp-duas">
-      <div class="imp-bloco"><h4>Cliente</h4><div class="imp-grade g2">
-        <${Par} r="Nome" v=${o.cliente.nome + (cli && cli.codigo ? " (cód. " + cli.codigo + ")" : "")} largo /><${Par} r="CPF/CNPJ" v=${fmtDoc(o.cliente.doc || (cli && cli.doc) || "")} />
-        <${Par} r="Telefone" v=${tels} /><${Par} r="Endereço" v=${endereco} largo /><${Par} r="Contato" v=${o.contato} /></div></div>
-      <div class="imp-bloco"><h4>Veículo</h4><div class="imp-grade g2">
-        <${Par} r="Placa" v=${exPlaca(o.veiculo.placa)} /><${Par} r="Veículo" v=${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")} />
-        <${Par} r="Ano" v=${o.veiculo.ano} /><${Par} r="Cor" v=${o.veiculo.cor} /><${Par} r="KM" v=${o.km_entrada != null ? fmtKm(o.km_entrada) : ""} />
-        <${Par} r="Combustível" v=${(vei && vei.combustivel) || o.veiculo.motor} /><${Par} r="Box" v=${o.box} /><${Par} r="Chassi" v=${vei && vei.chassi} /></div></div>
+    <section class="imp-duas imp-comp">
+      <div class="imp-bloco"><h4>Cliente</h4>
+        <div class="imp-l"><b class="imp-dest">${o.cliente.nome}</b>${cli && cli.codigo ? html`<span class="imp-cod">(cód. ${cli.codigo})</span>` : null}</div>
+        <div class="imp-l"><${Inl} r="CPF/CNPJ" v=${fmtDoc(o.cliente.doc || (cli && cli.doc) || "")} /><${Inl} r="Tel." v=${tels} /><${Inl} r="Contato" v=${o.contato} /></div>
+        <div class="imp-l"><${Inl} r="End." v=${endereco} /></div></div>
+      <div class="imp-bloco"><h4>Veículo</h4>
+        <div class="imp-l"><b class="imp-dest">${exPlaca(o.veiculo.placa)}</b><b>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")}</b></div>
+        <div class="imp-l"><${Inl} r="Ano" v=${o.veiculo.ano} /><${Inl} r="Cor" v=${o.veiculo.cor} /><${Inl} r="KM" v=${o.km_entrada != null ? fmtKm(o.km_entrada) : ""} />
+          <${Inl} r="Comb." v=${(vei && vei.combustivel) || o.veiculo.motor} /><${Inl} r="Box" v=${o.box} /><${Inl} r="Chassi" v=${vei && vei.chassi} /></div></div>
     </section>
     ${o.reclamacao || o.diagnostico ? html`<section class="imp-bloco imp-texto">
       ${o.reclamacao ? html`<p><b>Reclamação:</b> ${o.reclamacao}</p>` : null}${o.diagnostico ? html`<p><b>Diagnóstico:</b> ${o.diagnostico}</p>` : null}</section>` : null}

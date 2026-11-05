@@ -442,7 +442,7 @@ export function Ordem({ id, params = {} }) {
     const atual = await api.ordem(o.id);
     const gerar = { entrada: pdfEntrada, orcamento: pdfOrcamento, os: pdfOS }[qual];
     const nomes = { entrada: "Checklist", orcamento: "Orcamento", os: "OS" };
-    const blob = await gerar(atual, cfg);
+    const blob = await gerar(atual, cfg, { cli: dados.clientes.find(c => c.id === atual.cliente_id), vei: dados.veiculos.find(v => v.id === atual.veiculo_id) });
     await entregarArquivo(blob, `${nomes[qual]}_${String(o.numero).padStart(5, "0")}_${o.veiculo.placa}.pdf`);
   });
   const imprimir = async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo: "imprimir" }); };

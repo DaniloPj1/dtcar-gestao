@@ -6,7 +6,7 @@
 import { jsPDF } from "npm:jspdf@2.5.1";
 import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/pdf.js";
 import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/boletopdf.js";
-import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/COMMIT_MENSAGENS/js/mensagens.js";
+import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/aa706e82046cbfca7b3fb4c52d7c90810985ccca/js/mensagens.js";
 import type { Geradores } from "./anexos.ts";
 export { mensagens };
 

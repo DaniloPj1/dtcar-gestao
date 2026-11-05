@@ -2,7 +2,7 @@
 // Cada ferramenta chama uma função do banco (supabase/v20.sql) com o cliente do Supabase
 // já autenticado como o usuário que autorizou o conector: as regras de acesso valem e as
 // funções exigem administrador. Nada aqui apaga, paga ou mexe em conta paga.
-// Gravação: abrir_os (v20), lancar_itens_os (v21/v27), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina;
+// Gravação: abrir_os (v20), lancar_itens_os (v21/v27), receber_os (v36: recibo e baixa de O.S. entregue a receber), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina;
 // v34: modelo de mensagem e PDF pela função "email")
 // e email_enviar/email_responder/email_regra (v29: e-mail da oficina pela função "email").
 import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
@@ -25,6 +25,9 @@ Responda ao Danilo em português do Brasil, curto e direto.
 - Se a prévia trouxer "erros", pergunte só o que falta. Nunca invente telefone, ano, km ou reclamação.
 - Foto de cupom, pré-venda ou pedido de fornecedor que o Danilo mandar: registre com registrar_pre_nota (fornecedor, nº do documento,
   data e total já com desconto; O.S. se for para uma). Sem guardar a foto. pre_notas lista por fornecedor e período para conferir no acerto.
+- receber_os: "fulano pagou" → recibo e baixa da O.S. entregue a receber (fecha sozinha quando quita). Mexe em dinheiro: SEMPRE chame
+  primeiro com confirmar=false, mostre O.S., cliente, valor, forma, conta de entrada e data, e só grave (confirmar=true) depois do "sim" do Danilo.
+  Nunca invente forma de pagamento: se ele não disse, pergunte. Conta e valor: os da prévia, salvo se ele disser outros.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
 - whatsapp_enviar ENVIA de verdade pelo WhatsApp da oficina (fila com horário comercial e intervalo). Só com ordem do Danilo para
   aquele cliente. Texto ditado ou aprovado por ele: confirmar=true. Texto que você redigiu: mostre e espere o "sim" antes de confirmar.
@@ -186,6 +189,33 @@ export function criarServidor(db: Banco): McpServer {
     if (error) return falha(error.message);
     const r = d as { id?: string };
     return texto(r.id ? { ...r, abrir_no_sistema: SITE + "/#/os/" + r.id } : r);
+  });
+
+  // ---------- Receber O.S. (v36) ----------
+  s.registerTool("receber_os", {
+    title: "Receber pagamento da O.S. (recibo e baixa)",
+    description: "Registra o pagamento de uma O.S. ENTREGUE a receber: emite o recibo (forma, conta de entrada, data), baixa as parcelas a receber " +
+      "da mais antiga para a mais nova e, quitando o total, a O.S. vira Fechada sozinha (o mesmo que o botão Receber e finalizar da tela). " +
+      "Sem valor = o saldo que falta. Sem conta = a sugestão do sistema (dinheiro → Espécie; o resto → conta padrão de recebimento). " +
+      "O.S. no pátio (veículo não entregue), em orçamento, execução, fechada ou cancelada é recusada. " +
+      "Mexe em dinheiro: SEMPRE primeiro confirmar=false, mostre a prévia ao Danilo e só grave com confirmar=true depois do sim dele. " +
+      "Várias O.S.: uma chamada por O.S.",
+    inputSchema: z.object({
+      numero: z.number().int().positive().describe("Número da O.S."),
+      forma: z.string().min(2).describe("Forma de pagamento que o Danilo disse (ex.: Dinheiro, PIX, Cartão de débito). Nunca invente"),
+      conta: z.string().optional().describe("Conta em que o dinheiro entrou (ex.: Espécie, Sicredi, PicPay PJ). Sem ela, vale a sugestão do sistema"),
+      valor: z.number().positive().optional().describe("Valor recebido em reais. Sem ele, o saldo que falta (quita a O.S.)"),
+      data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().describe("Data do pagamento AAAA-MM-DD (padrão: hoje). Nunca no futuro"),
+      receber_mesmo_repetido: z.boolean().optional().describe("true só se o Danilo confirmou lançar de novo um recibo igual feito há menos de 10 minutos"),
+      pedido: z.string().optional().describe("O pedido do Danilo, resumido, para o histórico"),
+      confirmar: z.boolean().default(false),
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async ({ confirmar, ...p }) => {
+    const { data: d, error } = await db.rpc("agente_receber_os", { p, p_gravar: confirmar === true });
+    if (error) return falha(error.message);
+    const r = d as { id?: string; recibo_id?: string };
+    return texto({ ...r, ...(r.id ? { abrir_no_sistema: SITE + "/#/os/" + r.id } : {}), ...(r.recibo_id ? { imprimir_recibo: SITE + "/#/imprimir/recibo/" + r.recibo_id } : {}) });
   });
 
   // ---------- Pedidos de compra por fornecedor (v31) ----------

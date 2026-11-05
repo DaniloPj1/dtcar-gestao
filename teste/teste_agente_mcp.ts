@@ -47,12 +47,12 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
 const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "notas_da_sefaz", "pre_notas", "preparar_envio", "registrar_pre_nota", "saldos_das_contas",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "notas_da_sefaz", "pre_notas", "preparar_envio", "receber_os", "registrar_pre_nota", "saldos_das_contas",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("25 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("26 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
+confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
@@ -93,6 +93,17 @@ c = await chama("lancar_itens_os", { numero: 1904, itens: [] });
 confere("lancar_itens_os sem itens é recusado", c.r?.isError === true || !c.fn);
 c = await chama("lancar_itens_os", { numero: 1904, itens: [{ tipo: "peca", descricao: "x", valor_unit: -1 }] });
 confere("valor negativo é recusado", c.r?.isError === true || !c.fn);
+// receber O.S. (v37)
+c = await chama("receber_os", { numero: 1868, forma: "Dinheiro" });
+confere("receber_os sem confirmar = só prévia", c.fn === "agente_receber_os" && c.args?.p_gravar === false && (c.args?.p as Record<string, unknown>)?.numero === 1868 && (c.args?.p as Record<string, unknown>)?.forma === "Dinheiro");
+c = await chama("receber_os", { numero: 1868, forma: "Dinheiro", conta: "Espécie", valor: 150, data: "2026-11-05", confirmar: true });
+confere("receber_os com confirmar=true grava (sem 'confirmar' no pedido)", c.args?.p_gravar === true && !("confirmar" in (c.args?.p as object)) && (c.args?.p as Record<string, unknown>)?.valor === 150);
+c = await chama("receber_os", { numero: 1868 });
+confere("receber_os sem forma de pagamento é recusado", c.r?.isError === true || !c.fn);
+c = await chama("receber_os", { numero: 1868, forma: "PIX", data: "05/11/2026" });
+confere("receber_os com data fora do padrão é recusado", c.r?.isError === true || !c.fn);
+c = await chama("receber_os", { numero: 1868, forma: "PIX", valor: -5 });
+confere("receber_os com valor negativo é recusado", c.r?.isError === true || !c.fn);
 // pedidos de compra por fornecedor (v31)
 const ped = { fornecedor: "Biancardi", fornecedor_cnpj: "20.149.617/0003-42", documento: "PV 57941", data: "2026-11-03", total: 250.74, os_numero: 1854 };
 c = await chama("registrar_pre_nota", ped);

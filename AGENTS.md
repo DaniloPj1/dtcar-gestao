@@ -122,10 +122,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
   **v38 (05/11/2026): pacote de mensagens para o mesmo número.** O intervalo de 25–70 s vale entre contatos; se a próxima que a fila vai
   pegar (mesma ordem da `whatsapp_pegar_proxima`: `interno` primeiro, depois `id`) é para o MESMO número e entrou até 5 min depois da que
-  acabou de sair, o intervalo é 3 s (`whatsapp_pacote_segue`, usada pela `whatsapp_resultado` e pelo gatilho `whatsapp_fila_pacote`, que
+  acabou de sair e pode sair agora (PARAR, horário e limites, como na retirada), o intervalo é 3 s (`whatsapp_pacote_segue`, usada pela `whatsapp_resultado` e pelo gatilho `whatsapp_fila_pacote`, que
   encurta o intervalo quando a seguinte entra na fila depois de a anterior sair). Trava: 6 seguidas por número em 5 min. Falha no meio =
   intervalo normal. Limites, horário e PARAR não mudam. Motor 3.4 (`enviarSeguidas`): manda o pacote no mesmo sinal (espera intervalos de
-  até 5 s; não começa outra 20 s depois do último sinal confirmado, para a guarda da vez não vencer). Teste: `python3 teste/teste_v38.py`.
+  até 5 s; antes de cada envio confere se passaram 20 s do último sinal confirmado, para a guarda da vez não vencer). Teste: `python3 teste/teste_v38.py`.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
   (instalação num HOME temporário).

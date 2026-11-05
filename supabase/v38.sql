@@ -27,16 +27,28 @@ begin
   end if;
 end $$;
 
--- A mensagem p_ant (já enviada) e a próxima que a fila vai pegar (mesma ordem da whatsapp_pegar_proxima) formam um pacote?
+-- A mensagem p_ant (já enviada) e a próxima que a fila vai pegar formam um pacote?
+-- "A próxima" = a primeira pendente na ordem da whatsapp_pegar_proxima (interno primeiro, depois id). Só é pacote se ela
+-- for do mesmo número E puder sair agora pelos mesmos critérios da retirada (PARAR, horário, limites por hora/dia);
+-- se ela não puder sair, a retirada pularia para outro contato — e esse outro não pode ganhar o intervalo curto.
 create or replace function public.whatsapp_pacote_segue(p_ant public.whatsapp_fila) returns boolean
 language plpgsql stable security definer set search_path = public as $$
-declare prox public.whatsapp_fila; n int;
+declare prox public.whatsapp_fila; c public.whatsapp_conexao; n int; v_hora int; v_dia int;
 begin
   if p_ant.id is null or p_ant.status <> 'enviada' then return false; end if;
   select * into prox from public.whatsapp_fila
    where status = 'pendente' and (liberar_em is null or liberar_em <= now())
    order by interno desc, id limit 1;
   if prox.id is null or prox.telefone <> p_ant.telefone or prox.criado_em > p_ant.criado_em + interval '5 minutes' then return false; end if;
+  select * into c from public.whatsapp_conexao where id = 1;
+  if not (public.whatsapp_no_horario(c.regras) or prox.fora_horario) then return false; end if;
+  if not prox.interno then
+    if exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(prox.telefone)) then return false; end if;
+    select count(*) filter (where enviada_em > now() - interval '1 hour'),
+           count(*) filter (where enviada_em >= date_trunc('day', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo')
+      into v_hora, v_dia from public.whatsapp_fila where status = 'enviada' and not interno and enviada_em > now() - interval '1 day';
+    if v_hora >= coalesce((c.regras ->> 'por_hora')::int, 20) or v_dia >= coalesce((c.regras ->> 'por_dia')::int, 80) then return false; end if;
+  end if;
   select count(*) into n from public.whatsapp_fila
    where status = 'enviada' and telefone = p_ant.telefone and enviada_em > now() - interval '5 minutes';
   return n < 6;

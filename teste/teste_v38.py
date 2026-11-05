@@ -110,6 +110,24 @@ sql(f"update whatsapp_fila set pego_em = now() - interval '1 minute', status = '
 poe(VALMIR, "intervalo já livre"); v, _ = sql("select proximo_envio is null from whatsapp_conexao where id = 1")
 confere("intervalo já livre: o gatilho não marca nada", v == "t", v)
 
+# 8) a próxima do mesmo número não pode sair agora (PARAR, limite, fora do horário): sem intervalo curto
+sql("update whatsapp_fila set status = 'cancelada' where status = 'pendente'")
+sql("update whatsapp_fila set enviada_em = now() - interval '2 hours', pego_em = now() - interval '2 hours' where status in ('enviada', 'erro')")
+x, y, z = poe(VALMIR, "q1"), poe(VALMIR, "q2"), poe(OUTRO, "q3")
+pega(); sql(f"insert into whatsapp_optout (telefone) values (whatsapp_chave_tel('{VALMIR}'))")
+resultado(x); i = intervalo(); confere("PARAR no meio do pacote: intervalo normal (o outro contato não ganha 3 s)", 24 <= i <= 70, i)
+sql(f"delete from whatsapp_optout where telefone = whatsapp_chave_tel('{VALMIR}')")
+sql("update whatsapp_fila set status = 'cancelada' where status = 'pendente'")
+x, y = poe(VALMIR, "r1"), poe(VALMIR, "r2")
+pega(); sql("update whatsapp_conexao set regras = regras || '{\"por_hora\": 1}'::jsonb where id = 1")
+resultado(x); i = intervalo(); confere("limite por hora atingido: intervalo normal", 24 <= i <= 70, i)
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
+sql("update whatsapp_fila set status = 'cancelada' where status = 'pendente'")
+x, y = poe(VALMIR, "s1"), poe(VALMIR, "s2")
+pega(); sql("update whatsapp_conexao set regras = regras || '{\"dias\": []}'::jsonb where id = 1")
+resultado(x); i = intervalo(); confere("fora do horário: intervalo normal", 24 <= i <= 70, i)
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
+
 # permissões
 v, _ = sql("select has_function_privilege('authenticated', 'public.whatsapp_resultado(text, text, bigint, boolean, text, text, text)', 'execute')")
 confere("authenticated não chama whatsapp_resultado", v == "f", v)

@@ -358,9 +358,11 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
    *  Para quando o intervalo for o normal, ou PACOTE_MS depois do último sinal confirmado (o sinal seguinte continua). */
   async function enviarSeguidas() {
     for (let i = 0; i < PACOTE_MAX; i++) {
+      // conta do último sinal confirmado, ANTES de cada envio (inclusive depois de uma espera): a guarda da vez
+      // (SEM_PULSO_MS) não pode vencer no meio de um envio. O primeiro sempre pode (o sinal acabou de ser confirmado).
+      if (i > 0 && agora() - st.ultimoPulsoOk > PACOTE_MS) return;
       const r = await enviarDaFila();
-      // conta do último sinal confirmado: a guarda da vez (SEM_PULSO_MS) não pode vencer no meio do pacote
-      if (!r || !st.aberto || agora() - st.ultimoPulsoOk > PACOTE_MS) return;
+      if (!r || !st.aberto) return;
       if (!r.enviou) {
         // o banco ainda não liberou: só espera se faltar pouco (o intervalo do pacote é 3 s)
         if (!(r.espera > 0 && r.espera <= PACOTE_ESPERA_MS)) return;

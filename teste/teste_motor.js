@@ -273,6 +273,11 @@ function sessaoVinculada(b) {
   await m.pulso(); b.buscar = orig;
   confere("pacote: passou do tempo do sinal, a seguinte fica para o próximo sinal", b.fila.find((x) => x.id === 7).status === "enviada" && b.fila.find((x) => x.id === 8).status === "pendente" && esperas.length === m2esperas, velho);
   b.agora += 1000; await m.pulso(); confere("pacote: o sinal seguinte continua o pacote", b.fila.find((x) => x.id === 8).status === "enviada");
+  // a espera curta atravessa o prazo do sinal: não começa outro envio depois dela
+  b.agora += 41000; b.fila.push({ id: 9, telefone: tel, texto: "e", status: "pendente" }, { id: 10, telefone: tel, texto: "f", status: "pendente" });
+  const orig2 = b.buscar; b.buscar = async (u, o) => { if (u.endsWith("whatsapp_motor_resultado")) b.agora += 18000; return orig2(u, o); };
+  const m3 = esperas.length; await m.pulso(); b.buscar = orig2;
+  confere("pacote: espera que passa do prazo não emenda outro envio", b.fila.find((x) => x.id === 9).status === "enviada" && b.fila.find((x) => x.id === 10).status === "pendente" && esperas.length === m3 + 1, JSON.stringify(esperas.slice(m3)));
   await m.encerrar();
 }
 

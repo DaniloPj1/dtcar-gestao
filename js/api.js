@@ -263,7 +263,8 @@ function criarApiSupabase() {
       // fila e mensagens (v25)
       fila: async () => {
         const cols = "id,telefone,cliente_nome,texto,status,erro,criado_em,enviada_em,origem,ordem_numero,fora_horario";
-        let r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em").order("id", { ascending: false }).limit(20);
+        let r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em,arquivo,modelo").order("id", { ascending: false }).limit(20);
+        if (r.error && /column|arquivo|modelo/i.test(r.error.message)) r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em").order("id", { ascending: false }).limit(20); // sem o v34
         if (r.error && /column|entrega|lida_em/i.test(r.error.message)) r = await sb.from("whatsapp_fila").select(cols).order("id", { ascending: false }).limit(20); // sem o v32
         return ok(r); },
       // v32: alertas (faixa do administrador), número que recebe os avisos, resumo (sem resposta) e fotos recebidas

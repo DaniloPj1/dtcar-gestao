@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -122,24 +122,30 @@ confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{
 // cópia igual à do motor (mesmo código, fora a tipagem)
 const motorJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
 const zapTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
-const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar| as string/g, "").replace(/\s+/g, " "); };
-for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "midiaParaBaixar", "variacoes", "jidParaEnvio"]) {
+const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar|: \(ms: number\) => Promise<void>| as string/g, "").replace(/\s+/g, " "); };
+for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo"]) {
   const a = nucleo(motorJs, f).replace(/\(x\)/g, "x"), b = nucleo(zapTs, f).replace(/\(x\)/g, "x").replace(/x =>/g, "x =>");
   confere("cópia igual no motor e na zap: " + f, a.length > 50 && a.replace(/[()]/g, "") === b.replace(/[()]/g, ""), a.length + "/" + b.length);
 }
 
 // ---------- v32: mídia (Groq e pasta de fotos simulados) ----------
 {
-  const chamadas: any[] = []; let gravada = true; const enviados: any[] = []; const removidos: any[] = [];
+  const chamadas: any[] = []; let gravada = true; const enviados: any[] = []; const removidos: any[] = []; const envioApagado: string[] = []; const links: any[] = [];
   const adm = { rpc: async (f: string, a: any) => { chamadas.push([f, a]);
       if (f === "whatsapp_guardar_midia") return { data: gravada, error: null };
       if (f === "whatsapp_motor_conferir") return a.p_chave === "dtm_" + "b".repeat(64) ? { data: null, error: null } : { data: null, error: { message: "Chave do motor inválida" } };
       if (f === "whatsapp_midia_vencida") return { data: ["2026/10/x.jpg"], error: null };
       if (f === "whatsapp_midia_apagada") return { data: a.p_paths.length, error: null };
+      if (f === "whatsapp_envio_vencido") return { data: ["2026/09/" + "a".repeat(8) + "-0000-4000-8000-000000000000.pdf"], error: null };
+      if (f === "whatsapp_envio_apagado") { envioApagado.push(...a.p_paths); return { data: a.p_paths.length, error: null }; }
+      if (f === "whatsapp_motor_arquivo") return a.p_fila_id === 7 ? { data: { path: "2026/11/p.pdf", nome: "OS_01887.pdf", tipo: "application/pdf", bytes: 9 }, error: null }
+        : { data: null, error: { message: "Mensagem " + a.p_fila_id + " não está sendo enviada pelo motor." } };
       return { data: null, error: null }; },
     from: (_t: string) => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { valor: "segredo-cron" } }) }) }) }),
     storage: { from: (_b: string) => ({ upload: async (p: string, b: Uint8Array, o: any) => { enviados.push([p, b.length, o.contentType]); return { error: null }; },
-                                        remove: async (l: string[]) => { removidos.push(...l); return { error: null }; } }) } };
+                                        remove: async (l: string[]) => { removidos.push(...l); return { error: null }; },
+                                        createSignedUrl: async (p: string, seg: number) => { links.push([_b, p, seg]); return { data: { signedUrl: "https://x.supabase.co/storage/v1/object/sign/" + _b + "/" + p + "?token=t" }, error: null }; },
+                                        download: async (p: string) => p === "2026/11/p.pdf" ? { data: new Blob([new TextEncoder().encode("%PDF-1.4x")]), error: null } : { data: null, error: { message: "not found" } } }) } };
   const ultima = () => chamadas.filter((c) => c[0] === "whatsapp_guardar_midia").at(-1)?.[1].p;
   Deno.env.delete("GROQ_API_KEY");
   let r = await tratarMidia(adm, { msg_id: "A1", tipo: "audio", mime: "audio/ogg", segundos: 9, bytes: new Uint8Array(100) });
@@ -179,6 +185,26 @@ for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "midiaPara
   resp = await atenderAgendamento(pedidoMotor({ "x-dtcar-cron": "segredo-cron" }, { acao: "limpar_midia" }), adm);
   const jr = await resp.json();
   confere("agendamento limpa as fotos vencidas", resp.status === 200 && jr.apagadas === 1 && removidos.includes("2026/10/x.jpg"), JSON.stringify(jr));
+  confere("v34: agendamento limpa também os PDFs de 30+ dias e marca na fila", jr.pdfs_apagados === 1 && envioApagado.length === 1 && removidos.some((x) => x.endsWith(".pdf")), JSON.stringify(jr));
+  // v34: link do PDF para o motor
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "b".repeat(64) }, { acao: "arquivo", fila_id: 7 }), adm);
+  const jl = await resp.json();
+  confere("v34: motor pede o PDF da mensagem que pegou: link de 2 min da pasta whatsapp-envio", resp.status === 200 && /whatsapp-envio\/2026\/11\/p\.pdf/.test(jl.url) && jl.bytes === 9
+    && links.at(-1)[0] === "whatsapp-envio" && links.at(-1)[2] === 120, JSON.stringify(jl));
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "b".repeat(64) }, { acao: "arquivo", fila_id: 8 }), adm);
+  confere("v34: mensagem que o motor não pegou: sem link", resp.status === 403 && links.length === 1, String(resp.status));
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "c".repeat(64) }, { acao: "arquivo", fila_id: 7 }), adm);
+  confere("v34: chave errada não ganha link", resp.status === 401 && links.length === 1, String(resp.status));
+  resp = await atenderMotor(pedidoMotor({ "x-dtcar-motor": "dtm_" + "b".repeat(64) }, { acao: "arquivo", fila_id: "1; drop" }), adm);
+  confere("v34: fila_id inválido", resp.status === 400);
+  const pd = await pdfDaPasta(adm, { path: "2026/11/p.pdf", nome: "OS_01887.pdf", bytes: 9 });
+  confere("v34: processar lê o PDF da pasta e confere", pd.nome === "OS_01887.pdf" && pd.dados.length === 9);
+  let erroPdf = ""; try { await pdfDaPasta(adm, { path: "2026/11/p.pdf", nome: "x.pdf", bytes: 50 }); } catch (e) { erroPdf = (e as Error).message; }
+  confere("v34: PDF de tamanho diferente não sai", /tamanho diferente/.test(erroPdf), erroPdf);
+  // envio: texto e depois o documento (cópia do motor)
+  const env: any[] = []; const sock = { presenceSubscribe: async () => {}, sendPresenceUpdate: async () => {}, sendMessage: async (j: string, c: any) => { env.push(c); return { key: { id: "Z" + env.length } }; } };
+  const idz = await enviarComArquivo(sock, "x@s.whatsapp.net", "Olá", pd, async () => {});
+  confere("v34: zap manda texto e depois o PDF", idz === "Z1" && env[0].text === "Olá" && env[1].fileName === "OS_01887.pdf" && env[1].mimetype === "application/pdf" && env[1].document.length === 9, JSON.stringify(env.map((x) => Object.keys(x))));
   Deno.env.delete("GROQ_API_KEY");
 }
 

@@ -1,7 +1,7 @@
 // Teste do motor do WhatsApp (motor-zap/motor.js) sem rede: banco e WhatsApp simulados.
 // Rodar: (cd motor-zap && npm ci) && node teste/teste_motor.js
 import { criarMotor, vinculado, lerConfig } from "../motor-zap/motor.js";
-import { paraGuardar, variacoes, jidParaEnvio, enviarTexto, midiaParaBaixar } from "../motor-zap/whats.js";
+import { paraGuardar, variacoes, jidParaEnvio, enviarTexto, midiaParaBaixar, pdfConfere } from "../motor-zap/whats.js";
 import { readFileSync } from "node:fs";
 import { DisconnectReason } from "../motor-zap/node_modules/baileys/lib/index.js";
 import { writeFileSync, mkdtempSync } from "node:fs";
@@ -15,7 +15,7 @@ const CHAVE = "dtm_" + "a".repeat(64);
 // ---------- banco simulado com as mesmas regras do v24 ----------
 function banco() {
   const b = { sessao: new Map(), con: { situacao: "conectado", numero: "", dono: "", dono_id: null, dono_ate: 0, pedido: null, detalhe: "" },
-    chamadas: [], fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0 };
+    chamadas: [], pdfs: {}, fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0 };
   const erro = (msg, code) => ({ ok: false, status: 400, text: async () => JSON.stringify({ message: msg, code }) });
   const resp = (v) => ({ ok: true, status: 200, text: async () => (v === undefined ? "" : JSON.stringify(v)) });
   b.buscar = async (url, op) => {
@@ -23,7 +23,16 @@ function banco() {
       const a = JSON.parse(op.body); b.chamadas.push("zap:" + a.acao);
       if (op.headers.apikey !== "pub" || op.headers["x-dtcar-motor"] !== b.chaveValida) return { ok: false, status: 401, text: async () => '{"erro":"chave"}' };
       if (b.zapFalha > 0) { b.zapFalha--; return { ok: false, status: 500, text: async () => '{"erro":"falhou"}' }; }
+      if (a.acao === "arquivo") { // v34: link temporário do PDF, só da mensagem "enviando"
+        const f = b.fila.find((x) => x.id === a.fila_id);
+        if (!f || f.status !== "enviando" || !f.arquivo) return { ok: false, status: 403, text: async () => '{"erro":"não está sendo enviada"}' };
+        return resp({ url: "https://pasta.teste/" + f.arquivo.path, nome: f.arquivo.nome, tipo: "application/pdf", bytes: f.arquivo.bytes });
+      }
       b.midias.push(a); return resp({ ok: true });
+    }
+    if (url.startsWith("https://pasta.teste/")) { // v34: download do PDF pelo link temporário
+      b.chamadas.push("pdf"); const x = b.pdfs[url.slice(20)];
+      return x ? { ok: true, status: 200, arrayBuffer: async () => x.buffer.slice(x.byteOffset, x.byteOffset + x.byteLength) } : { ok: false, status: 404 };
     }
     const nome = url.split("/rpc/")[1]; const a = JSON.parse(op.body); b.chamadas.push(nome);
     if (op.headers.apikey !== "pub" || op.headers.authorization) return erro("cabeçalho errado");
@@ -45,7 +54,7 @@ function banco() {
     if (nome === "whatsapp_motor_resultado") { b.resultados.push(a); const f = b.fila.find((x) => x.id === a.p_fila_id); if (f) f.status = a.p_ok ? "enviada" : "erro"; return resp(); }
     if (nome === "whatsapp_motor_soltar") { if (b.con.dono_id === a.p_id) b.con.dono_ate = 0; return resp(); }
     if (!comVez()) return erro("O motor não está com a vez da conexão.", "55000");
-    if (nome === "whatsapp_motor_proxima") { const f = b.fila.find((x) => x.status === "pendente"); if (!f) return resp({ motivo: "fila vazia" }); f.status = "enviando"; return resp({ mensagem: { id: f.id, telefone: f.telefone, texto: f.texto } }); }
+    if (nome === "whatsapp_motor_proxima") { const f = b.fila.find((x) => x.status === "pendente"); if (!f) return resp({ motivo: "fila vazia" }); f.status = "enviando"; return resp({ mensagem: { id: f.id, telefone: f.telefone, texto: f.texto, arquivo: f.arquivo || null } }); }
     if (nome === "whatsapp_motor_ler") return resp(Object.fromEntries(a.p_chaves.filter((k) => b.sessao.has(k)).map((k) => [k, JSON.parse(b.sessao.get(k))])));
     if (nome === "whatsapp_motor_gravar") { for (const k in a.p_poe) b.sessao.set(k, JSON.stringify(a.p_poe[k])); for (const k of a.p_tira) b.sessao.delete(k); b.sessaoEm = b.agora; return resp(new Date(b.agora).toISOString()); }
     if (nome === "whatsapp_motor_apagar_sessao") { b.sessao.clear(); if (a.p_detalhe != null) Object.assign(b.con, { situacao: "desligado", numero: "", pedido: null, detalhe: a.p_detalhe }); return resp(); }
@@ -70,7 +79,8 @@ function fabrica() {
       enviadas: [], presencas: [], semWhats: new Set(), so8: new Set(),
       onWhatsApp: async (n) => [{ exists: !s.semWhats.has(n) && !(s.so8.has(n.slice(0, 4) + "9" + n.slice(4)) === false && s.so8.size && !s.so8.has(n)), jid: n + "@s.whatsapp.net" }],
       presenceSubscribe: async () => {}, sendPresenceUpdate: async (p, j) => { s.presencas.push(p); },
-      sendMessage: async (jid, c) => { if (s.falhaEnvio) throw new Error("sem rede"); s.enviadas.push({ jid, texto: c.text }); return { key: { id: "M" + s.enviadas.length } }; } };
+      sendMessage: async (jid, c) => { if (s.falhaEnvio || (c.document && s.falhaDoc)) throw new Error("sem rede");
+        s.enviadas.push({ jid, texto: c.text, doc: c.document ? { nome: c.fileName, tipo: c.mimetype, n: c.document.length } : null }); return { key: { id: "M" + s.enviadas.length } }; } };
     f.sockets.push(s); return s;
   };
   return f;
@@ -356,6 +366,33 @@ function sessaoVinculada(b) {
   confere("chave revogada: para", m.st.chaveRuim && !m.st.sock);
   arquivo = { chave: b.chaveValida }; b.con.dono_ate = 0; await m.pulso(); await espera();
   confere("chave nova no arquivo: volta a funcionar sem reiniciar", !m.st.chaveRuim && f.sockets.length === 2);
+  await m.encerrar();
+}
+
+// 4d) v34: mensagem com PDF — baixa pelo link da zap, confere, manda o texto e logo depois o documento
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); const m = novo(b, f);
+  const pdf = new TextEncoder().encode("%PDF-1.4 orçamento da O.S. 1887");
+  b.pdfs["2026/11/a.pdf"] = pdf; b.pdfs["2026/11/b.pdf"] = pdf; b.pdfs["2026/11/ruim.pdf"] = new TextEncoder().encode("<html>erro</html>");
+  const arq = (path, n = pdf.length) => ({ path, nome: "Orcamento_01887_ABC1D23.pdf", tipo: "application/pdf", bytes: n });
+  b.fila.push({ id: 1, telefone: "5527999112233", texto: "Segue o orçamento.", arquivo: arq("2026/11/a.pdf"), status: "pendente" });
+  await m.pulso(); await espera(); const s = f.sockets[0];
+  await s.emitir("connection.update", { connection: "open" }); await espera(); await m.pulso();
+  confere("PDF: texto e depois o documento (nome e tipo certos)", s.enviadas.length === 2 && s.enviadas[0].texto === "Segue o orçamento." && !s.enviadas[0].doc
+    && s.enviadas[1].doc && s.enviadas[1].doc.nome === "Orcamento_01887_ABC1D23.pdf" && s.enviadas[1].doc.tipo === "application/pdf" && s.enviadas[1].doc.n === pdf.length, JSON.stringify(s.enviadas));
+  confere("PDF: resultado com o id do texto", b.resultados.at(-1).p_ok === true && b.resultados.at(-1).p_msg_id === "M1" && b.chamadas.includes("zap:arquivo") && b.chamadas.includes("pdf"));
+  b.fila.push({ id: 2, telefone: "5527999112233", texto: "", arquivo: arq("2026/11/b.pdf"), status: "pendente" }); await m.pulso();
+  confere("só o PDF: sai o documento e o id é dele", s.enviadas.length === 3 && s.enviadas[2].doc && b.resultados.at(-1).p_ok && b.resultados.at(-1).p_msg_id === "M3");
+  b.fila.push({ id: 3, telefone: "5527999112233", texto: "x", arquivo: arq("2026/11/ruim.pdf"), status: "pendente" }); await m.pulso();
+  confere("arquivo que não é PDF: nada é enviado, vira erro", s.enviadas.length === 3 && b.resultados.at(-1).p_ok === false && /nada foi enviado/.test(b.resultados.at(-1).p_erro), b.resultados.at(-1).p_erro);
+  b.fila.push({ id: 4, telefone: "5527999112233", texto: "x", arquivo: arq("2026/11/a.pdf", 999), status: "pendente" }); await m.pulso();
+  confere("PDF de tamanho diferente: nada é enviado", s.enviadas.length === 3 && /tamanho diferente/.test(b.resultados.at(-1).p_erro));
+  b.fila.push({ id: 5, telefone: "5527999112233", texto: "x", arquivo: arq("2026/11/sumiu.pdf"), status: "pendente" }); await m.pulso();
+  confere("PDF que sumiu da pasta: nada é enviado", s.enviadas.length === 3 && /HTTP 404/.test(b.resultados.at(-1).p_erro), b.resultados.at(-1).p_erro);
+  s.falhaDoc = true; b.fila.push({ id: 6, telefone: "5527999112233", texto: "Texto que sai", arquivo: arq("2026/11/a.pdf"), status: "pendente" }); await m.pulso();
+  const r = b.resultados.at(-1);
+  confere("texto saiu e o PDF não: erro com o id do texto (não reenvia)", s.enviadas.length === 4 && r.p_ok === false && r.p_msg_id === "M4" && /O texto saiu, mas o PDF não/.test(r.p_erro), JSON.stringify(r));
+  confere("pdfConfere", pdfConfere(pdf, { bytes: pdf.length }) === "" && /não é um PDF/.test(pdfConfere(new Uint8Array([1, 2, 3, 4, 5]), {})) && /vazio/.test(pdfConfere(new Uint8Array(), {})));
   await m.encerrar();
 }
 

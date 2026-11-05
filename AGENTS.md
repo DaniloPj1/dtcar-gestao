@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`). `worker/`: robô da SEFAZ (GitHub Actions).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -90,7 +90,19 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   a chave do motor, ação `midia`); áudio → Groq Whisper (`whisper-large-v3-turbo`, segredo `GROQ_API_KEY` da função zap; sem a chave, registra
   o motivo), texto vira "[áudio m:ss] ...", arquivo não guardado; foto → pasta privada `whatsapp-midia` por 30 dias (`dtcar-zap-limpar-midia`
   apaga). (5) `whatsapp_resumo().sem_resposta`: cliente escreveu por último há mais de 2 h (últimos 3 dias). Teste: `python3 teste/teste_v32.py <banco>`.
-  Próxima etapa: envio de PDF (O.S., orçamento) e modelos de mensagem.
+  **v34 (etapa 4, 05/11/2026): PDF e modelos de mensagem.** Textos das mensagens num lugar só: `js/mensagens.js` (MSG da O.S. — entrada,
+  orcamento, adicionais, pronto, entrega, cobranca — + `msgCobrancaParcela` e `msgBoasVindas`), usado pelos botões da tela (link wa.me) e pela
+  função "email" (ação `whatsapp`, `email/whatsapp.ts`), que monta o texto do modelo com os dados da O.S. e gera UM PDF (O.S./orçamento/checklist,
+  boletos em aberto da O.S. ou o PDF da NF anexada) com os mesmos `js/pdf.js`/`js/boletopdf.js`. Prévia não guarda nada; confirmado guarda o PDF na
+  pasta privada `whatsapp-envio` (`AAAA/MM/<uuid>.pdf`, só a chave de servidor) e chama `whatsapp_enfileirar` com `arquivo` {path, nome, tipo,
+  bytes, origem} e `modelo` (fila recusou → PDF apagado). `whatsapp_fila.arquivo`/`modelo`; texto pode ser vazio quando há arquivo.
+  Envio: o texto (com "digitando…") e, 2,5 s depois, o documento (`enviarComArquivo`/`pdfConfere`, cópia em whats.js e zap); PDF é baixado e
+  conferido ANTES (sem PDF, nada sai); texto saiu e o PDF não → erro com o id do texto (nunca reenvia). O motor (3.2) pede o link temporário
+  (2 min) à zap (`acao: "arquivo"`, chave do motor; `whatsapp_motor_arquivo` só libera a mensagem "enviando" pelo motor); a zap lê direto da
+  pasta. PDFs de 30+ dias saem no agendamento `dtcar-zap-limpar-midia`. Conector: `whatsapp_enviar` com `modelo` e/ou `anexo` vai pela função
+  "email"; só `texto` continua direto no `whatsapp_enfileirar`. Tela da O.S. (administrador): botões de WhatsApp abrem o quadro com "Abrir
+  WhatsApp" ou "Enviar pelo WhatsApp da oficina" (`js/telas/zapos.js`). Mudou `js/mensagens.js`? Troque o commit dele em `email/site.ts`.
+  Testes: `python3 teste/teste_v34.py` (Postgres local, sem o banco da oficina), `deno run -A teste/teste_whatsapp_pdf.ts`.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
   (instalação num HOME temporário).

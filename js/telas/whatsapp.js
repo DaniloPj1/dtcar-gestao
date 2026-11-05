@@ -102,7 +102,7 @@ export function WhatsApp() {
     <${AbasMensagens} ativa="whatsapp" />
     <div class="card">
       <h3>WhatsApp da oficina</h3>
-      <p class="sub">Conexão própria com o WhatsApp do celular da oficina, sem serviço pago. O sistema vincula o celular, mantém a conexão (motor no Android ou, sem ele, o Supabase sob demanda) e envia e guarda mensagens pela fila. Envio de PDF vem na próxima etapa.</p>
+      <p class="sub">Conexão própria com o WhatsApp do celular da oficina, sem serviço pago. O sistema vincula o celular, mantém a conexão (motor no Android ou, sem ele, o Supabase sob demanda) e envia e guarda mensagens pela fila. Mensagens podem levar um PDF junto (orçamento, O.S., boleto ou NF), que sai logo depois do texto.</p>
       <div class="aviso">Conexão <b>não oficial</b>: o WhatsApp pode bloquear o número se perceber uso automático. Use um número da oficina, só com clientes, sem envio em massa.</div>
       ${!st && !erro ? html`<p class="sub">Carregando…</p>` : null}
       ${st ? html`<ul class="res-lista zap-situacao">
@@ -188,7 +188,8 @@ export function WhatsApp() {
         ${fila === null ? html`<p class="sub">Carregando…</p>` : !fila.length ? html`<p class="sub">Nenhuma mensagem ainda.</p>` : html`<ul class="zap-fila">
           ${fila.map(f => { const [rot, cor] = FILA[f.status] || [f.status, "muted"]; return html`<li key=${f.id}>
             <div><span class=${"pill p-" + cor}>${rot}</span> <b>${f.cliente_nome || f.telefone}</b>${f.ordem_numero ? " · O.S. " + f.ordem_numero : ""} <span class="sub">· ${fmtDataHora(f.enviada_em || f.criado_em)}${f.fora_horario ? " · fora do horário" : ""}</span></div>
-            <div class="zap-texto">${f.texto}</div>
+            ${f.texto ? html`<div class="zap-texto">${f.texto}</div>` : null}
+            ${f.arquivo ? html`<div class="sub zap-arquivo">📎 ${f.arquivo.nome}${f.arquivo.bytes ? " · " + Math.max(1, Math.round(f.arquivo.bytes / 1024)) + " KB" : ""}${f.arquivo.apagado ? " · apagado da pasta (30 dias)" : ""}</div>` : null}
             ${f.status === "enviada" && "entrega" in f ? (() => { const [er, ec] = ENTREGA[f.entrega || "enviada"] || ENTREGA.enviada; return html`<div class="sub zap-entrega"><span class=${"pill p-" + ec}>${er}</span>${f.lida_em ? " · lida " + fmtDataHora(f.lida_em) : f.entregue_em ? " · entregue " + fmtDataHora(f.entregue_em) : ""}</div>`; })() : null}
             ${f.erro && f.status !== "cancelada" ? html`<div class="sub erro-zap">${f.erro}</div>` : null}
             ${f.status === "pendente" ? html`<button type="button" class="btn btn-sm" onClick=${() => cancelar(f.id)}>Cancelar</button>` : null}

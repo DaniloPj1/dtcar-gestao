@@ -11,31 +11,12 @@ import { ReciboModal } from "./recibos.js";
 import { PrazoReceber, validarPrazo, lancarParcelas, ReceberParcelaModal, CombinarPrazoModal, ParcelasOS, situacaoParcela } from "./receber.js";
 import { BuscaFornecedor } from "./financeiro.js";
 import { NotasOSModal } from "./notasos.js";
+import { EnvioZapModal } from "./zapos.js";
+import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
 
-/* ---------------- Mensagens de WhatsApp ---------------- */
-const nomeVeic = o => [o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") + " (" + exPlaca(o.veiculo.placa) + ")";
-const primeiroNome = o => ((o.cliente || {}).nome || "").split(" ")[0];
-function linhasItensMsg(itens) {
-  const L = [];
-  const grupo = (tipo, titulo) => { const g = itens.filter(i => i.tipo === tipo); if (!g.length) return;
-    L.push("*" + titulo + ":*"); g.forEach(i => L.push("• " + i.descricao + (Number(i.qtd) !== 1 && i.tipo === "peca" ? " (" + qtdFmt(i.qtd) + ")" : "") + (i.fornecida_cliente ? " (peça do cliente)" : " — " + reais(totalItem(i))))); L.push(""); };
-  grupo("peca", "Peças"); grupo("servico", "Mão de obra"); grupo("terceiro", "Serviços de terceiros");
-  return L;
-}
-export const MSG = {
-  entrada: (o, cfg) => `Olá, ${primeiroNome(o)}! Aqui é da ${cfg.nome}.\n\nRecebemos seu ${nomeVeic(o)} em ${fmtDataHora(o.criado_em)}, com ${fmtKm(o.km_entrada)}. Número do atendimento: *${numOS(o.numero)}*.\n\nVamos fazer o diagnóstico e enviar o orçamento para sua aprovação antes de executar qualquer serviço.`,
-  orcamento: (o, cfg, itens) => { const t = totais(itens, o.desconto);
-    return [`Olá, ${primeiroNome(o)}! O orçamento do seu ${nomeVeic(o)} está pronto (${numOS(o.numero)}).`, "",
-      ...(o.diagnostico ? ["*Diagnóstico:* " + o.diagnostico, ""] : []), ...linhasItensMsg(itens),
-      ...(t.desconto ? ["Desconto: " + reais(t.desconto)] : []), `*Total: ${reais(t.total)}*`,
-      `Previsão de entrega: ${o.previsao_entrega ? fmtData(o.previsao_entrega) + (o.previsao_hora ? " às " + o.previsao_hora : "") : "a combinar"}`, `Válido até ${fmtData(o.validade_orcamento)}.`, "",
-      "Para aprovar, responda *APROVADO*. Se preferir aprovar só parte dos itens, é só dizer quais. Envio o orçamento completo em PDF a seguir."].join("\n"); },
-  adicionais: (o, cfg, itens) => { const t = totais(itens, 0);
-    return [`Olá, ${primeiroNome(o)}! Durante o serviço no seu ${nomeVeic(o)}, na ${numOS(o.numero)}, identificamos itens adicionais:`, "",
-      ...linhasItensMsg(itens), `*Valor adicional: ${reais(t.total)}*`, "", "Só executamos com a sua aprovação. Responda *APROVADO* para incluir, ou diga quais itens deseja."].join("\n"); },
-  pronto: (o, cfg) => `Olá, ${primeiroNome(o)}! Seu ${nomeVeic(o)} está pronto para retirada (${numOS(o.numero)}).\n\nValor total: *${reais(o.total)}*.\n${cfg.endereco ? "Endereço: " + cfg.endereco + "\n" : ""}\nQualquer dúvida, estamos à disposição.`,
-  entrega: (o, cfg) => `Obrigado pela confiança, ${primeiroNome(o)}!\n\nOs serviços da ${numOS(o.numero)} no seu ${nomeVeic(o)} têm garantia de ${o.garantia_dias} dias, até ${fmtData(somaDias(o.entregue_em, o.garantia_dias))}. Guarde a ordem de serviço que enviamos.\n\n${cfg.nome}${cfg.telefone ? " · " + cfg.telefone : ""}`,
-};
+/* ---------------- Mensagens de WhatsApp: textos em js/mensagens.js (os mesmos que o Claude manda pelo WhatsApp da oficina) ---------------- */
+export { MSG };
+const primeiroNome = o => primeiroNomeCli(((o || {}).cliente || {}).nome);
 
 /* ---------------- Inclusão / edição de item (busca no cadastro de produtos e serviços) ---------------- */
 const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "serviço de terceiro" };
@@ -448,9 +429,13 @@ export function Ordem({ id, params = {} }) {
   const imprimir = async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo: "imprimir" }); };
   // receber, entregar e recibo leem a O.S. do banco: item mexido e ainda não salvo é salvo antes (senão cobraria o total antigo)
   const abrirSalvo = (tipo, extra = {}) => async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo, ...extra }); };
+  // v34: pela fila do WhatsApp da oficina (só administrador) — a O.S. é salva antes (o texto e o PDF saem do banco)
+  // administrador escolhe no quadro: abrir o WhatsApp dele com o texto ou mandar pela oficina (com PDF); os outros abrem o link
+  const zapOuLink = qual => (perfil && perfil.papel === "admin" ? setModal({ tipo: "enviar", qual }) : whats(qual));
+  const abrirZap = qual => async () => { if (sujo) await acao("salvar", () => salvar({}, true)); setModal({ tipo: "zap", qual }); };
   const whats = qual => {
     const fn = MSG[qual]; if (!fn) return;
-    const lista = qual === "adicionais" ? pendentes : itens.filter(i => i.aprovado !== false);
+    const lista = itensDaMensagem(qual, itens);
     window.open(linkWhats(o.cliente.telefone, fn({ ...o, ...campos, total: tAtual.total }, cfg, lista)), "_blank", "noopener");
     evento("whatsapp", "Mensagem de WhatsApp aberta: " + qual + ".");
   };
@@ -461,11 +446,11 @@ export function Ordem({ id, params = {} }) {
   // 4 etapas: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada
   const etapa = etapaOS(o);
   if (st === "diagnostico" && gestor) acoes = [pode(perfil, "aprovar") ? B("Aprovar orçamento", aprovarOrcamento, true) : null, B(ocupado === "enviar" ? "Enviando…" : "Enviar orçamento ao cliente", enviarOrcamento, !pode(perfil, "aprovar"))];
-  if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => whats("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar, false, false, "btn-recusa")];
+  if (st === "aguardando" && pode(perfil, "aprovar")) acoes = [B("Aprovar orçamento", aprovarOrcamento, true), B("Reenviar WhatsApp", () => zapOuLink("orcamento")), B("Revisar orçamento", revisarOrcamento), B("Cliente recusou", recusar, false, false, "btn-recusa")];
   if (st === "execucao" && pode(perfil, "executar")) acoes = [B("Serviço concluído", () => marcarPronto(false), true), pendentes.length && pode(perfil, "aprovar") ? B("Aprovar adicionais", () => setModal({ tipo: "aprovar" })) : null, pendentes.length && pode(perfil, "aprovar") ? B("WhatsApp adicionais", () => whats("adicionais")) : null];
-  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", abrirSalvo("encerrar"), true), saldo > 0 ? B("Entregar sem receber", abrirSalvo("entrega")) : null, B("Avisar cliente", () => whats("pronto"))];
+  if (st === "pronto" && pode(perfil, "entregar")) acoes = [B(saldo > 0 ? "Receber e fechar" : "Entregar e fechar", abrirSalvo("encerrar"), true), saldo > 0 ? B("Entregar sem receber", abrirSalvo("entrega")) : null, B("Avisar cliente", () => zapOuLink("pronto"))];
   if (st === "recusado" && pode(perfil, "entregar") && !o.entregue_em) acoes = [B("Registrar retirada", abrirSalvo("entrega"), true)];
-  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", abrirSalvo("encerrar"), true) : null, B("WhatsApp de garantia", () => whats("entrega"))];
+  if (st === "entregue" && pode(perfil, "entregar")) acoes = [etapa === "pagamento" && saldo > 0 ? B("Receber pagamento (" + reais(saldo) + ")", abrirSalvo("encerrar"), true) : null, B("WhatsApp de garantia", () => zapOuLink("entrega"))];
   acoes = acoes.filter(Boolean);
   const passo = FLUXO.indexOf(etapa);
 
@@ -656,10 +641,12 @@ export function Ordem({ id, params = {} }) {
       setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed || edVeiculo(vCad)) : ed })); }}
       onSalvo=${async v => { if (aberta && v) { const veiculo = { ...o.veiculo, placa: v.placa, marca: v.marca, modelo: v.modelo, ano: v.ano, cor: v.cor, motor: v.combustivel || v.motor || "" }; await api.atualizarOrdem(o.id, { veiculo }); setO(x => ({ ...x, veiculo })); recarregar(["ordens"]); } }} />` : null}
     ${modal && modal.tipo === "foto" ? html`<div class="visor" onClick=${() => setModal(null)} role="dialog" aria-label="Foto ampliada"><${Foto} caminho=${modal.f.caminho} alt=${modal.f.rotulo} /><p>${modal.f.rotulo} · toque para fechar</p></div>` : null}
+    ${modal && modal.tipo === "zap" ? html`<${EnvioZapModal} o=${o} qual=${modal.qual} onFechar=${() => setModal(null)} />` : null}
     ${modal && modal.tipo === "enviar" && modal.qual ? html`<${Modal} titulo=${{ orcamento: "Orçamento pronto para envio", pronto: "Serviço concluído", entrega: "Entrega registrada" }[modal.qual]} onFechar=${() => setModal(null)}>
       <p>${{ orcamento: "Envie a mensagem com o resumo e, em seguida, o PDF do orçamento.", pronto: "Avise o cliente que o veículo está pronto para retirada.", entrega: "Envie a ordem de serviço com a garantia para o cliente." }[modal.qual]}</p>
       <div class="acoes col">
         ${o.cliente.telefone ? html`<button type="button" class="btn btn-whats" onClick=${() => whats(modal.qual)}>${I.whats} Abrir WhatsApp com a mensagem</button>` : html`<span class="aviso">Cliente sem telefone cadastrado.</span>`}
+        ${o.cliente.telefone && perfil && perfil.papel === "admin" ? html`<button type="button" class="btn" title="O sistema envia pelo WhatsApp da oficina, com o PDF junto" onClick=${abrirZap(modal.qual)}>Enviar pelo WhatsApp da oficina${modal.qual === "pronto" ? "" : " (com PDF)"}</button>` : null}
         ${modal.qual === "orcamento" ? html`<button type="button" class="btn" onClick=${() => documento("orcamento")}>PDF do orçamento</button>` : null}
         ${modal.qual === "entrega" ? html`<button type="button" class="btn" onClick=${() => documento("os")}>PDF da ordem de serviço</button><button type="button" class="btn" onClick=${() => setModal({ tipo: "imprimir" })}>Imprimir O.S.</button>` : null}
         <button type="button" class="btn-link" onClick=${() => setModal(null)}>Fechar</button></div></${Modal}>` : null}

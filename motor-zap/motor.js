@@ -12,6 +12,8 @@
 // horário, intervalo, limites) com "digitando…", e guarda as mensagens das conversas individuais (texto; mídia só o tipo).
 // v32: guarda os "tiques" das mensagens enviadas (entregue, lida, ouvida) e manda à função zap o áudio recebido (para
 // transcrever; o arquivo não é guardado) e a foto recebida (guardada 30 dias). Atualiza só por versão aprovada (iniciar.sh).
+// v34 (motor 3.2): mensagem da fila com PDF (O.S., orçamento, boleto, NF). O motor pede à função zap um link temporário do PDF
+// (só da mensagem que ele pegou), confere que é PDF do tamanho certo e envia: o texto e, logo depois, o documento.
 // Biblioteca: SOMENTE o pacote oficial "baileys" (WhiskeySockets), versão travada no package.json.
 import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto, downloadMediaMessage } from "baileys";
 import { readFileSync } from "node:fs";
@@ -19,9 +21,9 @@ import { homedir, hostname, platform, release } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { paraGuardar, jidParaEnvio, enviarTexto, midiaParaBaixar } from "./whats.js";
+import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere } from "./whats.js";
 
-export const VERSAO = "3.1";
+export const VERSAO = "3.2";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
 const ESPERAS = [5, 15, 30, 60, 120, 300].map((s) => s * 1000); // entre tentativas de reconectar
@@ -250,11 +252,12 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   /** v32: baixa a mídia e manda à função zap (áudio: transcrição; foto: pasta privada por 30 dias). Roda em segundo
    *  plano (não segura o sinal: a transcrição pode levar dezenas de segundos), uma por vez, até 3 tentativas. */
   let processandoMidia = null;
-  async function chamarZapMidia(corpo) {
-    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 120000);
+  async function chamarZapMidia(corpo) { return chamarZap({ acao: "midia", ...corpo }, 120000); }
+  async function chamarZap(corpo, espera) {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), espera);
     try {
       const r = await buscar(`${config.url}/functions/v1/zap`, { method: "POST", signal: ctl.signal,
-        headers: { apikey: config.publica, "content-type": "application/json", "x-dtcar-motor": config.chave }, body: JSON.stringify({ acao: "midia", ...corpo }) });
+        headers: { apikey: config.publica, "content-type": "application/json", "x-dtcar-motor": config.chave }, body: JSON.stringify(corpo) });
       const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (_) { j = null; }
       if (!r.ok) throw new Error((j && (j.erro || j.detalhe)) || `HTTP ${r.status}`);
       return j || {};
@@ -294,6 +297,20 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       try { await rpc("whatsapp_motor_resultado", { ...base(), ...r }); st.resultados.shift(); } catch (e) { log("resultado do envio não gravado (tenta de novo):", e.message); return; }
     }
   }
+  /** v34: baixa o PDF da mensagem pelo link temporário da função zap e confere. Erro = não envia nada. */
+  async function baixarPdf(m) {
+    const a = await chamarZap({ acao: "arquivo", fila_id: m.id }, 30000);
+    if (!a || !a.url) throw new Error("a função zap não deu o link do PDF");
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
+    try {
+      const r = await buscar(a.url, { signal: ctl.signal });
+      if (!r.ok) throw new Error("PDF não baixado (HTTP " + r.status + ")");
+      const dados = Buffer.from(await r.arrayBuffer());
+      const ruim = pdfConfere(dados, m.arquivo); if (ruim) throw new Error(ruim);
+      return { dados, nome: m.arquivo.nome || a.nome || "documento.pdf", tipo: "application/pdf" };
+    } catch (e) { if (e.name === "AbortError") throw new Error("o PDF demorou demais para baixar"); throw e; }
+    finally { clearTimeout(t); }
+  }
   /** Pega a próxima mensagem liberada pelas regras do banco e envia (uma por sinal). */
   async function enviarDaFila() {
     const s = st.sock; if (!s || !st.aberto) return;
@@ -308,7 +325,14 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     try {
       const jid = await jidParaEnvio(s, m.telefone);
       if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
-      else { const idm = await enviarTexto(s, jid, m.texto, esperarDigitando); res = { p_ok: true, p_msg_id: idm, p_jid: jid }; }
+      else {
+        let pdf = null;
+        if (m.arquivo) { try { pdf = await baixarPdf(m); } catch (e) { pdf = null; res = { p_ok: false, p_erro: "PDF não baixado (nada foi enviado): " + e.message }; } }
+        if (!res) {
+          try { const idm = await enviarComArquivo(s, jid, m.texto, pdf, esperarDigitando); res = { p_ok: true, p_msg_id: idm, p_jid: jid }; }
+          catch (e) { res = { p_ok: false, p_msg_id: e.idTexto || null, p_jid: jid, p_erro: e.idTexto ? e.message : "Falha ao enviar: " + e.message }; }
+        }
+      }
     } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + e.message }; }
     if (res.p_ok) { st.enviadas++; st.ultimoEnvio = new Date().toISOString(); log("mensagem", m.id, "enviada"); } else log("mensagem", m.id, "não enviada:", res.p_erro);
     st.resultados.push({ p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id || null, p_jid: res.p_jid || null, p_erro: res.p_erro || null });

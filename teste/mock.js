@@ -72,6 +72,10 @@
       excluir: async doc => { window.__RH = window.__RH.filter(y => y.id !== doc.id); } },
     // e-mail da oficina (v29 + função "email")
     email: { chamar: async b => { (window.__EMAIL_CHAMADAS = window.__EMAIL_CHAMADAS || []).push(b.acao);
+        if (b.acao === "whatsapp") { (window.__ZAP_ENVIOS = window.__ZAP_ENVIOS || []).push(JSON.parse(JSON.stringify(b)));
+          return { gravado: b.confirmar === true, erros: [], avisos: ["Fora do horário comercial: a mensagem sai no próximo horário de envio."], telefone: "5527999990000", cliente: { nome: "Cliente Teste" },
+            texto: b.texto || "Olá, Cliente! O orçamento do seu Fiat Uno está pronto (OS 0" + b.numero_os + ").", arquivo: b.anexo ? { nome: "Orcamento_0" + b.numero_os + "_ABC1D23.pdf", kb: 150 } : null,
+            ...(b.confirmar ? { id: 9, posicao_na_fila: 1 } : {}) }; }
         const e = window.__EMAIL = window.__EMAIL || { situacao: "desligado", ligado: true, conta: "", nome: "", detalhe: "", conectado_em: null, ultimo_uso: null, enviados_hoje: 0,
           configurado: false, endereco_retorno: "https://exemplo.supabase.co/functions/v1/email",
           lista_regras: [{ id: 1, tipo: "fraude", alvo: "nome", valor: "sisbra", obs: "Cobrança fraudulenta no DDA (02/11/2026)", origem: "padrao" }, { id: 2, tipo: "importante", alvo: "dominio", valor: "sicredi.com.br", obs: "Banco", origem: "padrao" }] };

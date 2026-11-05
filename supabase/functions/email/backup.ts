@@ -26,8 +26,9 @@ export type Passo = typeof PASSOS[number];
 export const LIMITE_ANEXO = 2_700_000;
 /** sem nada configurado: só o e-mail da oficina (o v35 já grava também o e-mail de login do administrador) */
 export const DESTINOS_PADRAO = ["centroautomotivodtcar@hotmail.com"];
-/** senha mínima: o zip AES deriva a chave com só 1000 voltas (PBKDF2-SHA1), então senha curta cai em força bruta */
-export const SENHA_MINIMA = 16;
+/** senha: a que o Danilo quiser (decisão dele em 05/11/2026), só não pode ficar vazia — zip sem senha nunca sai.
+ *  Aviso registrado: o zip AES deriva a chave com só 1000 voltas (PBKDF2-SHA1); senha curta é mais fácil de quebrar. */
+export const SENHA_MINIMA = 1;
 const EMAIL_OK = /^[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+$/;
 
 export interface Gerador {
@@ -64,7 +65,7 @@ export async function configBackup(adm: Db): Promise<{ ativo: boolean; emails: s
 }
 export function senhaDoBackup(env: (k: string) => string | undefined): string {
   const s = (env("BACKUP_SENHA") || "").trim();
-  if (s.length < SENHA_MINIMA) throw new ErroBackup(`Falta cadastrar a senha do backup: segredo BACKUP_SENHA da função "email" (Supabase › Edge Functions › Secrets), com ${SENHA_MINIMA} letras ou mais (use uma senha aleatória). Sem ela nada é enviado.`);
+  if (s.length < SENHA_MINIMA) throw new ErroBackup(`Falta cadastrar a senha do backup: segredo BACKUP_SENHA da função "email" (Supabase › Edge Functions › Secrets). Sem ela nada é enviado.`);
   return s;
 }
 

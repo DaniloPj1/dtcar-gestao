@@ -93,7 +93,7 @@ c = await chama("lancar_itens_os", { numero: 1904, itens: [] });
 confere("lancar_itens_os sem itens é recusado", c.r?.isError === true || !c.fn);
 c = await chama("lancar_itens_os", { numero: 1904, itens: [{ tipo: "peca", descricao: "x", valor_unit: -1 }] });
 confere("valor negativo é recusado", c.r?.isError === true || !c.fn);
-// receber O.S. (v36)
+// receber O.S. (v37)
 c = await chama("receber_os", { numero: 1868, forma: "Dinheiro" });
 confere("receber_os sem confirmar = só prévia", c.fn === "agente_receber_os" && c.args?.p_gravar === false && (c.args?.p as Record<string, unknown>)?.numero === 1868 && (c.args?.p as Record<string, unknown>)?.forma === "Dinheiro");
 c = await chama("receber_os", { numero: 1868, forma: "Dinheiro", conta: "Espécie", valor: 150, data: "2026-11-05", confirmar: true });

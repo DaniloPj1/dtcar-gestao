@@ -1,4 +1,4 @@
--- Esquema mínimo para testar supabase/v36.sql num Postgres local (teste/teste_v36.sh).
+-- Esquema mínimo para testar supabase/v37.sql num Postgres local (teste/teste_v37.sh).
 -- Usa o esquema do teste do v21 e acrescenta clientes, recibos, receber e os gatilhos do v12/v17
 -- (soma do recebido e fechamento da O.S. entregue quitada).
 \set ON_ERROR_STOP 1

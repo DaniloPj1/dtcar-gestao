@@ -1,5 +1,5 @@
 -- =====================================================================
--- DTCar Gestão — v36: receber O.S. pelo conector do Claude (05/11/2026)
+-- DTCar Gestão — v37: receber O.S. pelo conector do Claude (05/11/2026)
 --
 -- Pedido do Danilo: "o cliente pagou, dá baixa e finaliza" direto pelo conector.
 -- Função agente_receber_os: faz no banco, numa transação só, o mesmo que o botão

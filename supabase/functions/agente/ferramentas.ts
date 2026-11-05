@@ -2,7 +2,7 @@
 // Cada ferramenta chama uma função do banco (supabase/v20.sql) com o cliente do Supabase
 // já autenticado como o usuário que autorizou o conector: as regras de acesso valem e as
 // funções exigem administrador. Nada aqui apaga, paga ou mexe em conta paga.
-// Gravação: abrir_os (v20), lancar_itens_os (v21/v27), receber_os (v36: recibo e baixa de O.S. entregue a receber), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina;
+// Gravação: abrir_os (v20), lancar_itens_os (v21/v27), receber_os (v37: recibo e baixa de O.S. entregue a receber), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina;
 // v34: modelo de mensagem e PDF pela função "email")
 // e email_enviar/email_responder/email_regra (v29: e-mail da oficina pela função "email").
 import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
@@ -191,7 +191,7 @@ export function criarServidor(db: Banco): McpServer {
     return texto(r.id ? { ...r, abrir_no_sistema: SITE + "/#/os/" + r.id } : r);
   });
 
-  // ---------- Receber O.S. (v36) ----------
+  // ---------- Receber O.S. (v37) ----------
   s.registerTool("receber_os", {
     title: "Receber pagamento da O.S. (recibo e baixa)",
     description: "Registra o pagamento de uma O.S. ENTREGUE a receber: emite o recibo (forma, conta de entrada, data), baixa as parcelas a receber " +

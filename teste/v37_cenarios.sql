@@ -1,4 +1,4 @@
--- Cenários do v36 (cada um para com erro se o resultado não for o esperado)
+-- Cenários do v37 (cada um para com erro se o resultado não for o esperado)
 \set ON_ERROR_STOP 1
 update public.config set dados = '{"formasPagamento":["PIX","Dinheiro","Cartão de débito","Cartão de crédito","Boleto"],
   "contasFinanceiras":[{"nome":"Sicredi"},{"nome":"PicPay PJ"},{"nome":"Espécie"}],"contaRecebimento":"Sicredi"}' where id = 1;
@@ -75,5 +75,5 @@ begin
   assert not (r->>'pode_receber')::boolean and r::text like '%menos de 10 minutos%', '11 repetido: ' || r::text;
   r := public.agente_receber_os('{"numero":1873,"forma":"PIX","valor":200,"receber_mesmo_repetido":true}', true);
   assert (r->>'gravado')::boolean and (r->>'fechada')::boolean, '11 confirmado: ' || r::text;
-  raise notice 'OK: v36 (11 cenários)';
+  raise notice 'OK: v37 (11 cenários)';
 end $$;

@@ -228,28 +228,9 @@ export async function pdfEntrada(o, cfg) {
   return doc.output("blob");
 }
 
-/* ---------------- Orçamento ---------------- */
-export async function pdfOrcamento(o, cfg) {
-  const d = novoDoc(), { doc } = d;
-  const emissao = o.orcamento_enviado_em || new Date().toISOString();
-  const validade = o.validade_orcamento || somaDias(emissao, Number(cfg.validadeDias) || 10);
-  await cabecalho(d, cfg, "ORÇAMENTO", [numOS(o.numero), "Emissão: " + fmtData(emissao), "Válido até: " + fmtData(validade)]);
-  caixasClienteVeiculo(d, o);
-  faixa(d, [["ENTRADA", fmtData(o.criado_em)], ["KM", fmtKm(o.km_entrada)], ["PREVISÃO DE ENTREGA", o.previsao_entrega ? fmtData(o.previsao_entrega) : "A combinar"], ["VALIDADE", fmtData(validade)], ["CONSULTOR", o.consultor_nome]]);
-  bloco(d, "RECLAMAÇÃO DO CLIENTE", o.reclamacao);
-  bloco(d, "DIAGNÓSTICO TÉCNICO", o.diagnostico || "—", AZUL);
-  const itens = o.itens || [];
-  tabelasItens(d, itens);
-  const aprovado = !!o.aprovacao;
-  caixaTotais(d, totais(itens, o.desconto, aprovado), true);
-  bloco(d, "CONDIÇÕES DE PAGAMENTO", o.condicoes_pagamento || cfg.condicoesPadrao || "A combinar");
-  const ap = o.aprovacao;
-  await termoEAssinaturas(d, (cfg.termoOrcamento || TERMO_ORCAMENTO),
-    { rotulo: ap ? "Aprovado por: " + ap.por : "Aprovação do cliente", imagem: ap && ap.assinatura, nota: ap ? fmtDataHora(ap.em) + " · " + ap.forma : "Data: ____/____/______" },
-    { rotulo: "Consultor: " + (o.consultor_nome || "") });
-  rodape(d, numOS(o.numero) + "  ·  Orçamento  ·  " + exPlaca((o.veiculo || {}).placa) + "  ·  " + (cfg.nome || ""));
-  return doc.output("blob");
-}
+/* ---------------- Orçamento: o MESMO leiaute da impressão (ViaOS em modo orçamento), pelo pdfOS ----------------
+   Antes tinha leiaute próprio e saía diferente da impressão (Danilo, 05/11/2026: "mudou o modelo da impressão"). */
+export async function pdfOrcamento(o, cfg, ext = {}) { return pdfOS(o, cfg, { ...ext, orcamento: true }); }
 
 /* ---------------- Ordem de serviço: o MESMO leiaute da impressão do sistema (ViaOS em js/telas/imprimir.js) ----------------
    Mudou a impressão da O.S.? Mude aqui também (o e-mail e o botão PDF usam esta função). */
@@ -336,7 +317,8 @@ export async function pdfOS(o, cfg, ext = {}) {
   const d = novoDoc(), { doc } = d;
   const cli = ext.cli || null, vei = ext.vei || null;
   const c = o.cliente || {}, v = o.veiculo || {}, itensTodos = o.itens || [];
-  const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(o.status) && itensTodos.some(i => i.aprovado === true);
+  // ext.orcamento: o orçamento (itens não recusados), mesmo com a O.S. já aprovada (pedido do botão/anexo "orçamento")
+  const aprov = !ext.orcamento && ["execucao", "pronto", "entregue", "recusado"].includes(o.status) && itensTodos.some(i => i.aprovado === true);
   const orc = !aprov;
   const lista = itensTodos.filter(i => aprov ? i.aprovado === true : i.aprovado !== false);
   const t = totais(itensTodos, o.desconto, aprov);

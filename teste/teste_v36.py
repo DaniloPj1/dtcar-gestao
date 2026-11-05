@@ -420,6 +420,12 @@ confere("G: motor chama o tratamento só com a chave; processar fechado", v == "
 _, e = sql("select whatsapp_motor_avisos('chave-errada-chave-errada-chave-errada-chave-errada')", "anon")
 confere("G: chave errada recusada", "inválida" in e, e[-120:])
 
+# ---------- 19g. rodar o v36 de novo não apaga as pendências (Codex P1) ----------
+sql(f"select whatsapp_guardar_mensagens({q([{'msg_id': 'PEND-REAPLICA', 'jid': LUIZ + '@s.whatsapp.net', 'telefone': LUIZ, 'texto': 'pendente', 'tipo': 'texto'}])})")
+r = roda("supabase/v36.sql"); v, _ = sql("select coalesce(aviso, 'nulo') from whatsapp_mensagens where msg_id = 'PEND-REAPLICA'")
+confere("v36 de novo: pendente continua pendente", r.returncode == 0 and v == "nulo", (r.returncode, v, r.stderr[-200:]))
+sql("select whatsapp_avisos_processar(50)")
+
 # ---------- 20. erro no tratamento não impede gravar a mensagem ----------
 sql("alter table whatsapp_avisos rename to whatsapp_avisos_x")
 mid = recebe(JOAO, "mensagem com erro no aviso")

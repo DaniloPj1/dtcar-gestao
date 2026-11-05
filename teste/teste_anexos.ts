@@ -114,7 +114,9 @@ const os = await montarAnexos(db, "AT", [{ fonte: "os", numero: 1887 }], gerador
 const a0 = os.arquivos[0];
 const t0 = await texto(a0.bytes);
 confere("O.S.: PDF de verdade com o nome da tela (OS_01887_ABC1D23.pdf)", ehPdf(a0.bytes) && a0.nome === "OS_01887_ABC1D23.pdf", a0.nome);
-confere("O.S.: tem número, cliente, itens e total", /OS 01887/.test(t0) && /João da Silva/.test(t0) && /Bieleta dianteira/.test(t0) && /291,00/.test(t0), t0.slice(0, 600));
+confere("O.S.: tem número, cliente, itens e total", /Nº 01887/.test(t0) && /João da Silva/.test(t0) && /Bieleta dianteira/.test(t0) && /291,00/.test(t0), t0.slice(0, 600));
+confere("O.S.: mesmo leiaute da impressão do sistema (tabelas com total, termo, rodapé) e sem a coluna Procedência",
+  /Total de produtos/.test(t0) && /NÃO VALE COMO RECIBO DE PAGAMENTO/.test(t0) && !/Procedência|Original \/ genuína|\(adicional\)/.test(t0), t0.slice(0, 900));
 confere("O.S.: garantia contada em Brasília (entrega 04/11 22h → até 02/02/2027)", /02\/02\/2027/.test(t0), t0.match(/Garantia válida até [^.]*/)?.[0]);
 const imgs = (b: Uint8Array) => (new TextDecoder("latin1").decode(b).match(/\/Subtype \/Image/g) || []).length;
 confere("O.S.: logo, foto do serviço e assinatura entram como imagem (a foto de entrada não)", imgs(a0.bytes) === 3, imgs(a0.bytes));

@@ -1,6 +1,6 @@
 // Documentos em PDF: checklist de entrada, orçamento e ordem de serviço
-import { exPlaca, fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias } from "./util.js";
-import { secoesCheckin, achados, QUALIDADE, termoEntradaFinal, TERMO_GARANTIA, TERMO_ORCAMENTO } from "./regras.js";
+import { exPlaca, fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias, endCompleto } from "./util.js";
+import { secoesCheckin, achados, QUALIDADE, termoEntradaFinal, TERMO_GARANTIA, TERMO_ORCAMENTO, STATUS, situacaoOS, TABELAS_PRECO } from "./regras.js";
 
 const AZUL = [10, 75, 208], TINTA = [20, 26, 36], CINZA = [96, 106, 122], LINHA = [208, 214, 223], FUNDO = [243, 245, 248];
 const COR = { ok: [18, 122, 70], warn: [160, 95, 0], bad: [189, 49, 41], info: AZUL, na: CINZA };
@@ -251,28 +251,209 @@ export async function pdfOrcamento(o, cfg) {
   return doc.output("blob");
 }
 
-/* ---------------- Ordem de serviço (entrega e garantia) ---------------- */
-export async function pdfOS(o, cfg) {
+/* ---------------- Ordem de serviço: o MESMO leiaute da impressão do sistema (ViaOS em js/telas/imprimir.js) ----------------
+   Mudou a impressão da O.S.? Mude aqui também (o e-mail e o botão PDF usam esta função). */
+const AZUL_ESC = [10, 47, 128], BORDA = [197, 204, 214], GRADE = [215, 220, 227], CAB_TAB = [238, 241, 245], FUNDO_TOT = [246, 247, 249], TEXTO2 = [51, 59, 71], ROT = [91, 101, 115];
+
+/** Linhas corridas "Rótulo valor" que quebram entre campos; desenha (ou só mede, com desenhar=false). Devolve a altura. */
+function linhasCorridas(d, x, y, larg, linhas, desenhar) {
+  const { doc } = d, LH = 4.2, GAP = 3.5; let cy = y;
+  for (const partes of linhas) {
+    const ps = partes.filter(p => p && p.v !== null && p.v !== undefined && String(p.v).trim() !== "" && p.v !== "—");
+    if (!ps.length) continue;
+    let cx = x;
+    for (const p of ps) {
+      const tamV = p.tam || 8.6;
+      d.fonte("bold", 7.2); const wr = p.r ? doc.getTextWidth(p.r + " ") : 0;
+      d.fonte(p.b === false ? "normal" : "bold", tamV);
+      let partesV = [String(p.v)], wv = doc.getTextWidth(partesV[0]);
+      if (cx > x && cx + wr + wv > x + larg) { cx = x; cy += LH; }
+      if (cx + wr + wv > x + larg) partesV = doc.splitTextToSize(String(p.v), x + larg - cx - wr);
+      if (desenhar) {
+        if (p.r) { d.fonte("bold", 7.2); d.cor(ROT); doc.text(p.r, cx, cy); }
+        d.fonte(p.b === false ? "normal" : "bold", tamV); d.cor(p.cor || TINTA);
+        partesV.forEach((t, i) => doc.text(t, cx + wr, cy + i * LH));
+      }
+      d.fonte(p.b === false ? "normal" : "bold", tamV);
+      cy += (partesV.length - 1) * LH;
+      cx += wr + doc.getTextWidth(partesV[partesV.length - 1]) + GAP;
+    }
+    cy += LH;
+  }
+  return cy - y;
+}
+
+function tabelaOS(d, tituloTab, itens, total) {
+  if (!itens.length) return;
+  const { doc } = d;
+  const comRef = itens.some(i => i.codigo), comDesc = itens.some(i => Number(i.desconto) > 0);
+  const cols = [{ t: tituloTab }];
+  if (comRef) cols.push({ t: "REF.", w: 26 });
+  cols.push({ t: "QTD.", w: 15, a: "right" }, { t: "UNIT.", w: 26, a: "right" });
+  if (comDesc) cols.push({ t: "DESC.", w: 22, a: "right" });
+  cols.push({ t: "TOTAL", w: 27, a: "right" });
+  cols[0].w = CW - cols.slice(1).reduce((s, c) => s + c.w, 0);
+  const borda = (cor, larg) => { doc.setDrawColor(cor[0], cor[1], cor[2]); doc.setLineWidth(larg); };
+  const linhaCel = (y0, alt, textos, opts = {}) => {
+    if (opts.fundo) { doc.setFillColor(opts.fundo[0], opts.fundo[1], opts.fundo[2]); doc.rect(M, y0, CW, alt, "F"); }
+    borda(opts.borda || GRADE, 0.2); doc.rect(M, y0, CW, alt, "S");
+    let x = M;
+    cols.forEach((c, i) => {
+      if (i > 0 && !opts.semColunas) doc.line(x, y0, x, y0 + alt);
+      const t = textos[i]; if (t !== undefined && t !== null) {
+        d.fonte(opts.estilo || "normal", opts.tam || 8.6); d.cor(opts.cor || TINTA);
+        doc.text(t, c.a === "right" ? x + c.w - 1.8 : x + 1.8, y0 + (opts.base || 4.3), { align: c.a === "right" ? "right" : "left" });
+      }
+      x += c.w;
+    });
+  };
+  const cabec = () => { linhaCel(d.y, 6.3, cols.map(c => c.t), { fundo: CAB_TAB, borda: BORDA, estilo: "bold", tam: 7.2, cor: TINTA, base: 4.2 }); d.y += 6.3; };
+  d.espaco(20); cabec();
+  for (const i of itens) {
+    d.fonte("normal", 8.6);
+    const desc = i.descricao + (i.fornecida_cliente ? " (peça do cliente)" : i.qualidade === "usada" ? " (usada, autorizada)" : "");
+    const linhasDesc = doc.splitTextToSize(desc, cols[0].w - 3.6);
+    const ref = comRef ? doc.splitTextToSize(i.codigo || "", 26 - 3.6) : [];
+    const alt = Math.max(linhasDesc.length, ref.length || 1) * 3.8 + 2.6;
+    if (d.espaco(alt)) cabec();
+    const t = [linhasDesc];
+    if (comRef) t.push(ref);
+    t.push(i.horas ? qtdFmt(i.horas) + " h" : qtdFmt(i.qtd), i.fornecida_cliente ? "—" : reais(i.valor_unit));
+    if (comDesc) t.push(Number(i.desconto) ? reais(i.desconto) : "");
+    t.push(i.fornecida_cliente ? "—" : reais(totalItem(i)));
+    linhaCel(d.y, alt, t, { base: 4.1 }); d.y += alt;
+  }
+  d.espaco(6.3);
+  const xUlt = W - M - cols[cols.length - 1].w;
+  doc.setFillColor(FUNDO_TOT[0], FUNDO_TOT[1], FUNDO_TOT[2]); doc.rect(M, d.y, CW, 6.3, "F");
+  borda(GRADE, 0.2); doc.rect(M, d.y, CW, 6.3, "S"); doc.line(xUlt, d.y, xUlt, d.y + 6.3);
+  d.fonte("bold", 8.6); d.cor(TINTA);
+  doc.text(total[0], xUlt - 1.8, d.y + 4.3, { align: "right" }); doc.text(reais(total[1]), W - M - 1.8, d.y + 4.3, { align: "right" });
+  d.y += 6.3 + 3;
+}
+
+export async function pdfOS(o, cfg, ext = {}) {
   const d = novoDoc(), { doc } = d;
-  const entregue = o.status === "entregue";
-  await cabecalho(d, cfg, "ORDEM DE SERVIÇO", [numOS(o.numero), "Entrada: " + fmtDataHora(o.criado_em), entregue ? "Entrega: " + fmtDataHora(o.entregue_em) : "Situação: em andamento"]);
-  caixasClienteVeiculo(d, o);
-  faixa(d, [["KM ENTRADA", fmtKm(o.km_entrada)], ["KM SAÍDA", fmtKm(o.km_saida)], ["CONSULTOR", o.consultor_nome], ["MECÂNICO", o.mecanico_nome || "—"], ["PAGAMENTO", o.forma_pagamento || "—"]]);
-  bloco(d, "RECLAMAÇÃO DO CLIENTE", o.reclamacao);
-  if (o.diagnostico) bloco(d, "DIAGNÓSTICO TÉCNICO", o.diagnostico, AZUL);
-  const itens = (o.itens || []).filter(i => i.aprovado === true);
-  tabelasItens(d, itens);
-  caixaTotais(d, totais(itens, o.desconto, true), true);
-  if (o.obs_execucao) bloco(d, "OBSERVAÇÕES DA EXECUÇÃO", o.obs_execucao);
-  if (itens.some(i => i.fornecida_cliente)) bloco(d, "PEÇAS FORNECIDAS PELO CLIENTE", itens.filter(i => i.fornecida_cliente).map(i => i.descricao).join("; ") + ". A garantia da oficina cobre a mão de obra de instalação dessas peças.");
-  await gradeFotos(d, (o.fotos || []).filter(f => f.etapa !== "entrada"), "FOTOS DO SERVIÇO");
+  const cli = ext.cli || null, vei = ext.vei || null;
+  const c = o.cliente || {}, v = o.veiculo || {}, itensTodos = o.itens || [];
+  const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(o.status) && itensTodos.some(i => i.aprovado === true);
+  const orc = !aprov;
+  const lista = itensTodos.filter(i => aprov ? i.aprovado === true : i.aprovado !== false);
+  const t = totais(itensTodos, o.desconto, aprov);
   const dias = Number(o.garantia_dias) || Number(cfg.garantiaDias) || 90;
-  const termo = (cfg.termoGarantia || TERMO_GARANTIA).replace(/\{dias\}/g, String(dias))
-    + (entregue ? " Garantia válida até " + fmtData(somaDias(o.entregue_em, dias)) + "." : "");
-  await termoEAssinaturas(d, termo,
-    { rotulo: "Cliente: " + ((o.cliente || {}).nome || ""), imagem: o.assinatura_entrega, nota: entregue ? "Veículo retirado em " + fmtDataHora(o.entregue_em) : "" },
-    { rotulo: "Responsável: " + (o.mecanico_nome || o.consultor_nome || "") });
-  rodape(d, numOS(o.numero) + "  ·  Ordem de serviço  ·  " + exPlaca((o.veiculo || {}).placa) + "  ·  " + (cfg.nome || ""));
+  const termo = orc ? (cfg.termoOrcamento || TERMO_ORCAMENTO)
+    : (cfg.termoGarantia || TERMO_GARANTIA).replace(/\{dias\}/g, String(dias)) + (o.status === "entregue" ? " Garantia válida até " + fmtData(somaDias(o.entregue_em, dias)) + "." : "");
+
+  // ---- cabeçalho: logo · empresa · título, número e data
+  let xT = M;
+  try { const im = await imagem(cfg.logo || "app:icons/logo-preto.png"); const r = Math.min(36 / im.w, 13 / im.h); const lw = im.w * r, lh = im.h * r;
+    doc.addImage(im.data, im.fmt, M, d.y + (15 - lh) / 2, lw, lh, undefined, "FAST"); xT = M + lw + 4; } catch (e) {}
+  d.fonte("bold", 12.5); d.cor(TINTA); doc.text(cfg.nome || "Oficina", xT, d.y + 4.5);
+  d.fonte("normal", 7.8); d.cor(TEXTO2);
+  const lEmp = [cfg.endereco, [cfg.telefone ? "Tel. " + cfg.telefone : "", cfg.cnpj ? "CNPJ " + cfg.cnpj : ""].filter(Boolean).join(" · ")].filter(Boolean);
+  doc.text(lEmp.flatMap(l => doc.splitTextToSize(l, 125 - (xT - M))).slice(0, 3), xT, d.y + 8.8);
+  d.fonte("bold", 11.5); d.cor(TINTA); doc.text(orc ? "ORÇAMENTO" : "ORDEM DE SERVIÇO", W - M, d.y + 4.2, { align: "right" });
+  d.fonte("bold", 16); doc.text("Nº " + String(o.numero ?? "").padStart(5, "0"), W - M, d.y + 10.6, { align: "right" });
+  d.fonte("normal", 8); doc.text(fmtDataHora(o.criado_em), W - M, d.y + 14.6, { align: "right" });
+  d.y += 17.5; d.linhaH(d.y, TINTA, 0.6); d.y += 3;
+
+  // ---- cliente e veículo, compactos (linhas corridas)
+  const tels = [c.telefone, cli && cli.telefone2].filter(Boolean).map(fmtTel).join(" / ");
+  const endereco = cli ? endCompleto(cli) : c.endereco;
+  const ladoC = [[{ v: c.nome, tam: 9.2 }, { v: cli && cli.codigo ? "(cód. " + cli.codigo + ")" : "", b: false, cor: ROT, tam: 8 }],
+    [{ r: "CPF/CNPJ", v: fmtDoc(c.doc || (cli && cli.doc) || "") }, { r: "Tel.", v: tels }, { r: "Contato", v: o.contato }],
+    [{ r: "End.", v: endereco, b: false }]];
+  const ladoV = [[{ v: exPlaca(v.placa), tam: 9.2 }, { v: [v.marca, v.modelo].filter(Boolean).join(" ") }],
+    [{ r: "Ano", v: v.ano }, { r: "Cor", v: v.cor }, { r: "KM", v: o.km_entrada != null ? fmtKm(o.km_entrada) : "" },
+     { r: "Comb.", v: (vei && vei.combustivel) || v.motor }, { r: "Box", v: o.box }, { r: "Chassi", v: vei && vei.chassi }]];
+  const larg = MEIA - 6, y0 = d.y;
+  const alt = Math.max(linhasCorridas(d, M + 3, 0, larg, ladoC, false), linhasCorridas(d, M + MEIA + 7, 0, larg, ladoV, false)) + 7.6;
+  [[M, "CLIENTE", ladoC], [M + MEIA + 4, "VEÍCULO", ladoV]].forEach(([x, tit, ls]) => {
+    doc.setDrawColor(BORDA[0], BORDA[1], BORDA[2]); doc.setLineWidth(0.25); doc.roundedRect(x, y0, MEIA, alt, 1, 1, "S");
+    d.fonte("bold", 7.2); d.cor(AZUL_ESC); doc.text(tit, x + 3, y0 + 3.9);
+    linhasCorridas(d, x + 3, y0 + 7.8, larg, ls, true);
+  });
+  d.y = y0 + alt + 3;
+
+  // ---- reclamação e diagnóstico (só se houver)
+  const textos = [["Reclamação:", o.reclamacao], ["Diagnóstico:", o.diagnostico]].filter(([, x]) => x && String(x).trim());
+  const blocoTexto = (pares) => {
+    d.fonte("normal", 8.6);
+    const ls = pares.map(([r, x]) => { d.fonte("bold", 8.6); const wr = doc.getTextWidth(r + " "); d.fonte("normal", 8.6); return { r, wr, t: doc.splitTextToSize(String(x), CW - 6 - wr) }; });
+    const a = ls.reduce((s, l) => s + l.t.length * 3.9, 0) + 3.4; d.espaco(a);
+    doc.setDrawColor(BORDA[0], BORDA[1], BORDA[2]); doc.setLineWidth(0.25); doc.roundedRect(M, d.y, CW, a, 1, 1, "S");
+    let yy = d.y + 4.4;
+    for (const l of ls) { d.fonte("bold", 8.6); d.cor(TINTA); doc.text(l.r, M + 3, yy); d.fonte("normal", 8.6); doc.text(l.t, M + 3 + l.wr, yy); yy += l.t.length * 3.9; }
+    d.y += a + 3;
+  };
+  if (textos.length) blocoTexto(textos);
+
+  // ---- itens: produtos, serviços e terceiros, cada tabela com o seu total
+  tabelaOS(d, "PRODUTOS E PEÇAS", lista.filter(i => i.tipo === "peca"), ["Total de produtos", t.pecas]);
+  tabelaOS(d, "SERVIÇOS", lista.filter(i => i.tipo === "servico"), ["Total de serviços", t.servicos]);
+  tabelaOS(d, "SERVIÇOS DE TERCEIROS", lista.filter(i => i.tipo === "terceiro"), ["Total de serviços de terceiros", t.terceiros]);
+  if (o.obs_execucao) blocoTexto([["Observações:", o.obs_execucao]]);
+
+  // ---- resumo: dados à esquerda, totais à direita
+  const quando = o.status === "entregue" ? ["Entregue em", fmtDataHora(o.entregue_em)] : o.previsao_entrega ? ["Previsão", fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "")] : null;
+  const pares = [["Responsável", o.mecanico_nome], ["Consultor", o.consultor_nome],
+    ["Situação", ((situacaoOS(o) || STATUS[o.status] || {}).t || "") + (o.situacao ? " · " + o.situacao : "")], quando,
+    ["Pagamento", o.forma_pagamento], ["Condições", o.condicoes_pagamento],
+    orc && o.validade_orcamento ? ["Válido até", fmtData(o.validade_orcamento)] : null,
+    o.tabela_preco && o.tabela_preco !== "vista" ? ["Tabela", TABELAS_PRECO[o.tabela_preco]] : null]
+    .filter(p => p && p[1] !== null && p[1] !== undefined && String(p[1]).trim() !== "" && p[1] !== "—");
+  const linhasTot = [["Produtos", t.pecas], ["Serviços", t.servicos], ["Serviços de terceiros", t.terceiros], ["Desconto", -t.desconto]].filter(([, x]) => Number(x));
+  const largEsq = 108, colE = (largEsq - 4) / 2, xTot = M + largEsq + 8, largTot = W - M - xTot;
+  d.fonte("bold", 8.6);
+  const celulas = pares.map(([r, x]) => ({ r, t: doc.splitTextToSize(String(x), colE - 1) }));
+  const altLinha = []; for (let i = 0; i < celulas.length; i += 2) altLinha.push(3.4 + Math.max(...celulas.slice(i, i + 2).map(cc => cc.t.length)) * 3.8 + 1);
+  const altEsq = altLinha.reduce((s, a) => s + a, 0);
+  const altDir = (linhasTot.length > 1 ? linhasTot.length * 4.6 : 0) + 8;
+  d.espaco(Math.max(altEsq, altDir) + 4);
+  d.linhaH(d.y, BORDA, 0.25); d.y += 2.5;
+  let yy = d.y;
+  for (let i = 0; i < celulas.length; i += 2) {
+    celulas.slice(i, i + 2).forEach((cc, j) => { const x = M + j * (colE + 4);
+      d.fonte("normal", 6.8); d.cor(ROT); doc.text(cc.r, x, yy + 2.4); d.fonte("bold", 8.6); d.cor(TINTA); doc.text(cc.t, x, yy + 6); });
+    yy += altLinha[i / 2];
+  }
+  let yt = d.y + 3.4;
+  if (linhasTot.length > 1) for (const [r, x] of linhasTot) { d.fonte("normal", 9); d.cor(TINTA); doc.text(r, xTot, yt); d.fonte("bold", 9); doc.text(x < 0 ? "− " + reais(-x) : reais(x), W - M, yt, { align: "right" }); yt += 4.6; }
+  doc.setDrawColor(TINTA[0], TINTA[1], TINTA[2]); doc.setLineWidth(0.6); doc.line(xTot, yt - 2.2, W - M, yt - 2.2);
+  d.fonte("bold", 11.5); d.cor(TINTA); doc.text("Total", xTot, yt + 3.2); doc.text(reais(t.total), W - M, yt + 3.2, { align: "right" });
+  d.y += Math.max(altEsq, altDir) + 1.5;
+
+  // ---- termo
+  d.fonte("normal", 7.2); const tl = doc.splitTextToSize(termo, CW);
+  d.espaco(tl.length * 3.1 + 2); d.cor(TEXTO2); doc.text(tl, M, d.y + 2.6, { maxWidth: CW, align: "justify" }); d.y += tl.length * 3.1 + 2;
+
+  // ---- assinaturas (e autorização), como na impressão
+  const nota = !orc && o.aprovacao ? "Autorizado por " + o.aprovacao.por + " em " + fmtDataHora(o.aprovacao.em) + " (" + o.aprovacao.forma + "). Na retirada, o cliente declara receber o veículo com os serviços executados e testados." : "";
+  d.fonte("normal", 7.8); const nl = nota ? doc.splitTextToSize(nota, CW) : [];
+  d.espaco(30 + nl.length * 3.4);
+  const la = (CW - 16) / 2, yA = d.y + 15;
+  const assina = async (x, rotulo, img) => {
+    if (img) { try { const im = await imagem(img); const r = Math.min(la / im.w, 13 / im.h); doc.addImage(im.data, im.fmt, x + (la - im.w * r) / 2, yA - im.h * r - 0.5, im.w * r, im.h * r, undefined, "FAST"); } catch (e) {} }
+    doc.setDrawColor(TINTA[0], TINTA[1], TINTA[2]); doc.setLineWidth(0.25); doc.line(x, yA, x + la, yA);
+    d.fonte("normal", 7.8); d.cor(TINTA); doc.text(doc.splitTextToSize(rotulo, la)[0], x + la / 2, yA + 3.6, { align: "center" });
+  };
+  if (orc) {
+    d.fonte("normal", 8.6); d.cor(TINTA); doc.text("Autorizo a execução nas condições acima.", M, yA - 9);
+    d.fonte("bold", 8.6); doc.text("(   ) Aprovado    (   ) Reprovado    Data: ____/____/______", M, yA - 4);
+    await assina(M + la + 16, "Cliente: " + (c.nome || ""));
+  } else {
+    await assina(M, "Cliente: " + (c.nome || ""), o.assinatura_entrega);
+    await assina(M + la + 16, "Oficina");
+  }
+  d.y = yA + 6;
+  if (nl.length) { d.fonte("normal", 7.8); d.cor(TEXTO2); doc.text(nl, M, d.y + 1.5); d.y += nl.length * 3.4 + 1; }
+  d.linhaH(d.y + 0.5, BORDA, 0.25);
+  d.fonte("bold", 7.2); d.cor(ROT); doc.text("NÃO VALE COMO RECIBO DE PAGAMENTO", W / 2, d.y + 4, { align: "center" }); d.y += 7;
+
+  // ---- fotos do serviço (o PDF leva; a impressão não)
+  await gradeFotos(d, (o.fotos || []).filter(f => f.etapa !== "entrada"), "FOTOS DO SERVIÇO");
+  const n = doc.getNumberOfPages();
+  if (n > 1) rodape(d, numOS(o.numero) + "  ·  " + (orc ? "Orçamento" : "Ordem de serviço") + "  ·  " + exPlaca(v.placa) + "  ·  " + (cfg.nome || ""));
   return doc.output("blob");
 }
 

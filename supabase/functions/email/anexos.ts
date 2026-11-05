@@ -106,7 +106,10 @@ async function daOS(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Reco
   ]);
   if (doc.gerador === "pdfOS" && o.status !== "entregue") avisos.push(`A O.S. ${numero} ainda não foi entregue: o PDF sai como "em andamento", sem a data da garantia.`);
   if (cfg.espelhoLegado !== false) avisos.push("Período de transição: a O.S. vem da cópia do OS Oficina. Confira os valores antes de enviar ao cliente.");
-  const blob = await g[doc.gerador]({ ...o, itens, fotos, eventos: [] }, cfg);
+  // ficha do cliente e do veículo: código, 2º telefone, endereço completo, combustível e chassi (iguais à impressão do sistema)
+  const [cli] = o.cliente_id ? await lista(adm.from("clientes").select("*").eq("id", o.cliente_id)) : [];
+  const [vei] = o.veiculo_id ? await lista(adm.from("veiculos").select("*").eq("id", o.veiculo_id)) : [];
+  const blob = await g[doc.gerador]({ ...o, itens, fotos, eventos: [] }, cfg, { cli: cli || null, vei: vei || null });
   const placa = String((o.veiculo as Record<string, unknown> || {}).placa || "");
   return { nome: `${doc.nome}_${String(numero).padStart(5, "0")}${placa ? "_" + placa : ""}.pdf`, tipo: "application/pdf", bytes: await bytesDoPdf(blob),
     origem: `O.S. ${numero} (${doc.rotulo}${p.fotos === false ? ", sem fotos" : ""})` };

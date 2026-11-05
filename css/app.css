@@ -1084,3 +1084,40 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pedidos-pagamento{display:flex;flex-direction:column;gap:6px;margin:10px 0;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface-2)}
 .pedido-pag{display:flex;align-items:center;gap:8px;cursor:pointer}
 .pedido-pag span{flex:1}
+
+/* ---------- O.S. em cards (opção do computador: Lista | Tabela | Cards). Uma cor por etapa; o celular não usa ---------- */
+.os-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px}
+.os-card{--etapa:var(--muted);--etapa-soft:var(--surface-2);--on-etapa:#fff;display:flex;flex-direction:column;min-width:0;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);overflow:hidden;box-shadow:inset 0 4px 0 var(--etapa);transition:border-color .15s ease}
+.os-card:hover{border-color:var(--etapa)}
+.os-card.e-orc,.os-card.e-prov{--etapa:var(--warn);--etapa-soft:var(--warn-soft)}
+.os-card.e-exe{--etapa:var(--brand);--etapa-soft:var(--brand-soft)}
+.os-card.e-pag{--etapa:var(--ok);--etapa-soft:var(--ok-soft)}
+.os-card.e-rec{--etapa:var(--bad);--etapa-soft:var(--bad-soft)}
+@media (prefers-color-scheme: dark){:root:not([data-tema="claro"]) .os-card{--on-etapa:#0a0e14}}
+:root[data-tema="escuro"] .os-card{--on-etapa:#0a0e14}
+.osc-corpo{flex:1;display:flex;flex-direction:column;gap:8px;min-width:0;padding:0 0 10px;text-align:left;color:inherit}
+.osc-cab{display:flex;align-items:flex-start;gap:12px;padding:16px 14px 12px;background:var(--etapa-soft);border-bottom:1px solid var(--line)}
+.osc-id{flex:1;min-width:0;display:flex;flex-direction:column}
+.osc-id small{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.osc-id strong{font-family:var(--f-display);font-size:19px;line-height:1.15;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.osc-id span{font-size:13.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.osc-cli,.osc-recl,.osc-meta{padding:0 14px;font-size:14px}
+.osc-cli{display:flex;justify-content:space-between;gap:8px;min-width:0}
+.osc-cli b{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.osc-cli span{flex:none;color:var(--muted);font-variant-numeric:tabular-nums}
+.osc-recl{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.osc-meta{font-size:13px;color:var(--muted)}
+.osc-rodape{margin-top:auto;display:flex;flex-direction:column;align-items:flex-start;gap:6px;padding:10px 14px 0;border-top:1px solid var(--line)}
+.osc-etapa{padding:2px 9px;border-radius:6px;background:var(--etapa-soft);color:var(--etapa);font-size:12.5px;font-weight:700}
+.osc-valor{align-self:stretch;display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.osc-valor small{font-size:12.5px;color:var(--muted)}
+.osc-valor small.c-bad{color:var(--bad);font-weight:600}
+.osc-valor b{font-family:var(--f-display);font-size:20px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.osc-acoes{display:flex;align-items:center;gap:8px;padding:0 14px 14px}
+.osc-acoes .btn-avancar,.osc-acoes .btn-encerrar{flex:1;min-height:38px;background:var(--etapa);color:var(--on-etapa);border-color:transparent}
+.osc-acoes .btn-avancar:hover,.osc-acoes .btn-encerrar:hover{background:var(--etapa);color:var(--on-etapa);filter:brightness(.9)}
+.osc-acoes .menu-os-lista{flex:0 0 auto;margin-left:auto}
+.osc-acoes .menu-os-lista .btn-mais{width:auto;min-height:38px;padding:0 14px}
+/* no modo Cards, o resumo do topo usa as mesmas cores dos cards */
+.visao-cards .osr-orcamento{border-top-color:var(--warn)}.visao-cards .osr-execucao{border-top-color:var(--brand)}
+.visao-cards .osr-pagamento{border-top-color:var(--ok)}.visao-cards .osr-fechada{border-top-color:var(--muted)}

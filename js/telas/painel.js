@@ -339,6 +339,32 @@ function GradeOS({ lista, ver, ir, soma, total, acoesDe, prox = {} }) {
     <tfoot><tr><td colspan="9">${total} O.S.${total > lista.length ? " (mostrando " + lista.length + ")" : ""}</td>${ver ? html`<td class="num">${reais(soma)}</td><td></td><td></td>` : null}<td></td><td></td></tr></tfoot></table></div>`;
 }
 
+/** O.S. em cards (só no computador): uma cor por etapa (classe e-*), o mesmo botão de avançar etapa e o mesmo menu da lista */
+const COR_ETAPA = { orcamento: "orc", execucao: "exe", pagamento: "pag", fechada: "fec", recusado: "rec", cancelado: "can" };
+function CardsOS({ lista, ver, ir, acoesDe, prox = {} }) {
+  const hoje = hojeISO();
+  return html`<div class="os-cards">${lista.map(o => {
+    const e = o._pendente ? "prov" : COR_ETAPA[etapaOS(o)] || "can", st = situacaoOS(o);
+    const atrasada = ["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hoje;
+    const aReceber = o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em;
+    const parcVencida = ver && prox[o.id] && prox[o.id].vencimento < hoje;
+    const ficha = [o.veiculo.ano, o.veiculo.cor, o.km_entrada ? Number(o.km_entrada).toLocaleString("pt-BR") + " km" : ""].filter(Boolean).join(", ");
+    const quando = atrasada ? "previsão vencida" : parcVencida ? "recebimento vencido" : o.status === "entregue" && o.entregue_em ? "entregue em " + fmtData(o.entregue_em) : "há " + tempoDesde(o.criado_em);
+    return html`<article key=${o.id} class=${"os-card e-" + e}>
+      <button type="button" class="botao-limpo osc-corpo" onClick=${() => ir("/os/" + o.id)}>
+        <span class="osc-cab"><span class="osc-id"><small>${o._provisorio || numOS(o.numero)}, aberta em ${fmtData(o.criado_em)}</small>
+          <strong>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") || "Veículo"}</strong>${ficha ? html`<span>${ficha}</span>` : null}</span>
+          <${Placa} placa=${o.veiculo.placa} /></span>
+        <span class="osc-cli"><b>${o.cliente.nome}</b>${o.cliente.telefone ? html`<span>${fmtTel(o.cliente.telefone)}</span>` : null}</span>
+        ${o.reclamacao ? html`<span class="osc-recl">${o.reclamacao}</span>` : null}
+        ${o.mecanico_nome || o.box ? html`<span class="osc-meta">${[o.mecanico_nome ? "Mecânico: " + o.mecanico_nome : "", o.box ? "Box " + o.box : ""].filter(Boolean).join(", ")}</span>` : null}
+        <span class="osc-rodape"><span class="osc-etapa">${o._pendente ? "Aguardando número" : st.t}</span>
+          <span class="osc-valor"><small class=${atrasada || parcVencida ? "c-bad" : ""}>${quando}</small>
+          ${ver && Number(o.total) > 0 ? html`<b>${aReceber ? "falta " + reais(faltaReceber(o)) : reais(o.total)}</b>` : null}</span></span>
+      </button>
+      ${acoesDe ? html`<div class="osc-acoes">${acoesDe(o)}</div>` : null}</article>`; })}</div>`;
+}
+
 const ETAPAS_RESUMO = ETAPAS;
 const ORDENS_OS = [["recentes", "Mais recentes"], ["antigas", "Mais antigas no pátio"], ["previsao", "Previsão de entrega"], ["valor", "Maior valor"], ["numero", "Número da O.S."]];
 const naEtapa = (o, k) => etapaOS(o) === (k === "receber" ? "pagamento" : k);
@@ -402,7 +428,7 @@ export function Ordens({ params = {} }) {
   const totalAberto = abertas.reduce((s, o) => s + (etapaOS(o) === "pagamento" ? faltaReceber(o) : Number(o.total || 0)), 0);
   const atrasadas = dados.ordens.filter(o => ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO()).length;
   const nRecVenc = ver ? dados.ordens.filter(recVencida).length : 0;
-  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : " larga-media")}>
+  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : visao === "cards" ? " larga visao-cards" : " larga-media")}>
     <div class="os-resumo">${ver ? html`<button type="button" class=${"osr osr-total" + (filtro === "abertas" ? " ativo" : "")} onClick=${() => setFiltro("abertas")} title="Orçamento + em execução + o que falta receber das O.S. aguardando pagamento">
         <span>Total em aberto</span><b>${reais(totalAberto)}</b><small>${abertas.length} O.S.</small></button>` : null}
       ${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>
@@ -414,11 +440,12 @@ export function Ordens({ params = {} }) {
       <select class="inp" aria-label="Situação" value=${filtro} onChange=${e => setFiltro(e.target.value)}>
         ${[["abertas", "Todas em aberto"], ["todas", "Todas as O.S."], ...ETAPAS.map(([k, t]) => [k, t]), ["recusado", "Orçamento recusado"], ["cancelado", "Canceladas"], ["rec-vencido", "Recebimento vencido"], ["atrasadas", "Previsão vencida"], ["herdadas", "Herdadas do sistema antigo (abertas)"]].map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
       <select class="inp" aria-label="Ordenar" value=${ordem} onChange=${e => { setOrdem(e.target.value); lsSet("dtcar-os-ordem", e.target.value); }}>${ORDENS_OS.map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
-      ${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} />` : null}
+      ${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} cards />` : null}
     </div>
     <section class="card"><div class="secao-topo"><h2>${lista.length} O.S.</h2><span class="sub">${ver && soma ? reais(soma) : ""}</span>
         ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${() => ir("/entrada")}>+ Nova O.S.</button>` : null}</div>
       ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} acoesDe=${acoesDe} prox=${prox} />`
+      : lista.length && visao === "cards" ? html`<${CardsOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} acoesDe=${acoesDe} prox=${prox} />`
       : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} parcela=${prox[o.id]} acoes=${acoesDe(o)} onClick=${() => ir("/os/" + o.id)} />`)}</div>`
         : html`<${Vazio}>${dados.ordens.length ? "Nenhuma O.S. com esse filtro." : "Nenhuma O.S. ainda."}</${Vazio}>`}
       ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}

@@ -40,8 +40,20 @@ export function paraGuardar(m) {
   const k = m && m.key; if (!k || !k.id || !conversaIndividual(k.remoteJid)) return null;
   const t = textoDaMensagem(m); if (!t) return null;
   const ts = Number(m.messageTimestamp && (m.messageTimestamp.low ?? m.messageTimestamp)) || 0;
-  return { msg_id: k.id, jid: k.remoteJid, telefone: telefoneDaChave(k), nome: k.fromMe ? "" : String(m.pushName || "").slice(0, 80),
+  const r = { msg_id: k.id, jid: k.remoteJid, telefone: telefoneDaChave(k), nome: k.fromMe ? "" : String(m.pushName || "").slice(0, 80),
     de_mim: !!k.fromMe, texto: t.texto.slice(0, 4000), tipo: t.tipo, em: new Date(ts ? ts * 1000 : Date.now()).toISOString() };
+  const cit = mensagemCitada(m); if (cit) r.responde_a = cit;
+  return r;
+}
+
+/** v36: id da mensagem citada com "Responder" (o Danilo responde em cima do aviso para dizer de qual cliente é). */
+export function mensagemCitada(m) {
+  const c = conteudo(m); if (!c) return "";
+  for (const k of Object.keys(TIPOS)) {
+    const ci = c[k] && typeof c[k] === "object" && c[k].contextInfo;
+    if (ci && ci.stanzaId) return String(ci.stanzaId).slice(0, 200);
+  }
+  return "";
 }
 
 /** Mídia que vale baixar de uma mensagem RECEBIDA: áudio (para transcrever; o arquivo não é guardado) e foto

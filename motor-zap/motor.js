@@ -14,6 +14,8 @@
 // transcrever; o arquivo não é guardado) e a foto recebida (guardada 30 dias). Atualiza só por versão aprovada (iniciar.sh).
 // v34 (motor 3.2): mensagem da fila com PDF (O.S., orçamento, boleto, NF). O motor pede à função zap um link temporário do PDF
 // (só da mensagem que ele pegou), confere que é PDF do tamanho certo e envia: o texto e, logo depois, o documento.
+// v36 (motor 3.3): guarda também qual mensagem foi citada com "Responder" (responde_a): é assim que o banco sabe para qual
+// cliente é a resposta que o Danilo manda em cima do aviso.
 // Biblioteca: SOMENTE o pacote oficial "baileys" (WhiskeySockets), versão travada no package.json.
 import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto, downloadMediaMessage } from "baileys";
 import { readFileSync } from "node:fs";
@@ -23,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere } from "./whats.js";
 
-export const VERSAO = "3.2";
+export const VERSAO = "3.3";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
 const ESPERAS = [5, 15, 30, 60, 120, 300].map((s) => s * 1000); // entre tentativas de reconectar
@@ -234,7 +236,10 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     if (guardando || !st.aGuardar.length) return guardando || Promise.resolve();
     const lote = st.aGuardar.splice(0, 200);
     guardando = rpc("whatsapp_motor_mensagens", { ...base(), p_msgs: lote })
-      .catch((e) => { st.aGuardar.unshift(...lote); if (!/function|does not exist|PGRST202/i.test(e.message)) log("não guardou mensagens (tenta de novo):", e.message); })
+      // v36: os avisos são tratados numa chamada separada, depois de gravar (a gravação nunca depende deles)
+      .then(() => rpc("whatsapp_motor_avisos", { p_chave: config.chave })
+        .catch((e) => { if (!/function|does not exist|PGRST202/i.test(e.message)) log("avisos (o agendamento de 1 min trata):", e.message); }),
+        (e) => { st.aGuardar.unshift(...lote); if (!/function|does not exist|PGRST202/i.test(e.message)) log("não guardou mensagens (tenta de novo):", e.message); })
       .finally(() => { guardando = null; });
     return guardando;
   }

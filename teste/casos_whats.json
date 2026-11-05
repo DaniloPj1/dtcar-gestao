@@ -151,6 +151,61 @@
     }
    },
    "esperado": null
+  },
+  {
+   "nome": "v36: resposta do Danilo citando o aviso (texto)",
+   "m": {
+    "key": {
+     "id": "D1",
+     "remoteJid": "5527997696545@s.whatsapp.net",
+     "fromMe": false
+    },
+    "pushName": "Danilo",
+    "messageTimestamp": 1793736000,
+    "message": {
+     "extendedTextMessage": {
+      "text": "diz que fica pronto amanhã",
+      "contextInfo": {
+       "stanzaId": "3EB0AVISO123",
+       "participant": "5527992470140@s.whatsapp.net"
+      }
+     }
+    }
+   },
+   "esperado": {
+    "msg_id": "D1",
+    "telefone": "5527997696545",
+    "de_mim": false,
+    "texto": "diz que fica pronto amanhã",
+    "tipo": "texto",
+    "responde_a": "3EB0AVISO123"
+   }
+  },
+  {
+   "nome": "v36: áudio citando o aviso",
+   "m": {
+    "key": {
+     "id": "D2",
+     "remoteJid": "5527997696545@s.whatsapp.net",
+     "fromMe": false
+    },
+    "messageTimestamp": 1793736000,
+    "message": {
+     "audioMessage": {
+      "seconds": 5,
+      "mimetype": "audio/ogg; codecs=opus",
+      "contextInfo": {
+       "stanzaId": "3EB0RASC456"
+      }
+     }
+    }
+   },
+   "esperado": {
+    "msg_id": "D2",
+    "tipo": "audio",
+    "texto": "[audio]",
+    "responde_a": "3EB0RASC456"
+   }
   }
  ],
  "variacoes": [

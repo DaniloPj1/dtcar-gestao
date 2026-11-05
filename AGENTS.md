@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v37.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -109,6 +109,27 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   "email"; só `texto` continua direto no `whatsapp_enfileirar`. Tela da O.S. (administrador): botões de WhatsApp abrem o quadro com "Abrir
   WhatsApp" ou "Enviar pelo WhatsApp da oficina" (`js/telas/zapos.js`). Mudou `js/mensagens.js`? Troque o commit dele em `email/site.ts`.
   Testes: `python3 teste/teste_v34.py` (Postgres local, sem o banco da oficina), `deno run -A teste/teste_whatsapp_pdf.ts`.
+  **v36 (05/11/2026): aviso de resposta, resposta pelo WhatsApp do Danilo e resumo** — sem rodar o Claude (custo zero no plano).
+  Quem decide é o banco: `whatsapp_avisos_tratar`, chamada FORA da gravação (sem gatilho: a gravação das recebidas nunca espera nem falha
+  pelos avisos) — o motor chama `whatsapp_motor_avisos` (chave do motor, 5 por vez) e a zap `whatsapp_avisos_processar` logo depois de gravar;
+  o agendamento de 1 min trata o resto (50 por vez). Erro numa mensagem é tentado de novo e na 3ª falha vira `aviso = 'erro'`
+  (`aviso_tentativas`); mensagem recebida com mais de 6 h (motor parado, histórico do celular) vira `antiga`, sem aviso. Mensagem da oficina (fila ou celular) abre vigia de 48 h (`whatsapp_vigias`; não para o número de alerta). Chegou mensagem
+  de número com vigia aberta ou de cliente com O.S. (cadastro, telefone gravado na O.S. ou cliente da última mensagem da fila para o número):
+  **aviso** no `alerta_telefone` (`whatsapp_avisos` tipo aviso; espera `juntar_s` = 45 s em `whatsapp_fila.liberar_em` para juntar as
+  seguidas; áudio espera a transcrição até 3 min). O resto vai para o **resumo** por regras (`whatsapp_resumo_enviar`, pg_cron 08h, 12h e
+  17h30 de Brasília; grupos por tipo de contato; palavras de propaganda só contam). Mensagem do próprio Danilo é **comando**
+  (`whatsapp_comando`, número de alerta comparado com TODOS os dígitos: `whatsapp_e_alerta`): **OK, CANCELAR e AGORA só valem citando a
+  mensagem do próprio rascunho** (AGORA também na confirmação "na fila"); solto ou em cima de aviso → explicação, nada sai. Texto liga ao cliente pela mensagem citada (`responde_a`, gravada pelo motor 3.3 e pela zap: `mensagemCitada`, cópia igual)
+  ou, sem citação, pelo único cliente com aviso/rascunho em 30 min; texto → **rascunho** que a ação `assistente` da zap (chamada pelo banco
+  via pg_net e pelo agendamento de 1 min `dtcar-zap-avisos`) reescreve com o Claude Haiku (segredos `ANTHROPIC_API_KEY` e, opcional,
+  `ASSISTENTE_MODELO`; 3 tentativas, depois vai o texto dele marcado "sem revisão da IA"); OK (em cima do rascunho) → `whatsapp_assistente_enviar`
+  (origem `assistente`, mesmas proteções do `whatsapp_enfileirar`), OK AGORA/AGORA → fora do horário, CANCELAR, outro texto = correção.
+  Nada vai ao cliente sem o OK; rascunho vence em 24 h. Fila: `interno` (mensagens ao Danilo, inclusive o alerta de motor sem
+  sinal) sai primeiro, fora dos limites por hora/dia (também no `whatsapp_enfileirar`) e, com `avisos.fora_horario` (padrão), fora do
+  horário comercial, menos no silêncio 22h–7h — conferido no `whatsapp_pegar_proxima`: no silêncio, as internas voltam a esperar; quando ele
+  acaba, saem mesmo fora do horário comercial. IA: depois de uma falha, nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
+  (padrões em `whatsapp_avisos_cfg()`). Tabelas fora do backup, do banco do PC e do espelho. Mudou `paraGuardar`/`mensagemCitada`? Mude
+  as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
   (instalação num HOME temporário).

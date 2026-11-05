@@ -104,8 +104,17 @@ export async function prepararWhatsApp(d: DepsZap, p: Record<string, unknown>): 
   if (p.anexo && typeof p.anexo === "object") {
     // sem número no anexo: o da O.S. da mensagem
     const a = { ...(p.anexo as Record<string, unknown>) }, num = numeroOS(p.numero_os);
+    if (!num) throw new ErroAnexo("O PDF é de uma O.S.: informe a O.S. da mensagem (numero_os).");
     if (num && a.fonte === "os" && !a.numero) a.numero = num;
     if (num && (a.fonte === "boleto" || a.fonte === "nf") && !a.os && !a.nosso_numero && !a.id) a.os = num;
+    // O.S. informada no próprio anexo: tem de ser a mesma da mensagem; sem O.S. na mensagem, o PDF de O.S. não sai
+    // (o destinatário vem da O.S. da mensagem: nunca o documento de outro cliente)
+    for (const k of ["numero", "os"]) {
+      if (a[k] === undefined || a[k] === null || a[k] === "") continue;
+      const n = numeroOS(a[k]);
+      if (!num) throw new ErroAnexo("O PDF é de uma O.S.: informe a O.S. da mensagem (numero_os), a mesma do anexo.");
+      if (n !== num) throw new ErroAnexo(`O anexo é da O.S. ${n}, mas a mensagem é da O.S. ${num}.`);
+    }
     // boleto ou NF escolhidos pelo número/id: têm de ser da mesma O.S. da mensagem (nunca o documento de outro cliente)
     if (num && a.fonte === "boleto" && a.nosso_numero) {
       const [b] = await lista(d.adm.from("boletos").select("os_numero").eq("nosso_numero", String(a.nosso_numero).replace(/\D/g, "")));

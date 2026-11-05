@@ -312,7 +312,7 @@ export function criarServidor(db: Banco): McpServer {
   }, async ({ texto: t, modelo, anexo, cliente_id, numero_os, telefone, fora_do_horario, pedido, confirmar }) => {
     if (!cliente_id && !numero_os && !telefone) return falha("Informe o telefone com DDD, o cliente (cliente_id) ou a O.S. (numero_os).");
     if (!t && !modelo && !anexo) return falha("Informe o texto, um modelo ou o PDF (anexo).");
-    if (anexo && !numero_os && !anexo.nosso_numero && !anexo.id) return falha("O PDF é da O.S.: informe numero_os.");
+    if (anexo && !numero_os) return falha("O PDF é da O.S.: informe numero_os (o boleto ou a NF têm de ser dessa O.S.).");
     let r: Record<string, unknown>;
     if (modelo || anexo) {
       // v34: texto do modelo e PDF montados pela função "email" (mesmos js/mensagens.js e js/pdf.js do site)

@@ -154,6 +154,9 @@ await deve("nada para mandar", () => w({ numero_os: 1887 }), /texto, um modelo o
   const nf = await w({ numero_os: 1865, texto: "Segue a nota fiscal.", anexo: { fonte: "nf" } });
   confere("NF: só o PDF (o XML não vai pelo WhatsApp)", (nf.arquivo as L).nome === "NF 131.pdf", nf.arquivo);
 }
+await deve("NF com O.S. diferente da mensagem", () => w({ numero_os: 1887, anexo: { fonte: "nf", os: 1865 } }), /anexo é da O\.S\. 1865, mas a mensagem é da O\.S\. 1887/);
+await deve("PDF da O.S. com número diferente da mensagem", () => w({ numero_os: 1887, anexo: { fonte: "os", numero: 1865 } }), /anexo é da O\.S\. 1865/);
+await deve("PDF de O.S. sem a O.S. na mensagem", () => w({ telefone: "27999990000", texto: "x", anexo: { fonte: "boleto", os: 1865 } }), /informe a O\.S\. da mensagem/);
 await deve("boleto de outra O.S. não vai para este cliente", () => w({ numero_os: 1887, anexo: { fonte: "boleto", nosso_numero: "261000017" } }), /é da O\.S\. 1865, não da 1887/);
 await deve("NF de outra O.S. não vai para este cliente", () => w({ numero_os: 1887, anexo: { fonte: "nf", id: "11111111-1111-1111-1111-111111111111" } }), /é da O\.S\. 1865, não da 1887/);
 confere("nome do PDF: longo continua terminando em .pdf; vazio vira documento.pdf", nomeSeguroPdf("x".repeat(200) + ".pdf").length === 120 && nomeSeguroPdf("x".repeat(200) + ".pdf").endsWith(".pdf")

@@ -105,6 +105,10 @@ const cfg = tabelas.config[0].dados as L;
   await deve("cobrança de O.S. antiga entregue (conta como paga, recebido 0)", () => w({ modelo: "cobranca", numero_os: 1500 }), /nada a receber/);
   tabelas.ordens.push({ id: "o5", numero: 1501, status: "entregue", criado_em: "2025-01-01T12:00:00Z", cliente: { nome: "Antigo" }, veiculo: { placa: "BBB2B22" },
     total: 800, recebido: 300, checkin: { legado: { a_receber: true } } });
+  tabelas.ordens.push({ id: "o6", numero: 1502, status: "entregue", criado_em: "2026-10-01T12:00:00Z", cliente: { nome: "X" }, veiculo: { placa: "CCC3C33" },
+    total: 500, recebido: 500, finalizada_em: "2026-10-05T12:00:00Z", checkin: {} });
+  tabelas.receber.push({ id: "r9", ordem_id: "o6", status: "aberta", parcela: 1, parcelas: 1, valor: 500, vencimento: "2026-11-01", forma: "Boleto" });
+  await deve("O.S. fechada com parcela esquecida aberta: não cobra", () => w({ modelo: "cobranca", numero_os: 1502 }), /nada a receber.*esquecidas/);
   const ra = await w({ modelo: "cobranca", numero_os: 1501 });
   confere("O.S. antiga marcada a receber: cobra o saldo", /500,00/.test(String(ra.texto)), ra.texto);
 }

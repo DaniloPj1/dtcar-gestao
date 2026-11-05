@@ -70,7 +70,8 @@ async function textoDoModelo(d: DepsZap, p: Record<string, unknown>, avisos: str
     const leg = ((o.checkin || {}) as Record<string, unknown>).legado as Record<string, unknown> | undefined;
     const quitada = !!o.finalizada_em || (!!leg && leg.a_receber !== true && st === "entregue");
     const saldo = quitada ? 0 : Math.max(0, Number(o.total || 0) - Number(o.recebido || 0));
-    if (!parcelas.length && saldo <= 0.005) throw new ErroAnexo(`A O.S. ${num} não tem nada a receber.`);
+    if (quitada || (!parcelas.length && saldo <= 0.005))
+      throw new ErroAnexo(`A O.S. ${num} não tem nada a receber${quitada && parcelas.length ? ` (está quitada; há ${parcelas.length} parcela(s) aberta(s) esquecidas: cancele em Contas a receber)` : ""}.`);
     if (!parcelas.length) avisos.push(`A O.S. ${num} não tem parcelas lançadas: a cobrança sai com o saldo de R$ ${saldo.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`);
     extra.parcelas = parcelas;
   }

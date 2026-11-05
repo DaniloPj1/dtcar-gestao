@@ -80,8 +80,20 @@ F3 = r["id"] if isinstance(r, dict) else 0
 _, e = sql(f"select whatsapp_enfileirar({q({'telefone': '27999990002', 'texto': 'x', 'arquivo': arquivo()})}, false)", "authenticated", CONS)
 confere("consultor não envia", "administrador" in e, e)
 
-# ---------- motor pega e baixa ----------
+# ---------- quem não sabe enviar PDF (zap antiga, motor 3.1) não recebe mensagem com PDF ----------
 p, _ = js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1')", "anon")
+confere("motor antigo (sem p_com_arquivo): pula as com PDF e pega só a de texto", isinstance(p, dict) and p["mensagem"]["id"] == F3 and p["mensagem"]["arquivo"] is None, p)
+_, e = sql(f"select whatsapp_motor_arquivo('{CHAVE}', {F3})", "service_role")
+confere("mensagem sem arquivo não dá link", "sem arquivo" in e, e)
+sql(f"select whatsapp_motor_resultado('{CHAVE}', 'm1', {F3}, true, 'MSG3', '', null)", "anon")
+sql("update whatsapp_conexao set proximo_envio = null")
+p, _ = js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1')", "anon")
+confere("motor antigo: com só mensagens com PDF, fila vazia para ele", isinstance(p, dict) and p.get("motivo") == "fila vazia", p)
+n2, _ = sql("select count(*) from pg_proc where proname in ('whatsapp_pegar_proxima', 'whatsapp_motor_proxima')")
+confere("sem funções repetidas (a de 2 parâmetros foi trocada)", n2 == "2", n2)
+
+# ---------- motor pega e baixa ----------
+p, _ = js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1', true)", "anon")
 m = isinstance(p, dict) and p.get("mensagem") or {}
 confere("motor pega a 1ª com o arquivo", m.get("id") == F1 and m.get("arquivo", {}).get("path") == A1["path"] and m["arquivo"]["nome"] == A1["nome"], p)
 a, e = js(f"select whatsapp_motor_arquivo('{CHAVE}', {F1})", "service_role")
@@ -100,16 +112,19 @@ confere("texto + PDF: conversa registra o texto", isinstance(g, dict) and g["st"
 _, e = sql(f"select whatsapp_motor_arquivo('{CHAVE}', {F1})", "service_role")
 confere("depois de enviada, o link não sai mais", "não está sendo enviada" in e, e)
 sql("update whatsapp_conexao set proximo_envio = null")
-p, _ = js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1')", "anon")
+p, _ = js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1', true)", "anon")
 confere("2ª: só o PDF", isinstance(p, dict) and p["mensagem"]["id"] == F2 and p["mensagem"]["texto"] == "" and p["mensagem"]["arquivo"]["nome"] == A2["nome"], p)
 sql(f"select whatsapp_motor_resultado('{CHAVE}', 'm1', {F2}, true, 'MSG2', '', null)", "anon")
 g, _ = js(f"select jsonb_build_object('tx', texto, 'tp', tipo) from whatsapp_mensagens where fila_id = {F2}", None)
 confere("só PDF: conversa mostra [documento] nome", isinstance(g, dict) and g["tx"] == "[documento] " + A2["nome"] and g["tp"] == "documento", g)
-sql("update whatsapp_conexao set proximo_envio = null")
-p, _ = js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1')", "anon")
-confere("3ª: texto sem arquivo (arquivo null)", isinstance(p, dict) and p["mensagem"]["id"] == F3 and p["mensagem"]["arquivo"] is None, p)
-_, e = sql(f"select whatsapp_motor_arquivo('{CHAVE}', {F3})", "service_role")
-confere("mensagem sem arquivo não dá link", "sem arquivo" in e, e)
+# texto saiu e o PDF não (erro com msg_id): pedir de novo em 10 min é recusado (não manda o texto duas vezes)
+A4 = arquivo("OS_01887_ABC1D23.pdf"); na_pasta(A4)
+r, _ = js(f"select whatsapp_enfileirar({q({'telefone': '27999990002', 'texto': 'Segue a O.S.', 'arquivo': A4})}, true)")
+F4 = r["id"]; sql("update whatsapp_conexao set proximo_envio = null")
+js(f"select whatsapp_motor_proxima('{CHAVE}', 'm1', true)", "anon")
+sql(f"select whatsapp_motor_resultado('{CHAVE}', 'm1', {F4}, false, 'MSG4', '', 'O texto saiu, mas o PDF não: x')", "anon")
+r, _ = js(f"select whatsapp_enfileirar({q({'telefone': '27999990002', 'texto': 'Segue a O.S.', 'arquivo': A4})}, true)")
+confere("texto saiu e PDF não: repetir em 10 min é recusado", isinstance(r, dict) and not r["gravado"] and any("10 minutos" in x for x in r["erros"]), r)
 
 # ---------- limpeza ----------
 VELHO = arquivo("velho.pdf"); sql(f"insert into storage.objects (bucket_id, name, created_at) values ('whatsapp-envio', '{VELHO['path']}', now() - interval '31 days'), ('whatsapp-midia', '2026/09/x.jpg', now() - interval '40 days')")

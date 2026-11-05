@@ -299,9 +299,9 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
   }
   /** v34: baixa o PDF da mensagem pelo link temporário da função zap e confere. Erro = não envia nada. */
   async function baixarPdf(m) {
-    const a = await chamarZap({ acao: "arquivo", fila_id: m.id }, 30000);
+    const a = await chamarZap({ acao: "arquivo", fila_id: m.id }, 10000);
     if (!a || !a.url) throw new Error("a função zap não deu o link do PDF");
-    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 60000);
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 25000);
     try {
       const r = await buscar(a.url, { signal: ctl.signal });
       if (!r.ok) throw new Error("PDF não baixado (HTTP " + r.status + ")");
@@ -318,8 +318,13 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     // recebidas não gravadas podem ter um PARAR: também não envia até gravar
     if (st.resultados.length || st.aGuardar.length) return;
     let r;
-    try { r = await rpc("whatsapp_motor_proxima", base()); }
-    catch (e) { if (!/function|does not exist|PGRST202/i.test(e.message)) log("fila:", e.message); return; } // sem o v25: segue sem fila
+    try { r = await rpc("whatsapp_motor_proxima", { ...base(), p_com_arquivo: true }); }
+    catch (e) {
+      if (!/function|does not exist|PGRST202/i.test(e.message)) { log("fila:", e.message); return; }
+      // banco sem o v34 (só a função de 2 parâmetros): pede como antes; sem o v25, segue sem fila
+      try { r = await rpc("whatsapp_motor_proxima", base()); }
+      catch (e2) { if (!/function|does not exist|PGRST202/i.test(e2.message)) log("fila:", e2.message); return; }
+    }
     if (!r || !r.mensagem) { st.motivoFila = (r && r.motivo) || ""; return; }
     const m = r.mensagem; let res;
     try {

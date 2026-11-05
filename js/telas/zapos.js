@@ -1,7 +1,7 @@
 // Enviar pela fila do WhatsApp da oficina, direto da tela da O.S. (v34; só administrador): o mesmo texto do botão
 // "Abrir WhatsApp" (js/mensagens.js) e, se marcado, o PDF (orçamento, O.S. ou checklist), que sai logo depois do texto.
 // Quem monta o texto e o PDF é a função "email" do Supabase (a mesma que o Claude usa): primeiro a prévia, depois a fila.
-import { html, useState, useEffect } from "../lib.js";
+import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { Modal, Area } from "../ui.js";
 import { fmtTel } from "../util.js";
@@ -16,11 +16,13 @@ export function EnvioZapModal({ o, qual, onFechar }) {
   const [texto, setTexto] = useState(null), [editado, setEditado] = useState(false);
   const [previa, setPrevia] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState(""), [feito, setFeito] = useState(null);
   const pedido = confirmar => ({ acao: "whatsapp", modelo: qual, numero_os: o.numero, origem: "tela", confirmar,
-    ...(editado && texto ? { texto } : {}), ...(comPdf && PDF[padrao] ? { anexo: { fonte: "os", documento: padrao } } : {}) });
+    ...(editado ? { texto: texto || "", sem_texto: !String(texto || "").trim() } : {}), ...(comPdf && PDF[padrao] ? { anexo: { fonte: "os", documento: padrao } } : {}) });
+  const vez = useRef(0); // só vale a resposta da prévia mais recente (marcar/desmarcar o PDF rápido, digitar)
   const ver = async () => {
+    const n = ++vez.current;
     setFazendo("previa"); setErro("");
-    try { const r = await api.email.chamar(pedido(false)); setPrevia(r); if (!editado) setTexto(r.texto || ""); }
-    catch (e) { setErro(e.message); } finally { setFazendo(""); }
+    try { const r = await api.email.chamar(pedido(false)); if (n !== vez.current) return; setPrevia(r); if (!editado) setTexto(r.texto || ""); }
+    catch (e) { if (n === vez.current) setErro(e.message); } finally { if (n === vez.current) setFazendo(""); }
   };
   useEffect(() => { ver(); }, [comPdf]);
   // texto editado: confere de novo (limite de tamanho, link encurtado, repetição) pouco depois de parar de digitar
@@ -43,6 +45,6 @@ export function EnvioZapModal({ o, qual, onFechar }) {
     ${previa && (previa.avisos || []).length ? html`<div class="aviso">${linhas(previa.avisos)}</div>` : null}
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="acoes"><button type="button" class="btn-link" onClick=${onFechar}>Cancelar</button><span class="espaco"></span>
-      <button type="button" class="btn btn-pri" disabled=${!!fazendo || !previa || erros.length > 0 || !String(texto || "").trim()} onClick=${enviar}>${fazendo === "enviar" ? "Enviando…" : "Pôr na fila do WhatsApp"}</button></div>`}
+      <button type="button" class="btn btn-pri" disabled=${!!fazendo || !previa || erros.length > 0 || (!String(texto || "").trim() && !comPdf)} onClick=${enviar}>${fazendo === "enviar" ? "Enviando…" : "Pôr na fila do WhatsApp"}</button></div>`}
   </${Modal}>`;
 }

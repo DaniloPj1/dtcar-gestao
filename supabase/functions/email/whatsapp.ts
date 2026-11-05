@@ -24,6 +24,11 @@ export const MAX_PDF = 3 * 1024 * 1024;
 const lista = async (q: Promise<{ data: unknown; error: { message: string } | null }>) => {
   const { data, error } = await q; if (error) throw new Error(error.message); return (data || []) as Array<Record<string, unknown>>;
 };
+/** Nome seguro do PDF: sem caracteres proibidos, até 120 letras e sempre terminando em .pdf. */
+export function nomePdf(n: string) {
+  const base = String(n || "").replace(/[\\/:*?"<>|\r\n]+/g, "-").replace(/\.pdf$/i, "").trim().slice(0, 116) || "documento";
+  return base + ".pdf";
+}
 const numeroOS = (v: unknown) => parseInt(String(v ?? "").replace(/\D/g, ""), 10) || 0;
 
 async function config(adm: Db): Promise<Record<string, unknown>> {
@@ -88,7 +93,8 @@ async function pdfDoPedido(d: DepsZap, anexo: Record<string, unknown>): Promise<
 export async function prepararWhatsApp(d: DepsZap, p: Record<string, unknown>): Promise<Record<string, unknown>> {
   const avisos: string[] = [];
   let texto = String(p.texto ?? "").trim();
-  if (!texto && p.modelo) texto = await textoDoModelo(d, p, avisos);
+  // sem_texto (tela: o Danilo apagou o texto): vai só o PDF
+  if (!texto && p.modelo && p.sem_texto !== true) texto = await textoDoModelo(d, p, avisos);
   else if (p.modelo && texto) avisos.push("Foi usado o texto informado (o modelo ficou só no histórico).");
   let pdf: { arquivo: Arquivo; avisos: string[] } | null = null;
   if (p.anexo && typeof p.anexo === "object") {
@@ -96,13 +102,22 @@ export async function prepararWhatsApp(d: DepsZap, p: Record<string, unknown>): 
     const a = { ...(p.anexo as Record<string, unknown>) }, num = numeroOS(p.numero_os);
     if (num && a.fonte === "os" && !a.numero) a.numero = num;
     if (num && (a.fonte === "boleto" || a.fonte === "nf") && !a.os && !a.nosso_numero && !a.id) a.os = num;
+    // boleto ou NF escolhidos pelo número/id: têm de ser da mesma O.S. da mensagem (nunca o documento de outro cliente)
+    if (num && a.fonte === "boleto" && a.nosso_numero) {
+      const [b] = await lista(d.adm.from("boletos").select("os_numero").eq("nosso_numero", String(a.nosso_numero).replace(/\D/g, "")));
+      if (b && String(b.os_numero || "") !== String(num)) throw new ErroAnexo(`O boleto ${a.nosso_numero} é da O.S. ${b.os_numero || "(sem O.S.)"}, não da ${num}.`);
+    }
+    if (num && a.fonte === "nf" && a.id) {
+      const [n] = await lista(d.adm.from("os_notas").select("os_numero").eq("id", String(a.id)));
+      if (n && Number(n.os_numero) !== num) throw new ErroAnexo(`Essa NF é da O.S. ${n.os_numero}, não da ${num}.`);
+    }
     pdf = await pdfDoPedido(d, a);
   }
   if (!texto && !pdf) throw new ErroAnexo("Informe o texto, um modelo ou o PDF.");
   if (pdf) avisos.push(...pdf.avisos);
   const agora = (d.agora || (() => new Date()))();
   const path = `${agora.getUTCFullYear()}/${String(agora.getUTCMonth() + 1).padStart(2, "0")}/${(d.uuid || (() => crypto.randomUUID()))()}.pdf`;
-  const arquivo = pdf ? { path, nome: pdf.arquivo.nome.replace(/[\\/:*?"<>|\r\n]+/g, "-").slice(0, 120), tipo: "application/pdf", bytes: pdf.arquivo.bytes.length, origem: pdf.arquivo.origem } : undefined;
+  const arquivo = pdf ? { path, nome: nomePdf(pdf.arquivo.nome), tipo: "application/pdf", bytes: pdf.arquivo.bytes.length, origem: pdf.arquivo.origem } : undefined;
   const pedido = {
     texto, arquivo, modelo: p.modelo || undefined, ordem_numero: numeroOS(p.numero_os) || undefined, cliente_id: p.cliente_id || undefined,
     telefone: p.telefone || undefined, fora_horario: p.fora_do_horario === true, pedido: p.pedido || undefined, origem: p.origem === "tela" ? "tela" : "claude",

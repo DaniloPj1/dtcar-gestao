@@ -354,7 +354,9 @@ async function processar(adm: Db, ms: () => number): Promise<Response> {
         await guardar(); await gravarTiques();
         // recebidas não gravadas podem ter um PARAR: sem gravar, não envia nada
         if (aGuardar.length) { motivo = "mensagens recebidas não gravadas: parou"; break; }
-        const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
+        let { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id, p_com_arquivo: true });
+        // banco sem o v34 (só a função de 2 parâmetros): pede como antes
+        if (error && /function|does not exist|PGRST202/i.test(error.message)) ({ data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id }));
         if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
         const prox = p as { mensagem?: { id: number; telefone: string; texto: string; arquivo?: { path: string; nome: string; tipo: string; bytes: number } | null }; motivo?: string; proximo_envio?: string };
         if (!prox || !prox.mensagem) {

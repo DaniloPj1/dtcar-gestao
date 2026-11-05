@@ -11,6 +11,8 @@
 --     boas_vindas), só para o histórico. O texto é montado pela função "email" a partir dos dados da O.S.
 --  3. PDFs com mais de 30 dias saem da pasta (agendamento diário que já limpa as fotos do WhatsApp).
 -- Continuam valendo todas as regras da fila (horário, intervalo, limites, PARAR, sem repetir em 10 min).
+-- ORDEM SEGURA: mensagem com PDF só sai por quem sabe enviar PDF (zap nova, motor 3.2). Zap antiga/motor 3.1 não a recebem;
+-- ela fica na fila até a zap nova ser publicada ou o motor atualizar (etiqueta motor-v3.2).
 --
 -- Rode depois do v32 (e do v33). Pode rodar mais de uma vez.
 -- =====================================================================
@@ -97,10 +99,13 @@ begin
   if v_tel ~ '^55\d{10,11}$' and exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(v_tel)) then
     v_erros := v_erros || 'Este número pediu para não receber mensagens (respondeu PARAR).'::text;
   end if;
+  -- dois pedidos ao mesmo tempo para o mesmo número: um espera o outro (a conferência de repetição vale para os dois)
+  if p_gravar and v_tel ~ '^55\d{10,11}$' then perform pg_advisory_xact_lock(hashtext('dtcar-zap-fila:' || public.whatsapp_chave_tel(v_tel))); end if;
   -- mesma mensagem (texto e nome do arquivo) para o mesmo número em 10 minutos: não repete
+  -- (inclui a que deu erro depois de o texto sair: msg_id gravado)
   if exists (select 1 from public.whatsapp_fila f where public.whatsapp_chave_tel(f.telefone) = public.whatsapp_chave_tel(v_tel) and f.texto = v_txt
               and coalesce(f.arquivo ->> 'nome', '') = coalesce(v_arq ->> 'nome', '')
-              and f.status in ('pendente', 'enviando', 'enviada') and f.criado_em > now() - interval '10 minutes') then
+              and (f.status in ('pendente', 'enviando', 'enviada') or (f.status = 'erro' and f.msg_id is not null)) and f.criado_em > now() - interval '10 minutes') then
     v_erros := v_erros || 'Esta mesma mensagem para este número já está na fila ou foi enviada há menos de 10 minutos.'::text;
   end if;
   select count(*) into v_hoje from public.whatsapp_fila
@@ -135,7 +140,10 @@ end $$;
 -- ---------------------------------------------------------------------
 -- 4. Pegar a próxima (v25 + o arquivo vai junto) e gravar o resultado (v32 + registro do PDF na conversa)
 -- ---------------------------------------------------------------------
-create or replace function public.whatsapp_pegar_proxima(p_dono text, p_id text) returns jsonb
+-- Só quem sabe enviar PDF (zap nova e motor 3.2+) passa p_com_arquivo = true. A zap antiga e o motor 3.1 continuam
+-- chamando sem ele e NÃO recebem mensagem com PDF (senão mandariam só o texto, sem o PDF): ela espera quem saiba.
+drop function if exists public.whatsapp_pegar_proxima(text, text);
+create or replace function public.whatsapp_pegar_proxima(p_dono text, p_id text, p_com_arquivo boolean default false) returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare c public.whatsapp_conexao; v public.whatsapp_fila; v_hora int; v_dia int; v_no boolean;
 begin
@@ -157,7 +165,7 @@ begin
    where f.status = 'pendente' and exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(f.telefone));
   v_no := public.whatsapp_no_horario(c.regras);
   select * into v from public.whatsapp_fila
-   where status = 'pendente' and (v_no or fora_horario)
+   where status = 'pendente' and (v_no or fora_horario) and (p_com_arquivo or arquivo is null)
    order by id limit 1 for update skip locked;
   if v.id is null then return jsonb_build_object('motivo', case when v_no then 'fila vazia' else 'fora do horário' end); end if;
   update public.whatsapp_fila set status = 'enviando', pego_em = now(), pego_por = p_dono where id = v.id;
@@ -186,6 +194,14 @@ begin
   select regras into r from public.whatsapp_conexao where id = 1;
   a := coalesce((r ->> 'intervalo_min')::int, 25); b := greatest(a, coalesce((r ->> 'intervalo_max')::int, 70));
   update public.whatsapp_conexao set proximo_envio = now() + make_interval(secs => a + floor(random() * (b - a + 1))) where id = 1;
+end $$;
+
+drop function if exists public.whatsapp_motor_proxima(text, text);
+create or replace function public.whatsapp_motor_proxima(p_chave text, p_id text, p_com_arquivo boolean default false) returns jsonb
+language plpgsql security definer set search_path = public as $$
+begin
+  perform public.whatsapp_motor_com_vez(p_chave, p_id);
+  return public.whatsapp_pegar_proxima('android', p_id, p_com_arquivo);
 end $$;
 
 -- O motor pede o PDF da mensagem que pegou: a função zap confere aqui (chave do motor + mensagem "enviando" pelo motor)
@@ -229,11 +245,14 @@ end $$;
 do $$
 declare f text;
 begin
-  foreach f in array array['whatsapp_pegar_proxima(text, text)', 'whatsapp_resultado(text, text, bigint, boolean, text, text, text)',
+  foreach f in array array['whatsapp_pegar_proxima(text, text, boolean)', 'whatsapp_resultado(text, text, bigint, boolean, text, text, text)',
                            'whatsapp_envio_vencido(int)', 'whatsapp_envio_apagado(text[])', 'whatsapp_motor_arquivo(text, bigint)'] loop
     execute 'revoke all on function public.' || f || ' from public, anon, authenticated';
     execute 'grant execute on function public.' || f || ' to service_role';
   end loop;
+  execute 'revoke all on function public.whatsapp_motor_proxima(text, text, boolean) from public, authenticated';
+  execute 'grant execute on function public.whatsapp_motor_proxima(text, text, boolean) to anon, service_role';
+  execute 'revoke all on function public.whatsapp_arquivo_valido(jsonb) from public, anon';
   execute 'revoke all on function public.whatsapp_enfileirar(jsonb, boolean) from public, anon';
   execute 'grant execute on function public.whatsapp_enfileirar(jsonb, boolean) to authenticated, service_role';
   execute 'grant execute on function public.whatsapp_arquivo_valido(jsonb) to authenticated, service_role';

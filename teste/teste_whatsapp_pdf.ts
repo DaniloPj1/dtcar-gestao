@@ -8,7 +8,7 @@ import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "../js/pdf.js"
 import { nomePdf, pdfBoletos } from "../js/boletopdf.js";
 import * as mensagens from "../js/mensagens.js";
 import type { Geradores } from "../supabase/functions/email/anexos.ts";
-import type { Mensagens } from "../supabase/functions/email/whatsapp.ts";
+import { nomePdf as nomeSeguroPdf, type Mensagens } from "../supabase/functions/email/whatsapp.ts";
 import { tratar, type Deps } from "../supabase/functions/email/acoes.ts";
 
 (globalThis as unknown as { jspdf: unknown }).jspdf = { jsPDF };
@@ -142,6 +142,14 @@ await deve("nada para mandar", () => w({ numero_os: 1887 }), /texto, um modelo o
   confere("cobrança + boleto da O.S.", /^261000017|\.pdf$/.test(String((r.arquivo as L).nome)) && /1 boleto/.test(String((r.arquivo as L).origem)), r.arquivo);
   const nf = await w({ numero_os: 1865, texto: "Segue a nota fiscal.", anexo: { fonte: "nf" } });
   confere("NF: só o PDF (o XML não vai pelo WhatsApp)", (nf.arquivo as L).nome === "NF 131.pdf", nf.arquivo);
+}
+await deve("boleto de outra O.S. não vai para este cliente", () => w({ numero_os: 1887, anexo: { fonte: "boleto", nosso_numero: "261000017" } }), /é da O\.S\. 1865, não da 1887/);
+await deve("NF de outra O.S. não vai para este cliente", () => w({ numero_os: 1887, anexo: { fonte: "nf", id: "11111111-1111-1111-1111-111111111111" } }), /é da O\.S\. 1865, não da 1887/);
+confere("nome do PDF: longo continua terminando em .pdf; vazio vira documento.pdf", nomeSeguroPdf("x".repeat(200) + ".pdf").length === 120 && nomeSeguroPdf("x".repeat(200) + ".pdf").endsWith(".pdf")
+  && nomeSeguroPdf("") === "documento.pdf" && nomeSeguroPdf("NF 131.PDF") === "NF 131.pdf" && nomeSeguroPdf("a/b:c.pdf") === "a-b-c.pdf");
+{
+  const r = await w({ modelo: "orcamento", numero_os: 1887, texto: "", sem_texto: true, anexo: { fonte: "os", documento: "orcamento" } });
+  confere("tela apagou o texto (sem_texto): vai só o PDF", r.texto === "" && (r.arquivo as L).nome === "Orcamento_01887_ABC1D23.pdf", r);
 }
 await deve("fonte não aceita no WhatsApp", () => w({ numero_os: 1887, anexo: { fonte: "rh", id: "x" } }), /No WhatsApp vai um PDF/);
 await deve("O.S. sem NF", () => w({ numero_os: 1887, anexo: { fonte: "nf" } }), /não tem NF anexada/);

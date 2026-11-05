@@ -99,7 +99,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   Envio: o texto (com "digitando…") e, 2,5 s depois, o documento (`enviarComArquivo`/`pdfConfere`, cópia em whats.js e zap); PDF é baixado e
   conferido ANTES (sem PDF, nada sai); texto saiu e o PDF não → erro com o id do texto (nunca reenvia). O motor (3.2) pede o link temporário
   (2 min) à zap (`acao: "arquivo"`, chave do motor; `whatsapp_motor_arquivo` só libera a mensagem "enviando" pelo motor); a zap lê direto da
-  pasta. PDFs de 30+ dias saem no agendamento `dtcar-zap-limpar-midia`. Conector: `whatsapp_enviar` com `modelo` e/ou `anexo` vai pela função
+  pasta. Só quem sabe enviar PDF pede com `p_com_arquivo = true` (`whatsapp_pegar_proxima`/`whatsapp_motor_proxima`): zap antiga e motor 3.1
+  não recebem mensagem com PDF (ela espera; senão sairia só o texto). Boleto/NF escolhidos por número/id têm de ser da O.S. da mensagem. PDFs de 30+ dias saem no agendamento `dtcar-zap-limpar-midia`. Conector: `whatsapp_enviar` com `modelo` e/ou `anexo` vai pela função
   "email"; só `texto` continua direto no `whatsapp_enfileirar`. Tela da O.S. (administrador): botões de WhatsApp abrem o quadro com "Abrir
   WhatsApp" ou "Enviar pelo WhatsApp da oficina" (`js/telas/zapos.js`). Mudou `js/mensagens.js`? Troque o commit dele em `email/site.ts`.
   Testes: `python3 teste/teste_v34.py` (Postgres local, sem o banco da oficina), `deno run -A teste/teste_whatsapp_pdf.ts`.

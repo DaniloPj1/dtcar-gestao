@@ -19,7 +19,7 @@ const DIAS = ["", "seg", "ter", "qua", "qui", "sex", "sáb", "dom"];
 function regrasTexto(r) {
   if (!r) return "";
   const d = (r.dias || []).map(n => DIAS[n]).filter(Boolean);
-  return `Envio: ${d.length ? d.join(", ") : "nenhum dia"}, ${r.inicio}–${r.fim}${(r.dias || []).includes(6) && r.sabado_fim ? ` (sábado até ${r.sabado_fim})` : ""} · intervalo de ${r.intervalo_min} a ${r.intervalo_max} s entre mensagens · até ${r.por_hora} por hora e ${r.por_dia} por dia.`;
+  return `Envio: ${d.length ? d.join(", ") : "nenhum dia"}, ${r.inicio}–${r.fim}${(r.dias || []).includes(6) && r.sabado_fim ? ` (sábado até ${r.sabado_fim})` : ""} · intervalo de ${r.intervalo_min} a ${r.intervalo_max} s entre mensagens (para o mesmo contato, em seguida: 3 s) · até ${r.por_hora} por hora e ${r.por_dia} por dia.`;
 }
 
 const SIT = { desligado: ["Desligado", "muted"], pareando: ["Pareando…", "info"], conectado: ["Vinculado", "ok"], erro: ["Com problema", "bad"] };

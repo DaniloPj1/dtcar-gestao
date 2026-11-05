@@ -313,6 +313,40 @@ recebe(ESTRANHO, "PARAR")
 v, _ = sql(f"select count(*) from whatsapp_optout where telefone = whatsapp_chave_tel('{ESTRANHO}')")
 confere("PARAR de cliente continua", v == "1", v)
 
+# ---------- 19b. OK citando mensagem que não é aviso/rascunho: não aprova o rascunho de ninguém (Codex P1) ----------
+sql("update whatsapp_avisos set criado_em = now() - interval '1 hour'")
+recebe(LUIZ, "Pode ser sexta de manhã?")
+s = envia_tudo(); AV = para(s, DANILO)[-1]["msg_id"] if para(s, DANILO) else None
+recebe(DANILO, "sexta 8h ok", responde_a=AV)
+RX = ultimo_aviso("rascunho")["id"]; js("select whatsapp_assistente_pegar(3)", "service_role")
+sql(f"select whatsapp_assistente_resultado({RX}, 'Sexta às 8h está ótimo!', 'claude-haiku-5-5', null, false)", "service_role")
+s = envia_tudo()
+recebe(DANILO, "ok", responde_a="MENSAGEM-QUALQUER-DA-OFICINA")
+s = envia_tudo(); v, _ = sql(f"select situacao from whatsapp_avisos where id = {RX}")
+confere("OK em cima de mensagem desconhecida não envia ao cliente", len(para(s, LUIZ)) == 0 and v == "aguardando_ok", (v, s))
+confere("OK em cima de mensagem desconhecida explica", any("não é um aviso nem um rascunho" in x["texto"] for x in para(s, DANILO)), s)
+sql(f"update whatsapp_avisos set situacao = 'cancelado' where id = {RX}")
+
+# ---------- 19c. número de alerta com PARAR: interna também não sai (Codex P1) ----------
+sql(f"insert into whatsapp_optout (telefone) values (whatsapp_chave_tel('{DANILO}')) on conflict do nothing")
+iid, _ = sql("select whatsapp_interno('teste interno com PARAR')")
+s = envia_tudo(); v, _ = sql(f"select status from whatsapp_fila where id = {iid}")
+confere("interna para número com PARAR: cancelada, não sai", len(para(s, DANILO)) == 0 and v == "cancelada", (v, s))
+sql(f"delete from whatsapp_optout where telefone = whatsapp_chave_tel('{DANILO}')")
+
+# ---------- 19d. silêncio conferido na retirada (Codex P2) ----------
+sql(f"update whatsapp_conexao set regras = {q({**SEMPRE, 'dias': []})} where id = 1")
+iid, _ = sql("select whatsapp_interno('aviso antes do silêncio')")
+v, _ = sql(f"select fora_horario from whatsapp_fila where id = {iid}")
+confere("interna criada fora do silêncio: liberada fora do horário", v == "t", v)
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"23:59\"}' where id = 1")
+s = envia_tudo(); v, _ = sql(f"select status from whatsapp_fila where id = {iid}")
+confere("entrou no silêncio antes de sair: espera", v == "pendente" and len(para(s, DANILO)) == 0, (v, s))
+sql("update whatsapp_conexao set avisos = avisos || '{\"silencio_inicio\": \"00:00\", \"silencio_fim\": \"00:00\"}' where id = 1")
+s = envia_tudo(); v, _ = sql(f"select status from whatsapp_fila where id = {iid}")
+confere("fora do silêncio: sai", v == "enviada", v)
+sql(f"update whatsapp_conexao set regras = {q(SEMPRE)} where id = 1")
+
 # ---------- 20. erro no tratamento não impede gravar a mensagem ----------
 sql("alter table whatsapp_avisos rename to whatsapp_avisos_x")
 mid = recebe(JOAO, "mensagem com erro no aviso")

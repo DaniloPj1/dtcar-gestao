@@ -382,8 +382,9 @@ begin
     select av.* into a from public.whatsapp_avisos av join public.whatsapp_fila f on f.id = av.fila_id
      where f.msg_id = m.responde_a and av.tipo in ('aviso', 'rascunho', 'resposta') order by av.id desc limit 1;
   end if;
-  -- 2) sem citação: o único cliente com aviso/rascunho nos últimos 30 minutos
-  if a.id is null then
+  -- 2) sem citação: o único cliente com aviso/rascunho nos últimos 30 minutos. Citou uma mensagem que não é aviso/rascunho/
+  --    resposta: NÃO adivinha (um OK em cima de outra mensagem nunca pode aprovar o rascunho de alguém) — pede para refazer.
+  if a.id is null and coalesce(m.responde_a, '') = '' then
     select count(distinct chave) into v_n from public.whatsapp_avisos
      where tipo in ('aviso', 'rascunho', 'resposta') and chave is not null and criado_em > now() - interval '30 minutes';
     if v_n = 1 then
@@ -396,9 +397,11 @@ begin
     -- explica no máximo uma vez a cada 10 minutos
     if not exists (select 1 from public.whatsapp_avisos where tipo = 'ajuda' and criado_em > now() - interval '10 minutes') then
       insert into public.whatsapp_avisos (tipo, situacao, fila_id) values ('ajuda', 'info',
-        public.whatsapp_interno('🤖 Não sei para qual cliente é esta mensagem. Toque e segure no aviso do cliente, escolha *Responder* e escreva (ou grave o áudio) de novo.'));
+        public.whatsapp_interno(case when coalesce(m.responde_a, '') <> ''
+          then '🤖 A mensagem que você respondeu não é um aviso nem um rascunho de cliente. Nada foi enviado. Toque e segure no aviso (ou no rascunho) do cliente, escolha *Responder* e escreva de novo.'
+          else '🤖 Não sei para qual cliente é esta mensagem. Toque e segure no aviso do cliente, escolha *Responder* e escreva (ou grave o áudio) de novo.' end));
     end if;
-    return 'sem cliente';
+    return case when coalesce(m.responde_a, '') <> '' then 'citação desconhecida' else 'sem cliente' end;
   end if;
 
   -- citou o aviso e já há rascunho esperando OK para o mesmo cliente: o OK/CANCELAR vale para esse rascunho
@@ -617,7 +620,7 @@ end $$;
 -- ---------------------------------------------------------------------
 create or replace function public.whatsapp_pegar_proxima(p_dono text, p_id text, p_com_arquivo boolean default false) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare c public.whatsapp_conexao; v public.whatsapp_fila; v_hora int; v_dia int; v_no boolean; v_lim boolean;
+declare c public.whatsapp_conexao; v public.whatsapp_fila; v_hora int; v_dia int; v_no boolean; v_lim boolean; v_sil boolean;
 begin
   select * into c from public.whatsapp_conexao where id = 1 for update;
   if not (c.dono = p_dono and c.dono_id = p_id and c.dono_ate > now()) then return jsonb_build_object('motivo', 'sem a vez'); end if;
@@ -632,12 +635,15 @@ begin
          count(*) filter (where enviada_em >= date_trunc('day', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo')
     into v_hora, v_dia from public.whatsapp_fila where status = 'enviada' and not interno and enviada_em > now() - interval '1 day';
   v_lim := v_hora >= coalesce((c.regras ->> 'por_hora')::int, 20) or v_dia >= coalesce((c.regras ->> 'por_dia')::int, 80);
-  -- pendente de quem pediu PARAR depois de entrar na fila: não sai
-  update public.whatsapp_fila f set status = 'cancelada', erro = 'O cliente pediu para não receber mensagens (PARAR).'
-   where f.status = 'pendente' and not f.interno and exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(f.telefone));
+  -- pendente de quem pediu PARAR depois de entrar na fila: não sai (vale também para as internas: o número de alerta
+  -- pode ter pedido PARAR antes de ser escolhido como alerta)
+  update public.whatsapp_fila f set status = 'cancelada', erro = 'O número pediu para não receber mensagens (PARAR).'
+   where f.status = 'pendente' and exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(f.telefone));
   v_no := public.whatsapp_no_horario(c.regras);
+  -- interna fora do horário: o silêncio (22h–7h) é conferido agora, na retirada (não só quando entrou na fila)
+  v_sil := public.whatsapp_no_silencio(public.whatsapp_avisos_cfg());
   select * into v from public.whatsapp_fila
-   where status = 'pendente' and (v_no or fora_horario) and (p_com_arquivo or arquivo is null)
+   where status = 'pendente' and (v_no or (fora_horario and not (interno and v_sil))) and (p_com_arquivo or arquivo is null)
      and (liberar_em is null or liberar_em <= now()) and (interno or not v_lim)
    order by interno desc, id limit 1 for update skip locked;
   if v.id is null then

@@ -6,6 +6,7 @@ import { useApp, Campo, Modal, Seg, Dinheiro, Vazio, Abas } from "../ui.js";
 import { reais, fmtData, hojeISO, somaDias, arred, soDig, norm, numOS, linkWhats, fmtTel } from "../util.js";
 import { pode } from "../regras.js";
 import { referenteOS, ContaEntrada } from "./recibos.js";
+import { msgCobrancaParcela } from "../mensagens.js";
 
 const DIA = 86400000;
 export const diasAte = iso => Math.round((new Date(iso + "T12:00:00") - new Date(hojeISO() + "T12:00:00")) / DIA);
@@ -131,8 +132,7 @@ export function ReceberParcelaModal({ parcela, ordem, onFechar, onFeito }) {
   </${Modal}>`;
 }
 
-const msgCobranca = (p, cfg) => `Olá, ${(p.cliente_nome || "").split(" ")[0]}! Aqui é da ${cfg.nome}.\n\nPassando para lembrar ${diasAte(p.vencimento) < 0 ? "da parcela vencida em" : "da parcela com vencimento em"} *${fmtData(p.vencimento)}* no valor de *${reais(p.valor)}*` +
-  ` (${p.descricao}${p.parcelas > 1 ? ", parcela " + p.parcela + "/" + p.parcelas : ""}, ${p.forma}).\n\nSe já pagou, por favor desconsidere. Qualquer dúvida, estamos à disposição.`;
+const msgCobranca = (p, cfg) => msgCobrancaParcela(p, cfg);
 
 /** Tela Financeiro › Contas a receber */
 export function ContasReceber() {

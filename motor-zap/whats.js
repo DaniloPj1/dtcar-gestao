@@ -94,3 +94,27 @@ export async function enviarTexto(sock, jid, texto, esperar = (ms) => new Promis
   const r = await sock.sendMessage(jid, { text: texto });
   return (r && r.key && r.key.id) || "";
 }
+
+/** Valida o PDF baixado para a mensagem da fila (v34): tamanho certo e cabeçalho de PDF. */
+export function pdfConfere(bytes, arquivo) {
+  if (!bytes || !bytes.length) return "PDF vazio.";
+  if (arquivo && arquivo.bytes && bytes.length !== Number(arquivo.bytes)) return "PDF com tamanho diferente do gerado (" + bytes.length + " de " + arquivo.bytes + " bytes).";
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]) !== "%PDF-") return "O arquivo baixado não é um PDF.";
+  return "";
+}
+
+/** Mensagem da fila (v34): o texto (com "digitando…") e, logo depois, o PDF (documento, sem legenda). Devolve o id do texto
+ *  (ou do PDF, se for só ele). Se o texto saiu e o PDF não, o erro leva idTexto (o texto não pode ser mandado de novo). */
+export async function enviarComArquivo(sock, jid, texto, arquivo, esperar = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  let id = "";
+  if (texto) id = await enviarTexto(sock, jid, texto, esperar);
+  if (!arquivo) return id;
+  try {
+    if (id) await esperar(2500);
+    const r = await sock.sendMessage(jid, { document: arquivo.dados, mimetype: arquivo.tipo || "application/pdf", fileName: arquivo.nome });
+    return id || (r && r.key && r.key.id) || "";
+  } catch (e) {
+    if (!id) throw e;
+    const x = new Error("O texto saiu, mas o PDF não: " + ((e && e.message) || e)); x.idTexto = id; throw x;
+  }
+}

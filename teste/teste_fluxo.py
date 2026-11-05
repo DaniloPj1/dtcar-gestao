@@ -64,6 +64,23 @@ try:
     p1 = [r for r in rec if r["parcela"] == 1]
     chk("parcial: parcela paga 500 + restante aberto", len(p1) == 2 and any(r["status"] == "paga" and r["valor"] == 500 for r in p1) and any(r["status"] == "aberta" for r in p1))
     chk("recibo da parcela", pg.evaluate("window.__DB.recibos.some(r => r.ordem_id === 'o2' && r.valor === 500)"))
+    # v34: orçamento pelo WhatsApp da oficina (administrador): quadro de envio → prévia com o PDF → fila
+    pg.goto(U + "#/os/o4"); pg.wait_for_timeout(1500)
+    pg.click("button:has-text('Reenviar WhatsApp')"); pg.wait_for_timeout(400)
+    chk("WhatsApp: administrador escolhe abrir o WhatsApp ou mandar pela oficina", pg.query_selector("[role=dialog] button:has-text('Enviar pelo WhatsApp da oficina')") is not None and pg.query_selector("[role=dialog] button:has-text('Abrir WhatsApp com a mensagem')") is not None)
+    pg.click("[role=dialog] button:has-text('Enviar pelo WhatsApp da oficina')"); pg.wait_for_timeout(1200)
+    dz = pg.inner_text("[role=dialog]")
+    zenv = pg.evaluate("window.__ZAP_ENVIOS || []")
+    chk("WhatsApp: prévia com o texto do modelo e o PDF do orçamento marcado", "orçamento do seu Fiat Uno" in pg.input_value("#zap-texto") and "PDF do orçamento" in dz and "150 KB" in dz
+        and len(zenv) == 1 and zenv[0]["modelo"] == "orcamento" and zenv[0]["numero_os"] == 1896 and zenv[0]["anexo"]["documento"] == "orcamento" and zenv[0]["confirmar"] is False and zenv[0]["origem"] == "tela", (dz, zenv))
+    chk("WhatsApp: avisos da fila aparecem", "Fora do horário" in dz)
+    n0 = len(pg.evaluate("window.__ZAP_ENVIOS"))
+    pg.fill("#zap-texto", "Texto mudado pelo Danilo"); pg.wait_for_timeout(1500); pg.click("[role=dialog] button:has-text('Pôr na fila')"); pg.wait_for_timeout(1000)
+    zenv = pg.evaluate("window.__ZAP_ENVIOS")
+    chk("WhatsApp: texto editado é conferido de novo antes de enviar", any(z["confirmar"] is False and z.get("texto") == "Texto mudado pelo Danilo" for z in zenv[n0:]), zenv[n0:])
+    chk("WhatsApp: confirmado vai com o texto editado e o PDF, e acorda a fila", zenv[-1]["confirmar"] is True and zenv[-1]["texto"] == "Texto mudado pelo Danilo" and zenv[-1]["anexo"]["fonte"] == "os"
+        and "Mensagem na fila" in pg.inner_text("[role=dialog]") and "processar" in pg.evaluate("window.__ZAP_CHAMADAS || []"), zenv[-1])
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
     # O.S.: parcelas + trilha 4 etapas
     # regra do Danilo (03/11): O.S. aguardando pagamento (o3, no pátio) — itens editáveis; o que entra já vem aprovado e cobrado
     pg.goto(U + "#/os/o3"); pg.wait_for_timeout(1500)

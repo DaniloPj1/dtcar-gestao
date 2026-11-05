@@ -21,7 +21,9 @@ const banco: Banco = {
     if (fn === "whatsapp_enfileirar" && (args as { p_gravar?: boolean })?.p_gravar) return Promise.resolve({ data: { gravado: true, id: 7 }, error: null });
     return Promise.resolve({ data: respostas[fn] ?? { ok: fn }, error: null });
   },
-  functions: { invoke(nome, op) { acordadas.push([nome, op.body]); return Promise.resolve({ data: { ok: true }, error: null }); } },
+  functions: { invoke(nome, op) { acordadas.push([nome, op.body]);
+    if (nome === "email" && op.body?.acao === "whatsapp") return Promise.resolve({ data: { gravado: op.body.confirmar === true, texto: "Olá, João!", arquivo: { nome: "Orcamento_01887_ABC1D23.pdf", kb: 180 } }, error: null });
+    return Promise.resolve({ data: { ok: true }, error: null }); } },
 };
 const handler = createMcpHandler(() => criarServidor(banco), { onerror: (e) => console.error(e) });
 const ok: string[] = [], falhas: string[] = [];
@@ -133,6 +135,20 @@ c = await chama("whatsapp_enviar", { texto: "Seu carro está pronto", numero_os:
 confere("whatsapp_enviar padrão = prévia (não grava nem acorda a zap)", c.fn === "whatsapp_enfileirar" && c.args?.p_gravar === false && (c.args?.p as Record<string, unknown>)?.ordem_numero === 1904 && acordadas.length === 0, JSON.stringify(c.args));
 c = await chama("whatsapp_enviar", { texto: "Seu carro está pronto", cliente_id: "00000000-0000-4000-8000-000000000001", confirmar: true, pedido: "avisar" });
 confere("whatsapp_enviar confirmado grava e acorda a zap", c.args?.p_gravar === true && (c.args?.p as Record<string, unknown>)?.fora_horario === false && (c.args?.p as Record<string, unknown>)?.origem === "claude" && JSON.stringify(acordadas) === JSON.stringify([["zap", { acao: "processar" }]]), JSON.stringify(acordadas));
+// v34: modelo e PDF vão pela função "email"
+acordadas.length = 0;
+c = await chama("whatsapp_enviar", { modelo: "orcamento", numero_os: 1887, anexo: { fonte: "os", documento: "orcamento" } });
+const pw = acordadas[0] as [string, Record<string, unknown>];
+confere("whatsapp_enviar com modelo+PDF: prévia pela função email (sem gravar nem acordar a zap)", pw?.[0] === "email" && pw[1].acao === "whatsapp" && pw[1].modelo === "orcamento"
+  && pw[1].numero_os === 1887 && (pw[1].anexo as Record<string, unknown>).documento === "orcamento" && pw[1].confirmar === false && acordadas.length === 1
+  && /Orcamento_01887/.test(c.r?.content?.[0]?.text || ""), JSON.stringify(acordadas));
+acordadas.length = 0;
+c = await chama("whatsapp_enviar", { modelo: "cobranca", numero_os: 1865, anexo: { fonte: "boleto" }, confirmar: true });
+confere("whatsapp_enviar com modelo confirmado: grava e acorda a zap", (acordadas[0] as [string, Record<string, unknown>])[1].confirmar === true && JSON.stringify(acordadas[1]) === JSON.stringify(["zap", { acao: "processar" }]), JSON.stringify(acordadas));
+c = await chama("whatsapp_enviar", { numero_os: 1887 });
+confere("whatsapp_enviar sem texto, modelo nem PDF: erro", c.r?.isError === true);
+c = await chama("whatsapp_enviar", { telefone: "27999990000", anexo: { fonte: "os" } });
+confere("whatsapp_enviar PDF sem O.S.: erro", c.r?.isError === true && /numero_os/.test(c.r?.content?.[0]?.text || ""));
 c = await chama("whatsapp_ler", { telefone: "27999112233" });
 confere("whatsapp_ler → whatsapp_mensagens_de", c.fn === "whatsapp_mensagens_de" && c.args?.p_telefone === "27999112233" && c.args?.p_marcar_lidas === true);
 c = await chama("whatsapp_conversas", { so_nao_lidas: true });

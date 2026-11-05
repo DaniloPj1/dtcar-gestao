@@ -14,6 +14,8 @@
 //   motor no cabeçalho x-dtcar-motor, ou baixados aqui no processar): áudio é transcrito pelo Groq (segredo GROQ_API_KEY;
 //   o arquivo não é guardado), foto vai para a pasta privada "whatsapp-midia" por 30 dias. Aceita o agendamento do banco
 //   (cabeçalho x-dtcar-cron, mesmo segredo da SEFAZ): "processar" sem o motor e "limpar_midia" (fotos vencidas).
+// v34 — mensagem da fila com PDF (pasta privada whatsapp-envio): no processar, o PDF é lido da pasta e sai logo depois do texto;
+//   o motor pede o link temporário com a ação "arquivo" (só da mensagem que ele pegou). A limpeza diária apaga os PDFs de 30+ dias.
 // Revezamento (v24): quando o motor do Android está com a vez, a função não conecta com a sessão guardada
 // (conferir responde pelo último sinal do motor; desconectar vira pedido ao motor).
 //
@@ -25,6 +27,7 @@ import { withSupabase } from "npm:@supabase/server@1.9.2";
 import makeWASocket, { BufferJSON, Browsers, DisconnectReason, initAuthCreds, makeCacheableSignalKeyStore, proto, downloadMediaMessage } from "npm:baileys@7.0.0-rc14";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { createCipheriv } from "node:crypto";
+import { Buffer } from "node:buffer";
 import QRCode from "npm:qrcode@1.5.4";
 
 type Db = { from: (t: string) => any; rpc: (f: string, a?: Record<string, unknown>) => any };
@@ -213,6 +216,28 @@ export async function enviarTexto(sock: any, jid: string, texto: string, esperar
   return (r && r.key && r.key.id) || "";
 }
 
+/** v34 (cópia de motor-zap/whats.js) — confere o PDF baixado para a mensagem da fila. */
+export function pdfConfere(bytes: any, arquivo: any) {
+  if (!bytes || !bytes.length) return "PDF vazio.";
+  if (arquivo && arquivo.bytes && bytes.length !== Number(arquivo.bytes)) return "PDF com tamanho diferente do gerado (" + bytes.length + " de " + arquivo.bytes + " bytes).";
+  if (String.fromCharCode(bytes[0], bytes[1], bytes[2], bytes[3], bytes[4]) !== "%PDF-") return "O arquivo baixado não é um PDF.";
+  return "";
+}
+/** v34 (cópia de motor-zap/whats.js) — texto e, logo depois, o PDF; erro depois do texto leva idTexto. */
+export async function enviarComArquivo(sock: any, jid: string, texto: string, arquivo: any, esperar: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  let id = "";
+  if (texto) id = await enviarTexto(sock, jid, texto, esperar);
+  if (!arquivo) return id;
+  try {
+    if (id) await esperar(2500);
+    const r = await sock.sendMessage(jid, { document: arquivo.dados, mimetype: arquivo.tipo || "application/pdf", fileName: arquivo.nome });
+    return id || (r && r.key && r.key.id) || "";
+  } catch (e: any) {
+    if (!id) throw e;
+    const x: any = new Error("O texto saiu, mas o PDF não: " + ((e && e.message) || e)); x.idTexto = id; throw x;
+  }
+}
+
 
 /** Guarda da vez da função: a vez vale `segundos` a partir de agora; com 10 s de folga, nada abre depois disso
  *  e a conexão aberta é fechada sozinha antes de a vez vencer (nunca duas conexões com a mesma sessão). */
@@ -329,20 +354,32 @@ async function processar(adm: Db, ms: () => number): Promise<Response> {
         await guardar(); await gravarTiques();
         // recebidas não gravadas podem ter um PARAR: sem gravar, não envia nada
         if (aGuardar.length) { motivo = "mensagens recebidas não gravadas: parou"; break; }
-        const { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id });
+        let { data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id, p_com_arquivo: true });
+        // banco sem o v34 (só a função de 2 parâmetros): pede como antes
+        if (error && /function|does not exist|PGRST202/i.test(error.message)) ({ data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id }));
         if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
-        const prox = p as { mensagem?: { id: number; telefone: string; texto: string }; motivo?: string; proximo_envio?: string };
+        const prox = p as { mensagem?: { id: number; telefone: string; texto: string; arquivo?: { path: string; nome: string; tipo: string; bytes: number } | null }; motivo?: string; proximo_envio?: string };
         if (!prox || !prox.mensagem) {
           motivo = (prox && prox.motivo) || "";
           const ate = prox && prox.motivo === "intervalo" && prox.proximo_envio ? new Date(prox.proximo_envio).getTime() : 0;
           if (ate && ate - t0 < 112000) { await esperar(Math.max(500, ate - Date.now() + 500)); continue; } // espera o intervalo se couber
           break;
         }
-        const m = prox.mensagem; let res: Record<string, unknown>;
+        const m = prox.mensagem; let res: Record<string, unknown> | null = null;
         try {
           const jid = await jidParaEnvio(s, m.telefone);
           if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
-          else res = { p_ok: true, p_msg_id: await enviarTexto(s, jid, m.texto), p_jid: jid };
+          else {
+            // v34: PDF da pasta whatsapp-envio (baixado antes: sem o PDF, nada é enviado)
+            let pdf: any = null;
+            if (m.arquivo) {
+              try { pdf = await pdfDaPasta(adm, m.arquivo); } catch (e) { res = { p_ok: false, p_erro: "PDF não baixado (nada foi enviado): " + (e as Error).message }; }
+            }
+            if (!res) {
+              try { res = { p_ok: true, p_msg_id: await enviarComArquivo(s, jid, m.texto, pdf), p_jid: jid }; }
+              catch (e: any) { res = { p_ok: false, p_msg_id: e.idTexto || null, p_jid: jid, p_erro: e.idTexto ? e.message : "Falha ao enviar: " + e.message }; }
+            }
+          }
         } catch (e) { res = { p_ok: false, p_erro: "Falha ao enviar: " + (e as Error).message }; }
         if (res.p_ok) enviadas++;
         // o resultado marca a mensagem e o intervalo/limites: sem gravar, não envia mais nada (a mensagem nunca é reenviada:
@@ -425,13 +462,32 @@ function chaveServidor(): string {
 const admServidor = () => createClient(Deno.env.get("SUPABASE_URL")!, chaveServidor(), { auth: { persistSession: false } }) as any;
 const b64 = (s: string) => { const bin = atob(s); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u; };
 
-/** Motor do Android manda a mídia recebida (cabeçalho x-dtcar-motor com a chave do motor). */
+/** v34: PDF de uma mensagem da fila, lido da pasta privada whatsapp-envio (chave de servidor). */
+export async function pdfDaPasta(adm: any, a: { path: string; nome: string; tipo?: string; bytes?: number }) {
+  const { data, error } = await adm.storage.from("whatsapp-envio").download(a.path);
+  if (error || !data) throw new Error("PDF não está mais na pasta");
+  const dados = new Uint8Array(await data.arrayBuffer());
+  const ruim = pdfConfere(dados, a); if (ruim) throw new Error(ruim);
+  return { dados: Buffer.from(dados), nome: a.nome || "documento.pdf", tipo: "application/pdf" };
+}
+
+/** Motor do Android: manda a mídia recebida (acao "midia") ou pede o link temporário do PDF da mensagem que pegou
+ *  (acao "arquivo", v34: só para a mensagem "enviando" pelo motor; link de 2 minutos). Cabeçalho x-dtcar-motor com a chave do motor. */
 export async function atenderMotor(req: Request, adm: any = admServidor()): Promise<Response> {
   const chave = req.headers.get("x-dtcar-motor") || "";
   if (!/^dtm_[0-9a-f]{64}$/.test(chave)) return json({ erro: "Chave do motor ausente." }, 401);
   const { error: e1 } = await adm.rpc("whatsapp_motor_conferir", { p_chave: chave });
   if (e1) return json({ erro: "Chave do motor inválida ou revogada." }, 401);
   const c = await req.json().catch(() => ({}));
+  if (c.acao === "arquivo") {
+    const id = Number(c.fila_id);
+    if (!Number.isInteger(id) || id <= 0) return json({ erro: "Pedido inválido." }, 400);
+    const { data: a, error } = await adm.rpc("whatsapp_motor_arquivo", { p_chave: chave, p_fila_id: id });
+    if (error || !a) return json({ erro: error ? error.message : "Sem arquivo." }, /function|does not exist|PGRST202/i.test(error?.message || "") ? 501 : 403);
+    const { data: u, error: e2 } = await adm.storage.from("whatsapp-envio").createSignedUrl(a.path, 120);
+    if (e2 || !u) return json({ erro: "PDF não está mais na pasta." }, 410);
+    return json({ url: u.signedUrl, nome: a.nome, tipo: a.tipo, bytes: a.bytes });
+  }
   if (c.acao !== "midia" || typeof c.msg_id !== "string" || !c.msg_id) return json({ erro: "Pedido inválido." }, 400);
   if (typeof c.base64 === "string" && c.base64.length > Math.ceil(LIMITE_AUDIO_BYTES * 4 / 3) + 8) return json({ erro: "Arquivo grande demais." }, 413);
   let bytes: Uint8Array | undefined;
@@ -453,11 +509,22 @@ export async function atenderAgendamento(req: Request, adm: any = admServidor())
     const { data: paths, error } = await adm.rpc("whatsapp_midia_vencida", { p_limite: 200 });
     if (error) return json({ erro: error.message }, 500);
     const lista = (paths || []) as string[];
-    if (!lista.length) return json({ ok: true, apagadas: 0 });
-    const { error: e2 } = await adm.storage.from("whatsapp-midia").remove(lista);
-    if (e2) return json({ erro: e2.message }, 500);
-    const { data: n } = await adm.rpc("whatsapp_midia_apagada", { p_paths: lista });
-    return json({ ok: true, apagadas: n });
+    let n: unknown = 0;
+    if (lista.length) {
+      const { error: e2 } = await adm.storage.from("whatsapp-midia").remove(lista);
+      if (e2) return json({ erro: e2.message }, 500);
+      n = (await adm.rpc("whatsapp_midia_apagada", { p_paths: lista })).data;
+    }
+    // v34: PDFs enviados (ou gerados e não enviados) com mais de 30 dias. Sem o v34: segue sem eles.
+    const { data: pdfs, error: e3 } = await adm.rpc("whatsapp_envio_vencido", { p_limite: 200 });
+    let pdfsApagados = 0;
+    if (!e3 && (pdfs || []).length) {
+      const { error: e4 } = await adm.storage.from("whatsapp-envio").remove(pdfs);
+      if (e4) return json({ erro: e4.message, apagadas: n }, 500);
+      await adm.rpc("whatsapp_envio_apagado", { p_paths: pdfs });
+      pdfsApagados = (pdfs as string[]).length;
+    }
+    return json({ ok: true, apagadas: n, pdfs_apagados: pdfsApagados });
   }
   return json({ erro: "Ação desconhecida." }, 400);
 }

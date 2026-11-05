@@ -127,7 +127,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   Nada vai ao cliente sem o OK; rascunho vence em 24 h. Fila: `interno` (mensagens ao Danilo, inclusive o alerta de motor sem
   sinal) sai primeiro, fora dos limites por hora/dia (também no `whatsapp_enfileirar`) e, com `avisos.fora_horario` (padrão), fora do
   horário comercial, menos no silêncio 22h–7h — conferido no `whatsapp_pegar_proxima`: no silêncio, as internas voltam a esperar; quando ele
-  acaba, saem mesmo fora do horário comercial. IA: depois de uma falha, nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
+  acaba, saem mesmo fora do horário comercial (sem o motor, o agendamento de 1 min acorda a zap para elas). IA: depois de uma falha, nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
   (padrões em `whatsapp_avisos_cfg()`). Tabelas fora do backup, do banco do PC e do espelho. Mudou `paraGuardar`/`mensagemCitada`? Mude
   as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),

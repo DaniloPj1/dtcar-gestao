@@ -98,7 +98,7 @@ async function lerExec(adm: Db, exec: number) {
   return data;
 }
 async function guardar(adm: Db, caminho: string, bytes: Uint8Array, tipo: string) {
-  const { error } = await adm.storage.from(PASTA).upload(caminho, new Blob([bytes], { type: tipo }), { upsert: true, contentType: tipo });
+  const { error } = await adm.storage.from(PASTA).upload(caminho, new Blob([bytes as BlobPart], { type: tipo }), { upsert: true, contentType: tipo });
   if (error) throw new Error("Pasta do backup: " + error.message);
 }
 async function baixar(adm: Db, caminho: string): Promise<Uint8Array> {

@@ -41,9 +41,12 @@ begin
    order by interno desc, id limit 1;
   if prox.id is null or prox.telefone <> p_ant.telefone or prox.criado_em > p_ant.criado_em + interval '5 minutes' then return false; end if;
   select * into c from public.whatsapp_conexao where id = 1;
-  if not (public.whatsapp_no_horario(c.regras) or prox.fora_horario) then return false; end if;
+  if exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(prox.telefone)) then return false; end if;
+  if not (public.whatsapp_no_horario(c.regras)
+          or (prox.fora_horario and not (prox.interno and public.whatsapp_no_silencio(public.whatsapp_avisos_cfg())))) then
+    return false;
+  end if;
   if not prox.interno then
-    if exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(prox.telefone)) then return false; end if;
     select count(*) filter (where enviada_em > now() - interval '1 hour'),
            count(*) filter (where enviada_em >= date_trunc('day', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo')
       into v_hora, v_dia from public.whatsapp_fila where status = 'enviada' and not interno and enviada_em > now() - interval '1 day';

@@ -1,7 +1,7 @@
 // Backup: cópia completa dos dados em um arquivo e restauração do que estiver faltando
-import { html, useState } from "../lib.js";
+import { html, useState, useEffect } from "../lib.js";
 import { api, estaSemRede } from "../api.js";
-import { useApp, Vazio } from "../ui.js";
+import { useApp, Vazio, Campo, Texto } from "../ui.js";
 import { fmtDataHora } from "../util.js";
 
 // ordem de restauração: quem é referenciado vem antes
@@ -50,6 +50,51 @@ export async function gerarBackup({ cfg, perfil, aoProgredir = () => {}, prefixo
 }
 const NOME = Object.fromEntries(TABELAS);
 const chaveDe = t => t === "estoque_reserva" ? "item_id" : "id";
+/* ---------------- cópia de leitura por e-mail (v35 + função "email", backup.ts) ---------------- */
+const EMAIL_OK = /^[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+$/;
+const SIT_EXEC = { ok: ["Enviado", "c-ok"], erro: ["Falhou", "c-bad"], rodando: ["Gerando", "c-warn"] };
+const PASSO_EXEC = { inicio: "começando", planilha: "planilha pronta", paginas: "zip pronto", enviar: "enviado" };
+function CopiaLeitura() {
+  const { cfg, avisar, recarregar } = useApp();
+  const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
+  const bl = cfg.backupLeitura || {};
+  const [emails, setEmails] = useState((bl.emails || ["centroautomotivodtcar@hotmail.com", "danilo.pj1@hotmail.com"]).join(", "));
+  const semRede = estaSemRede();
+  const ler = async () => { try { setSt(await api.email.chamar({ acao: "backup_situacao" })); setErro(""); } catch (e) { setErro(/desconhecida/i.test(e.message) ? "Falta publicar a função \"email\" nova no Supabase." : e.message); } };
+  useEffect(() => { if (!semRede) ler(); }, []);
+  const rodando = st && st.execucoes.some(x => x.situacao === "rodando");
+  useEffect(() => { if (!rodando) return; const t = setInterval(ler, 5000); return () => clearInterval(t); }, [rodando]);
+  const salvar = async ativo => {
+    const lista = emails.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+    if (!lista.length || lista.length > 3 || lista.some(x => !EMAIL_OK.test(x))) { setErro("Informe de 1 a 3 e-mails válidos, separados por vírgula."); return; }
+    setFazendo("salvar"); setErro("");
+    try { await api.salvarConfig({ ...cfg, backupLeitura: { ativo, emails: lista } }); await recarregar(["config"]); setEmails(lista.join(", ")); avisar(ativo ? "Cópia de leitura: e-mails salvos." : "Cópia de leitura desligada."); await ler(); }
+    catch (e) { setErro(e.message); } finally { setFazendo(""); }
+  };
+  const agora = async () => {
+    setFazendo("agora"); setErro("");
+    try { const r = await api.email.chamar({ acao: "backup_leitura" }); avisar(r.aviso || "Backup começou."); await ler(); } catch (e) { setErro(e.message); } finally { setFazendo(""); }
+  };
+  const ult = st && st.execucoes[0], ultOk = st && st.execucoes.find(x => x.situacao === "ok");
+  const tamanho = x => ((x.detalhe && x.detalhe.zips) || []).reduce((s, z) => s + (z.bytes || 0), 0);
+  const alerta = !semRede && st && (!st.senha_cadastrada || (ult && ult.situacao === "erro"));
+  return html`<section class=${"card" + (alerta ? " card-alerta" : "")}>
+    <h3>Cópia de leitura por e-mail (todo dia às 18h)</h3>
+    <p>Um arquivo .zip <b>com senha</b> que abre em qualquer computador, <b>sem o sistema no ar</b>: páginas com busca por O.S., placa ou cliente (O.S. abertas por situação, fechadas por mês) e uma planilha Excel com todos os dados. Abre com o 7-Zip e a senha do backup.</p>
+    ${semRede ? html`<div class="aviso">Precisa de internet para ver e mudar a cópia de leitura.</div>` : html`
+      ${erro ? html`<div class="erros">${erro}</div>` : null}
+      ${st && !st.senha_cadastrada ? html`<div class="aviso">Falta cadastrar a senha do backup: segredo <b>BACKUP_SENHA</b> da função "email" no Supabase (Edge Functions › Secrets). Sem ela nada é enviado.</div>` : null}
+      ${st ? html`<p class="dica">${ultOk ? "Último envio: " + fmtDataHora(ultOk.terminado_em) + " para " + (ultOk.para || []).join(", ") + " (" + kb(tamanho(ultOk)) + ")." : "Nenhum envio ainda."}</p>` : null}
+      <${Campo} id="bl-emails" rotulo="Mandar para (até 3 e-mails)" dica="Separados por vírgula. Sai do Hotmail da oficina."><${Texto} id="bl-emails" valor=${emails} onMuda=${setEmails} inputmode="email" autocomplete="off" /></${Campo}>
+      <label class="linha-check"><input type="checkbox" checked=${bl.ativo !== false} disabled=${!!fazendo} onChange=${e => salvar(e.target.checked)} /><span>Enviar todo dia às 18h</span></label>
+      <div class="acoes"><button type="button" class="btn" disabled=${!!fazendo} onClick=${() => salvar(bl.ativo !== false)}>Salvar e-mails</button>
+        <button type="button" class="btn btn-pri" disabled=${!!fazendo || rodando || (st && !st.senha_cadastrada)} onClick=${agora}>${rodando ? "Gerando…" : fazendo === "agora" ? "Começando…" : "Gerar e enviar agora"}</button></div>
+      ${st && st.execucoes.length ? html`<ul class="ranking">${st.execucoes.slice(0, 7).map(x => { const [t, c] = SIT_EXEC[x.situacao] || [x.situacao, ""]; return html`<li key=${x.id}>
+        <span>${fmtDataHora(x.iniciado_em)} · ${x.origem === "tela" ? "pelo botão" : "agendado"}${x.situacao === "erro" && x.erro ? html`<br /><small class="c-bad">${x.erro}</small>` : null}${x.situacao === "rodando" ? html`<br /><small>${PASSO_EXEC[x.passo] || x.passo}…</small>` : null}</span>
+        <b class=${c}>${t}${x.situacao === "ok" ? " · " + kb(tamanho(x)) : ""}</b></li>`; })}</ul>` : null}`}
+    <span class="dica">A cópia de leitura não volta para o sistema: para restaurar dados, use o backup acima. Tem dados de clientes (LGPD): não compartilhe a senha.</span>
+  </section>`;
+}
 const kb = n => n > 1048576 ? (n / 1048576).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
 
 async function compactar(texto) {
@@ -125,6 +170,7 @@ export function Backup() {
         ${prog.fim ? html`<div class="aviso ok">Arquivo <b>${prog.fim.nomeArq}</b> salvo na pasta de downloads: ${prog.fim.total.toLocaleString("pt-BR")} registros, ${kb(prog.fim.tamanho)}.</div>` : null}` : null}
       <span class="dica">As fotos e assinaturas continuam guardadas no Supabase; o arquivo leva só a referência delas. O arquivo tem dados de clientes: guarde em local protegido (LGPD).</span>
     </section>
+    <${CopiaLeitura} />
     <section class="card">
       <h3>Restaurar de um backup</h3>
       <p>Use se algum registro foi apagado por engano. O sistema compara o arquivo com o que existe hoje e inclui só o que estiver faltando. Nada que já existe é alterado ou apagado.</p>

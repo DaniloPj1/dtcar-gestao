@@ -59,12 +59,18 @@ alter table public.whatsapp_conexao add column if not exists resumo_em timestamp
 grant select (avisos, resumo_em) on public.whatsapp_conexao to authenticated;
 
 alter table public.whatsapp_mensagens add column if not exists responde_a text;   -- id da mensagem citada ("Responder")
-alter table public.whatsapp_mensagens add column if not exists aviso text;        -- como foi tratada (ver whatsapp_avisos_tratar)
+-- mensagens de antes do v36 não geram aviso nem entram no resumo: marcadas SÓ na primeira vez (quando a coluna nasce),
+-- para rodar o v36 de novo não apagar as pendências (áudio esperando transcrição, comando do Danilo)
+do $$ begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'whatsapp_mensagens' and column_name = 'aviso') then
+    alter table public.whatsapp_mensagens add column aviso text;     -- como foi tratada (ver whatsapp_avisos_tratar)
+    update public.whatsapp_mensagens set aviso = 'antiga';
+  end if;
+end $$;
 alter table public.whatsapp_mensagens add column if not exists aviso_id bigint;
 alter table public.whatsapp_mensagens add column if not exists aviso_erro text;
 alter table public.whatsapp_mensagens add column if not exists resumida_em timestamptz;
--- mensagens de antes do v36: não geram aviso nem entram no resumo
-update public.whatsapp_mensagens set aviso = 'antiga' where aviso is null;
 create index if not exists whatsapp_mensagens_tratar on public.whatsapp_mensagens (em) where aviso is null;
 create index if not exists whatsapp_mensagens_resumo on public.whatsapp_mensagens (em) where aviso = 'resumo' and resumida_em is null;
 

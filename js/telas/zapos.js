@@ -23,6 +23,8 @@ export function EnvioZapModal({ o, qual, onFechar }) {
     catch (e) { setErro(e.message); } finally { setFazendo(""); }
   };
   useEffect(() => { ver(); }, [comPdf]);
+  // texto editado: confere de novo (limite de tamanho, link encurtado, repetição) pouco depois de parar de digitar
+  useEffect(() => { if (!editado) return; const t = setTimeout(ver, 700); return () => clearTimeout(t); }, [texto]);
   const enviar = async () => {
     setFazendo("enviar"); setErro("");
     try { const r = await api.email.chamar(pedido(true)); if (r.gravado) { setFeito(r); api.whatsapp.chamar({ acao: "processar" }).catch(() => {}); } else setPrevia(r); }
@@ -36,7 +38,7 @@ export function EnvioZapModal({ o, qual, onFechar }) {
     <p class="sub">${(MODELOS[qual] || {}).rotulo || "Mensagem"} · O.S. ${o.numero}${previa && previa.telefone ? " · para " + fmtTel(String(previa.telefone).slice(2)) + (previa.cliente && previa.cliente.nome ? " (" + previa.cliente.nome + ")" : "") : ""}</p>
     ${PDF[padrao] ? html`<label class="linha-check"><input type="checkbox" checked=${comPdf} onChange=${e => setComPdf(e.target.checked)} /><span>Enviar o ${PDF[padrao]} junto${previa && previa.arquivo ? " (" + previa.arquivo.kb + " KB)" : ""}</span></label>` : null}
     ${texto === null ? html`<p class="sub">${fazendo ? "Montando a mensagem…" : ""}</p>` : html`<div class="campo"><label for="zap-texto">Mensagem</label>
-      <${Area} id="zap-texto" valor=${texto} rows="10" onMuda=${v => { setTexto(v); setEditado(true); }} /></div>`}
+      <${Area} id="zap-texto" valor=${texto} rows="10" onMuda=${v => { setTexto(v); setEditado(true); setPrevia(null); }} /></div>`}
     ${erros.length ? html`<div class="erros">${linhas(erros)}</div>` : null}
     ${previa && (previa.avisos || []).length ? html`<div class="aviso">${linhas(previa.avisos)}</div>` : null}
     ${erro ? html`<div class="erros">${erro}</div>` : null}

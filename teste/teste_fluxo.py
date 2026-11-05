@@ -74,8 +74,10 @@ try:
     chk("WhatsApp: prévia com o texto do modelo e o PDF do orçamento marcado", "orçamento do seu Fiat Uno" in pg.input_value("#zap-texto") and "PDF do orçamento" in dz and "150 KB" in dz
         and len(zenv) == 1 and zenv[0]["modelo"] == "orcamento" and zenv[0]["numero_os"] == 1896 and zenv[0]["anexo"]["documento"] == "orcamento" and zenv[0]["confirmar"] is False and zenv[0]["origem"] == "tela", (dz, zenv))
     chk("WhatsApp: avisos da fila aparecem", "Fora do horário" in dz)
-    pg.fill("#zap-texto", "Texto mudado pelo Danilo"); pg.click("[role=dialog] button:has-text('Pôr na fila')"); pg.wait_for_timeout(1000)
+    n0 = len(pg.evaluate("window.__ZAP_ENVIOS"))
+    pg.fill("#zap-texto", "Texto mudado pelo Danilo"); pg.wait_for_timeout(1500); pg.click("[role=dialog] button:has-text('Pôr na fila')"); pg.wait_for_timeout(1000)
     zenv = pg.evaluate("window.__ZAP_ENVIOS")
+    chk("WhatsApp: texto editado é conferido de novo antes de enviar", any(z["confirmar"] is False and z.get("texto") == "Texto mudado pelo Danilo" for z in zenv[n0:]), zenv[n0:])
     chk("WhatsApp: confirmado vai com o texto editado e o PDF, e acorda a fila", zenv[-1]["confirmar"] is True and zenv[-1]["texto"] == "Texto mudado pelo Danilo" and zenv[-1]["anexo"]["fonte"] == "os"
         and "Mensagem na fila" in pg.inner_text("[role=dialog]") and "processar" in pg.evaluate("window.__ZAP_CHAMADAS || []"), zenv[-1])
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)

@@ -352,7 +352,11 @@ async function processar(adm: Db, ms: () => number): Promise<Response> {
         if (!aGuardar.length) return;
         const lote = aGuardar.splice(0, aGuardar.length);
         const { data, error } = await adm.rpc("whatsapp_guardar_mensagens", { p_msgs: lote });
-        if (error) { console.error("guardar mensagens", error.message); aGuardar.unshift(...lote); } else guardadas += Number(data) || 0;
+        if (error) { console.error("guardar mensagens", error.message); aGuardar.unshift(...lote); return; }
+        guardadas += Number(data) || 0;
+        // v36: avisos tratados numa chamada separada (a gravação nunca depende deles); o agendamento de 1 min pega o resto
+        const { error: e2 } = await adm.rpc("whatsapp_avisos_processar", { p_limite: 10 });
+        if (e2 && !/function|does not exist|PGRST202/i.test(e2.message)) console.error("avisos", e2.message);
       };
       const r = await proximo(s, 40000);
       if (r.tipo !== "open") {
@@ -491,7 +495,9 @@ type ItemAssistente = { id: number; base: string; anterior?: string | null; clie
 
 /** Monta o pedido à IA (texto do cliente vai como dado). */
 export function pedidoAssistente(it: ItemAssistente) {
-  const conversa = (it.conversa || []).map((c) => `[${c.em}] ${c.de === "oficina" ? "Oficina" : "Cliente"}: ${String(c.texto || "").slice(0, 500)}`).join("\n");
+  // < e > viram ‹ e ›: o texto do cliente não consegue fechar a tag <conversa> nem abrir outra (é dado, nunca instrução)
+  const semTag = (t: unknown) => String(t || "").replace(/</g, "‹").replace(/>/g, "›");
+  const conversa = (it.conversa || []).map((c) => `[${c.em}] ${c.de === "oficina" ? "Oficina" : "Cliente"}: ${semTag(String(c.texto || "").slice(0, 500))}`).join("\n");
   const partes = [
     `Agora: ${it.agora || ""}`,
     `Cliente: ${it.cliente || "(sem nome)"}${it.veiculo ? " — veículo " + it.veiculo : ""}${it.os_aberta ? " — O.S. " + it.os_aberta : ""}`,

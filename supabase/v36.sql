@@ -23,7 +23,9 @@
 --    cliente com aviso/rascunho nos últimos 30 minutos; se houver mais de um, ele recebe uma explicação.
 --    A IA (Claude Haiku, pela função zap, segredo ANTHROPIC_API_KEY) reescreve o texto de forma profissional,
 --    SEM acrescentar preço, prazo, data ou diagnóstico, e devolve o RASCUNHO ao Danilo.
---      OK (em cima do rascunho)   → vai para o cliente pela fila (regras de horário, intervalo e PARAR);
+--      OK (em cima do rascunho)   → vai para o cliente pela fila (regras de horário, intervalo e PARAR).
+--                                    OK/CANCELAR/AGORA SÓ valem citando a mensagem do rascunho: solto ou em cima do
+--                                    aviso não aprova nada (revisão independente, 05/11);
 --      OK AGORA                    → idem, liberado fora do horário comercial;
 --      outro texto (em cima)       → é a correção: a IA refaz o rascunho;
 --      CANCELAR                    → nada é enviado.
@@ -155,6 +157,20 @@ language sql stable as $$
                  coalesce(p_cfg ->> 'silencio_inicio', '22:00')::time i, coalesce(p_cfg ->> 'silencio_fim', '07:00')::time f) x
 $$;
 
+-- O mesmo número de celular? Compara TODOS os dígitos (com 55 e o 9 dos celulares do Brasil), não só a chave
+-- DDD + 8 últimos (whatsapp_chave_tel), para um número estrangeiro com os mesmos dígitos finais nunca passar pelo Danilo.
+create or replace function public.whatsapp_tel_completo(p text) returns text language plpgsql immutable as $$
+declare d text := regexp_replace(coalesce(p, ''), '\D', '', 'g');
+begin
+  if length(d) in (10, 11) then d := '55' || d; end if;
+  if length(d) = 12 and d like '55%' and substr(d, 5, 1) in ('6', '7', '8', '9') then d := substr(d, 1, 4) || '9' || substr(d, 5); end if;
+  return d;
+end $$;
+create or replace function public.whatsapp_e_alerta(p_tel text) returns boolean language sql stable security definer set search_path = public as $$
+  select coalesce(c.alerta_telefone, '') <> '' and public.whatsapp_tel_completo(p_tel) = public.whatsapp_tel_completo(c.alerta_telefone)
+    from public.whatsapp_conexao c where c.id = 1
+$$;
+
 -- texto do Danilo sem a marca do áudio transcrito
 create or replace function public.whatsapp_sem_marca(p text) returns text language sql immutable as $$
   select btrim(regexp_replace(coalesce(p, ''), '^\[áudio[^\]]*\]\s*', ''))
@@ -241,6 +257,10 @@ language plpgsql security definer set search_path = public as $$
 declare a public.whatsapp_avisos; v_id bigint; v_txt text; v_r jsonb;
 begin
   select * into a from public.whatsapp_avisos where id = p_av for update;
+  -- conferido DEPOIS de travar: CANCELAR, correção ou vencimento ao mesmo tempo ganham do OK
+  if a.id is null or a.tipo <> 'rascunho' or a.situacao <> 'aguardando_ok' or a.atualizado_em < now() - interval '24 hours' then
+    return jsonb_build_object('erro', 'Este rascunho não está mais esperando OK (cancelado, corrigido ou vencido).');
+  end if;
   v_txt := btrim(coalesce(a.proposta, ''));
   if v_txt = '' then return jsonb_build_object('erro', 'O rascunho está vazio.'); end if;
   if length(v_txt) > 2000 then return jsonb_build_object('erro', 'O rascunho passou de 2000 caracteres.'); end if;
@@ -322,8 +342,8 @@ begin
     return 'esperando transcrição';
   end if;
 
-  -- mensagem do próprio Danilo para a oficina: é uma ordem
-  if k <> '' and k = public.whatsapp_chave_tel(v_alerta) then
+  -- mensagem do próprio Danilo para a oficina: é uma ordem (número inteiro igual ao de alerta)
+  if public.whatsapp_e_alerta(m.telefone) then
     v_res := public.whatsapp_comando(m);
     update public.whatsapp_mensagens set aviso = 'comando', lida = true where id = m.id;
     return 'comando: ' || v_res;
@@ -368,7 +388,7 @@ create or replace function public.whatsapp_comando(m public.whatsapp_mensagens) 
 language plpgsql security definer set search_path = public as $$
 declare
   a public.whatsapp_avisos; r2 public.whatsapp_avisos; v_txt text := public.whatsapp_sem_marca(m.texto); v_p text; v_ok boolean; v_agora boolean;
-  v_cancela boolean; v_n int; v_r jsonb; v_id bigint;
+  v_cancela boolean; v_cmd boolean; v_n int; v_r jsonb; v_id bigint;
 begin
   v_p := lower(btrim(v_txt, E' .,!\n\t'));
   v_p := regexp_replace(v_p, '\s+', ' ', 'g');
@@ -377,14 +397,26 @@ begin
   v_agora := v_ok and v_p like '%agora%';
   v_cancela := v_p in ('cancelar', 'cancela', 'cancelado', 'não', 'nao', 'não manda', 'nao manda', 'não envia', 'nao envia', '2');
 
-  -- 1) o que ele citou com "Responder"
+  v_cmd := v_ok or v_cancela;
+  -- 1) o que ele citou com "Responder" (a mensagem que a oficina mandou para ele: aviso, rascunho ou confirmação)
   if coalesce(m.responde_a, '') <> '' then
     select av.* into a from public.whatsapp_avisos av join public.whatsapp_fila f on f.id = av.fila_id
      where f.msg_id = m.responde_a and av.tipo in ('aviso', 'rascunho', 'resposta') order by av.id desc limit 1;
   end if;
-  -- 2) sem citação: o único cliente com aviso/rascunho nos últimos 30 minutos. Citou uma mensagem que não é aviso/rascunho/
-  --    resposta: NÃO adivinha (um OK em cima de outra mensagem nunca pode aprovar o rascunho de alguém) — pede para refazer.
-  if a.id is null and coalesce(m.responde_a, '') = '' then
+  -- OK / CANCELAR / AGORA só valem EM CIMA da mensagem do próprio rascunho (ou, o AGORA, da confirmação "na fila").
+  -- Sem citação, citando um aviso ou outra mensagem: não aprova nada, explica (um OK solto nunca manda texto a cliente).
+  if v_cmd and not (a.id is not null and (a.tipo = 'rascunho' or (a.tipo = 'resposta' and v_agora))) then
+    if not exists (select 1 from public.whatsapp_avisos where tipo = 'ajuda' and criado_em > now() - interval '2 minutes') then
+      insert into public.whatsapp_avisos (tipo, situacao, fila_id) values ('ajuda', 'info',
+        public.whatsapp_interno(case when v_cancela
+          then '🤖 Nada foi cancelado. Para cancelar, toque e segure no *rascunho* do cliente, escolha *Responder* e escreva CANCELAR.'
+          else '🤖 Nada foi enviado. O *OK* só vale em cima do *rascunho*: toque e segure na mensagem "✍️ Rascunho para…", escolha *Responder* e escreva OK.' end));
+    end if;
+    return 'comando sem rascunho citado';
+  end if;
+  -- 2) texto sem citação: o único cliente com aviso/rascunho nos últimos 30 minutos (só cria rascunho; nada sai sem OK).
+  --    Citou uma mensagem que não é aviso/rascunho/resposta, ou a mensagem é antiga (chegou atrasada): não adivinha.
+  if a.id is null and coalesce(m.responde_a, '') = '' and m.em > now() - interval '10 minutes' then
     select count(distinct chave) into v_n from public.whatsapp_avisos
      where tipo in ('aviso', 'rascunho', 'resposta') and chave is not null and criado_em > now() - interval '30 minutes';
     if v_n = 1 then
@@ -402,13 +434,6 @@ begin
           else '🤖 Não sei para qual cliente é esta mensagem. Toque e segure no aviso do cliente, escolha *Responder* e escreva (ou grave o áudio) de novo.' end));
     end if;
     return case when coalesce(m.responde_a, '') <> '' then 'citação desconhecida' else 'sem cliente' end;
-  end if;
-
-  -- citou o aviso e já há rascunho esperando OK para o mesmo cliente: o OK/CANCELAR vale para esse rascunho
-  if a.tipo = 'aviso' and (v_ok or v_cancela) then
-    select * into r2 from public.whatsapp_avisos where chave = a.chave and tipo = 'rascunho' and situacao = 'aguardando_ok'
-     order by id desc limit 1;
-    if r2.id is not null then a := r2; end if;
   end if;
 
   if a.tipo = 'rascunho' and a.situacao = 'aguardando_ok' and v_ok then
@@ -452,22 +477,32 @@ begin
   return 'rascunho';
 end $$;
 
--- gatilho: toda mensagem gravada (ou áudio transcrito) é tratada na hora; erro aqui nunca impede gravar a mensagem
-create or replace function public.whatsapp_mensagens_aviso_gatilho() returns trigger
+-- Tratamento FORA da gravação (revisão independente, 05/11): o insert das recebidas nunca espera nem falha por causa dos
+-- avisos. Quem grava (motor: whatsapp_motor_avisos; zap: whatsapp_avisos_processar) chama logo depois, numa chamada
+-- separada e com poucas mensagens por vez; o agendamento de 1 minuto pega o resto. Erro numa mensagem vira aviso = 'erro'.
+drop trigger if exists whatsapp_mensagens_aviso on public.whatsapp_mensagens;
+drop function if exists public.whatsapp_mensagens_aviso_gatilho();
+create or replace function public.whatsapp_avisos_processar(p_limite int default 5) returns int
+language plpgsql security definer set search_path = public as $$
+declare r record; n int := 0;
+begin
+  for r in select id from public.whatsapp_mensagens where aviso is null and em > now() - interval '2 days'
+            order by id limit least(greatest(coalesce(p_limite, 5), 1), 100) loop
+    begin
+      perform public.whatsapp_avisos_tratar(r.id); n := n + 1;
+    exception when others then
+      update public.whatsapp_mensagens set aviso = 'erro', aviso_erro = left(sqlerrm, 300) where id = r.id;
+    end;
+  end loop;
+  return n;
+end $$;
+-- o motor (chave própria, sem precisar da vez) pede o tratamento depois de gravar as recebidas
+create or replace function public.whatsapp_motor_avisos(p_chave text) returns int
 language plpgsql security definer set search_path = public as $$
 begin
-  if new.aviso is null then
-    begin
-      perform public.whatsapp_avisos_tratar(new.id);
-    exception when others then
-      update public.whatsapp_mensagens set aviso = 'erro', aviso_erro = left(sqlerrm, 300) where id = new.id;
-    end;
-  end if;
-  return null;
+  perform public.whatsapp_motor_conferir(p_chave);
+  return public.whatsapp_avisos_processar(5);
 end $$;
-drop trigger if exists whatsapp_mensagens_aviso on public.whatsapp_mensagens;
-create trigger whatsapp_mensagens_aviso after insert or update of texto, midia_erro on public.whatsapp_mensagens
-  for each row execute function public.whatsapp_mensagens_aviso_gatilho();
 
 -- ---------------------------------------------------------------------
 -- IA (função zap, chave de servidor): pega os rascunhos pendentes e devolve o resultado
@@ -537,14 +572,8 @@ create or replace function public.whatsapp_avisos_minuto() returns jsonb
 language plpgsql security definer set search_path = public as $$
 declare r record; n int := 0; v_exp int; v_pend boolean;
 begin
-  -- mensagens que ficaram para trás (áudio sem transcrição depois de 3 min, gatilho com erro passageiro)
-  for r in select id from public.whatsapp_mensagens where aviso is null and em > now() - interval '2 days' order by id limit 50 loop
-    begin
-      perform public.whatsapp_avisos_tratar(r.id); n := n + 1;
-    exception when others then
-      update public.whatsapp_mensagens set aviso = 'erro', aviso_erro = left(sqlerrm, 300) where id = r.id;
-    end;
-  end loop;
+  -- mensagens ainda sem tratamento (o motor/zap não pediu, áudio esperando a transcrição, erro passageiro)
+  n := public.whatsapp_avisos_processar(50);
   -- rascunho sem OK há 24 h vence
   update public.whatsapp_avisos set situacao = 'expirado', atualizado_em = now()
    where tipo = 'rascunho' and situacao = 'aguardando_ok' and atualizado_em < now() - interval '24 hours';
@@ -679,7 +708,7 @@ begin
     if k > 0 and not coalesce((m ->> 'de_mim')::boolean, false) and coalesce(m ->> 'telefone', '') <> ''
        and lower(btrim(coalesce(m ->> 'texto', ''), E' .!\n')) in ('parar', 'pare', 'sair', 'stop', 'cancelar mensagens')
        -- o Danilo dando ordem para a oficina não vira "PARAR" do número dele
-       and public.whatsapp_chave_tel(m ->> 'telefone') is distinct from (select public.whatsapp_chave_tel(alerta_telefone) from public.whatsapp_conexao where id = 1) then
+       and not coalesce(public.whatsapp_e_alerta(m ->> 'telefone'), false) then
       insert into public.whatsapp_optout (telefone, texto) values (public.whatsapp_chave_tel(m ->> 'telefone'), left(m ->> 'texto', 100))
       on conflict (telefone) do nothing;
     end if;
@@ -695,13 +724,16 @@ declare f text;
 begin
   foreach f in array array['whatsapp_avisos_cfg()', 'whatsapp_contato(text)', 'whatsapp_interno(text, int)', 'whatsapp_assistente_acordar()',
                            'whatsapp_assistente_enviar(bigint, boolean)', 'whatsapp_rascunho_novo(public.whatsapp_avisos, text, text, bigint)',
-                           'whatsapp_avisos_tratar(bigint)', 'whatsapp_comando(public.whatsapp_mensagens)', 'whatsapp_mensagens_aviso_gatilho()',
+                           'whatsapp_avisos_tratar(bigint)', 'whatsapp_comando(public.whatsapp_mensagens)', 'whatsapp_avisos_processar(int)',
+                           'whatsapp_e_alerta(text)',
                            'whatsapp_assistente_pegar(int)', 'whatsapp_assistente_resultado(bigint, text, text, text, boolean)',
                            'whatsapp_avisos_minuto()', 'whatsapp_resumo_enviar()', 'whatsapp_guardar_mensagens(jsonb)',
                            'whatsapp_pegar_proxima(text, text, boolean)'] loop
     execute 'revoke all on function public.' || f || ' from public, anon, authenticated';
     execute 'grant execute on function public.' || f || ' to service_role';
   end loop;
+  execute 'revoke all on function public.whatsapp_motor_avisos(text) from public, authenticated';
+  execute 'grant execute on function public.whatsapp_motor_avisos(text) to anon, service_role';
 end $$;
 
 -- ---------------------------------------------------------------------

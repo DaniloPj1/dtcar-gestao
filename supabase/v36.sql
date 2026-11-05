@@ -71,6 +71,7 @@ end $$;
 alter table public.whatsapp_mensagens add column if not exists aviso_id bigint;
 alter table public.whatsapp_mensagens add column if not exists aviso_erro text;
 alter table public.whatsapp_mensagens add column if not exists resumida_em timestamptz;
+alter table public.whatsapp_mensagens add column if not exists aviso_tentativas int not null default 0;  -- erro passageiro: tenta de novo
 create index if not exists whatsapp_mensagens_tratar on public.whatsapp_mensagens (em) where aviso is null;
 create index if not exists whatsapp_mensagens_resumo on public.whatsapp_mensagens (em) where aviso = 'resumo' and resumida_em is null;
 
@@ -326,7 +327,7 @@ begin
   -- a oficina mandou: abre/renova a vigia (menos para o próprio Danilo)
   if m.de_mim then
     if k <> '' and length(regexp_replace(m.telefone, '\D', '', 'g')) >= 10
-       and k is distinct from public.whatsapp_chave_tel(v_alerta) then
+       and not coalesce(public.whatsapp_e_alerta(m.telefone), false) then
       insert into public.whatsapp_vigias (chave, telefone, desde, ate)
       values (k, m.telefone, m.em, m.em + make_interval(hours => coalesce((v_cfg ->> 'vigia_horas')::int, 48)))
       on conflict (chave) do update set telefone = excluded.telefone,
@@ -342,6 +343,10 @@ begin
   end if;
   if coalesce(v_alerta, '') = '' then
     update public.whatsapp_mensagens set aviso = 'sem_numero' where id = m.id; return 'sem_numero';
+  end if;
+  -- mensagem antiga (motor voltou depois de muito tempo, histórico do celular vinculado de novo): não avisa nem resume
+  if m.em < now() - interval '6 hours' then
+    update public.whatsapp_mensagens set aviso = 'antiga' where id = m.id; return 'antiga';
   end if;
   -- áudio: espera a transcrição (até 3 minutos)
   if m.tipo = 'audio' and m.transcricao is null and m.midia_erro is null and m.gravada_em > now() - interval '3 minutes' then
@@ -497,7 +502,9 @@ begin
     begin
       perform public.whatsapp_avisos_tratar(r.id); n := n + 1;
     exception when others then
-      update public.whatsapp_mensagens set aviso = 'erro', aviso_erro = left(sqlerrm, 300) where id = r.id;
+      -- erro passageiro: fica para a próxima rodada; na 3ª falha vira erro
+      update public.whatsapp_mensagens set aviso_erro = left(sqlerrm, 300), aviso_tentativas = aviso_tentativas + 1,
+             aviso = case when aviso_tentativas + 1 >= 3 then 'erro' end where id = r.id;
     end;
   end loop;
   return n;
@@ -518,7 +525,9 @@ language plpgsql security definer set search_path = public as $$
 declare r jsonb := '[]'::jsonb; a public.whatsapp_avisos; c jsonb;
 begin
   for a in select * from public.whatsapp_avisos
-            where tipo = 'rascunho' and (situacao = 'pendente' or (situacao = 'gerando' and atualizado_em < now() - interval '3 minutes'))
+            where tipo = 'rascunho'
+              and ((situacao = 'pendente' and (tentativas = 0 or atualizado_em < now() - interval '45 seconds'))  -- falhou: espera 45 s
+                   or (situacao = 'gerando' and atualizado_em < now() - interval '3 minutes'))
               and tentativas < 3
             order by id limit greatest(1, least(coalesce(p_limite, 3), 10)) for update skip locked loop
     update public.whatsapp_avisos set situacao = 'gerando', tentativas = tentativas + 1, atualizado_em = now() where id = a.id;
@@ -660,7 +669,7 @@ end $$;
 -- ---------------------------------------------------------------------
 create or replace function public.whatsapp_pegar_proxima(p_dono text, p_id text, p_com_arquivo boolean default false) returns jsonb
 language plpgsql security definer set search_path = public as $$
-declare c public.whatsapp_conexao; v public.whatsapp_fila; v_hora int; v_dia int; v_no boolean; v_lim boolean; v_sil boolean;
+declare c public.whatsapp_conexao; v public.whatsapp_fila; v_hora int; v_dia int; v_no boolean; v_lim boolean; v_sil boolean; v_int boolean;
 begin
   select * into c from public.whatsapp_conexao where id = 1 for update;
   if not (c.dono = p_dono and c.dono_id = p_id and c.dono_ate > now()) then return jsonb_build_object('motivo', 'sem a vez'); end if;
@@ -682,8 +691,14 @@ begin
   v_no := public.whatsapp_no_horario(c.regras);
   -- interna fora do horário: o silêncio (22h–7h) é conferido agora, na retirada (não só quando entrou na fila)
   v_sil := public.whatsapp_no_silencio(public.whatsapp_avisos_cfg());
+  v_int := coalesce((public.whatsapp_avisos_cfg() ->> 'fora_horario')::boolean, true) and not v_sil;
+  -- no silêncio, as internas liberadas fora do horário voltam a esperar (assim o alerta "fila parada" do v32 não acusa à toa);
+  -- quando o silêncio acaba, saem mesmo fora do horário comercial (aviso de sábado 23h sai domingo 7h, não segunda 8h)
+  if v_sil then
+    update public.whatsapp_fila set fora_horario = false where status = 'pendente' and interno and fora_horario;
+  end if;
   select * into v from public.whatsapp_fila
-   where status = 'pendente' and (v_no or (fora_horario and not (interno and v_sil))) and (p_com_arquivo or arquivo is null)
+   where status = 'pendente' and (v_no or (fora_horario and not (interno and v_sil)) or (interno and v_int)) and (p_com_arquivo or arquivo is null)
      and (liberar_em is null or liberar_em <= now()) and (interno or not v_lim)
    order by interno desc, id limit 1 for update skip locked;
   if v.id is null then
@@ -695,6 +710,109 @@ begin
   return jsonb_build_object('mensagem', jsonb_build_object('id', v.id, 'telefone', v.telefone, 'texto', v.texto,
     'arquivo', case when v.arquivo is not null then jsonb_build_object('path', v.arquivo ->> 'path', 'nome', v.arquivo ->> 'nome',
                                                                        'tipo', v.arquivo ->> 'tipo', 'bytes', (v.arquivo ->> 'bytes')::int) end));
+end $$;
+
+-- ---------------------------------------------------------------------
+-- Pôr na fila (v34): o limite do dia conta só as mensagens para clientes (as internas não gastam o limite)
+-- ---------------------------------------------------------------------
+create or replace function public.whatsapp_enfileirar(p jsonb, p_gravar boolean default false)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  v_txt text := btrim(coalesce(p ->> 'texto', ''));
+  v_tel text := regexp_replace(coalesce(p ->> 'telefone', ''), '\D', '', 'g');
+  v_arq jsonb := case when jsonb_typeof(p -> 'arquivo') = 'object' then p -> 'arquivo' end;
+  v_modelo text := nullif(btrim(coalesce(p ->> 'modelo', '')), '');
+  v_cli public.clientes; v_os public.ordens; v_r jsonb; v_erros text[] := '{}'; v_avisos text[] := '{}';
+  v_id bigint; v_fora boolean := coalesce((p ->> 'fora_horario')::boolean, false); v_hoje int;
+begin
+  if not public.e_admin() then raise exception 'Só o administrador envia WhatsApp.'; end if;
+  select regras into v_r from public.whatsapp_conexao where id = 1;
+  if nullif(p ->> 'ordem_numero', '') is not null then
+    select * into v_os from public.ordens where numero = (p ->> 'ordem_numero')::int;
+    if v_os.id is null then v_erros := v_erros || ('O.S. ' || (p ->> 'ordem_numero') || ' não encontrada.'); end if;
+  end if;
+  if nullif(p ->> 'cliente_id', '') is not null then
+    select * into v_cli from public.clientes where id = (p ->> 'cliente_id')::uuid;
+  elsif v_os.cliente_id is not null then
+    select * into v_cli from public.clientes where id = v_os.cliente_id;
+  end if;
+  if v_tel = '' and v_cli.id is not null then v_tel := regexp_replace(coalesce(nullif(v_cli.telefone, ''), v_cli.telefone2, ''), '\D', '', 'g'); end if;
+  -- O.S. com cliente que não está no cadastro (cópia na O.S.): usa o telefone da O.S.
+  if v_tel = '' and v_os.id is not null then v_tel := regexp_replace(coalesce(v_os.cliente ->> 'telefone', ''), '\D', '', 'g'); end if;
+  if length(v_tel) in (10, 11) then v_tel := '55' || v_tel; end if;
+  if v_tel !~ '^55\d{10,11}$' then v_erros := v_erros || 'Telefone inválido: use DDD + número (ex.: 27 99999-0000).'::text; end if;
+  -- qualquer número com DDD (v26). Se o telefone for de um cliente cadastrado, a fila mostra o nome.
+  if v_cli.id is null and v_tel ~ '^55\d{10,11}$' then
+    select * into v_cli from public.clientes c
+     where public.whatsapp_chave_tel(v_tel) in (public.whatsapp_chave_tel(c.telefone), public.whatsapp_chave_tel(c.telefone2), public.whatsapp_chave_tel(c.telefone3))
+       and coalesce(c.telefone, '') || coalesce(c.telefone2, '') || coalesce(c.telefone3, '') <> ''
+     order by c.atualizado_em desc nulls last limit 1;
+    if v_cli.id is null then v_avisos := v_avisos || 'Número sem cadastro no sistema (vai assim mesmo).'::text; end if;
+  elsif v_cli.id is not null and v_tel ~ '^55\d{10,11}$' and public.whatsapp_chave_tel(v_tel) not in (public.whatsapp_chave_tel(v_cli.telefone), public.whatsapp_chave_tel(v_cli.telefone2), public.whatsapp_chave_tel(v_cli.telefone3)) then
+    v_avisos := v_avisos || ('O telefone informado não é o do cadastro de ' || v_cli.nome || ' (vai para o número informado).');
+  end if;
+  if v_arq is not null and not public.whatsapp_arquivo_valido(v_arq) then
+    v_erros := v_erros || 'Arquivo inválido: o PDF tem de ser gerado pelo sistema.'::text; v_arq := null;
+  end if;
+  -- só na hora de gravar o PDF já está na pasta (na prévia ele ainda não foi guardado)
+  if v_arq is not null and p_gravar and not exists (select 1 from storage.objects o where o.bucket_id = 'whatsapp-envio' and o.name = v_arq ->> 'path') then
+    v_erros := v_erros || 'O PDF não está na pasta do WhatsApp (gere de novo).'::text;
+  end if;
+  if v_txt = '' and v_arq is null then v_erros := v_erros || 'Mensagem vazia.'::text; end if;
+  if length(v_txt) > 2000 then v_erros := v_erros || 'Mensagem longa demais (máximo 2000 caracteres).'::text; end if;
+  if v_txt ~* '(bit\.ly|tinyurl|cutt\.ly|goo\.gl|t\.co/|is\.gd|ow\.ly|encurtador|rebrand\.ly|shorturl)' then
+    v_erros := v_erros || 'Sem link encurtado: use o endereço completo.'::text;
+  end if;
+  if v_tel ~ '^55\d{10,11}$' and exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(v_tel)) then
+    v_erros := v_erros || 'Este número pediu para não receber mensagens (respondeu PARAR).'::text;
+  end if;
+  -- dois pedidos ao mesmo tempo para o mesmo número: um espera o outro (a conferência de repetição vale para os dois)
+  if p_gravar and v_tel ~ '^55\d{10,11}$' then perform pg_advisory_xact_lock(hashtext('dtcar-zap-fila:' || public.whatsapp_chave_tel(v_tel))); end if;
+  -- mesma mensagem (texto e nome do arquivo) para o mesmo número em 10 minutos: não repete
+  -- (inclui a que deu erro depois de o texto sair: msg_id gravado)
+  if exists (select 1 from public.whatsapp_fila f where public.whatsapp_chave_tel(f.telefone) = public.whatsapp_chave_tel(v_tel) and f.texto = v_txt
+              and coalesce(f.arquivo ->> 'nome', '') = coalesce(v_arq ->> 'nome', '')
+              and (f.status in ('pendente', 'enviando', 'enviada') or (f.status = 'erro' and f.msg_id is not null)) and f.criado_em > now() - interval '10 minutes') then
+    v_erros := v_erros || 'Esta mesma mensagem para este número já está na fila ou foi enviada há menos de 10 minutos.'::text;
+  end if;
+  select count(*) into v_hoje from public.whatsapp_fila
+   where status in ('pendente', 'enviando', 'enviada') and not interno and criado_em >= date_trunc('day', now() at time zone 'America/Sao_Paulo') at time zone 'America/Sao_Paulo';
+  if v_hoje >= coalesce((v_r ->> 'por_dia')::int, 80) then v_erros := v_erros || ('Limite do dia atingido (' || v_hoje || ' mensagens).'); end if;
+  if not public.whatsapp_no_horario(v_r) and not v_fora then
+    v_avisos := v_avisos || 'Fora do horário comercial: a mensagem sai no próximo horário de envio (para mandar agora, só com ordem do Danilo: fora_horario).'::text;
+  end if;
+  if (select situacao from public.whatsapp_conexao where id = 1) <> 'conectado' then
+    v_avisos := v_avisos || 'O WhatsApp da oficina não está conectado agora: a mensagem fica na fila até conectar.'::text;
+  end if;
+
+  if array_length(v_erros, 1) > 0 or not p_gravar then
+    return jsonb_build_object('gravado', false, 'erros', to_jsonb(v_erros), 'avisos', to_jsonb(v_avisos),
+      'telefone', v_tel, 'cliente', jsonb_build_object('id', v_cli.id, 'nome', coalesce(v_cli.nome, v_os.cliente ->> 'nome')), 'ordem_numero', v_os.numero, 'texto', v_txt,
+      'arquivo', case when v_arq is not null then jsonb_build_object('nome', v_arq ->> 'nome', 'kb', greatest(1, round((v_arq ->> 'bytes')::numeric / 1024)), 'origem', v_arq ->> 'origem') end,
+      'modelo', v_modelo, 'pendentes_na_fila', (select count(*) from public.whatsapp_fila where status = 'pendente'));
+  end if;
+  insert into public.whatsapp_fila (telefone, texto, cliente_id, cliente_nome, ordem_numero, origem, pedido_por, fora_horario, arquivo, modelo)
+  values (v_tel, v_txt, v_cli.id, coalesce(v_cli.nome, v_os.cliente ->> 'nome', ''), v_os.numero, coalesce(nullif(p ->> 'origem', ''), 'claude'),
+          left(coalesce(p ->> 'pedido', ''), 300), v_fora,
+          case when v_arq is not null then jsonb_build_object('path', v_arq ->> 'path', 'nome', v_arq ->> 'nome', 'tipo', 'application/pdf',
+                                                             'bytes', (v_arq ->> 'bytes')::int, 'origem', left(coalesce(v_arq ->> 'origem', ''), 200)) end,
+          v_modelo)
+  returning id into v_id;
+  return jsonb_build_object('gravado', true, 'id', v_id, 'avisos', to_jsonb(v_avisos), 'telefone', v_tel,
+    'cliente', jsonb_build_object('id', v_cli.id, 'nome', coalesce(v_cli.nome, v_os.cliente ->> 'nome')), 'ordem_numero', v_os.numero,
+    'arquivo', case when v_arq is not null then v_arq ->> 'nome' end, 'modelo', v_modelo,
+    'posicao_na_fila', (select count(*) from public.whatsapp_fila where status = 'pendente' and id <= v_id));
+end $$;
+
+-- aviso de "motor sem sinal" (v32) também como mensagem interna (sai primeiro, fora dos limites, respeita o silêncio)
+create or replace function public.whatsapp_alerta_na_fila(p_texto text) returns bigint
+language plpgsql security definer set search_path = public as $$
+declare v_tel text;
+begin
+  select alerta_telefone into v_tel from public.whatsapp_conexao where id = 1;
+  if coalesce(v_tel, '') = '' then return null; end if;
+  if exists (select 1 from public.whatsapp_optout o where o.telefone = public.whatsapp_chave_tel(v_tel)) then return null; end if;
+  return public.whatsapp_interno(p_texto);
 end $$;
 
 -- ---------------------------------------------------------------------

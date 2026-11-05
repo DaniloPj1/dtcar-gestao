@@ -15,7 +15,7 @@ const CHAVE = "dtm_" + "a".repeat(64);
 // ---------- banco simulado com as mesmas regras do v24 ----------
 function banco() {
   const b = { sessao: new Map(), con: { situacao: "conectado", numero: "", dono: "", dono_id: null, dono_ate: 0, pedido: null, detalhe: "" },
-    chamadas: [], pdfs: {}, fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0 };
+    chamadas: [], pdfs: {}, fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], intervalos: false, proximo: 0, msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0 };
   const erro = (msg, code) => ({ ok: false, status: 400, text: async () => JSON.stringify({ message: msg, code }) });
   const resp = (v) => ({ ok: true, status: 200, text: async () => (v === undefined ? "" : JSON.stringify(v)) });
   b.buscar = async (url, op) => {
@@ -51,9 +51,15 @@ function banco() {
     }
     if (nome === "whatsapp_motor_mensagens") { for (const x of a.p_msgs) if (!b.msgs.some((y) => y.msg_id === x.msg_id)) b.msgs.push(x); return resp(a.p_msgs.length); }
     if (nome === "whatsapp_motor_entrega") { if (b.semV28) return erro("Could not find the function public.whatsapp_motor_entrega", "PGRST202"); b.entregas.push(...a.p_lista); return resp(a.p_lista.length); }
-    if (nome === "whatsapp_motor_resultado") { b.resultados.push(a); const f = b.fila.find((x) => x.id === a.p_fila_id); if (f) f.status = a.p_ok ? "enviada" : "erro"; return resp(); }
+    if (nome === "whatsapp_motor_resultado") {
+      b.resultados.push(a); const f = b.fila.find((x) => x.id === a.p_fila_id); if (f) f.status = a.p_ok ? "enviada" : "erro";
+      // b.intervalos (v38): o banco marca o intervalo — 3 s se a próxima é do mesmo número (pacote), senão o normal
+      if (b.intervalos && f) { const p = b.fila.find((x) => x.status === "pendente"); b.proximo = b.agora + (a.p_ok && p && p.telefone === f.telefone ? 3000 : 40000); }
+      return resp();
+    }
     if (nome === "whatsapp_motor_soltar") { if (b.con.dono_id === a.p_id) b.con.dono_ate = 0; return resp(); }
     if (!comVez()) return erro("O motor não está com a vez da conexão.", "55000");
+    if (nome === "whatsapp_motor_proxima" && b.proximo > b.agora) return resp({ motivo: "intervalo", proximo_envio: new Date(b.proximo).toISOString() });
     if (nome === "whatsapp_motor_proxima") { const f = b.fila.find((x) => x.status === "pendente"); if (!f) return resp({ motivo: "fila vazia" }); f.status = "enviando"; return resp({ mensagem: { id: f.id, telefone: f.telefone, texto: f.texto, arquivo: f.arquivo || null } }); }
     if (nome === "whatsapp_motor_ler") return resp(Object.fromEntries(a.p_chaves.filter((k) => b.sessao.has(k)).map((k) => [k, JSON.parse(b.sessao.get(k))])));
     if (nome === "whatsapp_motor_gravar") { for (const k in a.p_poe) b.sessao.set(k, JSON.stringify(a.p_poe[k])); for (const k of a.p_tira) b.sessao.delete(k); b.sessaoEm = b.agora; return resp(new Date(b.agora).toISOString()); }
@@ -239,6 +245,34 @@ function sessaoVinculada(b) {
   confere("recebidas não gravadas (pode ter PARAR): não envia", s.enviadas.length === env && b.fila.find((x) => x.id === 6).status === "pendente");
   b.buscar = original; await m.pulso(); await espera();
   confere("recebidas: vão no próximo sinal", m.st.aGuardar.length === 0 && b.msgs.some((x) => x.msg_id === "R2"));
+  await m.encerrar();
+}
+
+// 1g) v38 (motor 3.4): pacote — mensagens seguidas para o mesmo número saem no mesmo sinal; outro número espera o intervalo
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); b.intervalos = true; const esperas = [];
+  const m = novo(b, f, { esperarPacote: async (ms) => { esperas.push(ms); b.agora += ms; } });
+  const tel = "5527997976646";
+  b.fila.push({ id: 1, telefone: tel, texto: "O.S. 1897", status: "pendente" }, { id: 2, telefone: tel, texto: "NF-e 21", status: "pendente" },
+              { id: 3, telefone: tel, texto: "NFS-e 134", status: "pendente" }, { id: 4, telefone: "5527988887777", texto: "Outro cliente", status: "pendente" });
+  await m.pulso(); await espera(); const s = f.sockets[0];
+  await s.emitir("connection.update", { connection: "open" }); await espera(); await m.pulso();
+  confere("pacote: as 3 do mesmo número saem no mesmo sinal, na ordem", s.enviadas.map((x) => x.texto).join("|") === "O.S. 1897|NF-e 21|NFS-e 134", JSON.stringify(s.enviadas.map((x) => x.texto)));
+  confere("pacote: espera só o intervalo curto entre elas", esperas.length === 2 && esperas.every((x) => x <= 5000), JSON.stringify(esperas));
+  confere("pacote: outro número não sai junto (intervalo normal)", b.fila.find((x) => x.id === 4).status === "pendente");
+  await m.pulso(); confere("pacote: outro número continua esperando no sinal seguinte", b.fila.find((x) => x.id === 4).status === "pendente");
+  b.agora += 41000; await m.pulso(); confere("pacote: depois do intervalo, sai o outro número", b.fila.find((x) => x.id === 4).status === "enviada");
+  // falha no meio: para o pacote (o banco marca o intervalo normal)
+  b.fila.push({ id: 5, telefone: tel, texto: "a", status: "pendente" }, { id: 6, telefone: tel, texto: "b", status: "pendente" });
+  b.agora += 41000; s.falhaEnvio = true; const antes = s.enviadas.length; await m.pulso(); s.falhaEnvio = false;
+  confere("pacote: falha no meio não emenda a seguinte", b.fila.find((x) => x.id === 6).status === "pendente" && s.enviadas.length === antes);
+  // sinal antigo (perto de vencer a vez): não começa outra mensagem do pacote
+  b.agora += 41000; b.fila.find((x) => x.id === 6).status = "cancelada"; b.fila.push({ id: 7, telefone: tel, texto: "c", status: "pendente" }, { id: 8, telefone: tel, texto: "d", status: "pendente" });
+  const m2esperas = esperas.length; const velho = m.st.ultimoPulsoOk;
+  const orig = b.buscar; b.buscar = async (u, o) => { const r = await orig(u, o); if (u.endsWith("whatsapp_motor_resultado")) b.agora += 25000; return r; };
+  await m.pulso(); b.buscar = orig;
+  confere("pacote: passou do tempo do sinal, a seguinte fica para o próximo sinal", b.fila.find((x) => x.id === 7).status === "enviada" && b.fila.find((x) => x.id === 8).status === "pendente" && esperas.length === m2esperas, velho);
+  b.agora += 1000; await m.pulso(); confere("pacote: o sinal seguinte continua o pacote", b.fila.find((x) => x.id === 8).status === "enviada");
   await m.encerrar();
 }
 

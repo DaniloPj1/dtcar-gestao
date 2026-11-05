@@ -25,9 +25,12 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere } from "./whats.js";
 
-export const VERSAO = "3.3";
+export const VERSAO = "3.4";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
+export const PACOTE_MAX = 8;              // tentativas por sinal (envios + esperas curtas)
+export const PACOTE_MS = 20000;          // não começa outra depois disso desde o último sinal (o seguinte continua o pacote)
+export const PACOTE_ESPERA_MS = 5000;    // só espera intervalo até isso (o do pacote é 3 s)
 const ESPERAS = [5, 15, 30, 60, 120, 300].map((s) => s * 1000); // entre tentativas de reconectar
 
 const hora = () => new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
@@ -56,7 +59,7 @@ function registro(saida) {
 
 export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = makeWASocket, saida = console, agora = Date.now,
                              relogio = { iniciar: setTimeout, parar: clearTimeout }, recarregar = null, esperasGravar = [0, 1000, 3000], esperarDigitando,
-                             baixarMidia = downloadMediaMessage } = {}) {
+                             baixarMidia = downloadMediaMessage, esperarPacote = (ms) => new Promise((r) => setTimeout(r, ms)) } = {}) {
   const id = randomUUID();
   const log = (...a) => saida.log(hora(), ...a);
   const blog = registro(saida);
@@ -313,7 +316,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     } catch (e) { if (e.name === "AbortError") throw new Error("o PDF demorou demais para baixar"); throw e; }
     finally { clearTimeout(t); }
   }
-  /** Pega a próxima mensagem liberada pelas regras do banco e envia (uma por sinal). */
+  /** Pega a próxima mensagem liberada pelas regras do banco e envia. Devolve { enviou, espera } (espera: ms até o banco liberar). */
   async function enviarDaFila() {
     const s = st.sock; if (!s || !st.aberto) return;
     // resultado anterior ainda não gravado: ele é que marca o intervalo e os limites — não envia outra antes;
@@ -327,7 +330,11 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
       try { r = await rpc("whatsapp_motor_proxima", base()); }
       catch (e2) { if (!/function|does not exist|PGRST202/i.test(e2.message)) log("fila:", e2.message); return; }
     }
-    if (!r || !r.mensagem) { st.motivoFila = (r && r.motivo) || ""; return; }
+    if (!r || !r.mensagem) {
+      st.motivoFila = (r && r.motivo) || "";
+      const falta = r && r.motivo === "intervalo" && r.proximo_envio ? new Date(r.proximo_envio).getTime() - agora() : 0;
+      return { enviou: false, espera: falta > 0 ? falta : 0 };
+    }
     const m = r.mensagem; let res;
     try {
       const jid = await jidParaEnvio(s, m.telefone);
@@ -344,6 +351,23 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     if (res.p_ok) { st.enviadas++; st.ultimoEnvio = new Date().toISOString(); log("mensagem", m.id, "enviada"); } else log("mensagem", m.id, "não enviada:", res.p_erro);
     st.resultados.push({ p_fila_id: m.id, p_ok: res.p_ok, p_msg_id: res.p_msg_id || null, p_jid: res.p_jid || null, p_erro: res.p_erro || null });
     await mandarResultados();
+    return { enviou: !!res.p_ok, espera: 0 };
+  }
+  /** v38 (motor 3.4): mensagens do mesmo "pacote" (mesmo número, entraram juntas) saem no mesmo sinal. O banco
+   *  decide o pacote (intervalo de 3 s em vez de 25–70 s); aqui só espera esse intervalo curto e pega a próxima.
+   *  Para quando o intervalo for o normal, ou PACOTE_MS depois do último sinal confirmado (o sinal seguinte continua). */
+  async function enviarSeguidas() {
+    for (let i = 0; i < PACOTE_MAX; i++) {
+      const r = await enviarDaFila();
+      // conta do último sinal confirmado: a guarda da vez (SEM_PULSO_MS) não pode vencer no meio do pacote
+      if (!r || !st.aberto || agora() - st.ultimoPulsoOk > PACOTE_MS) return;
+      if (!r.enviou) {
+        // o banco ainda não liberou: só espera se faltar pouco (o intervalo do pacote é 3 s)
+        if (!(r.espera > 0 && r.espera <= PACOTE_ESPERA_MS)) return;
+        await esperarPacote(r.espera + 200);
+        continue;
+      }
+    }
   }
 
   async function desconectarAPedido() {
@@ -417,7 +441,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     await mandarResultados(); await guardarMensagens(); await mandarEntregas();
     processarMidias(); // em segundo plano
     if (!st.sock && !st.conectando && agora() >= st.proximaTentativa) await conectar();
-    else if (st.aberto) await enviarDaFila();
+    else if (st.aberto) await enviarSeguidas();
   }
 
   async function encerrar(motivo = "encerrando") {

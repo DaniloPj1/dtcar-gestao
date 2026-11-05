@@ -62,7 +62,8 @@ function CopiaLeitura() {
   const semRede = estaSemRede();
   const ler = async () => { try { setSt(await api.email.chamar({ acao: "backup_situacao" })); setErro(""); } catch (e) { setErro(/desconhecida/i.test(e.message) ? "Falta publicar a função \"email\" nova no Supabase." : e.message); } };
   useEffect(() => { if (!semRede) ler(); }, []);
-  const rodando = st && st.execucoes.some(x => x.situacao === "rodando");
+  // "rodando" há mais de 10 minutos é execução travada: o botão volta a funcionar (o servidor também a marca como falha)
+  const rodando = st && st.execucoes.some(x => x.situacao === "rodando" && Date.now() - new Date(x.iniciado_em).getTime() < 600000);
   useEffect(() => { if (!rodando) return; const t = setInterval(ler, 5000); return () => clearInterval(t); }, [rodando]);
   const salvar = async ativo => {
     const lista = emails.split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);

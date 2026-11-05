@@ -250,7 +250,11 @@ export async function limparSobras(d: DepsBackup) {
 }
 
 /** Situação para a tela Backup (só administrador) */
-export async function situacaoBackup(adm: Db, env: (k: string) => string | undefined) {
+export async function situacaoBackup(adm: Db, env: (k: string) => string | undefined, agora = new Date()) {
+  // execução que ficou "rodando" mais de 10 minutos (chamada encerrada sem gravar o erro) vira falha: libera o "Gerar e enviar agora"
+  const { error: e0 } = await adm.from("backup_execucoes").update({ situacao: "erro", erro: "Parou no meio (passou de 10 minutos).", terminado_em: agora.toISOString() })
+    .eq("situacao", "rodando").lt("iniciado_em", new Date(agora.getTime() - 600000).toISOString());
+  if (e0 && !/does not exist|schema cache|relation/i.test(e0.message)) throw new Error(e0.message);
   const { data, error } = await adm.from("backup_execucoes").select("id, iniciado_em, terminado_em, origem, pedido_por, situacao, passo, erro, para, detalhe").order("id", { ascending: false }).limit(10);
   if (error) throw new Error(/does not exist|schema cache|relation/i.test(error.message) ? "Falta rodar o supabase/v35.sql no Supabase." : error.message);
   let senha = true; try { senhaDoBackup(env); } catch (_) { senha = false; }

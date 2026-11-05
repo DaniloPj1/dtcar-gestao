@@ -118,7 +118,7 @@ function banco(bkDados: L) {
     };
     const b: any = {
       select: () => b, insert: (v: unknown) => { op = "insert"; val = v; return b; }, update: (v: unknown) => { op = "update"; val = v; return b; },
-      eq: (c: string, v: unknown) => { filtros.push((r) => r[c] === v); return b; }, gt: (c: string, v: any) => { filtros.push((r) => r[c] > v); return b; }, order: (c: string, o?: { ascending?: boolean }) => { ord = [c, o?.ascending !== false]; return b; },
+      eq: (c: string, v: unknown) => { filtros.push((r) => r[c] === v); return b; }, lt: (c: string, v: any) => { filtros.push((r) => r[c] < v); return b; }, gt: (c: string, v: any) => { filtros.push((r) => r[c] > v); return b; }, order: (c: string, o?: { ascending?: boolean }) => { ord = [c, o?.ascending !== false]; return b; },
       range: (a: number, z: number) => { de = a; ate = z; return b; }, limit: (n: number) => { lim = n; return b; },
       maybeSingle: async () => { const r = exec(); return { data: r.data[0] || null, error: null }; }, single: async () => { const r = exec(); return { data: r.data[0], error: null }; },
       then: (ok: (v: unknown) => unknown, er: (e: unknown) => unknown) => Promise.resolve(exec()).then(ok, er),
@@ -245,6 +245,12 @@ async function abrirZip(bytes: Uint8Array, senha?: string) {
   const st = await situacaoBackup(b.db, (k) => ({ BACKUP_SENHA: SENHA } as Record<string, string>)[k]);
   confere("situação: senha cadastrada e e-mails", st.senha_cadastrada === true && st.config.emails.length === 2 && st.horario === "todo dia às 18h");
   const st2 = await situacaoBackup(b.db, () => undefined);
+  // execução travada há mais de 10 minutos: a consulta de situação marca como falha e libera o botão
+  b.t.backup_execucoes.push({ id: 99, situacao: "rodando", passo: "planilha", iniciado_em: new Date(Date.now() - 11 * 60000).toISOString(), detalhe: {} });
+  const st4 = await situacaoBackup(b.db, () => SENHA);
+  const trav = b.t.backup_execucoes.find((x) => x.id === 99)!;
+  confere("travada há 10+ min vira falha ao abrir a tela (libera o botão)", trav.situacao === "erro" && /Parou no meio/.test(trav.erro) && !st4.execucoes.some((x: any) => x.situacao === "rodando"), trav);
+  b.t.backup_execucoes = b.t.backup_execucoes.filter((x) => x.id !== 99);
   confere("situação sem senha avisa (sem mostrar a senha)", st2.senha_cadastrada === false && !JSON.stringify(st2).includes(SENHA));
   let bg: Promise<unknown> | null = null;
   const r = await tratar("backup_leitura", {}, { usuario: b.db, adm: b.db, env: (k) => ({ BACKUP_SENHA: SENHA } as Record<string, string>)[k], backup: async () => d, segundoPlano: (p) => { bg = p; } }) as any;

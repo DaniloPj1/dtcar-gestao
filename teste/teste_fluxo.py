@@ -135,6 +135,11 @@ try:
     pg.fill("#bl-emails", "a@b.com, invalido"); pg.click("text=Salvar e-mails"); pg.wait_for_timeout(300)
     chk("backup leitura: e-mail inválido não salva", "e-mails válidos" in pg.inner_text("main"))
     pg.fill("#bl-emails", "centroautomotivodtcar@hotmail.com, dono@exemplo.com"); pg.click("text=Salvar e-mails"); pg.wait_for_timeout(300)
+    # execução travada há 11 minutos (função encerrada sem gravar o erro): o botão não pode ficar preso
+    pg.evaluate("window.__BACKUP_EXEC = [{ id: 1, iniciado_em: new Date(Date.now() - 11 * 60000).toISOString(), origem: 'agendamento', situacao: 'rodando', passo: 'planilha', para: [], detalhe: {} }]")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/backup"); pg.wait_for_selector("text=Cópia de leitura por e-mail", timeout=5000); pg.wait_for_timeout(400)
+    chk("backup leitura: execução travada há 10+ min não prende o botão", pg.is_enabled("text=Gerar e enviar agora"))
+    pg.evaluate("window.__BACKUP_EXEC = []")
     pg.click("text=Gerar e enviar agora"); pg.wait_for_timeout(600)
     chk("backup leitura: botão gera e mostra 'Enviado'", "Enviado" in pg.inner_text("main") and "1,1 MB" in pg.inner_text("main"), pg.inner_text("main")[-300:])
     pg.screenshot(path=SAIDA + "/u5c-backup-leitura.png")

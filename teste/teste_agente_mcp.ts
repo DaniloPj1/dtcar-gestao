@@ -14,7 +14,7 @@ const respostas: Record<string, unknown> = {
   whatsapp_enfileirar: { gravado: false, erros: [], avisos: [] },
 };
 const acordadas: unknown[] = [];
-let sicrediRecusa = false;
+let sicrediRecusa: boolean | string = false;
 const banco: Banco = {
   rpc(fn, args) {
     chamadas.push([fn, args]);
@@ -26,7 +26,7 @@ const banco: Banco = {
     return Promise.resolve({ data: respostas[fn] ?? { ok: fn }, error: null });
   },
   functions: { invoke(nome, op) { acordadas.push([nome, op.body]);
-    if (nome === "sicredi" && sicrediRecusa) return Promise.resolve({ data: { erro: "CEP inválido" }, error: null });
+    if (nome === "sicredi" && sicrediRecusa) return Promise.resolve({ data: { erro: sicrediRecusa === "rede" ? "O Sicredi não respondeu em 25 s." : "Pedido recusado pelo Sicredi: CEP inválido" }, error: null });
     if (nome === "sicredi") return Promise.resolve({ data: { nossoNumero: "260000011", linhaDigitavel: "74891", codigoBarras: "748", qrCode: "000201x", txid: "t" }, error: null });
     if (nome === "email" && op.body?.acao === "whatsapp") return Promise.resolve({ data: { gravado: op.body.confirmar === true, texto: "Olá, João!", arquivo: { nome: "Orcamento_01887_ABC1D23.pdf", kb: 180 } }, error: null });
     return Promise.resolve({ data: { ok: true }, error: null }); } },
@@ -205,6 +205,10 @@ sicrediRecusa = true; chamadas.length = 0;
 const rr = await rpc("tools/call", { name: "emitir_boleto", arguments: { numero: 1887, confirmar: true } }, 9);
 confere("emitir_boleto recusado pelo Sicredi: desfaz a reserva e devolve erro", rr.corpo.result?.isError === true && chamadas[1]?.[1]?.p_acao === "boleto_desfazer"
   && JSON.stringify((chamadas[1]?.[1]?.p as Record<string, unknown>)?.reservas) === '["res1"]', JSON.stringify(chamadas));
+sicrediRecusa = "rede"; chamadas.length = 0;
+const rt = await rpc("tools/call", { name: "emitir_boleto", arguments: { numero: 1887, confirmar: true } }, 10);
+confere("emitir_boleto sem resposta do Sicredi: mantém a reserva (não desfaz)", rt.corpo.result?.isError === true && !chamadas.some((x) => x[1]?.p_acao === "boleto_desfazer")
+  && /Portal PJ/.test(rt.corpo.result?.content?.[0]?.text || ""), JSON.stringify(chamadas));
 sicrediRecusa = false;
 
 confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));

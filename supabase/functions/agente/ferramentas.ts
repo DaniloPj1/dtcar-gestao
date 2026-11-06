@@ -377,6 +377,8 @@ export function criarServidor(db: Banco): McpServer {
     () => ({ abrir_no_sistema: SITE + "/#/sefaz" })));
 
   // ---------- Boleto Sicredi pelo conector (v41 + função "sicredi") ----------
+  // mensagens de erroDoSicredi / corpoBoleto / carteiraProducao que garantem que NENHUM boleto foi registrado
+  const RECUSA_SICREDI = /^(Pedido recusado pelo Sicredi|Regra do Sicredi não atendida|Formato recusado|O Sicredi não aceitou|Acesso negado pelo Sicredi|Endereço não encontrado no Sicredi|Muitos pedidos seguidos|Boleto incompleto|Falta (a chave|o código))/;
   s.registerTool("emitir_boleto", {
     title: "Emitir boleto Sicredi (registra no banco)",
     description: "Emite boleto híbrido (boleto + Pix) pela API do Sicredi para as parcelas em aberto de uma O.S. (sem boleto ainda). " +
@@ -408,7 +410,12 @@ export function criarServidor(db: Banco): McpServer {
           let m = String(resp.error.message || "Falha no Sicredi.");
           try { const j = await resp.error.context?.json(); if (j?.erro) m = j.erro; } catch (_) { /* sem corpo */ }
           semResposta = m; // erro da chamada (rede, tempo, função fora): o banco pode ter registrado
-        } else if (resp.data?.erro) recusou = String(resp.data.erro); // o banco respondeu e recusou
+        } else if (resp.data?.erro) {
+          // a função "sicredi" devolve {erro} também para rede e tempo: só é recusa certa quando o banco respondeu que não aceitou
+          // (ou o pedido nem saiu: dados incompletos, chave/código, limite de pedidos)
+          const m = String(resp.data.erro);
+          if (RECUSA_SICREDI.test(m)) recusou = m; else semResposta = m;
+        }
         else reg = resp.data;
       } catch (e) { semResposta = (e as Error).message; }
       if (recusou) {

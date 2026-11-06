@@ -144,7 +144,8 @@ select 'ok: O.S.' as cenario;
 do $$
 declare r jsonb;
 begin
-  r := public.agente_fazer('salvar_cadastro', '{"tipo": "cliente", "codigo": 2, "campos": {"telefone": "(27) 98888-1111", "nome": "Bruno Lima Filho"}}', true);
+  r := public.agente_fazer('salvar_cadastro', '{"tipo": "cliente", "codigo": 2, "campos": {"telefone": "(27) 98888-1111", "nome": "Bruno Lima Filho", "rua": "Rua B, 20", "cidade": "Colatina", "uf": "ES"}}', true);
+  perform pg_temp.ok((select cliente->>'endereco' from public.ordens where numero = 2) = 'Rua B, 20, Colatina - ES', 'endereço na cópia da O.S.');
   perform pg_temp.ok((select telefone from public.clientes where codigo = 2) = '27988881111', 'telefone só números');
   perform pg_temp.ok((select cliente->>'nome' from public.ordens where numero = 2) = 'Bruno Lima Filho', 'cópia na O.S. aberta');
   perform pg_temp.ok(not (r->'cadastro' ? 'telefone') and r->'alterado' ? 'telefone', 'resposta sem o telefone, com o que mudou');

@@ -519,7 +519,11 @@ begin
     for o in select * from public.ordens where (case v_tipo when 'cliente' then cliente_id else veiculo_id end) = v_id
                and status not in ('cancelado', 'recusado') and not (status = 'entregue' and finalizada_em is not null) loop
       if v_tipo = 'cliente' then
-        perform public.agente_patch_os(o.id, jsonb_build_object('cliente', coalesce(o.cliente, '{}') || jsonb_build_object('nome', v_novo->>'nome', 'telefone', coalesce(v_novo->>'telefone', ''), 'doc', coalesce(v_novo->>'doc', ''))));
+        perform public.agente_patch_os(o.id, jsonb_build_object('cliente', coalesce(o.cliente, '{}') || jsonb_build_object('nome', v_novo->>'nome', 'telefone', coalesce(v_novo->>'telefone', ''),
+          'doc', coalesce(v_novo->>'doc', ''),
+          -- endereço como o v20 monta na abertura (rua + complemento, bairro, cidade - UF; senão o campo endereço)
+          'endereco', coalesce(nullif(concat_ws(', ', nullif(trim(concat_ws(' ', nullif(v_novo->>'rua', ''), nullif(v_novo->>'complemento', ''))), ''), nullif(v_novo->>'bairro', ''),
+                 nullif(trim(concat_ws(' - ', nullif(v_novo->>'cidade', ''), nullif(v_novo->>'uf', ''))), '')), ''), v_novo->>'endereco', ''))));
       else
         perform public.agente_patch_os(o.id, jsonb_build_object('veiculo', coalesce(o.veiculo, '{}') || jsonb_build_object('placa', v_novo->>'placa', 'marca', v_novo->>'marca', 'modelo', v_novo->>'modelo', 'ano', v_novo->>'ano', 'cor', coalesce(v_novo->>'cor', ''))));
       end if;

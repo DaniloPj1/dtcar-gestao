@@ -1,7 +1,9 @@
 // DTCar Gestão — ferramentas do agente (Claude) no conector "agente".
 // Cada ferramenta chama uma função do banco (supabase/v20.sql) com o cliente do Supabase
 // já autenticado como o usuário que autorizou o conector: as regras de acesso valem e as
-// funções exigem administrador. Nada aqui apaga, paga ou mexe em conta paga.
+// funções exigem administrador. Nada aqui paga, transfere ou aceita nada no banco: só registra.
+// v40 (06/11/2026, pedido do Danilo: "sem amarras"): alterar_os, salvar_cadastro, conta_pagar, atualizar_saldos, transferir,
+// cancelar_recibo, movimentar_estoque e produto, todas pelo agente_fazer (apaga quando ele pede; tudo fica em agente_acoes).
 // Gravação: abrir_os (v20), lancar_itens_os (v21/v27), receber_os (v37: recibo e baixa de O.S. entregue a receber), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina;
 // v34: modelo de mensagem e PDF pela função "email")
 // e email_enviar/email_responder/email_regra (v29: e-mail da oficina pela função "email").
@@ -28,6 +30,11 @@ Responda ao Danilo em português do Brasil, curto e direto.
 - receber_os: "fulano pagou" → recibo e baixa da O.S. entregue a receber (fecha sozinha quando quita). Mexe em dinheiro: SEMPRE chame
   primeiro com confirmar=false, mostre O.S., cliente, valor, forma, conta de entrada e data, e só grave (confirmar=true) depois do "sim" do Danilo.
   Nunca invente forma de pagamento: se ele não disse, pergunte. Conta e valor: os da prévia, salvo se ele disser outros.
+- Regra do Danilo (06/11/2026): você faz no sistema tudo o que ele pedir, inclusive apagar (fica no histórico).
+  O.S., cadastros e estoque (alterar_os, salvar_cadastro, movimentar_estoque, produto): ordem clara → confirmar=true direto; com dúvida, prévia.
+  Dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo): SEMPRE prévia primeiro e grave só depois do "sim".
+  "Receber e fechar" com o carro no pátio: receber_os (sinal) + alterar_os acao=entregar — a O.S. fecha sozinha quando quita.
+  Nunca pague, transfira ou aceite nada no banco: conta_pagar só registra o que o Danilo já pagou.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
 - whatsapp_enviar ENVIA de verdade pelo WhatsApp da oficina (fila com horário comercial e intervalo). Só com ordem do Danilo para
   aquele cliente. Texto ditado ou aprovado por ele: confirmar=true. Texto que você redigiu: mostre e espere o "sim" antes de confirmar.
@@ -194,10 +201,10 @@ export function criarServidor(db: Banco): McpServer {
   // ---------- Receber O.S. (v37) ----------
   s.registerTool("receber_os", {
     title: "Receber pagamento da O.S. (recibo e baixa)",
-    description: "Registra o pagamento de uma O.S. ENTREGUE a receber: emite o recibo (forma, conta de entrada, data), baixa as parcelas a receber " +
+    description: "Registra o pagamento de uma O.S.: emite o recibo (forma, conta de entrada, data), baixa as parcelas a receber " +
       "da mais antiga para a mais nova e, quitando o total, a O.S. vira Fechada sozinha (o mesmo que o botão Receber e finalizar da tela). " +
       "Sem valor = o saldo que falta. Sem conta = a sugestão do sistema (dinheiro → Espécie; o resto → conta padrão de recebimento). " +
-      "O.S. no pátio (veículo não entregue), em orçamento, execução, fechada ou cancelada é recusada. " +
+      "O.S. ainda não entregue (orçamento, execução, no pátio): o recibo entra como sinal/adiantamento e a O.S. fecha quando for entregue quitada (v40). Fechada ou cancelada é recusada. " +
       "Mexe em dinheiro: SEMPRE primeiro confirmar=false, mostre a prévia ao Danilo e só grave com confirmar=true depois do sim dele. " +
       "Várias O.S.: uma chamada por O.S.",
     inputSchema: z.object({
@@ -217,6 +224,138 @@ export function criarServidor(db: Banco): McpServer {
     const r = d as { id?: string; recibo_id?: string };
     return texto({ ...r, ...(r.id ? { abrir_no_sistema: SITE + "/#/os/" + r.id } : {}), ...(r.recibo_id ? { imprimir_recibo: SITE + "/#/imprimir/recibo/" + r.recibo_id } : {}) });
   });
+
+  // ---------- Sem amarras (v40): O.S., cadastros, financeiro e estoque pelo agente_fazer ----------
+  // Cada ação é feita numa transação; com confirmar=false o banco faz e desfaz no fim (a prévia mostra o resultado exato).
+  const fazer = async (acao: string, p: Record<string, unknown>, gravar: boolean, link?: (r: Record<string, unknown>) => Record<string, unknown>) => {
+    const { data: d, error } = await db.rpc("agente_fazer", { p_acao: acao, p: JSON.parse(JSON.stringify(p)), p_gravar: gravar });
+    if (error) return falha(/agente_fazer|schema cache|PGRST202/i.test(error.message) ? "Esta ferramenta ainda não foi ligada (falta rodar o supabase/v40.sql)." : error.message);
+    const r = (d || {}) as Record<string, unknown>;
+    return texto({ ...r, ...(link ? link(r) : {}) });
+  };
+  const GRAVA = { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false };
+  const pedido = z.string().optional().describe("O pedido do Danilo, resumido, para o histórico");
+  const confirmar = z.boolean().default(false);
+  const item = z.object({
+    tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2), qtd: z.number().positive().default(1),
+    valor_unit: z.number().nonnegative(), custo_unit: z.number().nonnegative().optional(), codigo: z.string().optional(), peca_do_cliente: z.boolean().optional(),
+  });
+
+  s.registerTool("alterar_os", {
+    title: "Alterar O.S. (etapa, itens, dados, cliente, excluir)",
+    description: "Faz qualquer mudança numa O.S. numa chamada só. acao (opcional): enviar_orcamento, aprovar (aprova o orçamento ou os adicionais pendentes), " +
+      "concluir (serviço pronto → aguardando pagamento), entregar (km_saida; parcelas [{valor, vencimento, forma}] se for a prazo), retirar (recusada, veículo sai), " +
+      "recusar (orçamento), cancelar (motivo obrigatório; parcelas em aberto são canceladas), reabrir (entregue/fechada → pátio; cancelada/recusada → orçamento), " +
+      "voltar_etapa, excluir (só sem recibo válido). Itens: itens_incluir (como lancar_itens_os), itens_alterar [{id, qtd, valor_unit, custo_unit, desconto, descricao, aprovado, codigo...}] " +
+      "e itens_remover [id] — os ids vêm de buscar_os. dados {campo: valor}: reclamacao, km, previsao, box, mecanico, diagnostico, desconto, obs, garantia_dias, forma_pagamento etc. " +
+      "cliente_id e placa/veiculo_id trocam o cliente e o veículo. Total e custo são recalculados. Ordem clara do Danilo: confirmar=true. " +
+      "Receber dinheiro é com receber_os. Com confirmar=false o sistema faz e desfaz: a resposta mostra como a O.S. ficaria.",
+    inputSchema: z.object({
+      numero: z.number().int().positive(),
+      acao: z.enum(["enviar_orcamento", "aprovar", "concluir", "entregar", "retirar", "recusar", "cancelar", "reabrir", "voltar_etapa", "excluir"]).optional(),
+      motivo: z.string().optional().describe("Motivo do cancelamento"),
+      km_saida: z.union([z.number().int().nonnegative(), z.string()]).optional(),
+      forma_pagamento: z.string().optional(), garantia_dias: z.number().int().nonnegative().optional(),
+      parcelas: z.array(z.object({ valor: z.number().positive(), vencimento: data, forma: z.string().optional() })).optional().describe("Entrega a prazo: parcelas a receber"),
+      dados: z.record(z.string(), z.unknown()).optional(),
+      cliente_id: z.string().uuid().optional(), placa: z.string().optional(), veiculo_id: z.string().uuid().optional(),
+      itens_incluir: z.array(item).max(40).optional(),
+      itens_alterar: z.array(z.object({ id: z.string().uuid() }).catchall(z.unknown())).max(60).optional(),
+      itens_remover: z.array(z.string().uuid()).max(60).optional(),
+      lancar_mesmo_repetido: z.boolean().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("alterar_os", { ...p, ...(p.km_saida !== undefined ? { km_saida: String(p.km_saida) } : {}) }, c === true,
+    (r) => r.id ? { abrir_no_sistema: SITE + "/#/os/" + r.id } : {}));
+
+  s.registerTool("salvar_cadastro", {
+    title: "Cliente e veículo: criar, editar, excluir",
+    description: "Cria, edita ou exclui cliente (tipo=cliente; id ou codigo) ou veículo (tipo=veiculo; id ou placa). campos {campo: valor} — cliente: nome, telefone, doc, email, " +
+      "rua, bairro, cidade, uf, cep, obs, situacao...; veículo: placa, marca, modelo, ano, cor, motor, km_atual, cliente_id, chassi... Editar atualiza também a cópia nas O.S. em aberto. " +
+      "Excluir só sem O.S. ligadas. Ordem clara do Danilo: confirmar=true.",
+    inputSchema: z.object({
+      tipo: z.enum(["cliente", "veiculo"]), acao: z.enum(["criar", "editar", "excluir"]).default("editar"),
+      id: z.string().uuid().optional(), codigo: z.number().int().positive().optional(), placa: z.string().optional(),
+      campos: z.record(z.string(), z.unknown()).optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("salvar_cadastro", p, c === true));
+
+  s.registerTool("conta_pagar", {
+    title: "Contas a pagar: lançar, pagar (baixa), desfazer, editar, cancelar, excluir",
+    description: "lancar: contas [{descricao, valor, vencimento, fornecedor (nome ou CNPJ), categoria, documento, linha_digitavel}] — com a linha do boleto, valor e vencimento " +
+      "saem dela; boleto repetido é recusado. pagar: dá baixa numa conta (id de contas_a_pagar, ou busca + vencimento/valor) com conta_origem (de qual conta saiu; padrão: a conta " +
+      "de pagamento dos Ajustes), pago_em (padrão hoje), valor_pago (juros/desconto saem da diferença) e forma_pagamento. desfazer: volta a conta paga para em aberto. " +
+      "editar: campos {..}. cancelar / excluir. Mexe em dinheiro: SEMPRE confirmar=false primeiro, mostre a prévia ao Danilo e só grave depois do sim. NUNCA paga nada no banco: só registra.",
+    inputSchema: z.object({
+      acao: z.enum(["lancar", "pagar", "desfazer", "editar", "cancelar", "excluir"]),
+      contas: z.array(z.object({
+        descricao: z.string().optional(), valor: z.number().positive().optional(), vencimento: data.optional(), emissao: data.optional(),
+        fornecedor: z.string().optional(), favorecido: z.string().optional(), categoria: z.string().optional(), documento: z.string().optional(),
+        linha_digitavel: z.string().optional(), codigo_barras: z.string().optional(), parcela: z.number().int().positive().optional(), parcelas: z.number().int().positive().optional(), obs: z.string().optional(),
+      })).max(60).optional(),
+      id: z.string().uuid().optional(), busca: z.string().optional().describe("Parte da descrição, favorecido, fornecedor ou documento"),
+      vencimento: data.optional().describe("Filtro da busca"), valor: z.number().positive().optional().describe("Filtro da busca"),
+      conta_origem: z.string().optional(), pago_em: data.optional(), valor_pago: z.number().positive().optional(),
+      juros: z.number().nonnegative().optional(), desconto: z.number().nonnegative().optional(), forma_pagamento: z.string().optional(),
+      campos: z.record(z.string(), z.unknown()).optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("conta_pagar", p, c === true));
+
+  s.registerTool("atualizar_saldos", {
+    title: "Atualizar saldos das contas",
+    description: "O mesmo \"Atualizar saldos\" da tela: contas [{nome, saldo}] com o saldo do extrato agora; conta não citada mantém o saldo calculado; nome novo = conta nova. " +
+      "conta_pagamento / conta_recebimento mudam as contas padrão. Mexe em dinheiro: SEMPRE confirmar=false primeiro e grave depois do sim.",
+    inputSchema: z.object({
+      contas: z.array(z.object({ nome: z.string().min(2), saldo: z.number() })).min(1).max(12),
+      conta_pagamento: z.string().optional(), conta_recebimento: z.string().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("atualizar_saldos", p, c === true));
+
+  s.registerTool("transferir", {
+    title: "Transferência entre contas da empresa",
+    description: "Registra dinheiro que passou de uma conta da empresa para outra (não é receita nem despesa): de, para, valor, data (padrão hoje), obs. " +
+      "acao=excluir com id apaga uma transferência. Mexe em dinheiro: SEMPRE confirmar=false primeiro e grave depois do sim.",
+    inputSchema: z.object({
+      acao: z.enum(["transferir", "excluir"]).default("transferir"), id: z.string().uuid().optional(),
+      de: z.string().optional(), para: z.string().optional(), valor: z.number().positive().optional(), data: data.optional(), obs: z.string().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("transferir", p, c === true));
+
+  s.registerTool("cancelar_recibo", {
+    title: "Cancelar recibo",
+    description: "Cancela um recibo pelo número (deixa de contar como recebido) e as parcelas que ele tinha baixado voltam a ficar em aberto. Recibo de boleto Sicredi pago: só pela tela. " +
+      "Mexe em dinheiro: SEMPRE confirmar=false primeiro e grave depois do sim.",
+    inputSchema: z.object({ numero: z.number().int().positive(), motivo: z.string().optional(), pedido, confirmar }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("cancelar_recibo", p, c === true));
+
+  s.registerTool("movimentar_estoque", {
+    title: "Estoque: entrada, saída e contagem",
+    description: "Movimenta o estoque da oficina (DTCar Gestão): movimentos [{codigo, tipo: entrada | saida | ajuste (contagem: define o saldo), qtd, custo (na entrada atualiza o custo), obs}]. " +
+      "Peça usada em O.S. sai sozinha pela O.S.: não lance saída dela aqui. Ordem clara do Danilo: confirmar=true.",
+    inputSchema: z.object({
+      movimentos: z.array(z.object({ codigo: z.string(), tipo: z.enum(["entrada", "saida", "ajuste"]), qtd: z.number().nonnegative(), custo: z.number().nonnegative().optional(), obs: z.string().optional() })).min(1).max(60),
+      pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("movimentar_estoque", p, c === true));
+
+  s.registerTool("produto", {
+    title: "Produto ou serviço do catálogo: criar, editar, inativar, excluir",
+    description: "Cadastro de produtos e serviços (codigo ou id). campos {campo: valor}: descricao, tipo (produto|servico, ao criar), referencia, codigo_barras, unidade, categoria, marca, " +
+      "localizacao, custo, preco_vista, preco_prazo, preco_atacado, margem_vista, estoque_min, controla_estoque, vender_sem_estoque, obs... estoque_inicial (ao criar). " +
+      "O saldo do estoque muda só por movimentar_estoque. Nunca invente preço ou custo. Ordem clara do Danilo: confirmar=true.",
+    inputSchema: z.object({
+      acao: z.enum(["criar", "editar", "inativar", "ativar", "excluir"]).default("editar"),
+      codigo: z.union([z.number().int().positive(), z.string()]).optional(), id: z.string().uuid().optional(),
+      campos: z.record(z.string(), z.unknown()).optional(), estoque_inicial: z.number().nonnegative().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("produto", { ...p, ...(p.codigo !== undefined ? { codigo: String(p.codigo) } : {}) }, c === true));
 
   // ---------- Pedidos de compra por fornecedor (v31) ----------
   s.registerTool("registrar_pre_nota", {

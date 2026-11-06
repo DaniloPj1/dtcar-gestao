@@ -46,10 +46,10 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
-const esperadas = ["abrir_os", "buscar_cliente", "buscar_os", "consultar_estoque", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "notas_da_sefaz", "pre_notas", "preparar_envio", "receber_os", "registrar_pre_nota", "saldos_das_contas",
+const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente", "buscar_os", "cancelar_recibo", "consultar_estoque", "conta_pagar", "contas_a_pagar", "contas_a_receber",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("26 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("34 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
 confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
@@ -168,6 +168,23 @@ c = await chama("whatsapp_situacao", {});
 confere("whatsapp_situacao → whatsapp_resumo", c.fn === "whatsapp_resumo");
 c = await chama("whatsapp_cancelar", { id: 7 });
 confere("whatsapp_cancelar → whatsapp_cancelar", c.fn === "whatsapp_cancelar" && c.args?.p_id === 7);
+
+// v40: ferramentas "sem amarras" vão todas pelo agente_fazer; sem confirmar = prévia
+c = await chama("alterar_os", { numero: 1904, acao: "entregar", km_saida: 52000 });
+confere("alterar_os sem confirmar = prévia pelo agente_fazer", c.fn === "agente_fazer" && c.args?.p_acao === "alterar_os" && c.args?.p_gravar === false
+  && (c.args?.p as Record<string, unknown>).km_saida === "52000" && (c.args?.p as Record<string, unknown>).acao === "entregar", JSON.stringify(c.args));
+c = await chama("alterar_os", { numero: 1904, acao: "voar" });
+confere("alterar_os com ação inválida: erro sem ir ao banco", c.r?.isError === true && !c.fn);
+c = await chama("conta_pagar", { acao: "pagar", busca: "energia", conta_origem: "PicPay PJ", confirmar: true });
+confere("conta_pagar confirmado grava", c.fn === "agente_fazer" && c.args?.p_acao === "conta_pagar" && c.args?.p_gravar === true && (c.args?.p as Record<string, unknown>).conta_origem === "PicPay PJ");
+for (const [nome, acao, args] of [["salvar_cadastro", "salvar_cadastro", { tipo: "cliente", codigo: 2, campos: { telefone: "27999" } }],
+  ["atualizar_saldos", "atualizar_saldos", { contas: [{ nome: "Sicredi", saldo: 10 }] }], ["transferir", "transferir", { de: "Sicredi", para: "Espécie", valor: 5 }],
+  ["cancelar_recibo", "cancelar_recibo", { numero: 19 }], ["movimentar_estoque", "movimentar_estoque", { movimentos: [{ codigo: "100", tipo: "ajuste", qtd: 3 }] }],
+  ["produto", "produto", { codigo: 690, campos: { preco_vista: 10 } }]] as Array<[string, string, Record<string, unknown>]>) {
+  c = await chama(nome, args);
+  confere(nome + " → agente_fazer('" + acao + "') prévia", c.fn === "agente_fazer" && c.args?.p_acao === acao && c.args?.p_gravar === false, JSON.stringify(c.args));
+}
+confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));
 
 console.log(ok.map((x) => "OK " + x).join("\n"));
 console.log("FALHAS", JSON.stringify(falhas));

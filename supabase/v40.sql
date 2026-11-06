@@ -423,8 +423,16 @@ begin
     if o.status not in ('diagnostico', 'aguardando') then raise exception 'A O.S. % está "%": só orçamento é recusado (para desistir depois de aprovada, use cancelar).', o.numero, public.agente_etapa(o); end if;
     perform public.agente_itens_gravar(o.id, (select coalesce(jsonb_agg((to_jsonb(i) - 'atualizado_em' - 'criado_em') || jsonb_build_object('aprovado', false)), '[]')
                                               from public.os_itens i where i.ordem_id = o.id and i.aprovado is null), '[]');
-    perform public.agente_patch_os(o.id, jsonb_build_object('status', 'recusado'));
-    insert into public.eventos (ordem_id, tipo, texto, usuario_nome) values (o.id, 'recusa', 'Orçamento recusado pelo cliente (agente, Claude).', v_quem);
+    -- como a tela (recusar em js/telas/ordem.js): taxa de diagnóstico dos Ajustes lançada e aprovada, desconto zerado
+    if coalesce(nullif(cfg->>'taxaDiagnostico', '')::numeric, 0) > 0 then
+      perform public.agente_itens_gravar(o.id, jsonb_build_array(jsonb_build_object('id', gen_random_uuid(), 'ordem_id', o.id, 'tipo', 'servico', 'descricao', 'Taxa de diagnóstico',
+        'qtd', 1, 'valor_unit', (cfg->>'taxaDiagnostico')::numeric, 'custo_unit', 0, 'desconto', 0, 'adicional', true, 'aprovado', true, 'executado', true,
+        'posicao', (select coalesce(max(posicao), -1) + 1 from public.os_itens where ordem_id = o.id))), '[]');
+      avisos := array_append(avisos, 'Taxa de diagnóstico de ' || public.agente_reais((cfg->>'taxaDiagnostico')::numeric) || ' lançada para a retirada.');
+    end if;
+    perform public.agente_patch_os(o.id, jsonb_build_object('status', 'recusado', 'desconto', 0));
+    insert into public.eventos (ordem_id, tipo, texto, usuario_nome) values (o.id, 'recusa', 'Orçamento recusado pelo cliente (agente, Claude).'
+      || case when coalesce(nullif(cfg->>'taxaDiagnostico', '')::numeric, 0) > 0 then ' Taxa de diagnóstico lançada.' else '' end, v_quem);
     feito := array_append(feito, 'orçamento recusado');
   elsif v_acao = 'cancelar' then
     if o.status = 'cancelado' then raise exception 'A O.S. % já está cancelada.', o.numero; end if;
@@ -525,7 +533,8 @@ begin
           'endereco', coalesce(nullif(concat_ws(', ', nullif(trim(concat_ws(' ', nullif(v_novo->>'rua', ''), nullif(v_novo->>'complemento', ''))), ''), nullif(v_novo->>'bairro', ''),
                  nullif(trim(concat_ws(' - ', nullif(v_novo->>'cidade', ''), nullif(v_novo->>'uf', ''))), '')), ''), v_novo->>'endereco', ''))));
       else
-        perform public.agente_patch_os(o.id, jsonb_build_object('veiculo', coalesce(o.veiculo, '{}') || jsonb_build_object('placa', v_novo->>'placa', 'marca', v_novo->>'marca', 'modelo', v_novo->>'modelo', 'ano', v_novo->>'ano', 'cor', coalesce(v_novo->>'cor', ''))));
+        perform public.agente_patch_os(o.id, jsonb_build_object('veiculo', coalesce(o.veiculo, '{}') || jsonb_build_object('placa', v_novo->>'placa', 'marca', v_novo->>'marca', 'modelo', v_novo->>'modelo', 'ano', v_novo->>'ano', 'cor', coalesce(v_novo->>'cor', ''),
+          'motor', coalesce(nullif(v_novo->>'combustivel', ''), v_novo->>'motor', ''))));
       end if;
       v_n := v_n + 1;
     end loop;

@@ -125,8 +125,10 @@ begin
   r := public.agente_fazer('alterar_os', '{"numero": 2, "cliente_id": "00000000-0000-0000-0000-0000000000c2", "placa": "xyz-9k88"}', true);
   select * into o from public.ordens where numero = 2;
   perform pg_temp.ok(o.cliente_id = '00000000-0000-0000-0000-0000000000c2' and o.cliente->>'nome' = 'Bruno Lima' and o.veiculo->>'placa' = 'XYZ9K88', 'cliente e veículo trocados');
+  update public.config set dados = dados || '{"taxaDiagnostico": 80}' where id = 1;
   r := public.agente_fazer('alterar_os', '{"numero": 2, "acao": "recusar"}', true);
-  perform pg_temp.ok((select status from public.ordens where numero = 2) = 'recusado' and (select total from public.ordens where numero = 2) = 0, 'recusada, total 0');
+  perform pg_temp.ok((select status from public.ordens where numero = 2) = 'recusado' and (select total from public.ordens where numero = 2) = 80, 'recusada, só a taxa de diagnóstico (80)');
+  update public.config set dados = dados - 'taxaDiagnostico' where id = 1;
   r := public.agente_fazer('alterar_os', '{"numero": 2, "acao": "retirar", "km_saida": 1500}', true);
   perform pg_temp.ok((select entregue_em from public.ordens where numero = 2) is not null, 'retirada');
   r := public.agente_fazer('alterar_os', '{"numero": 2, "acao": "reabrir"}', true);

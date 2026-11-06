@@ -14,14 +14,20 @@ const respostas: Record<string, unknown> = {
   whatsapp_enfileirar: { gravado: false, erros: [], avisos: [] },
 };
 const acordadas: unknown[] = [];
+let sicrediRecusa: boolean | string = false;
 const banco: Banco = {
   rpc(fn, args) {
     chamadas.push([fn, args]);
     if (fn === "agente_estoque" && args?.p_texto === "erro") return Promise.resolve({ data: null, error: { message: "O agente só atende o administrador." } });
+    if (fn === "agente_fazer" && args?.p_acao === "boleto_preparar") return Promise.resolve({ data: { os: 1887, cliente: "Granicap", total: 600, avisos: [],
+      boletos: [{ reserva_id: "res1", receber_id: "r1", descricao: "O.S. 1887", valor: 600, vencimento: "2026-12-06", boleto: { valor: 600, vencimento: "2026-12-06", pagador: { nome: "Granicap" } } }] }, error: null });
+    if (fn === "agente_fazer" && args?.p_acao === "boleto_gravar") return Promise.resolve({ data: { nosso_numero: (args.p as Record<string, unknown>).nosso_numero, pix: true }, error: null });
     if (fn === "whatsapp_enfileirar" && (args as { p_gravar?: boolean })?.p_gravar) return Promise.resolve({ data: { gravado: true, id: 7 }, error: null });
     return Promise.resolve({ data: respostas[fn] ?? { ok: fn }, error: null });
   },
   functions: { invoke(nome, op) { acordadas.push([nome, op.body]);
+    if (nome === "sicredi" && sicrediRecusa) return Promise.resolve({ data: { erro: sicrediRecusa === "rede" ? "O Sicredi não respondeu em 25 s." : "Pedido recusado pelo Sicredi: CEP inválido" }, error: null });
+    if (nome === "sicredi") return Promise.resolve({ data: { nossoNumero: "260000011", linhaDigitavel: "74891", codigoBarras: "748", qrCode: "000201x", txid: "t" }, error: null });
     if (nome === "email" && op.body?.acao === "whatsapp") return Promise.resolve({ data: { gravado: op.body.confirmar === true, texto: "Olá, João!", arquivo: { nome: "Orcamento_01887_ABC1D23.pdf", kb: 180 } }, error: null });
     return Promise.resolve({ data: { ok: true }, error: null }); } },
 };
@@ -47,9 +53,9 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
 const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente", "buscar_os", "cancelar_recibo", "consultar_estoque", "conta_pagar", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "emitir_boleto", "entrada_nota", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("34 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("36 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
 confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
@@ -180,10 +186,31 @@ confere("conta_pagar confirmado grava", c.fn === "agente_fazer" && c.args?.p_aca
 for (const [nome, acao, args] of [["salvar_cadastro", "salvar_cadastro", { tipo: "cliente", codigo: 2, campos: { telefone: "27999" } }],
   ["atualizar_saldos", "atualizar_saldos", { contas: [{ nome: "Sicredi", saldo: 10 }] }], ["transferir", "transferir", { de: "Sicredi", para: "Espécie", valor: 5 }],
   ["cancelar_recibo", "cancelar_recibo", { numero: 19 }], ["movimentar_estoque", "movimentar_estoque", { movimentos: [{ codigo: "100", tipo: "ajuste", qtd: 3 }] }],
-  ["produto", "produto", { codigo: 690, campos: { preco_vista: 10 } }]] as Array<[string, string, Record<string, unknown>]>) {
+  ["produto", "produto", { codigo: 690, campos: { preco_vista: 10 } }], ["entrada_nota", "entrada_nota", { numero: 12627, itens: [{ n: 3, codigo: "201" }] }]] as Array<[string, string, Record<string, unknown>]>) {
   c = await chama(nome, args);
   confere(nome + " → agente_fazer('" + acao + "') prévia", c.fn === "agente_fazer" && c.args?.p_acao === acao && c.args?.p_gravar === false, JSON.stringify(c.args));
 }
+// v41: emitir_boleto — prévia não chama o Sicredi; confirmado: preparar → sicredi emitir → gravar
+acordadas.length = 0;
+c = await chama("emitir_boleto", { numero: 1887, vencimento: "2026-12-06", valor: 600 });
+confere("emitir_boleto sem confirmar: prévia sem chamar o Sicredi", c.fn === "agente_fazer" && c.args?.p_gravar === false && acordadas.length === 0
+  && !/"boleto"/.test(c.r?.content?.[0]?.text || ""), c.r?.content?.[0]?.text);
+chamadas.length = 0; acordadas.length = 0;
+const rb = await rpc("tools/call", { name: "emitir_boleto", arguments: { numero: 1887, vencimento: "2026-12-06", valor: 600, confirmar: true } }, 8);
+confere("emitir_boleto confirmado: registra no Sicredi e grava o nosso número", (acordadas[0] as [string, Record<string, unknown>])?.[0] === "sicredi"
+  && ((acordadas[0] as [string, Record<string, unknown>])[1].acao === "emitir") && chamadas[1]?.[1]?.p_acao === "boleto_gravar"
+  && ((chamadas[1]?.[1]?.p as Record<string, unknown>)?.nosso_numero === "260000011") && ((chamadas[1]?.[1]?.p as Record<string, unknown>)?.reserva_id === "res1")
+  && !rb.corpo.result?.isError, JSON.stringify(chamadas));
+sicrediRecusa = true; chamadas.length = 0;
+const rr = await rpc("tools/call", { name: "emitir_boleto", arguments: { numero: 1887, confirmar: true } }, 9);
+confere("emitir_boleto recusado pelo Sicredi: desfaz a reserva e devolve erro", rr.corpo.result?.isError === true && chamadas[1]?.[1]?.p_acao === "boleto_desfazer"
+  && JSON.stringify((chamadas[1]?.[1]?.p as Record<string, unknown>)?.reservas) === '["res1"]', JSON.stringify(chamadas));
+sicrediRecusa = "rede"; chamadas.length = 0;
+const rt = await rpc("tools/call", { name: "emitir_boleto", arguments: { numero: 1887, confirmar: true } }, 10);
+confere("emitir_boleto sem resposta do Sicredi: mantém a reserva (não desfaz)", rt.corpo.result?.isError === true && !chamadas.some((x) => x[1]?.p_acao === "boleto_desfazer")
+  && /Portal PJ/.test(rt.corpo.result?.content?.[0]?.text || ""), JSON.stringify(chamadas));
+sicrediRecusa = false;
+
 confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));
 
 console.log(ok.map((x) => "OK " + x).join("\n"));

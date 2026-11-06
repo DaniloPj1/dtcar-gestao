@@ -38,7 +38,12 @@ create table public.contas (id uuid primary key default gen_random_uuid(), descr
 create unique index contas_codigo_barras_unico on public.contas (codigo_barras) where codigo_barras <> '' and status <> 'cancelada';
 create table public.transferencias (id uuid primary key default gen_random_uuid(), data date not null default current_date, de_conta text not null, para_conta text not null,
   valor numeric(12,2) not null check (valor > 0), obs text not null default '', criado_por text not null default '', criado_em timestamptz not null default now(), check (de_conta <> para_conta));
-create table public.boletos (id uuid primary key default gen_random_uuid(), recibo_id uuid, ordem_id uuid, receber_id uuid, situacao text not null default 'registrado');
+create table public.boletos (id uuid primary key default gen_random_uuid(), receber_id uuid, ordem_id uuid, os_numero text not null default '', cliente_id uuid,
+  pagador_nome text not null default '', pagador_doc text not null default '', pagador jsonb not null default '{}', descricao text not null default '',
+  valor numeric(12,2) not null check (valor > 0), vencimento date not null, emissao date not null default current_date,
+  nosso_numero text not null unique check (nosso_numero ~ '^[0-9]{9}$'), seu_numero text not null default '', codigo_barras text not null default '',
+  linha_digitavel text not null default '', situacao text not null default 'gerado', ocorrencia text not null default '', qr_url text not null default '',
+  txid text not null default '', recibo_id uuid, criado_por text not null default '', criado_em timestamptz not null default now());
 -- saldo por conta (versão simples do v18: saldo informado + recibos − pagamentos ± transferências)
 create or replace function public.saldos_contas() returns jsonb language sql stable as $$
   select coalesce(jsonb_agg(jsonb_build_object('nome', c->>'nome', 'informado', (c->>'saldo')::numeric,

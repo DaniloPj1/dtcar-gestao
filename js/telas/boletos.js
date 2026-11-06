@@ -43,6 +43,8 @@ export function situacaoDaApi(s) {
 const SIT = { gerado: ["Aguardando o banco", "info"], registrado: ["Registrado", "ok"], rejeitado: ["Rejeitado", "bad"], pago: ["Pago", "ok"],
   baixa_pedida: ["Baixa pedida", "warn"], baixado: ["Baixado", "muted"], enviado: ["Aguardando o banco", "info"] };
 const ATIVOS = ["gerado", "enviado", "registrado", "baixa_pedida"];
+/** Reserva do Claude (v41): a parcela foi separada para emitir pela API e a resposta do Sicredi não chegou. Não é boleto para pagar. */
+export const ehReserva = b => b.situacao === "gerado" && !b.linha_digitavel && /^000/.test(String(b.nosso_numero || ""));
 const pagadorDe = (c, o) => { c = c || {}; const oc = (o && o.cliente) || {};
   return { nome: c.nome || oc.nome || "", doc: soDig(c.doc || oc.doc), endereco: [c.rua, c.complemento].filter(Boolean).join(" ") || c.endereco || "",
     bairro: c.bairro || "", cep: soDig(c.cep), cidade: c.cidade || "", uf: (c.uf || "").toUpperCase() }; };
@@ -247,7 +249,17 @@ export function Boletos() {
   const lista = (boletos || []).filter(b => !q || norm(b.pagador_nome).includes(norm(q)) || String(b.os_numero).includes(q) || b.nosso_numero.includes(soDig(q)));
   const grupos = { abertos: lista.filter(b => ATIVOS.includes(b.situacao)), pagos: lista.filter(b => b.situacao === "pago"), outros: lista.filter(b => ["rejeitado", "baixado"].includes(b.situacao)) };
   const soma = l => l.reduce((s, b) => s + Number(b.valor), 0);
-  const linhaBoleto = b => { const [rot, cor] = SIT[b.situacao] || [b.situacao, "muted"], t = tel(b);
+  const liberarReserva = async b => {
+    if (!await confirmar({ titulo: "Liberar a reserva", texto: "Só libere depois de conferir no Portal PJ do Sicredi que este boleto NÃO foi registrado (" + b.pagador_nome + ", " + reais(b.valor) + ", vencimento " + fmtData(b.vencimento) + "). A parcela volta a poder receber boleto.", botao: "Liberar", perigo: true })) return;
+    try { await api.boletos.atualizar(b.id, { situacao: "rejeitado", ocorrencia: "Reserva do Claude liberada por " + perfil.nome + " em " + fmtDataHora(new Date().toISOString()) + ": não estava no banco." }); avisar("Reserva liberada."); await ler(); }
+    catch (e) { setErro(e.message); }
+  };
+  const linhaBoleto = b => { if (ehReserva(b)) return html`<div class="linha conta-linha" key=${b.id}>
+      <span class="meio"><strong>${b.pagador_nome}</strong><span>${[b.descricao, "venc. " + fmtData(b.vencimento), b.ocorrencia].filter(Boolean).join(" · ")}</span></span>
+      <span class="dir"><b>${reais(b.valor)}</b><span class="pill p-warn">Reservado pelo Claude · sem resposta do banco</span></span>
+      <span class="rec-acoes"><button type="button" class="btn btn-sm" onClick=${() => liberarReserva(b)}>Liberar reserva</button>
+        ${b.ordem_id ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + b.ordem_id)}>O.S.</button>` : null}</span></div>`;
+    const [rot, cor] = SIT[b.situacao] || [b.situacao, "muted"], t = tel(b);
     return html`<div class="linha conta-linha" key=${b.id}>
       <span class="meio"><strong>${b.pagador_nome}</strong><span>${[b.descricao, "venc. " + fmtData(b.vencimento), "nº " + nossoNumeroFmt(b.nosso_numero), b.situacao === "pago" ? "pago " + fmtData(b.data_pagamento) + " (" + b.forma_pagamento + ")" : "", b.ocorrencia].filter(Boolean).join(" · ")}</span></span>
       <span class="dir"><b>${reais(b.situacao === "pago" && b.valor_pago ? b.valor_pago : b.valor)}</b><span class=${"pill p-" + cor}>${rot}${b.qr_url && b.situacao !== "pago" ? " · com Pix" : ""}</span></span>

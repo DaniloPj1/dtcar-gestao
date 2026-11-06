@@ -101,7 +101,7 @@ begin
   perform pg_temp.ok((select recebido from public.ordens where numero = 1) = 100, 'recebido volta a 100');
 
   -- boleto em aberto impede cancelar
-  insert into public.boletos (ordem_id, situacao) values (o.id, 'registrado');
+  insert into public.boletos (ordem_id, situacao, valor, vencimento, nosso_numero) values (o.id, 'registrado', 10, current_date, '260000099');
   perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "acao": "cancelar", "motivo": "x"}', true)$c$, 'boleto Sicredi');
   delete from public.boletos;
   -- 13. cancelar O.S. devolve o estoque e cancela parcelas

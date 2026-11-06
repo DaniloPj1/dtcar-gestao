@@ -32,7 +32,9 @@ Responda ao Danilo em português do Brasil, curto e direto.
   Nunca invente forma de pagamento: se ele não disse, pergunte. Conta e valor: os da prévia, salvo se ele disser outros.
 - Regra do Danilo (06/11/2026): você faz no sistema tudo o que ele pedir, inclusive apagar (fica no histórico).
   O.S., cadastros e estoque (alterar_os, salvar_cadastro, movimentar_estoque, produto): ordem clara → confirmar=true direto; com dúvida, prévia.
-  Dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo): SEMPRE prévia primeiro e grave só depois do "sim".
+  entrada_nota (NF de compra no estoque): prévia primeiro, mostre os itens reconhecidos e grave com o ok do Danilo.
+  Dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo, emitir_boleto): SEMPRE prévia primeiro e grave só depois do "sim".
+  emitir_boleto registra no Sicredi de verdade (aparece no DDA do cliente).
   "Receber e fechar" com o carro no pátio: receber_os (sinal) + alterar_os acao=entregar — a O.S. fecha sozinha quando quita.
   Nunca pague, transfira ou aceite nada no banco: conta_pagar só registra o que o Danilo já pagou.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
@@ -356,6 +358,97 @@ export function criarServidor(db: Banco): McpServer {
     }),
     annotations: GRAVA,
   }, async ({ confirmar: c, ...p }) => fazer("produto", { ...p, ...(p.codigo !== undefined ? { codigo: String(p.codigo) } : {}) }, c === true));
+
+  s.registerTool("entrada_nota", {
+    title: "Dar entrada de NF de compra (SEFAZ) no estoque",
+    description: "O mesmo \"Dar entrada no estoque\" das Notas da SEFAZ: lê o XML da nota (chave, ou numero + fornecedor), reconhece os produtos (vínculo do fornecedor, " +
+      "código de barras, referência), soma o estoque, atualiza custo e preço e lança as duplicatas em contas a pagar. Item sem produto vira produto novo " +
+      "(margem dos Ajustes). Para mudar: itens [{n, acao: vincular|novo|ignorar, codigo (produto do estoque), fator (ex.: caixa com 4 = 4), descricao, margem}]. " +
+      "Use primeiro confirmar=false: mostre ao Danilo os itens (produto, quantidade e custo no estoque) e as contas; com o ok dele, confirmar=true. " +
+      "Nota já lançada é recusada. Não mexe no ObjetivaWeb (estoque fiscal).",
+    inputSchema: z.object({
+      chave: z.string().optional(), numero: z.union([z.string(), z.number()]).optional(), fornecedor: z.string().optional(),
+      itens: z.array(z.object({ n: z.number().int().positive(), acao: z.enum(["vincular", "novo", "ignorar"]).optional(), codigo: z.union([z.string(), z.number()]).optional(),
+        fator: z.number().positive().optional(), descricao: z.string().optional(), margem: z.number().nonnegative().optional(), atualizar_custo: z.boolean().optional() })).max(200).optional(),
+      lancar_contas: z.boolean().optional(), vencimento: data.optional().describe("Nota sem duplicata: vencimento para lançar o total"), categoria: z.string().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("entrada_nota", { ...p, ...(p.numero !== undefined ? { numero: String(p.numero) } : {}) }, c === true,
+    () => ({ abrir_no_sistema: SITE + "/#/sefaz" })));
+
+  // ---------- Boleto Sicredi pelo conector (v41 + função "sicredi") ----------
+  // mensagens de erroDoSicredi / corpoBoleto / carteiraProducao que garantem que NENHUM boleto foi registrado
+  const RECUSA_SICREDI = /^(Pedido recusado pelo Sicredi|Regra do Sicredi não atendida|Formato recusado|O Sicredi não aceitou|Acesso negado pelo Sicredi|Endereço não encontrado no Sicredi|Muitos pedidos seguidos|Boleto incompleto|Falta (a chave|o código))/;
+  s.registerTool("emitir_boleto", {
+    title: "Emitir boleto Sicredi (registra no banco)",
+    description: "Emite boleto híbrido (boleto + Pix) pela API do Sicredi para as parcelas em aberto de uma O.S. (sem boleto ainda). " +
+      "Sem parcela: informe vencimento (e valor; padrão = saldo sem parcela) e a parcela \"Boleto\" é criada. parcela=N escolhe uma só. nf = nº da NF (vai na referência do boleto). " +
+      "O cadastro do cliente precisa de CPF/CNPJ, rua, CEP, cidade e UF (a prévia diz o que falta). Só parcelas criadas a partir de 04/11/2026 (as antigas têm boleto PicPay). " +
+      "REGISTRA NO BANCO e aparece no DDA do cliente: SEMPRE confirmar=false primeiro, mostre O.S., cliente, valores e vencimentos, e só emita depois do sim do Danilo. " +
+      "Para mandar ao cliente: whatsapp_enviar com modelo cobranca e anexo {fonte:\"boleto\"}, ou email_enviar com anexo boleto.",
+    inputSchema: z.object({
+      numero: z.number().int().positive().describe("Número da O.S."),
+      parcela: z.number().int().positive().optional(), vencimento: data.optional(), valor: z.number().positive().optional(),
+      nf: z.string().optional().describe("Nº da NF emitida no ObjetivaWeb, se houver"), pedido, confirmar,
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  }, async ({ confirmar: c, ...p }) => {
+    const prep = await db.rpc("agente_fazer", { p_acao: "boleto_preparar", p: JSON.parse(JSON.stringify(p)), p_gravar: c === true });
+    if (prep.error) return falha(/boleto_preparar|Ação desconhecida/i.test(prep.error.message) ? "A emissão de boleto pelo conector ainda não foi ligada (falta rodar o supabase/v41.sql)." : prep.error.message);
+    const r = prep.data as { boletos: Array<Record<string, unknown>>; avisos?: string[]; parcela_criada?: string } & Record<string, unknown>;
+    if (c !== true) return texto({ ...r, boletos: r.boletos.map(({ boleto: _b, reserva_id: _r, ...x }) => x), previa: true, gravado: false });
+    if (!db.functions) return falha("Conector sem acesso às funções do Supabase.");
+    // as parcelas já estão reservadas (boleto "aguardando o banco"): uma por vez no Sicredi
+    const log: Array<Record<string, unknown>> = [];
+    let registrou = false;
+    for (const [i, b] of r.boletos.entries()) {
+      let reg: Record<string, unknown> | null = null, recusou = "", semResposta = "";
+      try {
+        // deno-lint-ignore no-explicit-any
+        const resp = (await db.functions.invoke("sicredi", { body: { acao: "emitir", ambiente: "producao", boleto: b.boleto } })) as { data?: any; error?: any };
+        if (resp.error) {
+          let m = String(resp.error.message || "Falha no Sicredi.");
+          try { const j = await resp.error.context?.json(); if (j?.erro) m = j.erro; } catch (_) { /* sem corpo */ }
+          semResposta = m; // erro da chamada (rede, tempo, função fora): o banco pode ter registrado
+        } else if (resp.data?.erro) {
+          // a função "sicredi" devolve {erro} também para rede e tempo: só é recusa certa quando o banco respondeu que não aceitou
+          // (ou o pedido nem saiu: dados incompletos, chave/código, limite de pedidos)
+          const m = String(resp.data.erro);
+          if (RECUSA_SICREDI.test(m)) recusou = m; else semResposta = m;
+        }
+        else reg = resp.data;
+      } catch (e) { semResposta = (e as Error).message; }
+      if (recusou) {
+        // nada foi registrado: tira as reservas que sobraram e, se ninguém pegou boleto, a parcela criada agora
+        const resto = r.boletos.slice(i).map((x) => x.reserva_id);
+        await db.rpc("agente_fazer", { p_acao: "boleto_desfazer", p: { reservas: resto, parcela_criada: registrou ? null : r.parcela_criada, motivo: recusou, pedido: p.pedido }, p_gravar: true });
+        log.push({ parcela: b.descricao, valor: b.valor, emitido: false, erro: "O Sicredi recusou: " + recusou });
+        break;
+      }
+      // as que ainda não foram ao banco saem da reserva quando a emissão para no meio
+      const soltarResto = () => i + 1 < r.boletos.length ? db.rpc("agente_fazer", { p_acao: "boleto_desfazer",
+        p: { reservas: r.boletos.slice(i + 1).map((x) => x.reserva_id), motivo: "emissão parou antes", pedido: p.pedido }, p_gravar: true }) : null;
+      if (semResposta || !reg || !/^\d{9}$/.test(String(reg.nossoNumero || ""))) {
+        await soltarResto();
+        log.push({ parcela: b.descricao, valor: b.valor, emitido: "não sei", erro: "Sem resposta clara do Sicredi (" + (semResposta || "resposta sem nosso número") +
+          "). A parcela ficou reservada (boleto \"aguardando o banco\"): confira no Portal PJ do Sicredi se o boleto existe antes de tentar de novo." });
+        break;
+      }
+      const g = await db.rpc("agente_fazer", { p_acao: "boleto_gravar", p: { reserva_id: b.reserva_id, pedido: p.pedido, nosso_numero: String(reg.nossoNumero),
+        codigo_barras: reg.codigoBarras || "", linha_digitavel: reg.linhaDigitavel || "", qr_code: reg.qrCode || "", txid: reg.txid || "" }, p_gravar: true });
+      registrou = true;
+      if (g.error) {
+        await soltarResto();
+        log.push({ parcela: b.descricao, valor: b.valor, emitido: true, gravado: false,
+          erro: "REGISTRADO NO BANCO, mas não foi gravado no sistema (" + g.error.message + "). Anote: nosso número " + reg.nossoNumero + ", linha " + reg.linhaDigitavel + "." });
+        break;
+      }
+      log.push({ parcela: b.descricao, emitido: true, ...(g.data as Record<string, unknown>) });
+    }
+    if (log.length < r.boletos.length && !log.some((x) => x.erro)) log.push({ aviso: "Parou antes do fim." });
+    const falhou = log.some((x) => x.erro);
+    return { ...texto({ os: r.os, cliente: r.cliente, boletos: log, avisos: r.avisos, abrir_no_sistema: SITE + "/#/boletos" }), ...(falhou ? { isError: true } : {}) };
+  });
 
   // ---------- Pedidos de compra por fornecedor (v31) ----------
   s.registerTool("registrar_pre_nota", {

@@ -51,9 +51,9 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
 const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente", "buscar_os", "cancelar_recibo", "consultar_estoque", "conta_pagar", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "emitir_boleto", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "emitir_boleto", "entrada_nota", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("35 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("36 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
 confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
@@ -184,7 +184,7 @@ confere("conta_pagar confirmado grava", c.fn === "agente_fazer" && c.args?.p_aca
 for (const [nome, acao, args] of [["salvar_cadastro", "salvar_cadastro", { tipo: "cliente", codigo: 2, campos: { telefone: "27999" } }],
   ["atualizar_saldos", "atualizar_saldos", { contas: [{ nome: "Sicredi", saldo: 10 }] }], ["transferir", "transferir", { de: "Sicredi", para: "Espécie", valor: 5 }],
   ["cancelar_recibo", "cancelar_recibo", { numero: 19 }], ["movimentar_estoque", "movimentar_estoque", { movimentos: [{ codigo: "100", tipo: "ajuste", qtd: 3 }] }],
-  ["produto", "produto", { codigo: 690, campos: { preco_vista: 10 } }]] as Array<[string, string, Record<string, unknown>]>) {
+  ["produto", "produto", { codigo: 690, campos: { preco_vista: 10 } }], ["entrada_nota", "entrada_nota", { numero: 12627, itens: [{ n: 3, codigo: "201" }] }]] as Array<[string, string, Record<string, unknown>]>) {
   c = await chama(nome, args);
   confere(nome + " → agente_fazer('" + acao + "') prévia", c.fn === "agente_fazer" && c.args?.p_acao === acao && c.args?.p_gravar === false, JSON.stringify(c.args));
 }

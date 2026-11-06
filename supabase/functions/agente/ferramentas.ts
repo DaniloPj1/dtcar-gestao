@@ -32,6 +32,7 @@ Responda ao Danilo em português do Brasil, curto e direto.
   Nunca invente forma de pagamento: se ele não disse, pergunte. Conta e valor: os da prévia, salvo se ele disser outros.
 - Regra do Danilo (06/11/2026): você faz no sistema tudo o que ele pedir, inclusive apagar (fica no histórico).
   O.S., cadastros e estoque (alterar_os, salvar_cadastro, movimentar_estoque, produto): ordem clara → confirmar=true direto; com dúvida, prévia.
+  entrada_nota (NF de compra no estoque): prévia primeiro, mostre os itens reconhecidos e grave com o ok do Danilo.
   Dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo, emitir_boleto): SEMPRE prévia primeiro e grave só depois do "sim".
   emitir_boleto registra no Sicredi de verdade (aparece no DDA do cliente).
   "Receber e fechar" com o carro no pátio: receber_os (sinal) + alterar_os acao=entregar — a O.S. fecha sozinha quando quita.
@@ -357,6 +358,23 @@ export function criarServidor(db: Banco): McpServer {
     }),
     annotations: GRAVA,
   }, async ({ confirmar: c, ...p }) => fazer("produto", { ...p, ...(p.codigo !== undefined ? { codigo: String(p.codigo) } : {}) }, c === true));
+
+  s.registerTool("entrada_nota", {
+    title: "Dar entrada de NF de compra (SEFAZ) no estoque",
+    description: "O mesmo \"Dar entrada no estoque\" das Notas da SEFAZ: lê o XML da nota (chave, ou numero + fornecedor), reconhece os produtos (vínculo do fornecedor, " +
+      "código de barras, referência), soma o estoque, atualiza custo e preço e lança as duplicatas em contas a pagar. Item sem produto vira produto novo " +
+      "(margem dos Ajustes). Para mudar: itens [{n, acao: vincular|novo|ignorar, codigo (produto do estoque), fator (ex.: caixa com 4 = 4), descricao, margem}]. " +
+      "Use primeiro confirmar=false: mostre ao Danilo os itens (produto, quantidade e custo no estoque) e as contas; com o ok dele, confirmar=true. " +
+      "Nota já lançada é recusada. Não mexe no ObjetivaWeb (estoque fiscal).",
+    inputSchema: z.object({
+      chave: z.string().optional(), numero: z.union([z.string(), z.number()]).optional(), fornecedor: z.string().optional(),
+      itens: z.array(z.object({ n: z.number().int().positive(), acao: z.enum(["vincular", "novo", "ignorar"]).optional(), codigo: z.union([z.string(), z.number()]).optional(),
+        fator: z.number().positive().optional(), descricao: z.string().optional(), margem: z.number().nonnegative().optional(), atualizar_custo: z.boolean().optional() })).max(200).optional(),
+      lancar_contas: z.boolean().optional(), vencimento: data.optional().describe("Nota sem duplicata: vencimento para lançar o total"), categoria: z.string().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("entrada_nota", { ...p, ...(p.numero !== undefined ? { numero: String(p.numero) } : {}) }, c === true,
+    () => ({ abrir_no_sistema: SITE + "/#/sefaz" })));
 
   // ---------- Boleto Sicredi pelo conector (v41 + função "sicredi") ----------
   s.registerTool("emitir_boleto", {

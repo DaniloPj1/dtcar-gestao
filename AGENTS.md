@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v38.sql`, `v39.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v38.sql`, `v39.sql`, `v40.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -59,7 +59,19 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (lista de Ajustes) e conta de entrada (`contasFinanceiras`; sem conta = mesma sugestão de `contaSugerida`), valor ≤ saldo (padrão = saldo),
   data nunca no futuro, recibo igual em 10 min só com `receber_mesmo_repetido`; grava o recibo, baixa as parcelas como `baixarParcela`
   (parcial divide a parcela) e o gatilho do v12/v17 fecha a O.S. quando quita. No pátio (veículo não entregue) recusa: a entrega pede KM na tela.
-  Não passa pela `sincronizar_alteracao_os` porque não altera a O.S. (como o recibo da tela). Teste: `bash teste/teste_v37.sh`. Prévia com p_gravar=false; grava com true, registra em `eventos` e `agente_acoes`. Testes: `deno run -A teste/teste_agente_mcp.ts`,
+  Não passa pela `sincronizar_alteracao_os` porque não altera a O.S. (como o recibo da tela). Teste: `bash teste/teste_v37.sh`.
+  **v40 — conector "sem amarras" (pedido do Danilo em 06/11/2026):** o agente faz no sistema tudo o que o Danilo pedir, inclusive apagar
+  (decisão dele: com histórico). Entrada única `agente_fazer(acao, p, gravar)`: cada ação roda de verdade numa transação e, na prévia
+  (`gravar = false`), o bloco é desfeito no fim (exceção `DT001`) — a prévia devolve exatamente o resultado que daria. Ações:
+  `alterar_os` (etapa: enviar_orcamento, aprovar, concluir, entregar com parcelas, retirar, recusar, cancelar com motivo, reabrir, voltar_etapa,
+  excluir só sem recibo válido; itens incluir/alterar/remover pelos ids de `buscar_os`; dados da O.S. por colunas com apelidos; trocar cliente e
+  veículo; total e custo recalculados como `totais`), `salvar_cadastro` (cliente/veículo; editar atualiza a cópia nas O.S. em aberto),
+  `conta_pagar` (lançar pela linha digitável — valor e vencimento saem dela —, pagar com `conta_origem`, desfazer, editar, cancelar, excluir),
+  `atualizar_saldos` (`guardar_saldos_contas`), `transferir`, `cancelar_recibo` (parcelas baixadas por ele voltam a ficar em aberto),
+  `movimentar_estoque` (`movimentar_estoque` do v3) e `produto`. Gravação em O.S. sempre pela `sincronizar_alteracao_os` (`agente_patch_os`,
+  `agente_itens_gravar`). `receber_os` passa a aceitar sinal/adiantamento em O.S. ainda não entregue. Tudo em `agente_acoes`.
+  Regra do texto do conector: dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo) sempre com prévia e "sim";
+  O.S., cadastros e estoque gravam direto com ordem clara. Teste: `bash teste/teste_v40.sh` (Postgres local) e `deno run -A teste/teste_agente_mcp.ts`. Prévia com p_gravar=false; grava com true, registra em `eventos` e `agente_acoes`. Testes: `deno run -A teste/teste_agente_mcp.ts`,
   `bash teste/teste_v21.sh` e `python3 teste/teste_consentimento.py`.
 - **WhatsApp próprio (v22 + `supabase/functions/zap`), etapa 1:** conexão com a biblioteca Baileys (SOMENTE o pacote oficial `baileys`,
   versão travada; há pacotes falsos com nome parecido) rodando na função "zap" sob demanda (conecta, faz e desconecta). Ações: testar (mostra

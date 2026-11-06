@@ -74,14 +74,18 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   O.S., cadastros e estoque gravam direto com ordem clara. Teste: `bash teste/teste_v40.sh` (Postgres local) e `deno run -A teste/teste_agente_mcp.ts`.
   **v41 — `emitir_boleto`:** `agente_boleto_preparar` (pelo `agente_fazer`) confere a carteira (API em produção), o cadastro do pagador e
   escolhe as parcelas em aberto da O.S. sem boleto ativo (com vencimento informado, cria a parcela "Boleto" do saldo); mesmas regras da tela
-  (`cfg.cobranca.desde`, vencimento não vencido, `refBoleto`). O conector chama a função "sicredi" (`emitir`, produção) para cada parcela e grava
-  com `agente_boleto_gravar` (situação registrado, histórico). Registrou no banco e não gravou: a resposta traz o nosso número e a linha.
+  (`cfg.cobranca.desde`, vencimento não vencido, `refBoleto`). Antes de chamar o banco, cada parcela fica **reservada**: linha em `boletos`
+  "gerado" com nosso número provisório `000xxxxxx` (índice único `boletos_um_ativo_por_parcela`: um boleto ativo por parcela). O conector chama a
+  função "sicredi" (`emitir`, produção) e `agente_boleto_gravar` troca a reserva pelo boleto registrado. O banco **recusou** (resposta com erro):
+  `agente_boleto_desfazer` tira as reservas e a parcela criada nesta emissão. **Sem resposta** (rede, tempo): a reserva fica, para conferir no
+  Portal PJ antes de emitir de novo (nunca emite duas vezes). Com vencimento, só a parcela nova; sem, só parcelas "Boleto" (outra forma só com
+  `parcela=N`); antigas/vencidas ficam de fora com aviso. Registrou no banco e não gravou: a resposta traz o nosso número e a linha.
   Prévia não chama o Sicredi. Teste: `bash teste/teste_v41.sh` e `deno run -A teste/teste_agente_mcp.ts`.
   **v42 — `entrada_nota`:** o mesmo "Dar entrada no estoque" das Notas da SEFAZ pelo conector. `agente_ler_nfe` lê o XML de `nfe_recebidas` com
   `xpath` (mesmos campos de `lerNFe`; custo = (vProd + frete + seguro + outros − desconto + IPI + ST) ÷ qtd); `agente_entrada_nfe` reconhece como
   `reconhecer` (vínculo do fornecedor com o fator, EAN, referência; o resto é produto novo com a margem `markupPecas`), aceita a decisão do Danilo por
   item (`n`, acao, codigo, fator, descricao, margem), grava pela `importar_nfe` (v4) e lança as duplicatas pela `lancar_contas` (v5), marcando
-  `contas_lancadas`. Nota já lançada é recusada. Teste: `bash teste/teste_v42.sh` (copia `importar_nfe`/`lancar_contas` dos arquivos v4/v5). Prévia com p_gravar=false; grava com true, registra em `eventos` e `agente_acoes`. Testes: `deno run -A teste/teste_agente_mcp.ts`,
+  `contas_lancadas`. Nota já lançada, cancelada/denegada ou ligada inteira a O.S. é recusada; item já ligado a O.S. (`nfe_os_vinculos`, v9) entra só a sobra, como "O que sobrou da nota". Teste: `bash teste/teste_v42.sh` (copia `importar_nfe`/`lancar_contas` dos arquivos v4/v5). Prévia com p_gravar=false; grava com true, registra em `eventos` e `agente_acoes`. Testes: `deno run -A teste/teste_agente_mcp.ts`,
   `bash teste/teste_v21.sh` e `python3 teste/teste_consentimento.py`.
 - **WhatsApp próprio (v22 + `supabase/functions/zap`), etapa 1:** conexão com a biblioteca Baileys (SOMENTE o pacote oficial `baileys`,
   versão travada; há pacotes falsos com nome parecido) rodando na função "zap" sob demanda (conecta, faz e desconecta). Ações: testar (mostra

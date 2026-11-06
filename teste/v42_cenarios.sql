@@ -23,7 +23,7 @@ insert into public.nfe_recebidas (chave, cnpj_emitente, nome_emitente, numero, e
 <emit><CNPJ>20149617000342</CNPJ><xNome>BIANCARDI AUTO PECAS LTDA</xNome><xFant>BIANCARDI</xFant><IE>123</IE><enderEmit><xLgr>Rua A</xLgr><nro>10</nro><xBairro>Centro</xBairro><xMun>Colatina</xMun><UF>ES</UF><CEP>29700000</CEP></enderEmit></emit>
 <det nItem="1"><prod><cProd>BK-VELA</cProd><cEAN>SEM GTIN</cEAN><xProd>VELA BK CX4</xProd><NCM>85111000</NCM><uCom>CX</uCom><qCom>2.0000</qCom><vUnCom>40.00</vUnCom><vProd>80.00</vProd></prod><imposto><IPI><IPITrib><vIPI>8.00</vIPI></IPITrib></IPI></imposto></det>
 <det nItem="2"><prod><cProd>FA-123</cProd><cEAN>7891234567895</cEAN><xProd>FILTRO AR GOL</xProd><uCom>UN</uCom><qCom>3</qCom><vUnCom>25</vUnCom><vProd>75.00</vProd><vDesc>3.00</vDesc></prod><imposto/></det>
-<det nItem="3"><prod><cProd>XYZ-9</cProd><cEAN>SEM GTIN</cEAN><xProd>PASTILHA FREIO DIANT</xProd><uCom>JG</uCom><qCom>1</qCom><vUnCom>130</vUnCom><vProd>130.00</vProd></prod><imposto/></det>
+<det nItem="3"><prod><cProd>J&amp;K-9</cProd><cEAN>SEM GTIN</cEAN><xProd>PASTILHA D&amp;W DIANT</xProd><uCom>JG</uCom><qCom>1</qCom><vUnCom>130</vUnCom><vProd>130.00</vProd></prod><imposto/></det>
 <total><ICMSTot><vNF>290.00</vNF></ICMSTot></total>
 <cobr><fat><nFat>12627</nFat></fat><dup><nDup>001</nDup><dVenc>2026-12-05</dVenc><vDup>145.00</vDup></dup><dup><nDup>002</nDup><dVenc>2027-01-05</dVenc><vDup>145.00</vDup></dup></cobr>
 </infNFe></NFe></nfeProc>$x$);
@@ -41,12 +41,20 @@ begin
   perform pg_temp.ok(it->1->>'acao' = 'vincular' and (it->1->>'custo_unit_estoque')::numeric = 24, 'item 2 pelo EAN, custo (75-3)/3 = 24');
   perform pg_temp.ok(it->2->>'acao' = 'novo', 'item 3 novo');
   perform pg_temp.ok((r->>'contas_lancadas')::int = 2, 'prévia mostra 2 duplicatas');
+  perform pg_temp.ok(it->2->>'produto' = 'PASTILHA D&W DIANT', 'texto do XML sem &amp;: ' || (it->2)::text);
+  perform pg_temp.erro($c$select public.agente_fazer('entrada_nota', '{"numero": "12627", "itens": [{"n": 9, "acao": "ignorar"}]}', false)$c$, 'não existe');
+  update public.nfe_recebidas set situacao = 'cancelada'; 
+  perform pg_temp.erro($c$select public.agente_fazer('entrada_nota', '{"numero": "12627"}', false)$c$, 'cancelada');
+  update public.nfe_recebidas set situacao = 'autorizada';
+  -- 1 das 2 caixas de vela já foi para uma O.S. (v9): só a sobra entra
+  insert into public.nfe_os_vinculos (chave, nf_item, descricao_nf, qtd) select chave, 1, 'VELA BK CX4', 1 from public.nfe_recebidas;
   -- de verdade, com o item 3 vinculado a mão a um produto que já existe e o 2 ignorado
   r := public.agente_fazer('entrada_nota', '{"numero": "12627", "itens": [{"n": 3, "codigo": "201"}, {"n": 2, "acao": "ignorar"}]}', true);
-  perform pg_temp.ok((select estoque_atual from public.produtos where codigo = 200) = 8, 'vela: 8 em estoque');
+  perform pg_temp.ok((select estoque_atual from public.produtos where codigo = 200) = 4, 'vela: só a sobra (1 cx = 4) em estoque');
   perform pg_temp.ok((select estoque_atual from public.produtos where codigo = 201) = 2 and (select custo from public.produtos where codigo = 201) = 130, 'filtro (item 3 a mão): +1, custo 130');
   perform pg_temp.ok((select preco_vista from public.produtos where codigo = 201) = 260, 'preço recalculado pela margem 100%');
   perform pg_temp.ok((select count(*) from public.contas where chave_nfe like '3226%' and origem = 'nfe') = 2, '2 contas a pagar');
+  perform pg_temp.ok(r->'avisos'->>0 like '%sobra%', 'aviso da sobra');
   perform pg_temp.ok((select status = 'lancada' and contas_lancadas from public.nfe_recebidas where numero = '12627'), 'nota marcada como lançada');
   perform pg_temp.erro($c$select public.agente_fazer('entrada_nota', '{"numero": "12627"}', false)$c$, 'já teve entrada');
 end $$;

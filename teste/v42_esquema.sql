@@ -14,7 +14,8 @@ create table public.notas_entrada (id uuid primary key default gen_random_uuid()
   fornecedor_id uuid, emissao timestamptz, valor_total numeric(12,2) not null default 0, itens jsonb not null default '[]', usuario_nome text not null default '', criado_em timestamptz not null default now());
 create table public.nfe_recebidas (id uuid primary key default gen_random_uuid(), chave text not null unique, cnpj_emitente text not null default '', nome_emitente text not null default '',
   numero text not null default '', emissao timestamptz, valor numeric(14,2) not null default 0, xml text, status text not null default 'nova', nota_id uuid,
-  contas_lancadas boolean not null default false);
+  contas_lancadas boolean not null default false, situacao text not null default 'autorizada');
+create table public.nfe_os_vinculos (id uuid primary key default gen_random_uuid(), chave text not null, nf_item int, descricao_nf text not null default '', qtd numeric(12,3) not null default 0);
 create or replace function public.nfe_recebida_lancada() returns trigger language plpgsql as $$
 begin update public.nfe_recebidas set status = 'lancada', nota_id = new.id where chave = new.chave; return new; end $$;
 create trigger notas_entrada_sefaz after insert on public.notas_entrada for each row execute function public.nfe_recebida_lancada();

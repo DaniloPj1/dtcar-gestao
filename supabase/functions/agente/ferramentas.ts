@@ -393,26 +393,52 @@ export function criarServidor(db: Banco): McpServer {
   }, async ({ confirmar: c, ...p }) => {
     const prep = await db.rpc("agente_fazer", { p_acao: "boleto_preparar", p: JSON.parse(JSON.stringify(p)), p_gravar: c === true });
     if (prep.error) return falha(/boleto_preparar|Ação desconhecida/i.test(prep.error.message) ? "A emissão de boleto pelo conector ainda não foi ligada (falta rodar o supabase/v41.sql)." : prep.error.message);
-    const r = prep.data as { boletos: Array<Record<string, unknown>>; avisos?: string[] } & Record<string, unknown>;
-    if (c !== true) return texto({ ...r, boletos: r.boletos.map(({ boleto: _b, pagador: _p, ...x }) => x), previa: true, gravado: false });
+    const r = prep.data as { boletos: Array<Record<string, unknown>>; avisos?: string[]; parcela_criada?: string } & Record<string, unknown>;
+    if (c !== true) return texto({ ...r, boletos: r.boletos.map(({ boleto: _b, reserva_id: _r, ...x }) => x), previa: true, gravado: false });
     if (!db.functions) return falha("Conector sem acesso às funções do Supabase.");
+    // as parcelas já estão reservadas (boleto "aguardando o banco"): uma por vez no Sicredi
     const log: Array<Record<string, unknown>> = [];
-    for (const b of r.boletos) {
-      // deno-lint-ignore no-explicit-any
-      const { data: reg, error } = (await db.functions.invoke("sicredi", { body: { acao: "emitir", ambiente: "producao", boleto: b.boleto } })) as { data?: any; error?: any };
-      let erroBanco = error ? String(error.message || "Falha no Sicredi.") : reg?.erro ? String(reg.erro) : "";
-      if (error) { try { const j = await error.context?.json(); if (j?.erro) erroBanco = j.erro; } catch (_) { /* mensagem genérica */ } }
-      if (erroBanco) { log.push({ parcela: b.descricao, valor: b.valor, emitido: false, erro: erroBanco }); break; }
-      const { boleto: _b, ...dados } = b;
-      const g = await db.rpc("agente_fazer", { p_acao: "boleto_gravar", p: { ...dados, pedido: p.pedido, nosso_numero: String(reg.nossoNumero || ""), codigo_barras: reg.codigoBarras || "",
-        linha_digitavel: reg.linhaDigitavel || "", qr_code: reg.qrCode || "", txid: reg.txid || "" }, p_gravar: true });
+    let registrou = false;
+    for (const [i, b] of r.boletos.entries()) {
+      let reg: Record<string, unknown> | null = null, recusou = "", semResposta = "";
+      try {
+        // deno-lint-ignore no-explicit-any
+        const resp = (await db.functions.invoke("sicredi", { body: { acao: "emitir", ambiente: "producao", boleto: b.boleto } })) as { data?: any; error?: any };
+        if (resp.error) {
+          let m = String(resp.error.message || "Falha no Sicredi.");
+          try { const j = await resp.error.context?.json(); if (j?.erro) m = j.erro; } catch (_) { /* sem corpo */ }
+          semResposta = m; // erro da chamada (rede, tempo, função fora): o banco pode ter registrado
+        } else if (resp.data?.erro) recusou = String(resp.data.erro); // o banco respondeu e recusou
+        else reg = resp.data;
+      } catch (e) { semResposta = (e as Error).message; }
+      if (recusou) {
+        // nada foi registrado: tira as reservas que sobraram e, se ninguém pegou boleto, a parcela criada agora
+        const resto = r.boletos.slice(i).map((x) => x.reserva_id);
+        await db.rpc("agente_fazer", { p_acao: "boleto_desfazer", p: { reservas: resto, parcela_criada: registrou ? null : r.parcela_criada, motivo: recusou, pedido: p.pedido }, p_gravar: true });
+        log.push({ parcela: b.descricao, valor: b.valor, emitido: false, erro: "O Sicredi recusou: " + recusou });
+        break;
+      }
+      // as que ainda não foram ao banco saem da reserva quando a emissão para no meio
+      const soltarResto = () => i + 1 < r.boletos.length ? db.rpc("agente_fazer", { p_acao: "boleto_desfazer",
+        p: { reservas: r.boletos.slice(i + 1).map((x) => x.reserva_id), motivo: "emissão parou antes", pedido: p.pedido }, p_gravar: true }) : null;
+      if (semResposta || !reg || !/^\d{9}$/.test(String(reg.nossoNumero || ""))) {
+        await soltarResto();
+        log.push({ parcela: b.descricao, valor: b.valor, emitido: "não sei", erro: "Sem resposta clara do Sicredi (" + (semResposta || "resposta sem nosso número") +
+          "). A parcela ficou reservada (boleto \"aguardando o banco\"): confira no Portal PJ do Sicredi se o boleto existe antes de tentar de novo." });
+        break;
+      }
+      const g = await db.rpc("agente_fazer", { p_acao: "boleto_gravar", p: { reserva_id: b.reserva_id, pedido: p.pedido, nosso_numero: String(reg.nossoNumero),
+        codigo_barras: reg.codigoBarras || "", linha_digitavel: reg.linhaDigitavel || "", qr_code: reg.qrCode || "", txid: reg.txid || "" }, p_gravar: true });
+      registrou = true;
       if (g.error) {
+        await soltarResto();
         log.push({ parcela: b.descricao, valor: b.valor, emitido: true, gravado: false,
           erro: "REGISTRADO NO BANCO, mas não foi gravado no sistema (" + g.error.message + "). Anote: nosso número " + reg.nossoNumero + ", linha " + reg.linhaDigitavel + "." });
         break;
       }
       log.push({ parcela: b.descricao, emitido: true, ...(g.data as Record<string, unknown>) });
     }
+    if (log.length < r.boletos.length && !log.some((x) => x.erro)) log.push({ aviso: "Parou antes do fim." });
     const falhou = log.some((x) => x.erro);
     return { ...texto({ os: r.os, cliente: r.cliente, boletos: log, avisos: r.avisos, abrir_no_sistema: SITE + "/#/boletos" }), ...(falhou ? { isError: true } : {}) };
   });

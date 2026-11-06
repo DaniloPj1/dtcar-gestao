@@ -14,8 +14,10 @@
 -- =====================================================================
 
 -- texto do primeiro nó (xpath com o namespace da NF-e)
+-- (o xpath devolve o texto ainda escapado: &amp; &lt; &gt; &quot; &apos; voltam ao normal, &amp; por último)
 create or replace function public.agente_nfe_txt(x xml, caminho text) returns text language sql immutable as $$
-  select nullif(trim((xpath(caminho || '/text()', x, array[array['n', 'http://www.portalfiscal.inf.br/nfe']]))[1]::text), '') $$;
+  select nullif(trim(replace(replace(replace(replace(replace((xpath(caminho || '/text()', x, array[array['n', 'http://www.portalfiscal.inf.br/nfe']]))[1]::text,
+    '&lt;', '<'), '&gt;', '>'), '&quot;', '"'), '&apos;', ''''), '&amp;', '&')), '') $$;
 create or replace function public.agente_nfe_num(x xml, caminho text) returns numeric language sql immutable as $$
   select coalesce(nullif(public.agente_nfe_txt(x, caminho), '')::numeric, 0) $$;
 
@@ -24,7 +26,7 @@ create or replace function public.agente_ler_nfe(p_xml text) returns jsonb langu
 declare x xml; inf xml; det xml; p xml; ns text[] := array[array['n', 'http://www.portalfiscal.inf.br/nfe']]; itens jsonb := '[]'; dups jsonb := '[]';
   v_qtd numeric; v_prod numeric; v_extras numeric; v_ean text; d xml; v_chave text;
 begin
-  begin x := xmlparse(document p_xml); exception when others then raise exception 'O XML da nota não é válido.'; end;
+  begin x := xmlparse(document ltrim(p_xml, chr(65279) || E' \n\r\t')); exception when others then raise exception 'O XML da nota não é válido.'; end;
   inf := (xpath('//n:infNFe', x, ns))[1];
   if inf is null then raise exception 'Este XML não é uma NF-e (sem infNFe).'; end if;
   v_chave := regexp_replace(coalesce((xpath('/n:infNFe/@Id', inf, ns))[1]::text, public.agente_nfe_txt(x, '//n:protNFe//n:chNFe'), ''), '\D', '', 'g');
@@ -68,7 +70,7 @@ create or replace function public.agente_entrada_nfe(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare
   n public.nfe_recebidas; v_n int; nf jsonb; forn uuid; it jsonb; ov jsonb; pr public.produtos; v_lista jsonb := '[]'; v_res jsonb; v_acao text; v_fator numeric;
-  v_ref text; v_marg numeric; cfg jsonb; v_contas jsonb := '[]'; r_contas jsonb; v_nome text; v_grupo uuid := gen_random_uuid(); d jsonb; avisos text[] := '{}'; v_cand jsonb;
+  v_ref text; v_marg numeric; cfg jsonb; v_contas jsonb := '[]'; r_contas jsonb; v_nome text; v_grupo uuid := gen_random_uuid(); d jsonb; avisos text[] := '{}'; v_cand jsonb; v_ligado jsonb; v_qtd numeric; v_cat text;
 begin
   perform public.agente_exige_admin();
   select dados into cfg from public.config where id = 1;
@@ -84,14 +86,35 @@ begin
   if n.chave is null then raise exception 'Nota não encontrada nas Notas da SEFAZ.'; end if;
   if n.xml is null then raise exception 'A NF % ainda não tem o XML completo (dê ciência ou confirme a operação em Notas da SEFAZ, ou peça o XML ao fornecedor).', n.numero; end if;
   if exists (select 1 from public.notas_entrada where chave = n.chave) then raise exception 'A NF % já teve entrada no estoque. Entrar de novo duplicaria o estoque.', n.numero; end if;
+  if coalesce(to_jsonb(n)->>'situacao', 'autorizada') <> 'autorizada' then raise exception 'A NF % está % na SEFAZ: não dá entrada.', n.numero, to_jsonb(n)->>'situacao'; end if;
+  if n.status = 'ignorada' then avisos := array_append(avisos, 'A nota estava marcada como ignorada nas Notas da SEFAZ.'); end if;
+  -- peças desta nota já ligadas a O.S. (v9) já entraram e saíram do estoque: só a sobra entra aqui (como "O que sobrou da nota")
+  if exists (select 1 from public.nfe_os_vinculos v where v.chave = n.chave and v.nf_item is null and v.descricao_nf = 'Nota inteira') then
+    raise exception 'A NF % inteira já foi ligada a uma O.S.: não há sobra para dar entrada.', n.numero;
+  end if;
+  select coalesce(jsonb_object_agg(v.nf_item::text, v.q), '{}') into v_ligado from (select nf_item, sum(qtd) q from public.nfe_os_vinculos where chave = n.chave and nf_item is not null group by nf_item) v;
 
   nf := public.agente_ler_nfe(n.xml);
   select id into forn from public.fornecedores where cnpj <> '' and regexp_replace(cnpj, '\D', '', 'g') = nf->'fornecedor'->>'cnpj';
   v_marg := coalesce(nullif(cfg->>'markupPecas', '')::numeric, 30);
   v_nome := coalesce(nullif(nf->'fornecedor'->>'fantasia', ''), nf->'fornecedor'->>'razao');
 
+  -- itens pedidos que não existem na nota
+  select string_agg(e->>'n', ', ') into v_ref from jsonb_array_elements(coalesce(p->'itens', '[]')) e
+    where not exists (select 1 from jsonb_array_elements(nf->'itens') x where (x->>'n')::int = (e->>'n')::int);
+  if v_ref is not null then raise exception 'Item(ns) % não existe(m) na NF % (a nota tem % itens).', v_ref, n.numero, jsonb_array_length(nf->'itens'); end if;
   for it in select * from jsonb_array_elements(nf->'itens') loop
     pr := null; v_fator := 1; v_acao := 'novo';
+    v_qtd := (it->>'qtd')::numeric - coalesce((v_ligado->>(it->>'n'))::numeric, 0);
+    if v_qtd <= 0.0001 then
+      avisos := array_append(avisos, 'Item ' || (it->>'n') || ' (' || (it->>'descricao_nf') || ') já foi todo para O.S.: fica de fora.');
+      v_lista := v_lista || jsonb_build_array(jsonb_build_object('acao', 'ignorar', 'codigo', it->>'codigo', 'descricao_nf', it->>'descricao_nf', 'qtd', 0, 'fator', 1, 'custo_unit', (it->>'custo_unit')::numeric, '_n', (it->>'n')::int));
+      continue;
+    end if;
+    if v_qtd < (it->>'qtd')::numeric then
+      avisos := array_append(avisos, 'Item ' || (it->>'n') || ': ' || ((it->>'qtd')::numeric - v_qtd) || ' já foi(ram) para O.S.; entra só a sobra (' || v_qtd || ').');
+      it := jsonb_set(it, '{qtd}', to_jsonb(v_qtd));
+    end if;
     -- reconhecer (como js/nfe.js): vínculo do fornecedor, EAN, referência
     if forn is not null then
       select x.* into pr from public.produto_fornecedor pf join public.produtos x on x.id = pf.produto_id
@@ -135,18 +158,21 @@ begin
   v_res := public.importar_nfe(jsonb_build_object('nota', nf->'nota', 'fornecedor', nf->'fornecedor',
              'itens', (select jsonb_agg(x - '_n' - '_produto') from jsonb_array_elements(v_lista) x)));
 
+  -- categoria: a pedida, a padrão do fornecedor ou "Fornecedores de peças" (como a tela)
+  select coalesce(nullif(p->>'categoria', ''), nullif(to_jsonb(f)->>'categoria_padrao', ''), 'Fornecedores de peças') into v_cat from public.fornecedores f where f.id = (v_res->>'fornecedor_id')::uuid;
+  v_cat := coalesce(v_cat, nullif(p->>'categoria', ''), 'Fornecedores de peças');
   -- contas a pagar: as duplicatas (ou o total, com vencimento informado), como contasDaNota da tela
   if coalesce((p->>'lancar_contas')::boolean, true) then
     if jsonb_array_length(nf->'duplicatas') > 0 then
       for d in select * from jsonb_array_elements(nf->'duplicatas') loop
         v_contas := v_contas || jsonb_build_array(jsonb_build_object('descricao', 'NF ' || (nf->'nota'->>'numero') || ' – ' || v_nome, 'fornecedor_id', v_res->>'fornecedor_id',
-          'favorecido', v_nome, 'categoria', coalesce(nullif(p->>'categoria', ''), 'Fornecedores de peças'), 'documento', (nf->'nota'->>'numero') || '/' || (d->>'numero'),
+          'favorecido', v_nome, 'categoria', v_cat, 'documento', (nf->'nota'->>'numero') || '/' || (d->>'numero'),
           'valor', d->'valor', 'emissao', left(nf->'nota'->>'emissao', 10), 'vencimento', d->>'vencimento', 'parcela', jsonb_array_length(v_contas) + 1,
           'parcelas', jsonb_array_length(nf->'duplicatas'), 'grupo', v_grupo, 'origem', 'nfe', 'chave_nfe', n.chave));
       end loop;
     elsif coalesce(p->>'vencimento', '') <> '' then
       v_contas := jsonb_build_array(jsonb_build_object('descricao', 'NF ' || (nf->'nota'->>'numero') || ' – ' || v_nome, 'fornecedor_id', v_res->>'fornecedor_id', 'favorecido', v_nome,
-        'categoria', coalesce(nullif(p->>'categoria', ''), 'Fornecedores de peças'), 'documento', (nf->'nota'->>'numero') || '/001', 'valor', nf->'nota'->'valor_total',
+        'categoria', v_cat, 'documento', (nf->'nota'->>'numero') || '/001', 'valor', nf->'nota'->'valor_total',
         'emissao', left(nf->'nota'->>'emissao', 10), 'vencimento', p->>'vencimento', 'parcela', 1, 'parcelas', 1, 'grupo', v_grupo, 'origem', 'nfe', 'chave_nfe', n.chave));
     else avisos := array_append(avisos, 'A nota não traz duplicatas: nenhuma conta a pagar lançada (informe vencimento para lançar o total).'); end if;
     if jsonb_array_length(v_contas) > 0 then
@@ -164,13 +190,26 @@ begin
     'avisos', to_jsonb(avisos));
 end $$;
 
+-- Notas da SEFAZ no conector: nota ligada a O.S. (v9) não aparece mais como "sem entrada"
+create or replace function public.agente_notas_sefaz(p_dias int default 7) returns jsonb
+language plpgsql stable security invoker set search_path = public as $$
+declare r jsonb;
+begin
+  perform public.agente_exige_admin();
+  select coalesce(jsonb_agg(jsonb_build_object('numero', n.numero, 'emitente', n.nome_emitente, 'cnpj', n.cnpj_emitente, 'emissao', n.emissao, 'valor', n.valor,
+      'situacao', n.situacao, 'estoque', case n.status when 'lancada' then 'entrada feita' when 'ignorada' then 'ignorada' when 'vinculada' then 'ligada a O.S. (só a sobra pode entrar)' else 'sem entrada' end,
+      'contas_lancadas', n.contas_lancadas, 'tem_xml', n.tem_xml, 'chave', n.chave) order by n.emissao desc), '[]'::jsonb) into r
+  from public.nfe_recebidas n where n.emissao >= now() - make_interval(days => greatest(coalesce(p_dias, 7), 1));
+  return jsonb_build_object('dias', coalesce(p_dias, 7), 'notas', r);
+end $$;
+
 do $$
 declare src text;
 begin
   select pg_get_functiondef('public.agente_fazer(text, jsonb, boolean)'::regprocedure) into src;
   if src not like '%agente_entrada_nfe%' then
-    src := replace(src, $a$when 'boleto_gravar' then 'agente_boleto_gravar' end;$a$,
-                        $b$when 'boleto_gravar' then 'agente_boleto_gravar' when 'entrada_nota' then 'agente_entrada_nfe' end;$b$);
+    src := replace(src, $a$when 'boleto_desfazer' then 'agente_boleto_desfazer' end;$a$,
+                        $b$when 'boleto_desfazer' then 'agente_boleto_desfazer' when 'entrada_nota' then 'agente_entrada_nfe' end;$b$);
     if src not like '%agente_entrada_nfe%' then raise exception 'v42: não reconheci a agente_fazer do v41 (rode o v41 antes).'; end if;
     execute src;
   end if;

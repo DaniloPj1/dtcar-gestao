@@ -202,7 +202,7 @@ declare
   feito text[] := '{}'; avisos text[] := '{}'; v_antes jsonb; v_patch jsonb := '{}'; v_dados jsonb := '{}';
   it jsonb; cur public.os_itens; v_mud jsonb; v_lista jsonb := '[]'; v_rem jsonb := '[]'; k text; v_prod public.produtos;
   v_cli public.clientes; v_vei public.veiculos; v_end text; v_km int; v_tot jsonb; v_pend int; v_rec numeric; v_n int; r jsonb;
-  v_hoje date := public.agente_hoje(); pa jsonb; v_soma numeric := 0;
+  v_hoje date := public.agente_hoje(); pa jsonb; v_soma numeric := 0; v_consumo jsonb := '{}';
   c_proib text[] := array['id', 'numero', 'status', 'cliente_id', 'veiculo_id', 'cliente', 'veiculo', 'total', 'custo', 'recebido', 'finalizada_em',
                           'criado_em', 'atualizado_em', 'criado_por', 'estoque_baixado', 'checkin', 'assinatura_entrada', 'assinatura_entrega'];
   c_item text[] := array['tipo', 'descricao', 'qtd', 'valor_unit', 'custo_unit', 'desconto', 'aprovado', 'executado', 'fornecida_cliente', 'qualidade', 'fornecedor', 'posicao'];
@@ -314,13 +314,22 @@ begin
     if coalesce((v_mud->>'fornecida_cliente')::boolean, false) then v_mud := v_mud || jsonb_build_object('valor_unit', 0, 'custo_unit', 0, 'desconto', 0); end if;
     perform jsonb_populate_record(cur, v_mud); -- confere os tipos
     v_mud := (to_jsonb(cur) - 'atualizado_em' - 'criado_em') || v_mud;
+    if coalesce((v_mud->>'qtd')::numeric, 0) <= 0 then raise exception 'Item "%": a quantidade tem de ser maior que zero (para tirar o item, use itens_remover).', cur.descricao; end if;
+    if coalesce((v_mud->>'valor_unit')::numeric, 0) < 0 or coalesce((v_mud->>'custo_unit')::numeric, 0) < 0 or coalesce((v_mud->>'desconto')::numeric, 0) < 0 then
+      raise exception 'Item "%": valor, custo e desconto não podem ser negativos.', cur.descricao; end if;
     -- produto marcado para não vender sem estoque: confere o saldo (descontando o que este item já reservou)
     select * into v_prod from public.produtos where id = nullif(v_mud->>'produto_id', '')::uuid for update;
     if v_prod.id is not null and v_prod.tipo = 'produto' and v_prod.controla_estoque and not coalesce(v_prod.vender_sem_estoque, true)
        and (v_mud->>'tipo') = 'peca' and not coalesce((v_mud->>'fornecida_cliente')::boolean, false) and (v_mud->>'aprovado') is distinct from 'false'
-       and (v_mud->>'qtd')::numeric > coalesce(v_prod.estoque_atual, 0) + coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0) then
+       and (v_mud->>'qtd')::numeric + coalesce((v_consumo->>v_prod.id::text)::numeric, 0)
+           > coalesce(v_prod.estoque_atual, 0) + coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0) then
       raise exception '%: estoque insuficiente (% disponível) e o produto está marcado para não ser vendido sem estoque.', v_prod.descricao,
-        coalesce(v_prod.estoque_atual, 0) + coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0);
+        coalesce(v_prod.estoque_atual, 0) + coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0) - coalesce((v_consumo->>v_prod.id::text)::numeric, 0);
+    end if;
+    -- o que as linhas anteriores deste pedido já vão tirar a mais do mesmo produto
+    if v_prod.id is not null then
+      v_consumo := jsonb_set(v_consumo, array[v_prod.id::text], to_jsonb(coalesce((v_consumo->>v_prod.id::text)::numeric, 0) + (v_mud->>'qtd')::numeric
+        - coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0)));
     end if;
     v_prod := null;
     v_lista := v_lista || jsonb_build_array(v_mud);

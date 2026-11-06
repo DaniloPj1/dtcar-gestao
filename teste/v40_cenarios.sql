@@ -50,6 +50,7 @@ begin
   update public.produtos set vender_sem_estoque = false where codigo = 100;
   perform pg_temp.erro(format($c$select public.agente_fazer('alterar_os', '{"numero": 1, "itens_alterar": [{"id": "%s", "qtd": 11}]}', true)$c$, v_id), 'estoque insuficiente');
   r := public.agente_fazer('alterar_os', jsonb_build_object('numero', 1, 'itens_alterar', jsonb_build_array(jsonb_build_object('id', v_id, 'qtd', 10))), false);
+  perform pg_temp.erro(format($c$select public.agente_fazer('alterar_os', '{"numero": 1, "itens_alterar": [{"id": "%s", "qtd": -1}]}', true)$c$, v_id), 'maior que zero');
   update public.produtos set vender_sem_estoque = true where codigo = 100;
   -- marcar como peça do cliente zera o preço (prévia)
   r := public.agente_fazer('alterar_os', jsonb_build_object('numero', 1, 'itens_alterar', jsonb_build_array(jsonb_build_object('id', v_id, 'peca_do_cliente', true))), false);

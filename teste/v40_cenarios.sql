@@ -73,6 +73,8 @@ begin
   -- 7. concluir; 8. sinal no pátio pelo receber_os
   r := public.agente_fazer('alterar_os', '{"numero": 1, "acao": "concluir"}', true);
   perform pg_temp.ok((select status from public.ordens where numero = 1) = 'pronto', 'concluída');
+  r := public.agente_receber_os('{"numero": 1, "forma": "PIX"}', false);
+  perform pg_temp.ok((r->>'vai_fechar')::boolean = false, 'sinal que quita no pátio não promete fechar');
   r := public.agente_receber_os('{"numero": 1, "forma": "PIX", "valor": 100}', true);
   perform pg_temp.ok((r->>'gravado')::boolean and (select recebido from public.ordens where numero = 1) = 100, 'sinal de 100 no pátio');
   perform pg_temp.ok((select finalizada_em from public.ordens where numero = 1) is null, 'sinal não fecha');

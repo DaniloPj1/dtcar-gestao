@@ -273,7 +273,8 @@ begin
                  else placa = upper(regexp_replace(p->>'placa', '[^A-Za-z0-9]', '', 'g')) end;
     if v_vei.id is null then raise exception 'Veículo % não encontrado (cadastre antes com salvar_cadastro).', coalesce(p->>'placa', p->>'veiculo_id'); end if;
     v_patch := v_patch || jsonb_build_object('veiculo_id', v_vei.id,
-      'veiculo', coalesce(o.veiculo, '{}') || jsonb_build_object('placa', v_vei.placa, 'marca', v_vei.marca, 'modelo', v_vei.modelo, 'ano', v_vei.ano, 'cor', coalesce(v_vei.cor, '')));
+      'veiculo', coalesce(o.veiculo, '{}') || jsonb_build_object('placa', v_vei.placa, 'marca', v_vei.marca, 'modelo', v_vei.modelo, 'ano', v_vei.ano, 'cor', coalesce(v_vei.cor, ''),
+        'motor', coalesce(nullif(to_jsonb(v_vei)->>'combustivel', ''), to_jsonb(v_vei)->>'motor', '')));
     if v_vei.cliente_id is distinct from coalesce((v_patch->>'cliente_id')::uuid, o.cliente_id) then
       avisos := array_append(avisos, 'O veículo ' || v_vei.placa || ' está cadastrado em nome de outro cliente.');
     end if;
@@ -649,6 +650,7 @@ begin
       if v_vp > c.valor then v_juros := v_vp - c.valor; elsif v_vp < c.valor then v_desc := c.valor - v_vp; end if;
     end if;
     v_vp := round(c.valor + v_juros - v_desc, 2);
+    if v_juros < 0 or v_desc < 0 or v_vp < 0 then raise exception 'Juros, desconto e valor pago não podem ficar negativos (valor pago calculado: %).', public.agente_reais(v_vp); end if;
     if v_pago > c.vencimento and v_juros = 0 then avisos := array_append(avisos, 'Pago ' || (v_pago - c.vencimento) || ' dia(s) depois do vencimento, sem juros informados.'); end if;
     update public.contas set status = 'paga', pago_em = v_pago, juros = v_juros, desconto = v_desc, valor_pago = v_vp, conta_origem = v_conta,
       forma_pagamento = coalesce(nullif(trim(p->>'forma_pagamento'), ''), nullif(forma_pagamento, ''), case when codigo_barras <> '' then 'Boleto' else '' end)

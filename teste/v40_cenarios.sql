@@ -187,6 +187,7 @@ begin
   perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "pagar", "busca": "Boleto DPK", "conta_origem": "Itaú"}', true)$c$, 'não existe');
   perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "editar", "busca": "Energia", "vencimento": "2026-11-09", "campos": {"valor_pago": 800}}', true)$c$, 'desfazer e pague de novo');
   r := public.agente_fazer('conta_pagar', '{"acao": "desfazer", "busca": "Energia", "vencimento": "2026-11-09"}', true);
+  perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "pagar", "busca": "Energia", "vencimento": "2026-11-09", "desconto": 900}', false)$c$, 'negativos');
   perform pg_temp.ok((select status from public.contas where descricao = 'Energia') = 'aberta', 'pagamento desfeito');
   r := public.agente_fazer('conta_pagar', jsonb_build_object('acao', 'editar', 'id', v_id, 'campos', jsonb_build_object('categoria', 'Fornecedores de peças')), true);
   perform pg_temp.ok((select categoria from public.contas where id = v_id) = 'Fornecedores de peças', 'conta editada');

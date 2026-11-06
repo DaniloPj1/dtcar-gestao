@@ -116,14 +116,17 @@ async function daOS(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Reco
 }
 
 const EM_ABERTO = ["gerado", "enviado", "registrado"];
+/** Reserva do conector (v41): nosso número provisório 000…, sem linha digitável — não vai para PDF nem mensagem */
+const ehReserva = (b: Record<string, unknown>) => b.situacao === "gerado" && !b.linha_digitavel && /^000/.test(String(b.nosso_numero || ""));
 async function doBoleto(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Record<string, unknown>, avisos: string[]): Promise<Arquivo> {
   let bs: Array<Record<string, unknown>>;
   const nn = String(p.nosso_numero || "").replace(/\D/g, "");
   if (nn) bs = await lista(adm.from("boletos").select("*").eq("nosso_numero", nn));
   else if (p.os) bs = (await lista(adm.from("boletos").select("*").eq("os_numero", String(parseInt(String(p.os).replace(/\D/g, ""), 10) || "")).order("vencimento")))
-    .filter((b) => EM_ABERTO.includes(String(b.situacao)));
+    .filter((b) => EM_ABERTO.includes(String(b.situacao)) && !ehReserva(b));
   else throw new ErroAnexo("Boleto: informe o nosso_numero ou a O.S.");
   if (!bs.length) throw new ErroAnexo(nn ? `Boleto ${nn} não encontrado.` : `A O.S. ${p.os} não tem boleto em aberto.`);
+  if (bs.some(ehReserva)) throw new ErroAnexo("Este boleto é só uma reserva do Claude (o Sicredi não respondeu): confira no Portal PJ; não é boleto para pagar.");
   for (const b of bs) {
     if (b.situacao === "rejeitado") throw new ErroAnexo(`O boleto ${b.nosso_numero} foi rejeitado pelo banco: não vale para pagamento.`);
     if (["pago", "baixado", "baixa_pedida"].includes(String(b.situacao))) avisos.push(`O boleto ${b.nosso_numero} está "${b.situacao}": confira antes de mandar cobrar.`);

@@ -88,6 +88,18 @@ try:
     chk("depois da consulta: baixado", pg.evaluate("window.__DB.boletos[1].situacao") == "baixado")
     chk("parcela 2 continua em aberto (baixa não recebe)", pg.evaluate("window.__DB.receber.find(p => p.id === 'r2').status") == "aberta")
     pg.screenshot(path=SAIDA + "/ba2-atualizado.png")
+    # v41: reserva do Claude sem resposta do banco — sem PDF/linha/WhatsApp, só "Liberar reserva"
+    pg.evaluate("""window.__DB.boletos.push({ id: 'res1', receber_id: 'r2', ordem_id: null, os_numero: '1887', pagador_nome: 'Reserva Teste', pagador_doc: '', pagador: {},
+      descricao: 'O.S. 1887', valor: 50, vencimento: '2026-12-20', emissao: '2026-11-06', nosso_numero: '000123456', seu_numero: '1887-9', codigo_barras: '', linha_digitavel: '',
+      situacao: 'gerado', ocorrencia: 'Reservado pelo agente', qr_url: '', txid: '', criado_por: 'Danilo', criado_em: '2026-11-06T10:00:00Z' })""")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(500); pg.goto(U + "#/boletos"); pg.wait_for_timeout(1500)
+    pg.click(".abas button:has-text('Em aberto')"); pg.wait_for_timeout(300)
+    lin = pg.locator(".lista .linha:has-text('Reserva Teste')")
+    chk("reserva aparece como reservada, sem PDF/Copiar/WhatsApp", lin.count() == 1 and "Reservado pelo Claude" in lin.inner_text()
+        and lin.locator("button:has-text('PDF'), button:has-text('Copiar linha'), a:has-text('WhatsApp'), button:has-text('Pedir baixa')").count() == 0)
+    lin.locator("button:has-text('Liberar reserva')").click(); pg.wait_for_timeout(300)
+    pg.click("[role=dialog] button:has-text('Liberar')"); pg.wait_for_timeout(800)
+    chk("liberar a reserva: vira rejeitado (a parcela pode receber boleto)", pg.evaluate("window.__DB.boletos.find(x => x.id === 'res1').situacao") == "rejeitado")
     b.close()
 finally:
   srv.terminate()

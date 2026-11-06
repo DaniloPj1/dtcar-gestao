@@ -17,6 +17,8 @@ values ('00000000-0000-0000-0000-000000000001', 1887, 'entregue', '00000000-0000
 
 select null from pg_temp.erro($c$select public.agente_fazer('boleto_preparar', '{"numero": 1887}', false)$c$, 'não está ligada');
 update public.config set dados = dados || '{"cobranca": {"modo": "api", "ambiente": "producao", "especie": "05", "jurosMes": 2, "multa": 2, "desde": "2026-11-04"}}' where id = 1;
+select null from pg_temp.erro($c$select public.agente_fazer('boleto_preparar', '{"numero": 1887}', false)$c$, 'Período de transição');
+update public.config set dados = dados || '{"espelhoLegado": false}' where id = 1;
 select null from pg_temp.erro($c$select public.agente_fazer('boleto_preparar', '{"numero": 1887}', false)$c$, 'falta CPF/CNPJ');
 update public.clientes set doc = '27.462.217/0003-31';
 select null from pg_temp.erro($c$select public.agente_fazer('boleto_preparar', '{"numero": 1887}', false)$c$, 'em aberto sem boleto');

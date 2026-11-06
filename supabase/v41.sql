@@ -33,6 +33,8 @@ begin
   if coalesce(cob->>'modo', '') <> 'api' or coalesce(cob->>'ambiente', '') <> 'producao' then
     raise exception 'A emissão pela API do Sicredi não está ligada em produção (Boletos Sicredi › Dados da carteira).';
   end if;
+  -- como o botão da tela: boleto real só depois da virada (cfg.espelhoLegado = false)
+  if coalesce(cfg->>'espelhoLegado', 'true') <> 'false' then raise exception 'Período de transição ligado (cfg.espelhoLegado): boleto real só depois da virada.'; end if;
   v_desde := coalesce(nullif(cob->>'desde', '')::date, date '2026-11-04');
 
   -- pagador: cadastro do cliente (como pagadorDe da tela)

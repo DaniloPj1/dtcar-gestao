@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v39.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v38.sql`, `v39.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -130,6 +130,12 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   acaba, saem mesmo fora do horário comercial (sem o motor, o agendamento de 1 min acorda a zap para elas: v39). IA: depois de uma falha, nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
   (padrões em `whatsapp_avisos_cfg()`). Tabelas fora do backup, do banco do PC e do espelho. Mudou `paraGuardar`/`mensagemCitada`? Mude
   as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
+  **v38 (05/11/2026): pacote de mensagens para o mesmo número.** O intervalo de 25–70 s vale entre contatos; se a próxima que a fila vai
+  pegar (mesma ordem da `whatsapp_pegar_proxima`: `interno` primeiro, depois `id`) é para o MESMO número e entrou até 5 min depois da que
+  acabou de sair e pode sair agora (PARAR, horário e limites, como na retirada), o intervalo é 3 s (`whatsapp_pacote_segue`, usada pela `whatsapp_resultado` e pelo gatilho `whatsapp_fila_pacote`, que
+  encurta o intervalo quando a seguinte entra na fila depois de a anterior sair). Trava: 6 seguidas por número em 5 min. Falha no meio =
+  intervalo normal. Limites, horário e PARAR não mudam. Motor 3.4 (`enviarSeguidas`): manda o pacote no mesmo sinal (espera intervalos de
+  até 5 s; antes de cada envio confere se passaram 20 s do último sinal confirmado, para a guarda da vez não vencer). Teste: `python3 teste/teste_v38.py`.
   Testes: `deno run -A teste/teste_zap.ts`, `node teste/teste_motor.js` (depois de `npm ci` em `motor-zap/`),
   `python3 teste/teste_v24.py <banco>` e `python3 teste/teste_v25.py <banco>` (Postgres local) e `bash teste/teste_instalar_motor.sh`
   (instalação num HOME temporário).

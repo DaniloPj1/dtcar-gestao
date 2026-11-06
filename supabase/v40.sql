@@ -701,6 +701,10 @@ begin
   for c in select * from jsonb_array_elements(p->'contas') loop
     if coalesce(trim(c->>'nome'), '') = '' or jsonb_typeof(c->'saldo') <> 'number' then raise exception 'Cada conta precisa de nome e saldo.'; end if;
   end loop;
+  -- nomes sem espaços nas pontas e sem repetir (sem acento/maiúscula), como o formulário da tela
+  p := jsonb_set(p, '{contas}', (select jsonb_agg(e || jsonb_build_object('nome', trim(e->>'nome'))) from jsonb_array_elements(p->'contas') e));
+  if (select count(distinct lower(public.unaccent_simples(e->>'nome'))) from jsonb_array_elements(p->'contas') e) < jsonb_array_length(p->'contas') then
+    raise exception 'A mesma conta aparece mais de uma vez na lista.'; end if;
   -- as atuais (citadas com o saldo novo; as outras mantêm o calculado) + as novas
   for v_at in select * from jsonb_array_elements(coalesce(atuais, '[]')) loop
     select e into c from jsonb_array_elements(p->'contas') e where lower(public.unaccent_simples(e->>'nome')) = lower(public.unaccent_simples(v_at->>'nome')) limit 1;

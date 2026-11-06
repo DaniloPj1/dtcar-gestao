@@ -199,9 +199,10 @@ begin
   perform pg_temp.ok(not exists (select 1 from public.contas where descricao = 'Energia dezembro'), 'conta excluída');
 
   -- saldos: só o Sicredi muda, o resto mantém o calculado
-  r := public.agente_fazer('atualizar_saldos', '{"contas": [{"nome": "sicredi", "saldo": 1500}]}', true);
+  r := public.agente_fazer('atualizar_saldos', '{"contas": [{"nome": " sicredi ", "saldo": 1500}]}', true);
   perform pg_temp.ok((select (c->>'saldo')::numeric from public.config, jsonb_array_elements(dados->'contasFinanceiras') c where c->>'nome' = 'Sicredi') = 1500, 'Sicredi 1500');
   perform pg_temp.ok(jsonb_array_length((select dados->'contasFinanceiras' from public.config)) = 3, 'continuam 3 contas');
+  perform pg_temp.erro($c$select public.agente_fazer('atualizar_saldos', '{"contas": [{"nome": "Sicredi", "saldo": 1}, {"nome": "SICREDI", "saldo": 2}]}', false)$c$, 'mais de uma vez');
 
   -- transferência
   perform pg_temp.erro($c$select public.agente_fazer('transferir', '{"de": "Sicredi", "para": "sicredi", "valor": 10}', true)$c$, 'mesma');

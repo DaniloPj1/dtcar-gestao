@@ -124,7 +124,7 @@ end $$;
 
 -- boleto Sicredi ainda pagável ligado à O.S. (cancelar/excluir a O.S. deixaria o cliente pagar dívida que não existe mais)
 create or replace function public.agente_boletos_ativos(p_ordem uuid) returns int language sql stable security invoker set search_path = public as $$
-  select count(*)::int from public.boletos where ordem_id = p_ordem and situacao in ('gerado', 'enviado', 'registrado') $$;
+  select count(*)::int from public.boletos where ordem_id = p_ordem and situacao in ('gerado', 'enviado', 'registrado', 'baixa_pedida') $$;
 
 -- dígitos verificadores da linha digitável bancária (47): três campos mód. 10 e o DV geral mód. 11 do código de barras
 create or replace function public.agente_mod10(p text) returns int language plpgsql immutable as $$

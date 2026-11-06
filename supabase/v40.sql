@@ -889,7 +889,9 @@ $b$  if o.status in ('diagnostico', 'aguardando', 'execucao', 'pronto') then -- 
   src := replace(src, $a$  if o.status = 'entregue' and o.finalizada_em is null and v_falta <= 0.009 then$a$,
                       $b$  if o.status <> 'entregue' and v_falta <= 0.009 then erros := array_append(erros, 'A O.S. ' || o.numero || ' já está quitada.'); end if;
   if o.status = 'entregue' and o.finalizada_em is null and v_falta <= 0.009 then$b$);
-  if src not like '%v40: sinal%' then raise exception 'v40: não reconheci a agente_receber_os do v37 (rode o v37 antes).'; end if;
+  -- sinal de O.S. ainda não entregue não fecha a O.S. (o gatilho só fecha entregue quitada)
+  src := replace(src, $a$'vai_fechar', v_quita,$a$, $b$'vai_fechar', v_quita and o.status = 'entregue',$b$);
+  if src not like '%v40: sinal%' or src not like '%v_quita and o.status%' then raise exception 'v40: não reconheci a agente_receber_os do v37 (rode o v37 antes).'; end if;
   execute src;
 end $$;
 

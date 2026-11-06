@@ -70,6 +70,7 @@ declare
   n public.nfe_recebidas; v_n int; nf jsonb; forn uuid; it jsonb; ov jsonb; pr public.produtos; v_lista jsonb := '[]'; v_res jsonb; v_acao text; v_fator numeric;
   v_ref text; v_marg numeric; cfg jsonb; v_contas jsonb := '[]'; r_contas jsonb; v_nome text; v_grupo uuid := gen_random_uuid(); d jsonb; avisos text[] := '{}'; v_cand jsonb;
 begin
+  perform public.agente_exige_admin();
   select dados into cfg from public.config where id = 1;
   if length(regexp_replace(coalesce(p->>'chave', ''), '\D', '', 'g')) = 44 then
     select * into n from public.nfe_recebidas where chave = regexp_replace(p->>'chave', '\D', '', 'g');

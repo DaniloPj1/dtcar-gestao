@@ -24,6 +24,7 @@ declare
   v_desde date; v_nf text := regexp_replace(coalesce(p->>'nf', ''), '[^0-9A-Za-z/-]', '', 'g'); pa public.receber; v_lista jsonb := '[]';
   v_saldo numeric; v_valor numeric; v_venc date; v_ref text;
 begin
+  perform public.agente_exige_admin();
   if coalesce(p->>'numero', '') !~ '^\s*[0-9]+\s*$' then raise exception 'Informe o número da O.S.'; end if;
   select * into o from public.ordens where numero = (p->>'numero')::int order by criado_em desc limit 1 for update;
   if o.id is null then raise exception 'O.S. % não encontrada.', p->>'numero'; end if;
@@ -100,6 +101,7 @@ create or replace function public.agente_boleto_gravar(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare b public.boletos;
 begin
+  perform public.agente_exige_admin();
   if coalesce(p->>'nosso_numero', '') !~ '^[0-9]{9}$' then raise exception 'Nosso número inválido: %', coalesce(p->>'nosso_numero', ''); end if;
   insert into public.boletos (receber_id, ordem_id, os_numero, cliente_id, pagador_nome, pagador_doc, pagador, descricao, valor, vencimento, emissao,
                               nosso_numero, seu_numero, codigo_barras, linha_digitavel, qr_url, txid, situacao, ocorrencia, criado_por)

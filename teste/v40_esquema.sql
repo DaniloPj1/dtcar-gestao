@@ -38,7 +38,7 @@ create table public.contas (id uuid primary key default gen_random_uuid(), descr
 create unique index contas_codigo_barras_unico on public.contas (codigo_barras) where codigo_barras <> '' and status <> 'cancelada';
 create table public.transferencias (id uuid primary key default gen_random_uuid(), data date not null default current_date, de_conta text not null, para_conta text not null,
   valor numeric(12,2) not null check (valor > 0), obs text not null default '', criado_por text not null default '', criado_em timestamptz not null default now(), check (de_conta <> para_conta));
-create table public.boletos (id uuid primary key default gen_random_uuid(), recibo_id uuid);
+create table public.boletos (id uuid primary key default gen_random_uuid(), recibo_id uuid, ordem_id uuid, receber_id uuid, situacao text not null default 'registrado');
 -- saldo por conta (versão simples do v18: saldo informado + recibos − pagamentos ± transferências)
 create or replace function public.saldos_contas() returns jsonb language sql stable as $$
   select coalesce(jsonb_agg(jsonb_build_object('nome', c->>'nome', 'informado', (c->>'saldo')::numeric,
@@ -85,3 +85,12 @@ begin
   return null;
 end $$;
 create trigger ordens_estoque_status after update of status on public.ordens for each row execute function public.estoque_ordem_gatilho();
+-- v12: recibo cancelado reabre a parcela que ele pagou
+create or replace function public.recibo_cancelado_reabre() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if new.cancelado and not old.cancelado then update public.receber set status = 'aberta', pago_em = null, recibo_id = null where recibo_id = new.id; end if;
+  return null;
+end $$;
+create trigger recibo_cancelado_reabre after update of cancelado on public.recibos for each row execute function public.recibo_cancelado_reabre();
+-- v3: o movimento de estoque aponta para a O.S.
+alter table public.estoque_mov add constraint estoque_mov_ordem foreign key (ordem_id) references public.ordens (id) on delete set null;

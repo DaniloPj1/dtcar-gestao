@@ -122,6 +122,32 @@ begin
   return '';
 end $$;
 
+-- boleto Sicredi ainda pagável ligado à O.S. (cancelar/excluir a O.S. deixaria o cliente pagar dívida que não existe mais)
+create or replace function public.agente_boletos_ativos(p_ordem uuid) returns int language sql stable security invoker set search_path = public as $$
+  select count(*)::int from public.boletos where ordem_id = p_ordem and situacao in ('gerado', 'enviado', 'registrado') $$;
+
+-- dígitos verificadores da linha digitável bancária (47): três campos mód. 10 e o DV geral mód. 11 do código de barras
+create or replace function public.agente_mod10(p text) returns int language plpgsql immutable as $$
+declare s int := 0; m int := 2; d int; i int;
+begin
+  for i in reverse length(p)..1 loop d := substr(p, i, 1)::int * m; s := s + d / 10 + d % 10; m := case m when 2 then 1 else 2 end; end loop;
+  return (10 - s % 10) % 10;
+end $$;
+create or replace function public.agente_linha_ok(p text) returns boolean language plpgsql immutable as $$
+declare d text := regexp_replace(coalesce(p, ''), '\D', '', 'g'); b text; s int := 0; m int := 2; i int; dv int;
+begin
+  if length(d) <> 47 then return null; end if;
+  if public.agente_mod10(substr(d, 1, 9)) <> substr(d, 10, 1)::int or public.agente_mod10(substr(d, 11, 10)) <> substr(d, 21, 1)::int
+     or public.agente_mod10(substr(d, 22, 10)) <> substr(d, 32, 1)::int then return false; end if;
+  b := public.agente_barras(d);
+  for i in reverse 44..1 loop
+    if i = 5 then continue; end if;
+    s := s + substr(b, i, 1)::int * m; m := case m when 9 then 2 else m + 1 end;
+  end loop;
+  dv := 11 - s % 11; if dv in (0, 10, 11) then dv := 1; end if;
+  return dv = substr(b, 5, 1)::int;
+end $$;
+
 -- ---------- resumo da O.S. agora com o id dos itens (para alterar/remover) ----------
 create or replace function public.agente_os_json(o public.ordens, p_itens boolean default true) returns jsonb
 language sql stable security invoker set search_path = public as $$
@@ -181,6 +207,7 @@ declare
                           'criado_em', 'atualizado_em', 'criado_por', 'estoque_baixado', 'checkin', 'assinatura_entrada', 'assinatura_entrega'];
   c_item text[] := array['tipo', 'descricao', 'qtd', 'valor_unit', 'custo_unit', 'desconto', 'aprovado', 'executado', 'fornecida_cliente', 'qualidade', 'fornecedor', 'posicao'];
 begin
+  perform public.agente_exige_admin();
   if coalesce(p->>'numero', '') !~ '^\s*[0-9]+\s*$' then raise exception 'Informe o número da O.S.'; end if;
   select * into o from public.ordens where numero = (p->>'numero')::int order by criado_em desc limit 1 for update;
   if o.id is null then raise exception 'O.S. % não encontrada.', p->>'numero'; end if;
@@ -194,11 +221,14 @@ begin
   if v_acao = 'excluir' then
     select coalesce(sum(valor), 0) into v_rec from public.recibos where ordem_id = o.id and not cancelado;
     if v_rec > 0 then raise exception 'A O.S. % tem % em recibos válidos. Cancele os recibos antes de excluir (ou cancele a O.S.).', o.numero, public.agente_reais(v_rec); end if;
+    if public.agente_boletos_ativos(o.id) > 0 then raise exception 'A O.S. % tem boleto Sicredi em aberto no banco: peça a baixa em Boletos Sicredi antes de excluir.', o.numero; end if;
     if exists (select 1 from public.fotos where ordem_id = o.id) then avisos := array_append(avisos, 'As fotos da O.S. ficam guardadas no armazenamento (só a ligação com a O.S. some).'); end if;
     perform public.agente_registrar('alterar_os', p, 'ordens', o.id::text,
       jsonb_build_object('ordem', to_jsonb(o), 'itens', (select coalesce(jsonb_agg(to_jsonb(i)), '[]') from public.os_itens i where i.ordem_id = o.id),
                          'parcelas', (select coalesce(jsonb_agg(to_jsonb(x)), '[]') from public.receber x where x.ordem_id = o.id)),
       jsonb_build_object('excluida', true));
+    -- itens primeiro: o estorno de estoque de cada peça ainda aponta para a O.S. (chave do estoque_mov)
+    delete from public.os_itens where ordem_id = o.id;
     delete from public.ordens where id = o.id;
     return jsonb_build_object('os', o.numero, 'excluida', true, 'cliente', o.cliente->>'nome', 'placa', o.veiculo->>'placa', 'total', o.total, 'avisos', to_jsonb(avisos));
   end if;
@@ -218,6 +248,13 @@ begin
     perform public.agente_patch_os(o.id, v_patch); v_patch := '{}';
     feito := array_append(feito, 'voltou uma etapa');
     insert into public.eventos (ordem_id, tipo, texto, usuario_nome) values (o.id, 'reabertura', 'O.S. voltou uma etapa (agente, Claude).', v_quem);
+  end if;
+
+  select * into o from public.ordens where id = o.id for update;
+  if (jsonb_array_length(coalesce(p->'itens_alterar', '[]')) + jsonb_array_length(coalesce(p->'itens_remover', '[]')) + jsonb_array_length(coalesce(p->'itens_incluir', '[]')) > 0
+      or coalesce(p->'dados', '{}') ? 'desconto')
+     and (o.status = 'cancelado' or (o.status = 'entregue' and o.finalizada_em is not null)) then
+    raise exception 'A O.S. % está "%": itens e desconto não mudam. Reabra antes (acao=reabrir, na mesma chamada).', o.numero, public.agente_etapa(o);
   end if;
 
   -- ---------- trocar cliente / veículo e dados ----------
@@ -273,8 +310,20 @@ begin
       if v_prod.id is null then raise exception 'Código % não existe no estoque.', it->>'codigo'; end if;
       v_mud := v_mud || jsonb_build_object('produto_id', v_prod.id, 'codigo', v_prod.codigo::text) || case when not (it ? 'custo_unit') then jsonb_build_object('custo_unit', v_prod.custo) else '{}' end;
     end if;
+    -- peça trazida pelo cliente: sem preço nem custo (como o editor da tela e o lancar_itens_os)
+    if coalesce((v_mud->>'fornecida_cliente')::boolean, false) then v_mud := v_mud || jsonb_build_object('valor_unit', 0, 'custo_unit', 0, 'desconto', 0); end if;
     perform jsonb_populate_record(cur, v_mud); -- confere os tipos
-    v_lista := v_lista || jsonb_build_array((to_jsonb(cur) - 'atualizado_em' - 'criado_em') || v_mud);
+    v_mud := (to_jsonb(cur) - 'atualizado_em' - 'criado_em') || v_mud;
+    -- produto marcado para não vender sem estoque: confere o saldo (descontando o que este item já reservou)
+    select * into v_prod from public.produtos where id = nullif(v_mud->>'produto_id', '')::uuid for update;
+    if v_prod.id is not null and v_prod.tipo = 'produto' and v_prod.controla_estoque and not coalesce(v_prod.vender_sem_estoque, true)
+       and (v_mud->>'tipo') = 'peca' and not coalesce((v_mud->>'fornecida_cliente')::boolean, false) and (v_mud->>'aprovado') is distinct from 'false'
+       and (v_mud->>'qtd')::numeric > coalesce(v_prod.estoque_atual, 0) + coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0) then
+      raise exception '%: estoque insuficiente (% disponível) e o produto está marcado para não ser vendido sem estoque.', v_prod.descricao,
+        coalesce(v_prod.estoque_atual, 0) + coalesce((select qtd from public.estoque_reserva where item_id = cur.id and produto_id = v_prod.id), 0);
+    end if;
+    v_prod := null;
+    v_lista := v_lista || jsonb_build_array(v_mud);
   end loop;
   for k in select jsonb_array_elements_text(coalesce(p->'itens_remover', '[]')) loop
     if not exists (select 1 from public.os_itens where id = k::uuid and ordem_id = o.id) then raise exception 'Item % não é da O.S. %.', k, o.numero; end if;
@@ -349,8 +398,8 @@ begin
       v_tot := public.agente_totais_os(o.id);
       select coalesce(sum(valor), 0) into v_rec from public.recibos where ordem_id = o.id and not cancelado;
       if abs(v_soma - ((v_tot->>'total')::numeric - v_rec - coalesce((select sum(valor) from public.receber where ordem_id = o.id and status = 'aberta'), 0))) > 0.009 then
-        avisos := array_append(avisos, 'As parcelas somam ' || public.agente_reais(v_soma) || ' e o saldo sem parcela é ' ||
-          public.agente_reais((v_tot->>'total')::numeric - v_rec - coalesce((select sum(valor) from public.receber where ordem_id = o.id and status = 'aberta'), 0)) || '.');
+        raise exception 'As parcelas somam % e o saldo a combinar é %: a soma das parcelas deve ser igual ao saldo.', public.agente_reais(v_soma),
+          public.agente_reais((v_tot->>'total')::numeric - v_rec - coalesce((select sum(valor) from public.receber where ordem_id = o.id and status = 'aberta'), 0));
       end if;
       insert into public.receber (ordem_id, cliente_id, cliente_nome, descricao, forma, parcela, parcelas, valor, vencimento, obs, criado_por)
       select o.id, o.cliente_id, coalesce(o.cliente->>'nome', ''), 'O.S. ' || o.numero, coalesce(nullif(x.e->>'forma', ''), nullif(trim(p->>'forma_pagamento'), ''), 'Boleto'),
@@ -370,6 +419,8 @@ begin
     feito := array_append(feito, 'orçamento recusado');
   elsif v_acao = 'cancelar' then
     if o.status = 'cancelado' then raise exception 'A O.S. % já está cancelada.', o.numero; end if;
+    if o.status = 'entregue' then raise exception 'A O.S. % está "%": o veículo já saiu. Reabra antes (acao=reabrir) se for mesmo cancelar.', o.numero, public.agente_etapa(o); end if;
+    if public.agente_boletos_ativos(o.id) > 0 then raise exception 'A O.S. % tem boleto Sicredi em aberto no banco: peça a baixa em Boletos Sicredi antes de cancelar.', o.numero; end if;
     if coalesce(trim(p->>'motivo'), '') = '' then raise exception 'Informe o motivo do cancelamento.'; end if;
     select coalesce(sum(valor), 0) into v_rec from public.recibos where ordem_id = o.id and not cancelado;
     if v_rec > 0 then avisos := array_append(avisos, 'A O.S. tem ' || public.agente_reais(v_rec) || ' em recibos, que continuam valendo. Cancele-os com cancelar_recibo se for o caso.'); end if;
@@ -413,6 +464,7 @@ declare
   v_tab text; v_id uuid; v_antes jsonb; v_campos jsonb; v_cols text; v_novo jsonb; o public.ordens; v_n int := 0; k text; avisos text[] := '{}';
   c_proib text[] := array['id', 'codigo', 'criado_em', 'atualizado_em'];
 begin
+  perform public.agente_exige_admin();
   if v_tipo not in ('cliente', 'veiculo') then raise exception 'tipo deve ser cliente ou veiculo.'; end if;
   if v_acao not in ('criar', 'editar', 'excluir') then raise exception 'acao deve ser criar, editar ou excluir.'; end if;
   v_tab := case v_tipo when 'cliente' then 'clientes' else 'veiculos' end;
@@ -440,7 +492,7 @@ begin
         case v_tipo when 'cliente' then ' ou veículos ligados' else ' ligadas' end;
     end;
     perform public.agente_registrar('salvar_cadastro', p, v_tab, v_id::text, v_antes, jsonb_build_object('excluido', true));
-    return jsonb_build_object('tipo', v_tipo, 'excluido', true, 'cadastro', v_antes);
+    return jsonb_build_object('tipo', v_tipo, 'excluido', true, 'cadastro', jsonb_build_object('id', v_antes->'id', 'codigo', v_antes->'codigo', 'nome', v_antes->'nome', 'placa', v_antes->'placa'));
   end if;
 
   if v_campos = '{}'::jsonb then raise exception 'Informe os campos.'; end if;
@@ -467,7 +519,11 @@ begin
     if v_n > 0 then avisos := array_append(avisos, v_n || ' O.S. em aberto atualizada(s) com o cadastro novo.'); end if;
   end if;
   perform public.agente_registrar('salvar_cadastro', p, v_tab, v_novo->>'id', v_antes, v_novo);
-  return jsonb_build_object('tipo', v_tipo, 'acao', v_acao, 'cadastro', v_novo - 'ficha', 'avisos', to_jsonb(avisos));
+  -- só o essencial e o que mudou (documento, telefone e endereço não voltam ao chat sem necessidade)
+  return jsonb_build_object('tipo', v_tipo, 'acao', v_acao, 'avisos', to_jsonb(avisos),
+    'cadastro', jsonb_strip_nulls(jsonb_build_object('id', v_novo->'id', 'codigo', v_novo->'codigo', 'nome', v_novo->'nome', 'placa', v_novo->'placa',
+      'marca', v_novo->'marca', 'modelo', v_novo->'modelo')),
+    'alterado', (select coalesce(jsonb_agg(x), '[]') from jsonb_object_keys(v_campos) x));
 end $$;
 
 -- =====================================================================
@@ -486,6 +542,7 @@ declare
   f public.fornecedores; v_barras text; v_valor numeric; v_venc date; v_fator int; v_conta text; v_pago date; v_juros numeric; v_desc numeric; v_vp numeric;
   v_hoje date := public.agente_hoje(); v_n int; v_cols text; v_campos jsonb; avisos text[] := '{}'; v_cand jsonb;
 begin
+  perform public.agente_exige_admin();
   if v_acao not in ('lancar', 'pagar', 'desfazer', 'editar', 'cancelar', 'excluir') then raise exception 'acao deve ser lancar, pagar, desfazer, editar, cancelar ou excluir.'; end if;
 
   if v_acao = 'lancar' then
@@ -500,13 +557,22 @@ begin
         v_fator := substr(v_barras, 6, 4)::int;
         if v_venc is null and v_fator >= 1000 then v_venc := date '2025-02-22' + (v_fator - 1000); end if;
       end if;
+      if public.agente_linha_ok(cj->>'linha_digitavel') is false then
+        avisos := array_append(avisos, 'Conta "' || coalesce(cj->>'descricao', '') || '": os dígitos verificadores da linha não conferem — confira o código antes de pagar.');
+      end if;
       if coalesce(v_valor, 0) <= 0 then raise exception 'Conta "%": informe o valor.', coalesce(cj->>'descricao', ''); end if;
       if v_venc is null then raise exception 'Conta "%": informe o vencimento.', coalesce(cj->>'descricao', ''); end if;
       if coalesce(cj->>'fornecedor', '') <> '' then
+        -- CNPJ ou nome exato; parte do nome só se for um fornecedor só
         select * into f from public.fornecedores x
           where (length(regexp_replace(cj->>'fornecedor', '\D', '', 'g')) = 14 and regexp_replace(x.cnpj, '\D', '', 'g') = regexp_replace(cj->>'fornecedor', '\D', '', 'g'))
-             or lower(x.razao) like '%' || lower(trim(cj->>'fornecedor')) || '%' or lower(x.fantasia) like '%' || lower(trim(cj->>'fornecedor')) || '%'
-          order by (lower(x.fantasia) = lower(trim(cj->>'fornecedor')) or lower(x.razao) = lower(trim(cj->>'fornecedor'))) desc limit 1;
+             or lower(x.fantasia) = lower(trim(cj->>'fornecedor')) or lower(x.razao) = lower(trim(cj->>'fornecedor')) limit 1;
+        if f.id is null then
+          select count(*), string_agg(coalesce(nullif(x.fantasia, ''), x.razao) || ' (' || x.cnpj || ')', '; ') into v_n, v_cols from public.fornecedores x
+            where lower(x.razao) like '%' || lower(trim(cj->>'fornecedor')) || '%' or lower(x.fantasia) like '%' || lower(trim(cj->>'fornecedor')) || '%';
+          if v_n > 1 then raise exception 'Fornecedor "%" bate com %: diga o nome completo ou o CNPJ. %', cj->>'fornecedor', v_n, v_cols; end if;
+          select * into f from public.fornecedores x where lower(x.razao) like '%' || lower(trim(cj->>'fornecedor')) || '%' or lower(x.fantasia) like '%' || lower(trim(cj->>'fornecedor')) || '%' limit 1;
+        end if;
         if f.id is null then avisos := array_append(avisos, 'Fornecedor "' || (cj->>'fornecedor') || '" não está cadastrado: ficou só como favorecido.'); end if;
       end if;
       if v_barras <> '' and exists (select 1 from public.contas where codigo_barras = v_barras and status <> 'cancelada') then
@@ -578,6 +644,10 @@ begin
     return jsonb_build_object('acao', 'excluir', 'excluida', true, 'conta', jsonb_build_object('descricao', c.descricao, 'valor', c.valor, 'vencimento', c.vencimento, 'situacao', c.status));
   elsif v_acao = 'editar' then
     v_campos := public.agente_campos('contas', p->'campos', array['id', 'criado_em', 'atualizado_em', 'status', 'pago_registrado_em']);
+    -- conta paga: valores e conta de saída entram no saldo por conta (v18); mudar aqui não acertaria o saldo nem o estorno
+    if c.status = 'paga' and exists (select 1 from jsonb_object_keys(v_campos) x where x in ('valor', 'valor_pago', 'juros', 'desconto', 'conta_origem', 'pago_em')) then
+      raise exception 'A conta "%" está paga: para mudar valor, juros, desconto, data ou conta de saída, use desfazer e pague de novo.', c.descricao;
+    end if;
     if v_campos ? 'linha_digitavel' then v_campos := v_campos || jsonb_build_object('codigo_barras', public.agente_barras(v_campos->>'linha_digitavel'), 'linha_digitavel', regexp_replace(v_campos->>'linha_digitavel', '\D', '', 'g')); end if;
     if v_campos ? 'conta_origem' and coalesce(v_campos->>'conta_origem', '') <> '' then v_campos := jsonb_set(v_campos, '{conta_origem}', to_jsonb(public.agente_conta_valida(v_campos->>'conta_origem'))); end if;
     if v_campos = '{}'::jsonb then raise exception 'Informe os campos a mudar.'; end if;
@@ -601,6 +671,7 @@ create or replace function public.agente_guardar_saldos(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare atuais jsonb := public.saldos_contas(); cfg jsonb; v_lista jsonb := '[]'; v_at jsonb; c jsonb; v_nome text; v_novas jsonb; v_pag text; v_rec text;
 begin
+  perform public.agente_exige_admin();
   select dados into cfg from public.config where id = 1;
   if jsonb_typeof(p->'contas') is distinct from 'array' or jsonb_array_length(p->'contas') = 0 then raise exception 'Informe contas: [{nome, saldo}].'; end if;
   for c in select * from jsonb_array_elements(p->'contas') loop
@@ -632,6 +703,7 @@ create or replace function public.agente_transferencia(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare v_acao text := lower(coalesce(p->>'acao', 'transferir')); t public.transferencias; v_data date; v_de text; v_para text;
 begin
+  perform public.agente_exige_admin();
   if v_acao = 'excluir' then
     select * into t from public.transferencias where id = nullif(p->>'id', '')::uuid;
     if t.id is null then raise exception 'Transferência não encontrada (informe o id).'; end if;
@@ -660,6 +732,7 @@ create or replace function public.agente_recibo(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare r public.recibos; v_n int; o public.ordens;
 begin
+  perform public.agente_exige_admin();
   if coalesce(p->>'numero', '') !~ '^\s*[0-9]+\s*$' then raise exception 'Informe o número do recibo.'; end if;
   select * into r from public.recibos where numero = (p->>'numero')::int for update;
   if r.id is null then raise exception 'Recibo % não encontrado.', p->>'numero'; end if;
@@ -667,10 +740,11 @@ begin
   if exists (select 1 from public.boletos b where b.recibo_id = r.id) then
     raise exception 'O recibo % veio de um boleto pago no banco: cancele pela tela de Boletos Sicredi, se for mesmo o caso.', r.numero;
   end if;
+  select count(*) into v_n from public.receber where recibo_id = r.id and status = 'paga';
   update public.recibos set cancelado = true, cancelado_motivo = 'Cancelado pelo agente (Claude) a pedido de ' || public.agente_quem() || ' em ' || to_char(public.agente_hoje(), 'DD/MM/YYYY')
     || coalesce(': ' || nullif(trim(p->>'motivo'), ''), '') where id = r.id;
+  -- o gatilho do v12 (recibo_cancelado_reabre) já reabre; isto cobre banco sem o gatilho
   update public.receber set status = 'aberta', pago_em = null, recibo_id = null where recibo_id = r.id and status = 'paga';
-  get diagnostics v_n = row_count;
   if r.ordem_id is not null then
     insert into public.eventos (ordem_id, tipo, texto, usuario_nome) values (r.ordem_id, 'recibo', 'Recibo ' || lpad(r.numero::text, 5, '0') || ' cancelado pelo agente (Claude).', public.agente_quem());
     select * into o from public.ordens where id = r.ordem_id;
@@ -688,6 +762,7 @@ create or replace function public.agente_movimentar_estoque(p jsonb) returns jso
 language plpgsql volatile security invoker set search_path = public as $$
 declare m jsonb; pr public.produtos; v_novo numeric; v_lista jsonb := '[]'; v_tipo text;
 begin
+  perform public.agente_exige_admin();
   if jsonb_typeof(p->'movimentos') is distinct from 'array' or jsonb_array_length(p->'movimentos') = 0 then raise exception 'Informe movimentos: [{codigo, tipo, qtd}].'; end if;
   for m in select * from jsonb_array_elements(p->'movimentos') loop
     v_tipo := lower(coalesce(m->>'tipo', ''));
@@ -711,6 +786,7 @@ create or replace function public.agente_produto(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare v_acao text := lower(coalesce(p->>'acao', 'editar')); pr public.produtos; v_antes jsonb; v_novo jsonb; v_campos jsonb; v_cols text; avisos text[] := '{}'; v_usos int;
 begin
+  perform public.agente_exige_admin();
   if v_acao not in ('criar', 'editar', 'inativar', 'ativar', 'excluir') then raise exception 'acao deve ser criar, editar, inativar, ativar ou excluir.'; end if;
   v_campos := public.agente_campos('produtos', p->'campos', array['id', 'codigo', 'estoque_atual', 'criado_em', 'atualizado_em']);
   if v_acao <> 'criar' then
@@ -798,7 +874,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['agente_hoje()', 'agente_quem()', 'agente_registrar(text, jsonb, text, text, jsonb, jsonb)', 'agente_contas_nomes()', 'agente_conta_valida(text)',
-    'agente_campos(text, jsonb, text[])', 'agente_patch_os(uuid, jsonb)', 'agente_itens_gravar(uuid, jsonb, jsonb)', 'agente_totais_os(uuid)', 'agente_barras(text)',
+    'agente_campos(text, jsonb, text[])', 'agente_boletos_ativos(uuid)', 'agente_mod10(text)', 'agente_linha_ok(text)', 'agente_patch_os(uuid, jsonb)', 'agente_itens_gravar(uuid, jsonb, jsonb)', 'agente_totais_os(uuid)', 'agente_barras(text)',
     'agente_os_json(public.ordens, boolean)', 'agente_a_pagar(date)', 'agente_alterar_os(jsonb)', 'agente_salvar_cadastro(jsonb)', 'agente_conta(jsonb)',
     'agente_guardar_saldos(jsonb)', 'agente_transferencia(jsonb)', 'agente_recibo(jsonb)', 'agente_movimentar_estoque(jsonb)', 'agente_produto(jsonb)',
     'agente_fazer(text, jsonb, boolean)'] loop

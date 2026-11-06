@@ -18,10 +18,14 @@ const banco: Banco = {
   rpc(fn, args) {
     chamadas.push([fn, args]);
     if (fn === "agente_estoque" && args?.p_texto === "erro") return Promise.resolve({ data: null, error: { message: "O agente só atende o administrador." } });
+    if (fn === "agente_fazer" && args?.p_acao === "boleto_preparar") return Promise.resolve({ data: { os: 1887, cliente: "Granicap", total: 600, avisos: [],
+      boletos: [{ receber_id: "r1", descricao: "O.S. 1887", valor: 600, vencimento: "2026-12-06", boleto: { valor: 600, vencimento: "2026-12-06", pagador: { nome: "Granicap" } } }] }, error: null });
+    if (fn === "agente_fazer" && args?.p_acao === "boleto_gravar") return Promise.resolve({ data: { nosso_numero: (args.p as Record<string, unknown>).nosso_numero, pix: true }, error: null });
     if (fn === "whatsapp_enfileirar" && (args as { p_gravar?: boolean })?.p_gravar) return Promise.resolve({ data: { gravado: true, id: 7 }, error: null });
     return Promise.resolve({ data: respostas[fn] ?? { ok: fn }, error: null });
   },
   functions: { invoke(nome, op) { acordadas.push([nome, op.body]);
+    if (nome === "sicredi") return Promise.resolve({ data: { nossoNumero: "260000011", linhaDigitavel: "74891", codigoBarras: "748", qrCode: "000201x", txid: "t" }, error: null });
     if (nome === "email" && op.body?.acao === "whatsapp") return Promise.resolve({ data: { gravado: op.body.confirmar === true, texto: "Olá, João!", arquivo: { nome: "Orcamento_01887_ABC1D23.pdf", kb: 180 } }, error: null });
     return Promise.resolve({ data: { ok: true }, error: null }); } },
 };
@@ -47,9 +51,9 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
 const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente", "buscar_os", "cancelar_recibo", "consultar_estoque", "conta_pagar", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "emitir_boleto", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("34 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("35 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
 confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
@@ -184,6 +188,17 @@ for (const [nome, acao, args] of [["salvar_cadastro", "salvar_cadastro", { tipo:
   c = await chama(nome, args);
   confere(nome + " → agente_fazer('" + acao + "') prévia", c.fn === "agente_fazer" && c.args?.p_acao === acao && c.args?.p_gravar === false, JSON.stringify(c.args));
 }
+// v41: emitir_boleto — prévia não chama o Sicredi; confirmado: preparar → sicredi emitir → gravar
+acordadas.length = 0;
+c = await chama("emitir_boleto", { numero: 1887, vencimento: "2026-12-06", valor: 600 });
+confere("emitir_boleto sem confirmar: prévia sem chamar o Sicredi", c.fn === "agente_fazer" && c.args?.p_gravar === false && acordadas.length === 0
+  && !/"boleto"/.test(c.r?.content?.[0]?.text || ""), c.r?.content?.[0]?.text);
+chamadas.length = 0; acordadas.length = 0;
+const rb = await rpc("tools/call", { name: "emitir_boleto", arguments: { numero: 1887, vencimento: "2026-12-06", valor: 600, confirmar: true } }, 8);
+confere("emitir_boleto confirmado: registra no Sicredi e grava o nosso número", (acordadas[0] as [string, Record<string, unknown>])?.[0] === "sicredi"
+  && ((acordadas[0] as [string, Record<string, unknown>])[1].acao === "emitir") && chamadas[1]?.[1]?.p_acao === "boleto_gravar"
+  && ((chamadas[1]?.[1]?.p as Record<string, unknown>)?.nosso_numero === "260000011") && !rb.corpo.result?.isError, JSON.stringify(chamadas));
+
 confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));
 
 console.log(ok.map((x) => "OK " + x).join("\n"));

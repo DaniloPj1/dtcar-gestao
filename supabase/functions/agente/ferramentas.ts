@@ -32,7 +32,8 @@ Responda ao Danilo em português do Brasil, curto e direto.
   Nunca invente forma de pagamento: se ele não disse, pergunte. Conta e valor: os da prévia, salvo se ele disser outros.
 - Regra do Danilo (06/11/2026): você faz no sistema tudo o que ele pedir, inclusive apagar (fica no histórico).
   O.S., cadastros e estoque (alterar_os, salvar_cadastro, movimentar_estoque, produto): ordem clara → confirmar=true direto; com dúvida, prévia.
-  Dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo): SEMPRE prévia primeiro e grave só depois do "sim".
+  Dinheiro (receber_os, conta_pagar, atualizar_saldos, transferir, cancelar_recibo, emitir_boleto): SEMPRE prévia primeiro e grave só depois do "sim".
+  emitir_boleto registra no Sicredi de verdade (aparece no DDA do cliente).
   "Receber e fechar" com o carro no pátio: receber_os (sinal) + alterar_os acao=entregar — a O.S. fecha sozinha quando quita.
   Nunca pague, transfira ou aceite nada no banco: conta_pagar só registra o que o Danilo já pagou.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
@@ -356,6 +357,47 @@ export function criarServidor(db: Banco): McpServer {
     }),
     annotations: GRAVA,
   }, async ({ confirmar: c, ...p }) => fazer("produto", { ...p, ...(p.codigo !== undefined ? { codigo: String(p.codigo) } : {}) }, c === true));
+
+  // ---------- Boleto Sicredi pelo conector (v41 + função "sicredi") ----------
+  s.registerTool("emitir_boleto", {
+    title: "Emitir boleto Sicredi (registra no banco)",
+    description: "Emite boleto híbrido (boleto + Pix) pela API do Sicredi para as parcelas em aberto de uma O.S. (sem boleto ainda). " +
+      "Sem parcela: informe vencimento (e valor; padrão = saldo sem parcela) e a parcela \"Boleto\" é criada. parcela=N escolhe uma só. nf = nº da NF (vai na referência do boleto). " +
+      "O cadastro do cliente precisa de CPF/CNPJ, rua, CEP, cidade e UF (a prévia diz o que falta). Só parcelas criadas a partir de 04/11/2026 (as antigas têm boleto PicPay). " +
+      "REGISTRA NO BANCO e aparece no DDA do cliente: SEMPRE confirmar=false primeiro, mostre O.S., cliente, valores e vencimentos, e só emita depois do sim do Danilo. " +
+      "Para mandar ao cliente: whatsapp_enviar com modelo cobranca e anexo {fonte:\"boleto\"}, ou email_enviar com anexo boleto.",
+    inputSchema: z.object({
+      numero: z.number().int().positive().describe("Número da O.S."),
+      parcela: z.number().int().positive().optional(), vencimento: data.optional(), valor: z.number().positive().optional(),
+      nf: z.string().optional().describe("Nº da NF emitida no ObjetivaWeb, se houver"), pedido, confirmar,
+    }),
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: true },
+  }, async ({ confirmar: c, ...p }) => {
+    const prep = await db.rpc("agente_fazer", { p_acao: "boleto_preparar", p: JSON.parse(JSON.stringify(p)), p_gravar: c === true });
+    if (prep.error) return falha(/boleto_preparar|Ação desconhecida/i.test(prep.error.message) ? "A emissão de boleto pelo conector ainda não foi ligada (falta rodar o supabase/v41.sql)." : prep.error.message);
+    const r = prep.data as { boletos: Array<Record<string, unknown>>; avisos?: string[] } & Record<string, unknown>;
+    if (c !== true) return texto({ ...r, boletos: r.boletos.map(({ boleto: _b, pagador: _p, ...x }) => x), previa: true, gravado: false });
+    if (!db.functions) return falha("Conector sem acesso às funções do Supabase.");
+    const log: Array<Record<string, unknown>> = [];
+    for (const b of r.boletos) {
+      // deno-lint-ignore no-explicit-any
+      const { data: reg, error } = (await db.functions.invoke("sicredi", { body: { acao: "emitir", ambiente: "producao", boleto: b.boleto } })) as { data?: any; error?: any };
+      let erroBanco = error ? String(error.message || "Falha no Sicredi.") : reg?.erro ? String(reg.erro) : "";
+      if (error) { try { const j = await error.context?.json(); if (j?.erro) erroBanco = j.erro; } catch (_) { /* mensagem genérica */ } }
+      if (erroBanco) { log.push({ parcela: b.descricao, valor: b.valor, emitido: false, erro: erroBanco }); break; }
+      const { boleto: _b, ...dados } = b;
+      const g = await db.rpc("agente_fazer", { p_acao: "boleto_gravar", p: { ...dados, pedido: p.pedido, nosso_numero: String(reg.nossoNumero || ""), codigo_barras: reg.codigoBarras || "",
+        linha_digitavel: reg.linhaDigitavel || "", qr_code: reg.qrCode || "", txid: reg.txid || "" }, p_gravar: true });
+      if (g.error) {
+        log.push({ parcela: b.descricao, valor: b.valor, emitido: true, gravado: false,
+          erro: "REGISTRADO NO BANCO, mas não foi gravado no sistema (" + g.error.message + "). Anote: nosso número " + reg.nossoNumero + ", linha " + reg.linhaDigitavel + "." });
+        break;
+      }
+      log.push({ parcela: b.descricao, emitido: true, ...(g.data as Record<string, unknown>) });
+    }
+    const falhou = log.some((x) => x.erro);
+    return { ...texto({ os: r.os, cliente: r.cliente, boletos: log, avisos: r.avisos, abrir_no_sistema: SITE + "/#/boletos" }), ...(falhou ? { isError: true } : {}) };
+  });
 
   // ---------- Pedidos de compra por fornecedor (v31) ----------
   s.registerTool("registrar_pre_nota", {

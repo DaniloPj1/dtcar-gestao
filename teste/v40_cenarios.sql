@@ -46,6 +46,14 @@ begin
   r := public.agente_fazer('alterar_os', jsonb_build_object('numero', 1, 'itens_alterar', jsonb_build_array(jsonb_build_object('id', v_id, 'qtd', 3))), true);
   perform pg_temp.ok((select total from public.ordens where numero = 1) = 500, 'qtd 3: total 500');
   perform pg_temp.ok((select estoque_atual from public.produtos where codigo = 100) = 7, 'estoque 7');
+  -- produto que não pode ser vendido sem estoque: não passa do disponível (7 + 3 já reservados = 10)
+  update public.produtos set vender_sem_estoque = false where codigo = 100;
+  perform pg_temp.erro(format($c$select public.agente_fazer('alterar_os', '{"numero": 1, "itens_alterar": [{"id": "%s", "qtd": 11}]}', true)$c$, v_id), 'estoque insuficiente');
+  r := public.agente_fazer('alterar_os', jsonb_build_object('numero', 1, 'itens_alterar', jsonb_build_array(jsonb_build_object('id', v_id, 'qtd', 10))), false);
+  update public.produtos set vender_sem_estoque = true where codigo = 100;
+  -- marcar como peça do cliente zera o preço (prévia)
+  r := public.agente_fazer('alterar_os', jsonb_build_object('numero', 1, 'itens_alterar', jsonb_build_array(jsonb_build_object('id', v_id, 'peca_do_cliente', true))), false);
+  perform pg_temp.ok((r->>'total')::numeric = 200, 'peça do cliente sai do total: ' || (r->>'total'));
 
   -- 4. remover o serviço; 5. incluir outro (entra aprovado)
   select id into v_id from public.os_itens where ordem_id = o.id and tipo = 'servico';
@@ -70,6 +78,7 @@ begin
 
   -- 9. entregar a prazo (parcela) ; 10. receber o resto fecha
   perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "acao": "entregar", "km_saida": 900}', true)$c$, 'não pode ser menor');
+  perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "acao": "entregar", "km_saida": 1300, "parcelas": [{"valor": 500, "vencimento": "2026-12-01"}]}', true)$c$, 'deve ser igual ao saldo');
   r := public.agente_fazer('alterar_os', '{"numero": 1, "acao": "entregar", "km_saida": 1300, "parcelas": [{"valor": 350, "vencimento": "2026-12-01"}]}', true);
   select * into o from public.ordens where numero = 1;
   perform pg_temp.ok(o.status = 'entregue' and o.km_saida = 1300 and o.finalizada_em is null, 'entregue a receber');
@@ -78,6 +87,9 @@ begin
   r := public.agente_receber_os('{"numero": 1, "forma": "Dinheiro"}', true);
   perform pg_temp.ok((select finalizada_em from public.ordens where numero = 1) is not null and r->>'conta_entrada' = 'Espécie', 'quitou e fechou (dinheiro → Espécie)');
 
+  -- O.S. fechada: itens e desconto não mudam; cancelar recusado
+  perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "dados": {"desconto": 50}}', true)$c$, 'não mudam');
+  perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "acao": "cancelar", "motivo": "x"}', true)$c$, 'já saiu');
   -- 11. reabrir; 12. cancelar recibo reabre a parcela
   r := public.agente_fazer('alterar_os', '{"numero": 1, "acao": "reabrir"}', true);
   perform pg_temp.ok((select status from public.ordens where numero = 1) = 'pronto', 'reaberta para o pátio');
@@ -85,6 +97,10 @@ begin
   perform pg_temp.ok((r->>'parcelas_reabertas')::int = 1 and (select status from public.receber where ordem_id = o.id and valor = 350) = 'aberta', 'recibo cancelado, parcela em aberto');
   perform pg_temp.ok((select recebido from public.ordens where numero = 1) = 100, 'recebido volta a 100');
 
+  -- boleto em aberto impede cancelar
+  insert into public.boletos (ordem_id, situacao) values (o.id, 'registrado');
+  perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "acao": "cancelar", "motivo": "x"}', true)$c$, 'boleto Sicredi');
+  delete from public.boletos;
   -- 13. cancelar O.S. devolve o estoque e cancela parcelas
   perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 1, "acao": "cancelar"}', true)$c$, 'motivo');
   r := public.agente_fazer('alterar_os', '{"numero": 1, "acao": "cancelar", "motivo": "Cliente desistiu"}', true);
@@ -116,6 +132,11 @@ begin
   perform pg_temp.ok((select status from public.ordens where numero = 2) = 'diagnostico', 'recusada reaberta');
   perform pg_temp.erro($c$select public.agente_fazer('alterar_os', '{"numero": 2, "acao": "voar"}', true)$c$, 'não existe');
 end $$;
+-- excluir O.S. com peça reservada no estoque (estorno aponta para a O.S.)
+insert into public.ordens (id, numero, status, cliente_id, cliente, veiculo) values ('00000000-0000-0000-0000-000000000003', 3, 'diagnostico', '00000000-0000-0000-0000-0000000000c1', '{"nome": "Ana"}', '{}');
+select null from public.agente_lancar_itens_os('{"numero": 3, "itens": [{"tipo": "peca", "descricao": "Pastilha", "codigo": "100", "qtd": 2, "valor_unit": 100}]}', true);
+select null from public.agente_fazer('alterar_os', '{"numero": 3, "acao": "excluir"}', true);
+select null from pg_temp.ok(not exists (select 1 from public.ordens where numero = 3) and (select estoque_atual from public.produtos where codigo = 100) = 10, 'excluída com a peça de volta ao estoque');
 select 'ok: O.S.' as cenario;
 
 -- ---------- cadastros ----------
@@ -125,6 +146,7 @@ begin
   r := public.agente_fazer('salvar_cadastro', '{"tipo": "cliente", "codigo": 2, "campos": {"telefone": "(27) 98888-1111", "nome": "Bruno Lima Filho"}}', true);
   perform pg_temp.ok((select telefone from public.clientes where codigo = 2) = '27988881111', 'telefone só números');
   perform pg_temp.ok((select cliente->>'nome' from public.ordens where numero = 2) = 'Bruno Lima Filho', 'cópia na O.S. aberta');
+  perform pg_temp.ok(not (r->'cadastro' ? 'telefone') and r->'alterado' ? 'telefone', 'resposta sem o telefone, com o que mudou');
   r := public.agente_fazer('salvar_cadastro', '{"tipo": "veiculo", "acao": "criar", "campos": {"placa": "qwe-1a23", "marca": "Ford", "modelo": "Ka", "cliente_id": "00000000-0000-0000-0000-0000000000c1"}}', true);
   perform pg_temp.ok(exists (select 1 from public.veiculos where placa = 'QWE1A23'), 'veículo criado');
   perform pg_temp.erro($c$select public.agente_fazer('salvar_cadastro', '{"tipo": "cliente", "acao": "excluir", "codigo": 2}', true)$c$, 'Não dá para excluir');
@@ -145,6 +167,9 @@ begin
   perform pg_temp.ok((select valor from public.contas where id = v_id) = 123.45 and (select vencimento from public.contas where id = v_id) = '2026-11-20', 'valor e vencimento do boleto');
   perform pg_temp.ok((select fornecedor_id is not null and favorecido = 'DPK' and origem = 'boleto' from public.contas where id = v_id), 'fornecedor achado');
   perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "lancar", "contas": [{"descricao": "de novo", "linha_digitavel": "74891111112222222222233333333333416360000012345"}]}', true)$c$, 'já está lançado');
+  insert into public.fornecedores (cnpj, razao, fantasia) values ('11111111000111', 'Auto Peças Um', 'AUTO UM'), ('22222222000122', 'Auto Peças Dois', 'AUTO DOIS');
+  perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "lancar", "contas": [{"descricao": "x", "valor": 1, "vencimento": "2026-12-01", "fornecedor": "auto"}]}', false)$c$, 'bate com 3');
+  perform pg_temp.ok(r->'avisos'->>0 like '%dígitos verificadores%', 'linha com dígito errado avisa');
   r := public.agente_fazer('conta_pagar', '{"acao": "lancar", "contas": [{"descricao": "Energia", "valor": 691.64, "vencimento": "2026-11-09"}, {"descricao": "Energia dezembro", "valor": 700, "vencimento": "2026-12-09"}]}', true);
   -- busca ambígua
   perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "pagar", "busca": "energia"}', false)$c$, 'Achei 2 contas');
@@ -156,6 +181,7 @@ begin
   perform pg_temp.ok((select status = 'paga' and juros = 8.36 and valor_pago = 700 and conta_origem = 'PicPay PJ' from public.contas where descricao = 'Energia'), 'paga com juros pelo PicPay');
   perform pg_temp.ok((select (x->>'atual')::numeric from jsonb_array_elements(public.saldos_contas()) x where x->>'nome' = 'PicPay PJ') = s - 700, 'saldo do PicPay caiu 700');
   perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "pagar", "busca": "Boleto DPK", "conta_origem": "Itaú"}', true)$c$, 'não existe');
+  perform pg_temp.erro($c$select public.agente_fazer('conta_pagar', '{"acao": "editar", "busca": "Energia", "vencimento": "2026-11-09", "campos": {"valor_pago": 800}}', true)$c$, 'desfazer e pague de novo');
   r := public.agente_fazer('conta_pagar', '{"acao": "desfazer", "busca": "Energia", "vencimento": "2026-11-09"}', true);
   perform pg_temp.ok((select status from public.contas where descricao = 'Energia') = 'aberta', 'pagamento desfeito');
   r := public.agente_fazer('conta_pagar', jsonb_build_object('acao', 'editar', 'id', v_id, 'campos', jsonb_build_object('categoria', 'Fornecedores de peças')), true);

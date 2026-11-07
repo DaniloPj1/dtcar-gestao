@@ -448,7 +448,10 @@ function criarApiSupabase() {
     criarOrdem: async dados => ok(await sb.from("ordens").insert(dados).select("id,numero").single()),
     // devolvem as linhas gravadas (o programa copia para o banco do PC na hora: base certa para conferir conflitos depois)
     atualizarOrdem: async (id, patch) => ok(await sb.from("ordens").update(patch).eq("id", id).select()),
-    excluirOrdem: async id => ok(await sb.from("ordens").delete().eq("id", id)),
+    /** v44: itens e O.S. numa transação (O.S. com peça do estoque); sem o v44, o caminho antigo */
+    excluirOrdem: async id => { const r = await sb.rpc("excluir_ordem", { p_id: id });
+      if (r.error && /excluir_ordem|schema cache|PGRST202|404/i.test(r.error.message || "")) return ok(await sb.from("ordens").delete().eq("id", id));
+      return ok(r); },
     salvarItens: async (ordemId, itens, removidos) => {
       if (removidos && removidos.length) ok(await sb.from("os_itens").delete().in("id", removidos));
       return itens.length ? ok(await sb.from("os_itens").upsert(itens.map((i, n) => ({ ...Object.fromEntries(Object.entries(i).filter(([k]) => !k.startsWith("_"))), ordem_id: ordemId, posicao: i.posicao ?? n }))).select()) : [];

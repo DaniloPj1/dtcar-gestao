@@ -336,10 +336,12 @@ export function Financeiro({ params = {} }) {
   const limpar = () => muda({ q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "" });
   const intervalo = () => { const per = PERIODOS.find(x => x[0] === f.periodo); return per && per[2] ? per[2]() : [f.de || hojeISO().slice(0, 7) + "-01", f.ate || hojeISO()]; };
   const [de, ate] = intervalo();
-  const carregar = () => {
+  const carregar = () => { (async () => {
+    // despesa fixa que entra nos 30 dias é lançada antes das duas leituras (senão a consulta do período ficaria sem ela)
+    if (api.contas.gerarFixas) await api.contas.gerarFixas().catch(() => {});
     api.contas.abertas().then(setAbertas).catch(e => { setErro(e.message); setAbertas([]); });
     if (aba === "consulta") { setConsulta(null); api.contas.listar({ de, ate, campo: f.campo }).then(setConsulta).catch(e => { setErro(e.message); setConsulta([]); }); }
-  };
+  })(); };
   useEffect(carregar, [aba, de, ate, f.campo]);
   const hoje = hojeISO();
   const fav = c => nomeFavorecido(c, dados.fornecedores);

@@ -13,6 +13,19 @@ const DIA = 86400000;
 const dias = (a, b) => Math.round((new Date(a + "T12:00:00") - new Date(b + "T12:00:00")) / DIA);
 export const somaMes = (iso, n) => { const [a, m, d] = iso.split("-").map(Number); const ult = new Date(a, m - 1 + n + 1, 0).getDate(); const x = new Date(a, m - 1 + n, Math.min(d, ult));
   return x.getFullYear() + "-" + String(x.getMonth() + 1).padStart(2, "0") + "-" + String(x.getDate()).padStart(2, "0"); };
+/** mesmo dia do mês seguinte (dia 31 em mês curto vira o último dia), como mes_seguinte() do v43 */
+export const mesSeguinte = (iso, dia) => { let [a, m] = iso.split("-").map(Number); m += 1; if (m > 12) { m = 1; a += 1; }
+  const ult = new Date(a, m, 0).getDate(); return a + "-" + String(m).padStart(2, "0") + "-" + String(Math.min(dia, ult)).padStart(2, "0"); };
+/** Despesas fixas (v43) projetadas até "ate", sem gravar: para a previsão de caixa dos meses seguintes.
+ *  Modelo = conta mais recente de cada grupo fixo; a primeira dá o dia do mês. */
+export function projetarFixas(fixas, ate) {
+  const g = new Map(); for (const c of fixas || []) { if (!c.grupo) continue; const l = g.get(c.grupo) || []; l.push(c); g.set(c.grupo, l); }
+  const out = [];
+  for (const [grupo, l] of g) { l.sort((x, y) => x.vencimento.localeCompare(y.vencimento)); const dia = +l[0].vencimento.slice(8, 10), m = l[l.length - 1];
+    for (let v = mesSeguinte(m.vencimento, dia), i = 0; v <= ate && i < 36; v = mesSeguinte(v, dia), i++)
+      out.push({ ...m, id: "proj-" + grupo + "-" + v, vencimento: v, status: "aberta", projetada: true, pago_em: null, valor_pago: null }); }
+  return out;
+}
 export const nomeFavorecido = (c, forns) => { const f = c.fornecedor_id && forns.find(x => x.id === c.fornecedor_id); return f ? (f.fantasia || f.razao) : (c.favorecido || c.descricao || "—"); };
 export function situacao(c, hoje = hojeISO()) {
   if (c.status === "paga") return { t: "Paga em " + fmtData(c.pago_em), cor: "ok", g: "paga" };
@@ -117,7 +130,7 @@ export function ContaForm({ inicial = {}, lerAoAbrir, onFechar, onSalvo }) {
     if (!c.descricao.trim()) return "Informe a descrição.";
     if (!(Number(c.valor) > 0)) return "Informe o valor.";
     if (!c.vencimento) return "Informe o vencimento.";
-    if (repetir !== "nao" && !(vezes >= 2 && vezes <= 60)) return "Informe de 2 a 60 vezes.";
+    if (repetir === "parcelar" && !(vezes >= 2 && vezes <= 60)) return "Informe de 2 a 60 vezes.";
     return "";
   };
   const salvar = async () => {
@@ -129,6 +142,11 @@ export function ContaForm({ inicial = {}, lerAoAbrir, onFechar, onSalvo }) {
       if (arq && anexar && !anexo) { const ext = (arq.name.split(".").pop() || "pdf").toLowerCase(); anexo = await api.enviarArquivo("contas/" + uuid() + "." + ext, arq, arq.type || "application/pdf"); }
       const base = { descricao: c.descricao.trim(), fornecedor_id: c.fornecedor_id || null, favorecido: c.favorecido || "", categoria: c.categoria || "", documento: c.documento || "", valor: arred(c.valor),
         emissao: c.emissao || null, vencimento: c.vencimento, linha_digitavel: bol ? bol.linha_digitavel : soDig(c.linha_digitavel), codigo_barras: bol ? bol.codigo_barras : "", obs: c.obs || "", anexo, origem: c.origem || "manual" };
+      // despesa fixa (v43): lança só a primeira; as próximas entram sozinhas, uma por mês, quando faltarem 30 dias
+      if (!c.id && repetir === "mensal") { const r = await api.contas.salvar({ ...base, origem: "recorrente" });
+        try { await api.contas.tornarFixa(r.id); avisar("Despesa fixa lançada: a próxima aparece sozinha 30 dias antes de vencer."); }
+        catch (e) { avisar("Conta lançada, mas não virou fixa: " + e.message, true); }
+        onSalvo(r); return; }
       if (c.id || repetir === "nao") { const r = await api.contas.salvar(c.id ? { id: c.id, ...base } : base); avisar(c.id ? "Conta atualizada." : "Conta lançada."); onSalvo(r); return; }
       const grupo = uuid(), n = Math.round(vezes);
       const parc = repetir === "parcelar" ? Array.from({ length: n }, (_, i) => i < n - 1 ? arred(base.valor / n) : arred(base.valor - arred(base.valor / n) * (n - 1))) : Array(n).fill(base.valor);
@@ -160,9 +178,10 @@ export function ContaForm({ inicial = {}, lerAoAbrir, onFechar, onSalvo }) {
       <${Campo} id="ct-doc" rotulo="Nº do documento"><${Texto} id="ct-doc" placeholder="NF, fatura, contrato" valor=${c.documento} onMuda=${v => set({ documento: v })} /></${Campo}>
       <${Campo} id="ct-emi" rotulo="Emissão"><input id="ct-emi" type="date" class="inp" value=${c.emissao || ""} onInput=${e => set({ emissao: e.target.value })} /></${Campo}>
     </div>
-    ${!c.id ? html`<div class="campo"><label>Repetir</label><${Seg} rotulo="Repetir" opcoes=${[["Não", "info"], ["Parcelar o valor", "info"], ["Todo mês", "info"]]} valor=${{ nao: "Não", parcelar: "Parcelar o valor", mensal: "Todo mês" }[repetir]}
-        onEscolha=${v => setRepetir({ "Não": "nao", "Parcelar o valor": "parcelar", "Todo mês": "mensal" }[v])} />
-      ${repetir !== "nao" ? html`<div class="grade"><${Campo} id="ct-vezes" rotulo=${repetir === "parcelar" ? "Número de parcelas" : "Quantos meses"}><input id="ct-vezes" class="inp inp-curto" inputmode="numeric" value=${vezes} onInput=${e => setVezes(parseInt(e.target.value) || 0)} /></${Campo}>
+    ${!c.id ? html`<div class="campo"><label>Repetir</label><${Seg} rotulo="Repetir" opcoes=${[["Não", "info"], ["Parcelar o valor", "info"], ["Todo mês (fixa)", "info"]]} valor=${{ nao: "Não", parcelar: "Parcelar o valor", mensal: "Todo mês (fixa)" }[repetir]}
+        onEscolha=${v => setRepetir({ "Não": "nao", "Parcelar o valor": "parcelar", "Todo mês (fixa)": "mensal" }[v])} />
+      ${repetir === "mensal" ? html`<span class="dica">Despesa fixa (aluguel, internet, contador): lança só esta conta. A do mês seguinte aparece sozinha 30 dias antes de vencer, com o valor da última (para reajustar, altere o valor da mais recente).</span>` : null}
+      ${repetir === "parcelar" ? html`<div class="grade"><${Campo} id="ct-vezes" rotulo=${repetir === "parcelar" ? "Número de parcelas" : "Quantos meses"}><input id="ct-vezes" class="inp inp-curto" inputmode="numeric" value=${vezes} onInput=${e => setVezes(parseInt(e.target.value) || 0)} /></${Campo}>
         <span class="dica">${repetir === "parcelar" ? `${vezes} parcelas de cerca de ${reais((Number(c.valor) || 0) / (vezes || 1))}, uma por mês a partir do vencimento.` : `${vezes} contas de ${reais(c.valor)}, uma por mês a partir do vencimento (aluguel, energia, internet).`}</span></div>` : null}</div>` : null}
     <${Campo} id="ct-obs" rotulo="Observação"><${Area} id="ct-obs" style=${{ minHeight: "56px" }} valor=${c.obs} onMuda=${v => set({ obs: v })} /></${Campo}>
     ${c.anexo ? html`<${LinkAnexo} caminho=${c.anexo} />` : null}
@@ -239,6 +258,7 @@ function ContaDetalhe({ conta, onFechar, onMudou }) {
       ${conta.status === "paga" ? html`<div><span>Valor pago</span><b>${reais(conta.valor_pago)}${Number(conta.juros) ? " (juros " + reais(conta.juros) + ")" : ""}${Number(conta.desconto) ? " (desc. " + reais(conta.desconto) + ")" : ""}</b></div>
         <div><span>Pago com</span><b>${conta.forma_pagamento || "—"}</b></div>
         <div><span>Saiu da conta</span><b>${conta.conta_origem || "não informada"}</b></div>` : null}
+      ${conta.fixa ? html`<div><span>Despesa fixa</span><b>todo mês, lançada 30 dias antes de vencer</b></div>` : null}
       <div><span>Lançada por</span><b>${conta.criado_por || "—"} · ${{ manual: "manual", boleto: "leitura do boleto", nfe: "duplicata da NF-e", os: "serviço de terceiro na O.S.", recorrente: "conta mensal", parcelado: "parcelamento" }[conta.origem] || conta.origem}</b></div>
     </div>
     ${conta.linha_digitavel && conta.status === "aberta" ? html`<${CopiarCodigo} conta=${conta} />` : null}
@@ -247,6 +267,9 @@ function ContaDetalhe({ conta, onFechar, onMudou }) {
     <div class="acoes">
       ${conta.status !== "cancelada" ? html`<button type="button" class="btn-link perigo" onClick=${async () => { if (await confirmar({ titulo: "Cancelar conta", texto: "A conta deixa de contar como dívida, mas continua no histórico.", botao: "Cancelar conta", perigo: true })) acao(() => api.contas.salvar({ id: conta.id, status: "cancelada" }), "Conta cancelada."); }}>Cancelar conta</button>`
         : html`<button type="button" class="btn-link perigo" onClick=${async () => { if (await confirmar({ titulo: "Excluir conta", texto: "A conta some de vez, inclusive dos relatórios.", botao: "Excluir", perigo: true })) acao(() => api.contas.excluir(conta.id), "Conta excluída."); }}>Excluir</button>`}
+      ${conta.fixa && conta.grupo ? html`<button type="button" class="btn-link" onClick=${async () => { if (await confirmar({ titulo: "Encerrar despesa fixa", texto: "Para de lançar " + conta.descricao + " todo mês. As contas já lançadas continuam como estão.", botao: "Encerrar" })) acao(() => api.contas.encerrarFixa(conta.grupo), "Despesa fixa encerrada."); }}>Encerrar despesa fixa</button>`
+        : conta.status !== "cancelada" && conta.origem !== "parcelado" && conta.origem !== "nfe" && api.contas.tornarFixa ? html`<button type="button" class="btn-link" onClick=${async () => { if (await confirmar({ titulo: "Tornar despesa fixa", texto: conta.descricao + " passa a ser lançada todo mês, sem fim, mostrando só a que vence em até 30 dias." + (conta.grupo ? " As próximas desta sequência que vencem depois de 30 dias são canceladas (continuam no histórico) e voltam uma por mês." : ""), botao: "Tornar fixa" }))
+          acao(() => api.contas.tornarFixa(conta.id), "Agora é despesa fixa: as próximas aparecem uma por mês, 30 dias antes de vencer."); }}>Tornar despesa fixa</button>` : null}
       <span class="espaco"></span>
       ${conta.status === "paga" ? html`<button type="button" class="btn" onClick=${async () => { if (await confirmar({ titulo: "Desfazer pagamento", texto: "A conta volta a ficar em aberto.", botao: "Desfazer" })) acao(() => api.contas.salvar({ id: conta.id, status: "aberta", pago_em: null, valor_pago: null, juros: 0, desconto: 0, ...(conta.conta_origem !== undefined ? { conta_origem: "" } : {}) }), "Pagamento desfeito."); }}>Desfazer pagamento</button>` : null}
       ${conta.status === "cancelada" ? html`<button type="button" class="btn" onClick=${() => acao(() => api.contas.salvar({ id: conta.id, status: "aberta" }), "Conta reaberta.")}>Reabrir</button>` : null}
@@ -353,7 +376,7 @@ export function Financeiro({ params = {} }) {
   const linha = c => { const s = situacao(c, hoje); const d = new Date(c.vencimento + "T12:00:00");
     return html`<button type="button" key=${c.id} class=${"linha conta-linha s-" + s.g} onClick=${() => setDet(c)}>
       <span class="data-bloco"><b>${String(d.getDate()).padStart(2, "0")}</b><small>${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small></span>
-      <span class="meio"><strong>${fav(c)}</strong><span>${[c.descricao !== fav(c) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.codigo_barras ? "boleto" : "", c.forma_pagamento && c.status === "paga" ? c.forma_pagamento : "", c.conta_origem && c.status === "paga" ? "saiu de " + c.conta_origem : ""].filter(Boolean).join(" · ")}</span></span>
+      <span class="meio"><strong>${fav(c)}</strong><span>${[c.descricao !== fav(c) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.fixa ? "fixa" : "", c.codigo_barras ? "boleto" : "", c.forma_pagamento && c.status === "paga" ? c.forma_pagamento : "", c.conta_origem && c.status === "paga" ? "saiu de " + c.conta_origem : ""].filter(Boolean).join(" · ")}</span></span>
       <span class="dir"><b class=${c.status === "cancelada" ? "riscado" : ""}>${reais(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)}</b><span class=${"pill p-" + s.cor}>${s.t}</span></span></button>`; };
   const sel = (k, rot, ops, rotulos) => html`<label class="filtro"><span>${rot}</span><select class="inp" value=${f[k]} onChange=${e => muda({ [k]: e.target.value })}><option value="">Todos</option>${ops.map(x => html`<option value=${x}>${rotulos ? rotulos[x] || x : x}</option>`)}</select></label>`;
   const carregando = aba === "abertas" ? !abertas : !consulta;

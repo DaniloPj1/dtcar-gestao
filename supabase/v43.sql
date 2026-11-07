@@ -38,7 +38,9 @@ begin
   select nome into v_nome from public.perfis where id = auth.uid();
   -- modelo de cada despesa fixa: a conta mais recente não cancelada do grupo; se todas foram canceladas uma a uma,
   -- a mais recente delas (cancelar cobranças não encerra a despesa: para isso há "Encerrar despesa fixa")
+  -- (as substituídas na conversão nunca servem de modelo)
   for m in select distinct on (grupo) * from public.contas where fixa and grupo is not null
+             and (status <> 'cancelada' or obs not like '%Substituída pela despesa fixa%')
            order by grupo, (status <> 'cancelada') desc, vencimento desc, criado_em desc loop
     -- dia do mês da primeira conta do grupo, mesmo cancelada (começou dia 31: fevereiro vai no dia 28, março volta para 31;
     -- cancelar uma cobrança não muda o calendário da despesa)

@@ -69,8 +69,11 @@ begin
   if c.grupo is null then update public.contas set grupo = g where id = c.id; end if;
   -- só a sequência mensal (ou a conta avulsa) vira fixa; parcelamento de compra não
   if c.origem = 'parcelado' then raise exception 'Conta parcelada não vira despesa fixa.'; end if;
+  -- ficam só as que vencem em até 30 dias, qualquer que seja a conta escolhida; se nenhuma vence nesse prazo,
+  -- fica a mais próxima (é o modelo das próximas)
   update public.contas set status = 'cancelada', obs = trim(obs || ' Substituída pela despesa fixa (lançada um mês por vez).')
-    where grupo = g and status = 'aberta' and vencimento > greatest(c.vencimento, current_date + 30);
+    where grupo = g and status = 'aberta' and vencimento > current_date + 30
+      and id <> (select x.id from public.contas x where x.grupo = g and x.status = 'aberta' order by x.vencimento, x.id limit 1);
   get diagnostics v_canc = row_count;
   update public.contas set fixa = true, origem = case when origem = 'manual' then 'recorrente' else origem end, parcela = null, parcelas = null
     where grupo = g and status <> 'cancelada';

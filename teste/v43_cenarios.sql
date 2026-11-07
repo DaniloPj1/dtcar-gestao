@@ -27,9 +27,15 @@ begin
   -- 5. encerrar: para de lançar
   perform public.encerrar_despesa_fixa(g);
   assert public.gerar_despesas_fixas(400) = 0, '5 encerrada';
+  -- 5b. escolhendo a ÚLTIMA da sequência, também ficam só as de até 30 dias (Codex, 07/11)
+  insert into public.contas (descricao, categoria, valor, vencimento, parcela, parcelas, grupo, origem)
+  select 'Internet', 'Fixa', 100, (d0 + make_interval(months => k))::date, k + 1, 12, '00000000-0000-0000-0000-0000000000f2', 'recorrente' from generate_series(0, 11) k;
+  r := public.tornar_despesa_fixa((select id from public.contas where descricao = 'Internet' order by vencimento desc limit 1));
+  assert (select bool_and(vencimento <= hoje + 30) from public.contas where descricao = 'Internet' and status = 'aberta')
+     and (select count(*) from public.contas where descricao = 'Internet' and status = 'aberta') between 1 and 2, '5b só até 30 dias: ' || r::text;
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (6 cenários)';
+  raise notice 'OK: v43 (7 cenários)';
 end $$;

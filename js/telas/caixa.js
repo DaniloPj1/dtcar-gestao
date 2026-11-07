@@ -111,6 +111,8 @@ export function PrevisaoCaixa() {
   useEffect(() => { (async () => {
     setD(null); setErro("");
     try {
+      // despesa fixa que acabou de entrar nos 30 dias é lançada antes de ler as contas do mês (senão ficaria fora da previsão)
+      if (api.contas.gerarFixas) await api.contas.gerarFixas().catch(() => {});
       const [pagar, pagas, recibos, receber] = await Promise.all([
         api.contas.listar({ de: ini, ate: fim, campo: "vencimento" }),
         api.contas.listar({ de: ini, ate: fim, campo: "pago_em", status: "paga" }),

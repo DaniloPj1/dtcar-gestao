@@ -212,6 +212,8 @@ function criarApiSupabase() {
     contas: {
       listar: async ({ de, ate, campo = "vencimento", status } = {}) => todos(() => { let q = sb.from("contas").select("*"); if (de) q = q.gte(campo, de); if (ate) q = q.lte(campo, ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
       // antes de listar as abertas, lança a próxima de cada despesa fixa que vence em até 30 dias (v43; sem o v43, segue sem lançar)
+      /** lança as despesas fixas que entram nos próximos 30 dias (no máximo a cada 5 min) */
+      gerarFixas: async () => { await gerarFixas(); },
       abertas: async () => { await gerarFixas(); return todos(() => sb.from("contas").select("*").eq("status", "aberta").order("vencimento").order("id")); },
       /** despesas fixas (v43): contas dos grupos marcados como fixos, para a previsão de caixa projetar os meses seguintes */
       fixas: async () => { if (temFixas === false) return []; try { const l = await todos(() => sb.from("contas").select("*").eq("fixa", true).neq("status", "cancelada").order("vencimento").order("id")); temFixas = true; return l; }

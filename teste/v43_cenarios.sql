@@ -33,9 +33,15 @@ begin
   r := public.tornar_despesa_fixa((select id from public.contas where descricao = 'Internet' order by vencimento desc limit 1));
   assert (select bool_and(vencimento <= hoje + 30) from public.contas where descricao = 'Internet' and status = 'aberta')
      and (select count(*) from public.contas where descricao = 'Internet' and status = 'aberta') between 1 and 2, '5b só até 30 dias: ' || r::text;
+  -- 5c. cancelar a primeira cobrança não muda o dia: começou 31/01, a de fevereiro é 28/02, a de março volta para 31
+  insert into public.contas (descricao, valor, vencimento, grupo, origem, fixa, status) values
+    ('Seguro', 50, '2027-01-31', '00000000-0000-0000-0000-0000000000f3', 'recorrente', true, 'cancelada'),
+    ('Seguro', 50, '2027-02-28', '00000000-0000-0000-0000-0000000000f3', 'recorrente', true, 'aberta');
+  perform public.gerar_despesas_fixas(('2027-03-31'::date - current_date) + 1);
+  assert exists (select 1 from public.contas where descricao = 'Seguro' and vencimento = '2027-03-31'), '5c dia 31 mantido';
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (7 cenários)';
+  raise notice 'OK: v43 (8 cenários)';
 end $$;

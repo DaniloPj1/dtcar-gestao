@@ -138,9 +138,10 @@
     estoque: { movimentos: async () => [], movimentar: async (id, tipo, q) => { const p = db.produtos.find(x => x.id === id); p.estoque_atual = tipo === "entrada" ? +p.estoque_atual + q : tipo === "saida" ? +p.estoque_atual - q : q; return p.estoque_atual; } },
     contas: { abertas: async () => db.contas.filter(c => c.status === "aberta"),
       // despesa fixa (v43): mesma regra do tornar_despesa_fixa / gerar_despesas_fixas
-      fixas: async () => db.contas.filter(c => c.fixa && c.status !== "cancelada"),
+      fixas: async () => db.contas.filter(c => c.fixa),
       tornarFixa: async id => { const c = db.contas.find(x => x.id === id); const g = c.grupo || (c.grupo = uid()); const lim = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
-        let canceladas = 0; db.contas.filter(x => x.grupo === g && x.status === "aberta" && x.vencimento > (c.vencimento > lim ? c.vencimento : lim)).forEach(x => { x.status = "cancelada"; canceladas++; });
+        const prim = db.contas.filter(x => x.grupo === g && x.status === "aberta").sort((a, b) => a.vencimento.localeCompare(b.vencimento))[0];
+        let canceladas = 0; db.contas.filter(x => x.grupo === g && x.status === "aberta" && x.vencimento > lim && x !== prim).forEach(x => { x.status = "cancelada"; canceladas++; });
         db.contas.filter(x => x.grupo === g && x.status !== "cancelada").forEach(x => Object.assign(x, { fixa: true, origem: x.origem === "manual" ? "recorrente" : x.origem, parcela: null, parcelas: null }));
         window.__FIXAS = (window.__FIXAS || []).concat([id]); return { grupo: g, canceladas, lancadas: 0 }; },
       encerrarFixa: async g => { db.contas.filter(x => x.grupo === g).forEach(x => { x.fixa = false; }); return 1; }, listar: async ({ de, ate, campo = "vencimento", status } = {}) => db.contas.filter(c => (!de || (c[campo] || "") >= de) && (!ate || (c[campo] || "") <= ate) && (!status || c.status === status) && (campo !== "pago_em" || c[campo])), salvar: async c => { if (c.id) { const o = db.contas.find(x => x.id === c.id); const antes = o.status; Object.assign(o, c, { atualizado_em: now() }); if (o.status === "paga" && antes !== "paga") o.pago_registrado_em = now(); if (o.status !== "paga") o.pago_registrado_em = null; return o; } const x = { id: uid(), status: "aberta", ...c }; db.contas.push(x); return x; } },

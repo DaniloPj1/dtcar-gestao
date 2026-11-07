@@ -17,11 +17,12 @@ export const somaMes = (iso, n) => { const [a, m, d] = iso.split("-").map(Number
 export const mesSeguinte = (iso, dia) => { let [a, m] = iso.split("-").map(Number); m += 1; if (m > 12) { m = 1; a += 1; }
   const ult = new Date(a, m, 0).getDate(); return a + "-" + String(m).padStart(2, "0") + "-" + String(Math.min(dia, ult)).padStart(2, "0"); };
 /** Despesas fixas (v43) projetadas até "ate", sem gravar: para a previsão de caixa dos meses seguintes.
- *  Modelo = conta mais recente de cada grupo fixo; a primeira dá o dia do mês. */
+ *  Modelo = conta mais recente não cancelada de cada grupo fixo; a primeira (mesmo cancelada) dá o dia do mês. */
 export function projetarFixas(fixas, ate) {
   const g = new Map(); for (const c of fixas || []) { if (!c.grupo) continue; const l = g.get(c.grupo) || []; l.push(c); g.set(c.grupo, l); }
   const out = [];
-  for (const [grupo, l] of g) { l.sort((x, y) => x.vencimento.localeCompare(y.vencimento)); const dia = +l[0].vencimento.slice(8, 10), m = l[l.length - 1];
+  for (const [grupo, l] of g) { l.sort((x, y) => x.vencimento.localeCompare(y.vencimento)); const dia = +l[0].vencimento.slice(8, 10), vivas = l.filter(c => c.status !== "cancelada"), m = vivas[vivas.length - 1];
+    if (!m) continue;
     for (let v = mesSeguinte(m.vencimento, dia), i = 0; v <= ate && i < 36; v = mesSeguinte(v, dia), i++)
       out.push({ ...m, id: "proj-" + grupo + "-" + v, vencimento: v, status: "aberta", projetada: true, pago_em: null, valor_pago: null }); }
   return out;

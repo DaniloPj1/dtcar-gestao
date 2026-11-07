@@ -151,6 +151,8 @@ export const leitorLocal = {
   recibosDesde: async (de, ate) => porData(await tabelaLocal("recibos"), "data", de, null).filter(r => !ate || !r.criado_em || r.criado_em <= ate),
   transferenciasListar: async ({ de, ate } = {}) => ordena(porData(await tabelaLocal("transferencias"), "data", de, ate), (a, b) => (a.data || "").localeCompare(b.data || "")),
   contasListar: async ({ de, ate, campo = "vencimento", status } = {}) => ordena(porData((await tabelaLocal("contas")).filter(c => !status || c.status === status), campo, de, ate), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),
+  // despesas fixas (v43), canceladas incluídas (a primeira dá o dia do mês)
+  contasFixas: async () => ordena((await tabelaLocal("contas")).filter(c => c.fixa === true || c.fixa === 1), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),
   contasAbertas: async () => ordena((await tabelaLocal("contas")).filter(c => c.status === "aberta"), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),
   receberAbertas: async () => ordena((await tabelaLocal("receber")).filter(p => p.status === "aberta"), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),
   receberListar: async ({ de, ate, status } = {}) => ordena(porData((await tabelaLocal("receber")).filter(p => !status || p.status === status), "vencimento", de, ate), (a, b) => (a.vencimento || "").localeCompare(b.vencimento || "")),

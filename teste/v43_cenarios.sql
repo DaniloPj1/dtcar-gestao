@@ -72,9 +72,15 @@ begin
   perform public.gerar_despesas_fixas(((d0 + interval '1 month')::date - current_date) + 1);
   assert exists (select 1 from public.contas where descricao = 'Agua' and status = 'aberta' and vencimento = (d0 + interval '1 month')::date), '5h mês antes do pago adiantado volta';
   assert (select count(*) from public.contas where descricao = 'Agua' and vencimento = (d0 + interval '2 months')::date and status <> 'cancelada') = 1, '5h pago não duplica';
+  -- 5i. mensalidade remarcada dentro do mês não gera outra no dia original (Codex, 07/11)
+  insert into public.contas (descricao, valor, vencimento, grupo, origem, fixa) values
+    ('Contador', 300, (d0 - interval '1 month')::date, '00000000-0000-0000-0000-0000000000f8', 'recorrente', true),
+    ('Contador', 300, (d0 + 5)::date, '00000000-0000-0000-0000-0000000000f8', 'recorrente', true);
+  perform public.gerar_despesas_fixas((d0 - current_date) + 1);
+  assert (select count(*) from public.contas where descricao = 'Contador' and date_trunc('month', vencimento) = date_trunc('month', d0)) = 1, '5i remarcada não duplica';
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (13 cenários)';
+  raise notice 'OK: v43 (14 cenários)';
 end $$;

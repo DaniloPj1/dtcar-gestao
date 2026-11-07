@@ -54,7 +54,8 @@ begin
     while prox <= current_date + coalesce(p_dias, 30) loop
       -- mês a mês: não lança onde já há cobrança do grupo nesse vencimento, inclusive a cancelada uma a uma pelo Danilo
       -- (não volta); só as canceladas pela conversão em despesa fixa ("Substituída pela despesa fixa") são relançadas
-      if not exists (select 1 from public.contas c where c.grupo = m.grupo and c.vencimento = prox
+      -- (por mês, não pela data: mensalidade remarcada de 10/11 para 15/11 continua sendo a de novembro — Codex, 07/11)
+      if not exists (select 1 from public.contas c where c.grupo = m.grupo and date_trunc('month', c.vencimento) = date_trunc('month', prox)
                      and (c.status <> 'cancelada' or c.obs not like '%Substituída pela despesa fixa%')) then
         insert into public.contas (descricao, fornecedor_id, favorecido, categoria, valor, vencimento, grupo, origem, fixa, obs, criado_por)
         values (m.descricao, m.fornecedor_id, m.favorecido, m.categoria, m.valor, prox, m.grupo, 'recorrente', true, '', coalesce(v_nome, 'despesa fixa'))

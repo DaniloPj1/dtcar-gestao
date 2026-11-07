@@ -36,6 +36,7 @@ export function traduzErro(e) {
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero,legado_receber:checkin->legado->a_receber";
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
 let temV11 = true, temReceber = true, temV18 = null, temBoletos = null;
+let temFixas = null, fixasGeradasEm = 0; // despesa fixa (supabase/v43.sql)
 /** grava sem a coluna nova da v18 (conta de origem/destino) se o banco ainda não tiver o supabase/v18.sql */
 async function semColunaV18(linha, coluna, gravar) {
   if (temV18 === false || !(coluna in linha)) { const { [coluna]: _, ...resto } = linha; return gravar(temV18 === false ? resto : linha); }
@@ -84,6 +85,9 @@ function criarApiSupabase() {
     for (;;) { let q = montar(); if (ultimo !== null) q = q.gt(chave, ultimo); const r = ok(await q.order(chave).limit(1000)); out.push(...r); if (r.length < 1000) return out; ultimo = r[r.length - 1][chave]; } };
   // o servidor devolve no máximo 1000 linhas por consulta: busca em páginas
   const todos = async montar => { const out = []; for (let de = 0; ; de += 1000) { const r = ok(await montar().range(de, de + 999)); out.push(...r); if (r.length < 1000) return out; } };
+  // despesas fixas (v43): no máximo uma vez a cada 5 minutos por aparelho; falha (sem v43, sem permissão) não impede a lista
+  const gerarFixas = async () => { if (temFixas === false || Date.now() - fixasGeradasEm < 300000) return; fixasGeradasEm = Date.now();
+    try { const r = await sb.rpc("gerar_despesas_fixas", { p_dias: 30 }); if (r.error && /gerar_despesas_fixas|function|schema cache|404/i.test(r.error.message || "")) temFixas = false; } catch (e) {} };
   const tabela = nome => ({
     listar: async (ordem = "criado_em") => todos(() => sb.from(nome).select("*").order(ordem).order("id")),
     salvar: async obj => { const { id, ...resto } = obj;
@@ -207,7 +211,16 @@ function criarApiSupabase() {
     },
     contas: {
       listar: async ({ de, ate, campo = "vencimento", status } = {}) => todos(() => { let q = sb.from("contas").select("*"); if (de) q = q.gte(campo, de); if (ate) q = q.lte(campo, ate); if (status) q = q.eq("status", status); return q.order("vencimento").order("id"); }),
-      abertas: async () => todos(() => sb.from("contas").select("*").eq("status", "aberta").order("vencimento").order("id")),
+      // antes de listar as abertas, lança a próxima de cada despesa fixa que vence em até 30 dias (v43; sem o v43, segue sem lançar)
+      /** lança as despesas fixas que entram nos próximos 30 dias (no máximo a cada 5 min) */
+      gerarFixas: async () => { await gerarFixas(); },
+      abertas: async () => { await gerarFixas(); return todos(() => sb.from("contas").select("*").eq("status", "aberta").order("vencimento").order("id")); },
+      /** despesas fixas (v43): contas dos grupos marcados como fixos, para a previsão de caixa projetar os meses seguintes */
+      fixas: async () => { if (temFixas === false) return []; try { const l = await todos(() => sb.from("contas").select("*").eq("fixa", true).order("vencimento").order("id")); temFixas = true; return l; }
+        catch (e) { if (/fixa|column/i.test(e.message)) { temFixas = false; return []; } throw e; } },
+      tornarFixa: async id => { try { return ok(await sb.rpc("tornar_despesa_fixa", { p_conta: id })); }
+        catch (e) { if (/tornar_despesa_fixa|function|schema cache|404/i.test(e.message)) throw new Error("Para usar despesa fixa (todo mês, sem fim), rode o supabase/v43.sql no Supabase."); throw e; } },
+      encerrarFixa: async grupo => ok(await sb.rpc("encerrar_despesa_fixa", { p_grupo: grupo })),
       /** contas pagas a partir de uma data, paginadas por id (saldo por conta) */
       pagasDesde: async de => todosPorChave(() => sb.from("contas").select("*").eq("status", "paga").gte("pago_em", de)),
       salvar: async c => semColunaV18(c, "conta_origem", async x => { const { id, ...resto } = x; return id ? ok(await sb.from("contas").update(resto).eq("id", id).select().single()) : ok(await sb.from("contas").insert(resto).select().single()); }),
@@ -548,7 +561,8 @@ function comBancoDoPC(a) {
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm), desde: ler(a.recibos.desde, L.recibosDesde) },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     estornos: { ...a.estornos, desde: ler(a.estornos.desde, L.estornosDesde) },
-    contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })) },
+    contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })),
+      ...(a.contas.fixas ? { fixas: ler(a.contas.fixas, L.contasFixas) } : {}) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },
     vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },

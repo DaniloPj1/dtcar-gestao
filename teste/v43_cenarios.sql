@@ -44,9 +44,17 @@ begin
   perform public.gerar_despesas_fixas(('2027-03-31'::date - current_date) + 1);
   assert (select status from public.contas where descricao = 'Seguro' and vencimento = '2027-03-31') = 'cancelada'
      and (select count(*) from public.contas where descricao = 'Seguro' and vencimento = '2027-03-31') = 1, '5d cancelada não volta';
+  -- 5e. sequência com uma cobrança distante já cancelada antes da conversão: os meses do meio voltam, a cancelada não
+  insert into public.contas (descricao, valor, vencimento, grupo, origem, status, obs)
+  select 'Software', 30, (d0 + make_interval(months => k))::date, '00000000-0000-0000-0000-0000000000f4', 'recorrente',
+         case when k = 5 then 'cancelada' else 'aberta' end, '' from generate_series(0, 5) k;
+  r := public.tornar_despesa_fixa((select id from public.contas where descricao = 'Software' order by vencimento limit 1));
+  perform public.gerar_despesas_fixas(((d0 + interval '5 months')::date - current_date) + 1);
+  assert (select count(*) from public.contas where descricao = 'Software' and status = 'aberta') = 5
+     and (select status from public.contas where descricao = 'Software' and vencimento = (d0 + interval '5 months')::date and obs = '') = 'cancelada', '5e meses do meio voltam';
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (9 cenários)';
+  raise notice 'OK: v43 (10 cenários)';
 end $$;

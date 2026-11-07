@@ -21,7 +21,7 @@ export const mesSeguinte = (iso, dia) => { let [a, m] = iso.split("-").map(Numbe
 export function projetarFixas(fixas, ate) {
   const g = new Map(); for (const c of fixas || []) { if (!c.grupo) continue; const l = g.get(c.grupo) || []; l.push(c); g.set(c.grupo, l); }
   const out = [];
-  for (const [grupo, l] of g) { l.sort((x, y) => x.vencimento.localeCompare(y.vencimento)); const dia = +l[0].vencimento.slice(8, 10), vivas = l.filter(c => c.status !== "cancelada"), m = vivas[vivas.length - 1];
+  for (const [grupo, l] of g) { l.sort((x, y) => x.vencimento.localeCompare(y.vencimento)); const dia = +l[0].vencimento.slice(8, 10), vivas = l.filter(c => c.status !== "cancelada"), m = vivas[vivas.length - 1] || l[l.length - 1];
     if (!m) continue;
     // mês a mês a partir do modelo; pula o vencimento que já tem cobrança (inclusive a cancelada uma a uma), menos as substituídas na conversão
     const ocupado = new Set(l.filter(c => c.status !== "cancelada" || !/Substituída pela despesa fixa/.test(c.obs || "")).map(c => c.vencimento));

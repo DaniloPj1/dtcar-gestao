@@ -36,9 +36,10 @@ declare m public.contas; prox date; dia int; n int := 0; v_nome text;
 begin
   if not public.e_admin() then return 0; end if;   -- só o administrador lança contas (como lancar_contas)
   select nome into v_nome from public.perfis where id = auth.uid();
-  -- modelo de cada despesa fixa: a conta mais recente não cancelada do grupo
-  for m in select distinct on (grupo) * from public.contas where fixa and grupo is not null and status <> 'cancelada'
-           order by grupo, vencimento desc, criado_em desc loop
+  -- modelo de cada despesa fixa: a conta mais recente não cancelada do grupo; se todas foram canceladas uma a uma,
+  -- a mais recente delas (cancelar cobranças não encerra a despesa: para isso há "Encerrar despesa fixa")
+  for m in select distinct on (grupo) * from public.contas where fixa and grupo is not null
+           order by grupo, (status <> 'cancelada') desc, vencimento desc, criado_em desc loop
     -- dia do mês da primeira conta do grupo, mesmo cancelada (começou dia 31: fevereiro vai no dia 28, março volta para 31;
     -- cancelar uma cobrança não muda o calendário da despesa)
     select extract(day from min(vencimento))::int into dia from public.contas c where c.grupo = m.grupo;
@@ -83,6 +84,8 @@ begin
   get diagnostics v_canc = row_count;
   update public.contas set fixa = true, origem = case when origem = 'manual' then 'recorrente' else origem end, parcela = null, parcelas = null
     where grupo = g and status <> 'cancelada';
+  -- as canceladas também ficam marcadas: a previsão e a geração enxergam o histórico inteiro do grupo
+  update public.contas set fixa = true where grupo = g and status = 'cancelada' and fixa is distinct from true;
   return jsonb_build_object('grupo', g, 'canceladas', v_canc, 'lancadas', public.gerar_despesas_fixas(30));
 end $$;
 grant execute on function public.tornar_despesa_fixa(uuid) to authenticated;

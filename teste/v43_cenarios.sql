@@ -52,9 +52,14 @@ begin
   perform public.gerar_despesas_fixas(((d0 + interval '5 months')::date - current_date) + 1);
   assert (select count(*) from public.contas where descricao = 'Software' and status = 'aberta') = 5
      and (select status from public.contas where descricao = 'Software' and vencimento = (d0 + interval '5 months')::date and obs = '') = 'cancelada', '5e meses do meio voltam';
+  -- 5f. despesa nova com a única cobrança cancelada continua (não encerra sozinha)
+  insert into public.contas (descricao, valor, vencimento, grupo, origem, fixa, status) values
+    ('Alarme', 80, current_date + 5, '00000000-0000-0000-0000-0000000000f5', 'recorrente', true, 'cancelada');
+  perform public.gerar_despesas_fixas(40);
+  assert exists (select 1 from public.contas where descricao = 'Alarme' and status = 'aberta'), '5f continua';
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (10 cenários)';
+  raise notice 'OK: v43 (11 cenários)';
 end $$;

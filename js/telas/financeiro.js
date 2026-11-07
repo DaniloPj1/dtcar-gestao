@@ -26,7 +26,9 @@ export function projetarFixas(fixas, ate) {
     if (!m) continue;
     // mês a mês a partir do modelo; pula o vencimento que já tem cobrança (inclusive a cancelada uma a uma), menos as substituídas na conversão
     const ocupado = new Set(l.filter(c => c.status !== "cancelada" || !/Substituída pela despesa fixa/.test(c.obs || "")).map(c => c.vencimento));
-    for (let v = mesSeguinte(m.vencimento, dia), i = 0; v <= ate && i < 36; v = mesSeguinte(v, dia), i++)
+    // começa na última cobrança já vencida (ou na primeira, se todas são futuras): mensalidade paga adiantado não pula os meses do meio
+    const hj = hojeISO(), passadas = efetivas.filter(c => c.vencimento <= hj), base = (passadas[passadas.length - 1] || efetivas[0] || m).vencimento;
+    for (let v = mesSeguinte(base, dia), i = 0; v <= ate && i < 36; v = mesSeguinte(v, dia), i++)
       if (!ocupado.has(v)) out.push({ ...m, id: "proj-" + grupo + "-" + v, vencimento: v, status: "aberta", projetada: true, pago_em: null, valor_pago: null }); }
   return out;
 }

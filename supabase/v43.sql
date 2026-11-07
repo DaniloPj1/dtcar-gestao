@@ -7,6 +7,7 @@
 --
 -- Agora uma despesa fixa é um grupo de contas (contas.grupo) marcado com contas.fixa = true:
 --   * a conta mais recente (não cancelada) do grupo é o modelo: descrição, favorecido, categoria e valor;
+--     a geração parte da última cobrança já vencida (pagamento adiantado não pula os meses do meio);
 --   * gerar_despesas_fixas() lança a do mês seguinte só quando ela vence em até 30 dias (mesmo dia do mês;
 --     dia 31 em mês curto vira o último dia). Não repete: índice único (grupo, vencimento) nas fixas;
 --   * reajuste = alterar o valor da conta mais recente; encerrar = fixa = false no grupo.
@@ -32,7 +33,7 @@ $$;
 
 create or replace function public.gerar_despesas_fixas(p_dias int default 30) returns int
 language plpgsql volatile security invoker set search_path = public as $$
-declare m public.contas; prox date; dia int; n int := 0; v_nome text;
+declare m public.contas; prox date; base date; dia int; n int := 0; v_nome text;
 begin
   if not public.e_admin() then return 0; end if;   -- só o administrador lança contas (como lancar_contas)
   select nome into v_nome from public.perfis where id = auth.uid();
@@ -45,7 +46,11 @@ begin
     -- dia do mês da primeira conta do grupo, mesmo cancelada (começou dia 31: fevereiro vai no dia 28, março volta para 31;
     -- cancelar uma cobrança não muda o calendário da despesa)
     select extract(day from min(vencimento))::int into dia from public.contas c where c.grupo = m.grupo;
-    prox := public.mes_seguinte(m.vencimento, dia);
+    -- de onde começar (separado do modelo): a última cobrança do grupo que já venceu; se todas são futuras, a primeira.
+    -- Assim uma mensalidade paga adiantado (ex.: janeiro pago em novembro) não pula dezembro (Codex, 07/11)
+    select coalesce(max(vencimento) filter (where vencimento <= current_date), min(vencimento)) into base
+      from public.contas c where c.grupo = m.grupo and (c.status <> 'cancelada' or c.obs not like '%Substituída pela despesa fixa%');
+    prox := public.mes_seguinte(coalesce(base, m.vencimento), dia);
     while prox <= current_date + coalesce(p_dias, 30) loop
       -- mês a mês: não lança onde já há cobrança do grupo nesse vencimento, inclusive a cancelada uma a uma pelo Danilo
       -- (não volta); só as canceladas pela conversão em despesa fixa ("Substituída pela despesa fixa") são relançadas

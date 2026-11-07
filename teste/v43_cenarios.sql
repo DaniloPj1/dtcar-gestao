@@ -64,9 +64,17 @@ begin
   update public.contas set status = 'cancelada' where descricao = 'Limpeza' and status = 'aberta';
   perform public.gerar_despesas_fixas(((d0 + interval '2 months')::date - current_date) + 1);
   assert exists (select 1 from public.contas where descricao = 'Limpeza' and status = 'aberta' and vencimento = (d0 + interval '2 months')::date), '5g mês intermediário volta';
+  -- 5h. mensalidade futura paga adiantado: o mês do meio (substituído na conversão) volta quando entra nos 30 dias (Codex, 07/11)
+  insert into public.contas (descricao, valor, vencimento, grupo, origem)
+  select 'Agua', 60, (d0 + make_interval(months => k))::date, '00000000-0000-0000-0000-0000000000f7', 'recorrente' from generate_series(0, 11) k;
+  update public.contas set status = 'paga', pago_em = hoje, valor_pago = 60 where descricao = 'Agua' and vencimento = (d0 + interval '2 months')::date;
+  r := public.tornar_despesa_fixa((select id from public.contas where descricao = 'Agua' order by vencimento limit 1));
+  perform public.gerar_despesas_fixas(((d0 + interval '1 month')::date - current_date) + 1);
+  assert exists (select 1 from public.contas where descricao = 'Agua' and status = 'aberta' and vencimento = (d0 + interval '1 month')::date), '5h mês antes do pago adiantado volta';
+  assert (select count(*) from public.contas where descricao = 'Agua' and vencimento = (d0 + interval '2 months')::date and status <> 'cancelada') = 1, '5h pago não duplica';
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (12 cenários)';
+  raise notice 'OK: v43 (13 cenários)';
 end $$;

@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { useApp, Campo, Dinheiro, Vazio, Modal, Texto } from "../ui.js";
 import { reais, fmtData, hojeISO, arred, numOS } from "../util.js";
 import { etapaOS, nomesContas } from "../regras.js";
+import { projetarFixas } from "./financeiro.js";
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -110,6 +111,8 @@ export function PrevisaoCaixa() {
   useEffect(() => { (async () => {
     setD(null); setErro("");
     try {
+      // despesa fixa que acabou de entrar nos 30 dias é lançada antes de ler as contas do mês (senão ficaria fora da previsão)
+      if (api.contas.gerarFixas) await api.contas.gerarFixas().catch(() => {});
       const [pagar, pagas, recibos, receber] = await Promise.all([
         api.contas.listar({ de: ini, ate: fim, campo: "vencimento" }),
         api.contas.listar({ de: ini, ate: fim, campo: "pago_em", status: "paga" }),
@@ -123,6 +126,9 @@ export function PrevisaoCaixa() {
       const pagarAntes = !atual && ini > hoje ? abertas.filter(c => c.vencimento < ini) : [];
       // histórico de transferências do mês escolhido (independe da data do saldo informado)
       const transfMes = api.transferencias ? await api.transferencias.listar({ de: ini, ate: fim }) : [];
+      // despesas fixas (v43): os meses que ainda não foram lançados entram como previsão (sem gravar)
+      if (ini > hoje && api.contas.fixas) { const proj = projetarFixas(await api.contas.fixas().catch(() => []), fim);
+        pagar.push(...proj.filter(c => c.vencimento >= ini)); pagarAntes.push(...proj.filter(c => c.vencimento < ini && c.vencimento >= hoje)); }
       setD({ pagar, pagas, recibos: recibos.filter(r => !r.cancelado), receber, pagarAtrasadas, pagarAntes, transfMes });
     } catch (e) { setErro(e.message); }
   })(); }, [mes, recarga]);

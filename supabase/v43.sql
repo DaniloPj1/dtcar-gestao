@@ -42,7 +42,11 @@ begin
     -- dia do mês da primeira conta do grupo, mesmo cancelada (começou dia 31: fevereiro vai no dia 28, março volta para 31;
     -- cancelar uma cobrança não muda o calendário da despesa)
     select extract(day from min(vencimento))::int into dia from public.contas c where c.grupo = m.grupo;
-    prox := public.mes_seguinte(m.vencimento, dia);
+    -- a partir da última cobrança do grupo, inclusive a cancelada uma a uma pelo Danilo (não volta a ser lançada);
+    -- só as canceladas pela conversão em despesa fixa ("Substituída pela despesa fixa") não contam
+    select max(vencimento) into prox from public.contas c where c.grupo = m.grupo
+      and (c.status <> 'cancelada' or c.obs not like '%Substituída pela despesa fixa%');
+    prox := public.mes_seguinte(greatest(prox, m.vencimento), dia);
     while prox <= current_date + coalesce(p_dias, 30) loop
       insert into public.contas (descricao, fornecedor_id, favorecido, categoria, valor, vencimento, grupo, origem, fixa, obs, criado_por)
       values (m.descricao, m.fornecedor_id, m.favorecido, m.categoria, m.valor, prox, m.grupo, 'recorrente', true, '', coalesce(v_nome, 'despesa fixa'))

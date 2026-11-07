@@ -23,7 +23,9 @@ export function projetarFixas(fixas, ate) {
   const out = [];
   for (const [grupo, l] of g) { l.sort((x, y) => x.vencimento.localeCompare(y.vencimento)); const dia = +l[0].vencimento.slice(8, 10), vivas = l.filter(c => c.status !== "cancelada"), m = vivas[vivas.length - 1];
     if (!m) continue;
-    for (let v = mesSeguinte(m.vencimento, dia), i = 0; v <= ate && i < 36; v = mesSeguinte(v, dia), i++)
+    // continua da última cobrança, inclusive a cancelada uma a uma (não volta); as canceladas na conversão em fixa não contam
+    const ult = l.filter(c => c.status !== "cancelada" || !/Substituída pela despesa fixa/.test(c.obs || "")).reduce((a, c) => (c.vencimento > a ? c.vencimento : a), m.vencimento);
+    for (let v = mesSeguinte(ult, dia), i = 0; v <= ate && i < 36; v = mesSeguinte(v, dia), i++)
       out.push({ ...m, id: "proj-" + grupo + "-" + v, vencimento: v, status: "aberta", projetada: true, pago_em: null, valor_pago: null }); }
   return out;
 }

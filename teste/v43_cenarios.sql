@@ -39,9 +39,14 @@ begin
     ('Seguro', 50, '2027-02-28', '00000000-0000-0000-0000-0000000000f3', 'recorrente', true, 'aberta');
   perform public.gerar_despesas_fixas(('2027-03-31'::date - current_date) + 1);
   assert exists (select 1 from public.contas where descricao = 'Seguro' and vencimento = '2027-03-31'), '5c dia 31 mantido';
+  -- 5d. cancelar uma mensalidade gerada (uma a uma) não faz ela voltar
+  update public.contas set status = 'cancelada' where descricao = 'Seguro' and vencimento = '2027-03-31';
+  perform public.gerar_despesas_fixas(('2027-03-31'::date - current_date) + 1);
+  assert (select status from public.contas where descricao = 'Seguro' and vencimento = '2027-03-31') = 'cancelada'
+     and (select count(*) from public.contas where descricao = 'Seguro' and vencimento = '2027-03-31') = 1, '5d cancelada não volta';
   -- 6. parcelado não vira fixa; sem administrador não lança
   insert into public.contas (descricao, valor, vencimento, origem, parcela, parcelas) values ('Compra parcelada', 100, hoje, 'parcelado', 1, 3);
   begin perform public.tornar_despesa_fixa((select id from public.contas where descricao = 'Compra parcelada')); assert false, '6 parcelado aceito';
   exception when raise_exception then null; end;
-  raise notice 'OK: v43 (8 cenários)';
+  raise notice 'OK: v43 (9 cenários)';
 end $$;

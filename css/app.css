@@ -991,6 +991,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .encerrar-resumo .forte{background:var(--brand-soft)}.encerrar-resumo .forte b{color:var(--brand)}
 /* contas a receber, prazo e parcelas */
 .lat-badge{margin-left:auto;min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:var(--bad);color:#fff;font-style:normal;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center}
+.lat-badge-aviso{background:#9a5c00}  /* contas a pagar: só vencem hoje/amanhã (nenhuma vencida) */
 .bloco-prazo{border:1px solid var(--borda,#d8dde6);border-radius:10px;padding:12px;margin:10px 0}
 .bloco-prazo h4{margin:0 0 6px;font-size:15px}
 .tab-parcelas{width:100%;border-collapse:collapse;margin-top:6px}.tab-parcelas th{text-align:left;font-size:13px;padding:4px}.tab-parcelas td{padding:3px 4px}

@@ -18,7 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
-- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v38.sql`, `v39.sql`, `v40.sql`, `v41.sql`, `v42.sql`, `v43.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
+- `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v38.sql`, `v39.sql`, `v40.sql`, `v41.sql`, `v42.sql`, `v43.sql`, `v45.sql`; o `v44.sql` está no PR #55). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`).
 
 ## Regras do negócio que não podem quebrar
 - **O.S. em 4 etapas**: Orçamento → Aprovado (execução) → Aguardando pagamento → Fechada (`ETAPAS` e `etapaOS()` em `js/regras.js`).
@@ -237,6 +237,14 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   Na conta: "Tornar despesa fixa" (`tornar_despesa_fixa`: cancela, sem apagar, as abertas da sequência que vencem depois de 30 dias) e
   "Encerrar despesa fixa" (`encerrar_despesa_fixa`). A previsão de caixa projeta os meses seguintes sem gravar (`projetarFixas`).
   Testes: `bash teste/teste_v43.sh` (Postgres local) e `python3 teste/teste_fluxo.py`.
+- **Aviso de contas a pagar (v45, pedido do Danilo em 08/11/2026):** `contas_aviso_enviar('manha'|'tarde')` no pg_cron
+  (`dtcar-contas-aviso-09h` '0 12 * * *' e `dtcar-contas-aviso-16h` '0 19 * * *', UTC) põe na fila do WhatsApp, como mensagem interna
+  (`whatsapp_interno`, v36) para o número de alerta, as contas abertas **vencidas**, que **vencem hoje** e (só às 9h) que **vencem amanhã**
+  — na sexta e no fim de semana "amanhã" vai até a segunda (`contas_aviso_ate`; feriado não conta). Às 16h só sai se ainda houver vencida
+  ou vencendo hoje sem baixa. Dia sem nada: não sai. Um envio por turno por dia (`contas_avisos`, log fora do backup, do banco do PC e do
+  espelho); `p_forcar = true` manda de novo; `contas_aviso_texto(turno)` só mostra o texto. Menu lateral: selo em "Contas a pagar"
+  (`alertaPagar` em `js/app.js`, mesma janela de datas; vermelho com vencida, `lat-badge-aviso` só com hoje/amanhã), relido ao trocar de
+  tela e a cada 2 min. Teste: `bash teste/teste_v45.sh` (Postgres local) e `python3 teste/teste_fluxo.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

@@ -2,7 +2,7 @@ import { html, render, useState, useEffect, useCallback, useRef } from "./lib.js
 import { api, definirSemRede, estaSemRede } from "./api.js";
 import { replicar, replicaDisponivel } from "./replica.js";
 import { local, erroDeRede, pedirPersistencia, sessaoGuardada } from "./local.js";
-import { fmtDataHora, lsGet, lsSet } from "./util.js";
+import { fmtDataHora, lsGet, lsSet, hojeISO } from "./util.js";
 import { fila } from "./fila.js";
 import { ehAlteracao, replicarComFila, definirGeracaoEspelho } from "./alteracoes.js";
 import { sessaoDoPC, sairDoPC, temAcessoGuardado } from "./acesso.js";
@@ -57,6 +57,17 @@ const LATERAL = [
   ["Financeiro", [["/receber", "Contas a receber", "dinheiro", "verValores"], ["/financeiro", "Contas a pagar", "dinheiro", "financeiro"], ["/caixa", "Previsão de caixa", "grafico", "financeiro"], ["/recibos", "Recibos", "recibo", "verValores"], ["/sefaz", "Notas da SEFAZ", "nuvem", "cadastrar"], ["/nfe", "Entrada de nota (XML)", "nota", "cadastrar"], ["/funcionarios", "Funcionários e RH", "pessoas", "financeiro"], ["/relatorios", "Relatórios", "grafico", "verValores"]]],
   ["Sistema", [["/equipe", "Equipe", "pessoas", "ajustes"], ["/ajustes", "Ajustes", "ajuste", "ajustes"], ["/backup", "Backup", "nuvem", "ajustes"], ["/dados-locais", "Dados no computador", "caixa"], ["/whatsapp", "WhatsApp e e-mail", "whats", "ajustes"], ["/importar", "Importar OS Oficina", "painel", "ajustes"]]],
 ];
+
+// Selo do menu "Contas a pagar" (v45, pedido do Danilo em 08/11/2026): vencidas, vencem hoje e vencem amanhã.
+// Na sexta (e no fim de semana) "amanhã" vai até a segunda, como o aviso do WhatsApp (contas_aviso_ate no v45).
+export function alertaPagar(lista, hoje = hojeISO()) {
+  const d = new Date(hoje + "T12:00:00"); d.setDate(d.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  const ate = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  const ab = (lista || []).filter(c => c.status === "aberta" && c.vencimento);
+  return { vencidas: ab.filter(c => c.vencimento < hoje).length, hoje: ab.filter(c => c.vencimento === hoje).length,
+           amanha: ab.filter(c => c.vencimento > hoje && c.vencimento <= ate).length };
+}
 
 function App() {
   const [sessao, setSessao] = useState(undefined);
@@ -133,6 +144,12 @@ function App() {
   const sessaoAtual = useRef(sessao); sessaoAtual.current = sessao;
   const loginOnline = () => !!(sessaoAtual.current && sessaoAtual.current.user && !sessaoAtual.current.pc && !sessaoDoPC());
   const membro = perfil && perfil.ativo !== false && ["admin", "consultor", "mecanico"].includes(perfil.papel);
+  // contas a pagar (só quem vê o financeiro): relê ao trocar de tela e a cada 2 min, para o selo do menu sumir logo depois da baixa
+  const [pagar, setPagar] = useState(null);
+  const vePagar = !!(membro && pode(perfil, "financeiro"));
+  useEffect(() => { if (!vePagar) { setPagar(null); return; } let vivo = true;
+    const ler = () => api.contas.abertas().then(l => { if (vivo) setPagar(alertaPagar(l)); }).catch(() => {});
+    ler(); const t = setInterval(ler, 120000); return () => { vivo = false; clearInterval(t); }; }, [vePagar, rota]);
   // programa para Windows: o acesso deste usuário está guardado para entrar sem internet?
   useEffect(() => { if (membro && sessao && sessao.user && sessao.user.email && window.dtcarDesktop) temAcessoGuardado(sessao.user.email).then(setAcessoNoPC).catch(() => {}); }, [membro, sessao && sessao.user && sessao.user.id]);
   const marcas = useRef({}); // maior atualizado_em já recebido por tabela (relógio do servidor)
@@ -419,8 +436,9 @@ function App() {
               onClick=${() => { const v = !sistemaAberto; setSistemaAberto(v); lsSet("dtcar-menu-sistema", v); }}>${grupo}<i aria-hidden="true">${aberto ? "▾" : "▸"}</i></button>`
           : html`<span>${grupo}</span>`}
         ${!aberto ? null : vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo") || (r === "/whatsapp" && base === "email") || (r === "/funcionarios" && base === "rh");
-          const nb = r === "/receber" ? vencidasRec : 0;
-          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class="lat-badge" title=${nb + " parcela(s) vencida(s)"}>${nb}</em>` : null}</button>`; })}</nav>`; })}
+          const pg = r === "/financeiro" && pagar ? pagar : null, nb = r === "/receber" ? vencidasRec : pg ? pg.vencidas + pg.hoje + pg.amanha : 0;
+          const dica = pg ? [pg.vencidas && pg.vencidas + " vencida(s)", pg.hoje && pg.hoje + " vence(m) hoje", pg.amanha && pg.amanha + " vence(m) amanhã"].filter(Boolean).join(", ") : nb + " parcela(s) vencida(s)";
+          return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class=${"lat-badge" + (pg && !pg.vencidas ? " lat-badge-aviso" : "")} title=${dica} aria-label=${dica}>${nb}</em>` : null}</button>`; })}</nav>`; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
     </aside>
     <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>

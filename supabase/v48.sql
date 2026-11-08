@@ -7,6 +7,7 @@
 --   * O padrão do Supabase dá todas as permissões ao usuário logado (inclusive apagar e TRUNCATE, que passa por cima
 --     das regras). Agora o logado só lê, inclui e altera as colunas que o editor usa; o histórico continua sem
 --     alterar nem apagar. As regras de administrador (RLS) do v47 continuam valendo.
+--   * Codex (PR #58): trocar ou apagar uma foto da pasta "site" também pede leitura do arquivo; o administrador ganha a leitura.
 -- Rode depois do v47. Pode rodar mais de uma vez. Não muda nada para a oficina.
 -- =====================================================================
 
@@ -29,3 +30,7 @@ language sql stable security definer set search_path = public as $$
 $$;
 revoke all on function public.site_conteudo_publicado() from public;
 grant execute on function public.site_conteudo_publicado() to anon, authenticated;
+
+drop policy if exists site_fotos_ler on storage.objects;
+create policy site_fotos_ler on storage.objects for select to authenticated
+  using (bucket_id = 'site' and public.e_admin());

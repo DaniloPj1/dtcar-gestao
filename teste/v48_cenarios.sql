@@ -69,3 +69,9 @@ insert into public.site_publicacoes (dados) values ('{"campos":{"h1":"Terceira"}
 reset role;
 update public.site_publicacoes set publicado_em = '2099-01-01' where observacao = 'v1';
 select pg_temp.c(public.site_conteudo_publicado()->'dados'->'campos'->>'h1' = 'Terceira', 'no ar fica a última gravada, mesmo com data adulterada');
+set role authenticated;
+select set_config('teste.admin', '1', false);
+select pg_temp.c((select count(*) from storage.objects where bucket_id = 'site') = 1, 'administrador lê as fotos do site');
+select set_config('teste.admin', '0', false);
+select pg_temp.c((select count(*) from storage.objects where bucket_id = 'site') = 0, 'não admin não lê pela API');
+reset role;

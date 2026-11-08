@@ -11,7 +11,8 @@
 --   * Dia sem nada para avisar: não sai mensagem.
 --   * Vai para o número de alerta da tela Sistema › WhatsApp (whatsapp_conexao.alerta_telefone) como mensagem
 --     interna (whatsapp_interno, v36): sai primeiro, fora dos limites, e respeita o silêncio das 22h às 7h.
---   * Uma mensagem por turno por dia (tabela contas_avisos): rodar de novo no mesmo turno não repete.
+--   * Uma mensagem por turno por dia (tabela contas_avisos): rodar de novo no mesmo turno não repete. Só marca o turno
+--     quando a mensagem entrou na fila (sem número de alerta, tenta de novo na próxima chamada).
 --
 -- Agendamentos (pg_cron em UTC; Brasília = UTC−3, sem horário de verão):
 --   dtcar-contas-aviso-09h  '0 12 * * *'   dtcar-contas-aviso-16h  '0 19 * * *'
@@ -123,10 +124,15 @@ declare
 begin
   -- pelo site só o administrador; o agendamento (pg_cron) roda sem login
   if auth.uid() is not null and not public.e_admin() then raise exception 'Só o administrador'; end if;
+  if p_turno not in ('manha', 'tarde') then raise exception 'Turno inválido: %', p_turno; end if;
+  -- uma chamada por turno de cada vez (agendamento + teste manual ao mesmo tempo não mandam duas mensagens)
+  perform pg_advisory_xact_lock(hashtext('dtcar-contas-aviso-' || p_turno));
   if not p_forcar and exists (select 1 from public.contas_avisos where dia = v_hoje and turno = p_turno) then return null; end if;
   v_txt := public.contas_aviso_texto(p_turno);
   if v_txt is null then return null; end if;
   v_id := public.whatsapp_interno(v_txt);
+  -- sem número de alerta (ou WhatsApp desligado): nada entrou na fila; não marca o turno, para sair quando configurar
+  if v_id is null then return null; end if;
   select count(*) into v_n from public.contas
    where status = 'aberta' and vencimento <= case when p_turno = 'manha' then public.contas_aviso_ate(v_hoje) else v_hoje end;
   insert into public.contas_avisos (dia, turno, fila_id, contas, texto) values (v_hoje, p_turno, v_id, v_n, v_txt)

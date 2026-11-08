@@ -51,7 +51,13 @@ select pg_temp.confere(public.contas_aviso_texto('manha') like '%CRZ%' and publi
 -- 6) sem número de alerta: nada sai e não quebra
 update public.whatsapp_conexao set alerta_telefone = '';
 select pg_temp.confere(public.contas_aviso_enviar('manha', true) is null, 'sem número de alerta: sem fila');
+delete from public.contas_avisos where turno = 'tarde';
+insert into public.contas (descricao, favorecido, valor, vencimento) select 'Hoje', 'Vence hoje', 50, d from h;
+select pg_temp.confere(public.contas_aviso_enviar('tarde') is null, 'tarde sem número: nada sai');
+select pg_temp.confere(not exists (select 1 from public.contas_avisos where turno = 'tarde'), 'sem número: turno não fica marcado');
 update public.whatsapp_conexao set alerta_telefone = '5527997696545';
+select pg_temp.confere(public.contas_aviso_enviar('tarde') is not null, 'número configurado: a tarde sai na próxima chamada');
+delete from public.contas where descricao = 'Hoje';
 
 -- 7) login que não é administrador é recusado
 set teste.uid = '00000000-0000-0000-0000-00000000000b'; set teste.admin = '0';

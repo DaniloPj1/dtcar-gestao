@@ -88,7 +88,7 @@ const srv = http.createServer((req, res) => {
   else if (t === "config") body = obj ? { id: 1, dados: cfgSrv } : [{ id: 1, dados: cfgSrv, atualizado_em: agora }];
   else if (t === "exclusoes") body = [];
   else if (t === "rpc" && /\/rpc\/sincronizar_alteracao_os/.test(u.pathname)) { const b = JSON.parse(txt || "{}"); body = rpcSinc(b.p_op || {}, !!b.p_forcar); }
-  else if (t === "rpc") body = {};
+  else if (t === "rpc") { rpcs.push(u.pathname.split("/").pop()); body = {}; }
   else if (t && D[t] && req.method === "PATCH") { const alvo = filtrar(D[t], u.searchParams); const p = JSON.parse(txt || "{}"); for (const r of alvo) Object.assign(r, p, { atualizado_em: agoraJa }); escritas.push([req.method, t, p]); body = obj ? alvo[0] || null : alvo; }
   else if (t && D[t] && req.method === "DELETE") { const alvo = new Set(filtrar(D[t], u.searchParams)); D[t] = D[t].filter(r => !alvo.has(r)); escritas.push([req.method, t, [...alvo].map(r => r.id)]); body = []; }
   else if (t && D[t] && req.method === "POST") { const linhas = [].concat(JSON.parse(txt || "[]")), out = [];
@@ -102,6 +102,7 @@ const srv = http.createServer((req, res) => {
   });
 });
 const escritas = [];
+const rpcs = []; // v50: funções chamadas no online (além da sincronização)
 srv.listen(PORTA);
 
 const { app, BrowserWindow } = require("electron");
@@ -232,6 +233,10 @@ app.on("browser-window-created", async (e, w) => {
     // descartar com internet: a O.S. do online vem mesmo com pendência (a tela de resolução não fica presa na versão do PC)
     const dupla = await offlineJs(`const a = await api.ordem("o1"), b = await api.ordemDoServidor("o1"); return a.reclamacao + "|" + b.reclamacao;`);
     chk("com conflito: api.ordem mostra a versão do PC e ordemDoServidor a do online (" + dupla + ")", dupla === "feito sem internet|" + o1.reclamacao);
+    // v50: desconto com alteração da O.S. na fila (aqui, em conflito) não vai ao online (a conta sairia sem o que foi feito no PC)
+    rpcs.length = 0;
+    const descFila = await offlineJs(`try { await api.descontoOS("o1", 10, "", false); return "passou"; } catch (e) { return e.message; }`);
+    chk("v50: desconto com alteração da O.S. na fila é recusado, sem chamar o online (" + String(descFila).slice(0, 70) + ")", /ainda não enviada/.test(descFila) && !rpcs.includes("os_aplicar_desconto"));
     o1.status = "pronto"; await limparFila();
     // fila: incluir e tirar ao mesmo tempo não perde nenhuma
     const fl = await js(`(async () => { const { fila } = await import("./js/fila.js"); await fila.adicionar({ id: "x0", tipo: "evento_os", ordem_id: "zz", criado_em: "2020-01-01" });

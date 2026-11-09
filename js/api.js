@@ -587,6 +587,15 @@ function comBancoDoPC(a) {
     evento: (ordem_id, tipo, texto, usuario_nome) => { const criado_em = new Date().toISOString();
       return escreve((o, t, x, u) => a.evento(o, t, x, u, criado_em), (o, t, x, u) => eventoOffline(o, t, x, u, criado_em))(ordem_id, tipo, texto, usuario_nome); },
     enviarArquivo: soOnline(a.enviarArquivo, "Sem internet: fotos e assinaturas só podem ser enviadas com internet."),
+    // v50: o desconto depois do orçamento grava direto no online (numa transação, com as parcelas). Com alteração desta O.S. ainda na fila
+    // (mesmo em conflito), a conta sairia sem o que foi feito neste PC e a tela continuaria mostrando a versão do PC: espera a fila.
+    ...(a.descontoOS ? { descontoOS: async (ordemId, desconto, motivo, gravar = true) => {
+      if (semRede) throw new Error("Sem conexão com a internet: o desconto depois do orçamento precisa de internet.");
+      if (await replicaPronta() && await temPendente(ordemId))
+        throw new Error("Esta O.S. tem alteração feita sem internet ainda não enviada (ou em conflito). Envie a fila ou resolva em Sistema › Dados no computador antes de dar o desconto.");
+      const r = await a.descontoOS(ordemId, desconto, motivo, gravar);
+      if (gravar !== false) tocarOS(ordemId); // gravou no online: quem estava lendo esta O.S. sabe que a resposta dele é anterior
+      return r; } } : {}),
     // envio da fila: depois que o histórico entrou no online, tira a cópia provisória do banco do PC (a réplica traz a definitiva)
     sincronizarAlteracao: async op => { const r = await a.sincronizarAlteracao(op); if (op.tipo === "evento_os" && op.local_id) await removerLocal("eventos", [op.local_id]); return r; },
     // backup sem internet: leitura ESTRITA do banco do PC (erro propaga; nunca vira tabela vazia). backup.tabela continua só do

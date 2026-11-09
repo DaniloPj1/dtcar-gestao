@@ -523,6 +523,9 @@ begin
   if coalesce(p->>'venda', '') <> '' then
     select * into vd from public.vendas where numero = nullif(regexp_replace(p->>'venda', '\D', '', 'g'), '')::int;
     if vd.id is null then raise exception 'Venda % não encontrada.', p->>'venda'; end if;
+    -- trava a venda até o fim da transação: dois recibos ao mesmo tempo não passam juntos do que falta receber (Codex no #62).
+    -- Trava "de aviso" (a tabela vendas só é gravada pelas funções do v4: o logado não tem "for update" nela)
+    perform pg_advisory_xact_lock(hashtext('dtcar.venda.' || vd.id::text));
     if vd.status = 'cancelada' then raise exception 'A venda % está cancelada.', vd.numero; end if;
     if v_valor > vd.total - coalesce((select sum(valor) from public.recibos where venda_id = vd.id and not cancelado), 0) + 0.009 then
       raise exception 'A venda % (total %) já tem % recebido: falta só %.', vd.numero, public.agente_reais(vd.total),
@@ -772,6 +775,7 @@ begin
     if jsonb_typeof(p->'itens') is distinct from 'array' or jsonb_array_length(p->'itens') = 0 then
       raise exception 'Informe itens: [{item_id (peça da O.S., veja buscar_os), nf_item (nº do item na nota) ou custo_total}].'; end if;
     if n.xml is not null then nf := public.agente_ler_nfe(n.xml); end if;
+    perform 1 from public.nfe_recebidas where chave = n.chave for update;  -- dois vínculos ao mesmo tempo não passam juntos da quantidade da nota
     -- já usado de cada item da nota (outras peças); a peça que está sendo vinculada de novo não conta (o vincular_nfe_os troca o vínculo dela)
     select coalesce(jsonb_object_agg(v.nf_item::text, v.q), '{}') into v_usado
       from (select nf_item, sum(qtd) q from public.nfe_os_vinculos where chave = n.chave and nf_item is not null

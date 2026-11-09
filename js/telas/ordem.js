@@ -222,6 +222,7 @@ export function Ordem({ id, params = {} }) {
   const guardaSaida = useRef({ pendente: false, salvar: null });
   useEffect(() => { window.dtcarSaida = { pendente: () => !!guardaSaida.current.pendente, salvar: () => guardaSaida.current.salvar() }; return () => { window.dtcarSaida = null; }; }, []);
   const [modal, setModal] = useState(null);
+  const [gravando, setGravando] = useState(false); // gravação automática do item em andamento: a tela espera (a recarga do fim apagaria o que fosse mexido no meio)
   const [nNotas, setNNotas] = useState(0); // NF anexadas (v33); sem o SQL ou sem internet fica 0
   // v50: técnico responsável pela lista de Funcionários (+ acessos sem ficha); null = sem o v50 ou sem internet (lista antiga, só acessos)
   const [tecnicos, setTecnicos] = useState(null);
@@ -325,7 +326,7 @@ export function Ordem({ id, params = {} }) {
     const nova = itens.some(y => y.id === x.id) ? itens.map(y => y.id === x.id ? { ...x, _novo: false } : y) : itens.concat([{ ...x, _novo: false }]);
     setItens(nova); setSujo(true); setModal(null);
     // grava na hora (como o Imprimir e o WhatsApp fazem), para o item não se perder se sair da O.S. sem clicar em "Salvar O.S."
-    if (podeGravarAgora) await acao("salvar", () => salvar({}, false, nova)); // "O.S. salva." vem antes dos avisos de total/parcelas, que continuam visíveis
+    if (podeGravarAgora) { setGravando(true); try { await acao("salvar", () => salvar({}, false, nova)); } finally { setGravando(false); } } // "O.S. salva." vem antes dos avisos de total/parcelas, que continuam visíveis
   };
   const excluirItem = it => { setItens(l => l.filter(x => x.id !== it.id)); if (!it._novo) setRemovidos(r => r.concat([it.id])); setSujo(true); setModal(null); };
 
@@ -619,7 +620,7 @@ export function Ordem({ id, params = {} }) {
   const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
   const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
   const minhasOff = filaPend.filter(op => op.ordem_id === o.id), conflitoOff = minhasOff.filter(op => op.conflito || op.erro);
-  return html`<div class="pagina">
+  return html`<div class=${"pagina" + (gravando ? " gravando" : "")} inert=${gravando ? true : undefined} aria-busy=${gravando ? "true" : undefined}>
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/ordens")}>← Voltar</button>
     ${minhasOff.length ? html`<div class=${conflitoOff.length ? "erros" : "aviso"}>${conflitoOff.length
       ? html`<b>Alteração feita sem internet com conflito:</b> ${conflitoOff[0].erro} <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`

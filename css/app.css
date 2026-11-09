@@ -1133,3 +1133,6 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .enc-desc .desc-os,[role=dialog] .desc-os{justify-content:flex-start}
 .enc-desc-resumo{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}.enc-desc-resumo span{color:var(--muted);font-size:14px}
 @media (max-width:640px){.desc-os{flex-wrap:nowrap}.desc-os .inp-din,.totais .desc-os .inp-din{flex:0 0 128px;width:128px;max-width:128px}.desc-os .desc-pct{flex:0 0 78px;width:78px}.desc-os .inp{min-width:0}}
+
+/* gravando o item na O.S.: a tela espera o fim (evita mexer no meio da gravação) */
+.pagina.gravando{opacity:.6;pointer-events:none}

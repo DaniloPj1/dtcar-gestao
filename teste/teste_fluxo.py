@@ -54,7 +54,22 @@ try:
     pg.goto(U + "#/receber"); pg.wait_for_timeout(1500)
     t = pg.inner_text("main")
     chk("contas a receber: vencida", "Vencidas" in t and "Vencida há" in t)
-    chk("selo no menu lateral", pg.query_selector(".lateral .lat-badge") is not None)
+    chk("selo no menu lateral", pg.query_selector(".lateral button:has-text('Contas a receber') .lat-badge") is not None)
+    # v45: selo em "Contas a pagar" — vermelho com vencida; amarelo só com as que vencem hoje/amanhã; some depois da baixa
+    sel_pg = ".lateral button:has-text('Contas a pagar') .lat-badge"
+    bp = pg.query_selector(sel_pg)
+    chk("contas a pagar: selo vermelho com conta vencida", bp is not None and "lat-badge-aviso" not in (bp.get_attribute("class") or "") and "vencida" in (bp.get_attribute("title") or ""))
+    pg.evaluate("""() => { const h = new Date(); const iso = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+      window.__V45 = window.__DB.contas.filter(c => c.status === 'aberta').map(c => [c.id, c.vencimento]); window.__DB.contas.forEach(c => { if (c.status === 'aberta') c.vencimento = '2099-01-01'; });
+      window.__DB.contas.push({ id: 'kv45', descricao: 'Energia', fornecedor_id: null, favorecido: 'Luz', categoria: 'Energia', documento: '', valor: 691.64, vencimento: iso(h), status: 'aberta', origem: 'manual' }); }""")
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(1200)
+    bp = pg.query_selector(sel_pg)
+    chk("contas a pagar: selo amarelo só com vence hoje", bp is not None and "lat-badge-aviso" in (bp.get_attribute("class") or "") and "hoje" in (bp.get_attribute("title") or "") and bp.inner_text().strip() == "1")
+    pg.evaluate("window.__DB.contas.find(c => c.id === 'kv45').status = 'paga'")
+    pg.goto(U + "#/receber"); pg.wait_for_timeout(1200)
+    bp = pg.query_selector(sel_pg)
+    chk("contas a pagar: selo some depois da baixa", bp is None, bp and bp.get_attribute("title"))
+    pg.evaluate("window.__DB.contas = window.__DB.contas.filter(c => c.id !== 'kv45'); window.__V45.forEach(([id, v]) => { window.__DB.contas.find(c => c.id === id).vencimento = v; })")
     pg.screenshot(path=SAIDA + "/u3-receber.png")
     # receber parcela 1 parcial
     pg.click(".conta-linha.s-vencida .btn-encerrar"); pg.wait_for_timeout(600)

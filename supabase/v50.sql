@@ -97,7 +97,7 @@ returns jsonb language plpgsql volatile security invoker set search_path = publi
 declare
   o public.ordens; v_desc numeric := round(coalesce(p_desconto, -1), 2); v_bruto numeric; v_total numeric; v_total_antes numeric; v_rec numeric;
   v_saldo numeric; v_abertas numeric; v_excesso numeric; v_corte numeric; pa public.receber; v_ajustes jsonb := '[]'; avisos text[] := '{}';
-  v_quem text; v_res jsonb; v_fechou boolean := false; v_motivo text := trim(coalesce(p_motivo, ''));
+  v_quem text; v_res jsonb; v_fechou boolean := false; v_motivo text := trim(coalesce(p_motivo, '')); v_mudou boolean;
 begin
   if not public.e_gestor() then raise exception 'Só o administrador ou o consultor dá desconto na O.S.'; end if;
   if v_desc < 0 then raise exception 'Informe o desconto em reais (zero ou mais).'; end if;
@@ -119,10 +119,17 @@ begin
   v_saldo := round(v_total - v_rec, 2);
   select coalesce(sum(valor), 0) into v_abertas from public.receber where ordem_id = o.id and status = 'aberta';
   v_excesso := round(v_abertas - v_saldo, 2);
+  v_mudou := abs(v_desc - coalesce(o.desconto, 0)) > 0.005;
+  if not v_mudou then
+    avisos := array_append(avisos, 'O desconto já é ' || public.agente_reais(v_desc) || ': nada mudou.');
+    if v_excesso > 0.009 then
+      avisos := array_append(avisos, 'As parcelas a receber passam do saldo em ' || public.agente_reais(v_excesso) || ': confira em Contas a receber.');
+    end if;
+  end if;
 
   begin
-    -- parcelas que passam do saldo novo: da mais nova para a mais antiga
-    if v_excesso > 0.009 then
+    -- parcelas que passam do saldo novo: da mais nova para a mais antiga (só quando o desconto muda; sempre com histórico na O.S.)
+    if v_mudou and v_excesso > 0.009 then
       for pa in select * from public.receber where ordem_id = o.id and status = 'aberta' order by vencimento desc, parcela desc, id desc for update loop
         exit when v_excesso <= 0.009;
         if exists (select 1 from public.boletos b where b.receber_id = pa.id and b.situacao in ('gerado', 'enviado', 'registrado', 'baixa_pedida')) then
@@ -144,7 +151,7 @@ begin
         v_excesso := round(v_excesso - v_corte, 2);
       end loop;
     end if;
-    if abs(v_desc - coalesce(o.desconto, 0)) > 0.005 or abs(v_total - coalesce(o.total, 0)) > 0.005 then
+    if v_mudou then
       perform public.agente_patch_os(o.id, jsonb_build_object('desconto', v_desc, 'total', v_total));
       insert into public.eventos (ordem_id, tipo, texto, usuario_nome)
       values (o.id, 'desconto', 'Desconto da O.S. de ' || public.agente_reais(coalesce(o.desconto, 0)) || ' para ' || public.agente_reais(v_desc)
@@ -158,7 +165,7 @@ begin
     if o.status = 'entregue' and not v_fechou and v_saldo - v_abertas > 0.009 and v_abertas > 0 then
       avisos := array_append(avisos, public.agente_reais(v_saldo - v_abertas) || ' do saldo ainda não têm prazo: combine o prazo na O.S. (ou pelo conector, parcela acao=combinar_prazo).');
     end if;
-    v_res := jsonb_build_object('os', o.numero, 'id', o.id, 'valor_itens', v_bruto, 'desconto_antes', coalesce(o.desconto, 0), 'desconto', v_desc,
+    v_res := jsonb_build_object('os', o.numero, 'id', o.id, 'valor_itens', v_bruto, 'desconto_antes', coalesce(o.desconto, 0), 'desconto', v_desc, 'mudou', v_mudou,
       'total_antes', v_total_antes, 'total', v_total, 'recebido', v_rec, 'saldo', v_saldo, 'parcelas_ajustadas', v_ajustes, 'fechou', v_fechou,
       'avisos', to_jsonb(avisos));
     if not coalesce(p_gravar, true) then raise exception using errcode = 'DT001', message = 'previa'; end if;
@@ -257,7 +264,7 @@ end $$;
 create or replace function public.agente_alterar_os_v50(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare v_dados jsonb := coalesce(p->'dados', '{}'); v_desc jsonb; v_acao text := lower(coalesce(trim(p->>'acao'), '')); r jsonb; rd jsonb; o public.ordens;
-  v_resto boolean; v_antes boolean;
+  v_resto boolean; v_antes boolean; v_itens boolean;
 begin
   perform public.agente_exige_admin();
   if jsonb_typeof(v_dados) <> 'object' then raise exception 'dados deve ser um objeto {campo: valor}.'; end if;
@@ -269,10 +276,15 @@ begin
   end if;
   if v_dados ? 'desconto' then v_desc := v_dados->'desconto'; v_dados := v_dados - 'desconto'; end if;
   p := jsonb_set(p, '{dados}', v_dados);
-  v_resto := v_acao <> '' or v_dados <> '{}'::jsonb or coalesce(p->>'cliente_id', '') <> '' or coalesce(p->>'placa', '') <> '' or coalesce(p->>'veiculo_id', '') <> ''
-    or jsonb_array_length(coalesce(p->'itens_incluir', '[]')) + jsonb_array_length(coalesce(p->'itens_alterar', '[]')) + jsonb_array_length(coalesce(p->'itens_remover', '[]')) > 0;
-  -- desconto antes (entregar com parcelas usa o saldo novo); depois só quando a O.S. é reaberta/volta etapa na mesma chamada
-  v_antes := v_acao not in ('reabrir', 'voltar_etapa');
+  v_itens := jsonb_array_length(coalesce(p->'itens_incluir', '[]')) + jsonb_array_length(coalesce(p->'itens_alterar', '[]')) + jsonb_array_length(coalesce(p->'itens_remover', '[]')) > 0;
+  v_resto := v_acao <> '' or v_dados <> '{}'::jsonb or coalesce(p->>'cliente_id', '') <> '' or coalesce(p->>'placa', '') <> '' or coalesce(p->>'veiculo_id', '') <> '' or v_itens;
+  if v_desc is not null and v_acao in ('cancelar', 'excluir', 'recusar', 'retirar') then
+    raise exception 'Desconto não combina com acao=%: mande só o que quer fazer.', v_acao; end if;
+  if v_desc is not null and v_acao = 'entregar' and v_itens then
+    raise exception 'Numa chamada só não dá para mexer nos itens, dar desconto e entregar: mande os itens primeiro.'; end if;
+  -- desconto antes só na entrega (as parcelas usam o saldo novo); nos outros casos, depois — vale sobre os itens e a etapa já mudados
+  -- (o os_aplicar_desconto confere de novo: não passa do valor dos itens e o total não fica menor que o recebido)
+  v_antes := v_acao = 'entregar';
   if v_desc is not null and v_antes then
     rd := public.agente_desconto_os(jsonb_build_object('numero', p->'numero', 'desconto', v_desc, 'motivo', coalesce(p->>'motivo', ''), 'pedido', coalesce(p->>'pedido', '')));
   end if;
@@ -318,11 +330,19 @@ begin
     v_antes := to_jsonb(f);
   end if;
   if v_acao = 'excluir' then
-    begin
-      delete from public.fornecedores where id = f.id;
-    exception when foreign_key_violation then
-      raise exception 'O fornecedor % tem registros ligados (produtos, notas ou contas): use acao=inativar.', coalesce(nullif(f.fantasia, ''), f.razao);
-    end;
+    -- as ligações com fornecedores apagam em cascata ou ficam sem fornecedor (o banco não barra): só exclui o que não tem nada ligado
+    select array_to_string(array_remove(array[
+      (select case when count(*) > 0 then count(*) || ' conta(s) a pagar' end from public.contas where fornecedor_id = f.id),
+      (select case when count(*) > 0 then count(*) || ' nota(s) de entrada' end from public.notas_entrada where fornecedor_id = f.id),
+      (select case when count(*) > 0 then count(*) || ' produto(s)' end from public.produtos where fornecedor_id = f.id),
+      (select case when count(*) > 0 then count(*) || ' código(s) de produto do fornecedor' end from public.produto_fornecedor where fornecedor_id = f.id),
+      (select case when count(*) > 0 then count(*) || ' item(ns) de O.S.' end from public.os_itens where fornecedor_id = f.id),
+      (select case when count(*) > 0 then count(*) || ' pedido(s) de compra' end from public.pre_notas where fornecedor_id = f.id),
+      (select case when count(*) > 0 then count(*) || ' regra(s) aprendida(s)' end from public.agente_regras where fornecedor_id = f.id)], null), ', ') into v_cand;
+    if coalesce(v_cand, '') <> '' then
+      raise exception 'O fornecedor % tem % ligados: use acao=inativar (some das listas e o histórico fica).', coalesce(nullif(f.fantasia, ''), f.razao), v_cand;
+    end if;
+    delete from public.fornecedores where id = f.id;
     perform public.agente_registrar('fornecedor', p, 'fornecedores', f.id::text, v_antes, jsonb_build_object('excluido', true));
     return jsonb_build_object('acao', 'excluir', 'excluido', true, 'fornecedor', jsonb_build_object('razao', f.razao, 'fantasia', f.fantasia, 'cnpj', f.cnpj));
   end if;
@@ -491,6 +511,11 @@ begin
     select * into vd from public.vendas where numero = nullif(regexp_replace(p->>'venda', '\D', '', 'g'), '')::int;
     if vd.id is null then raise exception 'Venda % não encontrada.', p->>'venda'; end if;
     if vd.status = 'cancelada' then raise exception 'A venda % está cancelada.', vd.numero; end if;
+    if v_valor > vd.total - coalesce((select sum(valor) from public.recibos where venda_id = vd.id and not cancelado), 0) + 0.009 then
+      raise exception 'A venda % (total %) já tem % recebido: falta só %.', vd.numero, public.agente_reais(vd.total),
+        public.agente_reais(coalesce((select sum(valor) from public.recibos where venda_id = vd.id and not cancelado), 0)),
+        public.agente_reais(greatest(0, vd.total - coalesce((select sum(valor) from public.recibos where venda_id = vd.id and not cancelado), 0)));
+    end if;
   end if;
   if coalesce(p->>'cliente_id', '') <> '' then
     select * into c from public.clientes where id = (p->>'cliente_id')::uuid;
@@ -616,6 +641,8 @@ begin
   if v_acao = 'excluir' then
     select count(*) into v_n from public.funcionario_lanc where funcionario_id = f.id;
     if v_n > 0 then raise exception '% tem % lançamento(s) no histórico: use acao=desligar (o histórico fica).', f.nome, v_n; end if;
+    select count(*) into v_n from public.ordens where tecnico_id = f.id;
+    if v_n > 0 then raise exception '% é o técnico responsável de % O.S.: use acao=desligar (a comissão dessas O.S. continua com ele).', f.nome, v_n; end if;
     delete from public.funcionarios where id = f.id;
     perform public.agente_registrar('funcionario', p, 'funcionarios', f.id::text, v_antes, jsonb_build_object('excluido', true));
     return jsonb_build_object('acao', 'excluir', 'excluido', true, 'funcionario', f.nome);
@@ -732,9 +759,11 @@ begin
     if jsonb_typeof(p->'itens') is distinct from 'array' or jsonb_array_length(p->'itens') = 0 then
       raise exception 'Informe itens: [{item_id (peça da O.S., veja buscar_os), nf_item (nº do item na nota) ou custo_total}].'; end if;
     if n.xml is not null then nf := public.agente_ler_nfe(n.xml); end if;
-    -- já usado de cada item da nota (outras O.S.)
+    -- já usado de cada item da nota (outras peças); a peça que está sendo vinculada de novo não conta (o vincular_nfe_os troca o vínculo dela)
     select coalesce(jsonb_object_agg(v.nf_item::text, v.q), '{}') into v_usado
-      from (select nf_item, sum(qtd) q from public.nfe_os_vinculos where chave = n.chave and nf_item is not null group by nf_item) v;
+      from (select nf_item, sum(qtd) q from public.nfe_os_vinculos where chave = n.chave and nf_item is not null
+              and item_id not in (select (x->>'item_id')::uuid from jsonb_array_elements(p->'itens') x where coalesce(x->>'item_id', '') <> '')
+            group by nf_item) v;
     for it in select * from jsonb_array_elements(p->'itens') loop
       select * into cur from public.os_itens where id = nullif(it->>'item_id', '')::uuid and ordem_id = o.id;
       if cur.id is null then raise exception 'Item % não é da O.S. % (veja os ids em buscar_os).', coalesce(it->>'item_id', '?'), o.numero; end if;
@@ -975,6 +1004,8 @@ begin
         and (v_acao = 'tornar' or x.fixa);
     if v_n = 0 then raise exception 'Nenhuma conta % com "%".', case when v_acao = 'tornar' then '' else 'fixa' end, p->>'busca'; end if;
     if v_n > 1 and v_acao = 'tornar' then raise exception 'Achei % contas: diga qual (id): %', v_n, left(v_cand::text, 1500); end if;
+    if v_acao = 'encerrar' and (select count(distinct x.grupo) from public.contas x where x.id in (select (e->>'id')::uuid from jsonb_array_elements(v_cand) e)) > 1 then
+      raise exception 'Achei mais de uma despesa fixa com "%": diga qual (id): %', p->>'busca', left(v_cand::text, 1500); end if;
     select * into c from public.contas where id = (v_cand->0->>'id')::uuid;
   end if;
   if c.id is null then raise exception 'Conta não encontrada (informe id ou busca).'; end if;
@@ -991,9 +1022,11 @@ end $$;
 -- p: campos {chave: valor} dos Ajustes (nome, endereco, telefone, cnpj, cidade, valorHora, markupPecas, markupTerceiros, garantiaDias,
 --    validadeDias, taxaDiagnostico, impressaoVias, exigirFotos, condicoesPadrao, termoEntrada, termoOrcamento, termoGarantia,
 --    textoRecibo, formasPagamento, situacoesOS, tiposCliente, categoriasDespesa, itensExtras);
---    encargos {fgts, inssPatronal, ferias, decimo} (Funcionários); backup_leitura {ativo, emails}; rh_remetentes [e-mails];
---    whatsapp_alerta (telefone que recebe os avisos); email_ligado (true/false); sefaz {buscar_automatico, ciencia_automatica}
+--    encargos {fgts, inssPatronal, ferias, decimo} (Funcionários); rh_remetentes [e-mails]; email_ligado (true/false);
+--    sefaz {buscar_automatico, ciencia_automatica}
 -- Fora daqui: contas e saldos (atualizar_saldos), carteira de cobrança, espelho/importação, logotipo e o layout do painel.
+-- Só na tela (revisão do #62): o número dos avisos do WhatsApp (as mensagens dele dão OK/CANCELAR/AGORA ao sistema) e o backup de
+-- leitura (para onde vão todos os dados) — um texto malicioso num e-mail ou mensagem não pode levar o conector a trocá-los.
 create or replace function public.agente_ajustes(p jsonb) returns jsonb
 language plpgsql volatile security invoker set search_path = public as $$
 declare cfg jsonb; v_patch jsonb := '{}'; k text; v jsonb; v_antes jsonb := '{}'; v_depois jsonb := '{}'; v_lista jsonb; x text; feito text[] := '{}'; r jsonb;
@@ -1041,21 +1074,8 @@ begin
     v_antes := v_antes || jsonb_build_object('encargos', cfg->'encargos');
     v_patch := v_patch || jsonb_build_object('encargos', coalesce(cfg->'encargos', '{}') || (p->'encargos'));
   end if;
-  if jsonb_typeof(p->'backup_leitura') = 'object' then
-    v := coalesce(cfg->'backupLeitura', '{}');
-    if p->'backup_leitura' ? 'ativo' then
-      if jsonb_typeof(p->'backup_leitura'->'ativo') <> 'boolean' then raise exception 'backup_leitura.ativo deve ser true ou false.'; end if;
-      v := v || jsonb_build_object('ativo', p->'backup_leitura'->'ativo');
-    end if;
-    if p->'backup_leitura' ? 'emails' then
-      select coalesce(jsonb_agg(distinct lower(trim(e))), '[]') into v_lista from jsonb_array_elements_text(p->'backup_leitura'->'emails') e where trim(e) <> '';
-      if jsonb_array_length(v_lista) = 0 or jsonb_array_length(v_lista) > 3 then raise exception 'O backup vai para 1 a 3 e-mails.'; end if;
-      for x in select jsonb_array_elements_text(v_lista) loop
-        if x !~ '^[^@\s]+@[^@\s]+\.[^@\s]+$' then raise exception 'E-mail inválido: %.', x; end if;
-      end loop;
-      v := v || jsonb_build_object('emails', v_lista);
-    end if;
-    v_antes := v_antes || jsonb_build_object('backupLeitura', cfg->'backupLeitura'); v_patch := v_patch || jsonb_build_object('backupLeitura', v);
+  if p ? 'backup_leitura' or p ? 'whatsapp_alerta' then
+    raise exception 'O backup de leitura e o número dos avisos do WhatsApp só mudam na tela (Sistema › Backup e Sistema › WhatsApp): são proteções contra ordem falsa.';
   end if;
   if jsonb_typeof(p->'rh_remetentes') = 'array' then
     select coalesce(jsonb_agg(distinct lower(trim(e))), '[]') into v_lista from jsonb_array_elements_text(p->'rh_remetentes') e where trim(e) <> '';
@@ -1071,12 +1091,7 @@ begin
     v_depois := v_patch;
     feito := array_append(feito, 'ajustes: ' || (select string_agg(kk, ', ') from jsonb_object_keys(v_patch) kk));
   end if;
-  -- WhatsApp, e-mail e SEFAZ (as mesmas funções das telas)
-  if p ? 'whatsapp_alerta' then
-    v_antes := v_antes || jsonb_build_object('whatsapp_alerta', (select alerta_telefone from public.whatsapp_conexao where id = 1));
-    r := public.whatsapp_alerta_config(coalesce(p->>'whatsapp_alerta', ''));
-    v_depois := v_depois || jsonb_build_object('whatsapp_alerta', r->'alerta_telefone'); feito := array_append(feito, 'número dos avisos do WhatsApp');
-  end if;
+  -- e-mail e SEFAZ (as mesmas funções das telas)
   if p ? 'email_ligado' then
     if jsonb_typeof(p->'email_ligado') <> 'boolean' then raise exception 'email_ligado deve ser true ou false.'; end if;
     perform public.email_ligar((p->>'email_ligado')::boolean);
@@ -1086,7 +1101,7 @@ begin
     r := public.agente_nota_sefaz(jsonb_build_object('acao', 'configurar') || (p->'sefaz'));
     v_depois := v_depois || jsonb_build_object('sefaz', r); feito := array_append(feito, 'Notas da SEFAZ');
   end if;
-  if array_length(feito, 1) is null then raise exception 'Nada a mudar: informe campos, encargos, backup_leitura, rh_remetentes, whatsapp_alerta, email_ligado ou sefaz.'; end if;
+  if array_length(feito, 1) is null then raise exception 'Nada a mudar: informe campos, encargos, rh_remetentes, email_ligado ou sefaz.'; end if;
   perform public.agente_registrar('ajustes', p, 'config', '1', v_antes, v_depois);
   return jsonb_build_object('feito', to_jsonb(feito), 'antes', v_antes, 'depois', v_depois,
     'aviso', 'As telas abertas pegam os ajustes novos ao recarregar (ou no próximo minuto).');

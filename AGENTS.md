@@ -96,22 +96,28 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   recusada ou fechada não muda (fechada: reabrir antes); não passa do valor dos itens (`os_valor_itens`, como `totais`) e o total não fica
   menor que o já recebido; parcelas a receber que passam do saldo novo são reduzidas da mais nova para a mais antiga (zerada = cancelada);
   parcela com boleto Sicredi no banco é recusada (pedir a baixa antes); quitou → fecha (gatilho do v12/v17); grava pela
-  `sincronizar_alteracao_os` e no histórico. Tela: no orçamento (diagnóstico) o campo continua no total, agora em R$ ou %; depois
-  ("aguardando", execução, pronto, entregue a receber) o total mostra o valor e **Alterar** (quadro com a prévia) e o quadro de receber tem a linha
-  "Desconto na O.S." (abre o campo; o botão principal espera "Aplicar desconto"). Precisa de internet.
+  `sincronizar_alteracao_os` e no histórico; o mesmo desconto não muda nada (as parcelas só acompanham uma mudança de desconto). Tela: no
+  orçamento (diagnóstico) o campo continua no total, agora em R$ ou %; depois ("aguardando", execução, pronto, entregue a receber) o total
+  mostra o valor e **Alterar** (quadro com a prévia) e o quadro de receber tem a linha "Desconto na O.S." (abre o campo; o botão principal
+  espera "Aplicar desconto"; a tela de trás é recarregada). Depois do orçamento, "Salvar O.S." não manda o desconto e calcula o total com o
+  do servidor (senão gravaria o antigo por cima). Precisa de internet; no programa do PC, espera a fila da O.S. (alteração pendente ou em conflito).
   (3) **Conector:** `consultar` (lê qualquer tabela com filtros, pelo login do Danilo — mesmas regras de acesso; `segredos`, `email_token` e
   `whatsapp_sessao` recusadas; QR do pareamento e hash da chave do motor nunca saem; XML das notas fora do padrão), `relatorio` (resumo,
   faturamento, técnicos, mais vendidos, previsão de caixa e resultado — as mesmas contas de `js/telas/relatorios.js`), e pelo `agente_fazer`:
   `desconto_os`, `fornecedor`, `venda_balcao`, `recibo_avulso`, `funcionario` (cadastro e lançamentos; `folha` e `lancar_folha` calculam pelo
   `js/folha.js` da tela), `nota_sefaz` (manifestar, ignorar, vincular à O.S., consultar agora), `boleto` (consultar, atualizar pagamentos como
   a tela — `boleto_pago`/`boleto_situacao` —, pedir baixa), `pedido_compra`, `parcela`, `despesa_fixa`, `ajustes`, `equipe`, `site` e
-  `rh_documento`; `alterar_os` aceita `dados.tecnico` (nome) e `dados.desconto` (pelo `os_aplicar_desconto`). `anexar_na_os` (NF em PDF/XML ou foto
+  `rh_documento`; `alterar_os` aceita `dados.tecnico` (nome) e `dados.desconto` (pelo `os_aplicar_desconto`, aplicado DEPOIS dos itens e da
+  etapa — antes só na entrega, que usa o saldo novo nas parcelas; com cancelar/excluir/recusar/retirar é recusado). Fornecedor só é excluído sem
+  nada ligado (as chaves são "set null"/"cascade": o banco não barra); funcionário que é técnico de O.S. não é excluído (tela e conector). `anexar_na_os` (NF em PDF/XML ou foto
   JPG/PNG, do anexo de e-mail ou da foto do WhatsApp — `whatsapp_mensagens_de` mostra o `foto_id`) e `backup_leitura` vão pela função "email"
   (ação `anexar_os` em `email/acoes.ts`; a do WhatsApp não precisa da Microsoft). **Prévia sem número:** o `agente_fazer` marca a transação
   (`dtcar.agente_previa`, lida por `agente_em_previa()`); na prévia, venda de balcão e recibo avulso conferem tudo e devolvem a conta SEM gravar
   (a sequência dos números não volta atrás: senão cada prévia pularia um número de venda e de recibo); `boleto_pago` só grava.
   **Fica de fora (só pela tela):** ObjetivaWeb, certificado, Importar OS Oficina, restaurar backup, pagar/transferir/aceitar no banco, chave
-  do motor e pareamento do WhatsApp, login da Microsoft. A função "agente" importa o `js/folha.js` do GitHub **travado num commit**
+  do motor e pareamento do WhatsApp, login da Microsoft, **o número dos avisos do WhatsApp** (as mensagens dele dão OK/CANCELAR/AGORA ao sistema)
+  e **o backup de leitura** (para onde vão todos os dados) — proteção contra ordem falsa vinda de e-mail ou mensagem. Acesso (`equipe`),
+  `ajustes` e qualquer exclusão: sempre prévia e "sim". A função "agente" importa o `js/folha.js` do GitHub **travado num commit**
   (`agente/ferramentas.ts`): **mudou `js/folha.js` (ou o `util.js` que ele usa)? Troque o commit, faça o merge com "Create a merge commit" e
   publique a função "agente" de novo.** Testes: `bash teste/teste_v50.sh` (banco INTEIRO: `teste/montar_banco.sh` monta o Supabase de
   mentira `teste/supabase_falso.sql` + `schema.sql` + todos os vNN; roda também os cenários do v40, v41 e v42 com o v50),

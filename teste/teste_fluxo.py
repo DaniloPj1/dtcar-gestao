@@ -479,6 +479,7 @@ try:
     itens_os()
     chk("desconto: a tela mostra o total novo", "315,00" in pg.inner_text(".totais"), pg.inner_text(".totais"))
     pg.click(".totais .desc-depois button:has-text('Alterar')"); pg.wait_for_timeout(700)
+    chk("desconto: o mesmo valor não dá para aplicar (nada mudaria)", pg.evaluate("document.querySelector('[role=dialog] .acoes .btn-pri').disabled"))
     pg.fill("#dsc-v", "400,00"); pg.wait_for_timeout(1000)
     chk("desconto: maior que o valor dos itens é recusado na prévia", "não pode passar" in pg.inner_text("[role=dialog]") and pg.evaluate("document.querySelector('[role=dialog] .acoes .btn-pri').disabled"))
     pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
@@ -497,7 +498,14 @@ try:
     pg.click("[role=dialog] .enc-desc button:has-text('Cancelar')"); pg.wait_for_timeout(300)
     chk("receber: Cancelar volta o desconto gravado e libera o botão", pg.query_selector("[role=dialog] #enc-desc") is None and ordem("o3")["total"] == 280
         and not pg.evaluate("document.querySelector('[role=dialog] .acoes .btn-pri').disabled"))
-    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(500)
+    # revisão do #62: o desconto dado no quadro de receber chega à tela da O.S.; "Salvar O.S." depois não grava o antigo por cima
+    itens_os()
+    chk("receber → O.S.: a tela mostra o desconto novo (70) e o total 280", "70,00" in pg.inner_text(".totais .desc-depois") and "280,00" in pg.inner_text(".totais"), pg.inner_text(".totais"))
+    pg.click("[role=tab]:has-text('Principais informações')"); pg.wait_for_timeout(300)
+    pg.fill("#os-box", "7"); pg.click(".rodape-acoes button:has-text('Salvar O.S.')"); pg.wait_for_timeout(1200)
+    o3 = ordem("o3")
+    chk("salvar a O.S. depois do desconto não volta o desconto nem o total", o3.get("desconto") == 70 and o3["total"] == 280 and o3.get("box") == "7", o3)
     # entregue a receber com parcelas: o desconto reduz a parcela mais nova
     pg.evaluate("""(() => { const d = window.__DB;
       d.ordens.unshift({ id: 'o9', numero: 1909, status: 'entregue', recebido: 200, finalizada_em: null, entregue_em: '2026-11-05T10:00:00-03:00', criado_em: '2026-11-04T08:00:00-03:00',
@@ -530,6 +538,10 @@ try:
     chk("sem o v50: técnico pelos acessos (sem a lista de funcionários) e sem gravar tecnico_id", "João Silva (Joãozinho)" not in ops and "Carlos Mecânico" in ops and o4.get("mecanico_id") == "p2" and "tecnico_id" not in o4, [ops, o4.get("mecanico_id")])
     pg.evaluate("window.__SEM_V50 = false")
     pg.screenshot(path=SAIDA + "/u9-desconto-tecnico.png")
+    pg.evaluate("window.__DB.ordens.find(o => o.id === 'o3').tecnico_id = 'fu1'")
+    pg.goto(U + "#/funcionario/fu1"); pg.wait_for_timeout(1500)
+    pg.click("button:has-text('Excluir cadastro')"); pg.wait_for_timeout(600)
+    chk("funcionário técnico de O.S. não é excluído (avisa para desligar)", any(f["id"] == "fu1" for f in pg.evaluate("window.__DB.funcionarios")) and "técnico responsável de 1 O.S." in pg.inner_text("body"))
     # O.S. em aberto guardadas por inteiro (inclui aguardando pagamento) e telas que só funcionam online
     pg.goto(U + "#/dados-locais"); pg.wait_for_timeout(2500)
     t = pg.inner_text("main")

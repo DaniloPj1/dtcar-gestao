@@ -311,8 +311,9 @@ begin
   perform pg_temp.ok((select dados->>'contaRecebimento' = 'Sicredi' from public.config where id = 1), 'o resto da config continua');
   perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"campos": {"espelhoLegado": true}}', true)$q$, 'não muda por aqui');
   perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"campos": {"impressaoVias": 5}}', true)$q$, '1 a 3');
-  r := public.agente_fazer('ajustes', '{"whatsapp_alerta": "(27) 99769-6545", "backup_leitura": {"emails": ["a@b.com"]}}', true);
-  perform pg_temp.ok((select alerta_telefone from public.whatsapp_conexao where id = 1) = '5527997696545', 'número dos avisos do WhatsApp');
+  -- revisão do #62: o número que dá ordens pelo WhatsApp e o destino do backup só mudam na tela
+  perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"whatsapp_alerta": "(27) 99769-6545"}', true)$q$, 'só mudam na tela');
+  perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"backup_leitura": {"emails": ["a@b.com"]}}', true)$q$, 'só mudam na tela');
   -- equipe
   r := public.agente_fazer('equipe', '{"perfil": "carlos", "ativo": false}', true);
   perform pg_temp.ok((select not ativo from public.perfis where id = '33333333-3333-3333-3333-333333333333'), 'desativar acesso');
@@ -361,6 +362,74 @@ begin
     and (select (m->>'foto_id')::bigint from jsonb_array_elements(r->'mensagens') m where m ? 'foto_id') = (select id from public.whatsapp_mensagens where msg_id = 'WAFOTO1'),
     'WhatsApp: só a mensagem com foto mostra o foto_id');
   perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 100}', false)$q$, 'Nada a fazer');
+end $$;
+
+-- ---------------------------------------------------------------- 12. revisão independente do PR #62
+reset role;
+-- O.S. 105 entregue a receber: itens 600 + 400, recibo 300, parcelas 350 + 350
+insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total, entregue_em)
+values ('00000000-0000-0000-0000-000000000105', 105, 'entregue', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000f1',
+        '{"nome": "Ana Souza"}', '{"placa": "ABC1D23"}', 1000, 1000, now());
+insert into public.os_itens (id, ordem_id, tipo, descricao, qtd, valor_unit, aprovado, executado) values
+  ('00000000-0000-0000-0000-00000000e105', '00000000-0000-0000-0000-000000000105', 'servico', 'Motor', 1, 600, true, true),
+  ('00000000-0000-0000-0000-00000000e106', '00000000-0000-0000-0000-000000000105', 'servico', 'Câmbio', 1, 400, true, true);
+insert into public.recibos (ordem_id, cliente_id, pagador, valor, referente, forma, conta_destino, data)
+values ('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-0000000000c1', 'Ana Souza', 300, 'entrada', 'PIX', 'Sicredi', current_date);
+insert into public.receber (id, ordem_id, cliente_id, cliente_nome, descricao, forma, parcela, parcelas, valor, vencimento) values
+  ('00000000-0000-0000-0000-0000000005a1', '00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-0000000000c1', 'Ana Souza', 'OS 00105', 'Promissória', 1, 2, 350, current_date + 20),
+  ('00000000-0000-0000-0000-0000000005a2', '00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-0000000000c1', 'Ana Souza', 'OS 00105', 'Promissória', 2, 2, 350, current_date + 50);
+-- duas despesas fixas parecidas
+insert into public.contas (id, descricao, favorecido, valor, vencimento, categoria, fixa, grupo) values
+  ('00000000-0000-0000-0000-0000000000d7', 'Aluguel casa 1', 'Imobiliária', 900, current_date + 8, 'Aluguel', true, '00000000-0000-0000-0000-00000000ca51'),
+  ('00000000-0000-0000-0000-0000000000d8', 'Aluguel casa 2', 'Imobiliária', 700, current_date + 9, 'Aluguel', true, '00000000-0000-0000-0000-00000000ca52');
+-- fornecedor com conta a pagar ligada
+insert into public.fornecedores (id, cnpj, razao, fantasia) values ('00000000-0000-0000-0000-0000000000b9', '', 'Torno do Zé', 'Torno do Zé');
+insert into public.contas (id, descricao, fornecedor_id, favorecido, valor, vencimento) values
+  ('00000000-0000-0000-0000-0000000000d9', 'Torno', '00000000-0000-0000-0000-0000000000b9', 'Torno do Zé', 120, current_date + 3);
+set role authenticated;
+do $$
+declare r jsonb; o public.ordens;
+begin
+  perform pg_temp.como('11111111-1111-1111-1111-111111111111');
+  -- (2) desconto junto com itens: vale sobre os itens já mudados (antes passava do valor dos itens e fechava a O.S. com parcela aberta)
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 650}, "itens_remover": ["00000000-0000-0000-0000-00000000e106"]}', true)$q$,
+    'não pode passar do valor dos itens');
+  perform pg_temp.ok((select count(*) from public.os_itens where ordem_id = '00000000-0000-0000-0000-000000000105') = 2, 'recusado: nada mudou (itens continuam)');
+  r := public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 100}, "itens_remover": ["00000000-0000-0000-0000-00000000e106"]}', true);
+  select * into o from public.ordens where numero = 105;
+  perform pg_temp.ok(o.desconto = 100 and o.total = 500 and o.finalizada_em is null, 'itens primeiro (600), depois o desconto: total 500 — ' || o.total);
+  perform pg_temp.ok((select status from public.receber where id = '00000000-0000-0000-0000-0000000005a2') = 'cancelada'
+                     and (select valor from public.receber where id = '00000000-0000-0000-0000-0000000005a1') = 200, 'parcelas acompanham o saldo novo (200)');
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 100, "acao": "entregar", "km_saida": "1100", "dados": {"desconto": 10}, "itens_remover": ["00000000-0000-0000-0000-00000000a102"]}', true)$q$,
+    'mande os itens primeiro');
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 100, "acao": "cancelar", "motivo": "teste", "dados": {"desconto": 10}}', true)$q$, 'não combina');
+  -- (4) o mesmo desconto: nada muda (as parcelas só acompanham uma mudança de desconto)
+  update public.receber set valor = 400 where id = '00000000-0000-0000-0000-0000000005a1';  -- parcela acima do saldo (como depois de mexer nos itens)
+  r := public.os_aplicar_desconto('00000000-0000-0000-0000-000000000105', 100, '', true);
+  perform pg_temp.ok(not (r->>'mudou')::boolean and r->'avisos'->>0 like '%nada mudou%' and r->'avisos'->>1 like '%passam do saldo%'
+                     and (select valor from public.receber where id = '00000000-0000-0000-0000-0000000005a1') = 400, 'mesmo desconto: nada muda, só avisa');
+  -- (3) fornecedor com conta ligada não é excluído (o banco não barra: a conta ficaria sem fornecedor)
+  perform pg_temp.erro($q$select public.agente_fazer('fornecedor', '{"acao": "excluir", "busca": "Torno do Zé"}', true)$q$, '1 conta(s) a pagar');
+  perform pg_temp.ok(exists (select 1 from public.fornecedores where id = '00000000-0000-0000-0000-0000000000b9'), 'fornecedor continua');
+  -- (5) recibo avulso de uma venda não passa do que falta receber dela
+  r := public.agente_fazer('venda_balcao', '{"itens": [{"descricao": "Lâmpada", "valor_unit": 25, "qtd": 2}], "forma": "PIX"}', true);
+  perform pg_temp.erro(format($q$select public.agente_fazer('recibo_avulso', '{"venda": %s, "valor": 50, "forma": "PIX", "receber_mesmo_repetido": true}', true)$q$, r->>'venda'), 'falta só');
+  r := public.agente_fazer('venda_balcao', '{"itens": [{"descricao": "Lâmpada", "valor_unit": 25, "qtd": 2}], "forma": "PIX", "receber": false}', true);
+  r := public.agente_fazer('recibo_avulso', format('{"venda": %s, "valor": 50, "forma": "PIX", "receber_mesmo_repetido": true}', r->>'venda')::jsonb, true);
+  perform pg_temp.ok((r->>'valor')::numeric = 50, 'venda sem recibo: recibo do que falta');
+  -- (10) encerrar despesa fixa: busca que acha duas sequências é recusada
+  perform pg_temp.erro($q$select public.agente_fazer('despesa_fixa', '{"acao": "encerrar", "busca": "Aluguel casa"}', true)$q$, 'mais de uma despesa fixa');
+  r := public.agente_fazer('despesa_fixa', '{"acao": "encerrar", "busca": "Aluguel casa 2"}', false);
+  perform pg_temp.ok(r->>'conta' = 'Aluguel casa 2', 'busca exata encerra a certa (prévia)');
+  -- (11) vincular de novo a mesma peça à mesma linha da nota (acertar o custo)
+  r := public.agente_fazer('nota_sefaz', '{"acao": "vincular_os", "numero": "456", "os": 100, "itens": [{"item_id": "00000000-0000-0000-0000-00000000a101", "custo_total": 70}]}', true);
+  perform pg_temp.ok((select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-00000000a101') = 35, 'custo acertado (70 / 2)');
+  r := public.agente_fazer('nota_sefaz', '{"acao": "vincular_os", "numero": "456", "os": 100, "itens": [{"item_id": "00000000-0000-0000-0000-00000000a101", "nf_item": 1}]}', true);
+  perform pg_temp.ok((select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-00000000a101') = 30, 'religar à mesma linha da nota não acusa falta (a própria peça não conta)');
+  -- (12) funcionário que é técnico de O.S. não é excluído
+  r := public.agente_fazer('funcionario', '{"acao": "criar", "campos": {"nome": "Zé Teste", "funcao": "Mecânico"}}', true);
+  r := public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"tecnico": "Zé Teste"}}', true);
+  perform pg_temp.erro($q$select public.agente_fazer('funcionario', '{"acao": "excluir", "funcionario": "Zé Teste"}', true)$q$, 'técnico responsável de 1 O.S.');
 end $$;
 
 reset role;

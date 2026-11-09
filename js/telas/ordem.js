@@ -262,7 +262,9 @@ export function Ordem({ id, params = {} }) {
   const editaInfo = gestor && aberta;
   const pendentes = itens.filter(i => i.aprovado === null || i.aprovado === undefined);
   const aprovadoAlgum = itens.some(i => i.aprovado === true);
-  const tOrc = totais(itens, campos.desconto, false), tAprov = totais(itens, campos.desconto, true);
+  // v50: no orçamento (diagnóstico) o desconto é o do campo; depois, só muda pelo quadro "Desconto" (os_aplicar_desconto): vale o do servidor
+  const descOS = st === "diagnostico" ? campos.desconto : Number(o.desconto) || 0;
+  const tOrc = totais(itens, descOS, false), tAprov = totais(itens, descOS, true);
   const usaAprov = ["execucao", "pronto", "entregue", "recusado"].includes(st);
   const tAtual = usaAprov ? tAprov : tOrc;
   const recebido = recibos.filter(r => !r.cancelado).reduce((s, r) => s + Number(r.valor), 0);
@@ -276,7 +278,7 @@ export function Ordem({ id, params = {} }) {
 
   const salvar = async (extra = {}, silencioso) => {
     const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(extra.status || st);
-    const t = totais(itens, campos.desconto, aprov);
+    const t = totais(itens, descOS, aprov);
     let lista = itens;
     if (itens.some(i => i._conta && !i.conta_id)) {
       lista = [];
@@ -293,7 +295,7 @@ export function Ordem({ id, params = {} }) {
     }
     await api.salvarItens(o.id, lista.map(({ _novo, _cadastrar, _conta, ...i }, n) => ({ ...i, posicao: n })), removidos);
     await api.atualizarOrdem(o.id, { diagnostico: campos.diagnostico, reclamacao: campos.reclamacao, previsao_entrega: campos.previsao_entrega || null, previsao_hora: campos.previsao_hora || "",
-      condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto, obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
+      condicoes_pagamento: campos.condicoes_pagamento, ...(st === "diagnostico" ? { desconto: campos.desconto } : {}), obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
       situacao: campos.situacao, tabela_preco: campos.tabela_preco, total: t.total, custo: t.custo, ...extra });
     if (!silencioso) avisar("O.S. salva.");
     // item mexido depois da entrega/recebimento: avisa o que precisa de conferência (recibos e parcelas não mudam sozinhos)
@@ -340,12 +342,12 @@ export function Ordem({ id, params = {} }) {
     if (assin && !assin.vazio()) { const b = await assin.blob(); assinatura = await api.enviarArquivo("assinaturas/" + o.id + "-aprov-" + Date.now() + ".png", b, "image/png"); }
     const novos = itens.map(i => (i.aprovado === null || i.aprovado === undefined) ? { ...i, aprovado: !!sel[i.id] } : i);
     const algum = novos.some(i => i.aprovado === true);
-    const t = totais(novos, campos.desconto, true);
+    const t = totais(novos, descOS, true);
     const registro = { em: new Date().toISOString(), por, forma, obs, assinatura };
     await api.salvarItens(o.id, novos.map(({ _novo, ...i }) => i), removidos);
     const status = st === "aguardando" || st === "diagnostico" ? (algum ? "execucao" : "recusado") : st;
     await api.atualizarOrdem(o.id, { aprovacao: o.aprovacao ? { ...registro, anteriores: (o.aprovacao.anteriores || []).concat([{ ...o.aprovacao, anteriores: undefined }]) } : registro,
-      status, total: t.total, custo: t.custo, diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto });
+      status, total: t.total, custo: t.custo, diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento, ...(st === "diagnostico" ? { desconto: campos.desconto } : {}) });
     const aprovados = novos.filter(i => sel[i.id] && pendentes.some(p => p.id === i.id)).length;
     await evento("aprovacao", `${por} aprovou ${aprovados} de ${pendentes.length} itens (${forma}).` + (status === "recusado" ? " Orçamento recusado." : ""));
     setModal(null); avisar(status === "recusado" ? "Nenhum item aprovado: orçamento marcado como recusado." : "Aprovação registrada."); await carregar(); recarregar(["ordens", "produtos"]);
@@ -401,7 +403,7 @@ export function Ordem({ id, params = {} }) {
   const confirmarEntrega = ({ km, forma, garantia, assin, recibo, prazo }) => acao("entregar", async () => {
     let assinatura = "";
     if (assin && !assin.vazio()) { const b = await assin.blob(); assinatura = await api.enviarArquivo("assinaturas/" + o.id + "-entrega.png", b, "image/png"); }
-    const t = totais(itens, campos.desconto, true);
+    const t = totais(itens, descOS, true);
     await api.atualizarOrdem(o.id, { status: st === "recusado" ? "recusado" : "entregue", km_saida: km, entregue_em: new Date().toISOString(), forma_pagamento: forma, garantia_dias: garantia, assinatura_entrega: assinatura, total: t.total, custo: t.custo, situacao: "" });
     const v = dados.veiculos.find(x => x.id === o.veiculo_id);
     if (v && km > (v.km_atual || 0)) await api.veiculos.salvar({ id: v.id, km_atual: km });
@@ -643,7 +645,8 @@ export function Ordem({ id, params = {} }) {
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
     ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} comPrazo=${comPrazo} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
-    ${modal && modal.tipo === "encerrar" ? html`<${EncerrarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }} />` : null}
+    ${modal && modal.tipo === "encerrar" ? html`<${EncerrarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }}
+      onDesconto=${() => { carregar(); carregarParcelas(); }} />` : null}
     ${modal && modal.tipo === "parcela" ? html`<${ReceberParcelaModal} parcela=${modal.p} ordem=${{ ...o, total: tAtual.total }} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }} />` : null}
     ${modal && modal.tipo === "desconto" ? html`<${DescontoModal} o=${o} subtotal=${tAtual.subtotal} desconto=${o.desconto} onFechar=${() => setModal(null)}
       onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); recarregar(["ordens", "receber"]); }} />` : null}

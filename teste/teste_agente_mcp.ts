@@ -258,6 +258,7 @@ sicrediRecusa = false;
 
 // ---------------- v50: acesso a tudo, menos o ObjetivaWeb ----------------
 const texto = (r: { content?: Array<{ text: string }> } | undefined) => String(r?.content?.[0]?.text || "");
+const arred2 = (v: number) => Math.round(v * 100) / 100;
 const json = (r: { content?: Array<{ text: string }> } | undefined) => { try { return JSON.parse(texto(r)); } catch (_) { return {}; } };
 Object.assign(tabelasF, {
   ordens: [{ id: "o1", numero: 1900, status: "entregue", total: 550, entregue_em: "2026-10-10T15:00:00Z", mecanico_id: null, mecanico_nome: "João Silva", tecnico_id: "f1" },
@@ -299,6 +300,11 @@ c = await chama("consultar", { tabela: "whatsapp_conexao", colunas: "*" });
 confere("consultar: QR do pareamento e hash do motor não saem", c.r?.isError === true && /qr_svg/.test(texto(c.r)));
 c = await chama("consultar", { tabela: "whatsapp_conexao", colunas: "situacao,qr_svg" });
 confere("consultar: pedir a coluna do QR pelo nome também é recusado", c.r?.isError === true);
+c = await chama("consultar", { tabela: "whatsapp_conexao", colunas: "situacao, qr_ svg" });
+confere("consultar: espaço no meio do nome não engana a trava (revisão do #62)", c.r?.isError === true);
+consultas.length = 0;
+c = await chama("consultar", { tabela: "ordens", colunas: "numero, status" });
+confere("consultar: colunas vão sem espaços", consultas[0]?.sel === "numero,status", consultas[0]?.sel);
 consultas.length = 0;
 c = await chama("consultar", { tabela: "whatsapp_conexao" });
 confere("consultar: whatsapp_conexao padrão sem as colunas escondidas", !/qr_svg|motor_hash/.test(consultas[0]?.sel || "") && !/<svg/.test(texto(c.r)), consultas[0]?.sel);
@@ -330,8 +336,25 @@ tabelasF.receber.push({ id: "r2", status: "aberta", valor: 120, vencimento: hoje
 tabelasF.contas.push({ id: "c1", status: "aberta", valor: 1500, vencimento: hoje, descricao: "Aluguel" });
 c = await chama("relatorio", { tipo: "caixa" });
 const cx = json(c.r);
-confere("relatorio caixa: saldo agora + a receber − a pagar, vencidas à parte, menor saldo", cx.saldo_agora === 1050.5 && cx.dia_a_dia?.[0]?.saldo_previsto === -329.5 && cx.vencidas_a_receber?.total === 70
-  && cx.menor_saldo?.saldo === -329.5 && chamadas.some(([f]) => f === "gerar_despesas_fixas"), texto(c.r).slice(0, 500));
+confere("relatorio caixa: saldo agora + a receber − a pagar, vencidas a receber fora da conta, menor saldo", cx.saldo_agora === 1050.5 && cx.dia_a_dia?.[0]?.saldo_previsto === -329.5
+  && cx.fora_da_conta?.parcelas_vencidas_a_receber?.total === 70 && cx.menor_saldo?.saldo === -329.5 && chamadas.some(([f]) => f === "gerar_despesas_fixas"), texto(c.r).slice(0, 500));
+// como a tela: conta vencida e aberta sai hoje; despesa fixa do mês ainda não lançado entra como previsão (revisão do #62)
+const ha = (d: number) => new Date(Date.now() - 3 * 3600 * 1000 + d * 86400000).toISOString().slice(0, 10);
+tabelasF.contas.push({ id: "c-venc", status: "aberta", valor: 200, vencimento: "2020-05-10", descricao: "Água atrasada" },
+  { id: "fx1", status: "paga", valor: 150, vencimento: ha(-5), descricao: "Internet", fixa: true, grupo: "g-net" });
+c = await chama("relatorio", { tipo: "caixa" });
+const cx2 = json(c.r);
+confere("relatorio caixa: conta vencida sai hoje e a fixa do mês seguinte entra como previsão", cx2.dia_a_dia?.[0]?.saidas === 1700 && cx2.contas_vencidas_saem_hoje?.total === 200
+  && cx2.despesas_fixas_previstas?.quantas === 1 && cx2.saldo_previsto_no_fim === arred2(1050.5 + 120 - 1500 - 200 - 150), texto(c.r).slice(0, 700));
+tabelasF.contas = tabelasF.contas.filter((x) => !["c-venc", "fx1"].includes(String(x.id)));
+// mais vendidos: o mesmo produto na O.S. e no balcão vira uma linha (como a tela)
+respostas.relatorio_vendidos = [{ origem: "os", tipo: "produto", produto_id: "p1", codigo: 100, descricao: "Filtro", qtd: 2, valor: 100, custo: 40, vezes: 1 },
+  { origem: "balcao", tipo: "produto", produto_id: "p1", codigo: 100, descricao: "Filtro", qtd: 1, valor: 50, custo: 20, vezes: 1 },
+  { origem: "os", tipo: "servico", produto_id: null, codigo: null, descricao: "Alinhamento", qtd: 1, valor: 80, custo: 0, vezes: 1 }];
+c = await chama("relatorio", { tipo: "vendidos", de: "2026-10-01", ate: "2026-10-31" });
+const vd = json(c.r);
+confere("relatorio vendidos: junta O.S. e balcão do mesmo produto", vd.total_itens === 2 && vd.itens?.[0]?.descricao === "Filtro" && vd.itens?.[0]?.qtd === 3 && vd.itens?.[0]?.em_os === 2
+  && vd.itens?.[0]?.balcao === 1 && vd.itens?.[0]?.valor === 150 && vd.faturamento === 230, texto(c.r).slice(0, 500));
 c = await chama("relatorio", { tipo: "faturamento", de: "2026-10-31", ate: "2026-10-01" });
 confere("relatorio: data final antes da inicial é recusada", c.r?.isError === true);
 
@@ -381,6 +404,8 @@ c = await chama("ajustes", {});
 confere("ajustes sem nada: mostra, sem a carteira do banco nem o layout do painel", json(c.r).ajustes?.nome === "DTCAR" && !/cobranca|painel/.test(texto(c.r)) && !chamadas.some(([f]) => f === "agente_fazer"), texto(c.r));
 c = await chama("ajustes", { campos: { garantiaDias: 90 } });
 confere("ajustes com campos → agente_fazer prévia", c.fn === "agente_fazer" && c.args?.p_acao === "ajustes" && c.args?.p_gravar === false);
+c = await chama("ajustes", { whatsapp_alerta: "27999990000" } as Record<string, unknown>);
+confere("ajustes: número dos avisos do WhatsApp não muda pelo conector", !c.fn || !("whatsapp_alerta" in ((c.args?.p as L) || {})), JSON.stringify(c.args));
 
 // RH: excluir tira o PDF da pasta (só gravando)
 removidos.length = 0;

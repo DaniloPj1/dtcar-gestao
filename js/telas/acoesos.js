@@ -89,7 +89,7 @@ export async function avancarEtapa(o, etapa, { perfil, cfg }) {
  * Encerrar O.S. numa janela só: registra a entrega (se ainda não houve) e o pagamento (recibo).
  * Quitando o total, a O.S. fica finalizada. Vale para O.S. em execução (sem itens pendentes), pronta ou entregue a receber.
  */
-export function EncerrarModal({ o, onFechar, onFeito }) {
+export function EncerrarModal({ o, onFechar, onFeito, onDesconto }) {
   const { cfg, perfil, dados, avisar, recarregar, ir } = useApp();
   const [r, setR] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
   const [km, setKm] = useState(""), [forma, setForma] = useState(o.forma_pagamento || ""), [contaDest, setContaDest] = useState(""), [valor, setValor] = useState(0), [receber, setReceber] = useState(true), [imprimir, setImprimir] = useState(true), [prazo, setPrazo] = useState(null);
@@ -113,7 +113,9 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
     setOcupado(true); setErro("");
     try { const x = await api.descontoOS(o.id, Number(desc) || 0, "no recebimento", true);
       avisar("Desconto aplicado: total " + reais(x.total) + "." + ((x.avisos || []).length ? " " + x.avisos.join(" ") : ""));
-      if (x.fechou) { await recarregar(["ordens", "receber"]); onFeito && onFeito(); return; }
+      // a tela de trás (O.S. ou lista) passa a ter o desconto novo: senão um "Salvar O.S." depois gravaria o antigo por cima
+      onDesconto && onDesconto(x); recarregar(["ordens", "receber"]);
+      if (x.fechou) { onFeito && onFeito(); return; }
       await carregar(false); setAbrirDesc(false); }
     catch (e) { setErro(e.message); } finally { setOcupado(false); }
   };
@@ -218,7 +220,7 @@ export function DescontoModal({ o, subtotal, desconto, onFechar, onFeito }) {
       ${avisos.map(a => html`<div class="aviso" key=${a}>${a}</div>`)}` : null}
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
-      <button type="button" class="btn btn-pri" disabled=${ocupado || conta || !!erro || !prev} onClick=${aplicar}>${ocupado ? "Aplicando…" : "Aplicar desconto"}</button></div>
+      <button type="button" class="btn btn-pri" disabled=${ocupado || conta || !!erro || !prev || Math.abs((Number(valor) || 0) - (Number(desconto) || 0)) < 0.005} onClick=${aplicar}>${ocupado ? "Aplicando…" : "Aplicar desconto"}</button></div>
   </${Modal}>`;
 }
 

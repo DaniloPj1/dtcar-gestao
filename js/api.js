@@ -164,6 +164,9 @@ function criarApiSupabase() {
       ...tabela("funcionarios"),
       lancamentos: async (competencia, funcionarioId) => { let q = sb.from("funcionario_lanc").select("*").eq("competencia", competencia); if (funcionarioId) q = q.eq("funcionario_id", funcionarioId); return ok(await q.order("data").order("criado_em")); },
       lancar: async l => { const { id, ...resto } = l; return id ? ok(await sb.from("funcionario_lanc").update(resto).eq("id", id).select().single()) : ok(await sb.from("funcionario_lanc").insert(resto).select().single()); },
+      /** v50: em quantas O.S. ele é o técnico responsável (sem o v50: 0) */
+      osComoTecnico: async id => { const r = await sb.from("ordens").select("id", { count: "exact", head: true }).eq("tecnico_id", id);
+        if (r.error) { if (/tecnico_id|column/i.test(r.error.message || "")) return 0; throw traduzErro(r.error); } return r.count || 0; },
       excluirLanc: async id => ok(await sb.from("funcionario_lanc").delete().eq("id", id)),
       /** O.S. entregues no período, com o mecânico (v50: e o técnico da lista de Funcionários), para calcular a comissão */
       ordensEntregues: async (ini, fim) => { const q = c => todos(() => sb.from("ordens").select(c).eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero"));

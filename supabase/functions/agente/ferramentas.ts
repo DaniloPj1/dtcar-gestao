@@ -686,12 +686,15 @@ export function criarServidor(db: Banco): McpServer {
     // chama até não restar anexo novo (no máximo 10 lotes) e para se um lote não trouxer nada (só erros)
     const novos: unknown[] = [], erros: unknown[] = [];
     let ultimo: Record<string, unknown> = {};
+    // anexo que deu erro vai em "pular" na chamada seguinte: o lote avança para os outros
+    const pular: string[] = [];
     for (let i = 0; i < 10; i++) {
-      ultimo = await email({ acao: "importar_rh", dias });
+      ultimo = await email({ acao: "importar_rh", dias, ...(pular.length ? { pular } : {}) });
       if (ultimo.erro) return falha(String(ultimo.erro));
       novos.push(...((ultimo.novos as unknown[]) || []));
-      for (const e of ((ultimo.erros as unknown[]) || [])) if (!erros.some((x) => JSON.stringify(x) === JSON.stringify(e))) erros.push(e);
-      if (!ultimo.restam || !ultimo.importados) break;
+      const novosErros = ((ultimo.erros as Array<Record<string, unknown>>) || []).filter((e) => !pular.includes(String(e.chave)));
+      for (const e of novosErros) { pular.push(String(e.chave)); erros.push(e); }
+      if (!ultimo.restam || (!ultimo.importados && !novosErros.length)) break;
     }
     return texto({ importados: novos.length, novos, ...(erros.length ? { erros } : {}), restam: ultimo.restam || 0,
       remetentes: ultimo.remetentes, emails_achados: ultimo.emails_achados, email_mais_recente: ultimo.email_mais_recente,

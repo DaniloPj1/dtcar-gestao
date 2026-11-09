@@ -48,7 +48,8 @@ const nomeSeguro = (n: string) => normalizar(n).replace(/[^a-z0-9.]+/g, "-").rep
 const decodificar = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 const EMAIL_OK = /^[^@\s<>,;]+@[^@\s<>,;]+\.[^@\s<>,;]+$/;
 
-export interface ImportarRH { remetentes?: unknown; dias?: number; maximo?: number }
+/** pular: anexos ("email_id|anexo_id") que já deram erro nesta busca — ficam de fora para o lote avançar (tentados de novo na próxima busca) */
+export interface ImportarRH { remetentes?: unknown; dias?: number; maximo?: number; pular?: unknown }
 export const REMETENTES_PADRAO = ["dploredocontabilidade@gmail.com"];
 
 /** Remetentes da contabilidade gravados na tela (cfg.rh.remetentes); sem nada gravado, o padrão. */
@@ -72,6 +73,7 @@ export async function importarRH(adm: Db, token: string, p: ImportarRH, agora = 
   const { data: ja, error: eJa } = await adm.from("rh_documentos").select("email_id, anexo_id").gte("email_data", desde.toISOString());
   if (eJa) throw new Error(/does not exist|schema cache|relation/i.test(eJa.message) ? "Falta rodar o supabase/v30.sql no Supabase." : eJa.message);
   const feitos = new Set((ja || []).map((r: { email_id: string; anexo_id: string }) => r.email_id + "|" + r.anexo_id));
+  const pular = new Set((Array.isArray(p.pular) ? p.pular : []).map(String).slice(0, 500));
 
   // lista os e-mails da contabilidade com anexo (todas as pastas, menos lixo e excluídos)
   // deno-lint-ignore no-explicit-any
@@ -91,7 +93,7 @@ export async function importarRH(adm: Db, token: string, p: ImportarRH, agora = 
         const an = await graph(token, `/me/messages/${encodeURIComponent(m.id)}/attachments?$select=id,name,contentType,size,isInline`);
         for (const a of an.value || []) {
           if (a.isInline || a["@odata.type"] !== "#microsoft.graph.fileAttachment" || !ehArquivoRH(a.name || "", a.contentType || "")) continue;
-          if ((a.size || 0) > 15 * 1024 * 1024 || feitos.has(m.id + "|" + a.id)) continue;
+          if ((a.size || 0) > 15 * 1024 * 1024 || feitos.has(m.id + "|" + a.id) || pular.has(m.id + "|" + a.id)) continue;
           pendentes.push({ m, a });
         }
       }
@@ -103,7 +105,7 @@ export async function importarRH(adm: Db, token: string, p: ImportarRH, agora = 
 
   const lote = pendentes.slice(0, maximo);
   const novos: Array<Record<string, unknown>> = [];
-  const erros: Array<{ arquivo: string; email: string; erro: string }> = [];
+  const erros: Array<{ arquivo: string; email: string; erro: string; chave: string }> = [];
   for (const { m, a } of lote) {
     // cada anexo por si: um que falha vai para "erros" e não impede os outros
     try {
@@ -128,7 +130,7 @@ export async function importarRH(adm: Db, token: string, p: ImportarRH, agora = 
       }
       novos.push((ins || [])[0] || linha);
     } catch (e) {
-      erros.push({ arquivo: String(a.name || ""), email: String(m.subject || ""), erro: (e as Error).message });
+      erros.push({ arquivo: String(a.name || ""), email: String(m.subject || ""), erro: (e as Error).message, chave: m.id + "|" + a.id });
     }
   }
   const restam = Math.max(0, pendentes.length - lote.length);
@@ -144,8 +146,16 @@ export async function listarRH(adm: Db, p: { competencia?: unknown; tipo?: unkno
   if (comp) { if (!/^\d{4}-\d{2}$/.test(comp)) throw new Error("Mês no formato AAAA-MM (ex.: 2026-10)."); q = q.eq("competencia", comp); }
   const tipo = String(p.tipo || "").trim();
   if (tipo) q = q.eq("tipo", tipo);
-  const { data, error } = await q.order("competencia", { ascending: false }).order("criado_em", { ascending: false }).limit(500);
-  if (error) throw new Error(/does not exist|schema cache|relation/i.test(error.message) ? "Falta rodar o supabase/v30.sql no Supabase." : error.message);
+  // lê tudo (páginas de 1000) antes de filtrar o texto e contar: busca por nome de documento antigo também acha
+  q = q.order("competencia", { ascending: false }).order("criado_em", { ascending: false });
+  // deno-lint-ignore no-explicit-any
+  const data: any[] = [];
+  for (let de = 0; de < 20000; de += 1000) {
+    const { data: pag, error } = await q.range(de, de + 999);
+    if (error) throw new Error(/does not exist|schema cache|relation/i.test(error.message) ? "Falta rodar o supabase/v30.sql no Supabase." : error.message);
+    data.push(...(pag || []));
+    if (!pag || pag.length < 1000) break;
+  }
   const t = normalizar(String(p.texto || ""));
   // deno-lint-ignore no-explicit-any
   const todos = (data || []).filter((d: any) => !t || normalizar([d.titulo, d.nome_arquivo, d.email_assunto, d.obs].join(" ")).includes(t));

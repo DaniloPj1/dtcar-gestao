@@ -292,8 +292,8 @@ const banco: Banco = {
   functions: { invoke(nome: string, op: { body: Record<string, unknown> }) {
     invocadas.push([nome, op.body]);
     if (op.body.acao === "importar_rh") { rhChamadas++; return Promise.resolve({ data: rhChamadas === 1
-      ? { importados: 2, novos: [{ id: "a" }, { id: "b" }], restam: 3, erros: [{ arquivo: "x.pdf", erro: "falhou" }], remetentes: ["dploredocontabilidade@gmail.com"], emails_achados: 3, email_mais_recente: "2026-11-04T16:38:26Z" }
-      : { importados: 0, novos: [], restam: 3, erros: [{ arquivo: "x.pdf", erro: "falhou" }], remetentes: ["dploredocontabilidade@gmail.com"], emails_achados: 3, email_mais_recente: "2026-11-04T16:38:26Z" }, error: null }); }
+      ? { importados: 2, novos: [{ id: "a" }, { id: "b" }], restam: 3, erros: [{ arquivo: "x.pdf", erro: "falhou", chave: "M|A" }], remetentes: ["dploredocontabilidade@gmail.com"], emails_achados: 3, email_mais_recente: "2026-11-04T16:38:26Z" }
+      : { importados: 0, novos: [], restam: 3, remetentes: ["dploredocontabilidade@gmail.com"], emails_achados: 3, email_mais_recente: "2026-11-04T16:38:26Z" }, error: null }); }
     if (op.body.acao === "anexo") return Promise.resolve({ data: { nome: "foto.jpg", imagem: { base64: "AAAA", tipo: "image/jpeg" } }, error: null });
     if (op.body.acao === "ler" && op.body.id === "erro-erro-erro") return Promise.resolve({ data: null, error: { message: "Edge Function returned a non-2xx status code", context: { json: () => Promise.resolve({ erro: "A Microsoft pediu para conectar o e-mail de novo." }) } } });
     return Promise.resolve({ data: { ok: op.body.acao }, error: null });
@@ -339,7 +339,7 @@ const antesRH = invocadas.length;
 const rhb = await chamarTool("rh_buscar_contabilidade", {});
 const rhbR = JSON.parse(rhb.result.content[0].text);
 confere("conector: rh_buscar_contabilidade repete enquanto entra algo e para quando o lote não traz nada",
-  invocadas.length - antesRH === 2 && invocadas.at(-1)![1].acao === "importar_rh" && invocadas.at(-1)![1].dias === 120 && !("remetentes" in invocadas.at(-1)![1])
+  invocadas.length - antesRH === 2 && invocadas.at(-1)![1].acao === "importar_rh" && invocadas.at(-1)![1].dias === 120 && !("remetentes" in invocadas.at(-1)![1]) && JSON.stringify(invocadas.at(-1)![1].pular) === JSON.stringify(["M|A"])
   && rhbR.importados === 2 && rhbR.erros.length === 1 && rhbR.email_mais_recente === "2026-11-04T16:38:26Z", rhbR);
 
 for (const o of ok) console.log("OK", o);

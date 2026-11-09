@@ -56,7 +56,7 @@ export function DocumentosRH() {
       } catch (e) { /* tenta na próxima vez */ }
     }
   };
-  // busca na contabilidade: chama a função até não restar anexo novo (para se um lote não trouxer nada: só erros)
+  // busca na contabilidade: chama a função até não restar anexo novo (os que deram erro ficam de fora das chamadas seguintes)
   // 09/11/2026: o erro aparece também na busca automática (ao abrir a tela); antes ficava escondido e o documento não entrava sem aviso.
   const buscar = async (silencioso = false) => {
     setBuscando("Buscando no e-mail da contabilidade…"); setErro("");
@@ -64,11 +64,13 @@ export function DocumentosRH() {
     const falhas = new Map();
     try {
       for (let i = 0; i < 15; i++) {
-        const r = await api.email.chamar({ acao: "importar_rh", remetentes, dias: (docs && docs.length) ? 120 : 400 });
+        // anexo que deu erro vai em "pular" na chamada seguinte: o lote avança para os outros
+        const r = await api.email.chamar({ acao: "importar_rh", remetentes, dias: (docs && docs.length) ? 120 : 400, pular: [...falhas.keys()] });
         total += r.importados || 0;
-        for (const f of (r.erros || [])) falhas.set(f.arquivo + "|" + f.email, f);
+        let novasFalhas = 0;
+        for (const f of (r.erros || [])) { const k = f.chave || (f.arquivo + "|" + f.email); if (!falhas.has(k)) { falhas.set(k, f); novasFalhas++; } }
         if (vivo.current) setBuscando(`Buscando no e-mail da contabilidade… ${total} documento(s) novo(s)`);
-        if (!r.restam || !r.importados) break;
+        if (!r.restam || (!r.importados && !novasFalhas)) break;
       }
       const d = await ler(); await lerGuias(d); await ler();
       if (falhas.size && vivo.current) setErro("Não entrou: " + [...falhas.values()].slice(0, 3).map(f => `${f.arquivo} (${f.erro})`).join("; ")

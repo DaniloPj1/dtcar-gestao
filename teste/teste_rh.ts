@@ -86,10 +86,22 @@ const e4 = (r4.erros || []) as Array<Record<string, string>>;
 confere("anexo com erro não trava os outros: o DAS entra e a folha vai para erros", r4.importados === 1 && e4.length === 1 && e4[0].arquivo.startsWith("FOLHA DE PONTO") && e4[0].erro === "erro de teste", r4);
 confere("falha no registro: apaga o arquivo enviado", pasta.size === antes + 1, { antes, depois: pasta.size });
 
+// Codex no #61: lote cheio de anexos com erro não trava os mais antigos — com "pular", a chamada seguinte avança
+msgs.push({ id: "M6", subject: "Lote com erro", from: { emailAddress: { address: "dploredocontabilidade@gmail.com" } }, receivedDateTime: "2026-11-05T10:00:00Z", hasAttachments: true });
+anexos.M6 = [1, 2, 3].map((i) => ({ id: "E" + i, name: `QUEBRADO ${i} 11.2026.pdf`, contentType: "application/pdf", size: 10 }));
+falharInsert = "QUEBRADO";
+const p1 = await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"], maximo: 3 }, agora);
+const k1 = ((p1.erros || []) as Array<Record<string, string>>).map((e) => e.chave);
+confere("lote só com erros: devolve a chave de cada um para pular", p1.importados === 0 && k1.length === 3 && k1.includes("M6|E1") && p1.restam === 1, p1);
+const p2 = await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"], maximo: 3, pular: k1 }, agora);
+confere("com pular, a chamada seguinte pega o anexo mais antigo que estava atrás (a folha que falhou antes)", p2.importados === 1 && !p2.erros && p2.restam === 0
+  && String((p2.novos as Array<Record<string, unknown>>)[0].titulo).startsWith("FOLHA DE PONTO"), p2);
+anexos.M6 = [];
+
 // sem remetentes na chamada (conector): usa cfg.rh.remetentes; sem nada gravado, o padrão da Loredo
 falharInsert = "";
 const r5 = await importarRH(adm, "T", {}, agora);
-confere("sem remetentes: padrão da Loredo (a folha que falhou entra agora)", r5.importados === 1 && JSON.stringify(r5.remetentes) === JSON.stringify(["dploredocontabilidade@gmail.com"]), r5);
+confere("sem remetentes: padrão da Loredo", r5.importados === 0 && r5.emails_achados === 4 && JSON.stringify(r5.remetentes) === JSON.stringify(["dploredocontabilidade@gmail.com"]), r5);
 cfgRH = ["outra@contabil.com.br"];
 const r6 = await importarRH(adm, "T", {}, agora);
 confere("sem remetentes: vale o que está gravado na tela (cfg.rh.remetentes)", JSON.stringify(r6.remetentes) === JSON.stringify(["outra@contabil.com.br"]) && r6.importados === 0, r6);
@@ -102,7 +114,7 @@ const docsBanco = [
 const filtros: Array<[string, unknown]> = [];
 // deno-lint-ignore no-explicit-any
 const q: any = { select: () => q, eq: (c: string, v: unknown) => { filtros.push([c, v]); return q; }, order: () => q,
-  limit: () => Promise.resolve({ data: docsBanco.filter((d) => filtros.every(([c, v]) => (d as Record<string, unknown>)[c] === v)), error: null }) };
+  range: (de: number, ate: number) => Promise.resolve({ data: docsBanco.filter((d) => filtros.every(([c, v]) => (d as Record<string, unknown>)[c] === v)).slice(de, ate + 1), error: null }) };
 const l1 = await listarRH({ from: () => q } as never, {});
 confere("rh_listar: todos, com contagem por mês e sem o '-' de guia não lida", l1.total === 2 && l1.por_mes["2026-10"] === 1 && l1.documentos[1].linha_digitavel === "" && l1.documentos[0].tamanho_kb === 2, l1);
 filtros.length = 0;
@@ -111,6 +123,12 @@ confere("rh_listar: filtro por mês", l2.total === 1 && l2.documentos[0].id === 
 filtros.length = 0;
 const l3 = await listarRH({ from: () => q } as never, { texto: "folha" });
 confere("rh_listar: busca por texto", l3.total === 1 && l3.documentos[0].id === "1", l3);
+// Codex no #61: mais de 1000 documentos — a busca por texto lê todas as páginas antes de filtrar
+for (let i = 0; i < 1500; i++) docsBanco.splice(i, 0, { id: "n" + i, competencia: "2026-11", tipo: "outro", titulo: "Doc " + i, nome_arquivo: "d.pdf", tamanho: 1, linha_digitavel: "", email_assunto: "", obs: "" });
+filtros.length = 0;
+const l4 = await listarRH({ from: () => q } as never, { texto: "pro labore" });
+confere("rh_listar: acha documento antigo depois de 1500 mais novos (lê todas as páginas)", l4.total === 1 && l4.documentos[0].id === "2", { total: l4.total });
+docsBanco.splice(0, 1500);
 let erroMes = "";
 try { await listarRH({ from: () => q } as never, { competencia: "out/2026" }); } catch (e) { erroMes = (e as Error).message; }
 confere("rh_listar: mês inválido avisa", /AAAA-MM/.test(erroMes), erroMes);

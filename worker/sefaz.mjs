@@ -1,4 +1,4 @@
-// DTCar Gestão — robô da SEFAZ (roda no GitHub Actions a cada 10 minutos)
+// DTCar Gestão — robô da SEFAZ (roda no GitHub Actions a cada 10 minutos e, desde o v49, disparado pelo Supabase às 8h e 16h)
 // Os web services da SEFAZ pedem o certificado do cliente por renegociação TLS, que o servidor
 // de funções do Supabase não suporta. Aqui o Node (OpenSSL) faz essa parte.
 //

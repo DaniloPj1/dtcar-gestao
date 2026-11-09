@@ -1,8 +1,8 @@
 // Ações rápidas da O.S. (usadas na lista e dentro da O.S.): cancelar com motivo e avançar etapa
 import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Area, Modal, Seg, Dinheiro, I } from "../ui.js";
-import { numOS, somaDias, totais, reais, soDig, fmtKm, hojeISO, arred, linkWhats, fmtData } from "../util.js";
+import { useApp, Campo, Area, Texto, Modal, Seg, Dinheiro, I } from "../ui.js";
+import { numOS, somaDias, totais, reais, soDig, fmtKm, hojeISO, arred, linkWhats, fmtData, parseValor } from "../util.js";
 import { referenteOS, ContaEntrada } from "./recibos.js";
 import { pode } from "../regras.js";
 import { PrazoReceber, validarPrazo, lancarParcelas, abaterParcelas, semPrazo } from "./receber.js";
@@ -93,21 +93,34 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
   const { cfg, perfil, dados, avisar, recarregar, ir } = useApp();
   const [r, setR] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
   const [km, setKm] = useState(""), [forma, setForma] = useState(o.forma_pagamento || ""), [contaDest, setContaDest] = useState(""), [valor, setValor] = useState(0), [receber, setReceber] = useState(true), [imprimir, setImprimir] = useState(true), [prazo, setPrazo] = useState(null);
+  const [desc, setDesc] = useState(0); // v50: desconto no quadro de receber
   const v12 = !api.temV12 || api.temV12();
-  useEffect(() => { (async () => {
+  const carregar = async primeira => {
     try {
       const [ord, recs, parcs] = await Promise.all([api.ordem(o.id), api.recibos.listar({ ordemId: o.id }), v12 && api.receber ? api.receber.daOrdem(o.id).catch(() => []) : []]);
       const t = totais(ord.itens || [], ord.desconto, true);
       const pago = recs.filter(x => !x.cancelado).reduce((s, x) => s + Number(x.valor), 0);
       const saldo = arred(Math.max(0, t.total - pago));
       setR({ ord, t, pago, saldo, parc: (parcs || []).filter(p => p.status === "aberta"), pend: (ord.itens || []).filter(i => i.aprovado === null || i.aprovado === undefined) });
-      setKm(String(ord.km_saida || ord.km_entrada || "")); setValor(saldo);
+      if (primeira) setKm(String(ord.km_saida || ord.km_entrada || "")); setValor(saldo); setDesc(Number(ord.desconto) || 0);
     } catch (e) { setErro(e.message); }
-  })(); }, [o.id]);
+  };
+  useEffect(() => { carregar(true); }, [o.id]);
   const jaEntregue = o.status === "entregue";
+  const podeDesc = !!api.descontoOS && pode(perfil, "orcar") && !(r && r.ord.finalizada_em);
+  const mudouDesc = !!r && Math.abs((Number(desc) || 0) - (Number(r.ord.desconto) || 0)) > 0.005;
+  const aplicarDesc = async () => {
+    setOcupado(true); setErro("");
+    try { const x = await api.descontoOS(o.id, Number(desc) || 0, "no recebimento", true);
+      avisar("Desconto aplicado: total " + reais(x.total) + "." + ((x.avisos || []).length ? " " + x.avisos.join(" ") : ""));
+      if (x.fechou) { await recarregar(["ordens", "receber"]); onFeito && onFeito(); return; }
+      await carregar(false); }
+    catch (e) { setErro(e.message); } finally { setOcupado(false); }
+  };
   const falta = r && v12 ? semPrazo(r.saldo, r.parc, receber ? valor : 0) : 0; // parte do saldo que ainda precisa de prazo
   const confirmar = async () => {
     if (!r) return;
+    if (mudouDesc) return setErro("Aplique o desconto antes (botão \"Aplicar desconto\"): o saldo muda.");
     if (r.pend.length) return setErro("Há itens aguardando aprovação do cliente. Abra a O.S. e registre a decisão antes de encerrar.");
     const k = parseInt(soDig(km), 10);
     if (!jaEntregue && !(k >= (r.ord.km_entrada || 0))) return setErro("O KM de saída não pode ser menor que o de entrada (" + fmtKm(r.ord.km_entrada) + ").");
@@ -140,6 +153,10 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
     ${!r && !erro ? html`<div class="carregando">Calculando…</div>` : null}
     ${r ? html`
       <div class="encerrar-resumo"><div><span>Total aprovado</span><b>${reais(r.t.total)}</b></div><div><span>Já recebido</span><b>${reais(r.pago)}</b></div><div class="forte"><span>Saldo</span><b>${reais(r.saldo)}</b></div></div>
+      ${podeDesc ? html`<div class="campo enc-desc"><label for="enc-desc">Desconto na O.S. <small class="sub">valor dos itens ${reais(r.t.subtotal)}</small></label>
+        <div class="enc-desc-linha"><${CampoDesconto} id="enc-desc" subtotal=${r.t.subtotal} valor=${desc} onMuda=${v => { setDesc(v); setErro(""); }} />
+          ${mudouDesc ? html`<button type="button" class="btn btn-sm btn-pri" disabled=${ocupado} onClick=${aplicarDesc}>Aplicar desconto</button>` : null}</div>
+        ${mudouDesc ? html`<span class="dica">Total com o desconto: ${reais(Math.max(0, r.t.subtotal - (Number(desc) || 0)))}. Parcelas a receber que passarem do saldo novo são reduzidas.</span>` : null}</div>` : null}
       ${r.pend.length ? html`<div class="aviso">${r.pend.length} item(ns) aguardando aprovação. Abra a O.S. para registrar a decisão do cliente.</div>` : null}
       ${!jaEntregue ? html`<${Campo} id="enc-km" rotulo="KM de saída" obrig><input id="enc-km" class="inp" inputmode="numeric" value=${km ? Number(soDig(km)).toLocaleString("pt-BR") : ""} onInput=${e => { setKm(soDig(e.target.value).slice(0, 7)); setErro(""); }} /></${Campo}>` : null}
       ${r.saldo > 0 ? html`
@@ -154,7 +171,48 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
       ${!v12 && r.saldo > 0 ? html`<div class="aviso">Para combinar prazo e parcelas, o banco precisa da atualização <b>supabase/v12.sql</b>.</div>` : null}` : null}
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="acoes"><button type="button" class="btn-link" onClick=${() => { onFechar(); ir("/os/" + o.id); }}>Abrir a O.S.</button><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
-      <button type="button" class="btn btn-pri" disabled=${!r || ocupado} onClick=${confirmar}>${ocupado ? "Registrando…" : jaEntregue ? (receber ? "Registrar pagamento" : "Salvar prazo") : receber && r && r.saldo > 0 ? "Encerrar e receber" : "Registrar entrega"}</button></div>
+      <button type="button" class="btn btn-pri" disabled=${!r || ocupado || mudouDesc} onClick=${confirmar}>${ocupado ? "Registrando…" : jaEntregue ? (receber ? "Registrar pagamento" : "Salvar prazo") : receber && r && r.saldo > 0 ? "Encerrar e receber" : "Registrar entrega"}</button></div>
+  </${Modal}>`;
+}
+
+/** Desconto da O.S. em reais ou em % do valor dos itens (v50): um campo acompanha o outro */
+export function CampoDesconto({ id, subtotal, valor, onMuda, disabled }) {
+  const pct = Number(subtotal) > 0 && Number(valor) > 0 ? arred(Number(valor) / Number(subtotal) * 100) : 0;
+  const fmt = v => v ? String(v).replace(".", ",") : "";
+  const [txt, setTxt] = useState(fmt(pct)), foco = useRef(false);
+  useEffect(() => { if (!foco.current) setTxt(fmt(pct)); }, [pct]);
+  return html`<div class="desc-os"><${Dinheiro} id=${id} valor=${valor} disabled=${disabled} onMuda=${v => onMuda(arred(Math.max(0, v)))} />
+    <div class="inp-suf desc-pct"><input id=${id + "-pct"} class="inp" inputmode="decimal" aria-label="Desconto em porcentagem" disabled=${disabled} value=${txt}
+      onFocus=${() => { foco.current = true; }} onInput=${e => { setTxt(e.target.value); onMuda(arred(Number(subtotal) * Math.min(100, Math.max(0, parseValor(e.target.value))) / 100)); }}
+      onBlur=${() => { foco.current = false; setTxt(fmt(pct)); }} /><span>%</span></div></div>`;
+}
+
+/** Desconto da O.S. depois do orçamento (v50): mostra o que muda (total, saldo, parcelas a receber) antes de aplicar */
+export function DescontoModal({ o, subtotal, desconto, onFechar, onFeito }) {
+  const { avisar } = useApp();
+  const [valor, setValor] = useState(Number(desconto) || 0), [motivo, setMotivo] = useState(""), [prev, setPrev] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
+  useEffect(() => { let vivo = true; setErro("");
+    const t = setTimeout(() => api.descontoOS(o.id, Number(valor) || 0, "", false).then(x => vivo && setPrev(x)).catch(e => { if (vivo) { setPrev(null); setErro(e.message); } }), 350);
+    return () => { vivo = false; clearTimeout(t); }; }, [valor]);
+  const aplicar = async () => {
+    setOcupado(true); setErro("");
+    try { const x = await api.descontoOS(o.id, Number(valor) || 0, motivo.trim(), true);
+      avisar("Desconto aplicado: total " + reais(x.total) + "." + ((x.avisos || []).length ? " " + x.avisos.join(" ") : ""));
+      onFeito && onFeito(x); }
+    catch (e) { setErro(e.message); setOcupado(false); }
+  };
+  const avisos = prev ? (prev.avisos || []).filter(a => !/foi fechada/.test(a)) : [];
+  return html`<${Modal} titulo=${"Desconto · " + numOS(o.numero)} onFechar=${onFechar}>
+    <p class="sub">Valor dos itens ${reais(subtotal)}. O desconto entra no total da O.S.; parcelas a receber que passarem do saldo novo são reduzidas (a mais nova primeiro).</p>
+    <${Campo} id="dsc-v" rotulo="Desconto (R$ ou %)"><${CampoDesconto} id="dsc-v" subtotal=${subtotal} valor=${valor} onMuda=${setValor} /></${Campo}>
+    <${Campo} id="dsc-m" rotulo="Motivo (opcional, vai para o histórico)"><${Texto} id="dsc-m" valor=${motivo} onMuda=${setMotivo} /></${Campo}>
+    ${prev ? html`<div class="encerrar-resumo"><div><span>Total com desconto</span><b>${reais(prev.total)}</b></div><div><span>Já recebido</span><b>${reais(prev.recebido)}</b></div><div class="forte"><span>Saldo</span><b>${reais(prev.saldo)}</b></div></div>
+      ${(prev.parcelas_ajustadas || []).length ? html`<div class="info">Parcelas a receber: ${prev.parcelas_ajustadas.map(p => p.parcela + (p.cancelada ? " cancelada" : " de " + reais(p.valor_antes) + " para " + reais(p.valor))).join(" · ")}.</div>` : null}
+      ${prev.fechou ? html`<div class="info">Com esse desconto a O.S. fica quitada e é fechada.</div>` : null}
+      ${avisos.map(a => html`<div class="aviso" key=${a}>${a}</div>`)}` : null}
+    ${erro ? html`<div class="erros">${erro}</div>` : null}
+    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
+      <button type="button" class="btn btn-pri" disabled=${ocupado || !!erro || !prev} onClick=${aplicar}>${ocupado ? "Aplicando…" : "Aplicar desconto"}</button></div>
   </${Modal}>`;
 }
 

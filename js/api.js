@@ -123,6 +123,14 @@ function criarApiSupabase() {
         try { for (const k of Object.keys(localStorage)) if (/^sb-.*-auth-token$/.test(k)) localStorage.removeItem(k); } catch (e) {} },
     },
     meuPerfil: async uid => ok(await sb.from("perfis").select("*").eq("id", uid).maybeSingle()),
+    /** v50: lista do técnico responsável da O.S. (funcionários ativos + acessos sem ficha); sem o v50, null (a tela usa a lista antiga) */
+    tecnicos: async () => { const r = await sb.rpc("tecnicos_lista"); if (r.error && /tecnicos_lista|schema cache|PGRST202|404/i.test(r.error.message || "")) return null; return ok(r) || []; },
+    /** v50: desconto da O.S. numa transação (parcelas a receber acompanham); gravar=false só mostra o que aconteceria */
+    descontoOS: async (ordemId, desconto, motivo, gravar = true) => {
+      let r; try { r = await sb.rpc("os_aplicar_desconto", { p_ordem: ordemId, p_desconto: desconto, p_motivo: motivo || "", p_gravar: !!gravar }); }
+      catch (e) { throw new Error("Sem conexão com a internet: o desconto depois do orçamento precisa de internet."); }
+      if (r.error && /os_aplicar_desconto|schema cache|PGRST202|404/i.test(r.error.message || "")) throw new Error("Para dar desconto depois do orçamento, o administrador precisa rodar o supabase/v50.sql no Supabase.");
+      return ok(r); },
     perfis: async () => ok(await sb.from("perfis").select("*").order("nome")),
     salvarPerfil: async (id, patch) => ok(await sb.from("perfis").update(patch).eq("id", id)),
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
@@ -157,8 +165,10 @@ function criarApiSupabase() {
       lancamentos: async (competencia, funcionarioId) => { let q = sb.from("funcionario_lanc").select("*").eq("competencia", competencia); if (funcionarioId) q = q.eq("funcionario_id", funcionarioId); return ok(await q.order("data").order("criado_em")); },
       lancar: async l => { const { id, ...resto } = l; return id ? ok(await sb.from("funcionario_lanc").update(resto).eq("id", id).select().single()) : ok(await sb.from("funcionario_lanc").insert(resto).select().single()); },
       excluirLanc: async id => ok(await sb.from("funcionario_lanc").delete().eq("id", id)),
-      /** O.S. entregues no período, com o mecânico, para calcular a comissão */
-      ordensEntregues: async (ini, fim) => todos(() => sb.from("ordens").select("id,numero,mecanico_id,mecanico_nome,entregue_em,cliente,veiculo").eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero")),
+      /** O.S. entregues no período, com o mecânico (v50: e o técnico da lista de Funcionários), para calcular a comissão */
+      ordensEntregues: async (ini, fim) => { const q = c => todos(() => sb.from("ordens").select(c).eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero"));
+        try { return await q("id,numero,mecanico_id,mecanico_nome,tecnico_id,entregue_em,cliente,veiculo"); }
+        catch (e) { if (!/tecnico_id|column/i.test(e.message)) throw e; return q("id,numero,mecanico_id,mecanico_nome,entregue_em,cliente,veiculo"); } }, // sem o v50
     },
     /** contas a receber (parcelas das O.S. entregues para pagar depois) — supabase/v12.sql */
     receber: {

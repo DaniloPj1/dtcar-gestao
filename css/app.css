@@ -1122,3 +1122,12 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* no modo Cards, o resumo do topo usa as mesmas cores dos cards */
 .visao-cards .osr-orcamento{border-top-color:var(--warn)}.visao-cards .osr-execucao{border-top-color:var(--brand)}
 .visao-cards .osr-pagamento{border-top-color:var(--ok)}.visao-cards .osr-fechada{border-top-color:var(--muted)}
+/* v50: desconto da O.S. em R$ ou % (total da O.S., quadro de receber e quadro de desconto) */
+.desc-os{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
+.desc-os .inp-din{max-width:170px}
+.desc-pct{width:96px}
+.desc-pct .inp{text-align:right;font-variant-numeric:tabular-nums}
+.totais .desc-depois{display:flex;align-items:center;gap:8px;color:var(--ink)}
+.totais .desc-depois b{color:var(--ink)}
+.enc-desc-linha{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.enc-desc .desc-os{justify-content:flex-start}

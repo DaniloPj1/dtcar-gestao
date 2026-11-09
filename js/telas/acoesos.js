@@ -93,7 +93,7 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
   const { cfg, perfil, dados, avisar, recarregar, ir } = useApp();
   const [r, setR] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
   const [km, setKm] = useState(""), [forma, setForma] = useState(o.forma_pagamento || ""), [contaDest, setContaDest] = useState(""), [valor, setValor] = useState(0), [receber, setReceber] = useState(true), [imprimir, setImprimir] = useState(true), [prazo, setPrazo] = useState(null);
-  const [desc, setDesc] = useState(0); // v50: desconto no quadro de receber
+  const [desc, setDesc] = useState(0), [abrirDesc, setAbrirDesc] = useState(false); // v50: desconto no quadro de receber (fechado: uma linha só)
   const v12 = !api.temV12 || api.temV12();
   const carregar = async primeira => {
     try {
@@ -114,7 +114,7 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
     try { const x = await api.descontoOS(o.id, Number(desc) || 0, "no recebimento", true);
       avisar("Desconto aplicado: total " + reais(x.total) + "." + ((x.avisos || []).length ? " " + x.avisos.join(" ") : ""));
       if (x.fechou) { await recarregar(["ordens", "receber"]); onFeito && onFeito(); return; }
-      await carregar(false); }
+      await carregar(false); setAbrirDesc(false); }
     catch (e) { setErro(e.message); } finally { setOcupado(false); }
   };
   const falta = r && v12 ? semPrazo(r.saldo, r.parc, receber ? valor : 0) : 0; // parte do saldo que ainda precisa de prazo
@@ -153,10 +153,14 @@ export function EncerrarModal({ o, onFechar, onFeito }) {
     ${!r && !erro ? html`<div class="carregando">Calculando…</div>` : null}
     ${r ? html`
       <div class="encerrar-resumo"><div><span>Total aprovado</span><b>${reais(r.t.total)}</b></div><div><span>Já recebido</span><b>${reais(r.pago)}</b></div><div class="forte"><span>Saldo</span><b>${reais(r.saldo)}</b></div></div>
-      ${podeDesc ? html`<div class="campo enc-desc"><label for="enc-desc">Desconto na O.S. <small class="sub">valor dos itens ${reais(r.t.subtotal)}</small></label>
+      ${podeDesc ? html`<div class="campo enc-desc">${abrirDesc || mudouDesc ? html`
+        <label for="enc-desc">Desconto na O.S. <small class="sub">valor dos itens ${reais(r.t.subtotal)}</small></label>
         <div class="enc-desc-linha"><${CampoDesconto} id="enc-desc" subtotal=${r.t.subtotal} valor=${desc} onMuda=${v => { setDesc(v); setErro(""); }} />
-          ${mudouDesc ? html`<button type="button" class="btn btn-sm btn-pri" disabled=${ocupado} onClick=${aplicarDesc}>Aplicar desconto</button>` : null}</div>
-        ${mudouDesc ? html`<span class="dica">Total com o desconto: ${reais(Math.max(0, r.t.subtotal - (Number(desc) || 0)))}. Parcelas a receber que passarem do saldo novo são reduzidas.</span>` : null}</div>` : null}
+          ${mudouDesc ? html`<button type="button" class="btn btn-sm btn-pri" disabled=${ocupado} onClick=${aplicarDesc}>Aplicar desconto</button>` : null}
+          <button type="button" class="btn-link" disabled=${ocupado} onClick=${() => { setDesc(Number(r.ord.desconto) || 0); setAbrirDesc(false); setErro(""); }}>Cancelar</button></div>
+        ${mudouDesc ? html`<span class="dica">Total com o desconto: ${reais(Math.max(0, r.t.subtotal - (Number(desc) || 0)))}. Parcelas a receber que passarem do saldo novo são reduzidas.</span>` : null}`
+        : html`<div class="enc-desc-resumo"><span>Desconto na O.S.</span><b>${reais(Number(r.ord.desconto) || 0)}</b>
+          <button type="button" class="btn-link" onClick=${() => setAbrirDesc(true)}>${Number(r.ord.desconto) > 0 ? "Alterar" : "Dar desconto"}</button></div>`}</div>` : null}
       ${r.pend.length ? html`<div class="aviso">${r.pend.length} item(ns) aguardando aprovação. Abra a O.S. para registrar a decisão do cliente.</div>` : null}
       ${!jaEntregue ? html`<${Campo} id="enc-km" rotulo="KM de saída" obrig><input id="enc-km" class="inp" inputmode="numeric" value=${km ? Number(soDig(km)).toLocaleString("pt-BR") : ""} onInput=${e => { setKm(soDig(e.target.value).slice(0, 7)); setErro(""); }} /></${Campo}>` : null}
       ${r.saldo > 0 ? html`
@@ -191,8 +195,10 @@ export function CampoDesconto({ id, subtotal, valor, onMuda, disabled }) {
 export function DescontoModal({ o, subtotal, desconto, onFechar, onFeito }) {
   const { avisar } = useApp();
   const [valor, setValor] = useState(Number(desconto) || 0), [motivo, setMotivo] = useState(""), [prev, setPrev] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
-  useEffect(() => { let vivo = true; setErro("");
-    const t = setTimeout(() => api.descontoOS(o.id, Number(valor) || 0, "", false).then(x => vivo && setPrev(x)).catch(e => { if (vivo) { setPrev(null); setErro(e.message); } }), 350);
+  const [conta, setConta] = useState(false); // prévia do valor digitado ainda chegando: "Aplicar" espera (não aplica olhando a conta antiga)
+  useEffect(() => { let vivo = true; setErro(""); setConta(true);
+    const t = setTimeout(() => api.descontoOS(o.id, Number(valor) || 0, "", false).then(x => { if (vivo) { setPrev(x); setConta(false); } })
+      .catch(e => { if (vivo) { setPrev(null); setErro(e.message); setConta(false); } }), 350);
     return () => { vivo = false; clearTimeout(t); }; }, [valor]);
   const aplicar = async () => {
     setOcupado(true); setErro("");
@@ -212,7 +218,7 @@ export function DescontoModal({ o, subtotal, desconto, onFechar, onFeito }) {
       ${avisos.map(a => html`<div class="aviso" key=${a}>${a}</div>`)}` : null}
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
-      <button type="button" class="btn btn-pri" disabled=${ocupado || !!erro || !prev} onClick=${aplicar}>${ocupado ? "Aplicando…" : "Aplicar desconto"}</button></div>
+      <button type="button" class="btn btn-pri" disabled=${ocupado || conta || !!erro || !prev} onClick=${aplicar}>${ocupado ? "Aplicando…" : "Aplicar desconto"}</button></div>
   </${Modal}>`;
 }
 

@@ -175,12 +175,20 @@ end $$;
 
 -- ---------------------------------------------------------------- 4. venda de balcão e recibo avulso
 do $$
-declare r jsonb; v_rec int;
+declare r jsonb; v_rec int; v_sv bigint; v_sr bigint;
 begin
   perform pg_temp.como('11111111-1111-1111-1111-111111111111');
+  v_sv := (select last_value from public.vendas_numero_seq); v_sr := (select last_value from public.recibos_numero_seq);
   r := public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "100", "qtd": 2}, {"descricao": "Palheta", "valor_unit": 30, "qtd": 1}], "forma": "pix", "cliente_id": "00000000-0000-0000-0000-0000000000c1"}', false);
-  perform pg_temp.ok((r->>'total')::numeric = 130 and (r->'recibo'->>'conta') = 'Sicredi' and (r->>'gravado')::boolean = false, 'prévia: 2×50 + 30, recibo no Sicredi');
+  perform pg_temp.ok((r->>'total')::numeric = 130 and (r->'recibo'->>'conta') = 'Sicredi' and (r->>'gravado')::boolean = false and (r->>'custo')::numeric = 40, 'prévia: 2×50 + 30, custo 2×20, recibo no Sicredi');
   perform pg_temp.ok((select estoque_atual from public.produtos where codigo = 100) = 10, 'prévia não tirou do estoque');
+  perform pg_temp.ok((select last_value from public.vendas_numero_seq) = v_sv and (select last_value from public.recibos_numero_seq) = v_sr
+    and r->'venda' = 'null' and r->'recibo'->'numero' = 'null', 'prévia não gasta número de venda nem de recibo (nada pula)');
+  update public.produtos set vender_sem_estoque = false where codigo = 100;
+  perform pg_temp.erro($q$select public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "100", "qtd": 6}, {"codigo": "100", "qtd": 5}], "forma": "Pix"}', false)$q$, 'estoque insuficiente de Filtro de óleo (há 4');
+  update public.produtos set vender_sem_estoque = true where codigo = 100;
+  r := public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "100", "qtd": 6}, {"codigo": "100", "qtd": 5}], "forma": "Pix"}', false);
+  perform pg_temp.ok(r->'avisos'->>0 like '%vai ficar negativo%', 'produto que pode vender sem estoque: só avisa');
   r := public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "100", "qtd": 2}], "forma": "Dinheiro", "tabela": "prazo", "desconto": 10}', true);
   perform pg_temp.ok((r->>'total')::numeric = 100 and r->'recibo'->>'conta' = 'Espécie' and r->>'cliente' = 'Consumidor', 'tabela a prazo (2×55 − 10), dinheiro → Espécie');
   perform pg_temp.ok((select estoque_atual from public.produtos where codigo = 100) = 8, 'baixou o estoque');
@@ -191,8 +199,12 @@ begin
   -- cancelar a venda: estoque volta e o recibo é cancelado
   r := public.agente_fazer('venda_balcao', format('{"acao": "cancelar", "numero": %s, "motivo": "desistiu"}', (select max(numero) - 1 from public.vendas))::jsonb, true);
   perform pg_temp.ok((r->>'cancelada')::boolean and (select estoque_atual from public.produtos where codigo = 100) = 9 and (r->>'recibos_cancelados')::int = 1, 'cancelar venda');
-  -- recibo avulso
+  -- recibo avulso (prévia sem número; gravado pega o número seguinte)
+  v_sr := (select last_value from public.recibos_numero_seq);
+  r := public.agente_fazer('recibo_avulso', '{"pagador": "Marcos", "valor": 80, "referente": "conserto de pneu sem O.S.", "forma": "PIX"}', false);
+  perform pg_temp.ok(r->'recibo' = 'null' and (select last_value from public.recibos_numero_seq) = v_sr and r->>'conta' = 'Sicredi', 'recibo avulso: prévia sem número');
   r := public.agente_fazer('recibo_avulso', '{"pagador": "Marcos", "valor": 80, "referente": "conserto de pneu sem O.S.", "forma": "PIX"}', true);
+  perform pg_temp.ok((r->>'recibo')::bigint = v_sr + 1, 'recibo avulso gravado com o número seguinte, sem pular');
   perform pg_temp.ok(r->>'conta' = 'Sicredi' and (r->>'valor')::numeric = 80, 'recibo avulso');
   perform pg_temp.erro($q$select public.agente_fazer('recibo_avulso', '{"pagador": "Marcos", "valor": 80, "referente": "conserto", "forma": "PIX"}', true)$q$, '10 minutos');
   perform pg_temp.erro($q$select public.agente_fazer('recibo_avulso', '{"os": 101, "valor": 80, "forma": "PIX"}', true)$q$, 'receber_os');
@@ -257,6 +269,7 @@ begin
   perform pg_temp.ok((select status from public.receber where id = '00000000-0000-0000-0000-0000000001b1') = 'paga', 'parcela baixada');
   select count(*) into n from public.recibos where ordem_id = '00000000-0000-0000-0000-000000000103';
   r := public.agente_fazer('boleto_pago', '{"nosso_numero": "260000011", "valor_pago": 612}', true);
+  perform pg_temp.erro($q$select public.agente_fazer('boleto_pago', '{"nosso_numero": "260000011", "valor_pago": 612}', false)$q$, 'só grava');
   perform pg_temp.ok((r->>'ja_registrado')::boolean and (select count(*) from public.recibos where ordem_id = '00000000-0000-0000-0000-000000000103') = n, 'nunca dois recibos');
   perform pg_temp.erro($q$select public.agente_fazer('boleto_situacao', '{"nosso_numero": "260000011", "situacao": "baixado"}', true)$q$, 'já está pago');
 end $$;
@@ -331,6 +344,23 @@ begin
   perform pg_temp.erro($q$select public.agente_fazer('fornecedor', '{"acao": "criar", "campos": {"razao": "Z"}}', true)$q$, 'só atende o administrador');
   perform pg_temp.como('11111111-1111-1111-1111-111111111111');
   perform pg_temp.ok((select count(distinct ferramenta) from public.agente_acoes) >= 14, 'histórico de todas as ferramentas novas');
+end $$;
+
+-- ---------------------------------------------------------------- 11. foto_id do WhatsApp; alterar_os sem nada
+reset role;
+insert into public.whatsapp_mensagens (msg_id, jid, telefone, nome, de_mim, texto, tipo, em, midia_path, midia_tipo, midia_expira)
+values ('WAFOTO1', '5527999990000@s.whatsapp.net', '27999990000', 'Ana', false, '', 'imagem', now(), '2026/11/09/WAFOTO1.jpg', 'image/jpeg', now() + interval '30 days'),
+       ('WATEXTO', '5527999990000@s.whatsapp.net', '27999990000', 'Ana', false, 'oi', 'texto', now() - interval '1 minute', null, null, null);
+set role authenticated;
+do $$
+declare r jsonb;
+begin
+  perform pg_temp.como('11111111-1111-1111-1111-111111111111');
+  r := public.whatsapp_mensagens_de('27999990000', 10, false);
+  perform pg_temp.ok((select count(*) from jsonb_array_elements(r->'mensagens') m where m ? 'foto_id') = 1
+    and (select (m->>'foto_id')::bigint from jsonb_array_elements(r->'mensagens') m where m ? 'foto_id') = (select id from public.whatsapp_mensagens where msg_id = 'WAFOTO1'),
+    'WhatsApp: só a mensagem com foto mostra o foto_id');
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 100}', false)$q$, 'Nada a fazer');
 end $$;
 
 reset role;

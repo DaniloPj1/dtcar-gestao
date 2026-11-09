@@ -19,6 +19,7 @@
 --      desconto_os, fornecedor, venda_balcao, recibo_avulso, funcionario, nota_sefaz, boleto_pago,
 --      boleto_situacao, pedido_compra, parcela, despesa_fixa, ajustes, equipe, site, rh_documento.
 --      alterar_os passa a aceitar dados.tecnico (nome do funcionário) e dados.desconto (pelo item 2).
+--   5. whatsapp_mensagens_de() mostra o foto_id das mensagens com foto (anexar_na_os do conector).
 -- Rode depois do v49. Pode rodar mais de uma vez.
 -- Período de transição: o espelho está desligado desde a virada (02/11/2026). ordens.tecnico_id vai junto
 -- com a O.S. (se o espelho fosse religado, a carga recriaria as O.S. sem técnico do cadastro, como hoje).
@@ -173,6 +174,12 @@ end $$;
 -- =====================================================================
 
 -- ---------- utilidades ----------
+-- A prévia (confirmar=false) faz e desfaz a ação, mas a sequência dos números (recibo, venda) não volta atrás: na prévia, quem gera
+-- recibo ou venda NÃO grava — confere tudo e devolve a conta, sem número (o número sai só na gravação, sem pular nenhum).
+-- O agente_fazer marca a transação com dtcar.agente_previa = sim/nao.
+create or replace function public.agente_em_previa() returns boolean language sql stable set search_path = public as $$
+  select coalesce(current_setting('dtcar.agente_previa', true), '') = 'sim' $$;
+
 -- CPF/CNPJ com dígitos verificadores (o mesmo de docValido em js/util.js)
 create or replace function public.agente_doc_valido(p text) returns boolean language plpgsql immutable as $$
 declare c text := regexp_replace(coalesce(p, ''), '\D', '', 'g'); s int; d int; i int; pesos int[];
@@ -269,7 +276,7 @@ begin
   if v_desc is not null and v_antes then
     rd := public.agente_desconto_os(jsonb_build_object('numero', p->'numero', 'desconto', v_desc, 'motivo', coalesce(p->>'motivo', ''), 'pedido', coalesce(p->>'pedido', '')));
   end if;
-  if v_resto then r := public.agente_alterar_os(p); end if;
+  if v_resto or v_desc is null then r := public.agente_alterar_os(p); end if;  -- sem nada: a mensagem "Nada a fazer" do v40
   if v_desc is not null and not v_antes then
     rd := public.agente_desconto_os(jsonb_build_object('numero', p->'numero', 'desconto', v_desc, 'motivo', coalesce(p->>'motivo', ''), 'pedido', coalesce(p->>'pedido', '')));
   end if;
@@ -362,6 +369,7 @@ language plpgsql volatile security invoker set search_path = public as $$
 declare v_acao text := lower(coalesce(p->>'acao', 'vender')); v public.vendas; c public.clientes; it jsonb; pr public.produtos; v_itens jsonb := '[]';
   v_tab text := lower(coalesce(nullif(trim(p->>'tabela'), ''), 'vista')); v_forma text; v_valor numeric; v_cli jsonb; v_res jsonb; v_rec public.recibos;
   v_conta text; v_receber boolean; avisos text[] := '{}'; v_quem text := public.agente_quem(); v_sub numeric := 0;
+  v_cus numeric := 0; v_usado jsonb := '{}'; v_desc numeric; v_total numeric; v_data date;
 begin
   perform public.agente_exige_admin();
   if v_acao = 'cancelar' then
@@ -403,9 +411,16 @@ begin
       v_valor := coalesce(nullif(it->>'valor_unit', '')::numeric,
         nullif(case v_tab when 'prazo' then pr.preco_prazo when 'atacado' then pr.preco_atacado else pr.preco_vista end, 0), nullif(pr.preco_vista, 0), 0);
       if v_valor <= 0 then raise exception '% está sem preço de venda: informe valor_unit.', pr.descricao; end if;
-      if pr.tipo = 'produto' and pr.controla_estoque and coalesce(pr.estoque_atual, 0) < (it->>'qtd')::numeric then
-        avisos := array_append(avisos, pr.descricao || ': estoque ' || coalesce(pr.estoque_atual, 0) || ' (vai ficar negativo' ||
-          case when not coalesce(pr.vender_sem_estoque, true) then '; o produto não pode ser vendido sem estoque e a venda vai ser recusada' else '' end || ').');
+      -- estoque: a mesma conferência do finalizar_venda (v4), somando o mesmo produto em mais de uma linha
+      if pr.tipo = 'produto' and pr.controla_estoque then
+        if coalesce(pr.estoque_atual, 0) - coalesce((v_usado->>pr.id::text)::numeric, 0) < (it->>'qtd')::numeric then
+          if not coalesce(pr.vender_sem_estoque, false) then
+            raise exception 'Estoque insuficiente de % (há % %).', pr.descricao,
+              trim(to_char(coalesce(pr.estoque_atual, 0) - coalesce((v_usado->>pr.id::text)::numeric, 0), 'FM999990.###')), pr.unidade;
+          end if;
+          avisos := array_append(avisos, pr.descricao || ': estoque ' || trim(to_char(coalesce(pr.estoque_atual, 0), 'FM999990.###')) || ' (vai ficar negativo).');
+        end if;
+        v_usado := v_usado || jsonb_build_object(pr.id::text, coalesce((v_usado->>pr.id::text)::numeric, 0) + (it->>'qtd')::numeric);
       end if;
       v_itens := v_itens || jsonb_build_array(jsonb_build_object('produto_id', pr.id, 'tipo', case when pr.tipo = 'servico' then 'servico' else 'produto' end,
         'descricao', pr.descricao, 'codigo', pr.codigo::text, 'qtd', (it->>'qtd')::numeric, 'valor_unit', round(v_valor, 2), 'desconto', round(coalesce(nullif(it->>'desconto', '')::numeric, 0), 2)));
@@ -420,18 +435,34 @@ begin
     if (v_itens->-1->>'desconto')::numeric < 0 or (v_itens->-1->>'desconto')::numeric > (v_itens->-1->>'qtd')::numeric * (v_itens->-1->>'valor_unit')::numeric + 0.005 then
       raise exception 'Item "%": desconto maior que o valor do item.', v_itens->-1->>'descricao'; end if;
     v_sub := v_sub + (v_itens->-1->>'qtd')::numeric * (v_itens->-1->>'valor_unit')::numeric - (v_itens->-1->>'desconto')::numeric;
+    v_cus := v_cus + (v_itens->-1->>'qtd')::numeric * coalesce(pr.custo, nullif(v_itens->-1->>'custo_unit', '')::numeric, 0);
   end loop;
   if coalesce(nullif(p->>'desconto', '')::numeric, 0) < 0 or coalesce(nullif(p->>'desconto', '')::numeric, 0) > v_sub + 0.005 then
     raise exception 'O desconto da venda não pode passar de %.', public.agente_reais(v_sub); end if;
+  v_desc := round(coalesce(nullif(p->>'desconto', '')::numeric, 0), 2);
+  v_total := greatest(0, round(v_sub - v_desc, 2));
+  if v_receber and v_total > 0 then
+    v_conta := case when coalesce(trim(p->>'conta'), '') <> '' then public.agente_conta_valida(p->>'conta') else public.agente_conta_sugerida(v_forma) end;
+    v_data := public.agente_data(p->>'data');
+  end if;
+  -- prévia: a conta da venda sem gravar (o número da venda e do recibo só saem na gravação, sem pular nenhum)
+  if public.agente_em_previa() then
+    return jsonb_build_object('acao', 'vender', 'venda', null, 'id', null, 'cliente', v_cli->>'nome', 'forma', v_forma, 'tabela', v_tab,
+      'subtotal', round(v_sub, 2), 'desconto', v_desc, 'total', v_total, 'custo', round(v_cus, 2),
+      'itens', (select jsonb_agg(jsonb_build_object('codigo', x->>'codigo', 'descricao', x->>'descricao', 'qtd', (x->>'qtd')::numeric, 'valor_unit', (x->>'valor_unit')::numeric,
+                'desconto', (x->>'desconto')::numeric)) from jsonb_array_elements(v_itens) x),
+      'recibo', case when v_receber and v_total > 0 then jsonb_build_object('numero', null, 'valor', v_total, 'conta', v_conta, 'data', v_data) end,
+      'avisos', to_jsonb(avisos || array['Prévia: o número da venda' || case when v_receber and v_total > 0 then ' e o do recibo saem' else ' sai' end || ' na gravação.']));
+  end if;
   v_res := public.finalizar_venda(jsonb_build_object('cliente_id', nullif(p->>'cliente_id', ''), 'cliente', v_cli, 'tabela_preco', v_tab,
     'desconto', round(coalesce(nullif(p->>'desconto', '')::numeric, 0), 2), 'forma_pagamento', v_forma, 'obs', trim(coalesce(p->>'obs', '') || ' (agente, Claude)'), 'itens', v_itens));
   select * into v from public.vendas where id = (v_res->>'id')::uuid;
   -- recibo do total (o dinheiro entra no saldo da conta)
   if v_receber and v.total > 0 then
-    v_conta := case when coalesce(trim(p->>'conta'), '') <> '' then public.agente_conta_valida(p->>'conta') else public.agente_conta_sugerida(v_forma) end;
+    v_conta := coalesce(v_conta, public.agente_conta_sugerida(v_forma));
     insert into public.recibos (venda_id, cliente_id, pagador, doc, valor, referente, forma, conta_destino, data, obs, emitido_por)
     values (v.id, v.cliente_id, coalesce(nullif(v.cliente->>'nome', ''), 'Consumidor'), coalesce(v.cliente->>'doc', ''), v.total,
-            'pagamento da venda de balcão nº ' || lpad(v.numero::text, 5, '0'), v_forma, v_conta, public.agente_data(p->>'data'),
+            'pagamento da venda de balcão nº ' || lpad(v.numero::text, 5, '0'), v_forma, v_conta, coalesce(v_data, public.agente_data(p->>'data')),
             'Lançado pelo agente (Claude).', v_quem) returning * into v_rec;
   end if;
   perform public.agente_registrar('venda_balcao', p, 'vendas', v.id::text, null, to_jsonb(v));
@@ -473,6 +504,10 @@ begin
   if not coalesce((p->>'receber_mesmo_repetido')::boolean, false) and exists (select 1 from public.recibos x where not x.cancelado and x.valor = v_valor
        and lower(x.pagador) = lower(v_pag) and x.criado_em > now() - interval '10 minutes') then
     raise exception 'Já existe recibo de % para % nos últimos 10 minutos. Se for outro pagamento, mande receber_mesmo_repetido=true.', public.agente_reais(v_valor), v_pag;
+  end if;
+  if public.agente_em_previa() then  -- o número do recibo só sai na gravação (sem pular nenhum)
+    return jsonb_build_object('recibo', null, 'id', null, 'pagador', v_pag, 'valor', v_valor, 'referente', v_ref, 'forma', v_forma,
+      'conta', v_conta, 'data', v_data, 'venda', vd.numero, 'aviso', 'Prévia: o número do recibo sai na gravação.');
   end if;
   insert into public.recibos (venda_id, cliente_id, pagador, doc, valor, referente, forma, conta_destino, data, obs, emitido_por)
   values (vd.id, coalesce(c.id, vd.cliente_id), v_pag, v_doc, v_valor, v_ref, v_forma, v_conta, v_data,
@@ -742,6 +777,8 @@ declare b public.boletos; pa public.receber; o public.ordens; cfg jsonb; v_conta
   v_parte numeric; v_quem text := public.agente_quem(); v_nn text; v_veic text;
 begin
   perform public.agente_exige_admin();
+  -- a prévia é da ferramenta "boleto" (consulta o banco e mostra); aqui só grava, para o número do recibo não pular
+  if public.agente_em_previa() then raise exception 'boleto_pago só grava: a prévia é a da ferramenta boleto (atualizar com confirmar=false).'; end if;
   select * into b from public.boletos where (coalesce(p->>'id', '') <> '' and id = (p->>'id')::uuid) or (coalesce(p->>'nosso_numero', '') <> '' and nosso_numero = regexp_replace(p->>'nosso_numero', '\D', '', 'g')) for update;
   if b.id is null then raise exception 'Boleto não encontrado.'; end if;
   if b.situacao = 'pago' then return jsonb_build_object('nosso_numero', b.nosso_numero, 'ja_registrado', true, 'aviso', 'Pagamento já registrado antes.'); end if;
@@ -1193,6 +1230,7 @@ begin
     when 'parcela' then 'agente_parcela' when 'despesa_fixa' then 'agente_despesa_fixa' when 'ajustes' then 'agente_ajustes'
     when 'equipe' then 'agente_equipe' when 'site' then 'agente_site' when 'rh_documento' then 'agente_rh_documento' end;
   if v_fn is null then raise exception 'Ação desconhecida: %', p_acao; end if;
+  perform set_config('dtcar.agente_previa', case when coalesce(p_gravar, false) then 'nao' else 'sim' end, true);
   begin
     execute format('select public.%I($1)', v_fn) into v using coalesce(p, '{}'::jsonb);
     if not coalesce(p_gravar, false) then raise exception using errcode = 'DT001', message = 'previa'; end if;
@@ -1206,7 +1244,7 @@ end $$;
 do $$
 declare f text;
 begin
-  foreach f in array array['tecnicos_lista()', 'agente_tecnico(text)', 'os_valor_itens(uuid)', 'os_aplicar_desconto(uuid, numeric, text, boolean)',
+  foreach f in array array['tecnicos_lista()', 'agente_tecnico(text)', 'agente_em_previa()', 'os_valor_itens(uuid)', 'os_aplicar_desconto(uuid, numeric, text, boolean)',
     'agente_doc_valido(text)', 'agente_forma_valida(text)', 'agente_conta_sugerida(text)', 'agente_data(text, boolean)', 'agente_desconto_os(jsonb)',
     'agente_alterar_os_v50(jsonb)', 'agente_fornecedor(jsonb)', 'agente_venda(jsonb)', 'agente_recibo_avulso(jsonb)', 'agente_funcionario(jsonb)',
     'agente_achar_nota(jsonb)', 'agente_nota_sefaz(jsonb)', 'agente_boleto_pago(jsonb)', 'agente_boleto_situacao(jsonb)', 'agente_pedido_compra(jsonb)',
@@ -1215,4 +1253,37 @@ begin
     execute format('revoke all on function public.%s from public, anon', f);
     execute format('grant execute on function public.%s to authenticated', f);
   end loop;
+end $$;
+
+
+-- =====================================================================
+-- 5. WhatsApp: as mensagens com foto mostram o foto_id (o conector anexa a foto na O.S. com anexar_na_os)
+--    O mesmo whatsapp_mensagens_de do v32, só com a chave foto_id a mais.
+-- =====================================================================
+create or replace function public.whatsapp_mensagens_de(p_telefone text, p_limite int default 30, p_marcar_lidas boolean default true) returns jsonb
+language plpgsql security definer set search_path = public as $$
+declare v_chave text := public.whatsapp_chave_tel(p_telefone); v jsonb; v_ids bigint[]; v_cli public.clientes;
+begin
+  if not public.e_admin() then raise exception 'Só o administrador vê o WhatsApp.'; end if;
+  if length(regexp_replace(coalesce(p_telefone, ''), '\D', '', 'g')) < 8 then raise exception 'Informe o telefone com DDD.'; end if;
+  select coalesce(jsonb_agg(jsonb_strip_nulls(jsonb_build_object('em', em, 'de', case when de_mim then 'oficina' else coalesce(nullif(nome, ''), 'cliente') end,
+                                               'texto', texto, 'tipo', tipo,
+                                               'entrega', case when de_mim then coalesce(entrega, 'enviada') end,
+                                               'entregue_em', case when de_mim then entregue_em end,
+                                               'lida_em', case when de_mim then lida_em end,
+                                               'foto_guardada_ate', case when midia_path is not null then midia_expira end,
+                                               'foto_id', case when midia_path is not null then id end,
+                                               'midia_nao_processada', midia_erro)) order by em), '[]'::jsonb), array_agg(id)
+    into v, v_ids from (select * from public.whatsapp_mensagens where public.whatsapp_chave_tel(telefone) = v_chave
+                  order by em desc limit least(greatest(coalesce(p_limite, 30), 1), 200)) t;
+  if p_marcar_lidas then update public.whatsapp_mensagens set lida = true where id = any(v_ids) and not lida; end if;
+  select * into v_cli from public.clientes where id = public.whatsapp_cliente_do_tel(p_telefone);
+  return jsonb_build_object('telefone', p_telefone, 'mensagens', v,
+    'cliente', case when v_cli.id is null then null else jsonb_build_object('id', v_cli.id, 'nome', v_cli.nome) end,
+    'cadastrado', v_cli.id is not null,
+    'os_abertas', public.whatsapp_os_abertas(v_cli.id),
+    'na_fila', (select coalesce(jsonb_agg(jsonb_build_object('id', id, 'status', status, 'texto', left(texto, 120), 'erro', erro, 'criado_em', criado_em) order by id), '[]'::jsonb)
+                  from public.whatsapp_fila where public.whatsapp_chave_tel(telefone) = v_chave and status in ('pendente', 'enviando', 'erro') and criado_em > now() - interval '7 days'),
+    'pediu_parar', exists (select 1 from public.whatsapp_optout where telefone = v_chave),
+    'sobre_a_entrega', 'entrega: enviada = chegou ao WhatsApp; entregue = chegou ao celular; lida = abriu (quem desligou a confirmação de leitura nunca aparece como lida); ouvida = áudio ouvido.');
 end $$;

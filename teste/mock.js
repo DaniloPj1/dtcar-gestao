@@ -39,6 +39,27 @@
     sincronizarAbertura: async op => { net(); window.__SEQ = (window.__SEQ || 1898) + 1; const o = { ...op.ordem, numero: window.__SEQ }; db.ordens.unshift(o); if (op.cliente) db.clientes.push(op.cliente); if (op.veiculo) db.veiculos.push(op.veiculo); window.__SYNC = (window.__SYNC || []).concat([op.provisorio + "->" + o.numero]); return { id: o.id, numero: o.numero, nova: true }; },
     evento: async (oid, tipo, texto) => { (window.__EV = window.__EV || []).push(tipo + ": " + texto); },
     temV11: () => true, temV12: () => true,
+    // v50: lista do técnico responsável (funcionários ativos + acessos sem ficha) e desconto da O.S. com as parcelas
+    tecnicos: async () => { net(); if (window.__SEM_V50) return null;
+      const f = db.funcionarios.filter(x => x.ativo !== false).map(x => ({ tipo: "funcionario", id: x.id, nome: x.nome, apelido: x.apelido || "", perfil_id: x.perfil_id || null, funcao: x.funcao || "" }));
+      const p = db.perfis.filter(x => x.ativo !== false && ["admin", "consultor", "mecanico"].includes(x.papel) && !db.funcionarios.some(y => y.ativo !== false && y.perfil_id === x.id))
+        .map(x => ({ tipo: "acesso", id: x.id, nome: x.nome, apelido: "", perfil_id: x.id, funcao: x.papel }));
+      return f.concat(p).sort((a, b) => a.nome.localeCompare(b.nome)); },
+    descontoOS: async (ordemId, desconto, motivo, gravar = true) => { net();
+      const r2 = v => Math.round(v * 100) / 100, o = db.ordens.find(x => x.id === ordemId), apr = ["execucao", "pronto", "entregue", "recusado"].includes(o.status);
+      if (o.status === "entregue" && o.finalizada_em) throw new Error("A O.S. está fechada (quitada). Reabra antes de mudar o desconto.");
+      const bruto = r2(db.os_itens.filter(i => i.ordem_id === ordemId && (apr ? i.aprovado === true : i.aprovado !== false)).reduce((s, i) => s + i.qtd * i.valor_unit - (i.desconto || 0), 0));
+      if (desconto > bruto + 0.005) throw new Error("O desconto não pode passar do valor dos itens.");
+      const total = r2(bruto - desconto), rec = (db.recibos || []).filter(x => x.ordem_id === ordemId && !x.cancelado).reduce((s, x) => s + Number(x.valor), 0);
+      if (total < rec - 0.009) throw new Error("Com esse desconto o total fica menor que o já recebido.");
+      const abertas = db.receber.filter(x => x.ordem_id === ordemId && x.status === "aberta").sort((a, b) => b.vencimento.localeCompare(a.vencimento));
+      let excesso = r2(abertas.reduce((s, x) => s + x.valor, 0) - (total - rec)); const ajustes = [];
+      for (const x of abertas) { if (excesso <= 0.009) break; const corte = Math.min(excesso, x.valor), fica = r2(x.valor - corte);
+        ajustes.push({ parcela: x.parcela + "/" + x.parcelas, valor_antes: x.valor, valor: fica, cancelada: fica <= 0.009 });
+        if (gravar) { if (fica <= 0.009) x.status = "cancelada"; else x.valor = fica; } excesso = r2(excesso - corte); }
+      const fechou = o.status === "entregue" && rec >= total - 0.009;
+      if (gravar) { o.desconto = desconto; o.total = total; if (fechou) o.finalizada_em = now(); (window.__EV = window.__EV || []).push("desconto: " + desconto + (motivo ? " (" + motivo + ")" : "")); }
+      return { os: o.numero, valor_itens: bruto, desconto, total, recebido: rec, saldo: r2(total - rec), parcelas_ajustadas: ajustes, fechou, avisos: [], gravado: !!gravar }; },
     whatsapp: { situacao: async () => ({ ...(window.__ZAP = window.__ZAP || { situacao: "desligado", numero: "", detalhe: "", atualizado_em: now(), dono_ate: null, motor_chave_em: null, motor_visto: null, motor_info: null, pedido: null }) }),
       novaChaveMotor: async () => { window.__ZAP.motor_chave_em = now(); return "dtm_" + "c".repeat(64); },
       revogarMotor: async () => { window.__ZAP.motor_chave_em = null; },
@@ -171,6 +192,7 @@
       lancamentos: async (comp, fid) => db.funcionario_lanc.filter(l => l.competencia === comp && (!fid || l.funcionario_id === fid)),
       lancar: async l => { const x = { id: uid(), criado_em: now(), ...l }; db.funcionario_lanc.push(x); return x; },
       excluirLanc: async id => { db.funcionario_lanc = db.funcionario_lanc.filter(x => x.id !== id); },
+      osComoTecnico: async id => db.ordens.filter(o => o.tecnico_id === id).length,
       ordensEntregues: async (ini, fim) => db.ordens.filter(o => o.status === "entregue" && o.entregue_em >= ini.slice(0, 10) && o.entregue_em < fim.slice(0, 10)) },
   };
 })();

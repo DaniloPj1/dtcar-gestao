@@ -125,6 +125,9 @@ export function FuncionarioTela({ id, params }) {
     } catch (e) { avisar(semTabela(e) ? "Rode o supabase/v10.sql antes de cadastrar funcionários." : e.message, true); } finally { setSalvando(false); }
   };
   const excluir = async () => {
+    // v50: técnico responsável de O.S. não é excluído (a comissão dessas O.S. ficaria sem dono)
+    const nOS = api.funcionarios.osComoTecnico ? await api.funcionarios.osComoTecnico(id).catch(() => 0) : 0;
+    if (nOS) return avisar(f.nome + " é o técnico responsável de " + nOS + " O.S.: informe a data de desligamento em vez de excluir (a comissão dessas O.S. continua com ele).", true);
     if (!await confirmar({ titulo: "Excluir " + f.nome, texto: "O cadastro e todos os lançamentos deste funcionário serão apagados. Para quem saiu da empresa, prefira informar a data de desligamento.", botao: "Excluir", perigo: true })) return;
     try { await api.funcionarios.excluir(id); avisar("Funcionário excluído."); ir("/funcionarios"); } catch (e) { avisar(e.message, true); }
   };

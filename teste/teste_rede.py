@@ -16,7 +16,7 @@ jwt = b64({"alg": "HS256", "typ": "JWT"}) + "." + b64({"sub": "u1", "exp": exp, 
 sessao = {"access_token": jwt, "token_type": "bearer", "expires_in": 3600, "expires_at": exp, "refresh_token": "r", "user": {"id": "u1", "email": "d@x", "aud": "authenticated", "role": "authenticated"}}
 PERFIL = {"id": "u1", "nome": "Danilo", "email": "d@x", "papel": "admin", "ativo": True}
 ORDENS = [{"id": "o1", "numero": 1900, "status": "execucao", "cliente": {"nome": "Cliente A", "telefone": ""}, "veiculo": {"placa": "ABC1D23", "marca": "Fiat", "modelo": "Uno"}, "cliente_id": None, "veiculo_id": None, "total": 100, "recebido": 0, "criado_em": "2026-10-30T10:00:00Z", "atualizado_em": "2026-10-30T10:00:00Z", "checkin": {}},
-          {"id": "o2", "numero": 1899, "status": "entregue", "cliente": {"nome": "Cliente B", "telefone": ""}, "veiculo": {"placa": "XYZ9A88", "marca": "VW", "modelo": "Gol"}, "cliente_id": None, "veiculo_id": None, "total": 300, "recebido": 0, "criado_em": "2026-10-29T10:00:00Z", "atualizado_em": "2026-10-29T10:00:00Z", "entregue_em": "2026-10-30T10:00:00Z", "checkin": {}}]
+          {"id": "o2", "numero": 1899, "status": "entregue", "cliente": {"nome": "Cliente B", "telefone": ""}, "veiculo": {"placa": "XYZ9A88", "marca": "VW", "modelo": "Gol"}, "cliente_id": None, "veiculo_id": None, "total": 300, "recebido": 0, "criado_em": "2026-10-29T10:00:00Z", "atualizado_em": "2026-10-29T10:00:00Z", "entregue_em": "2026-10-30T10:00:00Z", "garantia_dias": 90, "checkin": {}}]
 estado = {"modo": "ok"}
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler

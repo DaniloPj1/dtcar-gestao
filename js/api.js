@@ -123,6 +123,14 @@ function criarApiSupabase() {
         try { for (const k of Object.keys(localStorage)) if (/^sb-.*-auth-token$/.test(k)) localStorage.removeItem(k); } catch (e) {} },
     },
     meuPerfil: async uid => ok(await sb.from("perfis").select("*").eq("id", uid).maybeSingle()),
+    /** v50: lista do técnico responsável da O.S. (funcionários ativos + acessos sem ficha); sem o v50, null (a tela usa a lista antiga) */
+    tecnicos: async () => { const r = await sb.rpc("tecnicos_lista"); if (r.error && /tecnicos_lista|schema cache|PGRST202|404/i.test(r.error.message || "")) return null; return ok(r) || []; },
+    /** v50: desconto da O.S. numa transação (parcelas a receber acompanham); gravar=false só mostra o que aconteceria */
+    descontoOS: async (ordemId, desconto, motivo, gravar = true) => {
+      let r; try { r = await sb.rpc("os_aplicar_desconto", { p_ordem: ordemId, p_desconto: desconto, p_motivo: motivo || "", p_gravar: !!gravar }); }
+      catch (e) { throw new Error("Sem conexão com a internet: o desconto depois do orçamento precisa de internet."); }
+      if (r.error && /os_aplicar_desconto|schema cache|PGRST202|404/i.test(r.error.message || "")) throw new Error("Para dar desconto depois do orçamento, o administrador precisa rodar o supabase/v50.sql no Supabase.");
+      return ok(r); },
     perfis: async () => ok(await sb.from("perfis").select("*").order("nome")),
     salvarPerfil: async (id, patch) => ok(await sb.from("perfis").update(patch).eq("id", id)),
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
@@ -156,9 +164,14 @@ function criarApiSupabase() {
       ...tabela("funcionarios"),
       lancamentos: async (competencia, funcionarioId) => { let q = sb.from("funcionario_lanc").select("*").eq("competencia", competencia); if (funcionarioId) q = q.eq("funcionario_id", funcionarioId); return ok(await q.order("data").order("criado_em")); },
       lancar: async l => { const { id, ...resto } = l; return id ? ok(await sb.from("funcionario_lanc").update(resto).eq("id", id).select().single()) : ok(await sb.from("funcionario_lanc").insert(resto).select().single()); },
+      /** v50: em quantas O.S. ele é o técnico responsável (sem o v50: 0) */
+      osComoTecnico: async id => { const r = await sb.from("ordens").select("id", { count: "exact", head: true }).eq("tecnico_id", id);
+        if (r.error) { if (/tecnico_id|column/i.test(r.error.message || "")) return 0; throw traduzErro(r.error); } return r.count || 0; },
       excluirLanc: async id => ok(await sb.from("funcionario_lanc").delete().eq("id", id)),
-      /** O.S. entregues no período, com o mecânico, para calcular a comissão */
-      ordensEntregues: async (ini, fim) => todos(() => sb.from("ordens").select("id,numero,mecanico_id,mecanico_nome,entregue_em,cliente,veiculo").eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero")),
+      /** O.S. entregues no período, com o mecânico (v50: e o técnico da lista de Funcionários), para calcular a comissão */
+      ordensEntregues: async (ini, fim) => { const q = c => todos(() => sb.from("ordens").select(c).eq("status", "entregue").gte("entregue_em", ini).lt("entregue_em", fim).order("numero"));
+        try { return await q("id,numero,mecanico_id,mecanico_nome,tecnico_id,entregue_em,cliente,veiculo"); }
+        catch (e) { if (!/tecnico_id|column/i.test(e.message)) throw e; return q("id,numero,mecanico_id,mecanico_nome,entregue_em,cliente,veiculo"); } }, // sem o v50
     },
     /** contas a receber (parcelas das O.S. entregues para pagar depois) — supabase/v12.sql */
     receber: {
@@ -577,6 +590,15 @@ function comBancoDoPC(a) {
     evento: (ordem_id, tipo, texto, usuario_nome) => { const criado_em = new Date().toISOString();
       return escreve((o, t, x, u) => a.evento(o, t, x, u, criado_em), (o, t, x, u) => eventoOffline(o, t, x, u, criado_em))(ordem_id, tipo, texto, usuario_nome); },
     enviarArquivo: soOnline(a.enviarArquivo, "Sem internet: fotos e assinaturas só podem ser enviadas com internet."),
+    // v50: o desconto depois do orçamento grava direto no online (numa transação, com as parcelas). Com alteração desta O.S. ainda na fila
+    // (mesmo em conflito), a conta sairia sem o que foi feito neste PC e a tela continuaria mostrando a versão do PC: espera a fila.
+    ...(a.descontoOS ? { descontoOS: async (ordemId, desconto, motivo, gravar = true) => {
+      if (semRede) throw new Error("Sem conexão com a internet: o desconto depois do orçamento precisa de internet.");
+      if (await replicaPronta() && await temPendente(ordemId))
+        throw new Error("Esta O.S. tem alteração feita sem internet ainda não enviada (ou em conflito). Envie a fila ou resolva em Sistema › Dados no computador antes de dar o desconto.");
+      const r = await a.descontoOS(ordemId, desconto, motivo, gravar);
+      if (gravar !== false) tocarOS(ordemId); // gravou no online: quem estava lendo esta O.S. sabe que a resposta dele é anterior
+      return r; } } : {}),
     // envio da fila: depois que o histórico entrou no online, tira a cópia provisória do banco do PC (a réplica traz a definitiva)
     sincronizarAlteracao: async op => { const r = await a.sincronizarAlteracao(op); if (op.tipo === "evento_os" && op.local_id) await removerLocal("eventos", [op.local_id]); return r; },
     // backup sem internet: leitura ESTRITA do banco do PC (erro propaga; nunca vira tabela vazia). backup.tabela continua só do

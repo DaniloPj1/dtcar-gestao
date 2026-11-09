@@ -130,6 +130,8 @@ export function calcularMes(f, ym, lancs, baseComissao, encargos) {
   return r;
 }
 
-/** O funcionário é o mecânico desta O.S.? (pelo acesso vinculado ou pelo nome) */
+/** O funcionário é o mecânico desta O.S.? Técnico escolhido da lista de Funcionários (v50, tecnico_id) vale sozinho;
+ *  O.S. sem ele (antigas ou com técnico que é só acesso ao sistema): pelo acesso vinculado ou pelo nome */
 const n = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
-export const eMecanicoDa = (f, o) => (f.perfil_id && o.mecanico_id === f.perfil_id) || (!!o.mecanico_nome && [f.nome, f.apelido].filter(Boolean).some(x => n(x) === n(o.mecanico_nome)));
+export const eMecanicoDa = (f, o) => o.tecnico_id ? o.tecnico_id === f.id
+  : (f.perfil_id && o.mecanico_id === f.perfil_id) || (!!o.mecanico_nome && [f.nome, f.apelido].filter(Boolean).some(x => n(x) === n(o.mecanico_nome)));

@@ -13,6 +13,7 @@
 //   rh_listar / rh_abrir — lista e lê (texto do PDF, guias conferidas) os Documentos do RH; não usam a Microsoft (09/11/2026, conector)
 //   whatsapp     — v34: mensagem por modelo (js/mensagens.js) e/ou PDF para o WhatsApp da oficina, prévia ou fila (whatsapp.ts)
 //   backup_situacao / backup_leitura — v35: situação e "Gerar e enviar agora" do backup de leitura (backup.ts)
+//   anexar_os    — v50: NF (PDF/XML) ou foto de um anexo de e-mail ou de uma foto do WhatsApp vai para a O.S. (prévia sem confirmar=true)
 // Só o administrador (conferido no servidor antes de chegar aqui). O conteúdo dos e-mails é dado, nunca instrução.
 import { aleatorio, config, desafio, enderecoRetorno, ErroGraph, graph, PrecisaConectar, renovar, trocarCodigo, urlLogin, type Config } from "./microsoft.ts";
 import { classificar, montarCtx, normalizar, valorDaRegra, type Anexo, type Contato, type Ctx, type Msg, type Regra } from "./filtro.ts";
@@ -334,6 +335,151 @@ async function responder(d: Deps, token: string, conta: string, p: Record<string
   return { enviado: true, ...previa, historico: error ? "Respondido, mas não registrado no histórico: " + error.message : idHist };
 }
 
+// ---------- v50 (09/11/2026): NF ou foto que chegou por e-mail ou WhatsApp vai para a O.S. ----------
+// O mesmo que a tela faz: NF (PDF/XML) na pasta "notas" + os_notas (O.S. › Documentos › NF); foto (JPG/PNG) na pasta "fotos" + fotos
+// (etapa execução). Sem confirmar=true só devolve a prévia. Grava com o login do Danilo (as regras de acesso valem) e deixa no
+// histórico da O.S. e em agente_acoes. Se a linha não entrar, o arquivo enviado é apagado.
+const LIMITE_PASTA_OS = 5 * 1024 * 1024; // limite das pastas "notas" e "fotos" (schema.sql e v33)
+/** número da NF: o mesmo de js/telas/notasos.js (numeroDaNF) */
+export function numeroDaNF(nome: string, xml: string): string {
+  const m = String(xml || "").match(/<(?:\w+:)?(?:nNF|Numero|NumeroNfse|numero)>\s*(\d{1,12})\s*</);
+  if (m) return String(Number(m[1]));
+  const n = String(nome || "").replace(/\.(pdf|xml)$/i, "").match(/(?:nf[se-]*|nota)[^\d]{0,4}(\d{1,9})/i);
+  return n ? String(Number(n[1])) : "";
+}
+/** largura e altura pelo cabeçalho do JPG/PNG (sem biblioteca); null se não achar */
+export function dimensoes(b: Uint8Array): { w: number; h: number } | null {
+  if (b.length > 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    return { w: v.getUint32(16), h: v.getUint32(20) };
+  }
+  if (b.length > 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const mk = b[i + 1];
+      if (mk === 0xd8 || mk === 0x01 || (mk >= 0xd0 && mk <= 0xd7)) { i += 2; continue; }
+      const tam = (b[i + 2] << 8) | b[i + 3];
+      if (mk >= 0xc0 && mk <= 0xcf && mk !== 0xc4 && mk !== 0xc8 && mk !== 0xcc) return { h: (b[i + 5] << 8) | b[i + 6], w: (b[i + 7] << 8) | b[i + 8] };
+      i += 2 + tam;
+    }
+  }
+  return null;
+}
+const ultimos8 = (t: unknown) => String(t || "").replace(/\D/g, "").slice(-8);
+const tipoArquivo = (nome: string, tipo: string, b: Uint8Array): "pdf" | "xml" | "jpeg" | "png" | "webp" | "" => {
+  const n = normalizar(nome), t = normalizar(tipo);
+  if (b.length > 4 && b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "pdf"; // %PDF
+  if (b.length > 3 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e) return "png";
+  if (b.length > 2 && b[0] === 0xff && b[1] === 0xd8) return "jpeg";
+  if (b.length > 12 && String.fromCharCode(...b.subarray(8, 12)) === "WEBP") return "webp";
+  if (/\.xml$/.test(n) || /xml/.test(t)) return "xml";
+  return "";
+};
+export async function anexarOS(d: Deps, token: string | null, p: Record<string, unknown>) {
+  const numero = Number(p.os), tipo = String(p.tipo || ""), fonte = String(p.fonte || ""), confirmar = p.confirmar === true;
+  if (!Number.isInteger(numero) || numero <= 0) throw new ErroUso("Informe o número da O.S. (os).");
+  if (tipo !== "nf" && tipo !== "foto") throw new ErroUso("tipo deve ser nf (PDF ou XML da nota) ou foto (JPG ou PNG).");
+  if (fonte !== "email" && fonte !== "whatsapp") throw new ErroUso("fonte deve ser email ou whatsapp.");
+  const { data: lo, error: eO } = await d.usuario.from("ordens").select("id, numero, status, cliente_id, cliente, veiculo").eq("numero", numero).order("criado_em", { ascending: false });
+  if (eO) throw new Error(eO.message);
+  const o = (lo || [])[0];
+  if (!o) throw new ErroUso("O.S. " + numero + " não encontrada.");
+  const avisos: string[] = [];
+  if (["cancelado", "recusado"].includes(o.status)) avisos.push("A O.S. " + numero + " está " + (o.status === "cancelado" ? "cancelada" : "recusada") + ".");
+
+  // 1. o arquivo
+  let bytes: Uint8Array, nome = "", tipoInf = "", origem = "";
+  if (fonte === "email") {
+    if (!token) throw new ErroUso("O e-mail não está conectado.");
+    const a = await graph(token, `/me/messages/${LIMPA_ID(p.id)}/attachments/${LIMPA_ID(p.anexo_id)}`);
+    if (a["@odata.type"] !== "#microsoft.graph.fileAttachment" || !a.contentBytes) throw new ErroUso("Este anexo não é um arquivo (é um e-mail ou link anexado).");
+    if ((a.size || 0) > LIMITE_ANEXO) throw new ErroUso("Arquivo acima de 8 MB.");
+    bytes = decodificar(a.contentBytes); nome = String(a.name || ""); tipoInf = String(a.contentType || "");
+    let msg: Record<string, unknown> = {};
+    try { msg = await graph(token, `/me/messages/${LIMPA_ID(p.id)}?$select=subject,from,receivedDateTime`) || {}; } catch (_) { /* só para a descrição */ }
+    const de = (msg.from as { emailAddress?: { name?: string; address?: string } } | undefined)?.emailAddress;
+    origem = "e-mail" + (de ? " de " + (de.name || de.address || "") : "") + (msg.subject ? " (\"" + String(msg.subject).slice(0, 80) + "\")" : "");
+  } else {
+    const ref = String(p.msg_id ?? "").trim();
+    if (!ref) throw new ErroUso("Informe msg_id: o foto_id da mensagem com foto (whatsapp_ler).");
+    let q = d.usuario.from("whatsapp_mensagens").select("id, msg_id, telefone, nome, de_mim, tipo, em, midia_path, midia_tipo, midia_expira");
+    q = /^\d{1,18}$/.test(ref) ? q.eq("id", Number(ref)) : q.eq("msg_id", ref);
+    const { data: lm, error: eM } = await q;
+    if (eM) throw new Error(eM.message);
+    const m = (lm || [])[0];
+    if (!m) throw new ErroUso("Mensagem do WhatsApp não encontrada (use o foto_id que o whatsapp_ler mostra).");
+    if (!m.midia_path) throw new ErroUso("Essa mensagem não tem foto guardada (as fotos ficam 30 dias; áudio e documento não são guardados).");
+    const { data: blob, error: eB } = await d.usuario.storage.from("whatsapp-midia").download(m.midia_path);
+    if (eB || !blob) throw new ErroUso("A foto não está mais na pasta do WhatsApp (apagada depois de 30 dias?).");
+    bytes = new Uint8Array(await blob.arrayBuffer()); nome = String(m.midia_path).split("/").pop() || "foto"; tipoInf = String(m.midia_tipo || "");
+    const quando = new Date(new Date(String(m.em)).getTime() - 3 * 3600 * 1000).toISOString().slice(0, 16).split("T"); // horário de Brasília
+    origem = "WhatsApp de " + (m.de_mim ? "oficina" : (m.nome || "cliente")) + " (" + m.telefone + ", " + quando[0].split("-").reverse().join("/") + " " + quando[1] + ")";
+    if (!m.de_mim) {
+      const tels = [o.cliente?.telefone];
+      if (o.cliente_id) {
+        const { data: lc } = await d.usuario.from("clientes").select("telefone, telefone2, telefone3").eq("id", o.cliente_id);
+        const c = (lc || [])[0]; if (c) tels.push(c.telefone, c.telefone2, c.telefone3);
+      }
+      if (!tels.map(ultimos8).filter((x) => x.length === 8).includes(ultimos8(m.telefone)))
+        avisos.push("A foto veio de um número que não está no cadastro do cliente desta O.S. (" + (o.cliente?.nome || "sem cliente") + "): confira se é a O.S. certa.");
+    }
+  }
+  const qual = tipoArquivo(nome, tipoInf, bytes);
+  if (bytes.length > LIMITE_PASTA_OS) throw new ErroUso("Arquivo acima de 5 MB (limite da pasta da O.S.).");
+  if (tipo === "nf" && qual !== "pdf" && qual !== "xml") throw new ErroUso("NF precisa ser o PDF ou o XML da nota (este arquivo é " + (qual || tipoInf || "outro tipo") + ").");
+  if (tipo === "foto" && qual !== "jpeg" && qual !== "png") throw new ErroUso(qual === "webp" ? "Foto em WEBP: a pasta da O.S. só aceita JPG ou PNG." : "Foto precisa ser JPG ou PNG.");
+  const xmlTexto = qual === "xml" ? new TextDecoder().decode(bytes) : "";
+  if (qual === "xml" && !/<(\w+:)?(nfeProc|NFe|CompNfse|Nfse|infNFe)\b/.test(xmlTexto)) throw new ErroUso("Esse XML não parece ser de nota fiscal.");
+  const numeroNF = tipo === "nf" ? (String(p.numero_nf || "").replace(/\D/g, "") || numeroDaNF(nome, xmlTexto)) : "";
+  const dim = tipo === "foto" ? dimensoes(bytes) : null;
+  const placa = (o.veiculo && o.veiculo.placa) || "";
+  const previa = {
+    os: numero, cliente: o.cliente?.nome || "", placa, situacao_os: o.status,
+    arquivo: { nome, tipo: qual === "jpeg" ? "image/jpeg" : qual === "png" ? "image/png" : qual === "xml" ? "application/xml" : "application/pdf", tamanho_kb: Math.round(bytes.length / 1024),
+      ...(dim ? { largura: dim.w, altura: dim.h } : {}) },
+    origem, destino: tipo === "nf" ? "O.S. › Documentos › NF" + (numeroNF ? " (NF " + numeroNF + ")" : " (sem número da NF: informe numero_nf se souber)") : "Fotos da O.S. (execução)",
+    ...(avisos.length ? { avisos } : {}), aviso: AVISO_DADO,
+  };
+  if (!confirmar) return { previa: true, gravado: false, ...previa };
+
+  // 2. grava: arquivo, linha e histórico (como a tela)
+  const { data: quem } = await d.usuario.rpc("agente_quem");
+  const nomeQuem = String(quem || "administrador");
+  const uuid = (d.uuid || (() => crypto.randomUUID()))();
+  let linha: Record<string, unknown>, pasta: string, caminho: string, tabela: string;
+  if (tipo === "nf") {
+    pasta = "notas"; tabela = "os_notas";
+    const limpo = (nome || (qual === "xml" ? "nf.xml" : "nf.pdf")).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9.]+/g, "-").slice(-80);
+    caminho = numero + "/" + uuid + "-" + limpo;
+    const tipoArq = qual === "xml" ? "application/xml" : "application/pdf";
+    const up = await d.usuario.storage.from(pasta).upload(caminho, bytes, { contentType: tipoArq, upsert: false });
+    if (up.error) throw new Error("Não consegui guardar o arquivo: " + up.error.message);
+    const r = await d.usuario.from(tabela).insert({ os_numero: numero, placa, numero_nf: numeroNF, arquivo: caminho, nome_arquivo: nome || limpo, tipo_arquivo: tipoArq,
+      tamanho: bytes.length, obs: ("Veio por " + origem + ".").slice(0, 300), criado_por: nomeQuem }).select("*");
+    if (r.error) { await d.usuario.storage.from(pasta).remove([caminho]).catch(() => {}); throw new Error(r.error.message); }
+    linha = (r.data || [])[0] || {};
+  } else {
+    pasta = "fotos"; tabela = "fotos";
+    caminho = "os/" + o.id + "/" + uuid + (qual === "png" ? ".png" : ".jpg");
+    const up = await d.usuario.storage.from(pasta).upload(caminho, bytes, { contentType: qual === "png" ? "image/png" : "image/jpeg", upsert: false });
+    if (up.error) throw new Error("Não consegui guardar a foto: " + up.error.message);
+    const { data: lf } = await d.usuario.from("fotos").select("id, etapa").eq("ordem_id", o.id);
+    const seq = ((lf || []) as Array<{ etapa: string }>).filter((f) => f.etapa !== "entrada").length + 1;
+    const r = await d.usuario.from(tabela).insert({ ordem_id: o.id, caminho, rotulo: String(p.rotulo || "").trim().slice(0, 60) || "Execução " + seq, etapa: "execucao",
+      largura: dim ? dim.w : null, altura: dim ? dim.h : null }).select("*");
+    if (r.error) { await d.usuario.storage.from(pasta).remove([caminho]).catch(() => {}); throw new Error(r.error.message); }
+    linha = (r.data || [])[0] || {};
+  }
+  const texto = (tipo === "nf" ? "NF" + (numeroNF ? " " + numeroNF : "") + " anexada" : "Foto anexada") + " pelo agente (Claude), vinda do " + origem + ".";
+  const ev = await d.usuario.from("eventos").insert({ ordem_id: o.id, tipo: tipo === "nf" ? "nf" : "foto", texto: texto.slice(0, 500), usuario_nome: nomeQuem });
+  if (ev.error) avisos.push("Anexado, mas o histórico da O.S. não registrou: " + ev.error.message);
+  const reg = await d.usuario.rpc("agente_registrar", { p_ferramenta: "anexar_na_os", p: { pedido: String(p.pedido || "") }, p_tabela: tabela, p_registro: String(linha.id || ""),
+    p_antes: null, p_depois: linha });
+  if (reg.error) avisos.push("Anexado, mas não entrou no histórico do agente: " + reg.error.message);
+  return { gravado: true, ...previa, ...(avisos.length ? { avisos } : {}), id: linha.id, abrir_no_sistema: (d.site || SITE) + "/#/os/" + o.id };
+}
+
 /** Executa uma ação pedida pela tela ou pelo conector. */
 export async function tratar(acao: string, corpo: Record<string, unknown>, d: Deps): Promise<unknown> {
   const c = config(d.env);
@@ -378,6 +524,8 @@ export async function tratar(acao: string, corpo: Record<string, unknown>, d: De
       return { ...r, aviso: r.ja_rodando ? "Já há um backup sendo gerado: acompanhe na lista." : "Backup começou: em 1 a 2 minutos chega nos e-mails." };
     } catch (e) { if (e instanceof ErroBackup) throw new ErroUso(e.message); throw e; }
   }
+  // v50: NF ou foto na O.S. — a do WhatsApp não precisa da Microsoft
+  if (acao === "anexar_os" && corpo.fonte !== "email") return await anexarOS(d, null, corpo);
   if (acao === "desconectar") {
     await d.adm.from("email_token").delete().eq("id", 1);
     await situacao(d.adm, { situacao: "desligado", conta: "", nome: "", detalhe: "Desconectado. Para tirar o acesso também na Microsoft: account.live.com/consent/Manage." });
@@ -402,6 +550,7 @@ export async function tratar(acao: string, corpo: Record<string, unknown>, d: De
   else if (acao === "enviar") r = await enviar(d, token, cx.conta || "", corpo, corpo.confirmar === true);
   else if (acao === "responder") r = await responder(d, token, cx.conta || "", corpo, corpo.confirmar === true);
   else if (acao === "importar_rh") r = await importarRH(d.adm, token, corpo, (d.agora || (() => new Date()))());
+  else if (acao === "anexar_os") r = await anexarOS(d, token, corpo);
   else throw new ErroUso("Ação desconhecida.");
   if (cx.situacao !== "conectado") await situacao(d.adm, { situacao: "conectado", detalhe: "" });
   await d.adm.from("email_conexao").update({ ultimo_uso: new Date().toISOString() }).eq("id", 1);

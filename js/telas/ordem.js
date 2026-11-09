@@ -6,7 +6,7 @@ import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, 
 import { STATUS, FLUXO, ETAPAS, ETAPAS_ABERTAS, etapaOS, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
 import { FormVeiculo, edVeiculo, SitCliente, FormCliente, edCliente } from "./cadastros.js";
-import { CancelarModal, EncerrarModal } from "./acoesos.js";
+import { CancelarModal, EncerrarModal, CampoDesconto, DescontoModal } from "./acoesos.js";
 import { ReciboModal } from "./recibos.js";
 import { PrazoReceber, validarPrazo, lancarParcelas, ReceberParcelaModal, CombinarPrazoModal, ParcelasOS, situacaoParcela } from "./receber.js";
 import { BuscaFornecedor } from "./financeiro.js";
@@ -220,6 +220,10 @@ export function Ordem({ id, params = {} }) {
   const [sujo, setSujo] = useState(false);
   const [modal, setModal] = useState(null);
   const [nNotas, setNNotas] = useState(0); // NF anexadas (v33); sem o SQL ou sem internet fica 0
+  // v50: técnico responsável pela lista de Funcionários (+ acessos sem ficha); null = sem o v50 ou sem internet (lista antiga, só acessos)
+  const [tecnicos, setTecnicos] = useState(null);
+  useEffect(() => { let vivo = true; if (!api.tecnicos) return;
+    api.tecnicos().then(l => vivo && setTecnicos(l || null)).catch(() => {}); return () => { vivo = false; }; }, []);
   useEffect(() => { if (!o || !perfil || perfil.papel !== "admin" || !api.notasOS) return;
     let vivo = true; api.notasOS.listar(o.numero).then(l => vivo && setNNotas(l.length)).catch(() => {}); return () => { vivo = false; }; }, [o && o.numero]);
   const [ocupado, setOcupado] = useState("");
@@ -249,6 +253,8 @@ export function Ordem({ id, params = {} }) {
   const aberta = ABERTOS.includes(st);
   const gestor = pode(perfil, "orcar");
   const editavelOrc = gestor && st === "diagnostico";
+  // v50 (pedido do Danilo): desconto também depois do orçamento, até receber (aplicado numa transação, com as parcelas)
+  const podeDescontoDepois = gestor && !!api.descontoOS && (["aguardando", "execucao", "pronto"].includes(st) || (st === "entregue" && !o.finalizada_em));
   // regra do Danilo (03/11/2026): enquanto a O.S. não estiver fechada (orçamento, execução ou aguardando pagamento),
   // todo serviço e produto pode ser editado ou excluído; o que entra depois da aprovação já entra aprovado e cobrado
   const editaItens = gestor && ETAPAS_ABERTAS.includes(etapaOS(o));
@@ -256,7 +262,9 @@ export function Ordem({ id, params = {} }) {
   const editaInfo = gestor && aberta;
   const pendentes = itens.filter(i => i.aprovado === null || i.aprovado === undefined);
   const aprovadoAlgum = itens.some(i => i.aprovado === true);
-  const tOrc = totais(itens, campos.desconto, false), tAprov = totais(itens, campos.desconto, true);
+  // v50: no orçamento (diagnóstico) o desconto é o do campo; depois, só muda pelo quadro "Desconto" (os_aplicar_desconto): vale o do servidor
+  const descOS = st === "diagnostico" ? campos.desconto : Number(o.desconto) || 0;
+  const tOrc = totais(itens, descOS, false), tAprov = totais(itens, descOS, true);
   const usaAprov = ["execucao", "pronto", "entregue", "recusado"].includes(st);
   const tAtual = usaAprov ? tAprov : tOrc;
   const recebido = recibos.filter(r => !r.cancelado).reduce((s, r) => s + Number(r.valor), 0);
@@ -270,7 +278,7 @@ export function Ordem({ id, params = {} }) {
 
   const salvar = async (extra = {}, silencioso) => {
     const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(extra.status || st);
-    const t = totais(itens, campos.desconto, aprov);
+    const t = totais(itens, descOS, aprov);
     let lista = itens;
     if (itens.some(i => i._conta && !i.conta_id)) {
       lista = [];
@@ -287,7 +295,7 @@ export function Ordem({ id, params = {} }) {
     }
     await api.salvarItens(o.id, lista.map(({ _novo, _cadastrar, _conta, ...i }, n) => ({ ...i, posicao: n })), removidos);
     await api.atualizarOrdem(o.id, { diagnostico: campos.diagnostico, reclamacao: campos.reclamacao, previsao_entrega: campos.previsao_entrega || null, previsao_hora: campos.previsao_hora || "",
-      condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto, obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
+      condicoes_pagamento: campos.condicoes_pagamento, ...(st === "diagnostico" ? { desconto: campos.desconto } : {}), obs_execucao: campos.obs_execucao, obs_internas: campos.obs_internas, box: campos.box, contato: campos.contato,
       situacao: campos.situacao, tabela_preco: campos.tabela_preco, total: t.total, custo: t.custo, ...extra });
     if (!silencioso) avisar("O.S. salva.");
     // item mexido depois da entrega/recebimento: avisa o que precisa de conferência (recibos e parcelas não mudam sozinhos)
@@ -334,12 +342,12 @@ export function Ordem({ id, params = {} }) {
     if (assin && !assin.vazio()) { const b = await assin.blob(); assinatura = await api.enviarArquivo("assinaturas/" + o.id + "-aprov-" + Date.now() + ".png", b, "image/png"); }
     const novos = itens.map(i => (i.aprovado === null || i.aprovado === undefined) ? { ...i, aprovado: !!sel[i.id] } : i);
     const algum = novos.some(i => i.aprovado === true);
-    const t = totais(novos, campos.desconto, true);
+    const t = totais(novos, descOS, true);
     const registro = { em: new Date().toISOString(), por, forma, obs, assinatura };
     await api.salvarItens(o.id, novos.map(({ _novo, ...i }) => i), removidos);
     const status = st === "aguardando" || st === "diagnostico" ? (algum ? "execucao" : "recusado") : st;
     await api.atualizarOrdem(o.id, { aprovacao: o.aprovacao ? { ...registro, anteriores: (o.aprovacao.anteriores || []).concat([{ ...o.aprovacao, anteriores: undefined }]) } : registro,
-      status, total: t.total, custo: t.custo, diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento, desconto: campos.desconto });
+      status, total: t.total, custo: t.custo, diagnostico: campos.diagnostico, previsao_entrega: campos.previsao_entrega || null, condicoes_pagamento: campos.condicoes_pagamento, ...(st === "diagnostico" ? { desconto: campos.desconto } : {}) });
     const aprovados = novos.filter(i => sel[i.id] && pendentes.some(p => p.id === i.id)).length;
     await evento("aprovacao", `${por} aprovou ${aprovados} de ${pendentes.length} itens (${forma}).` + (status === "recusado" ? " Orçamento recusado." : ""));
     setModal(null); avisar(status === "recusado" ? "Nenhum item aprovado: orçamento marcado como recusado." : "Aprovação registrada."); await carregar(); recarregar(["ordens", "produtos"]);
@@ -370,10 +378,13 @@ export function Ordem({ id, params = {} }) {
     const novos = itens.map(i => i.id === it.id ? { ...i, executado: v } : i); setItens(novos);
     await api.salvarItens(o.id, [{ ...novos.find(i => i.id === it.id) }].map(({ _novo, ...i }) => i), []);
   });
-  const salvarMecanico = mid => acao("mec", async () => {
-    const m = dados.perfis.find(p => p.id === mid);
-    await api.atualizarOrdem(o.id, { mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" }); await evento("mecanico", "Técnico responsável: " + (m ? m.nome : "nenhum") + ".");
-    setO(x => ({ ...x, mecanico_id: mid || null, mecanico_nome: m ? m.nome : "" })); recarregar(["ordens"]);
+  // v50: a escolha grava o funcionário (tecnico_id), o acesso dele, se tiver (mecanico_id), e o nome (impressão e relatórios)
+  const salvarMecanico = v => acao("mec", async () => {
+    const x = listaTec.find(y => y.v === v), t = x ? x.t : null;
+    const patch = { mecanico_id: t ? t.perfil_id || null : null, mecanico_nome: t ? t.nome : "",
+      ...(tecnicos || "tecnico_id" in o ? { tecnico_id: t && t.tipo === "funcionario" ? t.id : null } : {}) };
+    await api.atualizarOrdem(o.id, patch); await evento("mecanico", "Técnico responsável: " + (t ? t.nome : "nenhum") + ".");
+    setO(y => ({ ...y, ...patch })); recarregar(["ordens"]);
   });
   const trocarCliente = (cid, novo) => acao("cliente", async () => {
     const c = dados.clientes.find(x => x.id === cid) || novo; if (!c) return;
@@ -392,7 +403,7 @@ export function Ordem({ id, params = {} }) {
   const confirmarEntrega = ({ km, forma, garantia, assin, recibo, prazo }) => acao("entregar", async () => {
     let assinatura = "";
     if (assin && !assin.vazio()) { const b = await assin.blob(); assinatura = await api.enviarArquivo("assinaturas/" + o.id + "-entrega.png", b, "image/png"); }
-    const t = totais(itens, campos.desconto, true);
+    const t = totais(itens, descOS, true);
     await api.atualizarOrdem(o.id, { status: st === "recusado" ? "recusado" : "entregue", km_saida: km, entregue_em: new Date().toISOString(), forma_pagamento: forma, garantia_dias: garantia, assinatura_entrega: assinatura, total: t.total, custo: t.custo, situacao: "" });
     const v = dados.veiculos.find(x => x.id === o.veiculo_id);
     if (v && km > (v.km_atual || 0)) await api.veiculos.salvar({ id: v.id, km_atual: km });
@@ -458,6 +469,11 @@ export function Ordem({ id, params = {} }) {
 
   /* ===== aba Principais informações ===== */
   const mecanicos = dados.perfis.filter(p => p.ativo !== false && ["mecanico", "admin", "consultor"].includes(p.papel));
+  const listaTec = tecnicos ? tecnicos.map(t => ({ v: (t.tipo === "funcionario" ? "f:" : "p:") + t.id, nome: t.nome + (t.apelido ? " (" + t.apelido + ")" : ""), t }))
+    : mecanicos.map(p => ({ v: "p:" + p.id, nome: p.nome, t: { tipo: "acesso", id: p.id, nome: p.nome, perfil_id: p.id } }));
+  // escolhido: o funcionário; senão o acesso (ou o funcionário ligado a ele); técnico que saiu da lista continua aparecendo nesta O.S.
+  const valorTec = o.tecnico_id ? "f:" + o.tecnico_id : o.mecanico_id ? ((listaTec.find(x => x.t.perfil_id === o.mecanico_id) || {}).v || "p:" + o.mecanico_id) : "";
+  const tecFora = valorTec && !listaTec.some(x => x.v === valorTec) ? { v: valorTec, nome: o.mecanico_nome || "técnico anterior" } : null;
   const situacoes = [...new Set([...(cfg.situacoesOS || []), campos.situacao].filter(Boolean))];
   const abaPrincipal = html`
     <section class="card"><h3>Atendimento</h3>
@@ -468,8 +484,8 @@ export function Ordem({ id, params = {} }) {
         <${Campo} id="os-box" rotulo="Box / prisma">${editaInfo ? html`<${Texto} id="os-box" valor=${campos.box} onMuda=${v => setCampo({ box: v.slice(0, 10) })} />` : html`<b>${o.box || "—"}</b>`}</${Campo}>
         <${Campo} id="os-sit" rotulo="Situação">${editaInfo ? html`<select id="os-sit" class="inp" value=${campos.situacao} onChange=${e => setCampo({ situacao: e.target.value })}><option value="">—</option>${situacoes.map(x => html`<option value=${x}>${x}</option>`)}</select>` : html`<b>${o.situacao || "—"}</b>`}</${Campo}>
         <div class="campo"><label>Consultor</label><b>${o.consultor_nome || "—"}</b></div>
-        <${Campo} id="mec" rotulo="Técnico responsável"><select id="mec" class="inp" disabled=${!aberta || !(gestor || st === "execucao")} value=${o.mecanico_id || ""} onChange=${e => salvarMecanico(e.target.value)}>
-          <option value="">${o.mecanico_nome && !o.mecanico_id ? o.mecanico_nome : "Selecione"}</option>${mecanicos.map(m => html`<option key=${m.id} value=${m.id}>${m.nome}</option>`)}</select></${Campo}>
+        <${Campo} id="mec" rotulo="Técnico responsável"><select id="mec" class="inp" disabled=${!aberta || !(gestor || st === "execucao")} value=${valorTec} onChange=${e => salvarMecanico(e.target.value)}>
+          <option value="">${o.mecanico_nome && !valorTec ? o.mecanico_nome : "Selecione"}</option>${tecFora ? html`<option value=${tecFora.v}>${tecFora.nome}</option>` : null}${listaTec.map(m => html`<option key=${m.v} value=${m.v}>${m.nome}</option>`)}</select></${Campo}>
       </div>
       ${verValores ? html`<div class="campo"><label>Tabela de preços</label>${editavelOrc ? html`<${Seg} rotulo="Tabela de preços" opcoes=${Object.values(TABELAS_PRECO).map(t => [t, "info"])} valor=${TABELAS_PRECO[campos.tabela_preco]} onEscolha=${t => setCampo({ tabela_preco: Object.keys(TABELAS_PRECO).find(k => TABELAS_PRECO[k] === t) })} />
         <span class="dica">Vale para os próximos itens buscados no cadastro.</span>` : html`<b>${TABELAS_PRECO[o.tabela_preco || "vista"]}</b>`}</div>` : null}
@@ -523,7 +539,9 @@ export function Ordem({ id, params = {} }) {
       ${verValores ? html`<div class="totais">
         <div><span>Valor dos produtos</span><b>${reais(tAtual.pecas)}</b></div><div><span>Valor dos serviços</span><b>${reais(tAtual.servicos)}</b></div>
         ${tAtual.terceiros ? html`<div><span>Serviços de terceiros</span><b>${reais(tAtual.terceiros)}</b></div>` : null}
-        <div><span>Desconto</span>${editavelOrc ? html`<${Dinheiro} id="desc" valor=${campos.desconto} onMuda=${v => setCampo({ desconto: v })} />` : html`<b>${reais(tAtual.desconto)}</b>`}</div>
+        <div class="tot-desc"><span>Desconto</span>${editavelOrc ? html`<${CampoDesconto} id="desc" subtotal=${tAtual.subtotal} valor=${campos.desconto} onMuda=${v => setCampo({ desconto: v })} />`
+          : podeDescontoDepois ? html`<span class="desc-depois"><b>${reais(tAtual.desconto)}</b><button type="button" class="btn btn-sm" disabled=${!!ocupado} onClick=${abrirSalvo("desconto")}>Alterar</button></span>`
+          : html`<b>${reais(tAtual.desconto)}</b>`}</div>
         <div class="tot"><span>Valor total${usaAprov ? " aprovado" : ""}</span><b>${reais(tAtual.total)}</b></div>
         <div class="interno"><span>Custo de peças e terceiros</span><b>${reais(tAtual.custo)}</b></div>
         <div class="interno"><span>Margem bruta</span><b class=${tAtual.margemPct < 30 && tAtual.total > 0 ? "c-warn" : ""}>${reais(tAtual.margem)} · ${tAtual.margemPct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</b></div>
@@ -627,8 +645,11 @@ export function Ordem({ id, params = {} }) {
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
     ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} comPrazo=${comPrazo} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
-    ${modal && modal.tipo === "encerrar" ? html`<${EncerrarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }} />` : null}
+    ${modal && modal.tipo === "encerrar" ? html`<${EncerrarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }}
+      onDesconto=${() => { carregar(); carregarParcelas(); }} />` : null}
     ${modal && modal.tipo === "parcela" ? html`<${ReceberParcelaModal} parcela=${modal.p} ordem=${{ ...o, total: tAtual.total }} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }} />` : null}
+    ${modal && modal.tipo === "desconto" ? html`<${DescontoModal} o=${o} subtotal=${tAtual.subtotal} desconto=${o.desconto} onFechar=${() => setModal(null)}
+      onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); recarregar(["ordens", "receber"]); }} />` : null}
     ${modal && modal.tipo === "prazo" ? html`<${CombinarPrazoModal} o=${o} saldo=${saldoSemPrazo} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregarParcelas(); }} />` : null}
     ${modal && modal.tipo === "recibo" ? html`<${ReciboModal} ordem=${{ ...o, total: tAtual.total }} valor=${saldo} forma=${modal.forma || o.forma_pagamento} onFechar=${() => setModal(null)} onEmitido=${async r => { setModal(null); await recarregar(["ordens", "receber"]); ir("/imprimir/recibo/" + r.id); }} />` : null}
     ${modal && modal.tipo === "imprimir" ? html`<${ImprimirModal} o=${o} verValores=${verValores} onFechar=${() => setModal(null)} />` : null}

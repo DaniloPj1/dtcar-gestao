@@ -507,6 +507,17 @@ begin
     'avisos', to_jsonb(avisos), 'imprimir', 'https://gestao.dtcarcentroautomotivo.com.br/#/imprimir/venda/' || v.id);
 end $$;
 
+-- trava a linha da venda até o fim da transação e devolve como ela está (a tabela vendas só é gravada pelas funções do v4, com a chave do
+-- dono: o logado não tem "for update" nela). É a mesma trava do cancelar_venda (v4): recibo e cancelamento da mesma venda não se cruzam.
+create or replace function public.venda_travar(p_id uuid) returns public.vendas
+language plpgsql volatile security definer set search_path = public as $$
+declare v public.vendas;
+begin
+  if not public.e_gestor() then raise exception 'Seu usuário não tem permissão para mexer em vendas.'; end if;
+  select * into v from public.vendas where id = p_id for update;
+  return v;
+end $$;
+
 -- ---------- recibo avulso (sem O.S.: venda de balcão, serviço sem O.S., outro recebimento) ----------
 -- p: pagador ou cliente_id; doc; valor; referente; forma; conta; data; obs; venda (número da venda de balcão); receber_mesmo_repetido
 create or replace function public.agente_recibo_avulso(p jsonb) returns jsonb
@@ -523,9 +534,8 @@ begin
   if coalesce(p->>'venda', '') <> '' then
     select * into vd from public.vendas where numero = nullif(regexp_replace(p->>'venda', '\D', '', 'g'), '')::int;
     if vd.id is null then raise exception 'Venda % não encontrada.', p->>'venda'; end if;
-    -- trava a venda até o fim da transação: dois recibos ao mesmo tempo não passam juntos do que falta receber (Codex no #62).
-    -- Trava "de aviso" (a tabela vendas só é gravada pelas funções do v4: o logado não tem "for update" nela)
-    perform pg_advisory_xact_lock(hashtext('dtcar.venda.' || vd.id::text));
+    -- trava a venda (a mesma trava do cancelar_venda) e relê: dois recibos ao mesmo tempo, ou recibo e cancelamento, não se cruzam (Codex no #62)
+    vd := public.venda_travar(vd.id);
     if vd.status = 'cancelada' then raise exception 'A venda % está cancelada.', vd.numero; end if;
     if v_valor > vd.total - coalesce((select sum(valor) from public.recibos where venda_id = vd.id and not cancelado), 0) + 0.009 then
       raise exception 'A venda % (total %) já tem % recebido: falta só %.', vd.numero, public.agente_reais(vd.total),
@@ -1292,7 +1302,7 @@ end $$;
 do $$
 declare f text;
 begin
-  foreach f in array array['tecnicos_lista()', 'agente_tecnico(text)', 'agente_em_previa()', 'os_valor_itens(uuid)', 'os_aplicar_desconto(uuid, numeric, text, boolean)',
+  foreach f in array array['tecnicos_lista()', 'agente_tecnico(text)', 'agente_em_previa()', 'venda_travar(uuid)', 'os_valor_itens(uuid)', 'os_aplicar_desconto(uuid, numeric, text, boolean)',
     'agente_doc_valido(text)', 'agente_forma_valida(text)', 'agente_conta_sugerida(text)', 'agente_data(text, boolean)', 'agente_desconto_os(jsonb)',
     'agente_alterar_os_v50(jsonb)', 'agente_fornecedor(jsonb)', 'agente_venda(jsonb)', 'agente_recibo_avulso(jsonb)', 'agente_funcionario(jsonb)',
     'agente_achar_nota(jsonb)', 'agente_nota_sefaz(jsonb)', 'agente_boleto_pago(jsonb)', 'agente_boleto_situacao(jsonb)', 'agente_pedido_compra(jsonb)',

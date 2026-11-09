@@ -1279,9 +1279,13 @@ export function criarServidor(db: Banco): McpServer {
       "SEMPRE confirmar=false primeiro (mostra antes e depois) e grave com o sim do Danilo.",
     inputSchema: z.object({ campos: z.record(z.string(), z.unknown()).optional(), encargos: z.record(z.string(), z.number()).optional(),
       rh_remetentes: z.array(z.string()).max(10).optional(), email_ligado: z.boolean().optional(),
-      sefaz: z.object({ buscar_automatico: z.boolean().optional(), ciencia_automatica: z.boolean().optional() }).optional(), pedido, confirmar }),
+      sefaz: z.object({ buscar_automatico: z.boolean().optional(), ciencia_automatica: z.boolean().optional() }).optional(),
+      whatsapp_alerta: z.unknown().optional().describe("Só na tela: a ferramenta recusa"), backup_leitura: z.unknown().optional().describe("Só na tela: a ferramenta recusa"),
+      pedido, confirmar }),
     annotations: GRAVA,
-  }, async ({ confirmar: c, ...p }) => {
+  }, async ({ confirmar: c, whatsapp_alerta, backup_leitura, ...p }) => {
+    if (whatsapp_alerta !== undefined || backup_leitura !== undefined)
+      return falha("O número dos avisos do WhatsApp e o backup de leitura só mudam na tela (Sistema › WhatsApp e Sistema › Backup): são proteções contra ordem falsa.");
     const { pedido: _p, ...mudar } = p;
     if (!Object.values(mudar).some((v) => v !== undefined)) {
       try {

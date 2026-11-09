@@ -378,6 +378,13 @@ values ('00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-0000000
 insert into public.receber (id, ordem_id, cliente_id, cliente_nome, descricao, forma, parcela, parcelas, valor, vencimento) values
   ('00000000-0000-0000-0000-0000000005a1', '00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-0000000000c1', 'Ana Souza', 'OS 00105', 'Promissória', 1, 2, 350, current_date + 20),
   ('00000000-0000-0000-0000-0000000005a2', '00000000-0000-0000-0000-000000000105', '00000000-0000-0000-0000-0000000000c1', 'Ana Souza', 'OS 00105', 'Promissória', 2, 2, 350, current_date + 50);
+-- O.S. 106 em execução: itens 300 + 200
+insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total)
+values ('00000000-0000-0000-0000-000000000106', 106, 'execucao', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000f1',
+        '{"nome": "Ana Souza"}', '{"placa": "ABC1D23"}', 1000, 500);
+insert into public.os_itens (id, ordem_id, tipo, descricao, qtd, valor_unit, aprovado, executado) values
+  ('00000000-0000-0000-0000-00000000e107', '00000000-0000-0000-0000-000000000106', 'servico', 'Revisão', 1, 300, true, false),
+  ('00000000-0000-0000-0000-00000000e108', '00000000-0000-0000-0000-000000000106', 'servico', 'Alinhamento', 1, 200, true, false);
 -- duas despesas fixas parecidas
 insert into public.contas (id, descricao, favorecido, valor, vencimento, categoria, fixa, grupo) values
   ('00000000-0000-0000-0000-0000000000d7', 'Aluguel casa 1', 'Imobiliária', 900, current_date + 8, 'Aluguel', true, '00000000-0000-0000-0000-00000000ca51'),
@@ -391,13 +398,19 @@ do $$
 declare r jsonb; o public.ordens;
 begin
   perform pg_temp.como('11111111-1111-1111-1111-111111111111');
-  -- (2) desconto junto com itens: vale sobre os itens já mudados (antes passava do valor dos itens e fechava a O.S. com parcela aberta)
-  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 650}, "itens_remover": ["00000000-0000-0000-0000-00000000e106"]}', true)$q$,
+  -- (2) desconto junto com itens: em O.S. que não foi entregue, vale sobre os itens já mudados (antes o desconto era conferido com os itens velhos)
+  r := public.agente_fazer('alterar_os', '{"numero": 106, "dados": {"desconto": 20}, "itens_alterar": [{"id": "00000000-0000-0000-0000-00000000e107", "valor_unit": 310}]}', false);
+  perform pg_temp.ok((r->>'total')::numeric = 490 and (r->'desconto'->>'valor_itens')::numeric = 510, 'O.S. no pátio: itens primeiro (510), depois o desconto: 490 — ' || coalesce(r->>'total', '?'));
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 106, "dados": {"desconto": 520}, "itens_alterar": [{"id": "00000000-0000-0000-0000-00000000e107", "valor_unit": 310}]}', true)$q$,
     'não pode passar do valor dos itens');
+  -- O.S. entregue: itens e desconto em chamadas separadas (no meio o gatilho poderia fechar a O.S.)
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 650}, "itens_remover": ["00000000-0000-0000-0000-00000000e106"]}', true)$q$,
+    'chamadas separadas');
   perform pg_temp.ok((select count(*) from public.os_itens where ordem_id = '00000000-0000-0000-0000-000000000105') = 2, 'recusado: nada mudou (itens continuam)');
-  r := public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 100}, "itens_remover": ["00000000-0000-0000-0000-00000000e106"]}', true);
+  r := public.agente_fazer('alterar_os', '{"numero": 105, "itens_remover": ["00000000-0000-0000-0000-00000000e106"]}', true);
+  r := public.agente_fazer('desconto_os', '{"numero": 105, "desconto": 100}', true);
   select * into o from public.ordens where numero = 105;
-  perform pg_temp.ok(o.desconto = 100 and o.total = 500 and o.finalizada_em is null, 'itens primeiro (600), depois o desconto: total 500 — ' || o.total);
+  perform pg_temp.ok(o.desconto = 100 and o.total = 500 and o.finalizada_em is null, 'itens (600) e depois o desconto: total 500 — ' || o.total);
   perform pg_temp.ok((select status from public.receber where id = '00000000-0000-0000-0000-0000000005a2') = 'cancelada'
                      and (select valor from public.receber where id = '00000000-0000-0000-0000-0000000005a1') = 200, 'parcelas acompanham o saldo novo (200)');
   perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 100, "acao": "entregar", "km_saida": "1100", "dados": {"desconto": 10}, "itens_remover": ["00000000-0000-0000-0000-00000000a102"]}', true)$q$,
@@ -426,6 +439,15 @@ begin
   perform pg_temp.ok((select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-00000000a101') = 35, 'custo acertado (70 / 2)');
   r := public.agente_fazer('nota_sefaz', '{"acao": "vincular_os", "numero": "456", "os": 100, "itens": [{"item_id": "00000000-0000-0000-0000-00000000a101", "nf_item": 1}]}', true);
   perform pg_temp.ok((select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-00000000a101') = 30, 'religar à mesma linha da nota não acusa falta (a própria peça não conta)');
+  -- re-verificação do #62: O.S. entregue + desconto novo + itens numa chamada: recusado com explicação (no meio o gatilho fecharia a O.S.)
+  perform pg_temp.erro($q$select public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 50}, "itens_alterar": [{"id": "00000000-0000-0000-0000-00000000e105", "valor_unit": 550}]}', true)$q$,
+    'chamadas separadas');
+  -- o mesmo desconto junto com itens: só os itens (o desconto não muda)
+  r := public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"desconto": 100}, "itens_alterar": [{"id": "00000000-0000-0000-0000-00000000e105", "valor_unit": 610}]}', false);
+  perform pg_temp.ok((r->>'total')::numeric = 510, 'mesmo desconto + itens: vale o item (610 − 100) — ' || coalesce(r->>'total', '?'));
+  -- O.S. fechada: o mesmo desconto devolve "nada mudou" (sem acusar "fechada")
+  r := public.os_aplicar_desconto('00000000-0000-0000-0000-000000000102', 0, '', false);
+  perform pg_temp.ok(not (r->>'mudou')::boolean, 'O.S. fechada + mesmo desconto: nada mudou, sem erro');
   -- Codex no #62: acesso pelo nome exato não pega outro que contém o nome ("Ana" × "Mariana")
   reset role;
   insert into auth.users (id, email, raw_user_meta_data) values

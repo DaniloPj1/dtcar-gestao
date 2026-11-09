@@ -103,14 +103,17 @@ begin
   if v_desc < 0 then raise exception 'Informe o desconto em reais (zero ou mais).'; end if;
   select * into o from public.ordens where id = p_ordem for update;
   if o.id is null then raise exception 'O.S. não encontrada.'; end if;
-  if o.status in ('cancelado', 'recusado') then raise exception 'A O.S. % está "%": não recebe desconto.', o.numero, public.agente_etapa(o); end if;
-  if o.status = 'entregue' and o.finalizada_em is not null then raise exception 'A O.S. % está fechada (quitada). Reabra antes de mudar o desconto.', o.numero; end if;
+  v_mudou := abs(v_desc - coalesce(o.desconto, 0)) > 0.005;
+  if v_mudou then  -- o mesmo desconto não muda nada: nem as travas abaixo valem (O.S. fechada pelo pagamento, por exemplo)
+    if o.status in ('cancelado', 'recusado') then raise exception 'A O.S. % está "%": não recebe desconto.', o.numero, public.agente_etapa(o); end if;
+    if o.status = 'entregue' and o.finalizada_em is not null then raise exception 'A O.S. % está fechada (quitada). Reabra antes de mudar o desconto.', o.numero; end if;
+  end if;
   v_bruto := public.os_valor_itens(o.id);
-  if v_desc > v_bruto + 0.005 then raise exception 'O desconto (%) não pode passar do valor dos itens (%).', public.agente_reais(v_desc), public.agente_reais(v_bruto); end if;
+  if v_mudou and v_desc > v_bruto + 0.005 then raise exception 'O desconto (%) não pode passar do valor dos itens (%).', public.agente_reais(v_desc), public.agente_reais(v_bruto); end if;
   v_total_antes := round(greatest(0, v_bruto - coalesce(o.desconto, 0)), 2);
   v_total := round(greatest(0, v_bruto - v_desc), 2);
   select coalesce(sum(valor), 0) into v_rec from public.recibos where ordem_id = o.id and not cancelado;
-  if v_total < v_rec - 0.009 then
+  if v_mudou and v_total < v_rec - 0.009 then
     raise exception 'Com esse desconto o total (%) fica menor que o já recebido (%). O desconto máximo agora é %.',
       public.agente_reais(v_total), public.agente_reais(v_rec), public.agente_reais(greatest(0, v_bruto - v_rec));
   end if;
@@ -119,9 +122,11 @@ begin
   v_saldo := round(v_total - v_rec, 2);
   select coalesce(sum(valor), 0) into v_abertas from public.receber where ordem_id = o.id and status = 'aberta';
   v_excesso := round(v_abertas - v_saldo, 2);
-  v_mudou := abs(v_desc - coalesce(o.desconto, 0)) > 0.005;
   if not v_mudou then
     avisos := array_append(avisos, 'O desconto já é ' || public.agente_reais(v_desc) || ': nada mudou.');
+    if v_desc > v_bruto + 0.005 or v_total < v_rec - 0.009 then
+      avisos := array_append(avisos, 'Atenção: o desconto passa do valor dos itens ou o total ficou menor que o já recebido: confira os itens e os recibos.');
+    end if;
     if v_excesso > 0.009 then
       avisos := array_append(avisos, 'As parcelas a receber passam do saldo em ' || public.agente_reais(v_excesso) || ': confira em Contas a receber.');
     end if;
@@ -282,6 +287,14 @@ begin
     raise exception 'Desconto não combina com acao=%: mande só o que quer fazer.', v_acao; end if;
   if v_desc is not null and v_acao = 'entregar' and v_itens then
     raise exception 'Numa chamada só não dá para mexer nos itens, dar desconto e entregar: mande os itens primeiro.'; end if;
+  if v_desc is not null and v_itens then
+    select * into o from public.ordens where numero = (p->>'numero')::int order by criado_em desc limit 1;
+    if o.id is not null and jsonb_typeof(v_desc) = 'number' and abs((v_desc #>> '{}')::numeric - coalesce(o.desconto, 0)) <= 0.005 then
+      v_desc := null;  -- o mesmo desconto: nada a fazer
+    elsif o.status = 'entregue' then
+      raise exception 'Na O.S. entregue, mande os itens e o desconto em chamadas separadas (no meio o total muda e a O.S. pode fechar sozinha).';
+    end if;
+  end if;
   -- desconto antes só na entrega (as parcelas usam o saldo novo); nos outros casos, depois — vale sobre os itens e a etapa já mudados
   -- (o os_aplicar_desconto confere de novo: não passa do valor dos itens e o total não fica menor que o recebido)
   v_antes := v_acao = 'entregar';

@@ -405,7 +405,7 @@ confere("ajustes sem nada: mostra, sem a carteira do banco nem o layout do paine
 c = await chama("ajustes", { campos: { garantiaDias: 90 } });
 confere("ajustes com campos → agente_fazer prévia", c.fn === "agente_fazer" && c.args?.p_acao === "ajustes" && c.args?.p_gravar === false);
 c = await chama("ajustes", { whatsapp_alerta: "27999990000" } as Record<string, unknown>);
-confere("ajustes: número dos avisos do WhatsApp não muda pelo conector", !c.fn || !("whatsapp_alerta" in ((c.args?.p as L) || {})), JSON.stringify(c.args));
+confere("ajustes: número dos avisos do WhatsApp não muda pelo conector (recusa e explica)", c.r?.isError === true && /só mudam na tela/.test(texto(c.r)) && !c.fn, texto(c.r));
 
 // RH: excluir tira o PDF da pasta (só gravando)
 removidos.length = 0;

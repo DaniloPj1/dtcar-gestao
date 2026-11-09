@@ -108,7 +108,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `js/folha.js` da tela), `nota_sefaz` (manifestar, ignorar, vincular à O.S., consultar agora), `boleto` (consultar, atualizar pagamentos como
   a tela — `boleto_pago`/`boleto_situacao` —, pedir baixa), `pedido_compra`, `parcela`, `despesa_fixa`, `ajustes`, `equipe`, `site` e
   `rh_documento`; `alterar_os` aceita `dados.tecnico` (nome) e `dados.desconto` (pelo `os_aplicar_desconto`, aplicado DEPOIS dos itens e da
-  etapa — antes só na entrega, que usa o saldo novo nas parcelas; com cancelar/excluir/recusar/retirar é recusado). Fornecedor só é excluído sem
+  etapa — antes só na entrega, que usa o saldo novo nas parcelas; com cancelar/excluir/recusar/retirar é recusado; na O.S. entregue, desconto
+  novo e itens vão em chamadas separadas, porque no meio o gatilho pode fechar a O.S.; o mesmo desconto é ignorado). Fornecedor só é excluído sem
   nada ligado (as chaves são "set null"/"cascade": o banco não barra); funcionário que é técnico de O.S. não é excluído (tela e conector). `anexar_na_os` (NF em PDF/XML ou foto
   JPG/PNG, do anexo de e-mail ou da foto do WhatsApp — `whatsapp_mensagens_de` mostra o `foto_id`) e `backup_leitura` vão pela função "email"
   (ação `anexar_os` em `email/acoes.ts`; a do WhatsApp não precisa da Microsoft). **Prévia sem número:** o `agente_fazer` marca a transação

@@ -616,7 +616,7 @@ export function Ordem({ id, params = {} }) {
   const nItens = itens.filter(i => i.aprovado !== false).length;
 
   const podeSalvar = sujo && (editaInfo || st === "execucao" || editaItens);
-  guardaSaida.current = { pendente: podeSalvar, salvar: () => salvar({}, true) };
+  guardaSaida.current = { pendente: podeSalvar, salvar: async () => { setGravando(true); try { await salvar({}, true); } finally { setGravando(false); } } }; // "Salvar e sair": a tela espera também
   const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
   const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
   const minhasOff = filaPend.filter(op => op.ordem_id === o.id), conflitoOff = minhasOff.filter(op => op.conflito || op.erro);

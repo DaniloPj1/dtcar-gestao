@@ -1046,7 +1046,7 @@ declare cfg jsonb; v_patch jsonb := '{}'; k text; v jsonb; v_antes jsonb := '{}'
   c_texto text[] := array['nome', 'endereco', 'telefone', 'cnpj', 'cidade', 'condicoesPadrao', 'termoEntrada', 'termoOrcamento', 'termoGarantia', 'textoRecibo'];
   c_num text[] := array['valorHora', 'markupPecas', 'markupTerceiros', 'taxaDiagnostico'];
   c_int text[] := array['garantiaDias', 'validadeDias', 'impressaoVias'];
-  c_lista text[] := array['formasPagamento', 'situacoesOS', 'tiposCliente', 'categoriasDespesa', 'itensExtras'];
+  c_lista text[] := array['formasPagamento', 'situacoesOS', 'tiposCliente', 'categoriasDespesa'];
 begin
   perform public.agente_exige_admin();
   select dados into cfg from public.config where id = 1;
@@ -1056,7 +1056,7 @@ begin
       if k = any (c_texto) then
         if jsonb_typeof(v) <> 'string' then raise exception '% deve ser texto.', k; end if;
         v := to_jsonb(trim(v #>> '{}'));
-        if k in ('telefone', 'cnpj') then v := to_jsonb(regexp_replace(v #>> '{}', '\D', '', 'g')); end if;
+        -- telefone e CNPJ ficam como foram escritos (a impressão da O.S. e do recibo mostra o texto); o CNPJ só tem os dígitos conferidos
         if k = 'cnpj' and (v #>> '{}') <> '' and not public.agente_doc_valido(v #>> '{}') then raise exception 'CNPJ inválido.'; end if;
         if k = 'nome' and (v #>> '{}') = '' then raise exception 'O nome da oficina não pode ficar vazio.'; end if;
       elsif k = any (c_num) or k = any (c_int) then
@@ -1065,6 +1065,19 @@ begin
         if k = 'impressaoVias' and (v #>> '{}')::int not between 1 and 3 then raise exception 'impressaoVias vai de 1 a 3.'; end if;
       elsif k = 'exigirFotos' then
         if jsonb_typeof(v) <> 'boolean' then raise exception 'exigirFotos deve ser true ou false.'; end if;
+      elsif k = 'itensExtras' then
+        -- itens extras do checklist: a tela grava {id, nome} e as respostas de cada O.S. ficam na chave "x_" + id (Codex no #62).
+        -- Aceita nomes ou {id, nome}; o item que já existe (pelo id ou pelo nome) mantém o id; o novo ganha um (8 letras, como a tela)
+        if jsonb_typeof(v) <> 'array' then raise exception 'itensExtras deve ser uma lista de nomes (ou de {id, nome}).'; end if;
+        select coalesce(jsonb_agg(jsonb_build_object('id', coalesce(ex.id, left(gen_random_uuid()::text, 8)), 'nome', t.nome) order by t.n), '[]') into v
+        from (select distinct on (lower(z.nome)) z.nome, z.id_dado, z.n from (
+                select trim(case when jsonb_typeof(e) = 'object' then e->>'nome' else e #>> '{}' end) nome,
+                       case when jsonb_typeof(e) = 'object' then nullif(e->>'id', '') end id_dado, n
+                from jsonb_array_elements(v) with ordinality a(e, n)) z
+              where coalesce(z.nome, '') <> '' order by lower(z.nome), z.n) t
+        left join lateral (select ie->>'id' id from jsonb_array_elements(coalesce(cfg->'itensExtras', '[]')) with ordinality w(ie, m)
+                           where (t.id_dado is not null and ie->>'id' = t.id_dado) or lower(trim(ie->>'nome')) = lower(t.nome)
+                           order by (t.id_dado is not null and ie->>'id' = t.id_dado) desc, m limit 1) ex on true;
       elsif k = any (c_lista) then
         if jsonb_typeof(v) <> 'array' then raise exception '% deve ser uma lista de textos.', k; end if;
         select coalesce(jsonb_agg(distinct trim(e)), '[]') into v_lista from jsonb_array_elements_text(v) e where trim(e) <> '';
@@ -1073,7 +1086,7 @@ begin
           where trim(e) <> '' order by lower(trim(e)), n) t;
         if k = 'formasPagamento' and jsonb_array_length(v) = 0 then raise exception 'A lista de formas de pagamento não pode ficar vazia.'; end if;
       else
-        raise exception 'O ajuste "%" não muda por aqui. Ajustes: %, %, %, exigirFotos, %.', k, array_to_string(c_texto, ', '), array_to_string(c_num, ', '),
+        raise exception 'O ajuste "%" não muda por aqui. Ajustes: %, %, %, exigirFotos, itensExtras, %.', k, array_to_string(c_texto, ', '), array_to_string(c_num, ', '),
           array_to_string(c_int, ', '), array_to_string(c_lista, ', ');
       end if;
       v_antes := v_antes || jsonb_build_object(k, cfg->k); v_patch := v_patch || jsonb_build_object(k, v);

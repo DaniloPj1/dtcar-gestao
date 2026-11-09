@@ -1273,7 +1273,7 @@ export function criarServidor(db: Banco): McpServer {
     title: "Ajustes da oficina e do sistema",
     description: "Sem nada: mostra os ajustes atuais. campos {nome, endereco, telefone, cnpj, cidade, valorHora, markupPecas, markupTerceiros, garantiaDias, validadeDias, taxaDiagnostico, " +
       "impressaoVias (1 a 3), exigirFotos, condicoesPadrao, termoEntrada, termoOrcamento, termoGarantia, textoRecibo, formasPagamento, situacoesOS, tiposCliente, categoriasDespesa, itensExtras} " +
-      "(listas: mande a lista inteira, na ordem). encargos {fgts, inssPatronal, ferias, decimo} (%, Funcionários). rh_remetentes [e-mails da contabilidade]. " +
+      "(listas: mande a lista inteira, na ordem; itensExtras = nomes dos itens extras do checklist — os que já existem mantêm o id). encargos {fgts, inssPatronal, ferias, decimo} (%, Funcionários). rh_remetentes [e-mails da contabilidade]. " +
       "email_ligado (true/false). sefaz {buscar_automatico, ciencia_automatica}. Contas e saldos: atualizar_saldos. " +
       "Só na tela (proteção contra ordem falsa): o número dos avisos do WhatsApp e o backup de leitura. Não mexe em carteira de cobrança, importação, certificado, logotipo nem no layout do painel. " +
       "SEMPRE confirmar=false primeiro (mostra antes e depois) e grave com o sim do Danilo.",

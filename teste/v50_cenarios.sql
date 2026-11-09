@@ -311,6 +311,19 @@ begin
   perform pg_temp.ok((select dados->>'contaRecebimento' = 'Sicredi' from public.config where id = 1), 'o resto da config continua');
   perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"campos": {"espelhoLegado": true}}', true)$q$, 'não muda por aqui');
   perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"campos": {"impressaoVias": 5}}', true)$q$, '1 a 3');
+  r := public.agente_fazer('ajustes', '{"campos": {"telefone": "(27) 99247-0140", "cnpj": "49.016.409/0001-95"}}', true);
+  perform pg_temp.ok((select dados->>'telefone' = '(27) 99247-0140' and dados->>'cnpj' = '49.016.409/0001-95' from public.config where id = 1),
+    'telefone e CNPJ ficam como escritos (a impressão mostra o texto)');
+  perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"campos": {"cnpj": "49.016.409/0001-96"}}', true)$q$, 'CNPJ inválido');
+  -- Codex no #62: itens extras do checklist são {id, nome}; o que já existe mantém o id (as respostas das O.S. ficam em "x_" + id)
+  r := public.agente_fazer('ajustes', '{"campos": {"itensExtras": ["Estepe", "Macaco"]}}', true);
+  perform pg_temp.ok((select jsonb_array_length(dados->'itensExtras') = 2 and dados->'itensExtras'->0->>'nome' = 'Estepe' and length(dados->'itensExtras'->0->>'id') = 8
+                      from public.config where id = 1), 'itens extras viram {id, nome}');
+  r := public.agente_fazer('ajustes', format('{"campos": {"itensExtras": ["Triângulo", "estepe", {"id": "%s", "nome": "Macaco hidráulico"}]}}',
+         (select dados->'itensExtras'->1->>'id' from public.config where id = 1))::jsonb, true);
+  perform pg_temp.ok((select dados->'itensExtras'->1->>'id' = (r->'antes'->'itensExtras'->0->>'id') and dados->'itensExtras'->2->>'id' = (r->'antes'->'itensExtras'->1->>'id')
+                        and dados->'itensExtras'->2->>'nome' = 'Macaco hidráulico' and jsonb_array_length(dados->'itensExtras') = 3 from public.config where id = 1),
+    'item que já existia mantém o id (pelo nome ou pelo id), novo ganha id, na ordem mandada');
   -- revisão do #62: o número que dá ordens pelo WhatsApp e o destino do backup só mudam na tela
   perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"whatsapp_alerta": "(27) 99769-6545"}', true)$q$, 'só mudam na tela');
   perform pg_temp.erro($q$select public.agente_fazer('ajustes', '{"backup_leitura": {"emails": ["a@b.com"]}}', true)$q$, 'só mudam na tela');

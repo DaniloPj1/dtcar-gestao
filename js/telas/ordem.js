@@ -218,6 +218,9 @@ export function Ordem({ id, params = {} }) {
   const [removidos, setRemovidos] = useState([]);
   const [campos, setCampos] = useState({});
   const [sujo, setSujo] = useState(false);
+  // aviso ao sair com alteração não salva (o app.js pergunta antes de trocar de tela)
+  const guardaSaida = useRef({ pendente: false, salvar: null });
+  useEffect(() => { window.dtcarSaida = { pendente: () => !!guardaSaida.current.pendente, salvar: () => guardaSaida.current.salvar() }; return () => { window.dtcarSaida = null; }; }, []);
   const [modal, setModal] = useState(null);
   const [nNotas, setNNotas] = useState(0); // NF anexadas (v33); sem o SQL ou sem internet fica 0
   // v50: técnico responsável pela lista de Funcionários (+ acessos sem ficha); null = sem o v50 ou sem internet (lista antiga, só acessos)
@@ -276,13 +279,14 @@ export function Ordem({ id, params = {} }) {
   const evento = (tipo, texto) => api.evento(o.id, tipo, texto, perfil.nome).catch(() => {});
   const cliCad = dados.clientes.find(c => c.id === o.cliente_id);
 
-  const salvar = async (extra = {}, silencioso) => {
+  const salvar = async (extra = {}, silencioso, listaNova) => {
+    const base = listaNova || itens; // listaNova: o item que acabou de entrar (o estado da tela ainda não refletiu)
     const aprov = ["execucao", "pronto", "entregue", "recusado"].includes(extra.status || st);
-    const t = totais(itens, descOS, aprov);
-    let lista = itens;
-    if (itens.some(i => i._conta && !i.conta_id)) {
+    const t = totais(base, descOS, aprov);
+    let lista = base;
+    if (base.some(i => i._conta && !i.conta_id)) {
       lista = [];
-      for (const i of itens) {
+      for (const i of base) {
         if (!i._conta || i.conta_id) { lista.push(i); continue; }
         try {
           const nomeP = i.fornecedor || "Prestador";
@@ -306,6 +310,7 @@ export function Ordem({ id, params = {} }) {
   const acao = async (rotulo, fn) => { setOcupado(rotulo); try { await fn(); } catch (e) { avisar(e.message, true); } finally { setOcupado(""); } };
 
   const novoItem = tipo => setModal({ tipo: "item", item: { id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: jaAprovada ? true : null, executado: st === "pronto" || st === "entregue" } });
+  const podeGravarAgora = gestor && (ETAPAS_ABERTAS.includes(etapaOS(o)) || st === "execucao");
   const salvarItem = async it => {
     let x = { ...it };
     if (x._cadastrar) {
@@ -317,7 +322,10 @@ export function Ordem({ id, params = {} }) {
       } catch (e) { avisar("O item entrou na O.S., mas não foi possível cadastrá-lo: " + e.message, true); }
     }
     delete x._cadastrar;
-    setItens(l => l.some(y => y.id === x.id) ? l.map(y => y.id === x.id ? { ...x, _novo: false } : y) : l.concat([{ ...x, _novo: false }])); setSujo(true); setModal(null);
+    const nova = itens.some(y => y.id === x.id) ? itens.map(y => y.id === x.id ? { ...x, _novo: false } : y) : itens.concat([{ ...x, _novo: false }]);
+    setItens(nova); setSujo(true); setModal(null);
+    // grava na hora (como o Imprimir e o WhatsApp fazem), para o item não se perder se sair da O.S. sem clicar em "Salvar O.S."
+    if (podeGravarAgora) await acao("salvar", async () => { await salvar({}, true, nova); avisar("Item salvo na O.S."); });
   };
   const excluirItem = it => { setItens(l => l.filter(x => x.id !== it.id)); if (!it._novo) setRemovidos(r => r.concat([it.id])); setSujo(true); setModal(null); };
 
@@ -607,6 +615,7 @@ export function Ordem({ id, params = {} }) {
   const nItens = itens.filter(i => i.aprovado !== false).length;
 
   const podeSalvar = sujo && (editaInfo || st === "execucao" || editaItens);
+  guardaSaida.current = { pendente: podeSalvar, salvar: () => salvar({}, true) };
   const abas = [["principal", "Principais informações"], ["veiculo", "Veículo"], ["itens", "Produtos e serviços" + (nItens ? " (" + nItens + ")" : "")], ["obs", "Observações"], ["entrada", ck.feito ? "Checklist ✓" : "Checklist"], ["historico", "Histórico"]];
   const corpo = { principal: abaPrincipal, veiculo: abaVeiculo, itens: abaItens, obs: abaObs, entrada: abaEntrada, historico: abaHist }[aba] || abaPrincipal;
   const minhasOff = filaPend.filter(op => op.ordem_id === o.id), conflitoOff = minhasOff.filter(op => op.conflito || op.erro);

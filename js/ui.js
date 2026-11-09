@@ -63,7 +63,9 @@ export function Abas({ abas, ativa, onTroca }) {
 export function Modal({ titulo, onFechar, children, largo }) {
   useEffect(() => { const k = e => { if (e.key === "Escape") onFechar(); }; document.addEventListener("keydown", k); document.body.classList.add("sem-rolagem");
     return () => { document.removeEventListener("keydown", k); document.body.classList.remove("sem-rolagem"); }; }, []);
-  return html`<div class="fundo-modal" onClick=${e => { if (e.target === e.currentTarget) onFechar(); }}>
+  // só fecha se o clique COMEÇOU no fundo: arrastar para selecionar texto de um campo e soltar fora da janela não fecha mais
+  const comecouNoFundo = useRef(false);
+  return html`<div class="fundo-modal" onPointerDown=${e => { comecouNoFundo.current = e.target === e.currentTarget; }} onClick=${e => { if (e.target === e.currentTarget && comecouNoFundo.current) onFechar(); comecouNoFundo.current = false; }}>
     <div class=${"modal" + (largo ? " largo" : "")} role="dialog" aria-modal="true" aria-label=${titulo}>
       <div class="modal-topo"><h2>${titulo}</h2><button type="button" class="fechar" aria-label="Fechar" onClick=${onFechar}>×</button></div>${children}</div></div>`;
 }

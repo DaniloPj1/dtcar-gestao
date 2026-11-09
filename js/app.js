@@ -100,7 +100,22 @@ function App() {
   const atualizarPendentes = useCallback(async () => { const l = await fila.listar(); setPend(l); return l; }, []);
   useEffect(() => { const f = () => atualizarPendentes(); window.addEventListener("dtcar-fila", f); return () => window.removeEventListener("dtcar-fila", f); }, []);
 
-  useEffect(() => { const f = () => { setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  const hashAtual = useRef(location.hash);
+  useEffect(() => { const f = () => {
+    const destino = location.hash;
+    // tela com alteração não salva (O.S.): volta para ela e pergunta antes de sair
+    const liberada = window.__saidaLiberada; window.__saidaLiberada = false;
+    if (!liberada && window.dtcarSaida && window.dtcarSaida.pendente()) {
+      history.replaceState(null, "", hashAtual.current || "#/");
+      confirmar({ titulo: "Alterações não salvas", texto: "Esta O.S. tem alterações que ainda não foram salvas. Salvar antes de sair?", botao: "Salvar e sair", botao2: "Sair sem salvar" }).then(async r => {
+        if (r === false) return;
+        if (r === true) { try { await window.dtcarSaida.salvar(); } catch (e) { avisar(e.message || "Não foi possível salvar.", true); return; } }
+        window.__saidaLiberada = true; location.hash = destino;
+      });
+      return;
+    }
+    hashAtual.current = destino;
+    setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   useEffect(() => {
     if (!api) return;
     (async () => {
@@ -424,6 +439,7 @@ function App() {
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}
     ${conf ? html`<${Modal} titulo=${conf.titulo} onFechar=${() => { conf.res(false); setConf(null); }}><p>${conf.texto}</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => { conf.res(false); setConf(null); }}>Voltar</button>
+      ${conf.botao2 ? html`<button type="button" class="btn btn-perigo" onClick=${() => { conf.res("descartar"); setConf(null); }}>${conf.botao2}</button>` : null}
       <button type="button" class=${"btn " + (conf.perigo ? "btn-perigo" : "btn-pri")} onClick=${() => { conf.res(true); setConf(null); }}>${conf.botao}</button></div></${Modal}>` : null}`;
 
   return html`<${Ctx.Provider} value=${ctx}>

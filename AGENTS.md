@@ -223,7 +223,11 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `cfg.rh.remetentes`, padrão dploredocontabilidade@gmail.com; só PDF/foto; `email_id`+`anexo_id` únicos; lote de até 12 por chamada com
   `restam`; tipo e mês pelo nome do arquivo) ou à mão ("+ Adicionar documento", ex.: DAS do WhatsApp). Valor, vencimento e linha digitável das
   guias são lidos **no navegador** (pdf.js, `lerPDFBoleto`), não na função (limite de processamento do Supabase). Fora do backup, do banco
-  do PC e do espelho. Testes: `deno run -A teste/teste_rh.ts` e `bash teste/teste_v30.sh`.
+  do PC e do espelho. **09/11/2026:** a importação pega os e-mails mais novos primeiro, um anexo com erro não trava os outros (vai em `erros`
+  e a tela mostra, também na busca automática ao abrir a tela) e a resposta traz `emails_achados`/`email_mais_recente`; sem `remetentes` na
+  chamada, vale `cfg.rh.remetentes`. **Conector (pedido do Danilo, "sem amarras"):** `rh_documentos` (ação `rh_listar`), `rh_abrir`
+  (`rh_abrir`: texto do PDF com as guias conferidas) e `rh_buscar_contabilidade` (`importar_rh`), pela função "email" com o login do Danilo;
+  o papel `agente_leitura` continua sem ler o RH. Testes: `deno run -A teste/teste_rh.ts`, `deno run -A teste/teste_email.ts` e `bash teste/teste_v30.sh`.
 - **Pedidos de compra por fornecedor (v31, pedido do Danilo em 04/11/2026):** cupons, pré-vendas e romaneios ficam na `pre_notas` (v19) **sem foto**:
   fornecedor (cadastro ou só o nome), documento, data, total já com desconto e a O.S. de destino. O Claude registra pelo conector
   (`registrar_pre_nota` → `agente_registrar_pre_nota`, prévia com confirmar=false; recusa o mesmo documento do mesmo fornecedor sem confirmação) e

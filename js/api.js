@@ -480,7 +480,15 @@ function criarApiSupabase() {
       return ok(r); },
     salvarItens: async (ordemId, itens, removidos) => {
       if (removidos && removidos.length) ok(await sb.from("os_itens").delete().in("id", removidos));
-      return itens.length ? ok(await sb.from("os_itens").upsert(itens.map((i, n) => ({ ...Object.fromEntries(Object.entries(i).filter(([k]) => !k.startsWith("_"))), ordem_id: ordemId, posicao: i.posicao ?? n }))).select()) : [];
+      if (!itens.length) return [];
+      // O upsert em lote do Supabase usa a união das colunas de todas as linhas e grava NULL no que falta numa linha. Item novo (sem criado_em)
+      // junto de item já salvo (com criado_em) dava "null value in column criado_em". Cada grupo de linhas com as mesmas colunas vai num pedido.
+      const linhas = itens.map((i, n) => ({ ...Object.fromEntries(Object.entries(i).filter(([k, v]) => !k.startsWith("_") && v !== undefined)), ordem_id: ordemId, posicao: i.posicao ?? n }));
+      const grupos = new Map();
+      for (const l of linhas) { const k = Object.keys(l).sort().join(","); if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(l); }
+      const saida = [];
+      for (const g of grupos.values()) saida.push(...ok(await sb.from("os_itens").upsert(g).select()));
+      return saida;
     },
     incluirFotos: async linhas => linhas.length ? ok(await sb.from("fotos").insert(linhas)) : null,
     excluirFoto: async foto => { ok(await sb.from("fotos").delete().eq("id", foto.id)); await sb.storage.from("fotos").remove([foto.caminho]); },

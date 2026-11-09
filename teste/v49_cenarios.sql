@@ -86,6 +86,14 @@ begin
   r := public.sefaz_vigiar(16, '2026-11-11 20:00Z');
   if r ->> 'motivo' not like '%certificado venceu%' then raise exception 'FALHOU: erro do robô %', r; end if;
 
+  -- 10b. falha de conexão com a SEFAZ (adia a proxima_consulta 10 min): mostra o erro, não "a SEFAZ pediu espera"
+  r := public.sefaz_disparar(8, '2026-11-12 11:00Z');
+  insert into net._http_response (id, status_code) values ((r ->> 'pedido_id')::bigint, 204);
+  update public.sefaz_config set worker_erro = '', ultimo_erro = 'A SEFAZ não respondeu em 90 segundos.',
+    worker_em = '2026-11-12 11:01Z', proxima_consulta = '2026-11-12 11:11Z' where id = 1;
+  r := public.sefaz_vigiar(8, '2026-11-12 12:00Z');
+  if r ->> 'motivo' not like '%consulta falhou: A SEFAZ não respondeu%' or r ->> 'motivo' like '%pediu espera%' then raise exception 'FALHOU: falha de conexão %', r; end if;
+
   -- 11. 23h de Brasília ainda é o mesmo dia (02h UTC do dia seguinte)
   if public.sefaz_vigiar(16, '2026-11-12 02:00Z') ->> 'acao' <> 'ja_avisado' then raise exception 'FALHOU: dia de Brasília'; end if;
 

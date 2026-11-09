@@ -148,14 +148,16 @@ begin
     v_resp := public.sefaz_resposta_github(d.pedido_id);
     if v_resp <> '' then
       v_motivo := v_resp || '.';
-    elsif c.proxima_consulta > v_marco then
-      v_motivo := 'o GitHub rodou o robô, mas a SEFAZ pediu espera até '
-                  || to_char(c.proxima_consulta at time zone 'America/Sao_Paulo', 'HH24:MI')
-                  || ' (consulta feita pouco antes). A consulta sai no próximo giro do robô depois disso.';
+    -- erros do robô primeiro: falha de conexão com a SEFAZ também adia a proxima_consulta (10 min) e não pode
+    -- aparecer como "a SEFAZ pediu espera" (apontamento do Codex no PR #60)
     elsif c.worker_em >= v_marco and coalesce(c.worker_erro, '') <> '' then
       v_motivo := 'o robô rodou, mas deu erro: ' || left(c.worker_erro, 200) || '.';
     elsif c.worker_em >= v_marco and coalesce(c.ultimo_erro, '') <> '' then
       v_motivo := 'o robô rodou, mas a consulta falhou: ' || left(c.ultimo_erro, 200) || '.';
+    elsif c.proxima_consulta > v_marco then
+      v_motivo := 'o GitHub rodou o robô, mas a SEFAZ pediu espera até '
+                  || to_char(c.proxima_consulta at time zone 'America/Sao_Paulo', 'HH24:MI')
+                  || ' (consulta feita pouco antes). A consulta sai no próximo giro do robô depois disso.';
     elsif c.worker_em is null or c.worker_em < v_marco then
       v_motivo := 'o GitHub aceitou o pedido, mas o robô ainda não rodou (fila do GitHub).';
     else

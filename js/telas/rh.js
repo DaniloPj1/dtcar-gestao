@@ -56,20 +56,25 @@ export function DocumentosRH() {
       } catch (e) { /* tenta na próxima vez */ }
     }
   };
-  // busca na contabilidade: chama a função até não restar anexo novo
+  // busca na contabilidade: chama a função até não restar anexo novo (para se um lote não trouxer nada: só erros)
+  // 09/11/2026: o erro aparece também na busca automática (ao abrir a tela); antes ficava escondido e o documento não entrava sem aviso.
   const buscar = async (silencioso = false) => {
     setBuscando("Buscando no e-mail da contabilidade…"); setErro("");
     let total = 0;
+    const falhas = new Map();
     try {
       for (let i = 0; i < 15; i++) {
         const r = await api.email.chamar({ acao: "importar_rh", remetentes, dias: (docs && docs.length) ? 120 : 400 });
         total += r.importados || 0;
+        for (const f of (r.erros || [])) falhas.set(f.arquivo + "|" + f.email, f);
         if (vivo.current) setBuscando(`Buscando no e-mail da contabilidade… ${total} documento(s) novo(s)`);
-        if (!r.restam) break;
+        if (!r.restam || !r.importados) break;
       }
       const d = await ler(); await lerGuias(d); await ler();
+      if (falhas.size && vivo.current) setErro("Não entrou: " + [...falhas.values()].slice(0, 3).map(f => `${f.arquivo} (${f.erro})`).join("; ")
+        + (falhas.size > 3 ? ` e mais ${falhas.size - 3}` : "") + ". Tente \"Buscar na contabilidade\" de novo; se continuar, adicione à mão.");
       if (!silencioso || total) avisar(total ? `${total} documento(s) novo(s) da contabilidade.` : "Nenhum documento novo da contabilidade.");
-    } catch (e) { if (!silencioso) setErro(e.message); }
+    } catch (e) { if (vivo.current) setErro((silencioso ? "Não foi possível buscar no e-mail da contabilidade: " : "") + e.message); }
     finally { if (vivo.current) setBuscando(""); }
   };
   useEffect(() => {

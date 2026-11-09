@@ -269,12 +269,31 @@ confere("desconectar apaga a chave guardada", !tabelas.email_token.length && tab
 const rg = await tratar("regra", { tipo: "ignorar", alvo: "remetente", valor: "Ofertas <OFERTAS@Loja.com.br>" }, deps) as Linha;
 confere("regra: normaliza antes de gravar", rg.valor === "ofertas@loja.com.br" && chamadas.some(([f]) => f === "email_regra_salvar"));
 
+// rh_abrir: documento do RH da pasta privada "rh" (sem Microsoft)
+tabelas.rh_documentos = [{ id: "4f6c1f5e-8a2b-4c1d-9e3f-0a1b2c3d4e5f", competencia: "2026-10", tipo: "darf", titulo: "DARF 10.2026", nome_arquivo: "DARF 10.2026.pdf",
+  tipo_arquivo: "application/pdf", arquivo: "2026-10/x-darf.pdf", valor: null, vencimento: null, linha_digitavel: "-" }];
+const baixados: string[] = [];
+// deno-lint-ignore no-explicit-any
+(db as any).storage = { from: (b: string) => ({ download: (c: string) => { baixados.push(b + "/" + c); return Promise.resolve({ data: new Blob(["%PDF"]), error: null }); } }) };
+const rhA = await tratar("rh_abrir", { id: "4f6c1f5e-8a2b-4c1d-9e3f-0a1b2c3d4e5f" }, deps) as Linha;
+confere("rh_abrir: lê o PDF da pasta rh, devolve o texto e as guias, sem o caminho do arquivo",
+  baixados[0] === "rh/2026-10/x-darf.pdf" && String(rhA.texto).includes("Boleto DPK") && Array.isArray(rhA.boletos) && !("arquivo" in rhA) && rhA.linha_digitavel === "", rhA);
+let rhErro = "";
+try { await tratar("rh_abrir", { id: "00000000-0000-0000-0000-000000000000" }, deps); } catch (e) { rhErro = (e as Error).message; }
+confere("rh_abrir: id que não existe avisa", /não encontrado/.test(rhErro), rhErro);
+try { await tratar("rh_abrir", { id: "../../segredo" }, deps); rhErro = ""; } catch (e) { rhErro = (e as Error).message; }
+confere("rh_abrir: id fora do formato é recusado", /id do documento/.test(rhErro), rhErro);
+
 // ---------------- 4. conector ----------------
 const invocadas: Array<[string, Record<string, unknown>]> = [];
+let rhChamadas = 0;
 const banco: Banco = {
   rpc: () => Promise.resolve({ data: {}, error: null }),
   functions: { invoke(nome: string, op: { body: Record<string, unknown> }) {
     invocadas.push([nome, op.body]);
+    if (op.body.acao === "importar_rh") { rhChamadas++; return Promise.resolve({ data: rhChamadas === 1
+      ? { importados: 2, novos: [{ id: "a" }, { id: "b" }], restam: 3, erros: [{ arquivo: "x.pdf", erro: "falhou" }], remetentes: ["dploredocontabilidade@gmail.com"], emails_achados: 3, email_mais_recente: "2026-11-04T16:38:26Z" }
+      : { importados: 0, novos: [], restam: 3, erros: [{ arquivo: "x.pdf", erro: "falhou" }], remetentes: ["dploredocontabilidade@gmail.com"], emails_achados: 3, email_mais_recente: "2026-11-04T16:38:26Z" }, error: null }); }
     if (op.body.acao === "anexo") return Promise.resolve({ data: { nome: "foto.jpg", imagem: { base64: "AAAA", tipo: "image/jpeg" } }, error: null });
     if (op.body.acao === "ler" && op.body.id === "erro-erro-erro") return Promise.resolve({ data: null, error: { message: "Edge Function returned a non-2xx status code", context: { json: () => Promise.resolve({ erro: "A Microsoft pediu para conectar o e-mail de novo." }) } } });
     return Promise.resolve({ data: { ok: op.body.acao }, error: null });
@@ -308,6 +327,20 @@ const semDados = await chamarTool("email_regra", { tipo: "importante" });
 confere("conector: regra incompleta não chama a função", semDados.result.isError && invocadas.at(-1)![1].acao === "anexo");
 await chamarTool("email_regra", { remover_id: 7 });
 confere("conector: remover regra", invocadas.at(-1)![1].acao === "remover_regra" && invocadas.at(-1)![1].id === 7);
+
+// Documentos do RH pelo conector (09/11/2026)
+const rhl = await chamarTool("rh_documentos", { competencia: "2026-10" });
+confere("conector: rh_documentos chama rh_listar com o mês", invocadas.at(-1)![1].acao === "rh_listar" && invocadas.at(-1)![1].competencia === "2026-10" && !rhl.result.isError, invocadas.at(-1));
+const rhMesRuim = await chamarTool("rh_documentos", { competencia: "10/2026" });
+confere("conector: rh_documentos recusa mês fora do formato", !!(rhMesRuim.error || rhMesRuim.result?.isError), rhMesRuim);
+await chamarTool("rh_abrir", { id: "4f6c1f5e-8a2b-4c1d-9e3f-0a1b2c3d4e5f" });
+confere("conector: rh_abrir chama a função com o id", invocadas.at(-1)![1].acao === "rh_abrir" && invocadas.at(-1)![1].id === "4f6c1f5e-8a2b-4c1d-9e3f-0a1b2c3d4e5f");
+const antesRH = invocadas.length;
+const rhb = await chamarTool("rh_buscar_contabilidade", {});
+const rhbR = JSON.parse(rhb.result.content[0].text);
+confere("conector: rh_buscar_contabilidade repete enquanto entra algo e para quando o lote não traz nada",
+  invocadas.length - antesRH === 2 && invocadas.at(-1)![1].acao === "importar_rh" && invocadas.at(-1)![1].dias === 120 && !("remetentes" in invocadas.at(-1)![1])
+  && rhbR.importados === 2 && rhbR.erros.length === 1 && rhbR.email_mais_recente === "2026-11-04T16:38:26Z", rhbR);
 
 for (const o of ok) console.log("OK", o);
 console.log("FALHAS", falhas);

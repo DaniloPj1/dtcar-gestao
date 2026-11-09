@@ -53,12 +53,12 @@ confere("instruções do servidor", String(ini.corpo.result?.instructions || "")
 const lista = await rpc("tools/list", {});
 const nomes = (lista.corpo.result?.tools || []).map((t: { name: string }) => t.name).sort();
 const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente", "buscar_os", "cancelar_recibo", "consultar_estoque", "conta_pagar", "contas_a_pagar", "contas_a_receber",
-  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "emitir_boleto", "entrada_nota", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "saldos_das_contas", "salvar_cadastro", "transferir",
+  "email_anexo", "email_buscar", "email_enviar", "email_ler", "email_regra", "email_responder", "email_situacao", "emitir_boleto", "entrada_nota", "lancar_itens_os", "listar_os", "movimentar_estoque", "notas_da_sefaz", "pre_notas", "preparar_envio", "produto", "receber_os", "registrar_pre_nota", "rh_abrir", "rh_buscar_contabilidade", "rh_documentos", "saldos_das_contas", "salvar_cadastro", "transferir",
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao"];
-confere("36 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("39 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("16 só de leitura (gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 16, String(leitura));
+confere("18 só de leitura (+ rh_documentos e rh_abrir; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 18, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {

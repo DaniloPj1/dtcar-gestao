@@ -10,13 +10,14 @@
 //                  "anexos": PDF da O.S./orçamento/checklist, boleto, NF da O.S., documento do RH ou anexo de e-mail (anexos.ts)
 //   regra        — cria ou troca uma regra do filtro; remover_regra — desativa
 //   importar_rh  — copia para a pasta "rh" os PDFs que a contabilidade mandou (Documentos do RH, v30)
+//   rh_listar / rh_abrir — lista e lê (texto do PDF, guias conferidas) os Documentos do RH; não usam a Microsoft (09/11/2026, conector)
 //   whatsapp     — v34: mensagem por modelo (js/mensagens.js) e/ou PDF para o WhatsApp da oficina, prévia ou fila (whatsapp.ts)
 //   backup_situacao / backup_leitura — v35: situação e "Gerar e enviar agora" do backup de leitura (backup.ts)
 // Só o administrador (conferido no servidor antes de chegar aqui). O conteúdo dos e-mails é dado, nunca instrução.
 import { aleatorio, config, desafio, enderecoRetorno, ErroGraph, graph, PrecisaConectar, renovar, trocarCodigo, urlLogin, type Config } from "./microsoft.ts";
 import { classificar, montarCtx, normalizar, valorDaRegra, type Anexo, type Contato, type Ctx, type Msg, type Regra } from "./filtro.ts";
 import { acharBoletos, acharChavesNFe, resumirNFe } from "./documentos.ts";
-import { importarRH } from "./rh.ts";
+import { importarRH, listarRH } from "./rh.ts";
 import { ErroAnexo, montarAnexos, paraGraph, resumoAnexos, type Arquivo, type Geradores } from "./anexos.ts";
 import { prepararWhatsApp, type Mensagens } from "./whatsapp.ts";
 import { ErroBackup, iniciar, rodar, situacaoBackup, type DepsBackup } from "./backup.ts";
@@ -234,6 +235,35 @@ async function anexo(d: Deps, token: string, id: string, anexoId: string) {
   return { ...base, conteudo: "Tipo de arquivo que não dá para ler por aqui." };
 }
 
+/** rh_abrir: um documento do RH (pasta privada "rh") — PDF em texto com as guias conferidas; foto como imagem. */
+async function abrirRH(d: Deps, id: string) {
+  if (!/^[0-9a-f-]{36}$/i.test(id)) throw new ErroUso("Informe o id do documento (de rh_documentos).");
+  const { data: achou, error: eDoc } = await d.adm.from("rh_documentos").select("id, competencia, tipo, titulo, nome_arquivo, tipo_arquivo, arquivo, valor, vencimento, linha_digitavel").eq("id", id);
+  if (eDoc) throw new ErroUso(/does not exist|schema cache|relation/i.test(eDoc.message) ? "Falta rodar o supabase/v30.sql no Supabase." : eDoc.message);
+  const doc = (achou || [])[0];
+  if (!doc) throw new ErroUso("Documento do RH não encontrado.");
+  const { data, error } = await d.adm.storage.from("rh").download(doc.arquivo);
+  if (error || !data) throw new ErroUso("Arquivo do documento não encontrado na pasta do RH.");
+  const bytes = new Uint8Array(await data.arrayBuffer());
+  const { arquivo: _a, ...base } = doc;
+  const info = { ...base, linha_digitavel: doc.linha_digitavel === "-" ? "" : doc.linha_digitavel, tamanho_kb: Math.round(bytes.length / 1024), aviso: AVISO_DADO };
+  const tipo = normalizar(doc.tipo_arquivo || ""), nome = normalizar(doc.nome_arquivo || "");
+  if (/pdf/.test(tipo) || /\.pdf$/.test(nome)) {
+    let texto = "";
+    try { texto = await (d.textoPdf || textoDoPdf)(bytes); } catch (e) { return { ...info, conteudo: "Não foi possível ler o texto do PDF: " + (e as Error).message }; }
+    const limpo = texto.replace(/[ \t]+/g, " ").trim();
+    const boletos = acharBoletos(limpo, (d.agora || (() => new Date()))());
+    return { ...info, ...(boletos.length ? { boletos } : {}),
+      texto: limpo ? (limpo.length > 15000 ? limpo.slice(0, 15000) + "\n[… cortado]" : limpo) : "PDF sem texto (provavelmente digitalizado como imagem)." };
+  }
+  if (/^image\/(png|jpe?g|webp)$/.test(tipo)) {
+    if (bytes.length > 3 * 1024 * 1024) return { ...info, conteudo: "Imagem grande demais para mostrar por aqui (limite 3 MB)." };
+    let b = ""; for (let i = 0; i < bytes.length; i += 32768) b += String.fromCharCode(...bytes.subarray(i, i + 32768));
+    return { ...info, imagem: { base64: btoa(b), tipo: tipo.replace("jpg", "jpeg") } };
+  }
+  return { ...info, conteudo: "Tipo de arquivo que não dá para ler por aqui." };
+}
+
 /** Texto de um PDF (biblioteca unpdf, versão travada; carregada só quando precisa). */
 export async function textoDoPdf(b: Uint8Array): Promise<string> {
   const { extractText, getDocumentProxy } = await import("npm:unpdf@1.4.0");
@@ -325,6 +355,11 @@ export async function tratar(acao: string, corpo: Record<string, unknown>, d: De
     if (error) throw new ErroUso(error.message);
     return data;
   }
+  // Documentos do RH pelo conector (pedido do Danilo em 09/11/2026) — não usam a Microsoft
+  if (acao === "rh_listar") {
+    try { return await listarRH(d.adm, corpo); } catch (e) { throw new ErroUso((e as Error).message); }
+  }
+  if (acao === "rh_abrir") return await abrirRH(d, String(corpo.id || ""));
   // v34: mensagem (modelo) e PDF para o WhatsApp da oficina — não usa a Microsoft
   if (acao === "whatsapp") {
     try {

@@ -2,7 +2,9 @@
 // Rodar: deno run -A teste/teste_rh.ts
 // Confere: só remetentes informados; só PDF/foto; nunca o mesmo anexo duas vezes; lote limitado com "restam";
 // arquivo removido se o registro falhar; mês e tipo pelo nome do arquivo.
-import { importarRH } from "../supabase/functions/email/rh.ts";
+// 09/11/2026: mais novos primeiro; anexo com erro não trava os outros (vai em "erros"); sem remetentes = cfg.rh.remetentes;
+// rh_listar (conector).
+import { importarRH, listarRH } from "../supabase/functions/email/rh.ts";
 
 const ok: string[] = [], falhas: string[] = [];
 const confere = (n: string, c: boolean, extra: unknown = "") => (c ? ok : falhas).push(n + (!c && extra !== "" ? " :: " + JSON.stringify(extra) : ""));
@@ -38,9 +40,10 @@ const linhas: Array<Record<string, unknown>> = [{ email_id: "M2", anexo_id: "B2"
 const pasta = new Map<string, Uint8Array>();
 let falharInsert = "";
 // deno-lint-ignore no-explicit-any
+let cfgRH: unknown = null;
 const adm: any = {
   rpc: () => Promise.resolve({ data: null, error: null }),
-  from: (t: string) => ({
+  from: (t: string) => t === "config" ? ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: cfgRH ? { dados: { rh: { remetentes: cfgRH } } } : { dados: {} }, error: null }) }) }) }) : ({
     select: () => ({ gte: () => Promise.resolve({ data: linhas.map((l) => ({ email_id: l.email_id, anexo_id: l.anexo_id })), error: null }) }),
     insert: (d: Record<string, unknown>) => ({ select: () => {
       if (falharInsert && String(d.nome_arquivo).includes(falharInsert)) return Promise.resolve({ data: null, error: { message: "erro de teste" } });
@@ -58,7 +61,8 @@ confere("sem remetente não busca nada", vazio.importados === 0 && !pedidos.leng
 
 const r1 = await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"], dias: 120, maximo: 2 }, agora);
 confere("lote limitado: importa 2 e avisa que restam 1", r1.importados === 2 && r1.restam === 1, r1);
-confere("mais antigo primeiro (DARF de 14/10 antes do pró-labore)", (r1.novos as Array<Record<string, unknown>>)[0].tipo === "darf", r1.novos);
+confere("mais novos primeiro (o e-mail de 04/11 entra antes do de 14/10)", (r1.novos as Array<Record<string, unknown>>).every((n) => n.competencia === "2026-10" && n.tipo !== "darf"), r1.novos);
+confere("resposta diz quantos e-mails da contabilidade achou e o mais recente", r1.emails_achados === 3 && r1.email_mais_recente === "2026-11-04T16:38:00Z", r1);
 const r2 = await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"], dias: 120, maximo: 8 }, agora);
 confere("segunda chamada pega o que faltou e para", r2.importados === 1 && r2.restam === 0, r2);
 const r3 = await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"], dias: 120 }, agora);
@@ -72,13 +76,44 @@ confere("mês e tipo pelo nome; caminho na pasta por mês; origem e-mail", pro.c
   && pro.origem === "email" && pro.email_de === "dploredocontabilidade@gmail.com" && pasta.has(String(pro.arquivo)), pro);
 confere("arquivo guardado é o anexo", new TextDecoder().decode(pasta.get(String(pro.arquivo))!) === "%PDF PRO LABORE 10.2026 - DTCAR.pdf");
 
-// registro falhou: o arquivo não fica sobrando na pasta
+// registro falhou: o arquivo não fica sobrando na pasta e os outros anexos entram mesmo assim
 anexos.M1.push({ id: "A5", name: "FOLHA DE PONTO 11.2026 - DTCAR.pdf", contentType: "application/pdf", size: 10 });
+anexos.M2.push({ id: "B3", name: "DAS 09.2026 - DTCAR.pdf", contentType: "application/pdf", size: 10 });
 falharInsert = "FOLHA DE PONTO";
 const antes = pasta.size;
-let erro = "";
-try { await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"] }, agora); } catch (e) { erro = (e as Error).message; }
-confere("falha no registro: avisa e apaga o arquivo enviado", erro === "erro de teste" && pasta.size === antes, { erro, antes, depois: pasta.size });
+const r4 = await importarRH(adm, "T", { remetentes: ["dploredocontabilidade@gmail.com"] }, agora);
+const e4 = (r4.erros || []) as Array<Record<string, string>>;
+confere("anexo com erro não trava os outros: o DAS entra e a folha vai para erros", r4.importados === 1 && e4.length === 1 && e4[0].arquivo.startsWith("FOLHA DE PONTO") && e4[0].erro === "erro de teste", r4);
+confere("falha no registro: apaga o arquivo enviado", pasta.size === antes + 1, { antes, depois: pasta.size });
+
+// sem remetentes na chamada (conector): usa cfg.rh.remetentes; sem nada gravado, o padrão da Loredo
+falharInsert = "";
+const r5 = await importarRH(adm, "T", {}, agora);
+confere("sem remetentes: padrão da Loredo (a folha que falhou entra agora)", r5.importados === 1 && JSON.stringify(r5.remetentes) === JSON.stringify(["dploredocontabilidade@gmail.com"]), r5);
+cfgRH = ["outra@contabil.com.br"];
+const r6 = await importarRH(adm, "T", {}, agora);
+confere("sem remetentes: vale o que está gravado na tela (cfg.rh.remetentes)", JSON.stringify(r6.remetentes) === JSON.stringify(["outra@contabil.com.br"]) && r6.importados === 0, r6);
+
+// rh_listar: filtros e mais novos primeiro
+const docsBanco = [
+  { id: "1", competencia: "2026-11", tipo: "folha_ponto", titulo: "FOLHA DE PONTO 11.2026", nome_arquivo: "f.pdf", tamanho: 2048, linha_digitavel: "", email_assunto: "", obs: "" },
+  { id: "2", competencia: "2026-10", tipo: "pro_labore", titulo: "PRO LABORE 10.2026", nome_arquivo: "p.pdf", tamanho: 1024, linha_digitavel: "-", email_assunto: "PRO-LABORE", obs: "" },
+];
+const filtros: Array<[string, unknown]> = [];
+// deno-lint-ignore no-explicit-any
+const q: any = { select: () => q, eq: (c: string, v: unknown) => { filtros.push([c, v]); return q; }, order: () => q,
+  limit: () => Promise.resolve({ data: docsBanco.filter((d) => filtros.every(([c, v]) => (d as Record<string, unknown>)[c] === v)), error: null }) };
+const l1 = await listarRH({ from: () => q } as never, {});
+confere("rh_listar: todos, com contagem por mês e sem o '-' de guia não lida", l1.total === 2 && l1.por_mes["2026-10"] === 1 && l1.documentos[1].linha_digitavel === "" && l1.documentos[0].tamanho_kb === 2, l1);
+filtros.length = 0;
+const l2 = await listarRH({ from: () => q } as never, { competencia: "2026-10" });
+confere("rh_listar: filtro por mês", l2.total === 1 && l2.documentos[0].id === "2", l2);
+filtros.length = 0;
+const l3 = await listarRH({ from: () => q } as never, { texto: "folha" });
+confere("rh_listar: busca por texto", l3.total === 1 && l3.documentos[0].id === "1", l3);
+let erroMes = "";
+try { await listarRH({ from: () => q } as never, { competencia: "out/2026" }); } catch (e) { erroMes = (e as Error).message; }
+confere("rh_listar: mês inválido avisa", /AAAA-MM/.test(erroMes), erroMes);
 
 for (const o of ok) console.log("OK", o);
 console.log("FALHAS", falhas);

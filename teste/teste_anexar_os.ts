@@ -63,7 +63,7 @@ const db: Db = {
   storage: {
     from(p: string) {
       return {
-        download: (c: string) => Promise.resolve(pastas[p]?.[c] ? { data: new Blob([pastas[p][c]]), error: null } : { data: null, error: { message: "Object not found" } }),
+        download: (c: string) => Promise.resolve(pastas[p]?.[c] ? { data: new Blob([pastas[p][c] as unknown as BlobPart]), error: null } : { data: null, error: { message: "Object not found" } }),
         upload: (c: string, b: Uint8Array, op: { contentType: string }) => { (pastas[p] = pastas[p] || {})[c] = b; envios.push([p, c, op.contentType]); return Promise.resolve({ data: { path: c }, error: null }); },
         remove: (l: string[]) => { for (const c of l) delete pastas[p]?.[c]; apagados.push([p, l]); return Promise.resolve({ data: l, error: null }); },
       };

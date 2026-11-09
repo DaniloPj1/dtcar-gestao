@@ -2,6 +2,8 @@ name: SEFAZ – notas de compra
 # Consulta a SEFAZ com o certificado A1 da DTCar (veja worker/sefaz.mjs).
 # Roda a cada 10 minutos (manifestações pedidas na tela); a consulta de notas só acontece às 8h e 16h
 # de Brasília ou quando pedida na tela.
+# v49: às 8h e às 16h o Supabase dispara este workflow na hora (workflow_dispatch, pg_cron + pg_net); o agendamento
+# de 10 em 10 minutos fica como reserva, porque o GitHub atrasa ou pula horários.
 on:
   schedule:
     - cron: "*/10 * * * *"

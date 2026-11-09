@@ -410,7 +410,9 @@ export function Ordem({ id, params = {} }) {
   };
   const excluir = async () => {
     if (!await confirmar({ titulo: "Excluir " + numOS(o.numero), texto: "Remove a O.S., os itens, as fotos e o histórico definitivamente. Prefira cancelar: o histórico protege a oficina.", botao: "Excluir definitivamente", perigo: true })) return;
-    acao("excluir", async () => { await api.removerArquivos((o.fotos || []).map(f => f.caminho).concat([o.assinatura_entrada, o.assinatura_entrega].filter(Boolean))); await api.excluirOrdem(o.id); await recarregar(["ordens"], { completo: true }); ir("/ordens"); });
+    // primeiro a O.S. (se falhar, as fotos continuam); depois os arquivos
+    acao("excluir", async () => { const arqs = (o.fotos || []).map(f => f.caminho).concat([o.assinatura_entrada, o.assinatura_entrega].filter(Boolean)); await api.excluirOrdem(o.id);
+      await api.removerArquivos(arqs).catch(() => {}); await recarregar(["ordens", "produtos"], { completo: true }); ir("/ordens"); });
   };
   const enviarFotoExec = arq => acao("foto", async () => {
     const { blob, w, h } = await reduzirImagem(arq, 1280, "image/jpeg", 0.72);

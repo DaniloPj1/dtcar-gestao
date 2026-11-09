@@ -325,7 +325,7 @@ export function Ordem({ id, params = {} }) {
     const nova = itens.some(y => y.id === x.id) ? itens.map(y => y.id === x.id ? { ...x, _novo: false } : y) : itens.concat([{ ...x, _novo: false }]);
     setItens(nova); setSujo(true); setModal(null);
     // grava na hora (como o Imprimir e o WhatsApp fazem), para o item não se perder se sair da O.S. sem clicar em "Salvar O.S."
-    if (podeGravarAgora) await acao("salvar", async () => { await salvar({}, true, nova); avisar("Item salvo na O.S."); });
+    if (podeGravarAgora) await acao("salvar", () => salvar({}, false, nova)); // "O.S. salva." vem antes dos avisos de total/parcelas, que continuam visíveis
   };
   const excluirItem = it => { setItens(l => l.filter(x => x.id !== it.id)); if (!it._novo) setRemovidos(r => r.concat([it.id])); setSujo(true); setModal(null); };
 

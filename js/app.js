@@ -100,22 +100,35 @@ function App() {
   const atualizarPendentes = useCallback(async () => { const l = await fila.listar(); setPend(l); return l; }, []);
   useEffect(() => { const f = () => atualizarPendentes(); window.addEventListener("dtcar-fila", f); return () => window.removeEventListener("dtcar-fila", f); }, []);
 
-  const hashAtual = useRef(location.hash);
-  useEffect(() => { const f = () => {
-    const destino = location.hash;
-    // tela com alteração não salva (O.S.): volta para ela e pergunta antes de sair
-    const liberada = window.__saidaLiberada; window.__saidaLiberada = false;
-    if (!liberada && window.dtcarSaida && window.dtcarSaida.pendente()) {
-      history.replaceState(null, "", hashAtual.current || "#/");
-      confirmar({ titulo: "Alterações não salvas", texto: "Esta O.S. tem alterações que ainda não foram salvas. Salvar antes de sair?", botao: "Salvar e sair", botao2: "Sair sem salvar" }).then(async r => {
-        if (r === false) return;
-        if (r === true) { try { await window.dtcarSaida.salvar(); } catch (e) { avisar(e.message || "Não foi possível salvar.", true); return; } }
-        window.__saidaLiberada = true; location.hash = destino;
-      });
-      return;
-    }
-    hashAtual.current = destino;
-    setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  // posição de cada tela no histórico do navegador (history.state.dtcarIdx): permite desfazer um "voltar" e ficar onde estava
+  const posHist = useRef(0), ignorarHash = useRef(false);
+  useEffect(() => {
+    const marca = n => { try { history.replaceState({ ...(history.state || {}), dtcarIdx: n }, ""); } catch (e) {} };
+    posHist.current = history.state && typeof history.state.dtcarIdx === "number" ? history.state.dtcarIdx : 0; marca(posHist.current);
+    const f = () => {
+      if (ignorarHash.current) { ignorarHash.current = false; return; } // era o "desfazer" da saída cancelada
+      const destino = location.hash;
+      const guardado = history.state && typeof history.state.dtcarIdx === "number";
+      const cur = guardado ? history.state.dtcarIdx : posHist.current + 1; // sem marca: tela nova (clique); com marca: voltar/avançar
+      if (!guardado) marca(cur);
+      const liberada = window.__saidaLiberada; window.__saidaLiberada = false;
+      // tela com alteração não salva (O.S.): desfaz o movimento no histórico e pergunta antes de sair
+      if (!liberada && window.dtcarSaida && window.dtcarSaida.pendente()) {
+        const volta = posHist.current - cur; // quantas posições para voltar ao ponto de partida
+        if (volta !== 0) { ignorarHash.current = true; setTimeout(() => history.go(volta), 0); } // depois do movimento atual terminar
+        confirmar({ titulo: "Alterações não salvas", texto: "Esta O.S. tem alterações que ainda não foram salvas. Salvar antes de sair?", botao: "Salvar e sair", botao2: "Sair sem salvar" }).then(async r => {
+          if (r === false) return;
+          if (r === true) { try { await window.dtcarSaida.salvar(); } catch (e) { avisar(e.message || "Não foi possível salvar.", true); return; } }
+          window.__saidaLiberada = true;
+          if (guardado) history.go(cur - posHist.current); else location.hash = destino;
+        });
+        return;
+      }
+      posHist.current = cur;
+      setRota(lerRota()); setConf(c => { if (c) c.res(false); return null; }); window.scrollTo(0, 0);
+    };
+    window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f);
+  }, []);
   useEffect(() => {
     if (!api) return;
     (async () => {

@@ -402,7 +402,7 @@ language plpgsql volatile security invoker set search_path = public as $$
 declare v_acao text := lower(coalesce(p->>'acao', 'vender')); v public.vendas; c public.clientes; it jsonb; pr public.produtos; v_itens jsonb := '[]';
   v_tab text := lower(coalesce(nullif(trim(p->>'tabela'), ''), 'vista')); v_forma text; v_valor numeric; v_cli jsonb; v_res jsonb; v_rec public.recibos;
   v_conta text; v_receber boolean; avisos text[] := '{}'; v_quem text := public.agente_quem(); v_sub numeric := 0;
-  v_cus numeric := 0; v_usado jsonb := '{}'; v_desc numeric; v_total numeric; v_data date;
+  v_cus numeric := 0; v_usado jsonb := '{}'; v_desc numeric; v_total numeric; v_data date; v_vh numeric; v_hora boolean;
 begin
   perform public.agente_exige_admin();
   if v_acao = 'cancelar' then
@@ -432,6 +432,10 @@ begin
   else
     v_cli := jsonb_build_object('nome', coalesce(nullif(trim(p->'cliente'->>'nome'), ''), 'Consumidor'), 'doc', regexp_replace(coalesce(p->'cliente'->>'doc', ''), '\D', '', 'g'));
   end if;
+  -- valor-hora dos Ajustes (serviço cobrado por hora: horas × valor-hora, como a tela do balcão)
+  select coalesce(case when (dados->>'valorHora') ~ '^\s*[0-9]+([.,][0-9]+)?\s*$' then replace(trim(dados->>'valorHora'), ',', '.')::numeric end, 0)
+    into v_vh from public.config where id = 1;
+  v_vh := coalesce(v_vh, 0);
   for it in select * from jsonb_array_elements(p->'itens') loop
     if jsonb_typeof(it->'qtd') is distinct from 'number' or (it->>'qtd')::numeric <= 0 then raise exception 'Item "%": informe a quantidade.', coalesce(it->>'codigo', it->>'descricao', '?'); end if;
     pr := null;
@@ -440,10 +444,16 @@ begin
         order by x.ativo desc limit 1;
       if pr.id is null then raise exception 'Código % não existe no cadastro de produtos e serviços.', it->>'codigo'; end if;
       if not pr.ativo then avisos := array_append(avisos, pr.descricao || ' está inativo no cadastro.'); end if;
-      -- preço da tabela escolhida (precoTabela em js/util.js)
+      -- preço padrão como a tela do balcão (js/telas/balcao.js): serviço por hora = (horas do cadastro ou 1) × valor-hora dos Ajustes;
+      -- os demais, o preço da tabela escolhida (precoTabela em js/util.js). valor_unit informado vale sempre.
+      v_hora := pr.tipo = 'servico' and coalesce(pr.cobranca, 'fixo') = 'hora';
       v_valor := coalesce(nullif(it->>'valor_unit', '')::numeric,
-        nullif(case v_tab when 'prazo' then pr.preco_prazo when 'atacado' then pr.preco_atacado else pr.preco_vista end, 0), nullif(pr.preco_vista, 0), 0);
-      if v_valor <= 0 then raise exception '% está sem preço de venda: informe valor_unit.', pr.descricao; end if;
+        case when v_hora then round(coalesce(nullif(pr.horas, 0), 1) * v_vh, 2)
+             else coalesce(nullif(case v_tab when 'prazo' then pr.preco_prazo when 'atacado' then pr.preco_atacado else pr.preco_vista end, 0), nullif(pr.preco_vista, 0)) end, 0);
+      if v_valor <= 0 then
+        if v_hora then raise exception '% é cobrado por hora e o valor-hora dos Ajustes está zerado: informe valor_unit.', pr.descricao; end if;
+        raise exception '% está sem preço de venda: informe valor_unit.', pr.descricao;
+      end if;
       -- estoque: a mesma conferência do finalizar_venda (v4), somando o mesmo produto em mais de uma linha
       if pr.tipo = 'produto' and pr.controla_estoque then
         if coalesce(pr.estoque_atual, 0) - coalesce((v_usado->>pr.id::text)::numeric, 0) < (it->>'qtd')::numeric then

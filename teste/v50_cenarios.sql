@@ -477,6 +477,24 @@ begin
   r := public.agente_fazer('funcionario', '{"acao": "criar", "campos": {"nome": "Zé Teste", "funcao": "Mecânico"}}', true);
   r := public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"tecnico": "Zé Teste"}}', true);
   perform pg_temp.erro($q$select public.agente_fazer('funcionario', '{"acao": "excluir", "funcionario": "Zé Teste"}', true)$q$, 'técnico responsável de 1 O.S.');
+  -- Codex no #62: serviço cobrado por hora na venda de balcão = (horas do cadastro ou 1) × valor-hora dos Ajustes, como a tela do balcão
+  reset role;
+  insert into public.produtos (id, codigo, tipo, descricao, cobranca, horas, preco_vista, controla_estoque)
+  values ('00000000-0000-0000-0000-00000000a700', 700, 'servico', 'Diagnóstico elétrico', 'hora', 1.5, 0, false),
+         ('00000000-0000-0000-0000-00000000a701', 701, 'servico', 'Mão de obra avulsa', 'hora', 0, 90, false);
+  update public.config set dados = dados || '{"valorHora": 120}' where id = 1;
+  set role authenticated;
+  perform pg_temp.como('11111111-1111-1111-1111-111111111111');
+  r := public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "700", "qtd": 1}, {"codigo": "701", "qtd": 2}], "forma": "PIX"}', false);
+  perform pg_temp.ok((r->'itens'->0->>'valor_unit')::numeric = 180 and (r->'itens'->1->>'valor_unit')::numeric = 120 and (r->>'total')::numeric = 420,
+    'serviço por hora: 1,5 h × 120 = 180; sem horas no cadastro = 1 h (não o preço fixo antigo) — ' || r::text);
+  r := public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "700", "qtd": 1, "valor_unit": 150}], "forma": "PIX"}', false);
+  perform pg_temp.ok((r->>'total')::numeric = 150, 'serviço por hora: valor_unit informado vale');
+  reset role;
+  update public.config set dados = dados - 'valorHora' where id = 1;
+  set role authenticated;
+  perform pg_temp.como('11111111-1111-1111-1111-111111111111');
+  perform pg_temp.erro($q$select public.agente_fazer('venda_balcao', '{"itens": [{"codigo": "700", "qtd": 1}], "forma": "PIX"}', false)$q$, 'valor-hora dos Ajustes está zerado');
 end $$;
 
 reset role;

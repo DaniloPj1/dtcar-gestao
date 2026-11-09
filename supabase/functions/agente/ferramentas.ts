@@ -1059,7 +1059,7 @@ export function criarServidor(db: Banco): McpServer {
 
   s.registerTool("venda_balcao", {
     title: "Venda de balcão: vender ou cancelar",
-    description: "vender: itens [{codigo (produto ou serviço do cadastro; veja consultar_estoque), qtd, valor_unit (padrão: preço da tabela), desconto}] ou item avulso {descricao, valor_unit, qtd}; " +
+    description: "vender: itens [{codigo (produto ou serviço do cadastro; veja consultar_estoque), qtd, valor_unit (padrão: preço da tabela; serviço por hora: horas do cadastro × valor-hora dos Ajustes), desconto}] ou item avulso {descricao, valor_unit, qtd}; " +
       "tabela vista|prazo|atacado; desconto (da venda); forma (lista dos Ajustes); cliente_id ou cliente {nome, doc} (sem nada = Consumidor). Dá baixa no estoque. " +
       "receber (padrão: sim, menos boleto/promissória/cheque) emite o recibo do total na conta (padrão: a sugestão pela forma). cancelar: numero e motivo (o estoque volta e o recibo é cancelado). " +
       "Mexe em dinheiro e estoque: SEMPRE confirmar=false primeiro e grave depois do sim. A resposta traz o link para imprimir o comprovante.",

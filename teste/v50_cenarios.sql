@@ -426,6 +426,18 @@ begin
   perform pg_temp.ok((select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-00000000a101') = 35, 'custo acertado (70 / 2)');
   r := public.agente_fazer('nota_sefaz', '{"acao": "vincular_os", "numero": "456", "os": 100, "itens": [{"item_id": "00000000-0000-0000-0000-00000000a101", "nf_item": 1}]}', true);
   perform pg_temp.ok((select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-00000000a101') = 30, 'religar à mesma linha da nota não acusa falta (a própria peça não conta)');
+  -- Codex no #62: acesso pelo nome exato não pega outro que contém o nome ("Ana" × "Mariana")
+  reset role;
+  insert into auth.users (id, email, raw_user_meta_data) values
+    ('44444444-4444-4444-4444-444444444444', 'mariana@oficina.test', '{"nome": "Mariana"}'),
+    ('55555555-5555-5555-5555-555555555555', 'ana@oficina.test', '{"nome": "Ana"}');
+  update public.perfis set papel = 'consultor' where id in ('44444444-4444-4444-4444-444444444444', '55555555-5555-5555-5555-555555555555');
+  set role authenticated;
+  perform pg_temp.como('11111111-1111-1111-1111-111111111111');
+  r := public.agente_fazer('equipe', '{"perfil": "Ana", "ativo": false}', true);
+  perform pg_temp.ok((select not ativo from public.perfis where id = '55555555-5555-5555-5555-555555555555')
+                     and (select ativo from public.perfis where id = '44444444-4444-4444-4444-444444444444'), 'equipe: "Ana" desativa a Ana, não a Mariana');
+  perform pg_temp.erro($q$select public.agente_fazer('equipe', '{"perfil": "an", "ativo": false}', true)$q$, 'Mais de um acesso');
   -- (12) funcionário que é técnico de O.S. não é excluído
   r := public.agente_fazer('funcionario', '{"acao": "criar", "campos": {"nome": "Zé Teste", "funcao": "Mecânico"}}', true);
   r := public.agente_fazer('alterar_os', '{"numero": 105, "dados": {"tecnico": "Zé Teste"}}', true);

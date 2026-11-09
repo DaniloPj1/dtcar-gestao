@@ -1117,15 +1117,18 @@ begin
   if v_busca = '' then raise exception 'Informe o perfil (id, e-mail ou nome; veja consultar tabela=perfis).'; end if;
   if v_busca ~* '^[0-9a-f]{8}-[0-9a-f]{4}-' then select * into u from public.perfis where id = v_busca::uuid;
   else
+    -- igual (e-mail ou nome) primeiro; parte do nome/e-mail só quando não há igual — e só se for um (Codex no #62: "Ana" não pega "Mariana")
     select count(*), string_agg(nome || ' <' || email || '>', '; ') into v_n, v_cand from public.perfis
       where lower(email) = lower(v_busca) or lower(public.unaccent_simples(nome)) = lower(public.unaccent_simples(v_busca));
-    if v_n = 0 then
+    if v_n = 1 then
+      select * into u from public.perfis where lower(email) = lower(v_busca) or lower(public.unaccent_simples(nome)) = lower(public.unaccent_simples(v_busca));
+    elsif v_n > 1 then raise exception 'Mais de um acesso com "%": %. Use o e-mail.', v_busca, v_cand;
+    else
       select count(*), string_agg(nome || ' <' || email || '>', '; ') into v_n, v_cand from public.perfis
         where lower(public.unaccent_simples(nome || ' ' || email)) like '%' || lower(public.unaccent_simples(v_busca)) || '%';
+      if v_n > 1 then raise exception 'Mais de um acesso com "%": %.', v_busca, v_cand; end if;
+      select * into u from public.perfis where lower(public.unaccent_simples(nome || ' ' || email)) like '%' || lower(public.unaccent_simples(v_busca)) || '%';
     end if;
-    if v_n > 1 then raise exception 'Mais de um acesso com "%": %.', v_busca, v_cand; end if;
-    select * into u from public.perfis where lower(email) = lower(v_busca) or lower(public.unaccent_simples(nome)) = lower(public.unaccent_simples(v_busca))
-      or lower(public.unaccent_simples(nome || ' ' || email)) like '%' || lower(public.unaccent_simples(v_busca)) || '%' limit 1;
   end if;
   if u.id is null then raise exception 'Acesso "%" não encontrado.', v_busca; end if;
   v_antes := to_jsonb(u);

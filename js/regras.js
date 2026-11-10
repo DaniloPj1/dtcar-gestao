@@ -122,6 +122,25 @@ export const pode = (perfil, acao) => {
   return (regras[acao] || []).includes(p);
 };
 
+/* ---------------- grupos de produtos (pedido do Danilo, 10/11/2026) ----------------
+ * O grupo é a própria coluna produtos.categoria. Não há tabela: a lista oficial de nomes fica em cfg.gruposProduto
+ * (grupo criado sem produto ainda) e o resto vem dos produtos. Dois nomes que só mudam em maiúscula, acento ou
+ * espaço são o MESMO grupo (chaveGrupo); a grafia que vale é a de cfg.gruposProduto ou, sem ela, a mais usada. */
+export const chaveGrupo = n => String(n ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+/** Grupos conhecidos: [{ nome, chave, n (produtos ativos), nTotal, custo (estoque a custo) }], ordenados por nome */
+export function gruposDeProdutos(produtos, cfg) {
+  const m = new Map();
+  for (const nome of (cfg && cfg.gruposProduto) || []) { const k = chaveGrupo(nome); if (k && !m.has(k)) m.set(k, { nome: String(nome).trim(), chave: k, n: 0, nTotal: 0, custo: 0, usos: new Map(), fixo: true }); }
+  for (const p of produtos || []) { const k = chaveGrupo(p.categoria); if (!k) continue;
+    let g = m.get(k); if (!g) { g = { nome: String(p.categoria).trim(), chave: k, n: 0, nTotal: 0, custo: 0, usos: new Map() }; m.set(k, g); }
+    g.usos.set(p.categoria, (g.usos.get(p.categoria) || 0) + 1); g.nTotal++;
+    if (p.ativo !== false) { g.n++; if (p.tipo === "produto") g.custo += Math.max(0, Number(p.estoque_atual) || 0) * (Number(p.custo) || 0); } }
+  return [...m.values()].map(g => { if (!g.fixo && g.usos.size > 1) g.nome = [...g.usos.entries()].sort((a, b) => b[1] - a[1])[0][0]; const { usos, fixo, ...r } = g; return r; })
+    .sort((a, b) => a.nome.localeCompare(b.nome));
+}
+/** Grafia oficial de um nome digitado (ou ele mesmo, aparado, se for grupo novo) */
+export const grupoCanonico = (nome, grupos) => { const k = chaveGrupo(nome); if (!k) return ""; const g = (grupos || []).find(x => x.chave === k); return g ? g.nome : String(nome).trim(); };
+
 export const TABELAS_PRECO = { vista: "À vista", prazo: "A prazo", atacado: "Atacado" };
 export const SITUACAO_CLIENTE = {
   liberado: { t: "Liberado", cor: "ok" },

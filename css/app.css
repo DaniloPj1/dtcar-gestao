@@ -1136,3 +1136,18 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 
 /* gravando o item na O.S.: a tela espera o fim (evita mexer no meio da gravação) */
 .pagina.gravando{opacity:.6;pointer-events:none}
+
+/* ---- produtos: filtros por grupo, marca e situação (10/11/2026) ---- */
+.prod-filtros{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:10px 0}
+.prod-filtros .filtro{flex:1 1 180px;max-width:320px}
+.prod-filtros .btn{margin-bottom:2px}
+.prod-total .sub{margin-left:auto}
+.prod-marcados{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 10px;margin-bottom:8px;border-radius:8px;background:var(--surface-2);font-size:13.5px}
+.prod-check{width:20px;height:20px;flex:none;accent-color:var(--brand);margin:0}
+.prod-td-check{width:28px}
+.linha-prod .linha-prod-abrir{display:flex;align-items:center;gap:12px;flex:1;min-width:0;border:0;background:none;padding:0;text-align:left;color:inherit;font:inherit;cursor:pointer}
+.grupos-lista .grupo-edita{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.grupos-lista .grupo-edita .inp{flex:1 1 180px}
+.grupo-acoes{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
+.acoes-modal{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
+@media (max-width:640px){.prod-filtros .filtro{max-width:none;flex:1 1 100%}.prod-total .sub{margin-left:0}}

@@ -874,6 +874,10 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .fin-busca{flex:2 1 260px}
 .fin-intervalo{align-self:center;color:var(--muted);font-size:13.5px;padding-bottom:8px;flex:1 1 150px}
 .fin-limpar{align-self:flex-end;margin-bottom:2px}
+/* contas escondidas pelos filtros gravados no aparelho (aba Em aberto) */
+.fin-escondidas{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;padding:8px 10px;margin-bottom:8px;border-radius:8px;border:1px solid #d9a24a;background:#fff6e5;color:#6b4300;font-size:13.5px}
+@media (prefers-color-scheme:dark){:root:not([data-tema="claro"]) .fin-escondidas{background:#3a2a10;color:#f5d9a3;border-color:#8a6a2a}}
+[data-tema="escuro"] .fin-escondidas{background:#3a2a10;color:#f5d9a3;border-color:#8a6a2a}
 .fin-resumo{display:flex;flex-wrap:wrap;gap:6px 18px;align-items:center;padding:8px 10px;margin-bottom:8px;border-radius:8px;background:var(--surface-2);font-size:13.5px;font-variant-numeric:tabular-nums}
 .fin-lado .ranking button{display:flex;justify-content:space-between;gap:8px;width:100%;text-align:left;color:inherit}
 .fin-lado .ranking button:hover span{color:var(--brand)}

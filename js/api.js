@@ -247,6 +247,14 @@ function criarApiSupabase() {
       porCodigo: async cod => cod ? ok(await sb.from("contas").select("id,descricao,valor,vencimento,status").eq("codigo_barras", cod).neq("status", "cancelada").maybeSingle()) : null,
     },
     /** pedidos de compra por fornecedor (cupons, pré-vendas): tabela pre_notas do v19 + colunas de conferência do v31 */
+    // orçamento separado da O.S. (v52). Gravação sempre pela orcamento_salvar (cabeçalho + itens numa transação)
+    orcamentos: {
+      listar: async () => todos(() => sb.from("orcamentos").select("*").order("numero", { ascending: false })),
+      um: async id => { const o = ok(await sb.from("orcamentos").select("*").eq("id", id).maybeSingle()); if (!o) return null;
+        return { ...o, itens: ok(await sb.from("orcamento_itens").select("*").eq("orcamento_id", id).order("posicao")) }; },
+      salvar: async orc => ok(await sb.rpc("orcamento_salvar", { p: orc })),
+      excluir: async id => { ok(await sb.from("orcamentos").delete().eq("id", id)); },
+    },
     preNotas: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("pre_notas").select("*").neq("situacao", "cancelada"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }),
       /** em aberto de um fornecedor (pelo cadastro ou pelo nome sem cadastro), para conferir no pagamento */
@@ -588,6 +596,10 @@ function comBancoDoPC(a) {
     ordemDoServidor: async id => { if (semRede) throw new Error("é preciso internet para trazer a O.S. do online"); const r = await ordemOriginal(id);
       if (!r || r._local || r._pendente) throw new Error("é preciso internet para trazer a O.S. do online"); return r; },
     recibos: { ...a.recibos, listar: ler(a.recibos.listar, L.recibosListar), um: ler(a.recibos.um, L.reciboUm), desde: ler(a.recibos.desde, L.recibosDesde) },
+    // orçamentos: sem internet, só consulta (do banco do PC); gravar precisa de internet (o número é dado pelo servidor)
+    orcamentos: { ...a.orcamentos, listar: ler(a.orcamentos.listar, L.orcamentos), um: ler(a.orcamentos.um, L.orcamento),
+      salvar: soOnline(a.orcamentos.salvar, "Sem conexão com a internet: o orçamento só pode ser gravado com internet."),
+      excluir: soOnline(a.orcamentos.excluir, "Sem conexão com a internet: o orçamento só pode ser excluído com internet.") },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     estornos: { ...a.estornos, desde: ler(a.estornos.desde, L.estornosDesde) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })),

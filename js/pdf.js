@@ -335,7 +335,8 @@ export async function pdfOS(o, cfg, ext = {}) {
   const lEmp = [cfg.endereco, [cfg.telefone ? "Tel. " + cfg.telefone : "", cfg.cnpj ? "CNPJ " + cfg.cnpj : ""].filter(Boolean).join(" · ")].filter(Boolean);
   doc.text(lEmp.flatMap(l => doc.splitTextToSize(l, 125 - (xT - M))).slice(0, 3), xT, d.y + 8.8);
   d.fonte("bold", 11.5); d.cor(TINTA); doc.text(orc ? "ORÇAMENTO" : "ORDEM DE SERVIÇO", W - M, d.y + 4.2, { align: "right" });
-  d.fonte("bold", 16); doc.text("Nº " + String(o.numero ?? "").padStart(5, "0"), W - M, d.y + 10.6, { align: "right" });
+  // ext.numeroTexto: orçamento separado da O.S. (v52) mostra o número próprio (ORC-00012), nunca número de O.S.
+  d.fonte("bold", 16); doc.text(ext.numeroTexto || "Nº " + String(o.numero ?? "").padStart(5, "0"), W - M, d.y + 10.6, { align: "right" });
   d.fonte("normal", 8); doc.text(fmtDataHora(o.criado_em), W - M, d.y + 14.6, { align: "right" });
   d.y += 17.5; d.linhaH(d.y, TINTA, 0.6); d.y += 3;
 
@@ -379,7 +380,7 @@ export async function pdfOS(o, cfg, ext = {}) {
   // ---- resumo: dados à esquerda, totais à direita
   const quando = o.status === "entregue" ? ["Entregue em", fmtDataHora(o.entregue_em)] : o.previsao_entrega ? ["Previsão", fmtData(o.previsao_entrega) + (o.previsao_hora ? " " + o.previsao_hora : "")] : null;
   const pares = [["Responsável", o.mecanico_nome], ["Consultor", o.consultor_nome],
-    ["Situação", ((situacaoOS(o) || STATUS[o.status] || {}).t || "") + (o.situacao ? " · " + o.situacao : "")], quando,
+    ["Situação", ext.situacaoTexto !== undefined ? ext.situacaoTexto : ((situacaoOS(o) || STATUS[o.status] || {}).t || "") + (o.situacao ? " · " + o.situacao : "")], quando,
     ["Pagamento", o.forma_pagamento], ["Condições", o.condicoes_pagamento],
     orc && o.validade_orcamento ? ["Válido até", fmtData(o.validade_orcamento)] : null,
     o.tabela_preco && o.tabela_preco !== "vista" ? ["Tabela", TABELAS_PRECO[o.tabela_preco]] : null]
@@ -435,7 +436,7 @@ export async function pdfOS(o, cfg, ext = {}) {
   // ---- fotos do serviço (o PDF leva; a impressão não)
   await gradeFotos(d, (o.fotos || []).filter(f => f.etapa !== "entrada"), "FOTOS DO SERVIÇO");
   const n = doc.getNumberOfPages();
-  if (n > 1) rodape(d, numOS(o.numero) + "  ·  " + (orc ? "Orçamento" : "Ordem de serviço") + "  ·  " + exPlaca(v.placa) + "  ·  " + (cfg.nome || ""));
+  if (n > 1) rodape(d, (ext.numeroTexto || numOS(o.numero)) + "  ·  " + (orc ? "Orçamento" : "Ordem de serviço") + "  ·  " + exPlaca(v.placa) + "  ·  " + (cfg.nome || ""));
   return doc.output("blob");
 }
 

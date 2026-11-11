@@ -104,6 +104,20 @@ export function situacaoOS(o) {
 }
 export const ABERTOS = ["diagnostico", "aguardando", "execucao", "pronto"];
 
+/* ---------------- orçamento separado da O.S. (v52, pedido do Danilo em 10/11/2026) ----------------
+ * Gravadas no banco: elaboracao, enviado, aprovado (virou O.S.), recusado. "vencido" é calculado: em elaboração ou
+ * enviado com a validade já passada (não precisa de agendamento; some sozinho quando a validade é trocada). */
+export const SITUACOES_ORC = {
+  elaboracao: { t: "Em elaboração", cor: "info" },
+  enviado: { t: "Enviado ao cliente", cor: "brand" },
+  aprovado: { t: "Aprovado", cor: "ok" },
+  recusado: { t: "Recusado", cor: "bad" },
+  vencido: { t: "Vencido", cor: "warn" },
+};
+/** Situação mostrada do orçamento: a gravada, ou "vencido" quando passou da validade sem resposta */
+export const situacaoORC = (o, hoje) => { if (!o) return ""; const h = hoje || new Date().toLocaleDateString("sv-SE");
+  return (o.situacao === "elaboracao" || o.situacao === "enviado") && o.validade && o.validade < h ? "vencido" : o.situacao; };
+
 export const PAPEIS = { admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico", pendente: "Aguardando liberação" };
 export const pode = (perfil, acao) => {
   const p = perfil && perfil.ativo !== false ? perfil.papel : "";

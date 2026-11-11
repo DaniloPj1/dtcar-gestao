@@ -43,6 +43,8 @@ export const hojeISO = () => { const d = new Date(); return d.getFullYear() + "-
 export const somaDias = (iso, n) => { const base = typeof iso === "string" && /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso : diaBrasilia(iso ? new Date(iso) : new Date());
   const d = new Date(base + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 export const numOS = n => "OS " + String(n ?? "").padStart(5, "0");
+/** Número do orçamento (v52): numeração própria, separada da O.S. */
+export const numORC = n => "ORC-" + String(n ?? "").padStart(5, "0");
 export const numRecibo = n => "Recibo " + String(n ?? "").padStart(5, "0");
 export const endCompleto = c => c ? ([[c.rua, c.complemento].filter(Boolean).join(" "), c.bairro, [c.cidade, c.uf].filter(Boolean).join("/"), c.cep ? "CEP " + c.cep : ""].filter(Boolean).join(", ") || c.endereco || "") : "";
 export function tempoDesde(iso) {

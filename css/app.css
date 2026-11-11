@@ -590,7 +590,7 @@ body{font-size:15px}
   .lateral{gap:8px;padding:12px 12px 10px}
   .lateral-marca{padding:2px 8px 4px}.lateral-marca img{height:28px}
   .lateral-grupo{gap:0}
-  .lateral-grupo button{min-height:32px;font-size:14px}
+  .lateral-grupo button{min-height:31px;font-size:14px}  /* 31px: com o item "Orçamentos" (v52) o menu aberto continua cabendo em 1600x950 */
   .lateral-grupo>span,.lateral-grupo>button.lateral-grupo-tit{padding-bottom:2px}
   .lateral-pe{padding-top:8px}
 }
@@ -1155,3 +1155,18 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .grupo-acoes{display:flex;gap:12px;flex-wrap:wrap;justify-content:flex-end}
 .acoes-modal{display:flex;gap:8px;justify-content:flex-end;margin-top:12px}
 @media (max-width:640px){.prod-filtros .filtro{max-width:none;flex:1 1 100%}.prod-total .sub{margin-left:0}}
+
+/* ---- orçamento separado da O.S. (v52) ---- */
+.orc-kpis{grid-template-columns:repeat(5,minmax(0,1fr))}
+.orc-kpis .kpi{text-align:left;cursor:pointer}
+.linha-orc .cod{min-width:92px;font-variant-numeric:tabular-nums}
+.orcamento .orc-veic{grid-template-columns:repeat(4,minmax(0,1fr))}
+.orc-tabela{margin-left:auto;max-width:200px}
+.orc-incluir{justify-content:flex-start;flex-wrap:wrap;margin-top:10px}
+.orc-totais{margin-top:14px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:6px;max-width:420px;margin-left:auto}
+.orc-totais>div{display:flex;justify-content:space-between;align-items:center;gap:12px;font-variant-numeric:tabular-nums}
+.orc-totais .orc-total{font-size:18px;font-weight:700;padding-top:6px;border-top:2px solid var(--ink)}
+.orc-acoes{flex-wrap:wrap;margin:14px 0 6px}
+.btn-recusa{color:var(--bad);border-color:var(--bad)}
+.orc-etapa2{margin-top:6px}
+@media (max-width:640px){.orc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.orcamento .orc-veic{grid-template-columns:repeat(2,minmax(0,1fr))}.orc-tabela{margin-left:0;max-width:none}.orc-totais{max-width:none}.linha-orc .cod{min-width:0}}

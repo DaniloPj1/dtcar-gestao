@@ -153,6 +153,21 @@
     enviarArquivo: async c => c, incluirFotos: async () => {},
     recibos: { desde: async de => { if (window.__FALHA_RECIBOS) throw new Error("falha simulada"); return (db.recibos || []).filter(r => !r.data || r.data >= de); }, listar: async ({ ordemId } = {}) => (db.recibos || []).filter(r => !ordemId || r.ordem_id === ordemId), salvar: async r => { if (r.id) { const o = db.recibos.find(y => y.id === r.id); if (r.cancelado && !o.cancelado && o.conta_destino) (db.estornos = db.estornos || []).push({ id: "e" + Date.now(), conta: o.conta_destino, valor: -o.valor, origem: "recibo", registro: o.id, original_em: o.criado_em, registrado_em: new Date().toISOString() }); Object.assign(o, r); return o; } const x = { id: "r" + Date.now(), numero: 1, criado_em: new Date().toISOString(), ...r }; (db.recibos = db.recibos || []).push(x); const o = db.ordens.find(y => y.id === r.ordem_id); if (o) { o.recebido = (o.recebido || 0) + Number(r.valor); if (o.status === "entregue" && o.recebido >= o.total) o.finalizada_em = new Date().toISOString(); } return x; }, um: async id => db.recibos.find(x => x.id === id) }, criarOrdem: async d => { net(); window.__SEQ = (window.__SEQ || 1898) + 1; const o = { id: "n" + window.__SEQ, numero: window.__SEQ, ...d }; db.ordens.unshift(o); return o; },
     ordem: async id => { net(); const o = db.ordens.find(x => x.id === id); return { ...o, itens: db.os_itens.filter(i => i.ordem_id === id), fotos: [], eventos: [] }; },
+    // orçamento separado da O.S. (v52): mesma conta e mesmas recusas da orcamento_salvar
+    orcamentos: { listar: async () => { net(); if (window.__SEM_V52) throw new Error("Could not find the table 'public.orcamentos' in the schema cache"); return (db.orcamentos = db.orcamentos || []).slice().sort((a, b) => b.numero - a.numero); },
+      um: async id => { net(); const o = (db.orcamentos || []).find(x => x.id === id); return o ? JSON.parse(JSON.stringify(o)) : null; },
+      salvar: async p => { net(); db.orcamentos = db.orcamentos || []; let o = p.id && db.orcamentos.find(x => x.id === p.id);
+        if (o && o.situacao === "aprovado") throw new Error("O orçamento já virou O.S.: não pode mais ser alterado.");
+        if (!String((p.cliente || {}).nome || "").trim()) throw new Error("Informe o cliente (cadastro ou nome).");
+        if (p.situacao === "recusado" && !String(p.motivo || "").trim()) throw new Error("Informe o motivo da recusa.");
+        const sub = p.itens.filter(i => i.aprovado !== false).reduce((s, i) => s + Math.round((i.qtd * i.valor_unit - (i.desconto || 0)) * 100) / 100, 0);
+        if ((p.desconto || 0) > sub + 0.001) throw new Error("O desconto não pode ser maior que o valor dos itens.");
+        const custo = p.itens.filter(i => i.aprovado !== false).reduce((s, i) => s + i.qtd * (i.custo_unit || 0), 0);
+        if (!o) { window.__ORC_SEQ = (window.__ORC_SEQ || 0) + 1; o = { id: uid(), numero: window.__ORC_SEQ, criado_em: now(), consultor_nome: db.perfis[0].nome, enviado_em: null, respondido_em: null, ordem_id: null, os_numero: null }; db.orcamentos.push(o); }
+        Object.assign(o, p, { total: Math.max(0, sub - (p.desconto || 0)), custo, validade: p.validade || null, atualizado_em: now(),
+          enviado_em: p.situacao === "enviado" ? o.enviado_em || now() : o.enviado_em, respondido_em: p.situacao === "recusado" ? o.respondido_em || now() : null, motivo: p.situacao === "recusado" ? p.motivo : "" });
+        return JSON.parse(JSON.stringify(o)); },
+      excluir: async id => { db.orcamentos = (db.orcamentos || []).filter(x => x.id !== id); } },
     produtos: { ...tab("produtos"), trocarGrupo: async ({ ids, de, para }) => { let n = 0; for (const p of window.__DB.produtos) if ((ids && ids.includes(p.id)) || (!ids && de && de.includes(p.categoria))) { p.categoria = String(para || "").trim(); p.atualizado_em = new Date().toISOString(); n++; } return n; } },
     vinculos: { doProduto: async () => [], listar: async () => [] },
     notas: { listar: async () => [] },

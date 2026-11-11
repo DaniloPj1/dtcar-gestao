@@ -20,13 +20,15 @@ const primeiroNome = o => primeiroNomeCli(((o || {}).cliente || {}).nome);
 
 /* ---------------- Inclusão / edição de item (busca no cadastro de produtos e serviços) ---------------- */
 const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "serviço de terceiro" };
-function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
+// orcamento = true (orçamento separado da O.S., v52): não lança conta do prestador nem barra por falta de estoque
+// (orçamento não mexe em estoque nem em financeiro) e os textos falam "orçamento" em vez de "O.S.".
+export function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar, orcamento = false }) {
   const { cfg, dados, perfil } = useApp();
   const [i, setI] = useState({ desconto: 0, ...item });
   const [busca, setBusca] = useState(""), [erroEst, setErroEst] = useState("");
   // novo item: abre primeiro o catálogo; "Cadastrar só nesta O.S." cria um item que não entra no cadastro geral
   const [etapa, setEtapa] = useState(item._novo ? "catalogo" : "detalhe");
-  const fin = pode(perfil, "financeiro");
+  const fin = !orcamento && pode(perfil, "financeiro"), doc = orcamento ? "neste orçamento" : "nesta O.S.";
   const [conta, setConta] = useState(item._conta || null); // { vencimento } para lançar conta a pagar ao prestador
   const qtdOriginal = !item._novo && item.produto_id ? Number(item.qtd) || 0 : 0;
   const set = p => { setI(o => ({ ...o, ...p })); setErroEst(""); };
@@ -52,7 +54,7 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   const disponivel = prod ? Number(prod.estoque_atual) + (prod.id === item.produto_id ? qtdOriginal : 0) : 0; // a quantidade já lançada nesta O.S. já saiu do estoque
   const semEstoque = prod && prod.tipo === "produto" && prod.controla_estoque && disponivel < Number(i.qtd);
   const salvar = () => {
-    if (semEstoque && !prod.vender_sem_estoque) return setErroEst(`Estoque insuficiente: há ${qtdFmt(disponivel)} ${prod.unidade}. Este produto está marcado para não ser vendido sem estoque.`);
+    if (!orcamento && semEstoque && !prod.vender_sem_estoque) return setErroEst(`Estoque insuficiente: há ${qtdFmt(disponivel)} ${prod.unidade}. Este produto está marcado para não ser vendido sem estoque.`);
     if (conta && !conta.vencimento) return setErroEst("Informe o vencimento da conta do prestador.");
     if (conta && !(Number(i.custo_unit) > 0)) return setErroEst("Informe o custo do prestador para lançar a conta a pagar.");
     onSalvar({ ...i, _conta: i.tipo === "terceiro" && !i.conta_id && conta ? conta : undefined });
@@ -62,19 +64,19 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
   if (etapa === "catalogo") return html`<${Modal} titulo=${"Incluir " + NOME_TIPO[i.tipo]} largo onFechar=${onFechar}>
     <div class="cat-topo"><input id="cat-busca" class="inp" type="search" autofocus autocomplete="off" aria-label=${"Buscar " + plural}
         placeholder=${i.tipo === "servico" ? "Buscar serviço: alinhamento, pastilha…" : i.tipo === "terceiro" ? "Buscar serviço de terceiro: retífica, torno, guincho…" : "Buscar por descrição, código, referência, marca ou aplicação"} value=${busca} onInput=${e => setBusca(e.target.value)} />
-      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim(), ...(i.tipo === "terceiro" && !i.valor_unit ? { custo_unit: 0, valor_unit: 0 } : {}) }); setEtapa("detalhe"); }}>+ Cadastrar só nesta O.S.</button></div>
+      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim(), ...(i.tipo === "terceiro" && !i.valor_unit ? { custo_unit: 0, valor_unit: 0 } : {}) }); setEtapa("detalhe"); }}>+ Cadastrar só ${doc}</button></div>
     <span class="dica">Tabela de preço: ${TABELAS_PRECO[tabela].toLowerCase()}. ${cat.length === 80 ? "Mostrando os 80 primeiros; refine a busca." : cat.length + " " + plural + " no cadastro."}</span>
     <div class="catalogo">${cat.map(p => { const est = p.tipo === "produto" && p.controla_estoque; const zerado = est && Number(p.estoque_atual) <= 0;
       return html`<button type="button" key=${p.id} class=${"cat-item" + (zerado ? " zerado" : "")} onClick=${() => usar(p)}>
         <span class="cod">${p.codigo}</span><span class="meio"><strong>${p.descricao}</strong><span>${[p.referencia, p.marca, p.categoria, p.tipo === "terceiro" && p.fornecedor_id ? ((dados.fornecedores.find(f => f.id === p.fornecedor_id) || {}).fantasia || (dados.fornecedores.find(f => f.id === p.fornecedor_id) || {}).razao) : "", p.tipo === "terceiro" && pode(perfil, "verValores") && Number(p.custo) ? "custo " + reais(p.custo) : ""].filter(Boolean).join(" · ")}</span></span>
         ${est ? html`<span class=${"cat-est" + (zerado ? " c-bad" : "")}>${qtdFmt(p.estoque_atual)} ${p.unidade}</span>` : null}
         <b>${p.tipo === "servico" && p.cobranca === "hora" ? qtdFmt(p.horas) + " h" : precoTabela(p, tabela) ? reais(precoTabela(p, tabela)) : "sem preço"}</b></button>`; })}
-      ${!cat.length ? html`<div class="vazio">Nenhum ${NOME_TIPO[i.tipo]} encontrado. Use “Cadastrar só nesta O.S.”${i.tipo === "terceiro" ? " ou cadastre em Cadastros › Produtos › Terceiros para reutilizar" : ""}.</div>` : null}</div>
+      ${!cat.length ? html`<div class="vazio">Nenhum ${NOME_TIPO[i.tipo]} encontrado. Use “Cadastrar só ${doc}”${i.tipo === "terceiro" ? " ou cadastre em Cadastros › Produtos › Terceiros para reutilizar" : ""}.</div>` : null}</div>
   </${Modal}>`;
   return html`<${Modal} titulo=${(item._novo ? "Incluir " : "Alterar ") + NOME_TIPO[i.tipo]} onFechar=${onFechar}>
     ${true ? (prod ? html`<div class="info item-origem"><span>Do cadastro: cód. ${prod.codigo}${prod.tipo === "produto" && prod.controla_estoque ? " · disponível " + qtdFmt(disponivel) + " " + prod.unidade : ""}</span>
         ${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Trocar</button>` : null}</div>`
-      : html`<div class="info item-origem"><span>Item só desta O.S.: não entra no cadastro de ${plural}${i.tipo === "peca" ? " nem no estoque" : ""}.</span>${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Escolher do cadastro</button>` : null}</div>`) : null}
+      : html`<div class="info item-origem"><span>Item só ${orcamento ? "deste orçamento" : "desta O.S."}: não entra no cadastro de ${plural}${i.tipo === "peca" ? " nem no estoque" : ""}.</span>${item._novo ? html`<button type="button" class="btn-link" onClick=${() => setEtapa("catalogo")}>Escolher do cadastro</button>` : null}</div>`) : null}
     <${Campo} id="it-desc" rotulo="Descrição" obrig><${Texto} id="it-desc" valor=${i.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
     ${i.tipo === "servico" ? html`
       <${Seg} rotulo="Forma de cobrança" opcoes=${[["Preço fechado", "info"], ["Por hora", "info"]]} valor=${porHora ? "Por hora" : "Preço fechado"}
@@ -110,7 +112,7 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
     ${!i.fornecida_cliente ? html`<div class="grade">
       <${Campo} id="it-descp" rotulo="Desconto (%)"><input id="it-descp" class="inp" inputmode="decimal" value=${bruto && Number(i.desconto) ? String(arred(Number(i.desconto) / bruto * 100)).replace(".", ",") : ""} onInput=${e => set({ desconto: arred(bruto * parseValor(e.target.value) / 100) })} /></${Campo}>
       <${Campo} id="it-desc-v" rotulo="Desconto (R$)"><${Dinheiro} id="it-desc-v" valor=${i.desconto} onMuda=${v => set({ desconto: v })} /></${Campo}></div>` : null}
-    ${semEstoque ? html`<div class=${prod.vender_sem_estoque ? "aviso" : "erros"}>Disponível: ${qtdFmt(disponivel)} ${prod.unidade}. ${prod.vender_sem_estoque ? "Ao salvar, o estoque ficará negativo." : "Este produto não pode ser vendido sem estoque."}</div>` : null}
+    ${semEstoque ? html`<div class=${orcamento || prod.vender_sem_estoque ? "aviso" : "erros"}>Disponível: ${qtdFmt(disponivel)} ${prod.unidade}. ${orcamento ? "O orçamento não reserva estoque: confira a peça antes de aprovar." : prod.vender_sem_estoque ? "Ao salvar, o estoque ficará negativo." : "Este produto não pode ser vendido sem estoque."}</div>` : null}
     <div class="total-item"><span>Total do item</span><b>${reais(totalItem(i))}</b></div>
     ${erro || erroEst ? html`<span class="dica erro">${erro || erroEst}</span>` : null}
     <div class="acoes">${!item._novo ? html`<button type="button" class="btn btn-perigo" onClick=${onExcluir}>Remover</button>` : null}<span class="espaco"></span>
@@ -119,7 +121,7 @@ function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar }) {
 }
 
 const ICON_LIXO = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg>`;
-function ItemLinha({ i, verValores, onClick, mostrarAprov, exec, onExcluir }) {
+export function ItemLinha({ i, verValores, onClick, mostrarAprov, exec, onExcluir, rotuloExcluir = "Excluir da O.S." }) {
   const sub = [];
   if (i.codigo && i.tipo !== "servico") sub.push(i.codigo);
   if (i.tipo === "servico") sub.push(i.horas ? qtdFmt(i.horas) + " h" + (verValores ? " × " + reais(i.valor_unit) : "") : qtdFmt(i.qtd) + (verValores ? " × " + reais(i.valor_unit) : " un"));
@@ -132,7 +134,7 @@ function ItemLinha({ i, verValores, onClick, mostrarAprov, exec, onExcluir }) {
     ${exec ? html`<input type="checkbox" class="chk-exec" aria-label=${"Executado: " + i.descricao} checked=${i.executado} disabled=${exec.disabled} onChange=${e => exec.onMuda(e.target.checked)} />` : null}
     <button type="button" class="meio botao-limpo" onClick=${onClick} disabled=${!onClick}><strong>${i.descricao}${i.adicional ? html` <em class="tag">adicional</em>` : null}${i.produto_id ? html` <em class="tag tag-cad">cadastro</em>` : null}</strong><span>${sub.join(" · ")}</span></button>
     <span class="dir">${verValores ? html`<b>${i.fornecida_cliente ? "—" : reais(totalItem(i))}</b>` : null}${ap}</span>
-    ${onExcluir ? html`<button type="button" class="btn-lixo" title="Excluir da O.S." aria-label=${"Excluir " + i.descricao} onClick=${onExcluir}>${ICON_LIXO}</button>` : null}</div>`;
+    ${onExcluir ? html`<button type="button" class="btn-lixo" title=${rotuloExcluir} aria-label=${"Excluir " + i.descricao} onClick=${onExcluir}>${ICON_LIXO}</button>` : null}</div>`;
 }
 
 /* ---------------- Aprovação ---------------- */

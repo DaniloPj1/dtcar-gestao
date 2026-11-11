@@ -371,6 +371,9 @@ export function Financeiro({ params = {} }) {
   const opcoes = (fn) => [...new Set([...(abertas || []), ...(consulta || [])].map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const categorias = opcoes(c => c.categoria || "Sem categoria"), favorecidos = opcoes(fav), formas = opcoes(c => c.forma_pagamento), contasSaida = opcoes(c => c.conta_origem);
   const ativos = ["q", "cat", "fav", "origem", ...(aba === "consulta" ? ["forma", "cx", "sit"] : [])].filter(k => f[k]).length;
+  // Em aberto: os filtros ficam gravados no aparelho e sobrevivem a sair e voltar; sem este aviso uma conta que vence hoje
+  // some da lista enquanto o cartão "Vencem hoje" (que não filtra) continua contando (caso do aluguel, 10/11/2026)
+  const escondidas = aba === "abertas" && ativos ? ab.filter(c => !passa(c)) : [];
   const totPago = lista.filter(c => c.status === "paga").reduce((s, c) => s + Number(c.valor_pago ?? c.valor), 0);
   const totAberto = soma(lista.filter(c => c.status === "aberta")), totVencido = soma(lista.filter(c => c.status === "aberta" && c.vencimento < hoje));
   const porCategoria = useMemo(() => { const g = new Map(); for (const c of lista.filter(c => c.status !== "cancelada")) g.set(c.categoria || "Sem categoria", (g.get(c.categoria || "Sem categoria") || 0) + Number(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)); return [...g.entries()].sort((a, b) => b[1] - a[1]); }, [lista]);
@@ -386,7 +389,9 @@ export function Financeiro({ params = {} }) {
       <span class="data-bloco"><b>${String(d.getDate()).padStart(2, "0")}</b><small>${d.toLocaleDateString("pt-BR", { month: "short" }).replace(".", "")}</small></span>
       <span class="meio"><strong>${fav(c)}</strong><span>${[c.descricao !== fav(c) ? c.descricao : "", c.categoria, c.parcelas > 1 ? "parcela " + c.parcela + "/" + c.parcelas : "", c.fixa ? "fixa" : "", c.codigo_barras ? "boleto" : "", c.forma_pagamento && c.status === "paga" ? c.forma_pagamento : "", c.conta_origem && c.status === "paga" ? "saiu de " + c.conta_origem : ""].filter(Boolean).join(" · ")}</span></span>
       <span class="dir"><b class=${c.status === "cancelada" ? "riscado" : ""}>${reais(c.status === "paga" ? c.valor_pago ?? c.valor : c.valor)}</b><span class=${"pill p-" + s.cor}>${s.t}</span></span></button>`; };
-  const sel = (k, rot, ops, rotulos) => html`<label class="filtro"><span>${rot}</span><select class="inp" value=${f[k]} onChange=${e => muda({ [k]: e.target.value })}><option value="">Todos</option>${ops.map(x => html`<option value=${x}>${rotulos ? rotulos[x] || x : x}</option>`)}</select></label>`;
+  // valor gravado que não está mais entre as opções (categoria renomeada, favorecido já pago) continua filtrando: mostra-o, em vez de "Todos"
+  const sel = (k, rot, ops, rotulos) => { const lista = f[k] && !ops.includes(f[k]) ? [f[k], ...ops] : ops;
+    return html`<label class="filtro"><span>${rot}</span><select class="inp" value=${f[k]} onChange=${e => muda({ [k]: e.target.value })}><option value="">Todos</option>${lista.map(x => html`<option value=${x}>${rotulos ? rotulos[x] || x : x}</option>`)}</select></label>`; };
   const carregando = aba === "abertas" ? !abertas : !consulta;
   return html`<div class="pagina larga financeiro">
     <div class="painel-topo"><div><h1>Contas a pagar</h1><span class="sub">${abertas ? reais(soma(ab)) + " em aberto em " + ab.length + " conta(s)" : "Carregando…"}</span></div>
@@ -417,6 +422,7 @@ export function Financeiro({ params = {} }) {
             ${ativos ? html`<button type="button" class="btn btn-sm fin-limpar" onClick=${limpar}>Limpar filtros (${ativos})</button>` : null}
           </div>
         </div>
+        ${escondidas.length ? html`<div class="fin-escondidas" role="status">${escondidas.length} conta(s) em aberto escondida(s) pelos filtros (${reais(soma(escondidas))})${escondidas.some(c => c.vencimento <= hoje) ? " — inclusive vencida ou vencendo hoje" : ""}.<button type="button" class="btn btn-sm" onClick=${limpar}>Limpar filtros</button></div>` : null}
         ${carregando ? html`<div class="esqueleto"></div>`
           : !lista.length ? html`<${Vazio}>${base.length ? "Nenhuma conta com esses filtros." : aba === "abertas" ? "Nenhuma conta em aberto. Lance boletos, duplicatas e despesas fixas para acompanhar as dívidas da oficina." : "Nenhuma conta neste período."}</${Vazio}>`
           : html`<div class="fin-resumo"><span><b>${lista.length}</b> conta(s)</span>

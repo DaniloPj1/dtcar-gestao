@@ -135,7 +135,12 @@ function criarApiSupabase() {
     salvarPerfil: async (id, patch) => ok(await sb.from("perfis").update(patch).eq("id", id)),
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
     salvarConfig: async dados => ok(await sb.from("config").upsert({ id: 1, dados, atualizado_em: new Date().toISOString() })),
-    clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"), produtos: tabela("produtos"),
+    clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"),
+    produtos: { ...tabela("produtos"),
+      // grupos de produtos: troca a categoria de vários produtos de uma vez (renomear/juntar grupos ou marcar itens na lista); uma instrução só
+      trocarGrupo: async ({ ids, de, para }) => { const cat = String(para ?? "").trim(); let q = sb.from("produtos").update({ categoria: cat, atualizado_em: new Date().toISOString() });
+        if (ids && ids.length) q = q.in("id", ids); else if (de && de.length) q = q.in("categoria", de); else return 0;
+        return ok(await q.select("id")).length; } },
     ordens: async desde => {
       const busca = cols => todos(() => { let q = sb.from("ordens").select(cols); if (desde) q = q.gt("atualizado_em", desde); return q.order("numero", { ascending: false }); });
       if (temV11) { try { return await busca(COLS_ORDENS + COLS_V11); } catch (e) { if (!/recebido|finalizada_em|motivo_cancelamento|column/i.test(e.message)) throw e; temV11 = false; } }

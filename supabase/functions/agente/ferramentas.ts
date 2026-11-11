@@ -124,10 +124,11 @@ export function criarServidor(db: Banco): McpServer {
 
   s.registerTool("consultar_estoque", {
     title: "Consultar estoque",
-    description: "Consulta peças no estoque do DTCar Gestão (estoque da oficina) por descrição, código, referência ou marca: saldo, custo e preços.",
-    inputSchema: z.object({ texto: z.string().min(2) }),
+    description: "Consulta peças no estoque do DTCar Gestão (estoque da oficina) por descrição, código, referência ou marca: saldo, custo, preços e grupo. " +
+      "grupo (v51): filtra pelo grupo do produto (ex.: Filtros, Freios; \"sem grupo\" traz os sem grupo) — só com grupo, lista até 200. A resposta traz também a lista de grupos existentes.",
+    inputSchema: z.object({ texto: z.string().min(2).optional(), grupo: z.string().optional() }).refine(x => x.texto || x.grupo, { message: "Informe o texto ou o grupo." }),
     annotations: LEITURA,
-  }, async ({ texto: t }) => chamar(db, "agente_estoque", { p_texto: t }));
+  }, async ({ texto: t, grupo: g }) => chamar(db, "agente_estoque", { p_texto: t ?? null, p_grupo: g ?? null }));
 
   s.registerTool("contas_a_receber", {
     title: "Contas a receber",
@@ -374,6 +375,7 @@ export function criarServidor(db: Banco): McpServer {
     title: "Produto ou serviço do catálogo: criar, editar, inativar, excluir",
     description: "Cadastro de produtos e serviços (codigo ou id). campos {campo: valor}: descricao, tipo (produto|servico, ao criar), referencia, codigo_barras, unidade, categoria, marca, " +
       "localizacao, custo, preco_vista, preco_prazo, preco_atacado, margem_vista, estoque_min, controla_estoque, vender_sem_estoque, obs... estoque_inicial (ao criar). " +
+      "categoria é o GRUPO do produto (Filtros, Freios, Suspensão…; veja os grupos em consultar_estoque): o banco troca o nome digitado pela grafia oficial do grupo. " +
       "O saldo do estoque muda só por movimentar_estoque. Nunca invente preço ou custo. Ordem clara do Danilo: confirmar=true.",
     inputSchema: z.object({
       acao: z.enum(["criar", "editar", "inativar", "ativar", "excluir"]).default("editar"),
@@ -387,13 +389,13 @@ export function criarServidor(db: Banco): McpServer {
     title: "Dar entrada de NF de compra (SEFAZ) no estoque",
     description: "O mesmo \"Dar entrada no estoque\" das Notas da SEFAZ: lê o XML da nota (chave, ou numero + fornecedor), reconhece os produtos (vínculo do fornecedor, " +
       "código de barras, referência), soma o estoque, atualiza custo e preço e lança as duplicatas em contas a pagar. Item sem produto vira produto novo " +
-      "(margem dos Ajustes). Para mudar: itens [{n, acao: vincular|novo|ignorar, codigo (produto do estoque), fator (ex.: caixa com 4 = 4), descricao, margem}]. " +
+      "(margem dos Ajustes; grupo sugerido pela referência já cadastrada). Para mudar: itens [{n, acao: vincular|novo|ignorar, codigo (produto do estoque), fator (ex.: caixa com 4 = 4), descricao, margem, categoria (grupo do produto novo)}]. " +
       "Use primeiro confirmar=false: mostre ao Danilo os itens (produto, quantidade e custo no estoque) e as contas; com o ok dele, confirmar=true. " +
       "Nota já lançada é recusada. Não mexe no ObjetivaWeb (estoque fiscal).",
     inputSchema: z.object({
       chave: z.string().optional(), numero: z.union([z.string(), z.number()]).optional(), fornecedor: z.string().optional(),
       itens: z.array(z.object({ n: z.number().int().positive(), acao: z.enum(["vincular", "novo", "ignorar"]).optional(), codigo: z.union([z.string(), z.number()]).optional(),
-        fator: z.number().positive().optional(), descricao: z.string().optional(), margem: z.number().nonnegative().optional(), atualizar_custo: z.boolean().optional() })).max(200).optional(),
+        fator: z.number().positive().optional(), descricao: z.string().optional(), margem: z.number().nonnegative().optional(), categoria: z.string().optional(), atualizar_custo: z.boolean().optional() })).max(200).optional(),
       lancar_contas: z.boolean().optional(), vencimento: data.optional().describe("Nota sem duplicata: vencimento para lançar o total"), categoria: z.string().optional(), pedido, confirmar,
     }),
     annotations: GRAVA,

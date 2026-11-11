@@ -4,7 +4,8 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Seg, Vazio, Placa } from "../ui.js";
 import { norm, reais, qtdFmt, hojeISO, fmtData, numOS, exPlaca, normPlaca } from "../util.js";
-import { pode, STATUS, situacaoOS } from "../regras.js";
+import { pode, STATUS, situacaoOS, gruposDeProdutos, chaveGrupo as chaveDoGrupo } from "../regras.js";
+import { passaSituacao } from "./produtos.js";
 import { nomeFavorecido, situacao } from "./financeiro.js";
 
 /* ---------------- catálogo ---------------- */
@@ -272,26 +273,38 @@ function RelVendidos() {
   </${Moldura}>`;
 }
 
-function RelEstoque() {
-  const { dados } = useApp();
-  const [f, setF] = useState("todos"), [grupo, setGrupo] = useState(""), [q, setQ] = useState("");
-  const grupos = useMemo(() => [...new Set(dados.produtos.filter(p => p.tipo === "produto").map(p => p.categoria).filter(Boolean))].sort(), [dados.produtos]);
-  const lista = useMemo(() => dados.produtos.filter(p => p.tipo === "produto" && p.ativo !== false && p.controla_estoque && (!grupo || p.categoria === grupo)
+function RelEstoque({ params = {} }) {
+  const { dados, cfg } = useApp();
+  // os mesmos filtros da tela de produtos (grupo, marca, situação e busca) chegam pela rota: "Relatório / imprimir" de lá
+  const [f, setF] = useState(["com", "sem", "minimo"].includes(params.sit) ? params.sit : "todos"), [grupo, setGrupo] = useState(params.grupo || ""), [marca, setMarca] = useState(params.marca || ""), [q, setQ] = useState(params.q || ""), [agrupar, setAgrupar] = useState(!params.grupo && params.agrupar !== "0");
+  const grupos = useMemo(() => gruposDeProdutos(dados.produtos.filter(p => p.tipo === "produto"), cfg), [dados.produtos, cfg.gruposProduto]);
+  const marcas = useMemo(() => [...new Set(dados.produtos.filter(p => p.tipo === "produto" && p.marca).map(p => p.marca))].sort((a, b) => a.localeCompare(b)), [dados.produtos]);
+  const lista = useMemo(() => dados.produtos.filter(p => p.tipo === "produto" && p.ativo !== false && p.controla_estoque
+    && (!grupo || (grupo === "__sem__" ? !chaveDoGrupo(p.categoria) : chaveDoGrupo(p.categoria) === grupo)) && (!marca || norm(p.marca) === norm(marca))
     && (!q || norm(p.descricao).includes(norm(q)) || norm(p.referencia).includes(norm(q)) || norm(p.marca).includes(norm(q)))
-    && (f === "todos" || (f === "saldo" ? n(p.estoque_atual) > 0 : f === "minimo" ? n(p.estoque_min) > 0 && n(p.estoque_atual) <= n(p.estoque_min) : f === "negativo" ? n(p.estoque_atual) < 0 : n(p.estoque_atual) > 0 && !n(p.custo))))
-    .sort((a, b) => a.descricao.localeCompare(b.descricao)), [dados.produtos, f, grupo, q]);
-  const tot = lista.reduce((t, p) => ({ descricao: "", est: t.est + Math.max(0, n(p.estoque_atual)), vc: t.vc + Math.max(0, n(p.estoque_atual)) * n(p.custo), vv: t.vv + Math.max(0, n(p.estoque_atual)) * n(p.preco_vista) }), { descricao: "", est: 0, vc: 0, vv: 0 });
+    && (f === "todos" ? true : f === "semcusto" ? n(p.estoque_atual) > 0 && !n(p.custo) : f === "negativo" ? n(p.estoque_atual) < 0 : f === "saldo" ? passaSituacao(p, "com") : passaSituacao(p, f)))
+    .sort((a, b) => (agrupar ? chaveDoGrupo(a.categoria).localeCompare(chaveDoGrupo(b.categoria)) : 0) || a.descricao.localeCompare(b.descricao)), [dados.produtos, f, grupo, marca, q, agrupar]);
+  const soma = l => l.reduce((t, p) => ({ est: t.est + Math.max(0, n(p.estoque_atual)), vc: t.vc + Math.max(0, n(p.estoque_atual)) * n(p.custo), vv: t.vv + Math.max(0, n(p.estoque_atual)) * n(p.preco_vista) }), { est: 0, vc: 0, vv: 0 });
+  const tot = { descricao: "", ...soma(lista) };
   const cols = [{ t: "Cód.", v: p => p.codigo ?? "" }, { t: "Descrição", v: p => p.descricao, sub: p => [p.referencia, p.marca, p.localizacao ? "local " + p.localizacao : ""].filter(Boolean).join(" · ") }, { t: "Grupo", v: p => p.categoria || "" },
     { t: "Estoque", v: p => p.descricao ? n(p.estoque_atual) : tot.est, f: "qtd", cls: p => n(p.estoque_atual) < 0 ? "c-bad" : "" }, { t: "Un.", v: p => p.unidade || "" }, { t: "Mínimo", v: p => p.descricao ? n(p.estoque_min) : "", f: "qtd" },
     { t: "Custo", v: p => p.descricao ? n(p.custo) : "", f: "reais" }, { t: "Valor a custo", v: p => p.descricao ? Math.max(0, n(p.estoque_atual)) * n(p.custo) : tot.vc, f: "reais" },
     { t: "Preço à vista", v: p => p.descricao ? n(p.preco_vista) : "", f: "reais" }, { t: "Valor a preço de venda", v: p => p.descricao ? Math.max(0, n(p.estoque_atual)) * n(p.preco_vista) : tot.vv, f: "reais" }];
+  // agrupado: um bloco por grupo com subtotal (quantidade e valor a custo); "Sem grupo" por último
+  const blocos = useMemo(() => { if (!agrupar) return null; const m = new Map(); for (const p of lista) { const k = chaveDoGrupo(p.categoria) || "__sem__"; if (!m.has(k)) m.set(k, { nome: p.categoria && chaveDoGrupo(p.categoria) ? ((grupos.find(g => g.chave === k) || {}).nome || p.categoria) : "Sem grupo", itens: [] }); m.get(k).itens.push(p); }
+    return [...m.entries()].sort((a, b) => (a[0] === "__sem__") - (b[0] === "__sem__") || a[1].nome.localeCompare(b[1].nome)).map(([k, b]) => ({ ...b, chave: k, sub: soma(b.itens) })); }, [lista, agrupar, grupos]);
   const semCusto = dados.produtos.filter(p => p.tipo === "produto" && p.ativo !== false && n(p.estoque_atual) > 0 && !n(p.custo)).length;
   return html`<${Moldura} chave="estoque" semPeriodo exportar=${() => baixarCSV("estoque-" + hojeISO(), cols, lista, tot)}
     filtros=${html`<div class="filtros-linha"><input id="rel-q" class="inp" type="search" placeholder="Descrição, referência ou marca" value=${q} onInput=${e => setQ(e.target.value)} />
-      <select class="inp inp-cat" aria-label="Grupo" value=${grupo} onChange=${e => setGrupo(e.target.value)}><option value="">Todos os grupos</option>${grupos.map(x => html`<option value=${x}>${x}</option>`)}</select></div>
-      <div class="chips">${[["todos", "Todos"], ["saldo", "Com saldo"], ["minimo", "No mínimo ou abaixo"], ["negativo", "Negativos"], ["semcusto", "Com saldo e sem custo"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (f === k ? " ativo" : "")} onClick=${() => setF(k)}>${t}</button>`)}</div>`}>
+      <select class="inp inp-cat" aria-label="Grupo" value=${grupo} onChange=${e => setGrupo(e.target.value)}><option value="">Todos os grupos</option>${grupos.map(x => html`<option value=${x.chave}>${x.nome}</option>`)}<option value="__sem__">Sem grupo</option></select>
+      <select class="inp inp-cat" aria-label="Marca" value=${marca} onChange=${e => setMarca(e.target.value)}><option value="">Todas as marcas</option>${marcas.map(x => html`<option value=${x}>${x}</option>`)}</select>
+      <label class="linha-check rel-agrupar"><input type="checkbox" checked=${agrupar} onChange=${e => setAgrupar(e.target.checked)} /> Agrupar por grupo, com subtotal</label></div>
+      <div class="chips">${[["todos", "Todos"], ["saldo", "Com saldo"], ["sem", "Sem estoque"], ["minimo", "No mínimo ou abaixo"], ["negativo", "Negativos"], ["semcusto", "Com saldo e sem custo"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (f === k ? " ativo" : "")} onClick=${() => setF(k)}>${t}</button>`)}</div>`}>
     <${Kpis} itens=${[["Produtos", lista.length], ["Estoque a custo", reais(tot.vc), "", "kpi-forte"], ["Estoque a preço de venda", reais(tot.vv)], semCusto ? ["Com saldo e sem custo", semCusto, "valor a custo subestimado", "alerta-kpi"] : null]} />
-    <section class="card"><${Tabela} cols=${cols} linhas=${lista} total=${tot} /></section>
+    ${blocos ? html`${blocos.map(b => html`<section class="card rel-grupo" key=${b.chave}><div class="secao-topo"><h3>${b.nome}</h3><span class="sub">${b.itens.length} produto(s) · estoque a custo <b>${reais(b.sub.vc)}</b></span></div>
+        <${Tabela} cols=${cols} linhas=${b.itens} total=${{ descricao: "", ...b.sub }} /></section>`)}${!blocos.length ? html`<section class="card"><${Vazio}>Nada encontrado com esses filtros.</${Vazio}></section>` : null}
+      ${blocos.length > 1 ? html`<section class="card"><div class="secao-topo"><h3>Total geral</h3><span class="sub">${lista.length} produto(s) · estoque a custo <b>${reais(tot.vc)}</b> · a preço de venda <b>${reais(tot.vv)}</b></span></div></section>` : null}`
+      : html`<section class="card"><${Tabela} cols=${cols} linhas=${lista} total=${tot} /></section>`}
   </${Moldura}>`;
 }
 
@@ -348,7 +361,7 @@ export function Relatorios({ params = {} }) {
   const { perfil, ir } = useApp();
   const Tela = TELAS[params.r];
   const fin = pode(perfil, "financeiro");
-  if (Tela && (fin || !["caixa", "contas"].includes(params.r))) return html`<${Tela} key=${params.r} />`;
+  if (Tela && (fin || !["caixa", "contas"].includes(params.r))) return html`<${Tela} key=${params.r} params=${params} />`;
   return html`<div class="pagina larga relatorios-hub">
     <div class="painel-topo"><div><h1>Relatórios</h1><span class="sub">Todos podem ser filtrados, impressos e exportados para planilha.</span></div></div>
     ${RELATORIOS.map(([g, l]) => { const vis = l.filter(r => !r[3] || pode(perfil, r[3])); return vis.length ? html`<section key=${g} class="hub-grupo"><h2>${g}</h2><div class="hub-cartoes">

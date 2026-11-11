@@ -3,7 +3,7 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro } from "../ui.js";
 import { norm, soDig, docValido, reais, qtdFmt, fmtData, fmtDataHora, fmtDoc, fmtTel, parseValor, precoPelaMargem, arred } from "../util.js";
-import { pode, UNIDADES } from "../regras.js";
+import { pode, UNIDADES, gruposDeProdutos, grupoCanonico } from "../regras.js";
 import { lerNFe, reconhecer, linkImagem } from "../nfe.js";
 import { contasDaNota, somaMes } from "./financeiro.js";
 
@@ -52,7 +52,7 @@ function ItemNota({ it, i, set, dados, cfg, ver }) {
       <${Campo} id=${"nf-d-" + i} rotulo="Descrição no cadastro"><${Texto} id=${"nf-d-" + i} valor=${n.descricao} onMuda=${v => setN({ descricao: v })} /></${Campo}>
       <${Campo} id=${"nf-r-" + i} rotulo="Referência"><${Texto} id=${"nf-r-" + i} valor=${n.referencia} onMuda=${v => setN({ referencia: v })} /></${Campo}>
       <${Campo} id=${"nf-m-" + i} rotulo="Marca"><${Texto} id=${"nf-m-" + i} list="nf-marcas" valor=${n.marca} onMuda=${v => setN({ marca: v })} /></${Campo}>
-      <${Campo} id=${"nf-c-" + i} rotulo="Grupo"><${Texto} id=${"nf-c-" + i} list="nf-cats" valor=${n.categoria} onMuda=${v => setN({ categoria: v })} /></${Campo}>
+      <${Campo} id=${"nf-c-" + i} rotulo="Grupo" dica=${n.grupo_sugerido && n.categoria ? "Sugerido pelo cadastro (mesma referência ou produto parecido)." : ""}><${Texto} id=${"nf-c-" + i} list="nf-cats" valor=${n.categoria} onMuda=${v => setN({ categoria: v, grupo_sugerido: false })} /></${Campo}>
       <${Campo} id=${"nf-u-" + i} rotulo="Unidade no estoque"><${Texto} id=${"nf-u-" + i} list="nf-uns" valor=${n.unidade} onMuda=${v => setN({ unidade: v.toUpperCase().slice(0, 6) })} /></${Campo}>
       ${ver ? html`<${Campo} id=${"nf-g-" + i} rotulo="Margem à vista" dica=${"Preço: " + reais(precoPelaMargem(custoEst, n.margem_vista))}><div class="inp-suf"><input id=${"nf-g-" + i} class="inp" inputmode="decimal" value=${String(n.margem_vista ?? "").replace(".", ",")} onInput=${e => setN({ margem_vista: parseValor(e.target.value) })} /><span>%</span></div></${Campo}>` : null}
       <${Campo} id=${"nf-e-" + i} rotulo="Estoque mínimo"><input id=${"nf-e-" + i} class="inp" inputmode="decimal" value=${String(n.estoque_min ?? "").replace(".", ",")} onInput=${e => setN({ estoque_min: parseValor(e.target.value) })} /></${Campo}>
@@ -86,7 +86,10 @@ export function EntradaNFe({ params = {} }) {
       // vindo de "O que sobrou da nota": só os itens escolhidos, com a quantidade restante
       const soEstes = params.itens && arq.name.startsWith("sefaz-") ? Object.fromEntries(String(params.itens).split(",").map(x => x.split(":")).map(([k, q]) => [k, Number(q)])) : null;
       if (soEstes) rec.forEach(it => { if (!(String(it.n) in soEstes)) it.acao = "ignorar"; else if (soEstes[it.n] > 0 && soEstes[it.n] < it.qtd) it.qtd = soEstes[it.n]; });
-      setItens(rec.map(it => ({ ...it, atualizar_custo: true, novo: { descricao: it.descricao_nf, referencia: it.codigo, marca: "", categoria: "", unidade: ["CX", "PCT", "JG", "KT"].includes(it.unidade) ? it.unidade : (it.unidade || "UN"), margem_vista: margem, estoque_min: 0 } })));
+      // grupo sugerido para produto novo: a mesma referência ou um "parecido" do cadastro que já tem grupo
+      const grupoSugerido = it => { const ref = norm(it.codigo); const igual = ref && dados.produtos.find(p => p.categoria && norm(p.referencia) === ref);
+        const par = igual || (it.sugestoes || []).map(id => dados.produtos.find(p => p.id === id)).find(p => p && p.categoria); return par ? par.categoria : ""; };
+      setItens(rec.map(it => ({ ...it, atualizar_custo: true, novo: { descricao: it.descricao_nf, referencia: it.codigo, marca: "", categoria: grupoSugerido(it), grupo_sugerido: !!grupoSugerido(it), unidade: ["CX", "PCT", "JG", "KT"].includes(it.unidade) ? it.unidade : (it.unidade || "UN"), margem_vista: margem, estoque_min: 0 } })));
       setNf({ ...lido, fornecedorCadastrado: forn || null, arquivo: arq.name });
       setFin1({ lancar: lido.duplicatas.length > 0, venc: somaMes((lido.nota.emissao || new Date().toISOString()).slice(0, 10), 1) });
       setJa(await api.notas.existe(lido.nota.chave).catch(() => null));
@@ -102,7 +105,7 @@ export function EntradaNFe({ params = {} }) {
     try {
       const p = { nota: nf.nota, fornecedor: nf.fornecedor, itens: itens.map(i => ({ acao: i.acao, produto_id: i.produto_id, codigo: i.codigo, ean: i.ean, descricao_nf: i.descricao_nf, unidade: i.unidade,
         fator: Number(i.fator) || 1, qtd: i.qtd, custo_unit: i.custo_unit, atualizar_custo: i.atualizar_custo !== false,
-        novo: i.acao === "novo" ? { ...i.novo, descricao: i.novo.descricao.trim(), margem_prazo: i.novo.margem_vista, margem_atacado: i.novo.margem_vista } : undefined })) };
+        novo: i.acao === "novo" ? { ...i.novo, grupo_sugerido: undefined, categoria: grupoCanonico(i.novo.categoria, gruposDeProdutos(dados.produtos, cfg)), descricao: i.novo.descricao.trim(), margem_prazo: i.novo.margem_vista, margem_atacado: i.novo.margem_vista } : undefined })) };
       const r = await api.notas.importar(p);
       if (fin && fin1.lancar) {
         try { const dups = nf.duplicatas.length ? nf.duplicatas : [{ numero: "001", vencimento: fin1.venc, valor: nf.nota.valor_total }];
@@ -114,7 +117,7 @@ export function EntradaNFe({ params = {} }) {
       setRes(r); avisar("Entrada da NF " + nf.nota.numero + " registrada."); await recarregar(["produtos", "fornecedores"]);
     } catch (e) { setErro(e.message); } finally { setEnviando(false); }
   };
-  const listas = useMemo(() => ({ cat: [...new Set(dados.produtos.map(x => x.categoria).filter(Boolean))].sort(), marca: [...new Set(dados.produtos.map(x => x.marca).filter(Boolean))].sort() }), [dados.produtos]);
+  const listas = useMemo(() => ({ cat: gruposDeProdutos(dados.produtos, cfg).map(g => g.nome), marca: [...new Set(dados.produtos.map(x => x.marca).filter(Boolean))].sort() }), [dados.produtos, cfg.gruposProduto]);
   if (res) return html`<div class="pagina"><section class="card"><h2>Entrada registrada</h2>
     <p>NF ${nf.nota.numero} de ${nf.fornecedor.fantasia || nf.fornecedor.razao}: ${res.vinculados} produto(s) com estoque atualizado, ${res.novos} cadastrado(s) e ${res.ignorados} ignorado(s).${res.contas ? " " + res.contas + " conta(s) lançada(s) em contas a pagar." : ""}</p>
     ${res.erroContas ? html`<div class="erros">O estoque foi atualizado, mas as contas a pagar não foram lançadas: ${res.erroContas}. Lance pelo Financeiro › Duplicatas do XML.</div>` : null}

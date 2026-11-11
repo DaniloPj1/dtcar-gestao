@@ -423,6 +423,28 @@ try:
     pg.goto(U + "#/caixa"); pg.wait_for_timeout(300); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
     chk("filtro de conta de saída não esconde as abertas", abertas == 0 or pg.locator(".conta-linha").count() == abertas)
     pg.evaluate("localStorage.removeItem('dtcar-fin-filtros')")
+    # 10/11/2026: aluguel (despesa fixa) vencendo hoje, com a do mês seguinte já lançada, sumia da aba Em aberto por um filtro de
+    # categoria gravado no aparelho, enquanto o cartão "Vencem hoje" continuava contando. A tela tem de avisar o que está escondido.
+    pg.evaluate("""(() => { const d = new Date(), iso = x => x.getFullYear() + '-' + String(x.getMonth() + 1).padStart(2, '0') + '-' + String(x.getDate()).padStart(2, '0');
+      const prox = new Date(d); prox.setMonth(prox.getMonth() + 1);
+      window.__DB.contas.push({ id: 'fx-hoje', descricao: 'Aluguel', favorecido: '', categoria: 'FIxa', valor: 5500, vencimento: iso(d), status: 'aberta', origem: 'recorrente', grupo: 'fx', fixa: true },
+        { id: 'fx-prox', descricao: 'Aluguel', favorecido: '', categoria: 'FIxa', valor: 5500, vencimento: iso(prox), status: 'aberta', origem: 'recorrente', grupo: 'fx', fixa: true }); })()""")
+    pg.evaluate("localStorage.setItem('dtcar-fin-filtros', JSON.stringify({ cat: 'Fornecedores de peças' }))")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(300); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
+    reais_py = lambda v: ("R$\xa0" + f"{v:,.2f}").replace(",", "X").replace(".", ",").replace("X", ".")
+    hoje_tot = pg.evaluate("(() => { const h = new Date(), iso = h.getFullYear() + '-' + String(h.getMonth() + 1).padStart(2, '0') + '-' + String(h.getDate()).padStart(2, '0'); return window.__DB.contas.filter(c => c.status === 'aberta' && c.vencimento === iso).reduce((s, c) => s + Number(c.valor), 0); })()")
+    esc_tot = pg.evaluate("window.__DB.contas.filter(c => c.status === 'aberta' && (c.categoria || 'Sem categoria') !== 'Fornecedores de peças').reduce((s, c) => s + Number(c.valor), 0)")
+    chk("filtro gravado: aluguel de hoje fora da lista mas contado em Vencem hoje", hoje_tot >= 5500 and reais_py(hoje_tot) in pg.inner_text(".fin-kpis") and pg.locator(".conta-linha:has-text('Aluguel')").count() == 0, (hoje_tot, pg.inner_text(".fin-kpis")))
+    av = pg.query_selector(".fin-escondidas")
+    chk("filtro gravado: aviso de contas escondidas, com vencendo hoje", av is not None and "escondida" in av.inner_text() and "vencendo hoje" in av.inner_text() and reais_py(esc_tot) in av.inner_text(), (esc_tot, av and av.inner_text()))
+    chk("filtro gravado: seletor mostra a categoria gravada", pg.input_value("select:below(:text('Categoria'))") == "Fornecedores de peças")
+    pg.click(".fin-escondidas button:has-text('Limpar filtros')"); pg.wait_for_timeout(500)
+    chk("limpar filtros mostra o aluguel em Vencem hoje", pg.query_selector(".fin-escondidas") is None and pg.locator(".grupo-contas:has-text('Vencem hoje') .conta-linha:has-text('Aluguel')").count() == 1)
+    # categoria gravada que não existe mais em nenhuma conta continua filtrando: o seletor tem de mostrá-la (não "Todos")
+    pg.evaluate("localStorage.setItem('dtcar-fin-filtros', JSON.stringify({ cat: 'Categoria antiga' }))")
+    pg.goto(U + "#/caixa"); pg.wait_for_timeout(300); pg.goto(U + "#/financeiro"); pg.wait_for_timeout(1200)
+    chk("filtro gravado sem opção: seletor mostra o valor e a tela avisa", pg.input_value("select:below(:text('Categoria'))") == "Categoria antiga" and pg.query_selector(".fin-escondidas") is not None)
+    pg.evaluate("localStorage.removeItem('dtcar-fin-filtros'); window.__DB.contas = window.__DB.contas.filter(c => !String(c.id).startsWith('fx-'))")
     # o pagamento sai do saldo da conta; editar a conta paga depois não desconta de novo
     pg.evaluate("(() => { const c = window.__DB.contas.find(c => c.id === 'k9'); c.pago_em = new Date().toISOString().slice(0, 10); })()")
     pg.goto(U + "#/caixa"); pg.wait_for_timeout(1500)

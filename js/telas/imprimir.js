@@ -90,6 +90,42 @@ function ViaOS({ o, cli, vei, valores, via, nVias }) {
   </article>`;
 }
 
+/* ---------------- Ficha do salão (pedido do Danilo em 11/11/2026) ----------------
+ * O que fazer no carro, em letras grandes, para o mecânico. A4, preto e branco e só contornos (pouca tinta).
+ * Os serviços saem da reclamação da O.S. (separados por "//", quebra de linha, ";" ou fim de frase);
+ * sem reclamação, dos serviços lançados. Sem valores. */
+export function servicosSalao(o) {
+  const texto = String((o && o.reclamacao) || "");
+  const daReclamacao = texto.split(/\/\/|\n|;|\.\s+(?=[A-ZÀ-Ú])/).map(x => x.replace(/\s+/g, " ").replace(/^[\s.\-–•]+|[\s.\-–•]+$/g, "")).filter(Boolean);
+  if (daReclamacao.length) return { lista: daReclamacao, de: "reclamacao" };
+  const servicos = ((o && o.itens) || []).filter(i => (i.tipo === "servico" || i.tipo === "terceiro") && i.aprovado !== false).map(i => String(i.descricao || "").trim()).filter(Boolean);
+  return { lista: servicos, de: servicos.length ? "servicos" : "" };
+}
+const semSufixoEmpresa = n => String(n || "").replace(/\s+(LTDA|ME|EPP|EIRELI|S\/?A)\.?$/i, "");
+function FichaSalao({ o }) {
+  const { lista, de } = servicosSalao(o);
+  const orc = ["diagnostico", "aguardando"].includes(o.status);
+  const tam = lista.length <= 5 ? "s-poucos" : lista.length <= 8 ? "s-medio" : lista.length <= 12 ? "s-muitos" : "s-lotado";
+  const sit = situacaoOS(o) || STATUS[o.status] || { t: o.status };
+  const linha2 = [o.veiculo.ano, semSufixoEmpresa(o.cliente.nome)].filter(Boolean).join(" · ");
+  const linha3 = ["Entrada em " + fmtData(o.criado_em), o.consultor_nome ? "Consultor: " + String(o.consultor_nome).split(" ")[0] : ""].filter(Boolean).join(" · ");
+  const campo = (r, v) => html`<div><span>${r}:</span> <b>${v}</b></div>`;
+  return html`<article class=${"folha salao " + tam}>
+    <header class="sl-topo"><div class="sl-marca">DTCAR<small>CENTRO AUTOMOTIVO</small></div>
+      <div class="sl-num">ORDEM DE SERVIÇO<b>Nº ${n5(o.numero)}</b></div></header>
+    <section class="sl-carro"><div class="sl-placa"><span>BRASIL</span><b>${exPlaca(o.veiculo.placa)}</b></div>
+      <div class="sl-vei"><b>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ").toUpperCase()}</b><span>${linha2}</span><span>${linha3}</span></div></section>
+    <h2 class="sl-tit">O QUE FAZER NO CARRO</h2>
+    ${lista.length ? html`<ol class="sl-lista">${lista.map((t, n) => html`<li key=${n}><i>${n + 1}</i><span>${t.toUpperCase()}</span><em></em></li>`)}</ol>`
+      : html`<div class="sl-vazio">A O.S. ainda não tem reclamação nem serviços lançados. Escreva abaixo o que fazer:</div>
+        <div class="sl-linhas">${[1, 2, 3, 4, 5].map(n => html`<div key=${n}></div>`)}</div>`}
+    ${de === "servicos" ? html`<p class="sl-origem">Lista tirada dos serviços lançados na O.S. (a reclamação está em branco).</p>` : null}
+    ${orc ? html`<div class="sl-aviso">Achou peça gasta ou com defeito? <b>AVISE O CONSULTOR ANTES DE TROCAR</b> — a O.S. ainda está em orçamento.</div>` : null}
+    <div class="sl-campos">${campo("KM", o.km_entrada ? fmtKm(o.km_entrada) : "")}${campo("Mecânico", o.mecanico_nome || "")}${campo("Box", o.box || "")}</div>
+    <footer class="sl-rodape"><span>Etapa: ${sit.t}</span><span>DTCar Gestão · O.S. ${n5(o.numero)}</span></footer>
+  </article>`;
+}
+
 /* ---------------- Venda de balcão ---------------- */
 function ViaVenda({ v, via, nVias }) {
   const prod = v.itens.filter(i => i.tipo !== "servico"), serv = v.itens.filter(i => i.tipo === "servico");
@@ -262,7 +298,7 @@ export function Imprimir({ tipo, id, params }) {
   const valores = params.valores !== "0" && pode(perfil, "verValores");
   const formato = params.formato === "cupom" ? "cupom" : "a4";
   useEffect(() => {
-    if (tipo === "os") api.ordem(id).then(setDoc).catch(e => setErro(e.message));
+    if (tipo === "os" || tipo === "salao") api.ordem(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "recibo") api.recibos.um(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }
@@ -274,8 +310,8 @@ export function Imprimir({ tipo, id, params }) {
     }
     else setErro("Documento desconhecido.");
   }, [tipo, id]);
-  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
-  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : "/veiculo/" + id);
+  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
+  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : "/veiculo/" + id);
   const cancelarRecibo = async () => {
     if (!await confirmar({ titulo: "Cancelar recibo " + n5(doc.numero), texto: "O recibo continua registrado, marcado como cancelado, e deixa de contar como pagamento recebido.", botao: "Cancelar recibo", perigo: true })) return;
     try { await api.recibos.salvar({ id: doc.id, cancelado: true, cancelado_motivo: "Cancelado por " + perfil.nome + " em " + new Date().toLocaleDateString("pt-BR") });
@@ -288,9 +324,9 @@ export function Imprimir({ tipo, id, params }) {
   };
   const cli = doc && tipo === "os" ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
   const vei = doc && tipo === "os" ? dados.veiculos.find(v => v.id === doc.veiculo_id) : null;
-  const nVias = formato === "cupom" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
+  const nVias = formato === "cupom" || tipo === "salao" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
   return html`<div class=${"imprimir" + (formato === "cupom" ? " imp-cupom" : "")}>
-    ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`}
+    ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : (tipo === "salao" ? html`<style>@page { size: A4; margin: 12mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`)}
     <div class="imp-barra so-tela">
       <button type="button" class="btn" onClick=${voltar}>← Voltar</button>
       ${((tipo === "os" || tipo === "venda") && formato === "a4") || tipo === "recibo" ? html`<div class="seg" role="group" aria-label="Vias">${[1, 2].map(n => html`<button type="button" key=${n} aria-pressed=${vias === n ? "true" : "false"} onClick=${() => setVias(n)}>${n} via${n > 1 ? "s" : ""}</button>`)}</div>` : null}
@@ -302,6 +338,7 @@ export function Imprimir({ tipo, id, params }) {
     </div>
     ${erro ? html`<div class="erros so-tela">${erro}</div>` : !doc ? html`<div class="carregando">Preparando documento…</div>`
       : tipo === "os" ? (formato === "cupom" ? html`<${CupomOS} o=${doc} valores=${valores} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaOS} key=${n} o=${doc} cli=${cli} vei=${vei} valores=${valores} via=${n + 1} nVias=${nVias} />`))
+      : tipo === "salao" ? html`<${FichaSalao} o=${doc} />`
       : tipo === "venda" ? (formato === "cupom" ? html`<${CupomVenda} v=${doc} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaVenda} key=${n} v=${doc} via=${n + 1} nVias=${nVias} />`))
       : tipo === "recibo" ? html`<div class=${"recibos-folha v" + nVias}>${Array.from({ length: nVias }, (_, n) => html`<${ViaRecibo} key=${n} r=${doc} via=${n + 1} nVias=${nVias} />`)}</div>`
       : tipo === "ponto" ? html`<${FolhaPonto} f=${doc.f} ym=${params.mes} extras=${String(params.feriados || "").split(/[^0-9]+/).filter(Boolean).map(Number)} />`

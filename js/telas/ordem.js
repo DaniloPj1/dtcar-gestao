@@ -198,15 +198,17 @@ function EntregaModal({ o, cfg, saldo, comPrazo = 0, onFechar, onConfirmar }) {
 }
 
 /* ---------------- Impressão (opções) ---------------- */
+const FORMATOS_IMP = { a4: "Folha A4", cupom: "Cupom 80 mm", salao: "Ficha do salão" };
 function ImprimirModal({ o, verValores, onFechar }) {
   const { cfg, ir } = useApp();
   const [vias, setVias] = useState(String(cfg.impressaoVias || 1)), [valores, setValores] = useState(verValores), [formato, setFormato] = useState("a4");
   return html`<${Modal} titulo=${"Imprimir " + numOS(o.numero)} onFechar=${onFechar}>
-    <div class="campo"><label>Formato</label><${Seg} rotulo="Formato" opcoes=${[["Folha A4", "info"], ["Cupom 80 mm", "info"]]} valor=${formato === "a4" ? "Folha A4" : "Cupom 80 mm"} onEscolha=${v => setFormato(v.startsWith("Folha") ? "a4" : "cupom")} /></div>
+    <div class="campo"><label>Formato</label><${Seg} rotulo="Formato" opcoes=${[["Folha A4", "info"], ["Cupom 80 mm", "info"], ["Ficha do salão", "info"]]} valor=${FORMATOS_IMP[formato]} onEscolha=${v => setFormato(Object.keys(FORMATOS_IMP).find(k => FORMATOS_IMP[k] === v) || "a4")} /></div>
     ${formato === "a4" ? html`<div class="campo"><label>Vias</label><${Seg} rotulo="Vias" opcoes=${[["1 via", "info"], ["2 vias", "info"]]} valor=${vias + " via" + (vias === "2" ? "s" : "")} onEscolha=${v => setVias(v[0])} /></div>` : null}
-    ${verValores ? html`<label class="linha-check"><input type="checkbox" checked=${valores} onChange=${e => setValores(e.target.checked)} /><span>Mostrar valores na impressão (desmarque para a via do mecânico)</span></label>` : null}
+    ${verValores && formato !== "salao" ? html`<label class="linha-check"><input type="checkbox" checked=${valores} onChange=${e => setValores(e.target.checked)} /><span>Mostrar valores na impressão (desmarque para a via do mecânico)</span></label>` : null}
+    ${formato === "salao" ? html`<p class="dica">O que fazer no carro, em letras grandes, para o mecânico: sai da reclamação da O.S., sem valores, em preto e branco (pouca tinta).</p>` : null}
     <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button>
-      <button type="button" class="btn btn-pri" onClick=${() => ir(`/imprimir/os/${o.id}?vias=${formato === "a4" ? vias : 1}&valores=${valores ? 1 : 0}&formato=${formato}`)}>Visualizar e imprimir</button></div>
+      <button type="button" class="btn btn-pri" onClick=${() => ir(formato === "salao" ? `/imprimir/salao/${o.id}` : `/imprimir/os/${o.id}?vias=${formato === "a4" ? vias : 1}&valores=${valores ? 1 : 0}&formato=${formato}`)}>Visualizar e imprimir</button></div>
   </${Modal}>`;
 }
 

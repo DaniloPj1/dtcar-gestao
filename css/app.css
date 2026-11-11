@@ -1170,3 +1170,58 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .btn-recusa{color:var(--bad);border-color:var(--bad)}
 .orc-etapa2{margin-top:6px}
 @media (max-width:640px){.orc-kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.orcamento .orc-veic{grid-template-columns:repeat(2,minmax(0,1fr))}.orc-tabela{margin-left:0;max-width:none}.orc-totais{max-width:none}.linha-orc .cod{min-width:0}}
+
+/* ===================== ficha do salão (11/11/2026): A4, preto e branco, só contornos ===================== */
+.folha.salao{color:#000;gap:0;padding:12mm;font-family:var(--f-body)}
+.salao .sl-topo{display:flex;justify-content:space-between;align-items:flex-end;padding-bottom:4mm;border-bottom:1.2mm solid #000}
+.salao .sl-marca{font-family:var(--f-display);font-weight:700;font-size:12mm;line-height:1}
+.salao .sl-marca small{display:block;font-family:var(--f-body);font-weight:600;font-size:3.8mm;letter-spacing:1mm;margin-top:1mm}
+.salao .sl-num{text-align:right;font-family:var(--f-display);font-weight:700;font-size:5mm;letter-spacing:.4mm}
+.salao .sl-num b{display:block;font-size:17mm;line-height:1;letter-spacing:0}
+.salao .sl-carro{display:flex;align-items:center;gap:7mm;margin-top:6mm}
+.salao .sl-placa{border:1mm solid #000;border-radius:2.5mm;min-width:66mm;flex:none;text-align:center;font-family:var(--f-display);padding:0 3mm}
+.salao .sl-placa span{display:block;border-bottom:.5mm solid #000;font-weight:700;font-size:3.6mm;letter-spacing:1.2mm;padding:.8mm 0}
+.salao .sl-placa b{display:block;font-weight:700;font-size:16mm;letter-spacing:.6mm;line-height:1.1;padding:.5mm 0;white-space:nowrap}
+.salao .sl-vei{display:flex;flex-direction:column;min-width:0}
+.salao .sl-vei b{font-family:var(--f-display);font-weight:700;font-size:8mm;line-height:1.05;overflow-wrap:anywhere}
+.salao .sl-vei span{font-weight:600;font-size:4.4mm;line-height:1.45}
+.salao .sl-vei b+span{margin-top:2mm}
+.salao .sl-tit{font-family:var(--f-display);font-weight:700;font-size:9mm;text-transform:none;letter-spacing:.3mm;margin:7mm 0 3.5mm;padding-bottom:1.5mm;border-bottom:.4mm solid #000;color:#000}
+.salao .sl-lista{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:var(--sl-gap)}
+.salao .sl-lista li{display:flex;align-items:center;gap:5mm;border:.5mm solid #000;border-radius:2.5mm;padding:var(--sl-pad) 5mm;break-inside:avoid}
+.salao .sl-lista i{font-style:normal;flex:none;width:calc(var(--sl-fs)*1.35);height:calc(var(--sl-fs)*1.35);border:.7mm solid #000;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:var(--f-display);font-weight:700;font-size:calc(var(--sl-fs)*.8)}
+.salao .sl-lista span{flex:1;min-width:0;font-family:var(--f-display);font-weight:700;font-size:var(--sl-fs);line-height:1.05;overflow-wrap:anywhere}
+.salao .sl-lista em{flex:none;width:calc(var(--sl-fs)*1.15);height:calc(var(--sl-fs)*1.15);border:.7mm solid #000;border-radius:1.5mm}
+.salao.s-poucos{--sl-fs:9.5mm;--sl-pad:3.5mm;--sl-gap:3.5mm}
+.salao.s-medio{--sl-fs:8mm;--sl-pad:2.6mm;--sl-gap:2.8mm}
+.salao.s-muitos{--sl-fs:6.4mm;--sl-pad:1.8mm;--sl-gap:2mm}
+.salao.s-lotado{--sl-fs:4.6mm;--sl-pad:1.2mm;--sl-gap:1.4mm}
+.salao.s-lotado .sl-lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+.salao .sl-vazio{font-weight:700;font-size:4.6mm;margin-bottom:2mm}
+.salao .sl-linhas div{border-bottom:.4mm solid #000;height:12mm}
+.salao .sl-origem{font-size:3.4mm;margin:2mm 0 0;font-style:italic}
+.salao .sl-aviso{margin-top:5mm;border:.5mm dashed #000;border-radius:2.5mm;padding:3.5mm 5mm;font-weight:600;font-size:4.8mm;line-height:1.35;break-inside:avoid}
+.salao .sl-aviso b{font-weight:700}
+.salao .sl-campos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6mm;margin-top:6mm;font-size:4.3mm;font-weight:700}
+.salao .sl-campos div{border-bottom:.4mm solid #000;padding-bottom:4mm;min-height:9mm}
+.salao .sl-campos b{font-weight:600}
+.salao .sl-rodape{display:flex;justify-content:space-between;gap:4mm;margin-top:auto;padding-top:5mm;font-size:3.3mm;font-weight:600}
+@media screen{.folha.salao{min-height:297mm}}
+/* celular: só a pré-visualização na tela encolhe; a impressão continua em A4 */
+@media screen and (max-width:640px){
+  .folha.salao{padding:14px;min-height:0;font-size:13px}
+  .salao .sl-marca{font-size:26px}.salao .sl-marca small{font-size:10px;letter-spacing:2px}
+  .salao .sl-num{font-size:11px}.salao .sl-num b{font-size:34px}
+  .salao .sl-carro{flex-direction:column;align-items:stretch;gap:10px;margin-top:12px}
+  .salao .sl-placa{width:auto}.salao .sl-placa span{font-size:10px}.salao .sl-placa b{font-size:40px}
+  .salao .sl-vei b{font-size:20px}.salao .sl-vei span{font-size:13px}
+  .salao .sl-tit{font-size:20px;margin:14px 0 8px}
+  .salao.s-poucos,.salao.s-medio,.salao.s-muitos,.salao.s-lotado{--sl-fs:19px;--sl-pad:8px;--sl-gap:8px}
+  .salao .sl-lista li{gap:10px;padding:var(--sl-pad) 10px}
+  .salao .sl-aviso{font-size:13px;padding:8px 10px;margin-top:12px}
+  .salao .sl-campos{font-size:13px;gap:10px;margin-top:12px}.salao .sl-campos div{padding-bottom:8px;min-height:0}
+  .salao .sl-rodape{font-size:11px;flex-direction:column;padding-top:12px}
+}
+@media print{
+  .folha.salao{padding:0;height:272mm;overflow:hidden;break-after:auto}
+}

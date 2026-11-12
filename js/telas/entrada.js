@@ -112,8 +112,9 @@ export function NovaOS() {
         consultor_id: f.consultorId, consultor_nome: cons ? cons.nome : "",
         garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "",
       });
-      await api.evento(ordem.id, "abertura", "O.S. aberta com " + fmtKm(km) + ".", perfil.nome);
+      // agenda (v54): ligada logo depois de criar a O.S., antes do histórico (se o histórico falhar, o agendamento não fica sem a O.S.)
       await ligarAgenda(f.agendaId, ordem, true);
+      await api.evento(ordem.id, "abertura", "O.S. aberta com " + fmtKm(km) + ".", perfil.nome);
       lsSet(LS_NOVA, null); setF(vazioNova());
       await recarregar(["clientes", "veiculos", "ordens"]);
       avisar(numOS(ordem.numero) + " aberta.");

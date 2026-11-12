@@ -203,6 +203,88 @@ try:
     cel.screenshot(path=SAIDA + "/agenda-celular-modal.png")
     cel.click(".modal .fechar"); cel.goto(U + "#/mais"); cel.wait_for_timeout(800)
     chk("celular: Agenda no menu Mais", cel.locator(".linha:has-text('Agenda')").count() == 1)
+    # ---- etapa 2: quadro "Agenda da semana" no Início
+    ini = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    ini.on("pageerror", lambda e: erros.append("PAGEERR ini " + str(e)))
+    ini.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    ini.add_init_script("""window.__DB.agendamentos = [
+      { id: 'i1', data: '%(h)s', hora: '08:00:00', situacao: 'confirmado', cliente_id: 'c1', cliente: { nome: 'Cliente Teste' }, veiculo: { placa: 'ABC1D23' }, servico: 'Revisão', remarcacoes: 0, mensagens: {} },
+      { id: 'i2', data: '%(h)s', hora: null, situacao: 'agendado', cliente: { nome: 'Sem Hora' }, veiculo: {}, servico: 'Óleo', remarcacoes: 0, mensagens: {} },
+      { id: 'i3', data: '%(h)s', hora: '09:00:00', situacao: 'cancelado', motivo: 'x', cliente: { nome: 'Cancelado Some' }, veiculo: {}, servico: 'Freio', remarcacoes: 0, mensagens: {} },
+      { id: 'i4', data: '%(h)s', hora: '10:00:00', situacao: 'agendado', cliente: { nome: 'Três' }, veiculo: {}, servico: 'A', remarcacoes: 0, mensagens: {} },
+      { id: 'i5', data: '%(h)s', hora: '11:00:00', situacao: 'agendado', cliente: { nome: 'Quatro' }, veiculo: {}, servico: 'B', remarcacoes: 0, mensagens: {} },
+      { id: 'i6', data: '%(h)s', hora: '12:00:00', situacao: 'agendado', cliente: { nome: 'Cinco Escondido' }, veiculo: {}, servico: 'C', remarcacoes: 0, mensagens: {} }];""" % {"h": HOJE})
+    ini.goto(U + "#/painel"); ini.wait_for_timeout(2500)
+    chk("Início: janela 'Agenda da semana' logo depois do pátio", ini.evaluate("(() => { const j = [...document.querySelectorAll('.grade-painel .janela')].map(e => e.className.match(/j-(\\w+)/)[1]); return j.indexOf('agenda') === j.indexOf('patio') + 1; })()"), ini.evaluate("[...document.querySelectorAll('.grade-painel .janela')].map(e => e.className)"))
+    t = ini.inner_text(".j-agenda")
+    chk("Início: semana com hoje, horário, cliente e situação escrita", "Agenda da semana" in t and "Hoje" in t and "08:00" in t and "Cliente Teste" in t and "Confirmado" in t, t[:500])
+    chk("Início: cancelado não aparece e o que passa de 4 vira '+ 1 neste dia'", "Cancelado Some" not in t and "Sem Hora" not in t and "Cinco Escondido" in t and "+ 1 neste dia" in t and "5 agendado(s)" in t, t[:500])
+    chk("Início PC: 6 dias lado a lado", ini.evaluate("getComputedStyle(document.querySelector('.ags-dias')).gridTemplateColumns.split(' ').length") == 6)
+    ini.screenshot(path=SAIDA + "/agenda-inicio-pc.png")
+    ini.click(".ags-item:has-text('Cliente Teste')"); ini.wait_for_timeout(400)
+    chk("Início: clicar abre o agendamento", "Chegou: abrir O.S." in ini.inner_text(".modal"))
+    ini.click(".modal button:has-text('Faltou')"); ini.wait_for_timeout(600)
+    chk("Início: mudou a situação e o quadro atualizou", "Faltou" in ini.inner_text(".ags-item:has-text('Cliente Teste')") and "4 agendado(s)" in ini.inner_text(".j-agenda"))
+    ini.click(".ags-cab >> nth=0"); ini.wait_for_timeout(700)
+    chk("Início: clicar no dia abre a Agenda", "#/agenda?d=" in ini.url)
+    ini.evaluate("window.__SEM_V54 = true"); ini.goto(U + "#/painel"); ini.wait_for_timeout(1200)
+    chk("Início: sem o v54 a janela só avisa", "supabase/v54.sql" in ini.inner_text(".j-agenda"))
+    # painel já personalizado antes (sem a janela): ela entra uma vez; depois de salvo com painelV6, respeita a remoção
+    cfgp = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    cfgp.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    cfgp.add_init_script("window.__DB.config = { ...window.__DB.config, painel: [{ k: 'busca', tam: 12 }, { k: 'patio', tam: 12 }, { k: 'quadro', tam: 12 }], painelV5: true }")
+    cfgp.goto(U + "#/painel"); cfgp.wait_for_timeout(2200)
+    chk("Início: painel personalizado ganha a janela uma vez", cfgp.locator(".j-agenda").count() == 1)
+    cfgp.add_init_script("window.__DB.config.painelV6 = true"); cfgp.reload(); cfgp.wait_for_timeout(2200)
+    chk("Início: removida pelo administrador (painelV6) não volta", cfgp.locator(".j-agenda").count() == 0 and cfgp.locator(".j-patio").count() == 1)
+    celi = b.new_context(viewport={"width": 393, "height": 852}).new_page()
+    celi.on("pageerror", lambda e: erros.append("PAGEERR celi " + str(e)))
+    celi.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    celi.add_init_script("window.__DB.agendamentos = [{ id: 'i1', data: '%s', hora: '08:00:00', situacao: 'agendado', cliente: { nome: 'Fulano de Tal com nome bem comprido mesmo' }, veiculo: { placa: 'ABC1D23' }, servico: 'Troca das pastilhas dianteiras e revisão completa do sistema de freio', remarcacoes: 0, mensagens: {} }]" % HOJE)
+    celi.goto(U + "#/painel"); celi.wait_for_timeout(2500)
+    chk("Início celular: só hoje e dias com agendamento, em uma coluna", celi.evaluate("[...document.querySelectorAll('.ags-dia')].filter(e => getComputedStyle(e).display !== 'none').length") == 1 and celi.evaluate("getComputedStyle(document.querySelector('.ags-dias')).gridTemplateColumns.split(' ').length") == 1)
+    chk("Início celular: sem rolagem para o lado", celi.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
+    celi.locator(".j-agenda").scroll_into_view_if_needed(); celi.screenshot(path=SAIDA + "/agenda-inicio-celular.png")
+    # ---- visão do mês: calendário inteiro, dia com serviço agendado em azul
+    import calendar
+    d0 = datetime.date.today(); outro = d0.replace(day=20 if d0.day != 20 else 21).isoformat()
+    cal = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    cal.on("pageerror", lambda e: erros.append("PAGEERR cal " + str(e)))
+    cal.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    cal.add_init_script("""window.__DB.agendamentos = [
+      { id: 'm1', data: '%(h)s', hora: '08:00:00', situacao: 'agendado', cliente: { nome: 'De Hoje' }, veiculo: {}, servico: 'Revisão', remarcacoes: 0, mensagens: {} },
+      { id: 'm2', data: '%(o)s', hora: '09:00:00', situacao: 'confirmado', cliente: { nome: 'Do Dia Vinte' }, veiculo: {}, servico: 'Óleo', remarcacoes: 0, mensagens: {} },
+      { id: 'm3', data: '%(o)s', hora: '10:00:00', situacao: 'agendado', cliente: { nome: 'Outro do Vinte' }, veiculo: {}, servico: 'Freio', remarcacoes: 0, mensagens: {} },
+      { id: 'm4', data: '%(c)s', hora: '10:00:00', situacao: 'cancelado', motivo: 'x', cliente: { nome: 'Só Cancelado' }, veiculo: {}, servico: 'Freio', remarcacoes: 0, mensagens: {} }];""" % {"h": HOJE, "o": outro, "c": d0.replace(day=5 if d0.day not in (5,) else 6).isoformat()})
+    cal.goto(U + "#/agenda"); cal.wait_for_timeout(2000)
+    chk("abre na semana por padrão, com o seletor Semana | Mês", cal.locator(".ag-dias").count() == 1 and cal.inner_text(".ag-visao").split() == ["Semana", "Mês"])
+    cal.click(".ag-visao button:has-text('Mês')"); cal.wait_for_timeout(800)
+    ndias = calendar.monthrange(d0.year, d0.month)[1]
+    chk("mês: calendário inteiro (todos os dias do mês)", cal.evaluate("document.querySelectorAll('.ag-cal-dia:not(.fora)').length") == ndias and cal.evaluate("document.querySelectorAll('.ag-cal-dia').length") % 7 == 0)
+    azuis = cal.evaluate("[...document.querySelectorAll('.ag-cal-dia.com')].map(e => e.querySelector('b').innerText + ':' + e.querySelector('span').innerText.trim())")
+    chk("mês: só os dias com serviço agendado ficam em azul, com a quantidade", sorted(azuis) == sorted([str(d0.day) + ":1 agend.", outro[8:].lstrip("0") + ":2 agend."]), azuis)
+    cores = cal.evaluate("(() => { const c = getComputedStyle(document.querySelector('.ag-cal-dia.com')).backgroundColor, l = getComputedStyle(document.querySelector('.ag-cal-dia:not(.com):not(.fora)')).backgroundColor; return [c, l]; })()")
+    chk("mês: azul da DTCar no dia com agenda, diferente do dia livre", cores[0] == "rgb(10, 75, 208)" and cores[0] != cores[1], cores)
+    chk("mês: legenda escrita e total do mês", "Dia em azul" in cal.inner_text(".ag-mes") and "3 agendado(s)" in cal.inner_text(".ag-barra"))
+    chk("mês: hoje selecionado mostra os serviços de hoje", "De Hoje" in cal.inner_text(".ag-mes .ag-lista"))
+    cal.click(".ag-cal-dia:not(.fora):has(b:text-is('%s'))" % outro[8:].lstrip("0")); cal.wait_for_timeout(300)
+    t = cal.inner_text(".ag-mes")
+    chk("mês: clicar no dia mostra os agendamentos dele", "Do Dia Vinte" in t and "Outro do Vinte" in t and "De Hoje" not in cal.inner_text(".ag-mes .ag-lista"), t[-300:])
+    cal.screenshot(path=SAIDA + "/agenda-mes-pc.png")
+    cal.click(".ag-semana button[aria-label='Próximo mês']"); cal.wait_for_timeout(700)
+    chk("mês: próximo mês sem dias azuis e 'Este mês' liberado", cal.locator(".ag-cal-dia.com:not(.fora)").count() == 0 and cal.locator(".ag-semana button:has-text('Este mês')").is_enabled())
+    cal.reload(); cal.wait_for_timeout(2000)
+    chk("mês: a escolha fica guardada no aparelho", cal.locator(".ag-cal").count() == 1)
+    cal.click(".ag-visao button:has-text('Semana')"); cal.wait_for_timeout(600)
+    chk("volta para a semana", cal.locator(".ag-dias").count() == 1 and cal.locator(".ag-cal").count() == 0)
+    celm = b.new_context(viewport={"width": 393, "height": 852}).new_page()
+    celm.on("pageerror", lambda e: erros.append("PAGEERR celm " + str(e)))
+    celm.add_init_script("try { localStorage.setItem('dtcar-agenda-visao', '\"mes\"') } catch (e) {}")
+    celm.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    celm.add_init_script("window.__DB.agendamentos = [{ id: 'm1', data: '%s', hora: '08:00:00', situacao: 'agendado', cliente: { nome: 'De Hoje' }, veiculo: {}, servico: 'Revisão', remarcacoes: 0, mensagens: {} }]" % HOJE)
+    celm.goto(U + "#/agenda"); celm.wait_for_timeout(2200)
+    chk("celular: calendário do mês cabe na tela (7 colunas, sem rolagem para o lado)", celm.evaluate("getComputedStyle(document.querySelector('.ag-cal')).gridTemplateColumns.split(' ').length") == 7 and celm.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
+    celm.screenshot(path=SAIDA + "/agenda-mes-celular.png")
     b.close()
 finally:
   srv.terminate()

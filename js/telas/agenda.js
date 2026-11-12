@@ -81,11 +81,19 @@ export function Agenda({ params = {} }) {
   const [modal, setModal] = useState(null), [q, setQ] = useState(""), [achados, setAchados] = useState(null), [canc, setCanc] = useState(false), [versao, setVersao] = useState(0);
   const gestor = pode(perfil, "orcar");
   const fim = somaDias(seg, 6);
+  // visão "Mês" (pedido do Danilo em 12/11/2026): calendário inteiro, com os dias que têm serviço agendado em azul.
+  // A escolha (Semana | Mês) fica guardada no aparelho. Clicar num dia mostra os agendamentos dele embaixo.
+  const [visao, setVisao] = useState(() => (lsGet("dtcar-agenda-visao") === "mes" && !params.d ? "mes" : "semana"));
+  const [mes, setMes] = useState(() => hoje.slice(0, 7) + "-01"), [sel, setSel] = useState(hoje);
+  const trocarVisao = v => { setVisao(v); lsSet("dtcar-agenda-visao", v); if (v === "mes") { const b = seg <= hoje && hoje <= fim ? hoje : seg; setMes(b.slice(0, 7) + "-01"); setSel(b); } else setSeg(inicioSemana(sel)); };
+  const outroMes = n => { const d = dia(mes); d.setMonth(d.getMonth() + n); const m = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-01"; setMes(m); setSel(m === hoje.slice(0, 7) + "-01" ? hoje : m); };
+  const gradeIni = inicioSemana(mes), ultimo = (() => { const d = dia(mes); d.setMonth(d.getMonth() + 1); d.setDate(0); return mes.slice(0, 8) + String(d.getDate()).padStart(2, "0"); })(), gradeFim = somaDias(inicioSemana(ultimo), 6);
+  const de = visao === "mes" ? gradeIni : seg, ate = visao === "mes" ? gradeFim : fim;
   // só a consulta da semana que está na tela atualiza a lista (trocar de semana no meio de uma consulta não mistura as respostas)
   useEffect(() => { let vivo = true; setLista(null);
-    api.agenda.listar({ de: seg, ate: fim }).then(l => { if (vivo) { setLista(l); setErro(""); } })
+    api.agenda.listar({ de, ate }).then(l => { if (vivo) { setLista(l); setErro(""); } })
       .catch(e => { if (!vivo) return; if (FALTA_V54(e)) setFalta(true); else setErro(e.message); setLista([]); });
-    return () => { vivo = false; }; }, [seg, versao]);
+    return () => { vivo = false; }; }, [de, ate, versao]);
   // a ligação de O.S. aberta sem internet é feita em js/app.js (em qualquer tela); aqui só recarrega quando ela acontece
   useEffect(() => { const f = () => setVersao(x => x + 1); window.addEventListener("dtcar-agenda", f); return () => window.removeEventListener("dtcar-agenda", f); }, []);
   // busca: do mês passado em diante (cliente, placa ou serviço)
@@ -99,8 +107,13 @@ export function Agenda({ params = {} }) {
   const doDia = d => (lista || []).filter(a => a.data === d && (canc || a.situacao !== "cancelado")).sort(ordemDoDia);
   // domingo só aparece se tiver alguém agendado
   const visiveis = dias.filter((d, i) => i < 6 || (lista || []).some(a => a.data === d));
-  const ativos = (lista || []).filter(a => AGENDA_ATIVA.includes(a.situacao)).length;
-  const salvo = (r, msg) => { setModal(null); avisar(msg || "Agenda atualizada."); if (r && r.data && (r.data < seg || r.data > fim)) setSeg(inicioSemana(r.data)); setVersao(x => x + 1); };
+  const ativos = (lista || []).filter(a => AGENDA_ATIVA.includes(a.situacao) && (visao !== "mes" || a.data.slice(0, 7) === mes.slice(0, 7))).length;
+  const salvo = (r, msg) => { setModal(null); avisar(msg || "Agenda atualizada.");
+    if (r && r.data && visao === "mes") { setMes(r.data.slice(0, 7) + "-01"); setSel(r.data); }
+    else if (r && r.data && (r.data < seg || r.data > fim)) setSeg(inicioSemana(r.data));
+    setVersao(x => x + 1); };
+  const diasMes = useMemo(() => { const l = []; for (let d = gradeIni; d <= gradeFim; d = somaDias(d, 1)) l.push(d); return l; }, [gradeIni, gradeFim]);
+  const nomeMes = (() => { const t = dia(mes).toLocaleDateString("pt-BR", { month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })();
   const novo = d => setModal({ data: d && d >= hoje ? d : hoje, hora: "", situacao: "agendado", cliente_id: "", veiculo_id: "", cliente: { nome: "", telefone: "" }, veiculo: { placa: "", marca: "", modelo: "", ano: "" }, servico: "", obs: "", motivo: "", mensagens: {} });
 
   const Linha = ({ a, comDia }) => { const v = a.veiculo || {};
@@ -116,23 +129,78 @@ export function Agenda({ params = {} }) {
       <div class="acoes">${gestor && !falta ? html`<button type="button" class="btn btn-pri" onClick=${() => novo(hoje)}>+ Agendar</button>` : null}</div></div>
     ${falta ? html`<div class="aviso">${AVISO_V54}</div>` : null}${erro ? html`<div class="erros">${erro}</div>` : null}
     <div class="ag-barra">
-      <div class="ag-semana" role="group" aria-label="Semana">
+      <div class="seg ag-visao" role="group" aria-label="Ver a agenda por">${[["semana", "Semana"], ["mes", "Mês"]].map(([k, t]) => html`<button type="button" key=${k} class="s-info" aria-pressed=${visao === k ? "true" : "false"} onClick=${() => visao !== k && trocarVisao(k)}>${t}</button>`)}</div>
+      ${visao === "mes" ? html`<div class="ag-semana" role="group" aria-label="Mês">
+        <button type="button" class="btn btn-sm" aria-label="Mês anterior" onClick=${() => outroMes(-1)}>‹</button>
+        <button type="button" class="btn btn-sm" disabled=${mes === hoje.slice(0, 7) + "-01"} onClick=${() => { setMes(hoje.slice(0, 7) + "-01"); setSel(hoje); }}>Este mês</button>
+        <button type="button" class="btn btn-sm" aria-label="Próximo mês" onClick=${() => outroMes(1)}>›</button>
+        <b class="ag-periodo">${nomeMes}</b>
+        ${lista ? html`<span class="sub">${ativos} agendado(s)</span>` : null}</div>`
+      : html`<div class="ag-semana" role="group" aria-label="Semana">
         <button type="button" class="btn btn-sm" aria-label="Semana anterior" onClick=${() => setSeg(somaDias(seg, -7))}>‹</button>
         <button type="button" class="btn btn-sm" disabled=${seg === inicioSemana(hoje)} onClick=${() => setSeg(inicioSemana(hoje))}>Esta semana</button>
         <button type="button" class="btn btn-sm" aria-label="Próxima semana" onClick=${() => setSeg(somaDias(seg, 7))}>›</button>
         <b class="ag-periodo">${ddmm(seg)} a ${fmtData(fim)}</b>
-        ${lista ? html`<span class="sub">${ativos} agendado(s)</span>` : null}</div>
+        ${lista ? html`<span class="sub">${ativos} agendado(s)</span>` : null}</div>`}
       <label class="ag-canc"><input type="checkbox" checked=${canc} onChange=${e => setCanc(e.target.checked)} /> Mostrar cancelados</label>
       <input class="inp ag-busca" type="search" aria-label="Buscar na agenda" placeholder="Buscar cliente, placa ou serviço" value=${q} onInput=${e => setQ(e.target.value)} />
     </div>
     ${filtrados ? html`<section class="card"><h3>Resultado da busca</h3>${filtrados.length ? html`<div class="ag-lista">${filtrados.sort((a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : ordemDoDia(a, b)).map(a => html`<${Linha} key=${a.id} a=${a} comDia />`)}</div>` : html`<${Vazio}>Nada encontrado do mês passado em diante.</${Vazio}>`}</section>` : null}
-    ${!lista ? html`<div class="esqueleto"></div>` : html`<div class=${"ag-dias n" + visiveis.length}>${visiveis.map(d => { const l = doDia(d), dw = dia(d).getDay();
+    ${!lista ? html`<div class="esqueleto"></div>` : visao === "mes" ? html`<section class="card ag-mes">
+        <div class="ag-cal" role="grid" aria-label=${"Calendário de " + nomeMes}>
+          ${["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"].map(n => html`<span key=${n} class="ag-cal-sem" role="columnheader">${n}</span>`)}
+          ${diasMes.map(d => { const n = (lista || []).filter(a => a.data === d && AGENDA_ATIVA.includes(a.situacao)).length, fora = d.slice(0, 7) !== mes.slice(0, 7);
+            return html`<button type="button" key=${d} role="gridcell" class=${"ag-cal-dia" + (n ? " com" : "") + (fora ? " fora" : "") + (d === hoje ? " ag-hoje" : "") + (d === sel ? " sel" : "")} aria-pressed=${d === sel ? "true" : "false"}
+              aria-label=${fmtData(d) + (n ? ": " + n + " agendado(s)" : ": livre") + (d === hoje ? " (hoje)" : "")} onClick=${() => setSel(d)}>
+              <b>${Number(d.slice(8))}</b>${n ? html`<span>${n}<i> agend.</i></span>` : null}</button>`; })}</div>
+        <p class="dica ag-cal-legenda"><i class="ag-cal-amostra" aria-hidden="true"></i> Dia em azul: tem serviço agendado (o número é a quantidade). Clique num dia para ver.</p>
+        <div class="ag-dia-cab ag-sel-cab"><b>${DIAS_LONGOS[dia(sel).getDay()]}</b><span>${fmtData(sel)}</span>${sel === hoje ? html`<em>Hoje</em>` : null}</div>
+        ${doDia(sel).length ? html`<div class="ag-lista">${doDia(sel).map(a => html`<${Linha} key=${a.id} a=${a} />`)}</div>` : html`<p class="ag-vazio">Livre</p>`}
+        ${gestor && !falta && sel >= hoje ? html`<button type="button" class="btn-link ag-add" onClick=${() => novo(sel)}>+ Agendar neste dia</button>` : null}
+      </section>` : html`<div class=${"ag-dias n" + visiveis.length}>${visiveis.map(d => { const l = doDia(d), dw = dia(d).getDay();
       return html`<section key=${d} class=${"card ag-dia" + (d === hoje ? " ag-hoje" : "") + (d < hoje ? " ag-passado" : "")} aria-label=${DIAS_LONGOS[dw] + " " + fmtData(d)}>
         <div class="ag-dia-cab"><b>${DIAS_LONGOS[dw]}</b><span>${fmtData(d)}</span>${d === hoje ? html`<em>Hoje</em>` : null}<small>${l.filter(a => AGENDA_ATIVA.includes(a.situacao)).length || ""}</small></div>
         ${l.length ? html`<div class="ag-lista">${l.map(a => html`<${Linha} key=${a.id} a=${a} />`)}</div>` : html`<p class="ag-vazio">Livre</p>`}
         ${gestor && !falta && d >= hoje ? html`<button type="button" class="btn-link ag-add" onClick=${() => novo(d)}>+ Agendar</button>` : null}
       </section>`; })}</div>`}
     ${modal ? html`<${AgendaModal} a=${modal} onFechar=${() => setModal(null)} onSalvo=${salvo} />` : null}
+  </div>`;
+}
+
+/* ---------------- quadro da semana no Início (etapa 2) ---------------- */
+// Janela do painel: a semana atual (segunda a sábado; domingo só com agendamento), sem os cancelados. Clicar num agendamento abre
+// o mesmo quadro da tela Agenda. No celular, só hoje e os dias com agendamento, um embaixo do outro.
+const MAX_NO_DIA = 4;
+export function SemanaJanela() {
+  const { perfil, ir, avisar } = useApp();
+  const hoje = hojeISO(), seg = inicioSemana(hoje), fim = somaDias(seg, 6);
+  const [lista, setLista] = useState(null), [aviso, setAviso] = useState(""), [modal, setModal] = useState(null), [versao, setVersao] = useState(0);
+  const gestor = pode(perfil, "orcar");
+  useEffect(() => { let vivo = true;
+    api.agenda.listar({ de: seg, ate: fim }).then(l => { if (vivo) { setLista(l); setAviso(""); } })
+      .catch(e => { if (!vivo) return; setLista([]); setAviso(FALTA_V54(e) ? AVISO_V54 : "A agenda precisa de internet para aparecer aqui."); });
+    return () => { vivo = false; }; }, [versao]);
+  useEffect(() => { const f = () => setVersao(x => x + 1); window.addEventListener("dtcar-agenda", f); window.addEventListener("dtcar-conectado", f);
+    return () => { window.removeEventListener("dtcar-agenda", f); window.removeEventListener("dtcar-conectado", f); }; }, []);
+  if (!lista) return html`<div class="esqueleto"></div>`;
+  if (aviso) return html`<span class="dica">${aviso}</span>`;
+  const vivos = lista.filter(a => a.situacao !== "cancelado");
+  const dias = []; for (let i = 0; i < 7; i++) { const d = somaDias(seg, i); if (i < 6 || vivos.some(a => a.data === d)) dias.push(d); }
+  const total = vivos.filter(a => AGENDA_ATIVA.includes(a.situacao)).length;
+  return html`<div class="ags">
+    <div class="ags-topo"><span class="sub">${total ? total + " agendado(s) de " + ddmm(seg) + " a " + ddmm(fim) : "Nenhum serviço agendado nesta semana."}</span>
+      <span class="espaco"></span><button type="button" class="btn-link" onClick=${() => ir("/agenda")}>Abrir a agenda</button>
+      ${gestor ? html`<button type="button" class="btn btn-sm" onClick=${() => setModal({ data: hoje, hora: "", situacao: "agendado", cliente_id: "", veiculo_id: "", cliente: { nome: "", telefone: "" }, veiculo: { placa: "", marca: "", modelo: "", ano: "" }, servico: "", obs: "", motivo: "", mensagens: {} })}>+ Agendar</button>` : null}</div>
+    <div class=${"ags-dias n" + dias.length}>${dias.map(d => { const l = vivos.filter(a => a.data === d).sort(ordemDoDia), dw = dia(d).getDay(), n = l.filter(a => AGENDA_ATIVA.includes(a.situacao)).length;
+      return html`<div key=${d} class=${"ags-dia" + (d === hoje ? " ag-hoje" : "") + (d < hoje ? " ag-passado" : "") + (l.length ? "" : " ags-livre")}>
+        <button type="button" class="ags-cab" aria-label=${DIAS_LONGOS[dw] + " " + fmtData(d) + ": abrir na agenda"} onClick=${() => ir("/agenda?d=" + d)}><b>${DIAS[dw]}</b><span>${ddmm(d)}</span>${d === hoje ? html`<em>Hoje</em>` : null}<small>${n || ""}</small></button>
+        ${l.length ? l.slice(0, MAX_NO_DIA).map(a => html`<button type="button" key=${a.id} class=${"ags-item s-" + a.situacao} onClick=${() => setModal(a)}>
+            <span class="ags-linha"><b>${horaCurta(a.hora) || "Sem hora"}</b><span class="ags-sit">${(SITUACOES_AGENDA[a.situacao] || { t: a.situacao }).t}</span></span>
+            <strong>${(a.cliente || {}).nome}</strong><span class="ags-serv">${[exPlaca((a.veiculo || {}).placa), a.servico].filter(Boolean).join(" · ")}</span></button>`)
+          : html`<span class="ags-vazio">Livre</span>`}
+        ${l.length > MAX_NO_DIA ? html`<button type="button" class="btn-link ags-mais" onClick=${() => ir("/agenda?d=" + d)}>+ ${l.length - MAX_NO_DIA} neste dia</button>` : null}
+      </div>`; })}</div>
+    ${modal ? html`<${AgendaModal} a=${modal} onFechar=${() => setModal(null)} onSalvo=${(r, msg) => { setModal(null); avisar(msg || "Agenda atualizada."); setVersao(x => x + 1); }} />` : null}
   </div>`;
 }
 

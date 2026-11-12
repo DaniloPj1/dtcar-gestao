@@ -5,11 +5,12 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, BuscaCliente } from "../ui.js";
-import { norm, uuid, reais, fmtData, fmtTel, fmtDataHora, totais, numORC, hojeISO, somaDias, exPlaca, normPlaca, linkWhats } from "../util.js";
+import { lsGet, lsSet, norm, uuid, reais, fmtData, fmtTel, fmtDataHora, totais, numORC, hojeISO, somaDias, exPlaca, normPlaca, linkWhats } from "../util.js";
 import { pode, SITUACOES_ORC, situacaoORC, TABELAS_PRECO } from "../regras.js";
 import { pdfOS, entregarArquivo } from "../pdf.js";
 import { ItemModal, ItemLinha } from "./ordem.js";
 import { CampoDesconto } from "./acoesos.js";
+import { LS_ORC_AGENDA } from "./agenda.js";
 
 const FALTA_V53 = e => /orcamento_aprovar|schema cache|could not find|404/i.test((e && e.message) || "");
 const FALTA_V52 = e => /orcamentos|orcamento_salvar|does not exist|schema cache|could not find|404/i.test((e && e.message) || "");
@@ -64,8 +65,11 @@ const NOVO = cfg => ({ situacao: "elaboracao", cliente_id: "", veiculo_id: "", c
 export function Orcamento({ id }) {
   const { dados, cfg, perfil, avisar, confirmar, ir, recarregar } = useApp();
   const novo = id === "novo";
-  const [o, setO] = useState(novo ? NOVO(cfg) : null), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false);
-  const [modal, setModal] = useState(null), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(false), [aprovar, setAprovar] = useState(false);
+  // agenda (v54): "Fazer orçamento" no agendamento abre o orçamento novo já com o cliente, o veículo e o serviço
+  const [daAgenda] = useState(() => { if (!novo) return null; const x = lsGet(LS_ORC_AGENDA); lsSet(LS_ORC_AGENDA, null); return x && x.agendaId ? x : null; });
+  const [o, setO] = useState(() => !novo ? null : daAgenda ? { ...NOVO(cfg), cliente_id: daAgenda.cliente_id || "", veiculo_id: daAgenda.veiculo_id || "",
+    cliente: { nome: "", telefone: "", ...(daAgenda.cliente || {}) }, veiculo: { placa: "", marca: "", modelo: "", ano: "", ...(daAgenda.veiculo || {}) }, reclamacao: daAgenda.reclamacao || "" } : NOVO(cfg)), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false);
+  const [modal, setModal] = useState(null), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(!!(daAgenda && !daAgenda.cliente_id)), [aprovar, setAprovar] = useState(false);
   // aprovar: antes de abrir o quadro, grava o que estiver pendente (a aprovação lê o orçamento do banco)
   const abrirAprovar = async () => { if (!itens.length) return setErro("Inclua pelo menos um item antes de aprovar."); const base = sujo ? await gravar() : o; if (base) setAprovar(true); };
   const gestor = pode(perfil, "orcar"), ver = pode(perfil, "verValores");
@@ -100,6 +104,7 @@ export function Orcamento({ id }) {
         reclamacao: o.reclamacao, obs: o.obs, obs_internas: o.obs_internas, tabela_preco: o.tabela_preco, condicoes_pagamento: o.condicoes_pagamento, desconto: Number(o.desconto) || 0,
         validade: o.validade || "", situacao: o.situacao, motivo: o.motivo || "", ...mudancas, itens: itens.map((i, n) => ({ ...i, posicao: n + 1 })) });
       avisar(aviso); setO(r); setItens(r.itens || []); setSujo(false); setErro("");
+      if (novo && daAgenda) await api.agenda.salvar({ id: daAgenda.agendaId, orcamento_id: r.id, orc_numero: r.numero }).catch(() => avisar("O orçamento foi salvo, mas não ficou ligado ao agendamento.", true));
       if (novo) ir("/orcamento/" + r.id);
       return r;
     } catch (e2) { setErro(FALTA_V52(e2) ? AVISO_V52 : e2.message); return null; } finally { setSalvando(false); }

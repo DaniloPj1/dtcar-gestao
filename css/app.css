@@ -590,7 +590,7 @@ body{font-size:15px}
   .lateral{gap:8px;padding:12px 12px 10px}
   .lateral-marca{padding:2px 8px 4px}.lateral-marca img{height:28px}
   .lateral-grupo{gap:0}
-  .lateral-grupo button{min-height:31px;font-size:14px}  /* 31px: com o item "Orçamentos" (v52) o menu aberto continua cabendo em 1600x950 */
+  .lateral-grupo button{min-height:30px;font-size:14px}  /* 30px: com "Orçamentos" (v52) e "Agenda" (v54) o menu aberto continua cabendo em 1600x950 e o fechado em 1366x768 */
   .lateral-grupo>span,.lateral-grupo>button.lateral-grupo-tit{padding-bottom:2px}
   .lateral-pe{padding-top:8px}
 }
@@ -1279,4 +1279,53 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .folha.osrec{padding:0;font-size:11px}
   .osrec .osr-tab tr,.osrec .osr-cuidados,.osrec ol.osr-cond li{break-inside:avoid}
   .osrec h2{break-after:avoid}
+}
+
+/* ===================== agenda da oficina (v54, 12/11/2026) ===================== */
+.ag-barra{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:12px}
+.ag-semana{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.ag-periodo{font-family:var(--f-display);font-size:19px;font-weight:700;margin-left:6px;font-variant-numeric:tabular-nums}
+.ag-canc{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted);cursor:pointer}
+.ag-busca{margin-left:auto;max-width:300px}
+.ag-dias{display:grid;gap:10px;grid-template-columns:1fr;align-items:start}
+@media (min-width:641px) and (max-width:899px){.ag-dias{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (min-width:900px) and (max-width:1199px){.ag-dias{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (min-width:1200px){.ag-dias.n6{grid-template-columns:repeat(6,minmax(0,1fr))}.ag-dias.n7{grid-template-columns:repeat(7,minmax(0,1fr))}
+  .ag-dias .ag-item{grid-template-columns:minmax(0,1fr)}.ag-dias .ag-hora small{display:inline;margin-right:4px}}
+.ag-dia{padding:10px;margin:0;border-top:3px solid var(--line)}
+.ag-dia.ag-hoje{border-top-color:var(--brand)}
+.ag-dia.ag-passado{background:var(--surface-2)}
+.ag-dia-cab{display:flex;align-items:baseline;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.ag-dia-cab b{font-family:var(--f-display);font-size:17px}
+.ag-dia-cab span{color:var(--muted);font-size:13px;font-variant-numeric:tabular-nums}
+.ag-dia-cab em{font-style:normal;font-size:12px;font-weight:700;color:var(--brand);background:var(--brand-soft);border-radius:999px;padding:0 8px}
+.ag-dia-cab small{margin-left:auto;font-weight:700;color:var(--muted)}
+.ag-lista{display:flex;flex-direction:column;gap:6px}
+.ag-item{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 8px;text-align:left;width:100%;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:inherit;font:inherit;padding:8px;cursor:pointer}
+.ag-item:hover{border-color:var(--brand)}
+.ag-item:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.ag-item .pill{grid-column:1/-1;justify-self:start}
+.ag-hora{font-weight:700;font-variant-numeric:tabular-nums;font-size:14px;min-width:44px}
+.ag-hora small{display:block;font-weight:600;color:var(--muted);font-size:12px}
+.ag-meio{display:flex;flex-direction:column;min-width:0;font-size:13.5px;line-height:1.3}
+.ag-meio strong{font-size:14px;overflow-wrap:anywhere}
+.ag-vei{color:var(--muted)}
+.ag-serv{overflow-wrap:anywhere}
+.ag-remarc{color:var(--warn);font-size:12.5px;font-weight:600}
+.ag-vinc{color:var(--brand);font-size:12.5px;font-weight:700}
+.ag-item.s-cancelado,.ag-item.s-faltou{background:var(--surface-2)}
+.ag-item.s-cancelado strong,.ag-item.s-cancelado .ag-serv{text-decoration:line-through;color:var(--muted)}
+.ag-vazio{margin:4px 0;color:var(--muted);font-size:13px}
+.ag-add{margin-top:8px;font-size:14px}
+.ag-modal{display:flex;flex-direction:column;gap:10px}
+.ag-modal .grade{margin:0}
+.ag-situacao{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ag-quando,.ag-veic{grid-template-columns:repeat(2,minmax(0,1fr))}
+.ag-acoes{display:flex;flex-direction:column;gap:10px;margin-top:4px}
+.ag-acoes-dia{display:flex;flex-wrap:wrap;gap:8px;padding-top:10px;border-top:1px solid var(--line)}
+@media (max-width:640px){
+  .ag-busca{margin-left:0;max-width:none;flex:1 1 100%}
+  .ag-periodo{flex:1 1 100%;margin-left:0}
+  .ag-acoes-dia .btn{flex:1 1 100%}
+  .ag-item{padding:10px}
 }

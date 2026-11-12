@@ -1,14 +1,19 @@
 // Geradores de PDF do próprio site (os mesmos arquivos que a tela usa), carregados do GitHub NUMA VERSÃO TRAVADA (commit).
 // O Supabase só aceita importar de alguns endereços (raw.githubusercontent.com sim; o endereço do site não).
-// Depois de mudar js/pdf.js, js/boletopdf.js, js/mensagens.js (v34), js/util.js, js/regras.js, js/cnab.js ou js/qr.js: troque o commit abaixo
+// Depois de mudar js/pdf.js, js/boletopdf.js, js/mensagens.js (v34), js/pdfrecibo.js ou js/osrecibo.js (O.S. Recibo, 12/11/2026), js/util.js,
+// js/regras.js, js/cnab.js ou js/qr.js: troque o commit abaixo
 // pelo da main que tem a mudança e publique a função "email" de novo (o teste_anexos confere que o commit existe).
 // jsPDF na mesma versão do vendor/jspdf.umd.min.js do site.
 import { jsPDF } from "npm:jspdf@2.5.1";
 import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/6c20bd8391f65b9c473662522c51a60d4d7d9503/js/pdf.js";
 import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/boletopdf.js";
 import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/6c20bd8391f65b9c473662522c51a60d4d7d9503/js/mensagens.js";
+import { pdfOSRecibo, usarLeitorImagem as usarLeitorRecibo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/ede5cbdc5076ff2c590389339115a733c826274b/js/pdfrecibo.js";
+import { osQuitada } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/ede5cbdc5076ff2c590389339115a733c826274b/js/osrecibo.js";
 import type { Geradores } from "./anexos.ts";
 export { mensagens };
 
 (globalThis as unknown as { jspdf: unknown }).jspdf = { jsPDF };
-export const geradores: Geradores = { pdfOS, pdfOrcamento, pdfEntrada, pdfBoletos, nomePdf, usarLeitorImagem };
+// o leitor de imagem (logo e fotos lidos direto da pasta) vale para os dois geradores: O.S./orçamento/checklist e O.S. Recibo
+const usarLeitores = (f: unknown) => { usarLeitorImagem(f); usarLeitorRecibo(f); };
+export const geradores: Geradores = { pdfOS, pdfOrcamento, pdfEntrada, pdfBoletos, nomePdf, usarLeitorImagem: usarLeitores, pdfOSRecibo, osQuitada };

@@ -8,8 +8,8 @@ import { jsPDF } from "npm:jspdf@2.5.1";
 import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/6c20bd8391f65b9c473662522c51a60d4d7d9503/js/pdf.js";
 import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/b384d4b0ca5e2c786b3e77a216c27e5d69bfdd64/js/boletopdf.js";
 import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/6c20bd8391f65b9c473662522c51a60d4d7d9503/js/mensagens.js";
-import { pdfOSRecibo, usarLeitorImagem as usarLeitorRecibo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/ede5cbdc5076ff2c590389339115a733c826274b/js/pdfrecibo.js";
-import { osQuitada } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/ede5cbdc5076ff2c590389339115a733c826274b/js/osrecibo.js";
+import { pdfOSRecibo, usarLeitorImagem as usarLeitorRecibo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/6410bc1d97c658aa045b2edc4e97125267253a0b/js/pdfrecibo.js";
+import { osQuitada } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/6410bc1d97c658aa045b2edc4e97125267253a0b/js/osrecibo.js";
 import type { Geradores } from "./anexos.ts";
 export { mensagens };
 

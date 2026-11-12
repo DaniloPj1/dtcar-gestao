@@ -685,8 +685,9 @@ export function Ordem({ id, params = {} }) {
             await api.atualizarOrdem(o.id, { km_entrada: k, checkin: { ...resto, chegou_em: new Date().toISOString() } });
             await api.evento(o.id, "entrada", "Veículo chegou: " + fmtKm(k) + " na entrada.", perfil.nome);
             // agenda (v54): o agendamento ligado ao orçamento desta O.S. fica "Chegou" (sem a agenda rodada, não faz nada)
-            // sem internet (ou se falhar): fica guardado e é feito quando a internet voltar (ligarPendentes, js/app.js)
-            if (o.orcamento_id && api.agenda && api.agenda.chegouPeloOrcamento) await api.agenda.chegouPeloOrcamento(o.orcamento_id, o).catch(() => guardarChegadaAgenda(o.orcamento_id, o.id));
+            // sempre guardada e feita por ligarPendentes (js/app.js, quando as O.S. recarregam): só depois que a chegada saiu da fila
+            // do programa do PC e o KM está no online — com ou sem internet, nunca antes
+            if (o.orcamento_id) guardarChegadaAgenda(o.orcamento_id, o.id);
             setModal(null); avisar("Chegada registrada."); await carregar(); recarregar(["ordens"]); }
           catch (e) { setModal(m => ({ ...m, salvando: false, erro: e.message })); } }}>Registrar chegada</button></div>
     </${Modal}>` : null}

@@ -133,6 +133,24 @@ try:
     a = off.evaluate("window.__DB.agendamentos.find(x => x.id === 'agoff')")
     chk("O.S. aberta sem internet: ligada ao agendamento fora da tela da agenda", a["situacao"] == "chegou" and a["os_numero"] == 1898, a)
     chk("ligação de O.S. ainda sem número continua guardada", off.evaluate("JSON.parse(localStorage.getItem('dtcar-agenda-vinculos')).map(x => x.agendaId)") == ["agx"])
+    # 7c. orçamento do agendamento já aprovado (v53): "Chegou" liga à O.S. que já existe e abre ela (não abre O.S. vazia)
+    ap = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    ap.on("pageerror", lambda e: erros.append("PAGEERR ap " + str(e)))
+    ap.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    ap.add_init_script("""window.__DB.orcamentos = [{ id: 'orcA', numero: 5, situacao: 'aprovado', ordem_id: 'o4', os_numero: 1896, cliente: { nome: 'Cliente Teste' }, veiculo: {}, itens: [] }];
+      const o4 = window.__DB.ordens.find(o => o.id === 'o4'); Object.assign(o4, { orcamento_id: 'orcA', orcamento_numero: 5, km_entrada: null, checkin: { aguardando_veiculo: true } });
+      window.__DB.agendamentos = [{ id: 'agA', data: '%s', hora: '10:00:00', situacao: 'confirmado', cliente_id: 'c1', cliente: { nome: 'Cliente Teste' }, veiculo: { placa: 'ABC1D23' }, servico: 'Pastilhas', orcamento_id: 'orcA', orc_numero: 5, remarcacoes: 0, mensagens: {} },
+        { id: 'agB', data: '%s', hora: '11:00:00', situacao: 'agendado', cliente_id: 'c1', cliente: { nome: 'Outro do mesmo ORC' }, veiculo: {}, servico: 'Pastilhas', orcamento_id: 'orcA', orc_numero: 5, remarcacoes: 0, mensagens: {} }];""" % (HOJE, HOJE))
+    ap.goto(U + "#/agenda"); ap.wait_for_timeout(2000)
+    ap.click(".ag-item:has-text('10:00')"); ap.wait_for_timeout(400)
+    ap.click(".modal button:has-text('Chegou: abrir O.S.')"); ap.wait_for_timeout(1500)
+    a = ap.evaluate("window.__DB.agendamentos.find(x => x.id === 'agA')")
+    chk("orçamento aprovado: 'Chegou' liga à O.S. existente e abre ela", "#/os/o4" in ap.url and a["situacao"] == "chegou" and a["os_numero"] == 1896 and a["ordem_id"] == "o4" and len(ap.evaluate("window.__DB.ordens")) == 6, [ap.url, a])
+    # chegada registrada direto na O.S. do orçamento: o outro agendamento desse orçamento também fica "Chegou"
+    ap.click("button:has-text('Registrar chegada')"); ap.wait_for_timeout(300)
+    ap.fill("#os-chegada-km", "1500"); ap.click(".modal .btn-pri:has-text('Registrar chegada')"); ap.wait_for_timeout(1200)
+    b2 = ap.evaluate("window.__DB.agendamentos.find(x => x.id === 'agB')")
+    chk("chegada registrada na O.S. do orçamento: agendamento fica 'Chegou'", b2["situacao"] == "chegou" and b2["os_numero"] == 1896, b2)
     # 8. sem o v54: avisa e esconde o botão
     pg.evaluate("window.__SEM_V54 = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/agenda"); pg.wait_for_timeout(900)
     chk("sem o v54: aviso e sem '+ Agendar'", "supabase/v54.sql" in pg.inner_text("main") and pg.locator("button:has-text('+ Agendar')").count() == 0)

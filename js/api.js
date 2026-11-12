@@ -265,6 +265,9 @@ function criarApiSupabase() {
       salvar: async a => { const { id, criado_em, atualizado_em, criado_por, criado_por_nome, remarcacoes, data_anterior, hora_anterior, ...resto } = a;
         return id ? ok(await sb.from("agendamentos").update(resto).eq("id", id).select().single()) : ok(await sb.from("agendamentos").insert(resto).select().single()); },
       excluir: async id => { ok(await sb.from("agendamentos").delete().eq("id", id)); },
+      /** chegada registrada na O.S. que veio de um orçamento aprovado: o agendamento desse orçamento fica "Chegou" com a O.S. */
+      chegouPeloOrcamento: async (orcamentoId, ordem) => ok(await sb.from("agendamentos").update({ situacao: "chegou", ordem_id: ordem.id, os_numero: ordem.numero })
+        .eq("orcamento_id", orcamentoId).in("situacao", ["agendado", "confirmado"]).select("id")),
     },
     preNotas: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("pre_notas").select("*").neq("situacao", "cancelada"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }),
@@ -615,7 +618,8 @@ function comBancoDoPC(a) {
     // agenda: sem internet, só consulta (do banco do PC); gravar precisa de internet
     agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),
       salvar: soOnline(a.agenda.salvar, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),
-      excluir: soOnline(a.agenda.excluir, "Sem conexão com a internet: a agenda só pode ser alterada com internet.") },
+      excluir: soOnline(a.agenda.excluir, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),
+      chegouPeloOrcamento: soOnline(a.agenda.chegouPeloOrcamento, "Sem conexão com a internet: a agenda só pode ser alterada com internet.") },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     estornos: { ...a.estornos, desde: ler(a.estornos.desde, L.estornosDesde) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })),

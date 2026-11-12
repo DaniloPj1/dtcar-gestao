@@ -214,7 +214,9 @@
         if (novo.situacao === "cancelado" && !String(novo.motivo || "").trim()) throw new Error('new row violates check constraint "agendamentos_motivo"');
         if (novo.situacao !== "cancelado") novo.motivo = "";
         Object.assign(a, novo); return { ...a }; },
-      excluir: async id => { db.agendamentos = (db.agendamentos || []).filter(x => x.id !== id); } },
+      excluir: async id => { db.agendamentos = (db.agendamentos || []).filter(x => x.id !== id); },
+      chegouPeloOrcamento: async (orcId, o) => { net(); const l = (db.agendamentos || []).filter(a => a.orcamento_id === orcId && ["agendado", "confirmado"].includes(a.situacao));
+        l.forEach(a => Object.assign(a, { situacao: "chegou", ordem_id: o.id, os_numero: o.numero })); return l.map(a => ({ id: a.id })); } },
     produtos: { ...tab("produtos"), trocarGrupo: async ({ ids, de, para }) => { let n = 0; for (const p of window.__DB.produtos) if ((ids && ids.includes(p.id)) || (!ids && de && de.includes(p.categoria))) { p.categoria = String(para || "").trim(); p.atualizado_em = new Date().toISOString(); n++; } return n; } },
     vinculos: { doProduto: async () => [], listar: async () => [] },
     notas: { listar: async () => [] },

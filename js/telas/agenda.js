@@ -148,6 +148,15 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
     } catch (x) { setErro(FALTA_V54(x) ? AVISO_V54 : x.message); return null; } finally { setSalvando(false); }
   };
   const chegou = async () => { const r = sujo ? await gravar({}, false) : a; if (!r) return;
+    // orçamento ligado já aprovado (v53): a O.S. existe e espera o carro — liga a ela e abre a O.S. para "Registrar chegada"
+    if (r.orcamento_id) {
+      setSalvando(true);
+      try { const orc = await api.orcamentos.um(r.orcamento_id);
+        if (orc && orc.situacao === "aprovado" && orc.ordem_id) {
+          await api.agenda.salvar({ id: r.id, situacao: "chegou", ordem_id: orc.ordem_id, os_numero: orc.os_numero });
+          avisar("O orçamento já virou a " + numOS(orc.os_numero) + ": registre a chegada nela."); onFechar(); ir("/os/" + orc.ordem_id); return; } }
+      catch (e) { setErro("Não foi possível conferir o orçamento ligado: " + e.message); return; } finally { setSalvando(false); }
+    }
     prepararNovaOSAgenda(r, dados); onFechar(); ir("/entrada"); };
   const orcamento = async () => { const r = sujo ? await gravar({}, false) : a; if (!r) return;
     lsSet(LS_ORC_AGENDA, { agendaId: r.id, cliente_id: r.cliente_id || "", veiculo_id: r.veiculo_id || "", cliente: r.cliente, veiculo: r.veiculo, reclamacao: r.servico });

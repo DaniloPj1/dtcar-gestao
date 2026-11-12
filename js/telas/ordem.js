@@ -683,6 +683,8 @@ export function Ordem({ id, params = {} }) {
           try { const { aguardando_veiculo, ...resto } = o.checkin || {};
             await api.atualizarOrdem(o.id, { km_entrada: k, checkin: { ...resto, chegou_em: new Date().toISOString() } });
             await api.evento(o.id, "entrada", "Veículo chegou: " + fmtKm(k) + " na entrada.", perfil.nome);
+            // agenda (v54): o agendamento ligado ao orçamento desta O.S. fica "Chegou" (sem a agenda rodada, não faz nada)
+            if (o.orcamento_id && api.agenda && api.agenda.chegouPeloOrcamento) await api.agenda.chegouPeloOrcamento(o.orcamento_id, o).catch(() => {});
             setModal(null); avisar("Chegada registrada."); await carregar(); recarregar(["ordens"]); }
           catch (e) { setModal(m => ({ ...m, salvando: false, erro: e.message })); } }}>Registrar chegada</button></div>
     </${Modal}>` : null}

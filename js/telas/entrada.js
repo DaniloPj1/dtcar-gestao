@@ -12,10 +12,28 @@ export const ORIGENS = ["Indicação", "Cliente antigo", "Google", "Instagram / 
 
 function vazioNova() {
   return { placa: "", veiculoId: "", vNovo: { marca: "", modelo: "", ano: "", cor: "", motor: "", combustivel: "" }, clienteId: "", modoCliente: "busca",
-    cNovo: { nome: "", telefone: "", doc: "", endereco: "", bairro: "", origem: "" }, buscaCliente: "", km: "", kmConfirmado: false, reclamacao: "", consultorId: "", box: "", contato: "" };
+    cNovo: { nome: "", telefone: "", doc: "", endereco: "", bairro: "", origem: "" }, buscaCliente: "", km: "", kmConfirmado: false, reclamacao: "", consultorId: "", box: "", contato: "", agendaId: "" };
 }
 /** Deixa a Nova O.S. pré-preenchida com um veículo (usado em Cadastros) */
 export function prepararNovaOS(v) { lsSet(LS_NOVA, { ...vazioNova(), placa: v.placa, veiculoId: v.id, clienteId: v.cliente_id || "" }); }
+
+// Agenda (v54): "Chegou: abrir O.S." preenche a Nova O.S. com o agendamento; ao abrir, o agendamento fica "Chegou" com a O.S.
+export const LS_VINCULOS = "dtcar-agenda-vinculos"; // O.S. aberta sem internet a partir da agenda: liga quando ela tiver número
+export function prepararNovaOSAgenda(ag, dados) {
+  const v = ag.veiculo_id ? dados.veiculos.find(x => x.id === ag.veiculo_id) : null, vc = ag.veiculo || {}, c = ag.cliente || {};
+  const placa = v ? v.placa : normPlaca(vc.placa), vCad = v || (placaValida(placa) ? dados.veiculos.find(x => x.placa === placa) : null);
+  const clienteId = ag.cliente_id || (vCad && vCad.cliente_id) || "";
+  lsSet(LS_NOVA, { ...vazioNova(), agendaId: ag.id, placa: vCad ? vCad.placa : placa, veiculoId: vCad ? vCad.id : "", clienteId,
+    vNovo: { ...vazioNova().vNovo, marca: vc.marca || "", modelo: vc.modelo || "", ano: vc.ano || "" },
+    modoCliente: clienteId ? "busca" : "novo", cNovo: { ...vazioNova().cNovo, nome: clienteId ? "" : c.nome || "", telefone: clienteId ? "" : c.telefone || "" },
+    reclamacao: ag.servico || "" });
+}
+/** liga a O.S. ao agendamento; sem internet (ou se falhar), guarda para ligar quando a O.S. tiver o número definitivo */
+async function ligarAgenda(agendaId, ordem, online) {
+  if (!agendaId) return;
+  if (online) { try { await api.agenda.salvar({ id: agendaId, situacao: "chegou", ordem_id: ordem.id, os_numero: ordem.numero }); return; } catch (e) {} }
+  lsSet(LS_VINCULOS, (lsGet(LS_VINCULOS) || []).filter(x => x.agendaId !== agendaId).concat([{ agendaId, ordemId: ordem.id }]));
+}
 
 function validarNova(f, dados) {
   const e = [], v = dados.veiculos.find(x => x.id === f.veiculoId);
@@ -90,6 +108,7 @@ export function NovaOS() {
         garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "",
       });
       await api.evento(ordem.id, "abertura", "O.S. aberta com " + fmtKm(km) + ".", perfil.nome);
+      await ligarAgenda(f.agendaId, ordem, true);
       lsSet(LS_NOVA, null); setF(vazioNova());
       await recarregar(["clientes", "veiculos", "ordens"]);
       avisar(numOS(ordem.numero) + " aberta.");
@@ -123,6 +142,7 @@ export function NovaOS() {
       await fila.adicionar({ id: ordemId, tipo: "abrir_os", criado_em: agora, provisorio: prov, usuario_nome: perfil.nome, cliente: novoCli, veiculo: novoVei, veiculoAtualizar: veiAtual, ordem,
         eventos: [{ tipo: "abertura", texto: "O.S. aberta com " + fmtKm(km) + " sem internet (" + prov + ").", usuario_nome: perfil.nome, criado_em: agora }] });
       await local.gravar("os:" + ordemId, { ...ordem, numero: prov, _pendente: true, _provisorio: prov, itens: [], fotos: [], eventos: [], desconto: 0, total: 0 });
+      await ligarAgenda(f.agendaId, { id: ordemId }, false);
       lsSet(LS_NOVA, null); setF(vazioNova());
       await atualizarPendentes();
       avisar(prov + " aberta sem internet. O número definitivo sai quando a conexão voltar.");
@@ -132,6 +152,7 @@ export function NovaOS() {
 
   return html`<div class="pagina">
     <div ref=${topo}></div>
+    ${f.agendaId ? html`<div class="info">Veio da agenda: ao abrir a O.S., o agendamento fica como “Chegou”, ligado a ela. Confira o KM e os dados do veículo.</div>` : null}
     ${erros.length ? html`<div class="erros" role="alert">Corrija para abrir a O.S.:<ul>${erros.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul></div>` : null}
     <section class="card"><h3>Veículo</h3>
       <${Campo} id="placa" rotulo="Placa" obrig dica="Se o veículo já passou pela oficina, os dados aparecem.">

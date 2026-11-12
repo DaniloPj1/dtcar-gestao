@@ -257,6 +257,15 @@ function criarApiSupabase() {
       aprovar: async (id, { itensFora = [], por = "", forma = "", gravar = false } = {}) => ok(await sb.rpc("orcamento_aprovar", { p_orcamento: id, p_itens_fora: itensFora, p_por: por, p_forma: forma, p_gravar: gravar })),
       excluir: async id => { ok(await sb.from("orcamentos").delete().eq("id", id)); },
     },
+    // agenda da oficina (v54). A tela grava direto na tabela (regras de acesso e gatilho do v54 decidem remarcação e quem criou)
+    agenda: {
+      listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("agendamentos").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate);
+        return q.order("data").order("hora", { nullsFirst: false }).order("id"); }),
+      um: async id => ok(await sb.from("agendamentos").select("*").eq("id", id).maybeSingle()),
+      salvar: async a => { const { id, criado_em, atualizado_em, criado_por, criado_por_nome, remarcacoes, data_anterior, hora_anterior, ...resto } = a;
+        return id ? ok(await sb.from("agendamentos").update(resto).eq("id", id).select().single()) : ok(await sb.from("agendamentos").insert(resto).select().single()); },
+      excluir: async id => { ok(await sb.from("agendamentos").delete().eq("id", id)); },
+    },
     preNotas: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("pre_notas").select("*").neq("situacao", "cancelada"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }),
       /** em aberto de um fornecedor (pelo cadastro ou pelo nome sem cadastro), para conferir no pagamento */
@@ -603,6 +612,10 @@ function comBancoDoPC(a) {
       salvar: soOnline(a.orcamentos.salvar, "Sem conexão com a internet: o orçamento só pode ser gravado com internet."),
       aprovar: soOnline(a.orcamentos.aprovar, "Sem conexão com a internet: aprovar o orçamento cria a O.S. no servidor e precisa de internet."),
       excluir: soOnline(a.orcamentos.excluir, "Sem conexão com a internet: o orçamento só pode ser excluído com internet.") },
+    // agenda: sem internet, só consulta (do banco do PC); gravar precisa de internet
+    agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),
+      salvar: soOnline(a.agenda.salvar, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),
+      excluir: soOnline(a.agenda.excluir, "Sem conexão com a internet: a agenda só pode ser alterada com internet.") },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     estornos: { ...a.estornos, desde: ler(a.estornos.desde, L.estornosDesde) },
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })),

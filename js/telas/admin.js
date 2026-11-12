@@ -12,6 +12,7 @@ export function Mais() {
   return html`<div class="pagina">
     <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div><div class="acoes"><${BotaoTema} classe="btn btn-sm" comTexto /><${BotaoInstalar} texto="Instalar no aparelho" /></div></section>
     <section class="card"><div class="lista">
+      ${it("/agenda", "Agenda", "Serviços agendados da semana", I.calendario)}
       ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
       ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}
       ${pode(perfil, "verValores") ? it("/balcao", "Venda de balcão", "Vender peças e serviços sem O.S.", I.carrinho) : null}

@@ -196,6 +196,25 @@
         Object.assign(o, { situacao: "aprovado", respondido_em: now(), ordem_id: os.id, os_numero: os.numero, cliente_id: cli.id, veiculo_id: vei.id, total: resumo.total });
         (window.__EV = window.__EV || []).push("abertura: O.S. aberta a partir do orçamento " + ref);
         return { ...resumo, pode_aprovar: true, gravado: true, ordem_id: os.id, os_numero: os.numero }; } },
+    // agenda da oficina (v54): mesmas regras do gatilho agendamentos_regras (remarcação, motivo só no cancelado)
+    agenda: { listar: async ({ de, ate } = {}) => { net(); if (window.__SEM_V54) throw new Error("Could not find the table 'public.agendamentos' in the schema cache");
+        return (db.agendamentos = db.agendamentos || []).filter(a => (!de || a.data >= de) && (!ate || a.data <= ate)).map(a => ({ ...a })); },
+      um: async id => { net(); const a = (db.agendamentos || []).find(x => x.id === id); return a ? { ...a } : null; },
+      salvar: async p => { net(); db.agendamentos = db.agendamentos || []; let a = p.id && db.agendamentos.find(x => x.id === p.id);
+        const { id, criado_em, atualizado_em, criado_por, criado_por_nome, remarcacoes, data_anterior, hora_anterior, ...r } = p;
+        if (!a) { if (!String((r.cliente || {}).nome || "").trim()) throw new Error('new row violates check constraint "agendamentos_cliente"');
+          if (!String(r.servico || "").trim()) throw new Error('new row violates check constraint "agendamentos_servico"');
+          a = { id: uid(), situacao: "agendado", hora: null, cliente_id: null, veiculo_id: null, cliente: {}, veiculo: {}, obs: "", motivo: "", remarcacoes: 0, data_anterior: null, hora_anterior: null,
+            ordem_id: null, os_numero: null, orcamento_id: null, orc_numero: null, mensagens: {}, criado_por_nome: db.perfis[0].nome, criado_em: now(), ...r, hora: r.hora ? r.hora + (r.hora.length === 5 ? ":00" : "") : null };
+          db.agendamentos.push(a); return { ...a }; }
+        const h = "hora" in r ? (r.hora ? r.hora + (r.hora.length === 5 ? ":00" : "") : null) : a.hora, d = "data" in r ? r.data : a.data;
+        const novo = { ...a, ...r, hora: h, data: d, atualizado_em: now() };
+        if (d !== a.data || h !== a.hora) { novo.remarcacoes = a.remarcacoes + 1; novo.data_anterior = a.data; novo.hora_anterior = a.hora; const m = { ...(novo.mensagens || {}) }; delete m.confirmacao; delete m.lembrete; novo.mensagens = m;
+          if (novo.situacao === "confirmado" && a.situacao === "confirmado") novo.situacao = "agendado"; }
+        if (novo.situacao === "cancelado" && !String(novo.motivo || "").trim()) throw new Error('new row violates check constraint "agendamentos_motivo"');
+        if (novo.situacao !== "cancelado") novo.motivo = "";
+        Object.assign(a, novo); return { ...a }; },
+      excluir: async id => { db.agendamentos = (db.agendamentos || []).filter(x => x.id !== id); } },
     produtos: { ...tab("produtos"), trocarGrupo: async ({ ids, de, para }) => { let n = 0; for (const p of window.__DB.produtos) if ((ids && ids.includes(p.id)) || (!ids && de && de.includes(p.categoria))) { p.categoria = String(para || "").trim(); p.atualizado_em = new Date().toISOString(); n++; } return n; } },
     vinculos: { doProduto: async () => [], listar: async () => [] },
     notas: { listar: async () => [] },

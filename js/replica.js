@@ -19,9 +19,9 @@ export async function replicaPronta() {
 export const TABELAS_REPLICA = ["perfis", "fornecedores", "clientes", "veiculos", "servicos", "produtos", "produto_fornecedor", "notas_entrada",
   "ordens", "os_itens", "eventos", "fotos", "recibos", "vendas", "venda_itens", "estoque_mov", "estoque_reserva", "contas", "nfe_recebidas",
   "nfe_os_vinculos", "funcionarios", "funcionario_lanc", "receber", "transferencias", "estornos_saldo",
-  "pre_notas", "pre_notas_itens", "agente_regras", "agente_acoes", "boletos", "orcamentos", "orcamento_itens"];
+  "pre_notas", "pre_notas_itens", "agente_regras", "agente_acoes", "boletos", "orcamentos", "orcamento_itens", "agendamentos"];
 const OPCIONAL = t => t === "servicos" || t.startsWith("funcionario") || t === "receber" || t === "transferencias" || t === "estornos_saldo"
-  || t.startsWith("pre_notas") || t.startsWith("agente_") || t === "boletos" || t.startsWith("orcamento");
+  || t.startsWith("pre_notas") || t.startsWith("agente_") || t === "boletos" || t.startsWith("orcamento") || t === "agendamentos";
 // antes do supabase/v13.sql, só estas têm "atualizado_em"; as demais são recarregadas inteiras de 30 em 30 min
 const COM_DATA_ANTIGA = ["ordens", "clientes", "veiculos", "produtos", "fornecedores", "contas", "funcionarios", "receber", "nfe_recebidas"];
 const MARGEM_MS = 60000; // folga: busca de novo o último minuto (transação demorada grava a data do início; gravar a mesma linha 2 vezes não faz mal)
@@ -144,6 +144,10 @@ export const leitorLocal = {
     return { ...o, itens: ordena(itens, (a, b) => (a.posicao || 0) - (b.posicao || 0)), fotos: ordena(fotos, (a, b) => (a.criado_em || "").localeCompare(b.criado_em || "")),
       eventos: ordena(eventos, (a, b) => (b.criado_em || "").localeCompare(a.criado_em || "")), _local: true };
   },
+  // agenda (v54): consulta sem internet, na mesma ordem do online (dia, horário; sem horário no fim do dia)
+  agenda: async ({ de, ate } = {}) => ordena((await tabelaLocal("agendamentos")).filter(x => (!de || x.data >= de) && (!ate || x.data <= ate)),
+    (a, b) => a.data < b.data ? -1 : a.data > b.data ? 1 : (a.hora || "99") < (b.hora || "99") ? -1 : (a.hora || "99") > (b.hora || "99") ? 1 : 0),
+  agendaUm: async id => { const x = (await tabelaLocal("agendamentos")).find(y => y.id === id); return x ? { ...x, _local: true } : null; },
   // orçamentos (v52): consulta sem internet
   orcamentos: async () => ordena(await tabelaLocal("orcamentos"), (a, b) => (b.numero || 0) - (a.numero || 0)),
   orcamento: async id => { const o = (await tabelaLocal("orcamentos")).find(x => x.id === id); if (!o) return null;

@@ -1225,3 +1225,10 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media print{
   .folha.salao{padding:0;height:272mm;overflow:hidden;break-after:auto}
 }
+/* aprovar orçamento (v53) */
+.orc-aprov-lista{margin:8px 0}
+.orc-aprov-item{cursor:pointer}
+.orc-aprov-item.fora .meio strong{text-decoration:line-through;color:var(--muted)}
+.btn-aprovar{font-weight:700}
+/* barra de cima: "Novo orçamento" só onde cabe (em tela estreita fica o item Orçamentos do menu) */
+@media (max-width:1100px){.bt-novo-orc{display:none}}

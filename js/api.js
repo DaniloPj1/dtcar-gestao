@@ -253,6 +253,8 @@ function criarApiSupabase() {
       um: async id => { const o = ok(await sb.from("orcamentos").select("*").eq("id", id).maybeSingle()); if (!o) return null;
         return { ...o, itens: ok(await sb.from("orcamento_itens").select("*").eq("orcamento_id", id).order("posicao")) }; },
       salvar: async orc => ok(await sb.rpc("orcamento_salvar", { p: orc })),
+      /** v53: aprova e vira O.S. (itensFora = ids que o cliente NÃO aprovou). gravar = false só confere e devolve o resumo */
+      aprovar: async (id, { itensFora = [], por = "", forma = "", gravar = false } = {}) => ok(await sb.rpc("orcamento_aprovar", { p_orcamento: id, p_itens_fora: itensFora, p_por: por, p_forma: forma, p_gravar: gravar })),
       excluir: async id => { ok(await sb.from("orcamentos").delete().eq("id", id)); },
     },
     preNotas: {
@@ -599,6 +601,7 @@ function comBancoDoPC(a) {
     // orçamentos: sem internet, só consulta (do banco do PC); gravar precisa de internet (o número é dado pelo servidor)
     orcamentos: { ...a.orcamentos, listar: ler(a.orcamentos.listar, L.orcamentos), um: ler(a.orcamentos.um, L.orcamento),
       salvar: soOnline(a.orcamentos.salvar, "Sem conexão com a internet: o orçamento só pode ser gravado com internet."),
+      aprovar: soOnline(a.orcamentos.aprovar, "Sem conexão com a internet: aprovar o orçamento cria a O.S. no servidor e precisa de internet."),
       excluir: soOnline(a.orcamentos.excluir, "Sem conexão com a internet: o orçamento só pode ser excluído com internet.") },
     transferencias: { ...a.transferencias, listar: ler(a.transferencias.listar, L.transferenciasListar) },
     estornos: { ...a.estornos, desde: ler(a.estornos.desde, L.estornosDesde) },

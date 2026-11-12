@@ -91,6 +91,7 @@ export function BarraTopo({ titulo, offline, pend, enviarFila }) {
       <${BotaoInstalar} />
       <${Situacao} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
       <${BotaoTema} classe="btn-icone" />
+      ${pode(perfil, "orcar") ? html`<button type="button" class="btn btn-sm bt-novo-orc" title="Novo orçamento, sem abrir O.S." onClick=${() => ir("/orcamento/novo")}>${I.mais}<span>Novo orçamento</span></button>` : null}
       ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-pri btn-sm" title="Nova O.S. (F2)" onClick=${() => ir("/entrada")}>${I.mais}<span>Nova O.S.</span></button>` : null}
     </div>
   </header>`;

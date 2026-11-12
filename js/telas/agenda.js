@@ -118,9 +118,11 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
   const veiculosCli = a.cliente_id ? dados.veiculos.filter(v => v.cliente_id === a.cliente_id) : [];
   const copiaVei = v => ({ placa: v.placa || "", marca: v.marca || "", modelo: v.modelo || "", ano: v.ano || "" });
   const escolherCliente = cid => { const c = dados.clientes.find(x => x.id === cid);
-    if (!c) return set({ cliente_id: "", veiculo_id: "", cliente: { nome: "", telefone: "" } });
+    // trocou de cliente: o carro do cliente anterior não pode ficar (abrir a O.S. trocaria o dono do carro no cadastro)
+    const semVei = { veiculo_id: "", veiculo: { placa: "", marca: "", modelo: "", ano: "" } };
+    if (!c) return set({ cliente_id: "", cliente: { nome: "", telefone: "" }, ...semVei });
     const vs = dados.veiculos.filter(v => v.cliente_id === cid), v = vs.length === 1 ? vs[0] : null;
-    set({ cliente_id: cid, cliente: { nome: c.nome, telefone: c.telefone || "" }, ...(v ? { veiculo_id: v.id, veiculo: copiaVei(v) } : { veiculo_id: "" }) }); };
+    set({ cliente_id: cid, cliente: { nome: c.nome, telefone: c.telefone || "" }, ...(v ? { veiculo_id: v.id, veiculo: copiaVei(v) } : semVei) }); };
   const escolherVeiculo = vid => { const v = dados.veiculos.find(x => x.id === vid); set(v ? { veiculo_id: vid, veiculo: copiaVei(v) } : { veiculo_id: "" }); };
   // placa digitada que já está no cadastro: puxa o veículo e o dono
   const digitarPlaca = txt => { const p = normPlaca(txt), v = placaValida(p) ? dados.veiculos.find(x => x.placa === p) : null;

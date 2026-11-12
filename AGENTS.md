@@ -401,7 +401,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - **Numeração**: vale a do sistema antigo (OS Oficina 3.0). Enquanto o **modo espelho** estiver ligado (Sistema › Importar), cada carga do
   backup antigo apaga e recarrega clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Não "proteger" esses dados contra o espelho.
 - **Período de transição (dois sistemas em paralelo):** enquanto `cfg.espelhoLegado` não for `false`, o OS Oficina é o sistema oficial e o
-  DTCar Gestão é só consulta e treino (faixa amarela "Período de transição" em todas as telas). Toda programação nova respeita isso:
+  DTCar Gestão é só consulta e treino. **A virada foi em 02/11/2026 (espelho desligado).** A faixa amarela "Período de transição" só aparece
+  com o espelho ligado de verdade (`cfg.espelhoLegado === true`, 12/11/2026): sem os Ajustes carregados ela não aparece mais. Toda programação nova respeita isso:
   (a) dado operacional novo (tabela ou coluna com O.S., dinheiro, cadastro ou estoque) entra em `espelho_legado_zerar()` ou é declarado
   preservado, com o motivo, no SQL e no PR; (b) nada pode levar a equipe a achar que um lançamento aqui é oficial nesse período;
   (c) o PR diz em uma linha como a mudança se comporta antes e depois da virada.

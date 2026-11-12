@@ -85,6 +85,13 @@ try:
     pg = abrir(b, "#/os/p1", pago=False, recibos=())
     pg.click("button:has-text('Imprimir O.S.')"); pg.wait_for_timeout(500)
     chk("janela (a receber): sem O.S. Recibo", pg.query_selector(".modal button:has-text('O.S. Recibo')") is None); pg.close()
+    # mecânico (sem ver valores) abrindo a rota direto: não mostra preços
+    pg = b.new_context(viewport={"width": 1366, "height": 900}).new_page(); pg.on("pageerror", lambda e: erros.append(str(e)))
+    pg.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    pg.add_init_script("window.__DB && (window.__DB.perfis[0].papel = 'mecanico');")
+    pg.goto(U + "#/imprimir/osrecibo/o6"); pg.wait_for_timeout(1800)
+    chk("mecânico: rota recusada sem mostrar valores", pg.query_selector(".folha.osrec") is None and "acesso aos valores" in pg.inner_text("body"), pg.inner_text("body")[:300])
+    pg.close()
     # celular
     pg = abrir(b, "#/imprimir/osrecibo/p1", 393, 852)
     chk("celular: sem rolagem lateral", pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))

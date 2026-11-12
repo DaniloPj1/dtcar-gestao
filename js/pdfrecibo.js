@@ -138,10 +138,18 @@ export async function pdfOSRecibo(o, cfg, ext = {}) {
   const rec = [{ t: "Recebemos de " }, { t: c.nome || "", b: true }].concat(docCli ? [{ t: ", CPF/CNPJ " }, { t: fmtDoc(docCli), b: true }] : [],
     [{ t: ", a importância de " }, { t: reais(dd.valorPago), b: true }, { t: " (" + extenso(dd.valorPago) + "), referente à Ordem de Serviço nº " + n5 }],
     formas ? [{ t: ", pago em " }, { t: formas, b: true }] : [], [{ t: ", dando plena quitação." }]);
-  const altRec = corrido(d, MX, 0, CW, rec, 8.8, 3.9, false) + (dd.pagos.length > 1 ? 4.6 : 0);
-  secao("Pagamento", altRec);
+  // lista dos pagamentos (mais de um): medida já quebrada, linha a linha, com troca de página se precisar
+  d.fonte("normal", 8.2);
+  const lPag = [];
+  if (dd.pagos.length > 1) for (const r of dd.pagos) {   // um pagamento nunca se divide entre duas linhas
+    const p = fmtData(r.data) + " · " + (r.forma || "—") + " · " + reais(r.valor), ult = lPag.length ? lPag[lPag.length - 1] : null;
+    if (ult !== null && doc.getTextWidth(ult + "     " + p) <= CW) lPag[lPag.length - 1] = ult + "     " + p; else lPag.push(p);
+  }
+  const altRec = corrido(d, MX, 0, CW, rec, 8.8, 3.9, false);
+  secao("Pagamento", altRec + Math.min(lPag.length, 3) * 3.6);
   d.y += 3.2; d.y += corrido(d, MX, d.y, CW, rec, 8.8, 3.9, true) - 3.2;
-  if (dd.pagos.length > 1) { d.fonte("normal", 8.2); d.cor(TINTA); doc.text(dd.pagos.map(r => fmtData(r.data) + " · " + (r.forma || "—") + " · " + reais(r.valor)).join("     "), MX, d.y + 3.4, { maxWidth: CW }); d.y += 4.6; }
+  for (const l of lPag) { d.espaco(3.6); d.fonte("normal", 8.2); d.cor(TINTA); doc.text(l, MX, d.y + 3.2); d.y += 3.6; }
+  if (lPag.length) d.y += 1;
   d.y += 1.5;
 
   // ---- prazo e condições da garantia (lista numerada)

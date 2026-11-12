@@ -340,7 +340,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (`dadosOSRecibo`, `condicoesGarantia`, `CUIDADOS_MOTOR`, `osQuitada` = etapa Fechada ou O.S. antiga entregue sem "a receber"; sem window/document).
   Tela: O.S. › Imprimir O.S. › "O.S. Recibo" (só aparece na O.S. paga e para quem vê valores) com a caixa "Incluir os cuidados do motor"
   (marcada) → `#/imprimir/osrecibo/<id>[?motor=0]` (`ViaOSRecibo` em `js/telas/imprimir.js`; a barra troca com/sem cuidados; O.S. não paga
-  mostra aviso só na tela). Itens: a mesma regra da ViaOS (com item aprovado, só os aprovados). Valor pago = soma dos recibos não cancelados
+  mostra aviso só na tela; a rota recusa quem não tem `verValores`, porque a impressão abre antes de `restrito`). Itens: a mesma regra da ViaOS (com item aprovado, só os aprovados). Valor pago = soma dos recibos não cancelados
   (O.S. antiga sem recibo: o total da O.S. e a forma gravada nela); "Pago em" = data do último recibo. PDF: `js/pdfrecibo.js` (`pdfOSRecibo`,
   arquivo separado do `js/pdf.js` de propósito, com o próprio `usarLeitorImagem`) — **mesmo leiaute da tela: mudou um, mude o outro.**
   Conector: anexo `{fonte:"os", documento:"recibo", motor?}` no `whatsapp_enviar` e no `email_enviar`/`email_responder` (`daOSRecibo` em

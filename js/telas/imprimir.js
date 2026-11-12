@@ -356,7 +356,11 @@ export function Imprimir({ tipo, id, params }) {
   const formato = params.formato === "cupom" ? "cupom" : "a4";
   useEffect(() => {
     if (tipo === "os" || tipo === "salao") api.ordem(id).then(setDoc).catch(e => setErro(e.message));
-    else if (tipo === "osrecibo") Promise.all([api.ordem(id), api.recibos.listar({ ordemId: id })]).then(([o, r]) => setDoc({ ...o, recibosDaOS: r || [] })).catch(e => setErro(e.message));
+    else if (tipo === "osrecibo") {
+      // mostra preços, total e pagamentos: só para quem vê valores (a rota de impressão abre antes de "restrito")
+      if (!pode(perfil, "verValores")) { setErro("A O.S. Recibo mostra valores: só para quem tem acesso aos valores da O.S."); return; }
+      Promise.all([api.ordem(id), api.recibos.listar({ ordemId: id })]).then(([o, r]) => setDoc({ ...o, recibosDaOS: r || [] })).catch(e => setErro(e.message));
+    }
     else if (tipo === "recibo") api.recibos.um(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }

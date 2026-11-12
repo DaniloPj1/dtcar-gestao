@@ -83,6 +83,27 @@ confere("recibo: não diz que não vale como recibo", !/NÃO VALE COMO RECIBO/i.
 confere("recibo: sem avisos (O.S. paga com recibos, fora da transição)", r1.avisos.length === 0, r1.avisos);
 await Deno.writeFile("/tmp/os_recibo_motor.pdf", a1.bytes);
 
+// ----- 12 pagamentos: a lista quebra em várias linhas sem invadir o título seguinte
+const salvos = tabelas.recibos;
+tabelas.recibos = Array.from({ length: 12 }, (_, n) => ({ id: "m" + n, ordem_id: "p1", numero: 950 + n, data: `2026-11-${String(n + 1).padStart(2, "0")}`, forma: "Transferência", valor: 276.25, cancelado: false }));
+const rm = await anexo({ fonte: "os", numero: 1854, documento: "recibo" });
+const tm = await texto(rm.arquivos[0].bytes);
+confere("12 pagamentos: todos na lista", Array.from({ length: 12 }, (_, n) => `${String(n + 1).padStart(2, "0")}/11/2026 · Transferência · R$ 276,25`).every((k) => tm.includes(k)), tm.slice(800, 2200));
+{ // posição: a última linha da lista fica acima da faixa "PRAZO E CONDIÇÕES"
+  const pdf = await getDocumentProxy(rm.arquivos[0].bytes.slice());
+  const ys: Record<string, number[]> = {};
+  for (let pg = 1; pg <= pdf.numPages; pg++) {
+    const c = await (await pdf.getPage(pg)).getTextContent();
+    for (const it of c.items as Array<{ str: string; transform: number[] }>) {
+      const k = it.str.includes("12/11/2026 · Transferência") ? "ultima" : it.str.includes("PRAZO E CONDIÇÕES DA GARANTIA") ? "prazo" : "";
+      if (k) (ys[k] = ys[k] || []).push(pg * 10000 - it.transform[5]);
+    }
+  }
+  confere("12 pagamentos: a lista termina antes do título seguinte", !!ys.ultima && !!ys.prazo && Math.max(...ys.ultima) + 8 < Math.min(...ys.prazo), ys);
+}
+await Deno.writeFile("/tmp/os_recibo_12pag.pdf", rm.arquivos[0].bytes);
+tabelas.recibos = salvos;
+
 // ----- sem os cuidados do motor
 const r2 = await anexo({ fonte: "os", numero: 1854, documento: "recibo", motor: false });
 const t2 = await texto(r2.arquivos[0].bytes);

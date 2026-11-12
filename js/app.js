@@ -29,7 +29,7 @@ import { Relatorios } from "./telas/relatorios.js";
 import { Financeiro } from "./telas/financeiro.js";
 import { PedidosCompra } from "./telas/pedidos.js";
 import { Orcamentos, Orcamento } from "./telas/orcamentos.js";
-import { Agenda } from "./telas/agenda.js";
+import { Agenda, ligarPendentes } from "./telas/agenda.js";
 import { Backup, montarBackup } from "./telas/backup.js";
 import { NotasSefaz } from "./telas/sefaz.js";
 import { WhatsApp } from "./telas/whatsapp.js";
@@ -342,6 +342,10 @@ function App() {
     if (errOS.length) setToast({ msg: errOS.length + " O.S. sem internet não puderam ser enviadas. Abra a O.S. para ver o motivo.", erro: true });
     else if (errAlt.length) setToast({ msg: errAlt.length + " alteração(ões) feita(s) sem internet não puderam ser enviadas (conflito com o online). Resolva em Sistema › Dados no computador.", erro: true });
   }, []);
+  // agenda (v54): O.S. aberta sem internet a partir da agenda — liga ao agendamento assim que a O.S. recebe o número definitivo,
+  // em qualquer tela (o envio da fila recarrega as O.S.); a tela da agenda, se estiver aberta, é avisada para recarregar
+  useEffect(() => { if (!membro || !dados.carregado) return;
+    ligarPendentes(dados.ordens).then(m => { if (m) window.dispatchEvent(new Event("dtcar-agenda")); }).catch(() => {}); }, [membro, dados.ordens]);
   useEffect(() => { if (!membro) return; enviarFila(); const t = setInterval(() => { if (navigator.onLine) enviarFila(); }, 60000); return () => clearInterval(t); }, [membro]);
   // gravação com internet que entrou na fila (a O.S. tinha alteração pendente): envia na hora
   useEffect(() => { const f = () => enviarFila(); window.addEventListener("dtcar-enviar-fila", f); return () => window.removeEventListener("dtcar-enviar-fila", f); }, []);

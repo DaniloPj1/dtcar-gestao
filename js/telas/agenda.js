@@ -28,7 +28,9 @@ const Pill = ({ a }) => { const s = SITUACOES_AGENDA[a.situacao] || { t: a.situa
 export const ordemDoDia = (a, b) => (horaCurta(a.hora) || "99") < (horaCurta(b.hora) || "99") ? -1 : (horaCurta(a.hora) || "99") > (horaCurta(b.hora) || "99") ? 1 : 0;
 
 /** O.S. aberta sem internet a partir da agenda: assim que ela recebe o número definitivo, liga ao agendamento */
-export async function ligarPendentes(ordens) {
+let ligando = Promise.resolve(false);
+export function ligarPendentes(ordens) { ligando = ligando.catch(() => false).then(() => ligarAgora(ordens)); return ligando; } // uma de cada vez
+async function ligarAgora(ordens) {
   const l = lsGet(LS_VINCULOS) || []; if (!l.length) return false;
   let mudou = false; const resta = [];
   for (const v of l) {
@@ -42,17 +44,20 @@ export async function ligarPendentes(ordens) {
 
 /* ---------------- semana ---------------- */
 export function Agenda({ params = {} }) {
-  const { perfil, dados, ir, avisar } = useApp();
+  const { perfil, ir, avisar } = useApp();
   const hoje = hojeISO();
   const [seg, setSeg] = useState(() => inicioSemana(/^\d{4}-\d{2}-\d{2}$/.test(params.d || "") ? params.d : hoje));
   const [lista, setLista] = useState(null), [erro, setErro] = useState(""), [falta, setFalta] = useState(false);
   const [modal, setModal] = useState(null), [q, setQ] = useState(""), [achados, setAchados] = useState(null), [canc, setCanc] = useState(false), [versao, setVersao] = useState(0);
   const gestor = pode(perfil, "orcar");
   const fim = somaDias(seg, 6);
-  const carregar = () => api.agenda.listar({ de: seg, ate: fim }).then(l => { setLista(l); setErro(""); })
-    .catch(e => { if (FALTA_V54(e)) setFalta(true); else setErro(e.message); setLista([]); });
-  useEffect(() => { setLista(null); carregar(); }, [seg, versao]);
-  useEffect(() => { ligarPendentes(dados.ordens).then(m => { if (m) setVersao(x => x + 1); }).catch(() => {}); }, [dados.ordens]);
+  // só a consulta da semana que está na tela atualiza a lista (trocar de semana no meio de uma consulta não mistura as respostas)
+  useEffect(() => { let vivo = true; setLista(null);
+    api.agenda.listar({ de: seg, ate: fim }).then(l => { if (vivo) { setLista(l); setErro(""); } })
+      .catch(e => { if (!vivo) return; if (FALTA_V54(e)) setFalta(true); else setErro(e.message); setLista([]); });
+    return () => { vivo = false; }; }, [seg, versao]);
+  // a ligação de O.S. aberta sem internet é feita em js/app.js (em qualquer tela); aqui só recarrega quando ela acontece
+  useEffect(() => { const f = () => setVersao(x => x + 1); window.addEventListener("dtcar-agenda", f); return () => window.removeEventListener("dtcar-agenda", f); }, []);
   // busca: do mês passado em diante (cliente, placa ou serviço)
   useEffect(() => { const n = q.trim(); if (n.length < 2) { setAchados(null); return; }
     let vivo = true; const t = setTimeout(() => api.agenda.listar({ de: somaDias(hoje, -60) }).then(l => { if (vivo) setAchados(l); }).catch(() => vivo && setAchados([])), 250);

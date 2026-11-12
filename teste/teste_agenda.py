@@ -115,6 +115,15 @@ try:
     pg.click(".ag-semana button[aria-label='Semana anterior']"); pg.wait_for_timeout(500); pg.click(".ag-semana button[aria-label='Próxima semana']"); pg.wait_for_timeout(700)
     chk("domingo aparece quando tem agendamento (7 colunas)", "Domingo" in pg.inner_text(".ag-dias") and pg.evaluate("getComputedStyle(document.querySelector('.ag-dias')).gridTemplateColumns.split(' ').length") == 7)
 
+    # 7b. O.S. aberta sem internet a partir da agenda: liga assim que a O.S. tem número, em qualquer tela (sem abrir a agenda)
+    off = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    off.on("pageerror", lambda e: erros.append("PAGEERR off " + str(e)))
+    off.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    off.add_init_script("window.__DB.agendamentos = [{ id: 'agoff', data: '%s', hora: null, situacao: 'agendado', cliente: { nome: 'Sem rede' }, veiculo: {}, servico: 'Embreagem', remarcacoes: 0, mensagens: {} }]; localStorage.setItem('dtcar-agenda-vinculos', JSON.stringify([{ agendaId: 'agoff', ordemId: 'o2' }, { agendaId: 'agx', ordemId: 'ainda-PROV' }]))" % HOJE)
+    off.goto(U + "#/ordens"); off.wait_for_timeout(2500)
+    a = off.evaluate("window.__DB.agendamentos.find(x => x.id === 'agoff')")
+    chk("O.S. aberta sem internet: ligada ao agendamento fora da tela da agenda", a["situacao"] == "chegou" and a["os_numero"] == 1898, a)
+    chk("ligação de O.S. ainda sem número continua guardada", off.evaluate("JSON.parse(localStorage.getItem('dtcar-agenda-vinculos')).map(x => x.agendaId)") == ["agx"])
     # 8. sem o v54: avisa e esconde o botão
     pg.evaluate("window.__SEM_V54 = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/agenda"); pg.wait_for_timeout(900)
     chk("sem o v54: aviso e sem '+ Agendar'", "supabase/v54.sql" in pg.inner_text("main") and pg.locator("button:has-text('+ Agendar')").count() == 0)

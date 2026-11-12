@@ -318,6 +318,12 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   a cópia do cliente. **Ainda não feito:** aprovar e virar O.S. (total ou parte dos itens, vínculo nas duas telas), envio pelo WhatsApp da
   oficina com PDF (função "email": trocar o commit de `pdf.js`/`util.js`/`regras.js` em `email/site.ts`), ferramentas do conector, painel e
   relatórios, backup de leitura, orçamento sem internet. Testes: `bash teste/teste_v52.sh` (banco inteiro) e `python3 teste/teste_fluxo.py`.
+- **Ficha do salão (pedido do Danilo em 11/11/2026):** O.S. › Imprimir O.S. › "Ficha do salão" → `#/imprimir/salao/<id>` (`FichaSalao` e
+  `servicosSalao` em `js/telas/imprimir.js`). O que fazer no carro, em letra grande, para o mecânico: A4, preto e branco, só contornos (pouca
+  tinta), sem valores, uma folha. Serviços tirados da reclamação (separados por "//", quebra de linha, ";" ou fim de frase); reclamação vazia →
+  serviços lançados não recusados; nada → linhas em branco. Aviso "avise o consultor antes de trocar" só no orçamento. KM, mecânico e box
+  preenchidos quando a O.S. tem. Tamanho da letra pela quantidade (`s-poucos`…`s-lotado`, este em 2 colunas). Só tela de impressão: não muda o
+  `pdfOS`, a função "email" nem o banco. Teste: `python3 teste/teste_ficha_salao.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

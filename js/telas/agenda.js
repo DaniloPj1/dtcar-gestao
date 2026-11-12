@@ -28,22 +28,24 @@ const Pill = ({ a }) => { const s = SITUACOES_AGENDA[a.situacao] || { t: a.situa
 export const ordemDoDia = (a, b) => (horaCurta(a.hora) || "99") < (horaCurta(b.hora) || "99") ? -1 : (horaCurta(a.hora) || "99") > (horaCurta(b.hora) || "99") ? 1 : 0;
 
 /** O.S. aberta sem internet a partir da agenda: assim que ela recebe o número definitivo, liga ao agendamento */
+const chaveVinculo = v => (v.orcamentoId ? "orc:" + v.orcamentoId : "ag:" + v.agendaId) + ">" + v.ordemId;
 let ligando = Promise.resolve(false);
 export function ligarPendentes(ordens) { ligando = ligando.catch(() => false).then(() => ligarAgora(ordens)); return ligando; } // uma de cada vez
 async function ligarAgora(ordens) {
   const l = lsGet(LS_VINCULOS) || []; if (!l.length) return false;
-  let mudou = false; const resta = [];
+  let mudou = false; const feitas = [];
   for (const v of l) {
     const o = (ordens || []).find(x => x.id === v.ordemId);
-    if (!o || typeof o.numero !== "number") { resta.push(v); continue; }
+    if (!o || typeof o.numero !== "number") continue;
     try {
       // chegada registrada sem internet na O.S. de um orçamento: todos os agendamentos desse orçamento; senão, o agendamento da Nova O.S.
       if (v.orcamentoId) await api.agenda.chegouPeloOrcamento(v.orcamentoId, o);
       else await api.agenda.salvar({ id: v.agendaId, situacao: "chegou", ordem_id: o.id, os_numero: o.numero });
-      mudou = true;
-    } catch (e) { resta.push(v); }
+      mudou = true; feitas.push(chaveVinculo(v));
+    } catch (e) { /* fica para a próxima */ }
   }
-  lsSet(LS_VINCULOS, resta);
+  // tira só as que foram feitas, relendo a lista: o que foi guardado enquanto esta rodava (outra chegada sem internet) continua lá
+  if (feitas.length) lsSet(LS_VINCULOS, (lsGet(LS_VINCULOS) || []).filter(v => !feitas.includes(chaveVinculo(v))));
   return mudou;
 }
 

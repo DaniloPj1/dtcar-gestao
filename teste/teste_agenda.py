@@ -158,6 +158,13 @@ try:
     ap.evaluate("window.__API_MOCK.agenda.chegouPeloOrcamento = window.__ag_off; (async () => { const m = await import('./js/telas/agenda.js'); await m.ligarPendentes(window.__DB.ordens); })()"); ap.wait_for_timeout(500)
     b2 = ap.evaluate("window.__DB.agendamentos.find(x => x.id === 'agB')")
     chk("internet de volta: agendamento do orçamento fica 'Chegou'", b2["situacao"] == "chegou" and ap.evaluate("localStorage.getItem('dtcar-agenda-vinculos')") == "[]", b2)
+    # 7e. pendência guardada enquanto a ligação está no meio (resposta lenta): não some
+    ap.evaluate("""localStorage.setItem('dtcar-agenda-vinculos', JSON.stringify([{ agendaId: 'agA', ordemId: 'o4' }]));
+      window.__ag_lento = window.__API_MOCK.agenda.salvar; window.__API_MOCK.agenda.salvar = async p => { await new Promise(r => setTimeout(r, 400)); return window.__ag_lento(p); }; 0""")
+    ap.evaluate("""(async () => { const ag = await import('./js/telas/agenda.js'), en = await import('./js/telas/entrada.js');
+      const p = ag.ligarPendentes(window.__DB.ordens); await new Promise(r => setTimeout(r, 100)); en.guardarChegadaAgenda('orcZ', 'o3'); await p; })()""")
+    ap.wait_for_timeout(300)
+    chk("pendência guardada no meio da ligação continua guardada", ap.evaluate("JSON.parse(localStorage.getItem('dtcar-agenda-vinculos'))") == [{"orcamentoId": "orcZ", "ordemId": "o3"}], ap.evaluate("localStorage.getItem('dtcar-agenda-vinculos')"))
     # 8. sem o v54: avisa e esconde o botão
     pg.evaluate("window.__SEM_V54 = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/agenda"); pg.wait_for_timeout(900)
     chk("sem o v54: aviso e sem '+ Agendar'", "supabase/v54.sql" in pg.inner_text("main") and pg.locator("button:has-text('+ Agendar')").count() == 0)

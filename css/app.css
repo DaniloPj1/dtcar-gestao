@@ -1329,3 +1329,59 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .ag-acoes-dia .btn{flex:1 1 100%}
   .ag-item{padding:10px}
 }
+
+/* ---- agenda da semana no Início (etapa 2, 12/11/2026) ---- */
+.ags-topo{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
+.ags-dias{display:grid;gap:8px;grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+@media (min-width:900px){.ags-dias.n6{grid-template-columns:repeat(6,minmax(0,1fr))}.ags-dias.n7{grid-template-columns:repeat(7,minmax(0,1fr))}}
+.ags-dia{display:flex;flex-direction:column;gap:5px;min-width:0;border:1px solid var(--line);border-top:3px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)}
+.ags-dia.ag-hoje{border-top-color:var(--brand)}
+.ags-dia.ag-passado{background:var(--surface-2)}
+.ags-cab{display:flex;align-items:baseline;gap:6px;border:0;background:none;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer;width:100%}
+.ags-cab b{font-family:var(--f-display);font-size:16px}
+.ags-cab span{color:var(--muted);font-size:12.5px;font-variant-numeric:tabular-nums}
+.ags-cab em{font-style:normal;font-size:11.5px;font-weight:700;color:var(--brand);background:var(--brand-soft);border-radius:999px;padding:0 7px}
+.ags-cab small{margin-left:auto;font-weight:700;color:var(--muted)}
+.ags-cab:focus-visible,.ags-item:focus-visible{outline:2px solid var(--brand);outline-offset:1px}
+.ags-item{display:flex;flex-direction:column;min-width:0;text-align:left;border:1px solid var(--line);border-radius:6px;background:var(--surface);color:inherit;font:inherit;font-size:13px;line-height:1.3;padding:6px 7px;cursor:pointer}
+.ags-item:hover{border-color:var(--brand)}
+.ags-linha{display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.ags-linha b{font-variant-numeric:tabular-nums}
+.ags-sit{font-size:11.5px;font-weight:700;color:var(--brand)}
+.ags-item.s-confirmado .ags-sit{color:var(--ok)}.ags-item.s-faltou .ags-sit{color:var(--warn)}.ags-item.s-chegou .ags-sit{color:var(--muted)}
+.ags-item strong,.ags-serv{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ags-serv{color:var(--muted)}
+.ags-item.s-faltou,.ags-item.s-chegou{background:var(--surface-2)}
+.ags-vazio{color:var(--muted);font-size:12.5px}
+.ags-mais{font-size:13px;text-align:left}
+@media (max-width:640px){
+  .ags-dias,.ags-dias.n6,.ags-dias.n7{grid-template-columns:minmax(0,1fr)}
+  .ags-dia.ags-livre:not(.ag-hoje){display:none}
+  .ags-item{padding:8px}
+  .ags-topo .espaco{display:none}
+}
+
+/* ---- agenda: visão do mês (12/11/2026) — dia com serviço agendado em azul ---- */
+.ag-visao{flex:none}
+.ag-mes{padding:12px}
+.ag-cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.ag-cal-sem{text-align:center;font-size:12.5px;font-weight:700;color:var(--muted);padding-bottom:2px}
+.ag-cal-dia{display:flex;flex-direction:column;align-items:flex-start;justify-content:space-between;gap:2px;min-height:64px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);font:inherit;text-align:left;cursor:pointer}
+.ag-cal-dia b{font-family:var(--f-display);font-size:18px;line-height:1;font-variant-numeric:tabular-nums}
+.ag-cal-dia span{font-size:12.5px;font-weight:700}
+.ag-cal-dia i{font-style:normal;font-weight:600}
+.ag-cal-dia.fora{background:var(--surface-2);color:var(--muted)}
+.ag-cal-dia.com,.ag-cal-amostra{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.ag-cal-dia.com.fora{opacity:.6}
+.ag-cal-dia.ag-hoje{box-shadow:inset 0 0 0 2px var(--ink)}
+.ag-cal-dia.sel{outline:3px solid var(--brand-strong);outline-offset:1px}
+.ag-cal-dia:focus-visible{outline:3px solid var(--ink);outline-offset:1px}
+.ag-cal-legenda{display:flex;align-items:center;gap:8px;margin:10px 0 4px}
+.ag-cal-amostra{display:inline-block;width:16px;height:16px;border-radius:4px;flex:none}
+.ag-sel-cab{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+@media (max-width:640px){
+  .ag-cal{gap:3px}
+  .ag-cal-dia{min-height:48px;padding:4px 5px;align-items:center}
+  .ag-cal-dia b{font-size:16px}
+  .ag-cal-dia i{display:none}
+}

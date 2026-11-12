@@ -348,7 +348,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `usarLeitorImagem` liga os dois geradores). **Mudou `js/osrecibo.js` ou `js/pdfrecibo.js`? Troque o commit no `email/site.ts`, merge com
   "Create a merge commit", publique a função "email"; a função "agente" só precisa de nova publicação quando mudar a descrição das ferramentas.**
   Testes: `python3 teste/teste_os_recibo.py` (tela, janela, A4, celular) e `deno run -A teste/teste_os_recibo_pdf.ts` (PDF pelo conector).
-- **Agenda da oficina (v54, pedido do Danilo em 12/11/2026) — etapa 1 de 3:** tabela `agendamentos` (dia, horário opcional, cliente e
+- **Agenda da oficina (v54, pedido do Danilo em 12/11/2026) — etapas 1 e 2 de 3:** tabela `agendamentos` (dia, horário opcional, cliente e
   veículo do cadastro OU só digitados — cópia em `cliente`/`veiculo`, sem chave estrangeira, como `orcamentos` —, serviço combinado, anotação
   interna). **Agenda livre** (decisão do Danilo: sem limite de carros por dia ou horário). Situações gravadas: `agendado`, `confirmado`, `chegou`,
   `faltou`, `cancelado` (motivo obrigatório; `SITUACOES_AGENDA` em `js/telas/agenda.js` — fora do `regras.js` para não obrigar a
@@ -365,7 +365,12 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   grava (`api.agenda.chegouPeloOrcamento`) só quando a O.S. não tem nada na fila do PC e o KM está no online; descartada/cancelada, esquece. A agenda não
   mexe em O.S., estoque nem financeiro. Sem internet: só consulta (banco do PC). Backup, restauração (`restaurar_tabela`), banco do PC e
   `exclusoes` incluídos; **preservada pelo espelho**. O `agente_leitura` lê sem a cópia do cliente; o conector já lê pela `consultar`.
-  **Ainda não feito:** quadro da semana no Início (etapa 2); botões de WhatsApp que abrem a mensagem pronta (confirmação, lembrete da véspera,
+  **Etapa 2 (12/11/2026, sem SQL):** janela "Agenda da semana" no Início (`SemanaJanela` em `agenda.js`, `JANELAS.agenda` em `painel.js`;
+  entra uma vez no painel já personalizado, depois do pátio — marca `cfg.painelV6`; sem cancelados, até 4 por dia, clicar abre o mesmo quadro
+  do agendamento; no celular só hoje e os dias com agendamento). Tela Agenda com **Semana | Mês** (escolha guardada no aparelho,
+  `dtcar-agenda-visao`): o mês mostra o calendário inteiro e o **dia com serviço agendado fica em azul**, com a quantidade escrita; clicar no
+  dia lista os agendamentos dele. Nova O.S. vinda da agenda: o vínculo é gravado logo depois de criar a O.S., antes do histórico.
+  **Ainda não feito:** botões de WhatsApp que abrem a mensagem pronta (confirmação, lembrete da véspera,
   remarcar) para o Danilo conferir e enviar — **nada sai sozinho** — e as ferramentas do conector para agendar/remarcar (etapa 3).
   Testes: `bash teste/teste_v54.sh` (banco inteiro) e `python3 teste/teste_agenda.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).

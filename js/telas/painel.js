@@ -8,6 +8,7 @@ import { LS_NOVA } from "./entrada.js";
 import { estoqueBaixo } from "./produtos.js";
 import { CancelarModal, EncerrarModal, MenuOS, proximaEtapa, avancarEtapa } from "./acoesos.js";
 import { situacaoParcela } from "./receber.js";
+import { SemanaJanela } from "./agenda.js";
 
 const DIA = 86400000;
 const diasDesde = iso => (Date.now() - new Date(iso)) / DIA;
@@ -65,6 +66,7 @@ export const JANELAS = {
   busca: { t: "Busca rápida", tam: 12 },
   hoje: { t: "Resumo do dia", tam: 12 },
   patio: { t: "Pátio", tam: 12 },
+  agenda: { t: "Agenda da semana", tam: 12 },
   alertas: { t: "Precisa de atenção", tam: 8 },
   estoque: { t: "Estoque baixo", tam: 4 },
   quadro: { t: "Quadro de O.S.", tam: 12 },
@@ -82,7 +84,7 @@ export const JANELAS = {
   aniversarios: { t: "Aniversariantes do mês", tam: 3, valores: true },
   contas: { t: "Contas a pagar", tam: 12, valores: true, fin: true },
 };
-export const LAYOUT_PADRAO = [["busca", 12], ["hoje", 12], ["patio", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
+export const LAYOUT_PADRAO = [["busca", 12], ["hoje", 12], ["patio", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
   ["servicos", 4], ["pecas", 4], ["formas", 4], ["manutencao", 6], ["recuperar", 3], ["aniversarios", 3]].map(([k, tam]) => ({ k, tam }));
 const TAMANHOS = [[3, "¼"], [4, "⅓"], [6, "½"], [8, "⅔"], [12, "Inteira"]];
 
@@ -178,6 +180,8 @@ export function Painel() {
   let salvo = Array.isArray(cfg.painel) && cfg.painel.length ? cfg.painel.filter(j => JANELAS[j.k]) : LAYOUT_PADRAO;
   // janela nova da versão 5: entra uma vez no layout já salvo, logo depois do pátio
   if (!cfg.painelV5 && !salvo.some(j => j.k === "contas")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "contas", tam: 12 }, ...salvo.slice(i + 1)]; }
+  // janela nova da versão 6 (agenda da semana, v54): entra uma vez no layout já salvo, logo depois do pátio
+  if (!cfg.painelV6 && !salvo.some(j => j.k === "agenda")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "agenda", tam: 12 }, ...salvo.slice(i + 1)]; }
   const layout = editar ? rascunho : salvo;
   let visiveis = layout.filter(j => (ver || !JANELAS[j.k].valores) && (fin || !JANELAS[j.k].fin));
   const [contasAb, setContasAb] = useState(null), [sefazNovas, setSefazNovas] = useState(0);
@@ -277,6 +281,7 @@ export function Painel() {
     manutencao: () => manut.length ? html`<ul class="ranking">${manut.slice(0, 7).map(x => html`<li key=${x.v.id}><span>${exPlaca(x.v.placa)} · ${x.c.nome.split(" ")[0]} · ${x.oque}</span><b class=${x.data < hoje ? "c-bad" : ""}>${fmtData(x.data)}</b>
       <a class="btn btn-sm btn-whats" aria-label=${"WhatsApp para " + x.c.nome} href=${linkWhats(x.c.telefone, lembrete(x))} target="_blank" rel="noopener">${I.whats}</a></li>`)}</ul>` : html`<span class="dica">Nenhuma revisão, troca de óleo ou filtro vencendo em 30 dias.</span>`,
     recuperar: () => html`<div class="numero-grande"><b>${recuperar.length}</b><span>sem visita entre 6 meses e 2 anos</span></div>${recuperar.length ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/cadastros?filtro=recuperar")}>Chamar no WhatsApp</button>` : null}`,
+    agenda: () => html`<${SemanaJanela} />`,
     contas: () => contasAb === "sem-rede" ? html`<span class="dica">Contas a pagar precisam de internet (ficam no servidor nesta etapa).</span>` : html`<${ContasJanela} l=${contasAb} />`,
     aniversarios: () => aniv.length ? html`<ul class="ranking">${aniv.slice(0, 7).map(c => html`<li key=${c.id}><span>${c.nome}</span><b>${c.nascimento.slice(8, 10)}/${c.nascimento.slice(5, 7)}</b></li>`)}</ul>` : html`<span class="dica">Nenhum neste mês.</span>`,
   };
@@ -286,7 +291,7 @@ export function Painel() {
   const mover = (i, d) => setRascunho(l => { const n = [...l], j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const soltar = (alvo) => { if (arrastando === null || arrastando === alvo) return; setRascunho(l => { const n = [...l]; const [x] = n.splice(arrastando, 1); n.splice(alvo, 0, x); return n; }); setArrastando(null); };
   const salvarLayout = async () => { setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
+    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
   const restaurar = async () => { if (await confirmar({ titulo: "Restaurar painel padrão", texto: "As janelas voltam para a organização original.", botao: "Restaurar" })) setRascunho(LAYOUT_PADRAO.map(j => ({ ...j }))); };
   const ocultas = Object.keys(JANELAS).filter(k => !(rascunho || []).some(j => j.k === k));
 

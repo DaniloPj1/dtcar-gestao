@@ -3,6 +3,8 @@
 // O Danilo (ou o Claude, por ordem dele) pede pelo que o arquivo é, nunca por um caminho solto:
 //   { fonte: "os", numero: 1887, documento: "os" | "orcamento" | "entrada", fotos?: false }
 //        → o mesmo PDF da tela da O.S. (js/pdf.js do site, gerado aqui com os dados do banco)
+//   { fonte: "os", numero: 1887, documento: "recibo", motor?: false }
+//        → a O.S. Recibo (12/11/2026, js/pdfrecibo.js): só para O.S. paga; com os cuidados do motor, salvo motor=false
 //   { fonte: "boleto", nosso_numero: "261234567" }  ou  { fonte: "boleto", os: 1887 }
 //        → o PDF do boleto Sicredi (js/boletopdf.js); pela O.S., todos os boletos em aberto dela num PDF só
 //   { fonte: "nf", os: 1887 }  ou  { fonte: "nf", id: "<id>" }
@@ -20,7 +22,7 @@ export interface Imagem { data: string; w: number; h: number; fmt: "PNG" | "JPEG
 // deno-lint-ignore no-explicit-any
 type Fn = (...a: any[]) => any;
 /** Geradores de PDF do site (js/pdf.js e js/boletopdf.js). */
-export interface Geradores { pdfOS: Fn; pdfOrcamento: Fn; pdfEntrada: Fn; pdfBoletos: Fn; nomePdf: Fn; usarLeitorImagem: Fn }
+export interface Geradores { pdfOS: Fn; pdfOrcamento: Fn; pdfEntrada: Fn; pdfBoletos: Fn; nomePdf: Fn; usarLeitorImagem: Fn; pdfOSRecibo?: Fn; osQuitada?: Fn }
 
 export const MAX_ARQUIVOS = 5;
 export const MAX_BYTES = 3 * 1024 * 1024;
@@ -87,19 +89,21 @@ const lista = async (q: Promise<{ data: unknown; error: { message: string } | nu
 };
 const bytesDoPdf = async (saida: unknown) => new Uint8Array(saida instanceof Blob ? await saida.arrayBuffer() : (saida as ArrayBuffer));
 
-const DOCS: Record<string, { gerador: "pdfOS" | "pdfOrcamento" | "pdfEntrada"; nome: string; rotulo: string }> = {
+const DOCS: Record<string, { gerador: "pdfOS" | "pdfOrcamento" | "pdfEntrada" | "pdfOSRecibo"; nome: string; rotulo: string }> = {
   os: { gerador: "pdfOS", nome: "OS", rotulo: "ordem de serviço" },
   orcamento: { gerador: "pdfOrcamento", nome: "Orcamento", rotulo: "orçamento" },
   entrada: { gerador: "pdfEntrada", nome: "Checklist", rotulo: "checklist de entrada" },
+  recibo: { gerador: "pdfOSRecibo", nome: "OS_Recibo", rotulo: "O.S. Recibo" },
 };
 
 async function daOS(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Record<string, unknown>, avisos: string[]): Promise<Arquivo> {
   const numero = parseInt(String(p.numero ?? p.os ?? "").replace(/\D/g, ""), 10);
   if (!numero) throw new ErroAnexo("Informe o número da O.S. do anexo.");
   const doc = DOCS[String(p.documento || "os")];
-  if (!doc) throw new ErroAnexo("Documento da O.S.: os, orcamento ou entrada.");
+  if (!doc) throw new ErroAnexo("Documento da O.S.: os, orcamento, entrada ou recibo.");
   const [o] = await lista(adm.from("ordens").select("*").eq("numero", numero));
   if (!o) throw new ErroAnexo(`O.S. ${numero} não encontrada.`);
+  if (doc.gerador === "pdfOSRecibo") return await daOSRecibo(adm, g, o, numero, p, cfg, avisos);
   const [itens, fotos] = await Promise.all([
     lista(adm.from("os_itens").select("*").eq("ordem_id", o.id).order("posicao")),
     p.fotos === false ? Promise.resolve([]) : lista(adm.from("fotos").select("*").eq("ordem_id", o.id).order("criado_em")),
@@ -113,6 +117,25 @@ async function daOS(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Reco
   const placa = String((o.veiculo as Record<string, unknown> || {}).placa || "");
   return { nome: `${doc.nome}_${String(numero).padStart(5, "0")}${placa ? "_" + placa : ""}.pdf`, tipo: "application/pdf", bytes: await bytesDoPdf(blob),
     origem: `O.S. ${numero} (${doc.rotulo}${p.fotos === false ? ", sem fotos" : ""})` };
+}
+
+/** O.S. Recibo (12/11/2026): a O.S. paga em forma de recibo + prazo e condições da garantia (+ cuidados do motor, salvo motor=false).
+ *  Só para O.S. paga: o documento diz "Recebemos de...". Não mexe no PDF da O.S. normal. */
+async function daOSRecibo(adm: Db, g: Geradores, o: Record<string, unknown>, numero: number, p: Record<string, unknown>, cfg: Record<string, unknown>, avisos: string[]): Promise<Arquivo> {
+  if (!g.pdfOSRecibo || !g.osQuitada) throw new ErroAnexo("A O.S. Recibo ainda não está nesta versão da função \"email\" (publique de novo).");
+  if (!g.osQuitada(o)) throw new ErroAnexo(`A O.S. ${numero} não está paga (fechada): a O.S. Recibo é só para O.S. quitada. Para a O.S. em aberto, use documento "os".`);
+  const [itens, recibos] = await Promise.all([
+    lista(adm.from("os_itens").select("*").eq("ordem_id", o.id).order("posicao")),
+    lista(adm.from("recibos").select("numero, data, criado_em, forma, valor, cancelado").eq("ordem_id", o.id)),
+  ]);
+  const [cli] = o.cliente_id ? await lista(adm.from("clientes").select("*").eq("id", o.cliente_id)) : [];
+  if (cfg.espelhoLegado !== false) avisos.push("Período de transição: a O.S. vem da cópia do OS Oficina. Confira os valores antes de enviar ao cliente.");
+  if (!recibos.filter((r) => !r.cancelado).length) avisos.push(`A O.S. ${numero} não tem recibo lançado: o valor pago sai como o total da O.S. e a forma, a gravada na O.S.`);
+  const motor = p.motor !== false;
+  const blob = await g.pdfOSRecibo({ ...o, itens }, cfg, { recibos, motor, cli: cli || null });
+  const placa = String((o.veiculo as Record<string, unknown> || {}).placa || "");
+  return { nome: `OS_Recibo_${String(numero).padStart(5, "0")}${placa ? "_" + placa : ""}.pdf`, tipo: "application/pdf", bytes: await bytesDoPdf(blob),
+    origem: `O.S. ${numero} (O.S. Recibo, ${motor ? "com" : "sem"} os cuidados do motor)` };
 }
 
 const EM_ABERTO = ["gerado", "enviado", "registrado"];

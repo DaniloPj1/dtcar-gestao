@@ -127,7 +127,7 @@ const orc = await montarAnexos(db, "AT", [{ fonte: "os", numero: 1887, documento
 confere("orçamento e checklist de entrada", orc.arquivos.map((a) => a.nome).join() === "Orcamento_01887_ABC1D23.pdf,Checklist_01887_ABC1D23.pdf" && orc.arquivos.every((a) => ehPdf(a.bytes))
   && /ORÇAMENTO/.test(await texto(orc.arquivos[0].bytes)), orc.arquivos.map((a) => a.nome));
 await deve("O.S. que não existe", () => montarAnexos(db, "AT", [{ fonte: "os", numero: 5 }], geradores, SITE), /O\.S\. 5 não encontrada/);
-await deve("documento da O.S. inválido", () => montarAnexos(db, "AT", [{ fonte: "os", numero: 1887, documento: "nota" }], geradores, SITE), /os, orcamento ou entrada/);
+await deve("documento da O.S. inválido", () => montarAnexos(db, "AT", [{ fonte: "os", numero: 1887, documento: "nota" }], geradores, SITE), /os, orcamento, entrada ou recibo/);
 
 const bo = await montarAnexos(db, "AT", [{ fonte: "boleto", os: 1887 }], geradores, SITE);
 const tb = await texto(bo.arquivos[0].bytes);

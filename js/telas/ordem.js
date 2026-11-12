@@ -13,6 +13,7 @@ import { BuscaFornecedor } from "./financeiro.js";
 import { NotasOSModal } from "./notasos.js";
 import { EnvioZapModal } from "./zapos.js";
 import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
+import { osQuitada } from "../osrecibo.js";
 
 /* ---------------- Mensagens de WhatsApp: textos em js/mensagens.js (os mesmos que o Claude manda pelo WhatsApp da oficina) ---------------- */
 export { MSG };
@@ -198,12 +199,23 @@ function EntregaModal({ o, cfg, saldo, comPrazo = 0, onFechar, onConfirmar }) {
 }
 
 /* ---------------- Impressão (opções) ---------------- */
-const FORMATOS_IMP = { a4: "Folha A4", cupom: "Cupom 80 mm", salao: "Ficha do salão" };
+const FORMATOS_IMP = { a4: "Folha A4", cupom: "Cupom 80 mm", salao: "Ficha do salão", osrecibo: "O.S. Recibo" };
 function ImprimirModal({ o, verValores, onFechar }) {
   const { cfg, ir } = useApp();
   const [vias, setVias] = useState(String(cfg.impressaoVias || 1)), [valores, setValores] = useState(verValores), [formato, setFormato] = useState("a4");
+  // O.S. Recibo (12/11/2026): só para O.S. paga (fechada); os cuidados do motor saem marcados e podem ser tirados
+  const [motor, setMotor] = useState(true);
+  const paga = osQuitada(o) && verValores;
+  const opcoes = [["Folha A4", "info"], ["Cupom 80 mm", "info"], ["Ficha do salão", "info"]].concat(paga ? [["O.S. Recibo", "info"]] : []);
+  if (formato === "osrecibo") return html`<${Modal} titulo=${"Imprimir " + numOS(o.numero)} onFechar=${onFechar}>
+    <div class="campo"><label>Formato</label><${Seg} rotulo="Formato" opcoes=${opcoes} valor=${FORMATOS_IMP[formato]} onEscolha=${v => setFormato(Object.keys(FORMATOS_IMP).find(k => FORMATOS_IMP[k] === v) || "a4")} /></div>
+    <p class="dica">A O.S. paga em forma de recibo, com o prazo e as condições da garantia.</p>
+    <label class="linha-check"><input type="checkbox" checked=${motor} onChange=${e => setMotor(e.target.checked)} /><span>Incluir os cuidados do motor (amaciamento e troca de óleo aos 1.000 km)</span></label>
+    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button>
+      <button type="button" class="btn btn-pri" onClick=${() => ir(`/imprimir/osrecibo/${o.id}${motor ? "" : "?motor=0"}`)}>Visualizar e imprimir</button></div>
+  </${Modal}>`;
   return html`<${Modal} titulo=${"Imprimir " + numOS(o.numero)} onFechar=${onFechar}>
-    <div class="campo"><label>Formato</label><${Seg} rotulo="Formato" opcoes=${[["Folha A4", "info"], ["Cupom 80 mm", "info"], ["Ficha do salão", "info"]]} valor=${FORMATOS_IMP[formato]} onEscolha=${v => setFormato(Object.keys(FORMATOS_IMP).find(k => FORMATOS_IMP[k] === v) || "a4")} /></div>
+    <div class="campo"><label>Formato</label><${Seg} rotulo="Formato" opcoes=${opcoes} valor=${FORMATOS_IMP[formato]} onEscolha=${v => setFormato(Object.keys(FORMATOS_IMP).find(k => FORMATOS_IMP[k] === v) || "a4")} /></div>
     ${formato === "a4" ? html`<div class="campo"><label>Vias</label><${Seg} rotulo="Vias" opcoes=${[["1 via", "info"], ["2 vias", "info"]]} valor=${vias + " via" + (vias === "2" ? "s" : "")} onEscolha=${v => setVias(v[0])} /></div>` : null}
     ${verValores && formato !== "salao" ? html`<label class="linha-check"><input type="checkbox" checked=${valores} onChange=${e => setValores(e.target.checked)} /><span>Mostrar valores na impressão (desmarque para a via do mecânico)</span></label>` : null}
     ${formato === "salao" ? html`<p class="dica">O que fazer no carro, em letras grandes, para o mecânico: sai da reclamação da O.S., sem valores, em preto e branco (pouca tinta).</p>` : null}

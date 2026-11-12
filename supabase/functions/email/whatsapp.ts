@@ -4,7 +4,7 @@
 //   { modelo?, texto?, numero_os?, cliente_id?, telefone?, anexo?, fora_do_horario?, pedido?, origem?, confirmar }
 //   - modelo: texto montado com js/mensagens.js (os mesmos textos da tela da O.S.): entrada, orcamento, adicionais, pronto,
 //     entrega, cobranca (parcelas em aberto da O.S.) e boas_vindas. Texto ditado pelo Danilo (texto) vale por cima do modelo.
-//   - anexo: UM PDF — {fonte:"os", documento: os|orcamento|entrada, fotos?}, {fonte:"boleto", os | nosso_numero}
+//   - anexo: UM PDF — {fonte:"os", documento: os|orcamento|entrada|recibo, fotos?, motor?}, {fonte:"boleto", os | nosso_numero}
 //     (pela O.S., todos os boletos em aberto num PDF só) ou {fonte:"nf", os | id} (o PDF da NF anexada na O.S.).
 //   - Sem confirmar: só a prévia (texto, arquivo, erros e avisos da fila). Nada é guardado.
 //   - confirmar=true e sem erros: guarda o PDF na pasta privada "whatsapp-envio" (AAAA/MM/<uuid>.pdf) e põe na fila

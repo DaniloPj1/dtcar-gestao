@@ -6,6 +6,7 @@ import { fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, tot
 import { STATUS, situacaoOS, pode, TERMO_GARANTIA, TERMO_ORCAMENTO, SITUACAO_CLIENTE, TABELAS_PRECO } from "../regras.js";
 import { diasDoMes, nomeMes, horasSemana, fmtHoras, VINCULOS, calcularMes, com_encargos } from "../folha.js";
 import { dadosDoMes } from "./funcionarios.js";
+import { dadosOSRecibo, condicoesGarantia, CUIDADOS_MOTOR, osQuitada } from "../osrecibo.js";
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const dataExtenso = iso => { const d = /^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? new Date(iso + "T12:00:00") : new Date(iso || Date.now()); return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`; };
@@ -194,6 +195,62 @@ function ViaRecibo({ r, via, nVias }) {
   </article>`;
 }
 
+/* ---------------- O.S. Recibo (pedido do Danilo em 12/11/2026) ----------------
+ * A O.S. paga em forma de recibo, com o prazo e as condições da garantia e, se marcado, os cuidados com o motor.
+ * Mesmo leiaute do js/pdfrecibo.js (PDF do WhatsApp e do e-mail): mudou aqui, mude lá. Textos em js/osrecibo.js. */
+function TabelaRecibo({ titulo, itens }) {
+  if (!itens.length) return null;
+  const comRef = itens.some(i => i.codigo);
+  return html`<table class="osr-tab"><thead><tr><th>${titulo}</th>${comRef ? html`<th class="ref">Ref.</th>` : null}<th class="num">Qtd.</th><th class="num">Unit.</th><th class="num">Total</th></tr></thead>
+    <tbody>${itens.map(i => html`<tr key=${i.id}><td>${i.descricao}${i.fornecida_cliente ? " (peça do cliente)" : ""}</td>${comRef ? html`<td class="ref">${i.codigo || ""}</td>` : null}
+      <td class="num">${i.horas ? qtdFmt(i.horas) + " h" : qtdFmt(i.qtd)}</td><td class="num">${i.fornecida_cliente ? "—" : reais(i.valor_unit)}</td><td class="num">${i.fornecida_cliente ? "—" : reais(totalItem(i))}</td></tr>`)}</tbody></table>`;
+}
+function ViaOSRecibo({ o, recibos, cli, motor }) {
+  const { cfg } = useApp();
+  const d = dadosOSRecibo(o, recibos, cfg), t = d.t;
+  const doc = o.cliente.doc || (cli && cli.doc) || "";
+  const veic = [o.veiculo.marca, o.veiculo.modelo, o.veiculo.ano, o.veiculo.cor].filter(Boolean).join(" – ");
+  const cond = condicoesGarantia({ dias: d.dias, numero: o.numero, telefone: cfg.telefone, motor, entrega: d.entrega, validade: d.validade });
+  const forma = d.formas ? (d.formas === d.formas.toUpperCase() ? d.formas : d.formas.charAt(0).toLowerCase() + d.formas.slice(1)) : "";
+  return html`<article class="folha osrec">
+    <header class="osr-topo">
+      <div class="osr-logo">${cfg.logo ? html`<${Foto} caminho=${cfg.logo} alt="Logotipo" />` : html`<img src="icons/logo-preto.png" alt="DTCar Centro Automotivo" />`}</div>
+      <div class="osr-emp"><b>${cfg.nome}</b>${cfg.cnpj ? html`<span>CNPJ ${cfg.cnpj}</span>` : null}${cfg.endereco ? html`<span>${cfg.endereco}</span>` : null}${cfg.telefone ? html`<span>Telefone: ${cfg.telefone}</span>` : null}</div>
+    </header>
+    <div class="osr-titulo"><h1>Recibo de Ordem de Serviço</h1><div class="osr-num">O.S. Nº ${n5(o.numero)}</div></div>
+    <div class="osr-sub">Pago em ${fmtData(d.pagoEm)}${o.criado_em ? " · O.S. aberta em " + fmtData(o.criado_em) : ""}</div>
+    <h2>Cliente e veículo</h2>
+    <table class="osr-dados"><tbody>
+      <tr><td class="r">Cliente</td><td>${o.cliente.nome}</td><td class="r">Telefone</td><td>${fmtTel(o.cliente.telefone) || ""}</td></tr>
+      <tr><td class="r">Veículo</td><td>${veic}</td><td class="r">Placa</td><td>${exPlaca(o.veiculo.placa)}</td></tr>
+      <tr><td class="r">KM na entrega</td><td>${o.km_saida ? fmtKm(o.km_saida) : ""}</td><td class="r">Data de entrega</td><td>${d.entrega ? fmtData(d.entrega) : ""}</td></tr>
+      <tr><td class="r">Técnico</td><td>${o.mecanico_nome || ""}</td><td class="r">CPF/CNPJ</td><td>${doc ? fmtDoc(doc) : ""}</td></tr>
+    </tbody></table>
+    <h2>Serviços e peças</h2>
+    <${TabelaRecibo} titulo="Produtos e peças" itens=${d.pecas} />
+    <${TabelaRecibo} titulo="Serviços" itens=${d.servicos} />
+    <${TabelaRecibo} titulo="Serviços de terceiros" itens=${d.terceiros} />
+    <div class="osr-total">${t.desconto ? html`<span>Desconto: − ${reais(t.desconto)}</span>` : null}<b>VALOR TOTAL DA O.S.: ${reais(t.total)}</b></div>
+    <h2>Pagamento</h2>
+    <p class="osr-recebemos">Recebemos de <b>${o.cliente.nome}</b>${doc ? html`, CPF/CNPJ <b>${fmtDoc(doc)}</b>` : null}, a importância de <b>${reais(d.valorPago)}</b> (${extenso(d.valorPago)}),
+      referente à Ordem de Serviço nº ${n5(o.numero)}${forma ? html`, pago em <b>${forma}</b>` : null}, dando plena quitação.</p>
+    ${d.pagos.length > 1 ? html`<p class="osr-pagos">${d.pagos.map((r, n) => html`<span key=${n}>${fmtData(r.data)} · ${r.forma || "—"} · ${reais(r.valor)}</span>`)}</p>` : null}
+    <h2>Prazo e condições da garantia</h2>
+    <ol class="osr-cond">${cond.map((c, n) => html`<li key=${n}>${c.r ? html`<b>${c.r}</b> ` : null}${c.t}</li>`)}</ol>
+    ${motor ? html`<h2>${CUIDADOS_MOTOR.titulo}</h2>
+      <div class="osr-cuidados"><p>${CUIDADOS_MOTOR.intro}</p>
+        <div class="osr-destaque">⚠ ${CUIDADOS_MOTOR.destaque} ${CUIDADOS_MOTOR.destaque2}</div>
+        <ul>${CUIDADOS_MOTOR.itens.map((c, n) => html`<li key=${n}><b>${c.r}</b>${c.t ? " " + c.t : ""}</li>`)}</ul></div>` : null}
+    <div class="osr-ass">
+      <div class="osr-local">${cfg.cidade || "Colatina/ES"}, ${fmtData(d.pagoEm)}</div>
+      <div class="osr-linhas"><div><b>${cfg.nome}</b>${cfg.cnpj ? "CNPJ " + cfg.cnpj : ""}</div>
+        <div><b>Cliente: ${o.cliente.nome}</b>Declaro ter recebido o veículo e ciência deste termo</div></div>
+    </div>
+    ${!osQuitada(o) ? html`<div class="osr-aviso so-tela">Atenção: esta O.S. ainda não está paga. A O.S. Recibo é para O.S. fechada (quitada).</div>` : null}
+    <footer class="osr-rodape">Gerado pelo sistema Gestão DTCar · O.S. ${n5(o.numero)} · ${exPlaca(o.veiculo.placa)}</footer>
+  </article>`;
+}
+
 /* ---------------- Fichas cadastrais ---------------- */
 function FichaCliente({ c }) {
   const { dados, perfil } = useApp();
@@ -299,6 +356,7 @@ export function Imprimir({ tipo, id, params }) {
   const formato = params.formato === "cupom" ? "cupom" : "a4";
   useEffect(() => {
     if (tipo === "os" || tipo === "salao") api.ordem(id).then(setDoc).catch(e => setErro(e.message));
+    else if (tipo === "osrecibo") Promise.all([api.ordem(id), api.recibos.listar({ ordemId: id })]).then(([o, r]) => setDoc({ ...o, recibosDaOS: r || [] })).catch(e => setErro(e.message));
     else if (tipo === "recibo") api.recibos.um(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }
@@ -310,8 +368,8 @@ export function Imprimir({ tipo, id, params }) {
     }
     else setErro("Documento desconhecido.");
   }, [tipo, id]);
-  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
-  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : "/veiculo/" + id);
+  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), osrecibo: "OS Recibo " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
+  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" || tipo === "osrecibo" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : "/veiculo/" + id);
   const cancelarRecibo = async () => {
     if (!await confirmar({ titulo: "Cancelar recibo " + n5(doc.numero), texto: "O recibo continua registrado, marcado como cancelado, e deixa de contar como pagamento recebido.", botao: "Cancelar recibo", perigo: true })) return;
     try { await api.recibos.salvar({ id: doc.id, cancelado: true, cancelado_motivo: "Cancelado por " + perfil.nome + " em " + new Date().toLocaleDateString("pt-BR") });
@@ -322,14 +380,15 @@ export function Imprimir({ tipo, id, params }) {
     if (!await confirmar({ titulo: "Cancelar venda " + n5(doc.numero), texto: "Os produtos voltam para o estoque e os recibos desta venda são cancelados.", botao: "Cancelar venda", perigo: true })) return;
     try { await api.vendas.cancelar(doc.id, "Cancelada por " + perfil.nome); setDoc(await api.vendas.uma(doc.id)); avisar("Venda cancelada."); recarregarProdutos(); } catch (e) { avisar(e.message, true); }
   };
-  const cli = doc && tipo === "os" ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
+  const cli = doc && (tipo === "os" || tipo === "osrecibo") ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
   const vei = doc && tipo === "os" ? dados.veiculos.find(v => v.id === doc.veiculo_id) : null;
-  const nVias = formato === "cupom" || tipo === "salao" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
+  const nVias = formato === "cupom" || tipo === "salao" || tipo === "osrecibo" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
   return html`<div class=${"imprimir" + (formato === "cupom" ? " imp-cupom" : "")}>
-    ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : (tipo === "salao" ? html`<style>@page { size: A4; margin: 12mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`)}
+    ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : (tipo === "salao" ? html`<style>@page { size: A4; margin: 12mm; }</style>` : tipo === "osrecibo" ? html`<style>@page { size: A4; margin: 9mm 11mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`)}
     <div class="imp-barra so-tela">
       <button type="button" class="btn" onClick=${voltar}>← Voltar</button>
       ${((tipo === "os" || tipo === "venda") && formato === "a4") || tipo === "recibo" ? html`<div class="seg" role="group" aria-label="Vias">${[1, 2].map(n => html`<button type="button" key=${n} aria-pressed=${vias === n ? "true" : "false"} onClick=${() => setVias(n)}>${n} via${n > 1 ? "s" : ""}</button>`)}</div>` : null}
+      ${tipo === "osrecibo" ? html`<div class="seg" role="group" aria-label="Cuidados do motor">${[["1", "Com cuidados do motor"], ["0", "Sem cuidados do motor"]].map(([v, t]) => html`<button type="button" key=${v} aria-pressed=${(params.motor !== "0") === (v === "1") ? "true" : "false"} onClick=${() => ir("/imprimir/osrecibo/" + id + (v === "0" ? "?motor=0" : ""))}>${t}</button>`)}</div>` : null}
       <span class="espaco"></span>
       ${tipo === "recibo" && doc && !doc.cancelado && pode(perfil, "entregar") ? html`<button type="button" class="btn btn-perigo" onClick=${cancelarRecibo}>Cancelar recibo</button>` : null}
       ${tipo === "venda" && doc && doc.status === "concluida" && pode(perfil, "entregar") ? html`<button type="button" class="btn btn-perigo" onClick=${cancelarVenda}>Cancelar venda</button>` : null}
@@ -339,6 +398,7 @@ export function Imprimir({ tipo, id, params }) {
     ${erro ? html`<div class="erros so-tela">${erro}</div>` : !doc ? html`<div class="carregando">Preparando documento…</div>`
       : tipo === "os" ? (formato === "cupom" ? html`<${CupomOS} o=${doc} valores=${valores} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaOS} key=${n} o=${doc} cli=${cli} vei=${vei} valores=${valores} via=${n + 1} nVias=${nVias} />`))
       : tipo === "salao" ? html`<${FichaSalao} o=${doc} />`
+      : tipo === "osrecibo" ? html`<${ViaOSRecibo} o=${doc} recibos=${doc.recibosDaOS} cli=${cli} motor=${params.motor !== "0"} />`
       : tipo === "venda" ? (formato === "cupom" ? html`<${CupomVenda} v=${doc} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaVenda} key=${n} v=${doc} via=${n + 1} nVias=${nVias} />`))
       : tipo === "recibo" ? html`<div class=${"recibos-folha v" + nVias}>${Array.from({ length: nVias }, (_, n) => html`<${ViaRecibo} key=${n} r=${doc} via=${n + 1} nVias=${nVias} />`)}</div>`
       : tipo === "ponto" ? html`<${FolhaPonto} f=${doc.f} ym=${params.mes} extras=${String(params.feriados || "").split(/[^0-9]+/).filter(Boolean).map(Number)} />`

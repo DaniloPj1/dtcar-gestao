@@ -334,6 +334,20 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   serviços lançados não recusados; nada → linhas em branco. Aviso "avise o consultor antes de trocar" só no orçamento. KM, mecânico e box
   preenchidos quando a O.S. tem. Tamanho da letra pela quantidade (`s-poucos`…`s-lotado`, este em 2 colunas). Só tela de impressão: não muda o
   `pdfOS`, a função "email" nem o banco. Teste: `python3 teste/teste_ficha_salao.py`.
+- **O.S. Recibo (pedido do Danilo em 12/11/2026):** a O.S. **paga** em forma de recibo, com o prazo e as condições da garantia e, se marcado,
+  os cuidados do motor (amaciamento e troca de óleo aos 1.000 km). **Não mexe no que já existia:** a O.S. normal (ViaOS e `pdfOS`, com "Não vale
+  como recibo"), o recibo de pagamento e o banco continuam iguais (sem SQL). Textos, contas e a regra "paga" num lugar só: `js/osrecibo.js`
+  (`dadosOSRecibo`, `condicoesGarantia`, `CUIDADOS_MOTOR`, `osQuitada` = etapa Fechada ou O.S. antiga entregue sem "a receber"; sem window/document).
+  Tela: O.S. › Imprimir O.S. › "O.S. Recibo" (só aparece na O.S. paga e para quem vê valores) com a caixa "Incluir os cuidados do motor"
+  (marcada) → `#/imprimir/osrecibo/<id>[?motor=0]` (`ViaOSRecibo` em `js/telas/imprimir.js`; a barra troca com/sem cuidados; O.S. não paga
+  mostra aviso só na tela; a rota recusa quem não tem `verValores`, porque a impressão abre antes de `restrito`). Itens: a mesma regra da ViaOS (com item aprovado, só os aprovados). Valor pago = soma dos recibos não cancelados
+  (O.S. antiga sem recibo: o total da O.S. e a forma gravada nela); "Pago em" = data do último recibo. PDF: `js/pdfrecibo.js` (`pdfOSRecibo`,
+  arquivo separado do `js/pdf.js` de propósito, com o próprio `usarLeitorImagem`) — **mesmo leiaute da tela: mudou um, mude o outro.**
+  Conector: anexo `{fonte:"os", documento:"recibo", motor?}` no `whatsapp_enviar` e no `email_enviar`/`email_responder` (`daOSRecibo` em
+  `email/anexos.ts`; O.S. não paga é recusada; `email/site.ts` importa `pdfrecibo.js` e `osrecibo.js` travados num commit e o
+  `usarLeitorImagem` liga os dois geradores). **Mudou `js/osrecibo.js` ou `js/pdfrecibo.js`? Troque o commit no `email/site.ts`, merge com
+  "Create a merge commit", publique a função "email"; a função "agente" só precisa de nova publicação quando mudar a descrição das ferramentas.**
+  Testes: `python3 teste/teste_os_recibo.py` (tela, janela, A4, celular) e `deno run -A teste/teste_os_recibo_pdf.ts` (PDF pelo conector).
 - **Agenda da oficina (v54, pedido do Danilo em 12/11/2026) — etapa 1 de 3:** tabela `agendamentos` (dia, horário opcional, cliente e
   veículo do cadastro OU só digitados — cópia em `cliente`/`veiculo`, sem chave estrangeira, como `orcamentos` —, serviço combinado, anotação
   interna). **Agenda livre** (decisão do Danilo: sem limite de carros por dia ou horário). Situações gravadas: `agendado`, `confirmado`, `chegou`,

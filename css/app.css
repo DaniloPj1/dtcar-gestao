@@ -1232,6 +1232,54 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .btn-aprovar{font-weight:700}
 /* barra de cima: "Novo orçamento" só onde cabe (em tela estreita fica o item Orçamentos do menu) */
 @media (max-width:1100px){.bt-novo-orc{display:none}}
+/* O.S. Recibo (pedido do Danilo em 12/11/2026): mesmo leiaute do js/pdfrecibo.js. Preto, branco e cinza (imprime bem em qualquer impressora). */
+.folha.osrec{color:#16191d;gap:0;padding:10mm 12mm;font-family:var(--f-body);font-size:12.2px;line-height:1.3}
+.osrec .osr-topo{display:flex;align-items:center;justify-content:space-between;gap:12px;border-bottom:2.5px solid #16191d;padding-bottom:6px}
+.osrec .osr-logo img{height:64px;width:auto;max-width:190px;display:block;object-fit:contain}
+.osrec .osr-emp{text-align:right;font-size:11.4px;line-height:1.35;display:flex;flex-direction:column}
+.osrec .osr-emp b{font-family:var(--f-display);font-size:15px;letter-spacing:.3px}
+.osrec .osr-titulo{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin:8px 0 2px}
+.osrec h1{font-family:var(--f-display);font-weight:700;font-size:25px;margin:0;letter-spacing:.5px;text-transform:uppercase;line-height:1.05}
+.osrec .osr-num{font-family:var(--f-display);font-weight:700;font-size:17px;border:2px solid #16191d;padding:2px 10px;white-space:nowrap}
+.osrec .osr-sub{font-size:11.6px}
+.osrec h2{font-family:var(--f-display);font-weight:700;font-size:14.5px;text-transform:uppercase;letter-spacing:.6px;margin:9px 0 4px;padding:1px 8px;background:#16191d;color:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.osrec .osr-dados{width:100%;border-collapse:collapse}
+.osrec .osr-dados td{border:1px solid #9aa0a6;padding:3px 6px;vertical-align:top}
+.osrec .osr-dados td.r{font-weight:600;width:17%;background:#eceef0;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.osrec .osr-tab{width:100%;border-collapse:collapse;margin:0 0 5px}
+.osrec .osr-tab th{font-family:var(--f-display);font-weight:700;text-transform:uppercase;letter-spacing:.4px;font-size:11.5px;text-align:left;border:1px solid #9aa0a6;background:#eceef0;padding:1px 6px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.osrec .osr-tab td{border:1px solid #c4c8cc;padding:0 6px;vertical-align:top;font-size:.94em;line-height:1.25}
+.osrec .osr-tab .num{text-align:right;white-space:nowrap;width:1%}
+.osrec .osr-tab .ref{white-space:nowrap;width:1%}
+.osrec .osr-total{display:flex;justify-content:flex-end;align-items:baseline;gap:16px;margin-top:3px;font-family:var(--f-display);font-size:17px}
+.osrec .osr-total span{font-size:13px}
+.osrec .osr-recebemos{margin:2px 0}
+.osrec .osr-pagos{margin:2px 0;display:flex;flex-wrap:wrap;gap:4px 16px;font-size:11.4px}
+.osrec ol.osr-cond{margin:2px 0;padding-left:20px}.osrec ol.osr-cond li{margin:2px 0}
+.osrec .osr-cuidados{border:2px solid #16191d;padding:5px 9px 6px;margin-top:2px}
+.osrec .osr-cuidados p{margin:0 0 3px}
+.osrec .osr-destaque{border:1.5px dashed #16191d;padding:4px 8px;margin:3px 0 4px;font-weight:700}
+.osrec .osr-cuidados ul{margin:2px 0;padding-left:18px}.osrec .osr-cuidados li{margin:1px 0}
+.osrec .osr-ass{margin-top:12px;break-inside:avoid}
+.osrec .osr-local{margin-bottom:28px}
+.osrec .osr-linhas{display:flex;gap:30px}
+.osrec .osr-linhas div{flex:1;border-top:1.2px solid #16191d;padding-top:3px;text-align:center;font-size:11.4px}
+.osrec .osr-linhas b{display:block}
+.osrec .osr-aviso{margin-top:10px;padding:8px 10px;border:2px solid #b42318;color:#b42318;font-weight:700}
+.osrec .osr-rodape{margin-top:8px;font-size:10px;color:#555;text-align:center;border-top:1px solid #c4c8cc;padding-top:3px}
+@media screen and (max-width:640px){
+  .folha.osrec{padding:14px;font-size:13px}
+  .osrec .osr-topo{flex-direction:column;align-items:flex-start}.osrec .osr-emp{text-align:left}
+  .osrec .osr-titulo{flex-direction:column;align-items:flex-start}.osrec h1{font-size:21px}
+  .osrec .osr-dados td{display:block;width:auto!important;border-top:0}.osrec .osr-dados tr{display:block;border-top:1px solid #9aa0a6}
+  .osrec .osr-tab{display:block;overflow-x:auto}
+  .osrec .osr-linhas{flex-direction:column;gap:34px}
+}
+@media print{
+  .folha.osrec{padding:0;font-size:11px}
+  .osrec .osr-tab tr,.osrec .osr-cuidados,.osrec ol.osr-cond li{break-inside:avoid}
+  .osrec h2{break-after:avoid}
+}
 
 /* ===================== agenda da oficina (v54, 12/11/2026) ===================== */
 .ag-barra{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin-bottom:12px}

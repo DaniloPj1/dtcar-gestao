@@ -167,7 +167,35 @@
         Object.assign(o, p, { total: Math.max(0, sub - (p.desconto || 0)), custo, validade: p.validade || null, atualizado_em: now(),
           enviado_em: p.situacao === "enviado" ? o.enviado_em || now() : o.enviado_em, respondido_em: p.situacao === "recusado" ? o.respondido_em || now() : null, motivo: p.situacao === "recusado" ? p.motivo : "" });
         return JSON.parse(JSON.stringify(o)); },
-      excluir: async id => { db.orcamentos = (db.orcamentos || []).filter(x => x.id !== id); } },
+      excluir: async id => { db.orcamentos = (db.orcamentos || []).filter(x => x.id !== id); },
+      // v53: mesma conferência e mesmo efeito da orcamento_aprovar (O.S. em execução, vínculo, baixa do estoque dos itens aprovados)
+      aprovar: async (id, { itensFora = [], por = "", forma = "", gravar = false } = {}) => { net(); if (window.__SEM_V53) throw new Error("Could not find the function public.orcamento_aprovar in the schema cache");
+        const o = db.orcamentos.find(x => x.id === id), ref = "ORC-" + String(o.numero).padStart(5, "0");
+        if (o.situacao === "aprovado") throw new Error("O orçamento " + ref + " já foi aprovado e virou a O.S. " + o.os_numero + ".");
+        const vao = o.itens.filter(i => !itensFora.includes(i.id) && i.aprovado !== false), ficam = o.itens.filter(i => itensFora.includes(i.id) || i.aprovado === false);
+        const sub = vao.reduce((s, i) => s + i.qtd * i.valor_unit - (i.desconto || 0), 0), erros = [], avisos = [];
+        if (!vao.length) erros.push("Nenhum item aprovado: o orçamento precisa de pelo menos um item para virar O.S.");
+        const tel = String(o.cliente.telefone || "").replace(/\D/g, "");
+        if (!o.cliente_id && (tel.length < 10 || tel.length > 11)) erros.push("Cliente sem cadastro: informe o telefone com DDD no orçamento (a O.S. precisa do cadastro do cliente).");
+        if (!o.veiculo_id && !/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(o.veiculo.placa || "")) erros.push("Informe a placa do veículo no orçamento (ABC1234 ou ABC1D23): a O.S. precisa do veículo.");
+        if ((o.desconto || 0) > sub + 0.001 && vao.length) erros.push("O desconto do orçamento ficou maior que os itens aprovados.");
+        const resumo = { orcamento: ref, itens_aprovados: vao.length, itens_nao_aprovados: ficam.length, nao_aprovados: ficam.map(i => i.descricao).join("; "), subtotal: sub, desconto: o.desconto || 0, total: Math.max(0, sub - (o.desconto || 0)), cliente_novo: !o.cliente_id, veiculo_novo: !o.veiculo_id, avisos };
+        if (erros.length) return { ...resumo, pode_aprovar: false, gravado: false, erros };
+        if (!gravar) return { ...resumo, pode_aprovar: true, gravado: false };
+        let cli = o.cliente_id && db.clientes.find(c => c.id === o.cliente_id); if (!cli) { cli = { id: uid(), nome: o.cliente.nome, telefone: tel, codigo: 900 + db.clientes.length }; db.clientes.push(cli); }
+        let vei = o.veiculo_id && db.veiculos.find(v => v.id === o.veiculo_id); if (!vei) { vei = { id: uid(), ...o.veiculo, cliente_id: cli.id }; db.veiculos.push(vei); }
+        window.__SEQ = Math.max(window.__SEQ || 0, ...db.ordens.map(x => Number(x.numero) || 0)) + 1;
+        const os = { id: uid(), numero: window.__SEQ, status: "execucao", cliente_id: cli.id, veiculo_id: vei.id, cliente: { nome: cli.nome, telefone: cli.telefone }, veiculo: { placa: vei.placa, marca: vei.marca || "", modelo: vei.modelo || "", ano: vei.ano || "" },
+          km_entrada: null, reclamacao: o.reclamacao, checkin: { feito: false, aguardando_veiculo: true, orcamento: ref }, total: resumo.total, desconto: o.desconto || 0, recebido: 0, tabela_preco: o.tabela_preco, condicoes_pagamento: o.condicoes_pagamento,
+          aprovacao: { em: now(), por: por || cli.nome, forma: forma || "Orçamento " + ref + " aprovado" }, orcamento_id: o.id, orcamento_numero: o.numero, criado_em: now(), atualizado_em: now(), diagnostico: "", obs_internas: "",
+          obs_execucao: [o.obs, ficam.length ? "Itens apontados pela oficina no orçamento " + ref + " e NÃO aprovados pelo cliente: " + resumo.nao_aprovados + "." : ""].filter(Boolean).join("\n") };
+        db.ordens.unshift(os);
+        vao.forEach((i, n) => { db.os_itens.push({ ...i, id: uid(), ordem_id: os.id, aprovado: true, executado: false, adicional: false, posicao: n + 1 });
+          const p = i.produto_id && db.produtos.find(x => x.id === i.produto_id); if (p && p.tipo === "produto" && p.controla_estoque && !i.fornecida_cliente) p.estoque_atual -= i.qtd; });
+        o.itens.forEach(i => { i.aprovado = vao.includes(i); });
+        Object.assign(o, { situacao: "aprovado", respondido_em: now(), ordem_id: os.id, os_numero: os.numero, cliente_id: cli.id, veiculo_id: vei.id, total: resumo.total });
+        (window.__EV = window.__EV || []).push("abertura: O.S. aberta a partir do orçamento " + ref);
+        return { ...resumo, pode_aprovar: true, gravado: true, ordem_id: os.id, os_numero: os.numero }; } },
     produtos: { ...tab("produtos"), trocarGrupo: async ({ ids, de, para }) => { let n = 0; for (const p of window.__DB.produtos) if ((ids && ids.includes(p.id)) || (!ids && de && de.includes(p.categoria))) { p.categoria = String(para || "").trim(); p.atualizado_em = new Date().toISOString(); n++; } return n; } },
     vinculos: { doProduto: async () => [], listar: async () => [] },
     notas: { listar: async () => [] },

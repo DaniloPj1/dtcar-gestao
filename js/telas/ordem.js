@@ -2,7 +2,7 @@
 import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Status, Campo, Texto, Area, Dinheiro, Seg, Abas, Modal, Foto, PadAssinatura, I, BuscaCliente } from "../ui.js";
-import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, precoPelaMargem, margemDoPreco, numOS, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
+import { soDig, norm, uuid, fmtTel, fmtDoc, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, arred, totais, totalItem, precoTabela, precoPelaMargem, margemDoPreco, numOS, numORC, numRecibo, somaDias, hojeISO, exPlaca, linkWhats, reduzirImagem, tempoDesde, parseValor, endCompleto } from "../util.js";
 import { STATUS, FLUXO, ETAPAS, ETAPAS_ABERTAS, etapaOS, ABERTOS, situacaoOS, pode, QUALIDADE, TABELAS_PRECO, SITUACAO_CLIENTE, secoesCheckin, achados } from "../regras.js";
 import { pdfEntrada, pdfOrcamento, pdfOS, entregarArquivo } from "../pdf.js";
 import { FormVeiculo, edVeiculo, SitCliente, FormCliente, edCliente } from "./cadastros.js";
@@ -635,7 +635,9 @@ export function Ordem({ id, params = {} }) {
       <div class="cli-linha"><div>${o.cliente_id && cliCad ? html`<button type="button" class="btn-link nome-cli" title="Abrir o cadastro do cliente" onClick=${() => setModal({ tipo: "cadcliente" })}>${o.cliente.nome}</button>` : html`<b>${o.cliente.nome}</b>`}<span>${fmtTel(o.cliente.telefone)}${o.cliente.doc ? " · " + fmtDoc(o.cliente.doc) : ""}</span></div>
         ${o.cliente.telefone ? html`<a class="btn btn-sm btn-whats" href=${linkWhats(o.cliente.telefone, "Olá, " + primeiroNome(o) + "! ")} target="_blank" rel="noopener">${I.whats} WhatsApp</a>` : null}</div>
       ${legado ? html`<div class="info">O.S. ${legado.numero} importada do OS Oficina 3.0${legado.situacao ? " · situação no sistema anterior: " + legado.situacao : ""}.</div>` : null}
-      ${!ck.feito && !legado && podeCk ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
+      ${o.orcamento_numero ? html`<div class="info os-orc">Veio do orçamento <button type="button" class="btn-link" onClick=${() => ir("/orcamento/" + o.orcamento_id)}>${numORC(o.orcamento_numero)}</button>, já aprovado${o.aprovacao && o.aprovacao.por ? " por " + o.aprovacao.por : ""}.</div>` : null}
+      ${ck.aguardando_veiculo && !o.km_entrada && !["entregue", "cancelado", "recusado"].includes(st) ? html`<div class="aviso ck-aviso os-chegada"><span><b>O veículo ainda não deu entrada.</b> Quando ele chegar, registre o KM.</span>${podeCk ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${() => setModal({ tipo: "chegada", km: "" })}>Registrar chegada</button>` : null}</div>` : null}
+      ${!ck.feito && !legado && podeCk && !(ck.aguardando_veiculo && !o.km_entrada) ? html`<div class="aviso ck-aviso"><span>Checklist de entrada não realizado.</span><button type="button" class="btn btn-sm" onClick=${() => ir("/os/" + o.id + "/checklist")}>Fazer agora</button></div>` : null}
       ${st === "entregue" && o.recebido !== undefined && !o.finalizada_em && saldo > 0 ? html`<div class="aviso">Veículo entregue em ${fmtDataHora(o.entregue_em)}. <b>Falta receber ${reais(saldo)}</b>${proxParc ? html` · próxima parcela ${reais(proxParc.valor)} em ${fmtData(proxParc.vencimento)} <span class=${"pill p-" + sitProx.cor}>${sitProx.t}</span>` : saldoSemPrazo > 0.009 && verValores ? " · sem prazo combinado" : ""}. A O.S. é finalizada quando o pagamento for registrado.</div>` : null}
       ${st === "entregue" && o.finalizada_em ? html`<div class="info">O.S. finalizada em ${fmtDataHora(o.finalizada_em)}: veículo entregue e pagamento recebido.</div>` : null}
       ${st === "cancelado" && o.motivo_cancelamento ? html`<div class="aviso">Cancelada. Motivo: ${o.motivo_cancelamento}</div>` : null}
@@ -670,6 +672,20 @@ export function Ordem({ id, params = {} }) {
     ${modal && modal.tipo === "cliente" ? html`<${Modal} titulo="Trocar cliente da O.S." onFechar=${() => setModal(null)}><${BuscaCliente} id="os-cli" valor="" onEscolha=${trocarCliente} />
       ${pode(perfil, "cadastrar") ? html`<div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => setModal({ tipo: "novocliente", ed: edCliente() })}>+ Cadastrar novo cliente</button></div>` : null}</${Modal}>` : null}
     ${modal && modal.tipo === "novocliente" ? html`<${FormCliente} naOS ed=${modal.ed} setEd=${ed => { if (ed === null) { setModal(null); return; } setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed) : ed })); }} onSalvo=${r => r && r.id && trocarCliente(r.id, r)} />` : null}
+    ${modal && modal.tipo === "chegada" ? html`<${Modal} titulo="Chegada do veículo" onFechar=${() => setModal(null)}>
+      <p class="sub">A O.S. veio de um orçamento aprovado antes de o carro chegar. Informe o KM do painel; depois, se quiser, faça o checklist de entrada.</p>
+      <${Campo} id="os-chegada-km" rotulo="KM de entrada" obrig><input id="os-chegada-km" class="inp" inputmode="numeric" value=${modal.km} onInput=${e => setModal(m => ({ ...m, km: e.target.value, erro: "" }))} /></${Campo}>
+      ${modal.erro ? html`<span class="dica erro">${modal.erro}</span>` : null}
+      <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${() => setModal(null)}>Cancelar</button>
+        <button type="button" class="btn btn-pri" disabled=${!!modal.salvando} onClick=${async () => { const k = Number(soDig(modal.km));
+          if (!(k > 0)) return setModal(m => ({ ...m, erro: "Informe o KM de entrada." }));
+          setModal(m => ({ ...m, salvando: true }));
+          try { const { aguardando_veiculo, ...resto } = o.checkin || {};
+            await api.atualizarOrdem(o.id, { km_entrada: k, checkin: { ...resto, chegou_em: new Date().toISOString() } });
+            await api.evento(o.id, "entrada", "Veículo chegou: " + fmtKm(k) + " na entrada.", perfil.nome);
+            setModal(null); avisar("Chegada registrada."); await carregar(); recarregar(["ordens"]); }
+          catch (e) { setModal(m => ({ ...m, salvando: false, erro: e.message })); } }}>Registrar chegada</button></div>
+    </${Modal}>` : null}
     ${modal && modal.tipo === "cadcliente" && cliCad ? html`<${FormCliente} naOS ed=${modal.ed || edCliente(cliCad)} setEd=${ed => { if (ed === null) { setModal(null); return; } setModal(m => ({ ...m, ed: typeof ed === "function" ? ed(m.ed || edCliente(cliCad)) : ed })); }}
       onSalvo=${async r => { if (r && aberta) { const cliente = { nome: r.nome, telefone: r.telefone || "", doc: r.doc || "", endereco: endCompleto(r) }; await api.atualizarOrdem(o.id, { cliente }); setO(x => ({ ...x, cliente })); recarregar(["ordens"]); } }} />` : null}
     ${modal && modal.tipo === "cancelar" ? html`<${CancelarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); }} />` : null}

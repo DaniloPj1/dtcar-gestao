@@ -11,6 +11,7 @@ import { pdfOS, entregarArquivo } from "../pdf.js";
 import { ItemModal, ItemLinha } from "./ordem.js";
 import { CampoDesconto } from "./acoesos.js";
 
+const FALTA_V53 = e => /orcamento_aprovar|schema cache|could not find|404/i.test((e && e.message) || "");
 const FALTA_V52 = e => /orcamentos|orcamento_salvar|does not exist|schema cache|could not find|404/i.test((e && e.message) || "");
 const AVISO_V52 = "Os orçamentos separados da O.S. precisam do arquivo supabase/v52.sql, que o administrador roda uma vez no Supabase.";
 const primeiroNome = n => String(n || "").trim().split(/\s+/)[0] || "";
@@ -61,10 +62,12 @@ const NOVO = cfg => ({ situacao: "elaboracao", cliente_id: "", veiculo_id: "", c
   tabela_preco: "vista", condicoes_pagamento: cfg.condicoesPadrao || "", desconto: 0, validade: somaDias(hojeISO(), Number(cfg.validadeDias) || 10), motivo: "" });
 
 export function Orcamento({ id }) {
-  const { dados, cfg, perfil, avisar, confirmar, ir } = useApp();
+  const { dados, cfg, perfil, avisar, confirmar, ir, recarregar } = useApp();
   const novo = id === "novo";
   const [o, setO] = useState(novo ? NOVO(cfg) : null), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false);
-  const [modal, setModal] = useState(null), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(false);
+  const [modal, setModal] = useState(null), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(false), [aprovar, setAprovar] = useState(false);
+  // aprovar: antes de abrir o quadro, grava o que estiver pendente (a aprovação lê o orçamento do banco)
+  const abrirAprovar = async () => { if (!itens.length) return setErro("Inclua pelo menos um item antes de aprovar."); const base = sujo ? await gravar() : o; if (base) setAprovar(true); };
   const gestor = pode(perfil, "orcar"), ver = pode(perfil, "verValores");
   const carregar = () => api.orcamentos.um(id).then(r => { if (!r) return setErro("Orçamento não encontrado."); setO(r); setItens(r.itens || []); setSujo(false); setSemCad(!r.cliente_id); })
     .catch(e => setErro(FALTA_V52(e) ? AVISO_V52 : e.message));
@@ -143,7 +146,7 @@ export function Orcamento({ id }) {
 
     <section class="card"><div class="secao-topo"><h3>Peças e serviços</h3>
         ${edita ? html`<label class="filtro orc-tabela"><span>Tabela de preço</span><select id="orc-tabela" class="inp" value=${o.tabela_preco} onChange=${e => set({ tabela_preco: e.target.value })}>${Object.entries(TABELAS_PRECO).map(([k, n]) => html`<option value=${k}>${n}</option>`)}</select></label>` : null}</div>
-      ${itens.length ? html`<div class="lista">${itens.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${ver} onClick=${edita ? () => setModal(i) : null} rotuloExcluir="Excluir do orçamento" onExcluir=${edita ? () => excluirItem(i) : null} />`)}</div>`
+      ${itens.length ? html`<div class="lista">${itens.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${ver} mostrarAprov=${false} onClick=${edita ? () => setModal(i) : null} rotuloExcluir="Excluir do orçamento" onExcluir=${edita ? () => excluirItem(i) : null} />`)}</div>`
         : html`<${Vazio}>Nenhum item ainda.</${Vazio}>`}
       ${edita ? html`<div class="acoes orc-incluir"><button type="button" class="btn" onClick=${() => incluir("peca")}>+ Produto / peça</button><button type="button" class="btn" onClick=${() => incluir("servico")}>+ Serviço</button><button type="button" class="btn" onClick=${() => incluir("terceiro")}>+ Serviço de terceiro</button></div>` : null}
       ${ver ? html`<div class="orc-totais">
@@ -168,9 +171,10 @@ export function Orcamento({ id }) {
         : html`${!novo ? html`<button type="button" class="btn btn-recusa" disabled=${salvando} onClick=${() => setRecusa("")}>Cliente recusou</button>` : null}
           ${o.situacao === "elaboracao" && !novo ? html`<button type="button" class="btn" disabled=${salvando} onClick=${() => gravar({ situacao: "enviado" }, "Marcado como enviado ao cliente.")}>Marcar como enviado</button>` : null}
           ${o.situacao === "enviado" ? html`<button type="button" class="btn" disabled=${salvando} onClick=${() => gravar({ situacao: "elaboracao" }, "Voltou para em elaboração.")}>Voltar para elaboração</button>` : null}
-          <button type="button" class="btn btn-pri" disabled=${salvando || (!sujo && !novo)} onClick=${() => gravar()}>${salvando ? "Salvando…" : "Salvar orçamento"}</button>`}
-    </div>
-    ${!novo && o.situacao !== "recusado" ? html`<p class="dica orc-etapa2">Quando o cliente aprovar: por enquanto abra a O.S. em “Nova O.S.” e lance os mesmos itens. O botão “Aprovar e virar O.S.” (com aprovação de parte dos itens) chega na próxima etapa.</p>` : null}` : null}
+          <button type="button" class=${"btn" + (novo || sujo ? " btn-pri" : "")} disabled=${salvando || (!sujo && !novo)} onClick=${() => gravar()}>${salvando ? "Salvando…" : "Salvar orçamento"}</button>
+          ${!novo ? html`<button type="button" class=${"btn btn-aprovar" + (sujo ? "" : " btn-pri")} disabled=${salvando} onClick=${abrirAprovar}>Cliente aprovou: virar O.S.</button>` : null}`}
+    </div>` : null}
+    ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${r => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "."); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
 
     ${modal ? html`<${ItemModal} item=${modal} tabela=${o.tabela_preco} orcamento onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal)} onFechar=${() => setModal(null)} />` : null}
     ${recusa !== null ? html`<${Modal} titulo="Cliente recusou o orçamento" onFechar=${() => setRecusa(null)}>
@@ -181,4 +185,43 @@ export function Orcamento({ id }) {
         <button type="button" class="btn btn-pri" disabled=${!recusa.trim() || salvando} onClick=${async () => { if (await gravar({ situacao: "recusado", motivo: recusa.trim() }, "Orçamento marcado como recusado.")) setRecusa(null); }}>Registrar recusa</button></div>
     </${Modal}>` : null}
   </div>`;
+}
+
+/* ---------------- aprovar: o que o cliente não tirar vira O.S.; o que tirar fica registrado como não aprovado ---------------- */
+const FORMAS_APROV = ["WhatsApp", "Telefone", "Na oficina"];
+function AprovarModal({ o, itens, ver, onFechar, onFeito }) {
+  const { ir } = useApp();
+  const [fora, setFora] = useState(() => itens.filter(i => i.aprovado === false).map(i => i.id)), [por, setPor] = useState((o.cliente || {}).nome || ""), [forma, setForma] = useState("WhatsApp");
+  const [previa, setPrevia] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
+  const jaRecusados = useMemo(() => new Set(itens.filter(i => i.aprovado === false).map(i => i.id)), [itens]);
+  const marca = (id, segue) => setFora(f => segue ? f.filter(x => x !== id) : [...new Set([...f, id])]);
+  // a conferência é do banco (mesma função da gravação, sem gravar): cliente, veículo, desconto e avisos
+  useEffect(() => { let vivo = true; setPrevia(null); setErro("");
+    api.orcamentos.aprovar(o.id, { itensFora: fora, por, forma, gravar: false }).then(r => { if (vivo) setPrevia(r); })
+      .catch(e => { if (vivo) setErro(FALTA_V53(e) ? "Aprovar e virar O.S. precisa do arquivo supabase/v53.sql, que o administrador roda uma vez no Supabase." : e.message); });
+    return () => { vivo = false; }; }, [fora.join(",")]);
+  const vao = itens.filter(i => !fora.includes(i.id)), t = totais(vao.map(i => ({ ...i, aprovado: null })), o.desconto);
+  const confirmar = async () => { setOcupado(true); setErro("");
+    try { const r = await api.orcamentos.aprovar(o.id, { itensFora: fora, por: por.trim(), forma, gravar: true });
+      if (!r.gravado) { setPrevia(r); setOcupado(false); return; } onFeito(r); }
+    catch (e) { setErro(e.message); setOcupado(false); } };
+  const erros = (previa && previa.erros) || [], avisos = (previa && previa.avisos) || [];
+  return html`<${Modal} titulo=${"Aprovar " + numORC(o.numero) + " e abrir a O.S."} largo onFechar=${onFechar}>
+    <p class="sub">Desmarque o que o cliente <b>não</b> aprovou. O que ficar marcado vai para a O.S., já aprovado. O que for desmarcado não vai: fica registrado no orçamento e numa observação da O.S. como apontado pela oficina e não aprovado pelo cliente.</p>
+    <div class="lista orc-aprov-lista">${itens.map(i => html`<label key=${i.id} class=${"linha orc-aprov-item" + (fora.includes(i.id) ? " fora" : "")}>
+      <input type="checkbox" class="prod-check" checked=${!fora.includes(i.id)} disabled=${jaRecusados.has(i.id)} onChange=${e => marca(i.id, e.target.checked)} />
+      <span class="meio"><strong>${i.descricao}</strong><span>${[{ peca: "Produto / peça", servico: "Serviço", terceiro: "Serviço de terceiro" }[i.tipo], fora.includes(i.id) ? "não aprovado pelo cliente" : "vai para a O.S."].join(" · ")}</span></span>
+      ${ver ? html`<span class="dir"><b>${i.fornecida_cliente ? "—" : reais(i.qtd * i.valor_unit - (Number(i.desconto) || 0))}</b></span>` : null}</label>`)}</div>
+    ${ver ? html`<div class="total-item"><span>${vao.length} item(ns) na O.S.${Number(o.desconto) ? " · desconto " + reais(o.desconto) : ""}</span><b id="orc-aprov-total">${reais(t.total)}</b></div>` : null}
+    <div class="grade">
+      <${Campo} id="orc-aprov-por" rotulo="Quem aprovou"><${Texto} id="orc-aprov-por" valor=${por} onMuda=${setPor} /></${Campo}>
+      <div class="campo"><label>Como aprovou</label><${Seg} rotulo="Como aprovou" opcoes=${FORMAS_APROV.map(x => [x, "info"])} valor=${forma} onEscolha=${setForma} /></div></div>
+    ${previa && (previa.cliente_novo || previa.veiculo_novo) && !erros.length ? html`<div class="info">${[previa.cliente_novo ? "O cliente será cadastrado" : "", previa.veiculo_novo ? "o veículo será cadastrado" : ""].filter(Boolean).join(" e ")} com os dados do orçamento.</div>` : null}
+    <div class="info">A O.S. nasce sem KM de entrada: quando o carro chegar, a tela da O.S. pede o KM e oferece o checklist. As peças aprovadas saem do estoque agora.</div>
+    ${avisos.map(a => html`<div class="aviso" key=${a}>${a}</div>`)}
+    ${erros.length ? html`<div class="erros">${erros.map(x => html`<div key=${x}>${x}</div>`)}</div>` : null}${erro ? html`<div class="erros">${erro}</div>` : null}
+    <div class="acoes">${erros.length ? html`<button type="button" class="btn" onClick=${onFechar}>Corrigir no orçamento</button>` : null}<span class="espaco"></span>
+      <button type="button" class="btn" onClick=${onFechar}>Cancelar</button>
+      <button type="button" class="btn btn-pri" disabled=${ocupado || !previa || !!erros.length || !vao.length} onClick=${confirmar}>${ocupado ? "Abrindo a O.S.…" : "Aprovar e abrir a O.S."}</button></div>
+  </${Modal}>`;
 }

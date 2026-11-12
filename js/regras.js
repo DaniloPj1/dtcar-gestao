@@ -118,20 +118,6 @@ export const SITUACOES_ORC = {
 export const situacaoORC = (o, hoje) => { if (!o) return ""; const h = hoje || new Date().toLocaleDateString("sv-SE");
   return (o.situacao === "elaboracao" || o.situacao === "enviado") && o.validade && o.validade < h ? "vencido" : o.situacao; };
 
-/* ---------------- agenda da oficina (v54, pedido do Danilo em 12/11/2026) ----------------
- * Gravadas no banco: agendado, confirmado, chegou (virou O.S.), faltou, cancelado (com motivo). "Remarcado" não é situação:
- * trocar o dia ou o horário conta uma remarcação (o gatilho do v54 calcula e volta "confirmado" para "agendado").
- * Agenda livre: sem limite de carros por dia ou horário (decisão do Danilo). O nome da situação sempre aparece escrito. */
-export const SITUACOES_AGENDA = {
-  agendado: { t: "Agendado", cor: "info" },
-  confirmado: { t: "Confirmado", cor: "ok" },
-  chegou: { t: "Chegou", cor: "brand" },
-  faltou: { t: "Faltou", cor: "warn" },
-  cancelado: { t: "Cancelado", cor: "bad" },
-};
-/** ainda vai acontecer (conta no dia e aparece nas próximas) */
-export const AGENDA_ATIVA = ["agendado", "confirmado"];
-
 export const PAPEIS = { admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico", pendente: "Aguardando liberação" };
 export const pode = (perfil, acao) => {
   const p = perfil && perfil.ativo !== false ? perfil.papel : "";

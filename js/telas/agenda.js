@@ -9,8 +9,23 @@ import { api } from "../api.js";
 import { fila } from "../fila.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, BuscaCliente } from "../ui.js";
 import { norm, fmtData, fmtTel, fmtDataHora, hojeISO, somaDias, exPlaca, normPlaca, placaValida, lsGet, lsSet, numOS, numORC } from "../util.js";
-import { pode, SITUACOES_AGENDA, AGENDA_ATIVA } from "../regras.js";
+import { pode } from "../regras.js";
 import { prepararNovaOSAgenda, LS_VINCULOS } from "./entrada.js";
+
+/* ---------------- agenda da oficina (v54, pedido do Danilo em 12/11/2026) ----------------
+ * Gravadas no banco: agendado, confirmado, chegou (virou O.S.), faltou, cancelado (com motivo). "Remarcado" não é situação:
+ * trocar o dia ou o horário conta uma remarcação (o gatilho do v54 calcula e volta "confirmado" para "agendado").
+ * Agenda livre: sem limite de carros por dia ou horário (decisão do Danilo). O nome da situação sempre aparece escrito.
+ * Fica aqui (e não em js/regras.js) porque regras.js é usado pela função "email" travado num commit: mexer nele obriga a republicar. */
+export const SITUACOES_AGENDA = {
+  agendado: { t: "Agendado", cor: "info" },
+  confirmado: { t: "Confirmado", cor: "ok" },
+  chegou: { t: "Chegou", cor: "brand" },
+  faltou: { t: "Faltou", cor: "warn" },
+  cancelado: { t: "Cancelado", cor: "bad" },
+};
+/** ainda vai acontecer (conta no dia e aparece nas próximas) */
+export const AGENDA_ATIVA = ["agendado", "confirmado"];
 
 const FALTA_V54 = e => /agendamentos|does not exist|schema cache|could not find|404/i.test((e && e.message) || "");
 export const AVISO_V54 = "A agenda precisa do arquivo supabase/v54.sql, que o administrador roda uma vez no Supabase.";

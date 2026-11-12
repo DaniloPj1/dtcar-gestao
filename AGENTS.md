@@ -337,7 +337,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - **Agenda da oficina (v54, pedido do Danilo em 12/11/2026) — etapa 1 de 3:** tabela `agendamentos` (dia, horário opcional, cliente e
   veículo do cadastro OU só digitados — cópia em `cliente`/`veiculo`, sem chave estrangeira, como `orcamentos` —, serviço combinado, anotação
   interna). **Agenda livre** (decisão do Danilo: sem limite de carros por dia ou horário). Situações gravadas: `agendado`, `confirmado`, `chegou`,
-  `faltou`, `cancelado` (motivo obrigatório; `SITUACOES_AGENDA` em `js/regras.js`, sempre escritas). "Remarcado" não é situação: o gatilho
+  `faltou`, `cancelado` (motivo obrigatório; `SITUACOES_AGENDA` em `js/telas/agenda.js` — fora do `regras.js` para não obrigar a
+  republicar a função "email" —, sempre escritas). "Remarcado" não é situação: o gatilho
   `agendamentos_regras` conta a remarcação quando muda dia/hora (`remarcacoes`, `data_anterior`, `hora_anterior`), volta "confirmado" para
   "agendado" e tira `confirmacao`/`lembrete` de `mensagens`; quem criou não muda. Grava direto na tabela (`api.agenda`): administrador/consultor
   gravam, a equipe toda lê, só o administrador apaga. Tela `js/telas/agenda.js` (`#/agenda`, menu Operação e "Mais" no celular): semana de

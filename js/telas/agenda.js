@@ -6,6 +6,7 @@
 // Sem internet: só consulta (banco do PC). Gravar precisa de internet.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
+import { fila } from "../fila.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, BuscaCliente } from "../ui.js";
 import { norm, fmtData, fmtTel, fmtDataHora, hojeISO, somaDias, exPlaca, normPlaca, placaValida, lsGet, lsSet, numOS, numORC } from "../util.js";
 import { pode, SITUACOES_AGENDA, AGENDA_ATIVA } from "../regras.js";
@@ -37,6 +38,13 @@ async function ligarAgora(ordens) {
   for (const v of l) {
     const o = (ordens || []).find(x => x.id === v.ordemId);
     if (!o || typeof o.numero !== "number") continue;
+    if (v.orcamentoId) {
+      // a O.S. do orçamento já tinha número: só vale depois que a chegada (KM) foi enviada. Na fila (ou em conflito): espera.
+      // Fora da fila e sem KM (alteração descartada) ou O.S. cancelada: a chegada não foi gravada — esquece, sem marcar a agenda.
+      let naFila = false; try { naFila = (await fila.listar()).some(op => op.ordem_id === o.id || op.id === o.id); } catch (e) { naFila = true; }
+      if (naFila) continue;
+      if (!o.km_entrada || o.status === "cancelado") { feitas.push(chaveVinculo(v)); continue; }
+    }
     try {
       // chegada registrada sem internet na O.S. de um orçamento: todos os agendamentos desse orçamento; senão, o agendamento da Nova O.S.
       if (v.orcamentoId) await api.agenda.chegouPeloOrcamento(v.orcamentoId, o);

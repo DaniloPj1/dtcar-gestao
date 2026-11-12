@@ -165,6 +165,16 @@ try:
       const p = ag.ligarPendentes(window.__DB.ordens); await new Promise(r => setTimeout(r, 100)); en.guardarChegadaAgenda('orcZ', 'o3'); await p; })()""")
     ap.wait_for_timeout(300)
     chk("pendência guardada no meio da ligação continua guardada", ap.evaluate("JSON.parse(localStorage.getItem('dtcar-agenda-vinculos'))") == [{"orcamentoId": "orcZ", "ordemId": "o3"}], ap.evaluate("localStorage.getItem('dtcar-agenda-vinculos')"))
+    # 7f. chegada guardada que ainda está na fila (ou em conflito) não marca a agenda; sem KM no online (descartada) é esquecida
+    r = ap.evaluate("""(async () => { const ag = await import('./js/telas/agenda.js'), fi = await import('./js/fila.js');
+      const b = window.__DB.agendamentos.find(x => x.id === 'agB'); b.situacao = 'agendado';
+      localStorage.setItem('dtcar-agenda-vinculos', JSON.stringify([{ orcamentoId: 'orcA', ordemId: 'o4' }]));
+      await fi.fila.adicionar({ id: 'alt1', tipo: 'alterar_os', ordem_id: 'o4', criado_em: new Date().toISOString(), conflito: true });
+      await ag.ligarPendentes(window.__DB.ordens); const naFila = [b.situacao, localStorage.getItem('dtcar-agenda-vinculos')];
+      await fi.fila.remover('alt1'); const o4 = { ...window.__DB.ordens.find(o => o.id === 'o4'), km_entrada: null };
+      await ag.ligarPendentes([o4]); return [naFila, b.situacao, localStorage.getItem('dtcar-agenda-vinculos')]; })()""")
+    chk("chegada ainda na fila: agenda espera", r[0][0] == "agendado" and "orcA" in r[0][1], r)
+    chk("chegada descartada (sem KM no online): agenda não marca e esquece", r[1] == "agendado" and r[2] == "[]", r)
     # 8. sem o v54: avisa e esconde o botão
     pg.evaluate("window.__SEM_V54 = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/agenda"); pg.wait_for_timeout(900)
     chk("sem o v54: aviso e sem '+ Agendar'", "supabase/v54.sql" in pg.inner_text("main") and pg.locator("button:has-text('+ Agendar')").count() == 0)

@@ -61,6 +61,15 @@ try:
     cel.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
     cel.goto(U + "#/ordens"); cel.wait_for_timeout(2000)
     chk("celular: continua na lista mesmo com Cards escolhido no aparelho", cel.query_selector(".linha-os-acoes") is not None and not cel.query_selector(".os-card") and not cel.query_selector(".troca-visao"))
+    # faixa do período de transição (12/11/2026): só com o espelho ligado de verdade; desligado ou ainda sem os Ajustes, não aparece
+    for nome, cfgjs in [("espelho desligado", "{ espelhoLegado: false }"), ("Ajustes sem a informação", "{}")]:
+      sf = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+      sf.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+      sf.add_init_script("window.__DB.config = " + cfgjs)
+      sf.goto(U + "#/painel"); sf.wait_for_timeout(300)
+      cedo = sf.locator(".faixa-transicao").count()
+      sf.wait_for_timeout(1800)
+      chk("sem faixa de transição (" + nome + "), nem piscando na abertura", cedo == 0 and sf.locator(".faixa-transicao").count() == 0 and "Período de transição" not in sf.inner_text("body"))
     b.close()
 finally:
   srv.terminate()

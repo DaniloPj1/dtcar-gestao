@@ -179,7 +179,7 @@ export function SemanaJanela() {
   useEffect(() => { let vivo = true;
     api.agenda.listar({ de: seg, ate: fim }).then(l => { if (vivo) { setLista(l); setAviso(""); } })
       .catch(e => { if (!vivo) return; setLista([]); setAviso(FALTA_V54(e) ? AVISO_V54 : "A agenda precisa de internet para aparecer aqui."); });
-    return () => { vivo = false; }; }, [versao]);
+    return () => { vivo = false; }; }, [versao, seg]); // seg: sistema aberto de domingo para segunda consulta a semana nova
   useEffect(() => { const f = () => setVersao(x => x + 1); window.addEventListener("dtcar-agenda", f); window.addEventListener("dtcar-conectado", f);
     return () => { window.removeEventListener("dtcar-agenda", f); window.removeEventListener("dtcar-conectado", f); }; }, []);
   if (!lista) return html`<div class="esqueleto"></div>`;

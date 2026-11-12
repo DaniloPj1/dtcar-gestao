@@ -36,7 +36,12 @@ async function ligarAgora(ordens) {
   for (const v of l) {
     const o = (ordens || []).find(x => x.id === v.ordemId);
     if (!o || typeof o.numero !== "number") { resta.push(v); continue; }
-    try { await api.agenda.salvar({ id: v.agendaId, situacao: "chegou", ordem_id: o.id, os_numero: o.numero }); mudou = true; } catch (e) { resta.push(v); }
+    try {
+      // chegada registrada sem internet na O.S. de um orçamento: todos os agendamentos desse orçamento; senão, o agendamento da Nova O.S.
+      if (v.orcamentoId) await api.agenda.chegouPeloOrcamento(v.orcamentoId, o);
+      else await api.agenda.salvar({ id: v.agendaId, situacao: "chegou", ordem_id: o.id, os_numero: o.numero });
+      mudou = true;
+    } catch (e) { resta.push(v); }
   }
   lsSet(LS_VINCULOS, resta);
   return mudou;

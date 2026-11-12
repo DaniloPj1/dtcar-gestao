@@ -28,6 +28,11 @@ export function prepararNovaOSAgenda(ag, dados) {
     modoCliente: clienteId ? "busca" : "novo", cNovo: { ...vazioNova().cNovo, nome: clienteId ? "" : c.nome || "", telefone: clienteId ? "" : c.telefone || "" },
     reclamacao: ag.servico || "" });
 }
+/** chegada registrada sem internet na O.S. de um orçamento (v53): guarda para marcar "Chegou" nos agendamentos dele quando voltar a internet */
+export function guardarChegadaAgenda(orcamentoId, ordemId) {
+  if (!orcamentoId) return;
+  lsSet(LS_VINCULOS, (lsGet(LS_VINCULOS) || []).filter(x => x.orcamentoId !== orcamentoId).concat([{ orcamentoId, ordemId }]));
+}
 /** liga a O.S. ao agendamento; sem internet (ou se falhar), guarda para ligar quando a O.S. tiver o número definitivo */
 async function ligarAgenda(agendaId, ordem, online) {
   if (!agendaId) return;

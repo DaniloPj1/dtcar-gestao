@@ -151,6 +151,13 @@ try:
     ap.fill("#os-chegada-km", "1500"); ap.click(".modal .btn-pri:has-text('Registrar chegada')"); ap.wait_for_timeout(1200)
     b2 = ap.evaluate("window.__DB.agendamentos.find(x => x.id === 'agB')")
     chk("chegada registrada na O.S. do orçamento: agendamento fica 'Chegou'", b2["situacao"] == "chegou" and b2["os_numero"] == 1896, b2)
+    # 7d. chegada na O.S. do orçamento sem conseguir falar com a agenda: fica guardada e é feita quando as O.S. recarregam
+    ap.evaluate("window.__DB.agendamentos.find(x => x.id === 'agB').situacao = 'agendado'; window.__ag_off = window.__API_MOCK.agenda.chegouPeloOrcamento; window.__API_MOCK.agenda.chegouPeloOrcamento = async () => { throw new Error('Failed to fetch'); }; 0")
+    ap.evaluate("(async () => { const m = await import('./js/telas/entrada.js'); m.guardarChegadaAgenda('orcA', 'o4'); })()"); ap.wait_for_timeout(200)
+    chk("chegada sem internet: guardada no aparelho", ap.evaluate("JSON.parse(localStorage.getItem('dtcar-agenda-vinculos'))") == [{"orcamentoId": "orcA", "ordemId": "o4"}])
+    ap.evaluate("window.__API_MOCK.agenda.chegouPeloOrcamento = window.__ag_off; (async () => { const m = await import('./js/telas/agenda.js'); await m.ligarPendentes(window.__DB.ordens); })()"); ap.wait_for_timeout(500)
+    b2 = ap.evaluate("window.__DB.agendamentos.find(x => x.id === 'agB')")
+    chk("internet de volta: agendamento do orçamento fica 'Chegou'", b2["situacao"] == "chegou" and ap.evaluate("localStorage.getItem('dtcar-agenda-vinculos')") == "[]", b2)
     # 8. sem o v54: avisa e esconde o botão
     pg.evaluate("window.__SEM_V54 = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/agenda"); pg.wait_for_timeout(900)
     chk("sem o v54: aviso e sem '+ Agendar'", "supabase/v54.sql" in pg.inner_text("main") and pg.locator("button:has-text('+ Agendar')").count() == 0)

@@ -346,7 +346,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `chegou` + `ordem_id`/`os_numero` (O.S. aberta sem internet: guarda em `dtcar-agenda-vinculos` e liga quando ela tiver o número);
   **"Fazer orçamento"** abre o orçamento novo preenchido (`dtcar-orc-da-agenda`) e liga `orcamento_id`/`orc_numero` ao salvar. Orçamento ligado
   já aprovado (v53): "Chegou" liga o agendamento à O.S. que o orçamento criou e abre ela (lá se registra a chegada, sem O.S. vazia); e
-  "Registrar chegada" na O.S. do orçamento marca "Chegou" nos agendamentos desse orçamento (`api.agenda.chegouPeloOrcamento`). A agenda não
+  "Registrar chegada" na O.S. do orçamento marca "Chegou" nos agendamentos desse orçamento (`api.agenda.chegouPeloOrcamento`; sem internet, guarda em `dtcar-agenda-vinculos`
+  pela `guardarChegadaAgenda` e faz quando as O.S. recarregam, como a O.S. aberta sem internet). A agenda não
   mexe em O.S., estoque nem financeiro. Sem internet: só consulta (banco do PC). Backup, restauração (`restaurar_tabela`), banco do PC e
   `exclusoes` incluídos; **preservada pelo espelho**. O `agente_leitura` lê sem a cópia do cliente; o conector já lê pela `consultar`.
   **Ainda não feito:** quadro da semana no Início (etapa 2); botões de WhatsApp que abrem a mensagem pronta (confirmação, lembrete da véspera,

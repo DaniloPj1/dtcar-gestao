@@ -35,7 +35,7 @@
     config: async () => { net(); return db.config; }, salvarConfig: async d => { db.config = d; },
     clientes: tab("clientes"), veiculos: tab("veiculos"), produtos: tab("produtos"), fornecedores: tab("fornecedores"),
     ordens: async () => { net(); return db.ordens; }, alterados: async (k, desde) => (db[k] || []).filter(r => r.atualizado_em && (!desde || r.atualizado_em > desde)), urlArquivo: async () => "",
-    itensDasOrdens: async ids => db.os_itens.filter(i => ids.includes(i.ordem_id)),
+    itensDasOrdens: async ids => { net(); return db.os_itens.filter(i => ids.includes(i.ordem_id)); },
     sincronizarAbertura: async op => { net(); window.__SEQ = (window.__SEQ || 1898) + 1; const o = { ...op.ordem, numero: window.__SEQ }; db.ordens.unshift(o); if (op.cliente) db.clientes.push(op.cliente); if (op.veiculo) db.veiculos.push(op.veiculo); window.__SYNC = (window.__SYNC || []).concat([op.provisorio + "->" + o.numero]); return { id: o.id, numero: o.numero, nova: true }; },
     evento: async (oid, tipo, texto) => { (window.__EV = window.__EV || []).push(tipo + ": " + texto); },
     temV11: () => true, temV12: () => true,

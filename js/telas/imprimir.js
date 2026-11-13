@@ -1,6 +1,7 @@
 // Impressão: O.S. (A4 ou cupom 80 mm), recibo de pagamento, fichas cadastrais (cliente e veículo) e resumo das O.S. em aberto
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
+import { erroDeRede } from "../local.js";
 import { useApp, Foto } from "../ui.js";
 import { fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias, exPlaca, extenso, endCompleto } from "../util.js";
 import { STATUS, situacaoOS, pode, TERMO_GARANTIA, TERMO_ORCAMENTO, SITUACAO_CLIENTE, TABELAS_PRECO } from "../regras.js";
@@ -309,6 +310,25 @@ function FichaVeiculo({ v }) {
 /* ---------------- Resumo de O.S. em aberto (pedido do Danilo em 13/11/2026) ----------------
  * As O.S. em aberto de um cliente ou de um veículo num documento só, no padrão da O.S. (mesmo cabeçalho, quadros e tabelas).
  * Contas e textos em js/resumoos.js. O PDF do conector (js/pdfresumo.js) segue este leiaute: mudou um, mude o outro. */
+/** Sem internet no navegador ou no celular (no programa Windows o banco do PC responde antes): os itens vêm da cópia de cada O.S.
+ * guardada no aparelho, a mesma que abre a O.S. sem internet. O.S. sem cópia NÃO vira lista vazia (o total sairia errado): avisa
+ * quais faltam. Vale o registro mais novo: a cópia (cabeçalho e itens juntos) ou, se a lista for mais nova que a cópia, a linha da
+ * lista com os itens da cópia — e a tela avisa que os itens dessa O.S. podem estar desatualizados. */
+async function copiasParaResumo(ordens) {
+  const faltam = [], antigas = [], usadas = [], itens = [];
+  for (const o of ordens) {
+    const c = api.ordemNoAparelho ? await api.ordemNoAparelho(o.id) : null;
+    if (!c || !Array.isArray(c.itens)) { faltam.push(n5(o.numero)); continue; }
+    const { itens: daCopia, fotos, eventos, _local, ...cab } = c;
+    const antiga = !o._pendente && Date.parse(c.atualizado_em || "") < Date.parse(o.atualizado_em || "");
+    if (antiga) antigas.push(n5(o.numero));
+    usadas.push(antiga ? o : { ...o, ...cab }); itens.push(...daCopia);
+  }
+  if (faltam.length) throw new Error("Sem conexão com a internet: " + (faltam.length > 1 ? "as O.S. " + faltam.join(", ") + " não estão guardadas" : "a O.S. " + faltam[0] + " não está guardada")
+    + " neste aparelho. O resumo abre quando a conexão voltar.");
+  const abertas = usadas.filter(etapaNoResumo);
+  return { ordens: abertas, itens, semInternet: true, copiasAntigas: antigas.filter(n => abertas.some(o => n5(o.numero) === n)) };
+}
 function ResumoOS({ doc, params }) {
   const pedidas = String(params.os || "").split(/[^0-9]+/).filter(Boolean).map(Number);
   const [marcadas, setMarcadas] = useState(() => new Set(doc.ordens.filter(o => pedidas.length ? pedidas.includes(Number(o.numero)) : marcadaNoResumo(o)).map(o => o.id)));
@@ -325,6 +345,8 @@ function ResumoOS({ doc, params }) {
       ${doc.ordens.length ? html`<div class="resos-opcoes">${doc.ordens.map(o => html`<label class="linha-check" key=${o.id}><input type="checkbox" checked=${marcadas.has(o.id)} onChange=${() => trocar(o.id)} />
         <span><b>O.S. ${n5(o.numero)}</b> · ${[exPlaca((o.veiculo || {}).placa), (o.cliente || {}).nome].filter(Boolean).join(" · ")} · ${(situacaoOS(o) || {}).t} · ${reais(o.total)}</span></label>`)}</div>
         <p class="dica">Orçamento ainda não aprovado entra só se você marcar. O que estiver marcado sai na folha abaixo.</p>` : html`<p class="dica">Nenhuma O.S. em aberto ${dono}.</p>`}
+      ${doc.semInternet ? html`<div class="aviso">Sem internet: os itens e os valores são da cópia das O.S. guardada neste aparelho.${(doc.copiasAntigas || []).length
+        ? (doc.copiasAntigas.length > 1 ? " As cópias das O.S. " + doc.copiasAntigas.join(", ") + " são mais antigas" : " A cópia da O.S. " + doc.copiasAntigas[0] + " é mais antiga") + " que a lista: os itens podem estar desatualizados." : ""} Confira de novo quando a conexão voltar.</div>` : null}
       ${d.clientesDiferentes.length ? html`<div class="aviso">As O.S. marcadas estão em nomes diferentes (${d.clientesDiferentes.join("; ")}). O resumo sai no nome de ${d.cli ? d.cli.nome : "—"}.</div>` : null}
     </section>
     ${!escolhidas.length ? (doc.ordens.length ? html`<div class="erros so-tela">Marque pelo menos uma O.S. para montar o resumo.</div>` : null) : html`<article class="folha os-a4 resos">
@@ -423,7 +445,8 @@ export function Imprimir({ tipo, id, params }) {
       // pelo veículo, o cabeçalho leva o proprietário do cadastro
       const base = { de, ordens, cliente: de === "veiculo" ? dados.clientes.find(c => c.id === ficha.cliente_id) || null : ficha, veiculo: de === "veiculo" ? ficha : null };
       if (!ordens.length) setDoc({ ...base, itens: [] });
-      else api.itensDasOrdens(ordens.map(o => o.id)).then(itens => setDoc({ ...base, itens })).catch(e => setErro(e.message));
+      else api.itensDasOrdens(ordens.map(o => o.id)).then(itens => setDoc({ ...base, itens }))
+        .catch(e => erroDeRede(e) ? copiasParaResumo(ordens).then(c => setDoc({ ...base, ...c })) : Promise.reject(e)).catch(e => setErro(e.message));
     }
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }

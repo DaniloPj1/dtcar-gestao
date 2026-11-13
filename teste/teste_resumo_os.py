@@ -3,7 +3,8 @@
 # Confere: quais O.S. entram (em execução e aguardando pagamento marcadas; orçamento só marcando; fechada nunca), o cabeçalho
 # (proprietário do cadastro pelo veículo; lista de placas pelo cliente), itens e totais de cada O.S., desconto, recebido e falta
 # receber (colunas só quando usadas), total geral, "Só o resumo", o caso do Jeep em UMA folha A4, o aviso de nomes diferentes só
-# na tela, os botões nas fichas, o mecânico sem acesso aos valores e o celular sem rolagem lateral.
+# na tela, os botões nas fichas, o mecânico sem acesso aos valores, o celular sem rolagem lateral e o resumo sem internet
+# (cópias das O.S. guardadas no aparelho; O.S. sem cópia avisa, cópia antiga avisa, cópia mais nova vale inteira).
 # Uso: python3 teste/teste_resumo_os.py [pasta das fotos]   (precisa de: pip install playwright && playwright install chromium; pdfinfo)
 import subprocess, time, sys, os, tempfile, re, json
 from playwright.sync_api import sync_playwright
@@ -170,6 +171,53 @@ try:
       pg = abrir(b, rota, 393, 852)
       chk("celular sem rolagem lateral: " + rota, pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"), pg.evaluate("[document.documentElement.scrollWidth, window.innerWidth]"))
       pg.screenshot(path=os.path.join(TMP, nome + ".png"), full_page=True); pg.close()
+    # ---- sem internet no navegador/celular (revisão do Codex, PR #74): os itens vêm das cópias das O.S. guardadas no aparelho ----
+    GUARDA = "(mods => { const db = window.__DB, G = window.__GUARD = {}; for (const id of ['j1', 'j2', 'j3']) { const o = db.ordens.find(x => x.id === id);" \
+             " G[id] = { ...o, itens: db.os_itens.filter(i => i.ordem_id === id).map(i => ({ ...i })), fotos: [], eventos: [] }; } mods(G); })"
+    ROTA = "#/imprimir/resumo/vj?de=veiculo"
+    def offline(pg, mods):
+      pg.goto(U + "#/veiculo/vj"); pg.wait_for_timeout(500); pg.evaluate(GUARDA + "(" + mods + ")")
+      pg.goto(U + ROTA); pg.wait_for_timeout(900); return pg.inner_text("body")
+    pg = abrir(b, "#/veiculo/vj")
+    # erro que não é de rede continua aparecendo como erro (não cai para a cópia do aparelho)
+    pg.evaluate("window.__ITENS = window.__API_MOCK.itensDasOrdens; window.__API_MOCK.itensDasOrdens = async () => { throw new Error('permission denied for table os_itens'); }; 0")
+    t = offline(pg, "G => {}")
+    chk("erro que não é de rede: mostra o erro, sem usar a cópia", "permission denied" in t and "Sem internet" not in t and pg.query_selector(".folha.resos") is None, t[-300:])
+    pg.evaluate("window.__API_MOCK.itensDasOrdens = window.__ITENS; 0")
+    pg.context.set_offline(True); pg.evaluate("window.dispatchEvent(new Event('offline'))"); pg.wait_for_timeout(300)
+    # todas as cópias no aparelho, iguais à lista
+    pg.goto(U + "#/veiculo/vj"); pg.wait_for_timeout(600)
+    chk("sem internet: o botão continua na ficha do veículo", "Resumo das O.S. em aberto" in pg.inner_text("main"))
+    t = offline(pg, "G => {}"); folha = pg.inner_text(".folha.resos") if pg.query_selector(".folha.resos") else ""
+    chk("sem internet: o resumo abre pelas cópias do aparelho", "RESUMO DE ORDENS DE SERVIÇO" in folha and "4.759,44" in folha and "Trocador de calor do câmbio" in folha and "Disco de Freio Dianteiro" in folha, t[-400:])
+    chk("sem internet: orçamento continua desmarcado", pg.evaluate("[...document.querySelectorAll('.resos-opcoes input')].map(i => i.checked).join()") == "true,true,false")
+    quadro = pg.inner_text(".resos-escolha")
+    chk("sem internet: aviso só na tela", "Sem internet: os itens e os valores são da cópia das O.S. guardada neste aparelho." in quadro and "mais antiga" not in quadro and "Sem internet" not in folha
+        and pg.evaluate("!!document.querySelector('.resos-escolha.so-tela .aviso')"))
+    chk("sem internet: continua em UMA folha A4 (Jeep)", paginas(pg, "resumo_sem_internet") == 1)
+    pg.screenshot(path=os.path.join(TMP, "resumo_sem_internet.png"), full_page=True)
+    # O.S. sem cópia: não vira lista vazia, avisa qual falta
+    t = offline(pg, "G => { delete G.j2; }")
+    chk("sem internet: O.S. sem cópia avisa qual falta", "Sem conexão com a internet: a O.S. 01928 não está guardada neste aparelho. O resumo abre quando a conexão voltar." in t and pg.query_selector(".folha.resos") is None, t[-300:])
+    t = offline(pg, "G => { delete G.j1.itens; delete G.j2; }")
+    chk("sem internet: cópia sem os itens conta como faltando (plural)", "as O.S. 01927, 01928 não estão guardadas neste aparelho" in t and pg.query_selector(".folha.resos") is None, t[-300:])
+    # cópia mais antiga que a lista: cabeçalho da lista, itens da cópia e aviso com o número
+    t = offline(pg, "G => { G.j1.atualizado_em = '2026-11-12T09:00:00-03:00'; G.j1.reclamacao = 'ANTIGA'; G.j1.status = 'diagnostico'; G.j1.itens = G.j1.itens.slice(0, 2); }")
+    quadro = pg.inner_text(".resos-escolha"); folha = pg.inner_text(".folha.resos")
+    chk("sem internet: cópia antiga avisa o número da O.S.", "A cópia da O.S. 01927 é mais antiga que a lista: os itens podem estar desatualizados." in quadro, quadro[-300:])
+    chk("sem internet: cópia antiga não muda a etapa nem a reclamação da lista", "ANTIGA" not in folha and pg.evaluate("[...document.querySelectorAll('.resos-opcoes input')].map(i => i.checked).join()") == "true,true,false"
+        and "Filtro de óleo" in folha and "Trocador de calor do câmbio" not in folha)
+    # cópia mais nova que a lista: vale a cópia inteira (cabeçalho e itens); O.S. cancelada na cópia sai do resumo
+    t = offline(pg, "G => { G.j1.atualizado_em = '2026-11-13T18:00:00-03:00'; G.j1.desconto = 50; G.j1.total = 2165.24;"
+        " G.j1.itens.push({ id: 'novo', ordem_id: 'j1', tipo: 'servico', descricao: 'Item novo da cópia', qtd: 1, valor_unit: 100, desconto: 0, aprovado: true, posicao: 99 });"
+        " G.j3.atualizado_em = '2026-11-13T18:00:00-03:00'; G.j3.status = 'cancelado'; }")
+    quadro = pg.inner_text(".resos-escolha"); folha = pg.inner_text(".folha.resos")
+    chk("sem internet: cópia mais nova vale inteira", "Item novo da cópia" in folha and "2.165,24" in folha and "4.809,44" in folha and "mais antiga" not in quadro, folha[-500:])
+    chk("sem internet: O.S. cancelada na cópia mais nova sai do resumo", pg.evaluate("document.querySelectorAll('.resos-opcoes input').length") == 2 and "01930" not in quadro, quadro)
+    pg.context.set_offline(False); pg.close()
+    # com internet nada muda: sem aviso de cópia
+    pg = abrir(b, ROTA)
+    chk("com internet: sem aviso de cópia do aparelho", "Sem internet" not in pg.inner_text("body") and "4.759,44" in pg.inner_text(".folha.resos")); pg.close()
     # a O.S. normal continua igual
     pg = abrir(b, "#/imprimir/os/j2")
     chk("O.S. normal: continua abrindo como antes", pg.query_selector(".folha.os-a4") is not None and pg.query_selector(".folha.resos") is None and "ORDEM DE SERVIÇO" in pg.inner_text(".folha.os-a4")); pg.close()

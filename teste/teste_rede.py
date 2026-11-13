@@ -15,8 +15,10 @@ exp = int(time.time()) + 3600
 jwt = b64({"alg": "HS256", "typ": "JWT"}) + "." + b64({"sub": "u1", "exp": exp, "role": "authenticated", "aud": "authenticated"}) + ".x"
 sessao = {"access_token": jwt, "token_type": "bearer", "expires_in": 3600, "expires_at": exp, "refresh_token": "r", "user": {"id": "u1", "email": "d@x", "aud": "authenticated", "role": "authenticated"}}
 PERFIL = {"id": "u1", "nome": "Danilo", "email": "d@x", "papel": "admin", "ativo": True}
-ORDENS = [{"id": "o1", "numero": 1900, "status": "execucao", "cliente": {"nome": "Cliente A", "telefone": ""}, "veiculo": {"placa": "ABC1D23", "marca": "Fiat", "modelo": "Uno"}, "cliente_id": None, "veiculo_id": None, "total": 100, "recebido": 0, "criado_em": "2026-10-30T10:00:00Z", "atualizado_em": "2026-10-30T10:00:00Z", "checkin": {}},
+ORDENS = [{"id": "o1", "numero": 1900, "status": "execucao", "cliente": {"nome": "Cliente A", "telefone": ""}, "veiculo": {"placa": "ABC1D23", "marca": "Fiat", "modelo": "Uno"}, "cliente_id": "c1", "veiculo_id": None, "total": 100, "recebido": 0, "criado_em": "2026-10-30T10:00:00Z", "atualizado_em": "2026-10-30T10:00:00Z", "checkin": {}},
           {"id": "o2", "numero": 1899, "status": "entregue", "cliente": {"nome": "Cliente B", "telefone": ""}, "veiculo": {"placa": "XYZ9A88", "marca": "VW", "modelo": "Gol"}, "cliente_id": None, "veiculo_id": None, "total": 300, "recebido": 0, "criado_em": "2026-10-29T10:00:00Z", "atualizado_em": "2026-10-29T10:00:00Z", "entregue_em": "2026-10-30T10:00:00Z", "garantia_dias": 90, "checkin": {}}]
+CLIENTES = [{"id": "c1", "codigo": 10, "nome": "Cliente A", "situacao": "liberado", "atualizado_em": "2026-10-30T10:00:00Z"}]
+ITENS = [{"id": "i1", "ordem_id": "o1", "tipo": "servico", "descricao": "Troca de óleo do motor", "qtd": 1, "valor_unit": 100, "desconto": 0, "aprovado": True, "posicao": 0, "criado_em": "2026-10-30T10:00:00Z"}]
 estado = {"modo": "ok"}
 import threading
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -27,6 +29,8 @@ def resposta(u, accept):
     elif "/rest/v1/ordens" in u:
         if obj: body = next((o for o in ORDENS if "id=eq." + o["id"] in u), ORDENS[0])
         else: body = ORDENS
+    elif "/rest/v1/os_itens" in u: body = [i for i in ITENS if "o1" in u.split("ordem_id=")[-1].split("&")[0]] if "ordem_id=" in u else []
+    elif "/rest/v1/clientes" in u: body = CLIENTES[0] if obj else CLIENTES
     elif "/rest/v1/rpc/" in u: body = {}
     elif "/auth/v1/health" in u: body = {"ok": True}
     else: body = {} if obj else []
@@ -73,6 +77,16 @@ try:
     pg.evaluate("import('./js/api.js').then(m => m.definirSemRede(true))")
     t0 = time.time(); pg.evaluate("location.hash = '#/os/o2'"); pg.wait_for_timeout(1500)
     chk("sem rede: O.S. guardada (aguardando pagamento) abre na hora", "Cliente B" in pg.inner_text("main") or "XYZ9A88" in pg.inner_text("main"))
+    # resumo das O.S. em aberto sem internet (revisão do Codex, PR #74): os itens vêm da cópia da O.S. guardada no aparelho
+    pg.evaluate("location.hash = '#/imprimir/resumo/c1?de=cliente'"); pg.wait_for_timeout(1500); tx = pg.inner_text("body")
+    chk("sem rede: resumo das O.S. em aberto abre pela cópia guardada", "RESUMO DE ORDENS DE SERVIÇO" in tx and "Troca de óleo do motor" in tx and "Sem internet: os itens e os valores são da cópia" in tx)
+    KV = """(async f => { const db = await new Promise(r => { const q = indexedDB.open('dtcar-local'); q.onsuccess = () => r(q.result); });
+      const st = db.transaction('kv', 'readwrite').objectStore('kv'); return new Promise(r => { const t = f(st); t.onsuccess = () => r(t.result); }); })"""
+    copia = pg.evaluate(KV + "(st => st.get('os:o1'))"); pg.evaluate(KV + "(st => st.delete('os:o1'))")
+    pg.evaluate("location.hash = '#/ordens'"); pg.wait_for_timeout(500)
+    pg.evaluate("location.hash = '#/imprimir/resumo/c1?de=cliente'"); pg.wait_for_timeout(1500); tx = pg.inner_text("body")
+    chk("sem rede: resumo sem a cópia da O.S. avisa qual falta (não sai vazio)", "a O.S. 01900 não está guardada neste aparelho" in tx and "RESUMO DE ORDENS DE SERVIÇO" not in tx)
+    pg.evaluate(KV + "(st => st.put(%s, 'os:o1'))" % json.dumps(copia))
     pg.evaluate("location.hash = '#/caixa'"); pg.wait_for_timeout(800)
     print("caixa:", pg.inner_text("main")[:200].replace("\n", " | "))
     pg.screenshot(path=os.path.join(RAIZ, "teste", "telas", "r1-os-offline.png"))

@@ -1385,3 +1385,34 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .ag-cal-dia b{font-size:16px}
   .ag-cal-dia i{display:none}
 }
+
+/* ---- Resumo de O.S. em aberto (13/11/2026): #/imprimir/resumo/<id>?de=cliente|veiculo — as O.S. em aberto de um cliente
+   ou de um veículo num documento só, no padrão da O.S. (js/telas/imprimir.js: ResumoOS). O PDF do conector segue este leiaute. ---- */
+.resos-escolha{background:#fff;color:#111418;max-width:210mm;margin:14px auto 0;padding:12px 14px;border-radius:6px;box-shadow:0 2px 12px rgba(0,0,0,.18);display:flex;flex-direction:column;gap:8px;font-size:14px}
+.resos-escolha-topo{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;justify-content:space-between}
+.resos-escolha-topo>b{font-family:var(--f-display);font-size:16px;text-transform:uppercase;letter-spacing:.05em}
+.resos-escolha .seg button{background:#fff;color:#111;border-color:#c5ccd6}
+.resos-escolha .seg button[aria-pressed="true"]{background:#0a4bd0;color:#fff;border-color:#0a4bd0}
+.resos-opcoes{display:flex;flex-direction:column;gap:6px}
+.resos-opcoes .linha-check span{min-width:0;overflow-wrap:anywhere}
+.resos-escolha .dica{color:#566275;margin:0}
+.resos-escolha .aviso{margin:0}
+.resos .resos-os{display:flex;flex-direction:column;gap:4px;margin-top:3px}
+.resos-faixa{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:baseline;gap:0 14px;background:#141a24;color:#fff;padding:3px 8px;font-size:12px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.resos-faixa>span{min-width:0;overflow-wrap:anywhere}
+.resos-faixa b{font-family:var(--f-display);font-size:14.5px;letter-spacing:.04em}
+.resos-faixa .dir{font-size:11px;margin-left:auto;text-align:right}
+.resos-rec{margin:0;font-size:11.5px}
+.resos-fecho{display:flex;flex-direction:column;border:1px solid #c5ccd6;border-top:2px solid #141a24;background:#eef1f5;font-variant-numeric:tabular-nums;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.resos-fecho div{display:flex;justify-content:flex-end;gap:14px;padding:2px 6px}
+.resos-fecho div b{min-width:96px;text-align:right;font-weight:600}
+.resos-fecho .forte{font-size:1.12em}
+.resos-fecho .forte b,.resos-fecho .forte span{font-weight:700}
+.resos-geral{margin-top:6px}
+.resos-geral td:first-child{overflow-wrap:anywhere}
+.resos-sit{display:block;font-size:.9em;color:#5b6573}
+.resos-geral tfoot td{background:#141a24;color:#fff;border-color:#141a24;font-size:1.1em;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.resos-geral tfoot td:first-child{text-align:left;text-transform:uppercase;letter-spacing:.04em}
+.resos-geral tfoot td.forte{font-size:1.25em}
+@media (max-width:640px){.resos-escolha{margin:10px 10px 0}.resos-faixa .dir{margin-left:0;text-align:left}.resos .imp-tab{font-size:11px}.resos .resos-geral{font-size:10.5px}.resos-geral th,.resos-geral td{padding:3px 4px}.resos-geral tfoot td,.resos-geral tfoot td.forte{font-size:1em}}
+@media print{.resos-os,.resos-geral,.resos-fecho{break-inside:avoid}}

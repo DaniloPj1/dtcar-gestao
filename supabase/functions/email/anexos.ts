@@ -5,6 +5,10 @@
 //        → o mesmo PDF da tela da O.S. (js/pdf.js do site, gerado aqui com os dados do banco)
 //   { fonte: "os", numero: 1887, documento: "recibo", motor?: false }
 //        → a O.S. Recibo (12/11/2026, js/pdfrecibo.js): só para O.S. paga; com os cuidados do motor, salvo motor=false
+//   { fonte: "resumo", numero: 1928, de: "cliente" | "veiculo", orcamentos?: true, itens?: false }
+//        → o Resumo de O.S. em aberto (13/11/2026, js/pdfresumo.js): as O.S. aprovadas e aguardando pagamento do cliente ou do
+//          veículo da O.S. informada num PDF só (itens, total, recebido e falta receber de cada uma + total geral).
+//          orcamentos=true inclui os orçamentos não aprovados; itens=false manda só o quadro "Resumo geral"
 //   { fonte: "boleto", nosso_numero: "261234567" }  ou  { fonte: "boleto", os: 1887 }
 //        → o PDF do boleto Sicredi (js/boletopdf.js); pela O.S., todos os boletos em aberto dela num PDF só
 //   { fonte: "nf", os: 1887 }  ou  { fonte: "nf", id: "<id>" }
@@ -22,7 +26,9 @@ export interface Imagem { data: string; w: number; h: number; fmt: "PNG" | "JPEG
 // deno-lint-ignore no-explicit-any
 type Fn = (...a: any[]) => any;
 /** Geradores de PDF do site (js/pdf.js e js/boletopdf.js). */
-export interface Geradores { pdfOS: Fn; pdfOrcamento: Fn; pdfEntrada: Fn; pdfBoletos: Fn; nomePdf: Fn; usarLeitorImagem: Fn; pdfOSRecibo?: Fn; osQuitada?: Fn }
+export interface Geradores { pdfOS: Fn; pdfOrcamento: Fn; pdfEntrada: Fn; pdfBoletos: Fn; nomePdf: Fn; usarLeitorImagem: Fn; pdfOSRecibo?: Fn; osQuitada?: Fn;
+  /** Resumo de O.S. em aberto (js/pdfresumo.js e js/resumoos.js) */
+  pdfResumoOS?: Fn; etapaNoResumo?: Fn; dadosResumoOS?: Fn; nomeArquivoResumo?: Fn }
 
 export const MAX_ARQUIVOS = 5;
 export const MAX_BYTES = 3 * 1024 * 1024;
@@ -138,6 +144,44 @@ async function daOSRecibo(adm: Db, g: Geradores, o: Record<string, unknown>, num
     origem: `O.S. ${numero} (O.S. Recibo, ${motor ? "com" : "sem"} os cuidados do motor)` };
 }
 
+const dinheiro = (n: unknown) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+/** Resumo de O.S. em aberto (13/11/2026): as O.S. em aberto do cliente ou do veículo da O.S. informada num PDF só — itens, total,
+ *  recebido e falta receber de cada uma e o total geral. Entram as aprovadas (em execução) e as aguardando pagamento; orçamento
+ *  não aprovado só com orcamentos=true. As regras e as contas são as da tela (js/resumoos.js). Só leitura. */
+async function doResumo(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Record<string, unknown>, avisos: string[]): Promise<Arquivo> {
+  if (!g.pdfResumoOS || !g.etapaNoResumo || !g.dadosResumoOS || !g.nomeArquivoResumo) throw new ErroAnexo("O resumo de O.S. ainda não está nesta versão da função \"email\" (publique de novo).");
+  const etapa = g.etapaNoResumo;
+  const numero = parseInt(String(p.numero ?? p.os ?? "").replace(/\D/g, ""), 10);
+  if (!numero) throw new ErroAnexo("Resumo de O.S.: informe o número de uma O.S. do cliente ou do veículo (numero).");
+  const de = String(p.de || "");
+  if (de !== "cliente" && de !== "veiculo") throw new ErroAnexo('Resumo de O.S.: informe de: "cliente" (as O.S. em aberto do cliente) ou "veiculo" (as do veículo).');
+  const [ref] = await lista(adm.from("ordens").select("*").eq("numero", numero));
+  if (!ref) throw new ErroAnexo(`O.S. ${numero} não encontrada.`);
+  const chave = de === "cliente" ? "cliente_id" : "veiculo_id", dono = de === "cliente" ? "cliente" : "veículo";
+  if (!ref[chave]) throw new ErroAnexo(`A O.S. ${numero} não tem ${dono} do cadastro: o resumo junta as O.S. pelo cadastro.`);
+  const abertas = (await lista(adm.from("ordens").select("*").eq(chave, ref[chave]))).filter((o) => etapa(o));
+  const orcs = abertas.filter((o) => etapa(o) === "orcamento");
+  const ordens = p.orcamentos === true ? abertas : abertas.filter((o) => etapa(o) !== "orcamento");
+  const nums = (l: Array<Record<string, unknown>>) => l.map((o) => Number(o.numero)).sort((a, b) => a - b).join(", ");
+  if (!ordens.length) throw new ErroAnexo(`Nenhuma O.S. aprovada ou aguardando pagamento deste ${dono}.` +
+    (orcs.length ? ` Há orçamento não aprovado (O.S. ${nums(orcs)}): para incluir, peça com orcamentos=true.` : ""));
+  const itens = await lista(adm.from("os_itens").select("*").in("ordem_id", ordens.map((o) => o.id)).order("posicao"));
+  // cabeçalho: a ficha do cliente; pelo veículo, a ficha do veículo e a do proprietário do cadastro
+  const [vei] = de === "veiculo" ? await lista(adm.from("veiculos").select("*").eq("id", ref.veiculo_id)) : [];
+  const cliId = de === "cliente" ? ref.cliente_id : (vei || {}).cliente_id;
+  const [cli] = cliId ? await lista(adm.from("clientes").select("*").eq("id", cliId)) : [];
+  const d = g.dadosResumoOS({ ordens, itens, de, cliente: cli || null, veiculo: vei || null });
+  if (cfg.espelhoLegado !== false) avisos.push("Período de transição: a O.S. vem da cópia do OS Oficina. Confira os valores antes de enviar ao cliente.");
+  if (!ordens.some((o) => Number(o.numero) === numero)) avisos.push(`A O.S. ${numero} não entra neste resumo (${etapa(ref) === "orcamento" ? "é orçamento não aprovado" : "não está em aberto"}); entraram as outras em aberto do mesmo ${dono}.`);
+  if (p.orcamentos !== true && orcs.length) avisos.push(`Ficou de fora o orçamento ainda não aprovado (O.S. ${nums(orcs)}). Para incluir, peça com orcamentos=true.`);
+  if (p.orcamentos === true && orcs.length) avisos.push(`O resumo inclui orçamento ainda não aprovado (O.S. ${nums(orcs)}): o valor dele entra no total geral.`);
+  if (d.clientesDiferentes.length) avisos.push(`As O.S. deste resumo estão em nomes diferentes (${d.clientesDiferentes.join("; ")}): o resumo sai no nome de ${d.cli ? d.cli.nome : "—"}.`);
+  const blob = await g.pdfResumoOS(d, cfg, { itens: p.itens !== false });
+  const quem = de === "cliente" ? "do cliente " + (d.cli ? d.cli.nome : "") : "do veículo " + (d.vei ? d.vei.placa : "");
+  return { nome: g.nomeArquivoResumo(d), tipo: "application/pdf", bytes: await bytesDoPdf(blob),
+    origem: `Resumo de ${ordens.length} O.S. em aberto ${quem.trim()} (O.S. ${nums(ordens)})${p.itens === false ? ", só o quadro geral" : ""}: total ${dinheiro(d.soma.total)}, falta receber ${dinheiro(d.soma.falta)}` };
+}
+
 const EM_ABERTO = ["gerado", "enviado", "registrado"];
 /** Reserva do conector (v41): nosso número provisório 000…, sem linha digitável — não vai para PDF nem mensagem */
 const ehReserva = (b: Record<string, unknown>) => b.situacao === "gerado" && !b.linha_digitavel && /^000/.test(String(b.nosso_numero || ""));
@@ -214,14 +258,14 @@ export async function montarAnexos(adm: Db, token: string, pedidos: unknown, car
   let g: Geradores | null = null, cfg: Record<string, unknown> | null = null;
   for (const p of ps) {
     const fonte = String(p?.fonte || "");
-    if (fonte === "os" || fonte === "boleto") {
+    if (fonte === "os" || fonte === "boleto" || fonte === "resumo") {
       if (!g) { g = await carregar(); g.usarLeitorImagem(leitorImagem(adm, site)); }
       if (!cfg) cfg = await config(adm);
-      arquivos.push(fonte === "os" ? await daOS(adm, g, p, cfg, avisos) : await doBoleto(adm, g, p, cfg, avisos));
+      arquivos.push(fonte === "os" ? await daOS(adm, g, p, cfg, avisos) : fonte === "resumo" ? await doResumo(adm, g, p, cfg, avisos) : await doBoleto(adm, g, p, cfg, avisos));
     } else if (fonte === "nf") arquivos.push(...await daNF(adm, p));
     else if (fonte === "rh") arquivos.push(await doRH(adm, p));
     else if (fonte === "email") arquivos.push(await doEmail(token, p));
-    else throw new ErroAnexo('Anexo: fonte "os", "boleto", "nf", "rh" ou "email".');
+    else throw new ErroAnexo('Anexo: fonte "os", "resumo", "boleto", "nf", "rh" ou "email".');
   }
   if (arquivos.length > MAX_ARQUIVOS) throw new ErroAnexo(`No máximo ${MAX_ARQUIVOS} arquivos por e-mail.`);
   const total = arquivos.reduce((s, a) => s + a.bytes.length, 0);

@@ -995,7 +995,7 @@ export function criarServidor(db: Banco): McpServer {
       out.oleo = oleos.map((o, i) => ({ litros: o.litros, viscosidade: o.viscosidade, norma: o.linha.norma, motor: o.linha.motor, periodo: periodoTexto(o.linha), fontes: o.fontes, conferido: !!o.linha.conferido, ...(i === 0 ? { melhor: true } : {}) }));
       // filtros: da ficha (se tem) ou da melhor aplicação do catálogo
       const app = r && r.filtros[0];
-      const base = ficha ? { filtros: ficha.filtros || {}, marca: ficha.marca || "Tecfil" } : app ? { filtros: Object.fromEntries(TIPOS_FILTRO.map(([k]: [string, string]) => [k, app[k]])), marca: app.marca } : null;
+      const base = ficha ? { filtros: ficha.filtros || {}, marca: ficha.marca || "Tecfil" } : app ? { filtros: Object.fromEntries(TIPOS_FILTRO.map((x: string[]) => [x[0], app[x[0]]])), marca: app.marca } : null;
       const lancar: unknown[] = [];
       if (base) {
         const lista = filtrosDaFicha(cat, estoque, prods, base);

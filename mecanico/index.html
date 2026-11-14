@@ -337,17 +337,47 @@ a{color:#174f94}a:hover{color:#0f3a70}
 <sc-if value="{{n.itensPasso}}" hint-placeholder-val="{{false}}">
 <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="font-size: 15px; color: #33383f">{{n.placa}} · {{n.modelo}}</div>
-<div style="display: flex; flex-direction: column; gap: 6px">
-<label for="nv-texto" style="font-size: 16px; font-weight: 700">O que precisa ser feito?</label>
-<div style="font-size: 14px; color: #4a515b">Escreva ou fale do seu jeito. O sistema organiza depois.</div>
-<textarea id="nv-texto" value="{{n.texto}}" onChange="{{onTexto}}" placeholder="Ex.: trocar óleo e filtro, pastilha dianteira, barulho na suspensão" style="height: 170px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 12px 14px; font-family: inherit; font-size: 17px; line-height: 24px; background: #ffffff; color: #16191d; resize: none"></textarea>
+<div style="font-size: 16px; font-weight: 700">Marque os serviços mais feitos</div>
+<sc-if value="{{n.semPrelista}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 14px; color: #4a515b">{{n.prelistaTexto}}</div>
+</sc-if>
+<sc-for list="{{n.sistemas}}" as="g" hint-placeholder-count="4">
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; overflow: hidden">
+<button type="button" aria-expanded="{{g.expandido}}" onClick="{{g.abrir}}" style="width: 100%; min-height: 52px; padding: 0 14px; background: #ffffff; border: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 17px; font-weight: 700; color: #16191d; cursor: pointer; text-align: left">
+<span>{{g.nome}}</span>
+<span style="font-size: 14px; font-weight: 700; color: #174f94">{{g.resumo}}</span>
+</button>
+<sc-if value="{{g.aberto}}" hint-placeholder-val="{{false}}">
+<div style="border-top: 1px solid #e4e7ea; padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 4px">
+<sc-for list="{{g.itens}}" as="sv" hint-placeholder-count="4">
+<button type="button" aria-pressed="{{sv.apertado}}" onClick="{{sv.marcar}}" style="min-height: 48px; padding: 6px 8px; background: {{sv.fundo}}; border: 1px solid {{sv.borda}}; border-radius: 6px; display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; color: #16191d; cursor: pointer; text-align: left">
+<span style="flex: none; width: 26px; height: 26px; border-radius: 5px; border: 2px solid {{sv.caixaBorda}}; background: {{sv.caixaFundo}}; color: #ffffff; display: flex; align-items: center; justify-content: center">
+<sc-if value="{{sv.marcado}}" hint-placeholder-val="{{false}}">
+<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"></path></svg>
+</sc-if>
+</span>
+<span>{{sv.nome}}</span>
+</button>
+</sc-for>
 </div>
-<button type="button" onClick="{{falar}}" style="min-height: 60px; background: {{n.falarBg}}; color: {{n.falarFg}}; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px">
-<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.500 11a6.500 6.500 0 0 0 13 0M12 17.500V21"/></svg>
+</sc-if>
+</div>
+</sc-for>
+<div style="display: flex; flex-direction: column; gap: 6px; padding-top: 6px">
+<label for="nv-texto" style="font-size: 16px; font-weight: 700">Ou escreva ou fale</label>
+<textarea id="nv-texto" value="{{n.texto}}" onChange="{{onTexto}}" placeholder="Ex.: 2 amortecedores, coxim do amort, pastilha diant" style="height: 96px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 12px 14px; font-family: inherit; font-size: 17px; line-height: 24px; background: #ffffff; color: #16191d; resize: none"></textarea>
+</div>
+<button type="button" onPointerDown="{{falarInicio}}" onPointerUp="{{falarFim}}" onPointerCancel="{{falarFim}}" onPointerLeave="{{falarFim}}" onContextMenu="{{semMenu}}" style="min-height: 64px; background: {{n.falarBg}}; color: {{n.falarFg}}; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; touch-action: none; user-select: none; -webkit-user-select: none">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"></path></svg>
 {{n.falarTexto}}
 </button>
-<button type="button" onClick="{{entender}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Montar a lista</button>
-<div style="font-size: 13px; color: #4a515b; text-align: center">"Falar" precisa de internet. Se não ouvir, use o microfone do teclado.</div>
+<sc-if value="{{n.temParcial}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 15px; color: #33383f; font-style: italic">{{n.parcial}}</div>
+</sc-if>
+<button type="button" onClick="{{entender}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">{{n.addRotulo}}</button>
+<sc-if value="{{n.temLista}}" hint-placeholder-val="{{false}}">
+<button type="button" onClick="{{verLista}}" style="min-height: 52px; background: #ffffff; color: #16191d; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer">{{n.verListaRotulo}}</button>
+</sc-if>
 </div>
 </sc-if>
 
@@ -355,26 +385,48 @@ a{color:#174f94}a:hover{color:#0f3a70}
 <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px">
 <div style="font-size: 15px; color: #33383f">{{n.placa}} · {{n.modelo}}</div>
 <div style="display: flex; align-items: baseline; justify-content: space-between">
-<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Lista corrigida</div>
+<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Lista</div>
 <div style="font-size: 14px; font-weight: 700">{{n.total}}</div>
 </div>
 <sc-for list="{{n.itens}}" as="it" hint-placeholder-count="4">
-<div style="background: #ffffff; border: 1px solid {{it.borda}}; border-radius: 6px; padding: 10px 6px 10px 12px; display: flex; align-items: center; gap: 8px">
+<div style="background: #ffffff; border: 1px solid {{it.borda}}; border-radius: 6px; padding: 10px 6px 10px 12px; display: flex; flex-direction: column; gap: 8px">
+<div style="display: flex; align-items: center; gap: 8px">
 <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
 <div style="font-size: 16px; font-weight: 700; line-height: 20px">{{it.nome}}</div>
 <div style="font-size: 13px; font-weight: 700; color: {{it.tipoCor}}">{{it.tipo}}</div>
+<sc-if value="{{it.temDisse}}" hint-placeholder-val="{{false}}">
 <div style="font-size: 13px; color: #4a515b">Você disse: “{{it.disse}}”</div>
+</sc-if>
 </div>
 <button type="button" aria-label="{{it.rotulo}}" onClick="{{it.remover}}" style="flex: none; width: 48px; height: 48px; background: transparent; border: none; color: #4a515b; cursor: pointer; display: flex; align-items: center; justify-content: center">
-<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"></path></svg>
 </button>
+</div>
+<sc-for list="{{it.perguntas}}" as="pq" hint-placeholder-count="1">
+<div style="display: flex; flex-direction: column; gap: 4px; padding-right: 6px">
+<div style="font-size: 13px; font-weight: 700; color: {{pq.cor}}">{{pq.titulo}}</div>
+<div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px">
+<sc-for list="{{pq.opcoes}}" as="op" hint-placeholder-count="4">
+<button type="button" aria-label="{{op.rotulo}}" aria-pressed="{{op.apertado}}" onClick="{{op.escolher}}" style="min-height: 44px; padding: 0 4px; border-radius: 6px; border: 2px solid {{op.borda}}; background: {{op.fundo}}; color: {{op.cor}}; font-size: 14px; font-weight: 700; cursor: pointer">{{op.texto}}</button>
+</sc-for>
+</div>
+</div>
+</sc-for>
+<sc-if value="{{it.temQtd}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; align-items: center; gap: 10px; padding-right: 6px">
+<div style="font-size: 13px; font-weight: 700; color: #4a515b; flex: 1">Quantidade</div>
+<button type="button" aria-label="{{it.menosRotulo}}" onClick="{{it.menos}}" style="width: 48px; height: 44px; background: #ffffff; border: 1px solid #16191d; border-radius: 6px; font-size: 22px; font-weight: 700; color: #16191d; cursor: pointer">−</button>
+<div style="min-width: 34px; text-align: center; font-family: 'Barlow Condensed', sans-serif; font-size: 24px; font-weight: 700">{{it.qtd}}</div>
+<button type="button" aria-label="{{it.maisRotulo}}" onClick="{{it.mais}}" style="width: 48px; height: 44px; background: #ffffff; border: 1px solid #16191d; border-radius: 6px; font-size: 22px; font-weight: 700; color: #16191d; cursor: pointer">+</button>
+</div>
+</sc-if>
 </div>
 </sc-for>
 <sc-if value="{{n.vazio}}" hint-placeholder-val="{{false}}">
-<div style="font-size: 15px; color: #4a515b; text-align: center; padding: 16px 0">Nenhum item na lista. Volte e descreva o serviço.</div>
+<div style="font-size: 15px; color: #4a515b; text-align: center; padding: 16px 0">Nenhum item na lista ainda.</div>
 </sc-if>
-<button type="button" onClick="{{abrirOS}}" style="min-height: 56px; background: #16191d; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; margin-top: 4px">Concluir (teste: não salva)</button>
-<button type="button" onClick="{{corrigir}}" style="min-height: 52px; background: #ffffff; color: #16191d; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer">Voltar e corrigir o texto</button>
+<button type="button" onClick="{{corrigir}}" style="min-height: 56px; background: #ffffff; color: #174f94; border: 2px dashed #174f94; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">+ Adicionar mais itens</button>
+<button type="button" onClick="{{abrirOS}}" style="min-height: 56px; background: #16191d; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Concluir (teste: não salva)</button>
 </div>
 </sc-if>
 </sc-if>
@@ -464,7 +516,7 @@ Veículos
 <label for="add-texto" style="font-size: 20px; font-weight: 700">O que mais precisa ser feito?</label>
 <textarea id="add-texto" value="{{addTexto}}" onChange="{{onAddTexto}}" placeholder="Escreva ou fale do seu jeito" style="height: 110px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 12px 14px; font-family: inherit; font-size: 17px; line-height: 24px; background: #ffffff; color: #16191d; resize: none"></textarea>
 <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-<button type="button" onClick="{{addFalar}}" style="min-height: 54px; background: {{addFalarBg}}; color: {{addFalarFg}}; border: 2px solid #16191d; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">{{addFalarTexto}}</button>
+<button type="button" onPointerDown="{{addFalarInicio}}" onPointerUp="{{falarFim}}" onPointerCancel="{{falarFim}}" onPointerLeave="{{falarFim}}" onContextMenu="{{semMenu}}" style="min-height: 54px; background: {{addFalarBg}}; color: {{addFalarFg}}; border: 2px solid #16191d; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none">{{addFalarTexto}}</button>
 <button type="button" onClick="{{addConfirmar}}" style="min-height: 54px; background: #174f94; color: #ffffff; border: 2px solid #174f94; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">Adicionar</button>
 </div>
 <button type="button" onClick="{{fecharFolha}}" style="height: 52px; background: transparent; border: none; font-size: 16px; font-weight: 700; color: #4a515b; cursor: pointer">Cancelar</button>

@@ -35,7 +35,7 @@ def montar(pg, papel='admin', pedidos=None):
         if '/auth/v1/logout' in u: return route.fulfill(status=204, headers={'access-control-allow-origin': '*'})
         if '/rest/v1/perfis' in u: return resp(route, [{'id': UID, 'nome': 'Fulano de Teste', 'papel': papel, 'ativo': True}])
         if '/rest/v1/ordens' in u: return resp(route, ORDENS)
-        if '/rest/v1/os_itens' in u: return resp(route, ITENS if 'ordem_id=' in u else (HIST if 'offset=0' in u or 'offset' not in u else []))
+        if '/rest/v1/os_itens' in u: return resp(route, ITENS if 'ordem_id=' in u else ([h for h in HIST if 'tipo=eq.servico' not in u or h['tipo'] == 'servico'] if 'offset=0' in u or 'offset' not in u else []))
         if '/rest/v1/rpc/tecnicos_lista' in u: return resp(route, [{'tipo': 'acesso', 'id': UID, 'nome': 'Fulano de Teste', 'apelido': '', 'perfil_id': UID, 'funcao': 'admin'}, {'tipo': 'funcionario', 'id': 'f2', 'nome': 'Beltrano Silva', 'apelido': '', 'perfil_id': None, 'funcao': 'Mecânico'}])
         if '/rest/v1/veiculos' in u: return resp(route, [{'id': 'v9', 'placa': 'QQQ1A11', 'marca': 'Fiat', 'modelo': 'STRADA 1.4', 'ano': '2018', 'cor': 'Branca', 'combustivel': 'Flex', 'km_atual': 97310, 'cliente_id': 'c9'}] if 'QQQ1A11' in u else [])
         if '/rest/v1/clientes' in u: return resp(route, [{'nome': 'Cliente do Cadastro'}])
@@ -46,6 +46,10 @@ try:
     with sync_playwright() as p:
         b = p.chromium.launch()
         ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block'); pg = ctx.new_page(); pedidos = []
+        # ditado e microfone de mentira: "ouve" a palavra bieleta enquanto o botão está apertado
+        pg.add_init_script("""window.SpeechRecognition = class { start() { window.__ouvindo = (window.__ouvindo || 0) + 1; this._t = setTimeout(() => this.onresult && this.onresult({ results: [[{ transcript: 'bieleta' }]] }), 60); }
+          stop() { clearTimeout(this._t); setTimeout(() => this.onend && this.onend(), 10); } };
+          Object.defineProperty(navigator, 'mediaDevices', { value: { getUserMedia: async () => ({ getTracks: () => [] }) }, configurable: true });""")
         erros = []; pg.on('pageerror', lambda e: erros.append(str(e))); pg.on('console', lambda m: m.type == 'error' and 'Failed to load resource' not in m.text and erros.append(m.text))
         montar(pg, pedidos=pedidos)
         pg.goto('http://localhost:8765/mecanico/'); pg.wait_for_selector('#lg-senha')
@@ -78,12 +82,38 @@ try:
         pg.get_by_role('button', name='Voltar', exact=True).click(); pg.fill('#nv-placa', 'NOV4A00'); pg.get_by_role('button', name='Buscar veículo').click()
         pg.get_by_text('Placa nova · dados da consulta pela placa').wait_for(); t(pg.get_by_text('Jeep RENEGADE 1.8 2020/2021').count() == 1, 'placa nova pela consulta')
         pg.fill('#nv-cliente', 'Zé'); pg.fill('#nv-km', '5000'); pg.get_by_role('button', name='Continuar para os itens').click()
-        pg.fill('#nv-texto', 'coxim do amort, kit amort, ortecedor, pastilha de freio diant, subst coxim do amort diant, amortesedor trazeiro, zzzqqq'); pg.get_by_role('button', name='Montar a lista').click()
-        nomes = pg.evaluate("[...document.querySelectorAll('div')].filter(d => d.style.fontSize === '16px' && d.style.fontWeight === '700').map(d => d.textContent)")
-        t('COXIM DO AMORTECEDOR' in nomes, 'abreviação: coxim do amort → ' + str(nomes)); t('KIT AMORTECEDOR' in nomes, 'abreviação: kit amort'); t('AMORTECEDOR' in nomes, 'palavra cortada: ortecedor')
-        t('PASTILHA DE FREIO DIANTEIRA' in nomes, 'concordância e escrita já usada: pastilha diant'); t('SUBST. COXIM DO AMORTECEDOR DIANTEIRO' in nomes, 'frase já usada pela oficina volta com a escrita dela')
-        t('AMORTECEDOR TRASEIRO' in nomes, 'palavra errada: amortesedor trazeiro'); t(pg.get_by_text('Conferir a escrita').count() == 1, 'palavra desconhecida fica para conferir')
-        t(pg.get_by_text('Você disse: “coxim do amort”').count() == 1, 'mostra o que foi dito')
+        # pré-lista: serviços mais feitos, por sistema
+        pg.get_by_role('button', name='Suspensão').wait_for(); t(pg.get_by_role('button', name='Rodas e pneus').count() == 1, 'pré-lista separada por sistema')
+        pg.get_by_role('button', name='Suspensão').click(); pg.get_by_role('button', name='SUBST. COXIM DO AMORTECEDOR DIANTEIRO').click()
+        t(pg.get_by_text('1 marcado').count() == 1 and pg.get_by_role('button', name='Adicionar à lista (1)').count() == 1, 'marca serviço da pré-lista')
+        # segurar para falar
+        fala = "button:has-text('Segure para falar')"
+        pg.dispatch_event(fala, 'pointerdown'); pg.get_by_text('Microfone liberado').wait_for(); t(pg.evaluate('window.__ouvindo || 0') == 0, 'primeiro toque só libera o microfone')
+        pg.dispatch_event(fala, 'pointerdown'); pg.get_by_text('Ouvindo… solte para terminar').wait_for(); pg.wait_for_timeout(150)
+        t(pg.input_value('#nv-texto') == '', 'enquanto aperta, ainda não escreve'); pg.dispatch_event("button:has-text('Ouvindo')", 'pointerup')
+        pg.wait_for_function("document.getElementById('nv-texto').value === 'bieleta'"); t(pg.get_by_text('Segure para falar').count() == 1, 'soltou: para de ouvir e escreve o que ouviu')
+        pg.fill('#nv-texto', 'coxim do amort, kit amort, ortecedor, pastilha de freio diant, 2 amortesedor trazeiro, zzzqqq, alinhamento'); pg.get_by_role('button', name='Adicionar à lista (1 + texto)').click()
+        nomes = lambda: pg.evaluate("[...document.querySelectorAll('div')].filter(d => d.style.fontSize === '16px' && d.style.fontWeight === '700' && d.style.lineHeight === '20px').map(d => d.textContent)")
+        n0 = nomes()
+        t('SUBST. COXIM DO AMORTECEDOR DIANTEIRO' in n0, 'serviço marcado entrou na lista: ' + str(n0)); t('COXIM DO AMORTECEDOR' in n0, 'abreviação: coxim do amort'); t('KIT AMORTECEDOR' in n0, 'abreviação: kit amort')
+        t('AMORTECEDOR' in n0, 'palavra cortada: ortecedor'); t('PASTILHA DE FREIO DIANTEIRA' in n0, 'concordância e escrita já usada'); t('AMORTECEDOR TRASEIRO' in n0, 'palavra errada, sem o "2" no nome')
+        t(pg.get_by_text('Conferir a escrita').count() == 1, 'palavra desconhecida fica para conferir'); t(pg.get_by_text('Você disse: “coxim do amort”').count() == 1, 'mostra o que foi dito')
+        # perguntas: posição, lado e quantidade
+        t(pg.evaluate("document.querySelector('[aria-label=\"Aumentar a quantidade de AMORTECEDOR TRASEIRO\"]').previousElementSibling.textContent") == '2', 'quantidade dita no texto')
+        t(pg.get_by_role('button', name='Dianteiro — AMORTECEDOR TRASEIRO').count() == 0 and pg.get_by_role('button', name='Lado direito — AMORTECEDOR TRASEIRO').count() == 1, 'não pergunta a posição que já foi dita; pergunta o lado')
+        t(pg.get_by_role('button', name='Dianteiro — ALINHAMENTO').count() == 0 and pg.get_by_role('button', name='Aumentar a quantidade de ALINHAMENTO').count() == 0, 'serviço sem posição nem quantidade')
+        pg.get_by_role('button', name='Concluir (teste: não salva)').click(); pg.get_by_text('Falta informar a posição ou o lado').wait_for(); t(True, 'não conclui sem a posição e o lado')
+        pg.get_by_role('button', name='Dianteiro — AMORTECEDOR', exact=True).click(); pg.get_by_role('button', name='Os dois lados — AMORTECEDOR', exact=True).click()
+        n1 = nomes(); t('AMORTECEDOR DIANTEIRO (OS DOIS LADOS)' in n1, 'posição e lado entram no nome: ' + str(n1))
+        t(pg.evaluate("document.querySelector('[aria-label=\"Aumentar a quantidade de AMORTECEDOR DIANTEIRO (OS DOIS LADOS)\"]').previousElementSibling.textContent") == '2', '"os dois lados" sugere quantidade 2')
+        pg.get_by_role('button', name='Aumentar a quantidade de KIT AMORTECEDOR').click()
+        for _ in range(30):
+            pend = pg.locator("button[aria-pressed='false'][aria-label*='não se aplica']"); falta = pg.evaluate("[...document.querySelectorAll('div')].filter(d => /^Qual /.test(d.textContent) && d.children.length === 0).length")
+            if not falta: break
+            pg.evaluate("(() => { const q = [...document.querySelectorAll('div')].find(d => /^Qual /.test(d.textContent) && d.children.length === 0); q.nextElementSibling.lastElementChild.click(); })()")
+        # adicionar mais itens sem perder a lista
+        pg.get_by_role('button', name='+ Adicionar mais itens').click(); pg.fill('#nv-texto', 'balanceamento'); pg.get_by_role('button', name='Adicionar à lista', exact=True).click()
+        t('BALANCEAMENTO' in nomes() and 'KIT AMORTECEDOR' in nomes(), 'adiciona mais itens sem perder a lista')
         pg.get_by_role('button', name='Concluir (teste: não salva)').click()
         t(pg.get_by_text('Teste: o orçamento NÃO foi salvo no sistema.').count() == 1, 'orçamento não é salvo')
         # óleo pelo catálogo real

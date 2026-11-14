@@ -79,6 +79,19 @@ details.card summary h3::after{content:" ▾";font-size:12px}
 .sub{color:var(--muted);font-size:13.5px}
 .dica{font-size:12.5px;color:var(--muted)}
 .dica.erro{color:var(--bad);font-weight:600}
+/* consulta do veículo pela placa (v55) */
+.placa-linha{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;margin:-4px 0 10px}
+.placa-buscar{font-weight:600}
+.info.placa-nova .dica{color:inherit;opacity:.9}
+.info.placa-nova .btn-link{margin-right:8px}
+.placa-consulta{margin:6px 0 12px;display:flex;flex-direction:column;gap:8px}
+.placa-botoes{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.placa-botoes .dica{flex:1 1 240px}
+.placa-resultado{background:var(--brand-soft);border-radius:var(--r);padding:10px 12px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
+.placa-dif{margin-top:6px;color:var(--warn);font-weight:500}
+.placa-situacao{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:10px 0 6px}
+.placa-ok{background:var(--ok-soft);color:var(--ok);border-radius:999px;padding:2px 12px;font-weight:700;font-size:13px}
+.placa-uso{margin:6px 0 10px;font-size:14px}
 .vazio{color:var(--muted);text-align:center;padding:20px 8px;border:1px dashed var(--line);border-radius:var(--r)}
 .texto-pre{white-space:pre-wrap}
 .termo{font-size:14px}

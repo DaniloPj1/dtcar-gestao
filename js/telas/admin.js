@@ -4,6 +4,7 @@ import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
 import { pode, PAPEIS, CONFIG_PADRAO, TERMO_ENTRADA, TERMO_ORCAMENTO, TERMO_GARANTIA } from "../regras.js";
+import { CartaoPlaca } from "../placa.js";
 
 /* ---------------- Menu "Mais" ---------------- */
 export function Mais() {
@@ -123,6 +124,7 @@ export function Ajustes() {
         ${c.itensExtras.length ? html`<div class="chips">${c.itensExtras.map(x => html`<span class="chip" key=${x.id}>${x.nome}<button type="button" aria-label=${"Remover " + x.nome} onClick=${() => set({ itensExtras: c.itensExtras.filter(y => y.id !== x.id) })}>×</button></span>`)}</div>` : null}
         <div class="linha-add"><input class="inp" id="a-item" placeholder="Nome do item" value=${novoItem} onInput=${e => setNovoItem(e.target.value)} /><button type="button" class="btn" onClick=${() => { if (novoItem.trim()) { set({ itensExtras: c.itensExtras.concat([{ id: uuid().slice(0, 8), nome: novoItem.trim() }]) }); setNovoItem(""); } }}>Adicionar</button></div></div>
     </section>
+    <${CartaoPlaca} auto=${c.placaAuto} onAuto=${v => set({ placaAuto: v })} />
     <section class="card"><h2>Termos dos documentos</h2><span class="dica">Revise com seu contador ou advogado antes de usar.</span>
       ${termo("termoEntrada", "Termo do checklist de entrada", TERMO_ENTRADA, "A frase da taxa de diagnóstico é acrescentada automaticamente quando houver taxa.")}
       ${termo("termoOrcamento", "Termo do orçamento", TERMO_ORCAMENTO)}

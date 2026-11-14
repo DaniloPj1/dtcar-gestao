@@ -68,6 +68,10 @@ const banco: Banco = {
     if (nome === "sicredi" && op.body?.acao === "baixar") return Promise.resolve({ data: { ok: true }, error: null });
     if (nome === "sicredi" && sicrediRecusa) return Promise.resolve({ data: { erro: sicrediRecusa === "rede" ? "O Sicredi não respondeu em 25 s." : "Pedido recusado pelo Sicredi: CEP inválido" }, error: null });
     if (nome === "sicredi") return Promise.resolve({ data: { nossoNumero: "260000011", linhaDigitavel: "74891", codigoBarras: "748", qrCode: "000201x", txid: "t" }, error: null });
+    if (nome === "placa" && op.body?.placa === "SEM0A00") return Promise.resolve({ data: null, error: { message: "erro", context: { json: () => Promise.resolve({ erro: "A consulta completa é só para administrador e consultor." }) } } });
+    if (nome === "placa" && op.body?.acao === "saldo") return Promise.resolve({ data: { ok: true, saldo: { saldo_centavos: 950 } }, error: null });
+    if (nome === "placa") return Promise.resolve({ data: op.body.placa === "FOR4A00" ? { ok: false, erro: "Acabou o saldo do API Placas." }
+      : { ok: true, encontrado: true, placa: op.body.placa, tipo: op.body.acao, origem: op.body.forcar ? "api" : "cadastro", dados: { marca: "FIAT", modelo: "UNO" }, valor_centavos: op.body.forcar ? 20 : 0 }, error: null });
     if (nome === "email" && op.body?.acao === "whatsapp") return Promise.resolve({ data: { gravado: op.body.confirmar === true, texto: "Olá, João!", arquivo: { nome: "Orcamento_01887_ABC1D23.pdf", kb: 180 } }, error: null });
     return Promise.resolve({ data: { ok: true }, error: null }); } },
   from: (t: string) => fromFalso(t),
@@ -99,8 +103,10 @@ const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente
   "whatsapp_cancelar", "whatsapp_conversas", "whatsapp_enviar", "whatsapp_ler", "whatsapp_situacao",
   // v50: acesso a tudo, menos o ObjetivaWeb
   "consultar", "relatorio", "desconto_os", "fornecedor", "venda_balcao", "recibo_avulso", "funcionario", "nota_sefaz", "boleto", "pedido_compra", "parcela",
-  "despesa_fixa", "ajustes", "equipe", "site", "rh_documento", "anexar_na_os", "backup_leitura"].sort();
-confere("57 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+  "despesa_fixa", "ajustes", "equipe", "site", "rh_documento", "anexar_na_os", "backup_leitura",
+  // v55: consulta do veículo pela placa (API Placas)
+  "consultar_placa"].sort();
+confere("58 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
 confere("20 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 20, String(leitura));
@@ -296,6 +302,9 @@ confere("consultar: tabela de chaves é recusada sem ir ao banco", c.r?.isError 
 consultas.length = 0;
 c = await chama("consultar", { tabela: "nfe_recebidas" });
 confere("consultar: XML das notas fica fora do padrão", !/(^|,)xml(,|$)/.test(consultas[0]?.sel || "") && /tem_xml/.test(consultas[0]?.sel || "") && json(c.r).mostrando === 1, consultas[0]?.sel);
+consultas.length = 0;
+c = await chama("consultar", { tabela: "placa_consultas" });
+confere("consultar (v55): consultas de placa sem a resposta inteira da API no padrão", /valor_centavos/.test(consultas[0]?.sel || "") && !/(^|,)resposta(,|$)/.test(consultas[0]?.sel || ""), consultas[0]?.sel);
 c = await chama("consultar", { tabela: "whatsapp_conexao", colunas: "*" });
 confere("consultar: QR do pareamento e hash do motor não saem", c.r?.isError === true && /qr_svg/.test(texto(c.r)));
 c = await chama("consultar", { tabela: "whatsapp_conexao", colunas: "situacao,qr_svg" });
@@ -446,6 +455,30 @@ confere("backup_leitura: enviar e situação pela função email", JSON.stringif
 c = await chama("alterar_os", { numero: 1904, dados: { tecnico: "João", desconto: 50 } });
 confere("alterar_os: técnico pelo nome e desconto vão para o banco (prévia)", c.args?.p_acao === "alterar_os" && ((c.args?.p as L).dados as L).tecnico === "João" && c.args?.p_gravar === false);
 confere("instruções v50: fora do conector e dinheiro com prévia", String(ini.corpo.result?.instructions || "").includes("ObjetivaWeb") && String(ini.corpo.result?.instructions || "").includes("desconto_os, venda_balcao"));
+
+// ---------- v55: consultar_placa
+acordadas.length = 0;
+let rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "MTX1A23" } });
+let jp = JSON.parse(rp.corpo.result?.content?.[0]?.text || "{}");
+confere("consultar_placa: padrão é a básica, sem forçar", acordadas.length === 1 && acordadas[0][0] === "placa" && (acordadas[0][1] as L).acao === "basico" && (acordadas[0][1] as L).placa === "MTX1A23"
+  && !("forcar" in (acordadas[0][1] as L)) && jp.origem === "cadastro" && jp.dados?.modelo === "UNO", JSON.stringify(acordadas));
+acordadas.length = 0;
+rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "MTX1A23", tipo: "basico", consultar_de_novo: true } });
+confere("consultar_placa: consultar de novo não vale para a básica", !("forcar" in (acordadas[0][1] as L)));
+acordadas.length = 0;
+rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "MTX1A23", tipo: "completa", consultar_de_novo: true } });
+jp = JSON.parse(rp.corpo.result?.content?.[0]?.text || "{}");
+confere("consultar_placa: completa de novo manda forcar", (acordadas[0][1] as L).acao === "completa" && (acordadas[0][1] as L).forcar === true && jp.origem === "api");
+rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "FOR4A00" } });
+confere("consultar_placa: erro da função (sem saldo) vira erro da ferramenta", rp.corpo.result?.isError === true && /saldo/.test(rp.corpo.result?.content?.[0]?.text || ""));
+rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "SEM0A00", tipo: "completa" } });
+confere("consultar_placa: recusa da função com a mensagem dela", rp.corpo.result?.isError === true && /administrador e consultor/.test(rp.corpo.result?.content?.[0]?.text || ""));
+acordadas.length = 0;
+rp = await rpc("tools/call", { name: "consultar_placa", arguments: { tipo: "saldo" } });
+confere("consultar_placa: saldo", (acordadas[0][1] as L).acao === "saldo" && JSON.parse(rp.corpo.result?.content?.[0]?.text || "{}").saldo?.saldo_centavos === 950);
+rp = await rpc("tools/call", { name: "consultar_placa", arguments: {} });
+confere("consultar_placa: sem placa é recusado", rp.corpo.result?.isError === true || !!rp.corpo.error);
+confere("instruções v55: só busca na API quando não tem os dados", String(ini.corpo.result?.instructions || "").includes("consultar_placa") && String(ini.corpo.result?.instructions || "").includes("só buscar na API quando o sistema não tiver os dados"));
 
 confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));
 

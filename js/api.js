@@ -208,6 +208,23 @@ function criarApiSupabase() {
       },
     },
     temBoletos: () => temBoletos,
+    /** Dados do veículo pela placa, pela função "placa" (API Placas; a chave fica no servidor; v55).
+     *  Devolve { ok, encontrado, dados, origem } ou { ok: false, erro, desligada?, sem_saldo?, semRede? }. Não lança erro. */
+    placa: async body => {
+      let data, error;
+      const SEM_RESPOSTA = { ok: false, semRede: true, erro: "Sem resposta da consulta de placa (sem conexão, ou a consulta ainda não foi ligada no Supabase)." };
+      try { ({ data, error } = await sb.functions.invoke("placa", { body })); } catch (e) { return SEM_RESPOSTA; }
+      if (error) {
+        const st = error.context && error.context.status; let m = error.message || "";
+        if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) return SEM_RESPOSTA;
+        try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
+        if (st === 404 || /not found/i.test(m)) return { ok: false, desligada: true, erro: "A consulta de placa ainda não foi ligada: falta publicar a função \"placa\" no Supabase." };
+        return { ok: false, erro: m || "Falha na consulta da placa." };
+      }
+      return data || { ok: false, erro: "Sem resposta da consulta de placa." };
+    },
+    /** Consultas de placa pagas desde uma data (tela Ajustes: quantidade e gasto do mês). Só administrador e consultor leem. */
+    placaUso: async desde => ok(await sb.from("placa_consultas").select("tipo,valor_centavos,saldo_centavos,em").gte("em", desde).order("em", { ascending: false }).limit(2000)),
     /** API de Cobrança do Sicredi pela função "sicredi" (o navegador nunca vê a chave nem o código de acesso) */
     sicredi: async body => {
       const { data, error } = await sb.functions.invoke("sicredi", { body });

@@ -4,6 +4,7 @@ import { api, estaSemRede } from "../api.js";
 import { fila, servidorResponde } from "../fila.js";
 import { local, erroDeRede } from "../local.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, SecaoChecklist, PadAssinatura, Foto } from "../ui.js";
+import { usePlaca, PlacaBusca, tirarPreenchidos, paraResumo, anoFabMod } from "../placa.js";
 import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
 import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
 
@@ -71,6 +72,14 @@ function validarNova(f, dados) {
 }
 
 /* =================== NOVA O.S. =================== */
+/** Anos do veículo novo (o campo da tela é o ano do modelo). Se a consulta da placa trouxe o ano de fabricação — e o chassi e o Renavam,
+ *  quando já houve consulta completa —, eles entram no cadastro, desde que a placa e o ano da tela ainda sejam os da consulta. */
+function anosENumeros(f) {
+  const mod = +f.vNovo.ano || null, p = f.vNovo.daPlaca && f.vNovo.daPlaca.placa === f.placa ? f.vNovo.daPlaca : null;
+  const fab = p && +p.ano_fab && String(p.ano_mod || "") === String(f.vNovo.ano) && +p.ano_fab <= mod ? +p.ano_fab : mod;
+  return { ano: anoFabMod(fab, mod), ano_fab: fab, ano_mod: mod, ...(p && p.chassi ? { chassi: p.chassi } : {}), ...(p && p.renavam ? { renavam: p.renavam } : {}) };
+}
+
 export function NovaOS() {
   const { dados, cfg, perfil, avisar, confirmar, ir, recarregar, atualizarPendentes } = useApp();
   const consultores = dados.perfis.filter(p => p.ativo !== false && (p.papel === "admin" || p.papel === "consultor"));
@@ -81,6 +90,17 @@ export function NovaOS() {
   useEffect(() => { lsSet(LS_NOVA, f); }, [f]);
   useEffect(() => { if (!f.consultorId && consultores.some(c => c.id === perfil.id)) setF(o => ({ ...o, consultorId: perfil.id })); }, [dados.perfis]);
   const muda = p => setF(o => ({ ...o, ...p }));
+  // Placa nova (fora do cadastro) e sem marca/modelo digitados: busca os dados pela placa (v55) e preenche só o que está em branco.
+  // vNovo.daPlaca guarda de qual placa veio o preenchimento, o que foi posto na tela (campos) e o que a consulta trouxe além
+  // dos campos da tela (ano de fabricação; chassi e Renavam se já houve consulta completa). Fica no rascunho da tela.
+  const placaNova = placaValida(f.placa) && !f.veiculoId && !dados.veiculos.some(x => x.placa === f.placa);
+  const autoPlaca = usePlaca(f.placa, { falta: placaNova && !f.vNovo.marca.trim() && !f.vNovo.modelo.trim(), auto: cfg.placaAuto !== false,
+    onDados: (dd, r) => setF(o => { const campos = paraResumo(dd), postos = Object.fromEntries(Object.keys(campos).filter(k => !String(o.vNovo[k] ?? "").trim() && campos[k]).map(k => [k, campos[k]]));
+      return { ...o, vNovo: { ...o.vNovo, ...postos, daPlaca: { placa: r.placa || o.placa, campos: postos, ano_fab: dd.ano_fab || "", ano_mod: dd.ano_mod || "", chassi: dd.chassi || "", renavam: dd.renavam || "" } } }; }) });
+  // a placa digitada passou a existir no cadastro (outro aparelho cadastrou, ou o rascunho é antigo): liga ao veículo, como ao digitar
+  useEffect(() => { if (f.veiculoId || !placaValida(f.placa)) return; const v = dados.veiculos.find(x => x.placa === f.placa); if (v) setF(o => o.veiculoId || o.placa !== v.placa ? o : { ...o, veiculoId: v.id, clienteId: v.cliente_id || o.clienteId }); }, [dados.veiculos, f.placa]);
+  // a placa foi trocada depois do preenchimento (mesmo num rascunho reaberto): o que veio da placa antiga sai dos campos
+  useEffect(() => { const p = f.vNovo.daPlaca; if (p && p.placa !== f.placa) setF(o => { const { daPlaca, ...v } = tirarPreenchidos(o.vNovo, (o.vNovo.daPlaca || {}).campos || {}); return { ...o, vNovo: v }; }); }, [f.placa]);
   const veiculo = dados.veiculos.find(v => v.id === f.veiculoId);
   const cliente = dados.clientes.find(c => c.id === f.clienteId);
   const abertaDoVeiculo = veiculo ? dados.ordens.find(o => o.veiculo_id === veiculo.id && ["diagnostico", "aguardando", "execucao", "pronto"].includes(o.status)) : null;
@@ -99,7 +119,7 @@ export function NovaOS() {
           endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "" }); cliId = cli.id; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo;
-      if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ano: String(f.vNovo.ano), ano_fab: +f.vNovo.ano || null, ano_mod: +f.vNovo.ano || null,
+      if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
         cor: f.vNovo.cor.trim(), motor: f.vNovo.motor.trim(), combustivel: f.vNovo.combustivel || "", cliente_id: cliId, km_atual: km });
       else vei = await api.veiculos.salvar({ id: vei.id, cliente_id: cliId, km_atual: Math.max(km, vei.km_atual || 0) });
       const cons = consultores.find(c => c.id === f.consultorId);
@@ -132,7 +152,7 @@ export function NovaOS() {
           endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "" }; cli = novoCli; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo, novoVei = null, veiAtual = null;
-      if (!vei) { novoVei = { id: uuid(), placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ano: String(f.vNovo.ano), ano_fab: +f.vNovo.ano || null, ano_mod: +f.vNovo.ano || null,
+      if (!vei) { novoVei = { id: uuid(), placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
         cor: f.vNovo.cor.trim(), motor: f.vNovo.motor.trim(), combustivel: f.vNovo.combustivel || "", cliente_id: cliId, km_atual: km }; vei = novoVei; }
       else veiAtual = { id: vei.id, cliente_id: cliId, km_atual: Math.max(km, vei.km_atual || 0) };
       const cons = consultores.find(c => c.id === f.consultorId);
@@ -167,7 +187,7 @@ export function NovaOS() {
       </${Campo}>
       ${veiculo ? html`<div class="achado"><${Placa} placa=${veiculo.placa} /><div class="meio"><strong>${veiculo.marca} ${veiculo.modelo} ${veiculo.ano}</strong><div class="sub">Já cadastrado · último KM ${fmtKm(veiculo.km_atual)} · ${dados.ordens.filter(o => o.veiculo_id === veiculo.id).length} O.S. anteriores</div></div></div>
         ${abertaDoVeiculo ? html`<div class="aviso">Este veículo já está com a <b>${numOS(abertaDoVeiculo.numero)}</b> aberta (${abertaDoVeiculo.status === "pronto" ? "pronto para retirada" : "em andamento"}). <button type="button" class="btn-link" onClick=${() => ir("/os/" + abertaDoVeiculo.id)}>Abrir a O.S. existente</button></div>` : null}`
-      : placaValida(f.placa) ? html`<div class="info">Placa nova. Preencha os dados do veículo.</div>
+      : placaValida(f.placa) ? html`<div class="info placa-nova">Placa nova. ${["", "quieto"].includes(autoPlaca.estado) ? "Preencha os dados do veículo. " : ""}<${PlacaBusca} c=${autoPlaca} /></div>
         <div class="grade">
           <${Campo} id="v-marca" rotulo="Marca" obrig><${Texto} id="v-marca" valor=${f.vNovo.marca} onMuda=${v => muda({ vNovo: { ...f.vNovo, marca: v } })} /></${Campo}>
           <${Campo} id="v-modelo" rotulo="Modelo" obrig><${Texto} id="v-modelo" valor=${f.vNovo.modelo} onMuda=${v => muda({ vNovo: { ...f.vNovo, modelo: v } })} /></${Campo}>

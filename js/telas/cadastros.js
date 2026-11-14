@@ -1,11 +1,12 @@
 // Cadastros no modelo do OS Oficina 3.0: clientes (3 abas), veículos (ficha cadastral) e produtos/serviços
-import { html, useState, useEffect, useMemo } from "../lib.js";
+import { html, useState, useEffect, useMemo, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, Modal, Vazio, I, Dinheiro, BuscaCliente } from "../ui.js";
 import { soDig, norm, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, reais, fmtData, numOS, linkWhats, qtdFmt, hojeISO, endCompleto } from "../util.js";
 import { pode, ABERTOS, SITUACAO_CLIENTE, COMBUSTIVEIS, ESTADO_CIVIL } from "../regras.js";
 import { etapaNoResumo } from "../resumoos.js";
 import { LinhaOS } from "./painel.js";
+import { consultarPlaca, tirarPreenchidos, camposNovos, paraFicha, anoFabMod, avisoSaldo, usePlaca, PlacaAviso, PRECO_PLACA } from "../placa.js";
 import { prepararNovaOS, ORIGENS } from "./entrada.js";
 import { ProdutosLista } from "./produtos.js";
 import { FornecedoresLista } from "./compras.js";
@@ -140,12 +141,70 @@ export const edVeiculo = (v, clienteId) => v ? { tipo: "veiculo", id: v.id, plac
 export const anoVeiculo = (f, m) => { f = +f || 0; m = +m || 0; return f && m && f !== m ? `${f}/${m}` : String(m || f || ""); };
 
 export function FormVeiculo({ ed, setEd, onSalvo }) {
-  const { dados, perfil, avisar, confirmar, recarregar, ir } = useApp();
+  const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const pode_ = pode(perfil, "cadastrar"), d = ed.d;
   const set = (k, v) => setEd(o => ({ ...o, erros: [], d: { ...o.d, [k]: v } }));
   const T = (k, rot, attr = {}, obrig) => html`<${Campo} id=${"v-" + k} rotulo=${rot} obrig=${obrig}><${Texto} id=${"v-" + k} valor=${d[k]} onMuda=${v => set(k, v)} ...${attr} /></${Campo}>`;
   const N = (k, rot, max = 7) => html`<${Campo} id=${"v-" + k} rotulo=${rot}><input id=${"v-" + k} class="inp" inputmode="numeric" value=${d[k] === "" || d[k] === null ? "" : Number(d[k]).toLocaleString("pt-BR").replace(/\./g, k.startsWith("ano") ? "" : ".")} onInput=${e => set(k, soDig(e.target.value).slice(0, max))} /></${Campo}>`;
   const D = (k, rot) => html`<${Campo} id=${"v-" + k} rotulo=${rot}><input id=${"v-" + k} type="date" class="inp" value=${d[k] || ""} onInput=${e => set(k, e.target.value)} /></${Campo}>`;
+  // ---- Consulta pela placa (v55). Regra do Danilo: só busca quando o sistema ainda não tem os dados.
+  // Sozinha: veículo novo, placa que não está no cadastro e marca/modelo em branco (consulta básica).
+  // Pelos botões: "Buscar dados pela placa" (básica, quando falta dado) e "Consulta completa" (chassi, Renavam e nº do motor).
+  // Só preenche campo em branco; se a placa for trocada depois, o que veio da placa antiga sai dos campos.
+  const plDig = normPlaca(d.placa), [consulta, setConsulta] = useState({ estado: "" });
+  const ultima = useRef(null), aberto = useRef(true), placaAgora = useRef(plDig);   // ultima: { placa, ficha, linha } que a consulta pôs nos campos
+  placaAgora.current = plDig;
+  useEffect(() => () => { aberto.current = false; }, []);
+  const juntar = (dd, placa) => {
+    const ficha = paraFicha(dd), linha = dd.motor_numero ? "Nº do motor: " + dd.motor_numero : "";
+    if (!aberto.current) return;   // a ficha foi fechada antes de a consulta voltar
+    setEd(o => {
+      if (!o || !aberto.current) return o;
+      const u = ultima.current && ultima.current.placa === placa ? ultima.current : { ficha: {}, linha: "" };
+      const postos = Object.fromEntries(camposNovos(o.d, ficha).map(k => [k, ficha[k]])), obs = String(o.d.obs || "");
+      const poeLinha = linha && !obs.includes(linha);
+      ultima.current = { placa, ficha: { ...u.ficha, ...postos }, linha: poeLinha ? linha : u.linha };
+      return { ...o, erros: [], d: { ...o.d, ...postos, ...(poeLinha ? { obs: [obs.trim(), linha].filter(Boolean).join("\n") } : {}) } };
+    });
+  };
+  useEffect(() => {   // trocou a placa: tira o que a consulta da placa anterior tinha preenchido
+    const u = ultima.current;
+    if (!u || u.placa === plDig) return;
+    ultima.current = null; setConsulta({ estado: "" });
+    setEd(o => o && ({ ...o, d: { ...tirarPreenchidos(o.d, u.ficha), obs: u.linha ? String(o.d.obs || "").split("\n").filter(l => l.trim() !== u.linha).join("\n") : o.d.obs } }));
+  }, [plDig]);
+  const jaCadastrada = !ed.id && placaValida(plDig) && dados.veiculos.some(v => v.placa === plDig);
+  const auto = usePlaca(d.placa, { falta: pode_ && !ed.id && !jaCadastrada && !String(d.marca).trim() && !String(d.modelo).trim(), auto: cfg.placaAuto !== false, onDados: dd => juntar(dd, plDig) });
+  const faltaBasico = !String(d.marca).trim() || !String(d.modelo).trim() || !(d.ano_fab || d.ano_mod) || !String(d.cor).trim() || !d.combustivel;
+  const chassiForm = String(d.chassi || "").replace(/\s/g, "").toUpperCase(), renavamForm = soDig(d.renavam);
+  const temCompleta = chassiForm.length === 17 && renavamForm.length >= 9;
+  const NOME_CAMPO = { marca: "marca", modelo: "modelo", ano_fab: "ano de fabricação", ano_mod: "ano do modelo", cor: "cor", combustivel: "combustível", motor: "motor", chassi: "chassi", renavam: "Renavam" };
+  const consultar = async tipo => {
+    if (!placaValida(plDig)) return setConsulta({ estado: "erro", msg: "Digite a placa primeiro (ABC1234 ou ABC1D23)." });
+    let forcar = false;
+    if (tipo === "completa" && temCompleta) {   // já temos chassi e Renavam: só consulta de novo se ele confirmar
+      if (!await confirmar({ titulo: "Consultar de novo?", texto: "Esta ficha já tem chassi e Renavam. Consultar de novo custa " + reais(PRECO_PLACA.completa) + " e serve para conferir: só preenche o que estiver em branco.", botao: "Consultar de novo" })) return;
+      forcar = true;
+    }
+    setConsulta({ estado: "buscando", tipo });
+    const r = await consultarPlaca(plDig, tipo, { forcar, manual: true });
+    if (!aberto.current) return;
+    if (placaAgora.current !== plDig) return setConsulta({ estado: "" });   // a placa foi trocada enquanto a consulta ia e voltava: não mistura os dados
+    if (r.ok && r.encontrado) {
+      const dd = r.dados || {}, novos = camposNovos(d, paraFicha(dd));
+      juntar(dd, plDig);
+      const custo = r.origem === "api" ? "Consulta feita agora (" + reais((r.valor_centavos || 0) / 100) + ")." : r.origem === "copia" ? "Consulta que já estava guardada no sistema (sem custo)." : "O cadastro já tinha estes dados (sem custo).";
+      setConsulta({ estado: "feito", tipo, r, msg: custo + " " + (novos.length ? "Preenchido: " + novos.map(k => NOME_CAMPO[k] || k).join(", ") + "." : "Não havia campo em branco para preencher.") + " Confira e salve o cadastro.", aviso: avisoSaldo(r) });
+    } else if (r.ok) setConsulta({ estado: "nao", tipo, msg: "A consulta não achou esta placa (não foi cobrado). Confira se a placa está certa." });
+    else setConsulta({ estado: "erro", tipo, msg: r.erro || "Falha na consulta." });
+  };
+  // o que a consulta trouxe (para conferir) e o que está diferente da ficha: chassi e Renavam identificam o veículo.
+  // (o "final do chassi" da consulta básica só é mostrado: sem ver uma resposta de verdade, não dá para comparar com segurança)
+  const cd = consulta.estado === "feito" && consulta.r ? consulta.r.dados || {} : null, difs = [];
+  if (cd) {
+    if (cd.chassi && chassiForm && chassiForm !== cd.chassi) difs.push({ k: "chassi", rot: "Chassi", aqui: chassiForm, la: cd.chassi });
+    if (cd.renavam && renavamForm && Number(renavamForm) !== Number(cd.renavam)) difs.push({ k: "renavam", rot: "Renavam", aqui: renavamForm, la: cd.renavam });
+  }
   const salvar = async () => {
     const erros = [], pl = normPlaca(d.placa), agora = new Date().getFullYear() + 1;
     if (!placaValida(pl) && !(ed.id && pl === ed.placaOriginal)) erros.push("Placa inválida (ABC1234 ou ABC1D23).");
@@ -177,6 +236,7 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
         ${N("ano_fab", "Ano fabricação", 4)}${N("ano_mod", "Ano modelo", 4)}${T("cor", "Cor")}
         <${Campo} id="v-data" rotulo="Data do cadastro"><input id="v-data" type="date" class="inp" value=${d.data || ""} onInput=${e => set("data", e.target.value)} /></${Campo}>
       </div>
+      ${jaCadastrada ? html`<div class="placa-linha"><span class="dica erro" role="status">Esta placa já está no cadastro.</span></div>` : auto.estado && auto.estado !== "quieto" ? html`<div class="placa-linha"><${PlacaAviso} c=${auto} /></div>` : null}
       <div class="campo"><label for="v-dono">Proprietário</label><${BuscaCliente} id="v-dono" valor=${d.cliente_id} onEscolha=${v => set("cliente_id", v)} /></div>
       <div class="grade">
         ${T("motorista", "Motorista / condutor")}
@@ -185,6 +245,19 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
         ${T("chassi", "Chassi", { maxlength: 20, style: { textTransform: "uppercase" } })}${T("renavam", "Renavam", { inputmode: "numeric" })}${N("km_atual", "KM atual")}
       </div>
       <div class="campo"><label>Combustível</label><${Seg} rotulo="Combustível" opcoes=${COMBUSTIVEIS.map(c => [c, "info"])} valor=${d.combustivel} onEscolha=${v => set("combustivel", v)} /></div>
+      ${pode_ && !jaCadastrada ? html`<div class="placa-consulta">
+        <div class="placa-botoes">
+          ${faltaBasico ? html`<button type="button" class="btn btn-sm" id="v-buscar-placa" disabled=${consulta.estado === "buscando" || auto.estado === "buscando"} onClick=${() => consultar("basico")}>${consulta.estado === "buscando" && consulta.tipo === "basico" ? "Buscando…" : "Buscar dados pela placa"}</button>` : null}
+          <button type="button" class="btn btn-sm" id="v-consulta-completa" disabled=${consulta.estado === "buscando"} onClick=${() => consultar("completa")}>${consulta.estado === "buscando" && consulta.tipo === "completa" ? "Consultando…" : "Consulta completa pela placa"}</button>
+          <span class="dica">${faltaBasico ? "A busca traz marca, modelo, ano, cor e combustível (" + reais(PRECO_PLACA.basico) + "). " : ""}A completa traz também chassi, Renavam e nº do motor (${reais(PRECO_PLACA.completa)}). Só é cobrado o que o sistema ainda não tem.</span>
+        </div>
+        ${consulta.msg ? html`<div class=${consulta.estado === "erro" ? "dica erro" : "dica"} role="status">${consulta.msg}${consulta.aviso ? html` <b>${consulta.aviso}</b>` : null}</div>` : null}
+        ${cd ? html`<div class="placa-resultado"><b>Na consulta:</b> ${[[cd.marca, cd.modelo].filter(Boolean).join(" "), anoFabMod(cd.ano_fab, cd.ano_mod), cd.cor, cd.combustivel || cd.combustivel_detran, cd.motor ? "motor " + cd.motor : "",
+            cd.chassi ? "chassi " + cd.chassi : cd.final_chassi ? "chassi final " + cd.final_chassi : "", cd.renavam ? "Renavam " + cd.renavam : "", cd.motor_numero ? "nº do motor " + cd.motor_numero : "",
+            cd.municipio ? "emplacado em " + cd.municipio + (cd.uf ? "/" + cd.uf : "") : ""].filter(Boolean).join(" · ")}
+          ${difs.map(x => html`<div class="placa-dif" key=${x.rot}><b>${x.rot} diferente:</b> na ficha ${x.aqui}, na consulta ${x.la}. Confira no documento do veículo.
+            ${x.k ? html` <button type="button" class="btn-link" onClick=${() => set(x.k, x.la)}>Usar o da consulta</button>` : null}</div>`)}</div>` : null}
+      </div>` : null}
       <h4 class="sub-titulo">Manutenção programada</h4>
       <div class="grade grade-manut">
         ${D("revisao_data", "Revisão: data")}${N("revisao_km", "Revisão: KM")}

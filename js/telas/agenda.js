@@ -11,6 +11,7 @@ import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, BuscaCliente } from "../
 import { norm, fmtData, fmtTel, fmtDataHora, hojeISO, somaDias, exPlaca, normPlaca, placaValida, lsGet, lsSet, numOS, numORC } from "../util.js";
 import { pode } from "../regras.js";
 import { prepararNovaOSAgenda, LS_VINCULOS } from "./entrada.js";
+import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
 
 /* ---------------- agenda da oficina (v54, pedido do Danilo em 12/11/2026) ----------------
  * Gravadas no banco: agendado, confirmado, chegou (virou O.S.), faltou, cancelado (com motivo). "Remarcado" não é situação:
@@ -207,13 +208,21 @@ export function SemanaJanela() {
 /* ---------------- um agendamento ---------------- */
 const MOTIVOS = ["Cliente desmarcou", "Cliente vai remarcar", "Fez em outra oficina", "Peça não chegou", "Oficina sem horário"];
 export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
-  const { dados, perfil, avisar, confirmar, ir } = useApp();
+  const { dados, cfg, perfil, avisar, confirmar, ir } = useApp();
   const novo = !inicial.id;
   const [a, setA] = useState(() => ({ ...inicial, hora: horaCurta(inicial.hora), cliente: { nome: "", telefone: "", ...(inicial.cliente || {}) }, veiculo: { placa: "", marca: "", modelo: "", ano: "", ...(inicial.veiculo || {}) } }));
   const [semCad, setSemCad] = useState(!novo && !inicial.cliente_id), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [sujo, setSujo] = useState(novo), [cancela, setCancela] = useState(null);
   const gestor = pode(perfil, "orcar"), trancado = !gestor || inicial._local || inicial.situacao === "chegou";
   const set = p => { setA(x => ({ ...x, ...p })); setSujo(true); setErro(""); };
   const veiculosCli = a.cliente_id ? dados.veiculos.filter(v => v.cliente_id === a.cliente_id) : [];
+  // Placa fora do cadastro e sem marca/modelo: busca pela placa (v55). Placa do cadastro já é ligada pelo digitarPlaca, sem consulta.
+  // Só em agendamento novo ou depois de a placa ser digitada nesta tela: abrir um agendamento antigo não consulta nem muda nada sozinho.
+  const [mexeuPlaca, setMexeuPlaca] = useState(novo);
+  const plAg = normPlaca(a.veiculo.placa);
+  const tresCampos = dd => { const r = paraResumo(dd); return { marca: r.marca, modelo: r.modelo, ano: r.ano }; };
+  const autoPlaca = usePlaca(a.veiculo.placa, { falta: mexeuPlaca && !trancado && !a.veiculo_id && !String(a.veiculo.marca || "").trim() && !String(a.veiculo.modelo || "").trim() && !dados.veiculos.some(v => v.placa === plAg),
+    auto: cfg.placaAuto !== false, onDados: dd => { setA(x => ({ ...x, veiculo: soVazios(x.veiculo, tresCampos(dd)) })); setSujo(true); },
+    onTrocou: dd => setA(x => ({ ...x, veiculo: tirarPreenchidos(x.veiculo, tresCampos(dd)) })) });
   const copiaVei = v => ({ placa: v.placa || "", marca: v.marca || "", modelo: v.modelo || "", ano: v.ano || "" });
   const escolherCliente = cid => { const c = dados.clientes.find(x => x.id === cid);
     // trocou de cliente: o carro do cliente anterior não pode ficar (abrir a O.S. trocaria o dono do carro no cadastro)
@@ -223,7 +232,7 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
     set({ cliente_id: cid, cliente: { nome: c.nome, telefone: c.telefone || "" }, ...(v ? { veiculo_id: v.id, veiculo: copiaVei(v) } : semVei) }); };
   const escolherVeiculo = vid => { const v = dados.veiculos.find(x => x.id === vid); set(v ? { veiculo_id: vid, veiculo: copiaVei(v) } : { veiculo_id: "" }); };
   // placa digitada que já está no cadastro: puxa o veículo e o dono
-  const digitarPlaca = txt => { const p = normPlaca(txt), v = placaValida(p) ? dados.veiculos.find(x => x.placa === p) : null;
+  const digitarPlaca = txt => { setMexeuPlaca(true); const p = normPlaca(txt), v = placaValida(p) ? dados.veiculos.find(x => x.placa === p) : null;
     if (v && !a.veiculo_id) { const c = v.cliente_id ? dados.clientes.find(x => x.id === v.cliente_id) : null;
       if (c && (!a.cliente_id || a.cliente_id === c.id)) { setSemCad(false); return set({ veiculo_id: v.id, veiculo: copiaVei(v), cliente_id: c.id, cliente: { nome: c.nome, telefone: c.telefone || "" } }); }
       if (!a.cliente_id) return set({ veiculo_id: v.id, veiculo: copiaVei(v) }); }
@@ -290,6 +299,7 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
       <${Campo} id="ag-placa" rotulo="Placa"><${Texto} id="ag-placa" valor=${a.veiculo.placa} disabled=${trancado || !!a.veiculo_id} onMuda=${digitarPlaca} /></${Campo}>
       <${Campo} id="ag-modelo" rotulo="Veículo"><${Texto} id="ag-modelo" placeholder="Marca e modelo" valor=${[a.veiculo.marca, a.veiculo.modelo].filter(Boolean).join(" ")} disabled=${trancado || !!a.veiculo_id}
         onMuda=${v => set({ veiculo: { ...a.veiculo, marca: "", modelo: v } })} /></${Campo}></div>
+    ${autoPlaca.botao || (autoPlaca.estado && autoPlaca.estado !== "quieto") ? html`<div class="placa-linha"><${PlacaBusca} c=${autoPlaca} /></div>` : null}
     <${Campo} id="ag-serv" rotulo="Serviço combinado" obrig><${Area} id="ag-serv" rows="2" placeholder="Ex.: revisão dos 40 mil, troca de óleo e filtros" valor=${a.servico} disabled=${trancado} onMuda=${v => set({ servico: v })} /></${Campo}>
     <${Campo} id="ag-obs" rotulo="Anotação interna (o cliente não vê)"><${Area} id="ag-obs" rows="2" valor=${a.obs} disabled=${trancado} onMuda=${v => set({ obs: v })} /></${Campo}>
 

@@ -2,7 +2,7 @@
 // Confere a pesquisa por modelo e ano, o código comparável com o estoque, a prioridade do estoque e a conversão.
 // Uso: node teste/teste_catalogo.mjs
 import dados from "../js/catalogodados.js";
-import { prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
+import { resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 const cat = prepararCatalogo(dados);
@@ -39,6 +39,16 @@ r = pesquisar(cat, "onix 1.0", 2015);
 const div = pesquisar(cat, "onix").oleo.filter(o => o.divergente);
 chk("divergência: Ipiranga e Maxon não contam como duas fontes", div.every(o => !/Ipiranga|Maxon/.test(o.fonte) || !/Ipiranga|Maxon/.test(o.divergente)), div.map(o => o.fonte + " x " + o.divergente));
 chk("período escrito", periodoTexto({ de: 2016, ate: 2021 }) === "2016 a 2021" && periodoTexto({ de: 2022, ate: 0 }) === "2022 em diante" && periodoTexto({ de: 0, ate: 2012 }) === "até 2012" && periodoTexto({ de: 0, ate: 0 }) === "");
+
+// --- resumo do óleo (tela resumida): uma linha por resposta diferente
+let rs = resumoOleo(pesquisar(cat, "hilux 2.8", 2023).oleo);
+chk("resumo Hilux 2023: uma linha só (8 L 5W30); as de 5,9 L com erro conhecido ficam fora", rs.length === 1 && rs[0].litros === "8" && rs[0].viscosidade === "5W30", rs.map(g => g.litros + " " + g.viscosidade));
+rs = resumoOleo(pesquisar(cat, "hilux 2.8", 2018).oleo);
+chk("resumo Hilux 2018: primeira linha é a conferida (7,9 L) e junta a Texaco, que concorda", rs[0].litros === "7,9" && /Conferido/.test(rs[0].linha.fonte) && rs[0].fontes === 2 && !rs.some(g => g.litros === "5,9"), rs.map(g => g.litros + " x" + g.fontes));
+rs = resumoOleo(pesquisar(cat, "palio fire", 2010).oleo);
+chk("resumo Palio Fire: Ipiranga e Maxon iguais contam como uma fonte", rs[0].litros === "2,7" && rs[0].fontes === 2, rs.map(g => g.litros + " x" + g.fontes));
+rs = resumoOleo(pesquisar(cat, "onix", 2018).oleo);
+chk("resumo Onix: o 15W40 da Omnicraft (erro de impressão) não entra", !rs.some(g => g.viscosidade === "15W40"), rs.map(g => g.viscosidade));
 
 // --- filtros: Tecfil, Mahle e MANN; o resto na conversão
 const semEstoque = new Map();

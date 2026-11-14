@@ -103,6 +103,23 @@ export function marcarDivergencias(linhas) {
   });
 }
 
+// Resumo do óleo para a tela (pedido do Danilo em 14/11/2026: "algo mais resumido"): uma linha por resposta diferente.
+// Linhas com os mesmos litros e a mesma viscosidade viram uma só (conta quantas fontes concordam); a linha de tabela com erro
+// conhecido (tem aviso) não entra no resumo, só nos detalhes. Devolve [{ litros, viscosidade, linha, fontes, divergente }].
+export const linhaSuspeita = r => eTabela(r) && !!r.aviso;
+export function resumoOleo(linhas) {
+  const grupos = new Map();
+  for (const r of linhas) {
+    if (linhaSuspeita(r)) continue;
+    const k = litrosNum(r.litros) + "|" + norm(r.viscosidade).split(/\s+ou\s+/).sort().join("/");
+    const g = grupos.get(k) || { litros: r.litros, viscosidade: r.viscosidade, linha: r, familias: new Set(), divergente: false };
+    g.familias.add(familia(r.fonte)); g.divergente = g.divergente || !!r.divergente; grupos.set(k, g);
+  }
+  // primeiro a conferida pela oficina, depois a resposta em que mais fontes concordam (empate: a ordem da pesquisa)
+  return [...grupos.values()].map((g, i) => ({ litros: g.litros, viscosidade: g.viscosidade, linha: g.linha, fontes: g.familias.size, divergente: g.divergente, _i: i }))
+    .sort((a, b) => (eTabela(a.linha) - eTabela(b.linha)) || b.fontes - a.fontes || a._i - b._i).map(({ _i, ...g }) => g);
+}
+
 export const periodoTexto = r => r.de && r.ate ? (r.de === r.ate ? String(r.de) : r.de + " a " + r.ate) : r.de ? r.de + " em diante" : r.ate ? "até " + r.ate : "";
 
 // Estoque de filtros: código comparável → produtos do cadastro (a mesma peça pode estar em dois cadastros, com e sem "S/NF").

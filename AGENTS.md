@@ -444,6 +444,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   litros diferentes para o mesmo modelo/cilindrada/ano; correções conferidas ficam em `AVISOS_OLEO`/`EXTRAS_OLEO` do `catalogo/gerar.py`
   (Hilux 2.8 177 cv = 7,9 L pelo manual; 204 cv 2022+ só "indicado por lojas, não conferido"). Aplicação de outro catálogo com filtro no
   estoque que a Tecfil não liga aparece em "No seu estoque". Não inventar código, litro nem norma: o que o catálogo não traz fica em branco.
+  **Tela resumida (pedido do Danilo no mesmo dia):** óleo em uma linha por resposta diferente (`resumoOleo`: mesmos litros e viscosidade
+  viram uma linha; primeiro a conferida, depois a que mais fontes concordam; no máximo 3; linha de tabela com erro conhecido só nos
+  detalhes), UMA aplicação de filtros (a que melhor casa) com cada filtro numa linha; norma, fonte e observações do catálogo em
+  "Ver detalhes" e as demais aplicações em "Ver outras versões" (lá dentro, "outros catálogos").
   **Ainda não feito:** ficha de óleo/filtros gravada no veículo e sugestão automática pela placa (etapa 2, com SQL), lançar na O.S. (etapa 3),
   conector (etapa 4); fluidos de câmbio/diferencial e palhetas. Testes: `node teste/teste_catalogo.mjs` e `python3 teste/teste_oleo_filtros.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).

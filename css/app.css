@@ -1431,40 +1431,34 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media print{.resos-os,.resos-geral,.resos-fecho{break-inside:avoid}}
 
 /* ===== Óleo e filtros por veículo (14/11/2026). Classes só desta tela (of-): não mexem em nenhuma outra. ===== */
-.of-pagina{max-width:920px}
+.of-pagina{max-width:860px}
 .of-busca{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:12px}
 .of-campo{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:13.5px}
-.of-campo .inp{min-height:50px}
-.of-oleos{display:flex;flex-direction:column;gap:8px}
-.of-oleo{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 16px;align-items:center;border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-.of-oleo-carro{display:flex;flex-direction:column;min-width:0}
-.of-oleo-num{display:flex;gap:18px}
-.of-oleo-num span{display:flex;flex-direction:column;align-items:flex-end}
-.of-oleo-num small,.of-marca small{font-size:12px;color:var(--muted);font-weight:600}
-.of-oleo-num b{font:700 22px var(--f-display);font-variant-numeric:tabular-nums;white-space:nowrap}
-.of-oleo-pe{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center}
-.of-oleo.of-div{border-color:var(--warn)}
-.of-selo{font-size:12.5px;font-weight:600;border-radius:6px;padding:3px 8px}
+.of-oleos{display:flex;flex-direction:column}
+.of-oleo{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:8px 2px;border-bottom:1px solid var(--line)}
+.of-oleo:last-child{border-bottom:0}
+.of-litros,.of-visc{font:700 21px var(--f-display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.of-litros{min-width:64px}
+.of-oleo-carro{flex:1 1 220px;min-width:0;color:var(--muted);font-size:13.5px}
+.of-oleo-pe{flex:1 1 100%}
+.of-selo{font-size:12.5px;font-weight:600;border-radius:6px;padding:2px 8px}
 .of-selo-div{background:var(--warn-soft);color:var(--warn)}
 .of-selo-aviso{background:var(--brand-soft);color:var(--brand-strong)}
+.of-mais,.of-outros{align-self:flex-start}
 .of-app{border:1px solid var(--line);border-radius:8px;overflow:hidden}
-.of-app header{background:var(--surface-2);padding:10px 12px;border-bottom:1px solid var(--line)}
-.of-app h3{margin:0;font-size:16.5px}
-.of-app header p{margin:2px 0 0}
-.of-app footer{padding:8px 12px}
-.of-filtro{display:grid;grid-template-columns:110px minmax(0,1fr) auto;gap:10px;align-items:center;padding:9px 12px;border-bottom:1px solid var(--line)}
+.of-app header{background:var(--surface-2);padding:8px 12px;border-bottom:1px solid var(--line)}
+.of-app footer{padding:7px 12px}
+.of-filtro{display:grid;grid-template-columns:104px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line)}
+.of-app .of-filtro:last-child{border-bottom:0}
 .of-tipo{font-weight:700}
 .of-nada,.of-traco{color:var(--muted);font-weight:500}
-.of-marcas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px 12px}
-.of-marca{display:flex;flex-direction:column;min-width:0}
-.of-marca b{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
-.of-semsaldo{grid-column:1/-1;font-size:12.5px;color:var(--muted)}
+.of-cods{display:flex;flex-wrap:wrap;gap:2px 18px;align-items:baseline;min-width:0}
+.of-marca small{font-size:12.5px;color:var(--muted);font-weight:600}
+.of-marca b,.of-est-item b{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.of-semsaldo{flex:1 1 100%;font-size:12.5px;color:var(--muted)}
 .of-filtro.of-tem{background:var(--ok-soft)}
-.of-estoque{display:flex;flex-wrap:wrap;gap:6px 16px}
-.of-est-item{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 8px}
-.of-est-item em{font-style:normal;font-size:12px;font-weight:700;color:var(--ok);border:1px solid var(--ok);border-radius:5px;padding:1px 6px}
-.of-est-item b{font-size:16.5px;font-variant-numeric:tabular-nums}
-.of-outros{align-self:flex-start}
+.of-est-item em{font-style:normal;font-size:12px;font-weight:700;color:var(--ok);border:1px solid var(--ok);border-radius:5px;padding:1px 6px;margin-right:8px}
+.of-est-item b{font-size:16px}
 .of-conv-lista{display:flex;flex-direction:column}
 .of-conv-lista div{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
 .of-conv-lista span{color:var(--muted);font-weight:600}
@@ -1475,8 +1469,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (max-width:1100px){.bt-oleo{display:none}}
 @media (max-width:640px){
   .of-busca{grid-template-columns:minmax(0,1fr) 96px}
-  .of-oleo{grid-template-columns:1fr}.of-oleo-num{justify-content:flex-start}.of-oleo-num span{align-items:flex-start}
-  .of-filtro{grid-template-columns:minmax(0,1fr) auto}.of-tipo{grid-column:1}.of-filtro .of-conv{grid-column:2;grid-row:1}
-  .of-marcas,.of-estoque,.of-nada{grid-column:1/-1}
+  .of-filtro{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px}.of-filtro .of-conv{grid-column:2;grid-row:1}
+  .of-cods,.of-nada{grid-column:1/-1}
   .of-conv-lista div{grid-template-columns:110px minmax(0,1fr)}
 }

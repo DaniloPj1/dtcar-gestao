@@ -1488,3 +1488,9 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .fo-sel{border-color:#174f94;background:#eef3fa}
 .fo-confirma{display:flex;gap:8px;align-items:center;margin:10px 0;font-size:14px}
 @media (max-width:640px){.fo-campos{grid-template-columns:1fr}}
+
+/* Lançar óleo e filtros da ficha na O.S. (14/11/2026) */
+.secao-botoes{display:flex;gap:8px;flex-wrap:wrap}
+.lf-linha{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #e3e6ea;flex-wrap:wrap}
+.lf-linha select{flex:1 1 220px;min-width:0}.lf-desc{flex:1 1 200px}.lf-qtd{width:72px}
+.lf-sem{opacity:.85}

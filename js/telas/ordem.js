@@ -12,6 +12,7 @@ import { PrazoReceber, validarPrazo, lancarParcelas, ReceberParcelaModal, Combin
 import { BuscaFornecedor } from "./financeiro.js";
 import { NotasOSModal } from "./notasos.js";
 import { EnvioZapModal } from "./zapos.js";
+import { LancarFicha } from "./lancarficha.js";
 import { guardarChegadaAgenda } from "./entrada.js";
 import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
 import { osQuitada } from "../osrecibo.js";
@@ -327,7 +328,8 @@ export function Ordem({ id, params = {} }) {
   };
   const acao = async (rotulo, fn) => { setOcupado(rotulo); try { await fn(); } catch (e) { avisar(e.message, true); } finally { setOcupado(""); } };
 
-  const novoItem = tipo => setModal({ tipo: "item", item: { id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: jaAprovada ? true : null, executado: st === "pronto" || st === "entregue" } });
+  const itemVazio = tipo => ({ id: uuid(), _novo: true, tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, servico_id: null, produto_id: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", adicional: st !== "diagnostico", aprovado: jaAprovada ? true : null, executado: st === "pronto" || st === "entregue" });
+  const novoItem = tipo => setModal({ tipo: "item", item: itemVazio(tipo) });
   const podeGravarAgora = gestor && (ETAPAS_ABERTAS.includes(etapaOS(o)) || st === "execucao");
   const salvarItem = async it => {
     let x = { ...it };
@@ -344,6 +346,12 @@ export function Ordem({ id, params = {} }) {
     setItens(nova); setSujo(true); setModal(null);
     // grava na hora (como o Imprimir e o WhatsApp fazem), para o item não se perder se sair da O.S. sem clicar em "Salvar O.S."
     if (podeGravarAgora) { setGravando(true); try { await acao("salvar", () => salvar({}, false, nova)); } finally { setGravando(false); } } // "O.S. salva." vem antes dos avisos de total/parcelas, que continuam visíveis
+  };
+  // etapa 3 de óleo e filtros: lança de uma vez os itens escolhidos na ficha do veículo (mesmo caminho do salvarItem: grava na hora)
+  const lancarFicha = async lista => {
+    const nova = itens.concat(lista.map(x => ({ ...itemVazio("peca"), ...x, _novo: false })));
+    setItens(nova); setSujo(true); setModal(null);
+    if (podeGravarAgora) { setGravando(true); try { await acao("salvar", () => salvar({}, false, nova)); } finally { setGravando(false); } }
   };
   const excluirItem = it => { setItens(l => l.filter(x => x.id !== it.id)); if (!it._novo) setRemovidos(r => r.concat([it.id])); setSujo(true); setModal(null); };
 
@@ -550,7 +558,7 @@ export function Ordem({ id, params = {} }) {
     const g = itens.filter(i => i.tipo === tipo);
     const podeEditar = editaItens;
     if (!g.length && !podeEditar) return null;
-    return html`<div class="grupo-itens"><div class="secao-topo"><h4>${titulo}</h4>${podeEditar ? html`<button type="button" class="btn btn-sm" onClick=${() => novoItem(tipo)}>+ Incluir</button>` : null}</div>
+    return html`<div class="grupo-itens"><div class="secao-topo"><h4>${titulo}</h4>${podeEditar ? html`<span class="secao-botoes">${tipo === "peca" && vCad && vCad.ficha_oleo ? html`<button type="button" class="btn btn-sm" id="os-ficha-oleo" onClick=${() => setModal({ tipo: "ficha" })}>Óleo e filtros da ficha</button>` : null}<button type="button" class="btn btn-sm" onClick=${() => novoItem(tipo)}>+ Incluir</button></span>` : null}</div>
       ${g.length ? html`<div class="lista">${g.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${verValores} mostrarAprov=${st !== "diagnostico"}
         exec=${execOn && i.aprovado === true ? { disabled: st !== "execucao" || !pode(perfil, "executar") || !!ocupado, onMuda: v => marcarExecutado(i, v) } : null}
         onClick=${editaItens ? () => setModal({ tipo: "item", item: i }) : null}
@@ -671,6 +679,7 @@ export function Ordem({ id, params = {} }) {
     ${podeSalvar ? html`<div class="rodape-acoes"><div class="in"><button type="button" class="btn" onClick=${carregar}>Descartar alterações</button><button type="button" class="btn btn-pri" disabled=${!!ocupado} onClick=${() => acao("salvar", () => salvar())}>${ocupado === "salvar" ? "Salvando…" : "Salvar O.S."}</button></div></div>` : null}
 
     ${modal && modal.tipo === "notas" ? html`<${NotasOSModal} o=${o} onFechar=${() => setModal(null)} onMudou=${setNNotas} />` : null}
+    ${modal && modal.tipo === "ficha" && vCad ? html`<${LancarFicha} o=${o} v=${vCad} itens=${itens} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onLancar=${lancarFicha} />` : null}
     ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
     ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} comPrazo=${comPrazo} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}

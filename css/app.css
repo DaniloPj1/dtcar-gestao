@@ -1434,6 +1434,9 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .of-pagina{max-width:860px}
 .of-busca{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:12px}
 .of-campo{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:13.5px}
+.of-placa{display:flex;flex-wrap:wrap;gap:4px 12px;align-items:baseline;background:var(--brand-soft);color:var(--brand-strong);border-radius:8px;padding:8px 12px;font-size:14px}
+.of-placa-sem{background:var(--warn-soft);color:var(--warn)}
+.of-entendido{margin-left:auto}
 .of-oleos{display:flex;flex-direction:column}
 .of-oleo{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:8px 2px;border-bottom:1px solid var(--line)}
 .of-oleo:last-child{border-bottom:0}

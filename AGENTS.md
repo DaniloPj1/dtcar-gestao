@@ -448,6 +448,16 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   viram uma linha; primeiro a conferida, depois a que mais fontes concordam; no máximo 3; linha de tabela com erro conhecido só nos
   detalhes), UMA aplicação de filtros (a que melhor casa) com cada filtro numa linha; norma, fonte e observações do catálogo em
   "Ver detalhes" e as demais aplicações em "Ver outras versões" (lá dentro, "outros catálogos").
+  **Busca pela placa (pedido do Danilo em 14/11/2026, v132):** o mesmo campo aceita a placa. Placa do cadastro usa o cadastro (sem custo);
+  fora do cadastro chama a função "placa" (`consultarPlaca`, básica), que já guarda a cópia em `placa_consultas` e a reaproveita por 180 dias
+  (cadastrar o carro depois não paga de novo; a tela de óleo e filtros NÃO cadastra nada). **Casamento por palavras-chave**
+  (`chavesDoVeiculo`/`pesquisarVeiculo` em `js/catalogo.js`): marca, nome do modelo (palavra inteira: gol não é golf; "novo" e marca repetida
+  saem), cilindrada (do modelo, colada tipo "XEI20FLEX"/"10MT", ou do campo motor), ano do modelo e combustível; versão, turbo e 16v só
+  põem a linha certa na frente (`notaExtras`; diesel e turbo empurram para trás a linha do outro tipo). Se não acha, afrouxa: sem a marca,
+  depois sem a cilindrada. A tela mostra "Buscando por: HILUX 2.8 diesel 2022" para a pessoa conferir. Moto e caminhão não existem no
+  catálogo: a tela diz que não achou, não inventa. Também: o bloco "Também no seu estoque" só aceita aplicação de outro catálogo com ano
+  informado e período que não comece mais de 10 anos antes quando não tem ano final (Gol 1.6 2012 recebeu filtro do Gol AP "1996 em
+  diante"); linha de óleo conferida pela oficina não leva o selo "divergente".
   **Ainda não feito:** ficha de óleo/filtros gravada no veículo e sugestão automática pela placa (etapa 2, com SQL), lançar na O.S. (etapa 3),
   conector (etapa 4); fluidos de câmbio/diferencial e palhetas. Testes: `node teste/teste_catalogo.mjs` e `python3 teste/teste_oleo_filtros.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).

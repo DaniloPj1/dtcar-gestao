@@ -133,6 +133,24 @@
         porHash: async h => (db.boletos_arquivos || []).find(a => a.hash === h) || null,
         salvar: async a => { const x = { id: uid(), criado_em: now(), ...a }; (db.boletos_arquivos = db.boletos_arquivos || []).push(x); return x; } } },
     temBoletos: () => true,
+    // Consulta pela placa (função "placa", v55): window.__PLACA guarda as chamadas e deixa o teste mudar a resposta.
+    // Padrão: toda placa nova é um VW CrossFox; ZZZ9Z99 não existe; "situacao" simula função desligada ("desligada"), sem saldo ("saldo")
+    // ou servidor sem resposta ("semresposta": o que o navegador vê sem conexão ou com a função ainda não publicada).
+    placa: async body => { const P = window.__PLACA = window.__PLACA || {}; P.chamadas = P.chamadas || []; P.chamadas.push(body);
+      if (P.saldo === undefined) P.saldo = 1000;
+      if (P.situacao === "desligada") return { ok: false, desligada: true, erro: "A consulta de placa ainda não foi ligada: falta a chave do API Placas." };
+      if (P.situacao === "semresposta") return { ok: false, semRede: true, erro: "Sem resposta da consulta de placa (sem conexão, ou a consulta ainda não foi ligada no Supabase)." };
+      if (body.acao === "saldo") return { ok: true, saldo_centavos: P.saldo, saldo_formatado: "R$ " + (P.saldo / 100).toFixed(2).replace(".", ","), consultas_disponiveis: Math.floor(P.saldo / 3), preco: { basico: 3, completa: 20 }, limite_dia: 100, pagas_hoje: 0 };
+      if (P.situacao === "saldo") return { ok: false, sem_saldo: true, erro: "Acabou o saldo da consulta de placa (API Placas)." };
+      if (body.placa === "ZZZ9Z99") return { ok: true, encontrado: false, placa: body.placa };
+      const cad = db.veiculos.find(v => v.placa === body.placa);
+      if (cad && body.acao === "basico" && cad.marca && cad.modelo && cad.ano_fab && cad.cor && cad.combustivel) return { ok: true, encontrado: true, placa: body.placa, tipo: "basico", origem: "cadastro", dados: cad, valor_centavos: 0 };
+      const valor = body.acao === "completa" ? 20 : 3; P.saldo -= valor;
+      const dados = { ...(P.dados || { marca: "Volkswagen", modelo: "CROSSFOX", ano_fab: 2007, ano_mod: 2008, cor: "Prata", combustivel: "Flex", combustivel_detran: "Alcool / Gasolina", motor: "1.6", municipio: "Colatina", uf: "ES", final_chassi: "04251" }),
+        ...(body.acao === "completa" ? { chassi: "9BWZZZ377VT004251", renavam: "00123456789", motor_numero: "BAH123456" } : {}) };
+      (db.placa_consultas = db.placa_consultas || []).push({ tipo: body.acao, valor_centavos: valor, saldo_centavos: P.saldo, em: now() });
+      return { ok: true, encontrado: true, placa: body.placa, tipo: body.acao, dados, origem: "api", valor_centavos: valor, saldo_centavos: P.saldo }; },
+    placaUso: async desde => (db.placa_consultas || []).filter(x => x.em >= desde),
     // API do Sicredi (função "sicredi"): respostas como as da documentação v3.9.1; window.__SICREDI guarda as chamadas e o que o "banco" sabe
     sicredi: async body => { const S = window.__SICREDI = window.__SICREDI || { chamadas: [], situacao: {}, seq: 0 }; S.chamadas.push(body);
       if (body.acao === "teste_completo") return { ok: true, passos: [{ passo: "Entrar no Sicredi (token)", ok: true, detalhe: "Token recebido (vale 300 s)." }, { passo: "Emitir boleto de teste (R$ 1,00, com Pix)", ok: true, detalhe: "Nosso número 261000019, com QR Code Pix." }] };

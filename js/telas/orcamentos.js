@@ -5,12 +5,13 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, BuscaCliente } from "../ui.js";
-import { lsGet, lsSet, norm, uuid, reais, fmtData, fmtTel, fmtDataHora, totais, numORC, hojeISO, somaDias, exPlaca, normPlaca, linkWhats } from "../util.js";
+import { lsGet, lsSet, norm, uuid, reais, fmtData, fmtTel, fmtDataHora, totais, numORC, hojeISO, somaDias, exPlaca, normPlaca, placaValida, linkWhats } from "../util.js";
 import { pode, SITUACOES_ORC, situacaoORC, TABELAS_PRECO } from "../regras.js";
 import { pdfOS, entregarArquivo } from "../pdf.js";
 import { ItemModal, ItemLinha } from "./ordem.js";
 import { CampoDesconto } from "./acoesos.js";
 import { LS_ORC_AGENDA } from "./agenda.js";
+import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
 
 const FALTA_V53 = e => /orcamento_aprovar|schema cache|could not find|404/i.test((e && e.message) || "");
 const FALTA_V52 = e => /orcamentos|orcamento_salvar|does not exist|schema cache|could not find|404/i.test((e && e.message) || "");
@@ -70,6 +71,16 @@ export function Orcamento({ id }) {
   const [o, setO] = useState(() => !novo ? null : daAgenda ? { ...NOVO(cfg), cliente_id: daAgenda.cliente_id || "", veiculo_id: daAgenda.veiculo_id || "",
     cliente: { nome: "", telefone: "", ...(daAgenda.cliente || {}) }, veiculo: { placa: "", marca: "", modelo: "", ano: "", ...(daAgenda.veiculo || {}) }, reclamacao: daAgenda.reclamacao || "" } : NOVO(cfg)), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false);
   const [modal, setModal] = useState(null), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(!!(daAgenda && !daAgenda.cliente_id)), [aprovar, setAprovar] = useState(false);
+  // Placa digitada (veículo sem cadastro) e sem marca/modelo: busca pela placa (v55). Placa que já está no cadastro usa o cadastro, sem consulta.
+  // Só em orçamento novo ou depois de a placa ser digitada nesta tela: abrir um orçamento antigo não consulta nem muda nada sozinho.
+  const [mexeuPlaca, setMexeuPlaca] = useState(novo);
+  const veiDig = (o && o.veiculo) || {}, plDig = normPlaca(veiDig.placa), noCad = placaValida(plDig) ? dados.veiculos.find(v => v.placa === plDig) : null;
+  const podeBuscar = !!o && mexeuPlaca && pode(perfil, "orcar") && !o._local && !["aprovado", "recusado"].includes(o.situacao) && !o.veiculo_id && !String(veiDig.marca || "").trim() && !String(veiDig.modelo || "").trim();
+  const juntarVei = dd => { setO(x => x && ({ ...x, veiculo: soVazios(x.veiculo || {}, dd) })); setSujo(true); };
+  useEffect(() => { if (podeBuscar && noCad) juntarVei({ marca: noCad.marca || "", modelo: noCad.modelo || "", ano: noCad.ano || "" }); }, [podeBuscar && noCad ? noCad.id : ""]);
+  const tresCampos = dd => { const r = paraResumo(dd); return { marca: r.marca, modelo: r.modelo, ano: r.ano }; };
+  const autoPlaca = usePlaca(veiDig.placa, { falta: podeBuscar && !noCad, auto: cfg.placaAuto !== false, onDados: dd => juntarVei(tresCampos(dd)),
+    onTrocou: dd => setO(x => x && ({ ...x, veiculo: tirarPreenchidos(x.veiculo || {}, tresCampos(dd)) })) });
   // aprovar: antes de abrir o quadro, grava o que estiver pendente (a aprovação lê o orçamento do banco)
   const abrirAprovar = async () => { if (!itens.length) return setErro("Inclua pelo menos um item antes de aprovar."); const base = sujo ? await gravar() : o; if (base) setAprovar(true); };
   const gestor = pode(perfil, "orcar"), ver = pode(perfil, "verValores");
@@ -142,10 +153,11 @@ export function Orcamento({ id }) {
       ${edita && veiculosCli.length ? html`<div class="campo"><label for="orc-vei">Veículo do cadastro</label><select id="orc-vei" class="inp" value=${o.veiculo_id || ""} onChange=${e => escolherVeiculo(e.target.value)}>
         <option value="">Outro veículo (digitar)</option>${veiculosCli.map(v => html`<option value=${v.id}>${[exPlaca(v.placa), v.marca, v.modelo, v.ano].filter(Boolean).join(" ")}</option>`)}</select></div>` : null}
       <div class="grade orc-veic">
-        <${Campo} id="orc-placa" rotulo="Placa"><${Texto} id="orc-placa" valor=${o.veiculo.placa} disabled=${!edita || !!o.veiculo_id} onMuda=${v => set({ veiculo: { ...o.veiculo, placa: normPlaca(v) } })} /></${Campo}>
+        <${Campo} id="orc-placa" rotulo="Placa"><${Texto} id="orc-placa" valor=${o.veiculo.placa} disabled=${!edita || !!o.veiculo_id} onMuda=${v => { setMexeuPlaca(true); set({ veiculo: { ...o.veiculo, placa: normPlaca(v) } }); }} /></${Campo}>
         <${Campo} id="orc-marca" rotulo="Marca"><${Texto} id="orc-marca" valor=${o.veiculo.marca} disabled=${!edita || !!o.veiculo_id} onMuda=${v => set({ veiculo: { ...o.veiculo, marca: v } })} /></${Campo}>
         <${Campo} id="orc-modelo" rotulo="Modelo"><${Texto} id="orc-modelo" valor=${o.veiculo.modelo} disabled=${!edita || !!o.veiculo_id} onMuda=${v => set({ veiculo: { ...o.veiculo, modelo: v } })} /></${Campo}>
         <${Campo} id="orc-ano" rotulo="Ano"><${Texto} id="orc-ano" valor=${o.veiculo.ano} disabled=${!edita || !!o.veiculo_id} onMuda=${v => set({ veiculo: { ...o.veiculo, ano: v } })} /></${Campo}></div>
+      ${autoPlaca.botao || (autoPlaca.estado && autoPlaca.estado !== "quieto") ? html`<div class="placa-linha"><${PlacaBusca} c=${autoPlaca} /></div>` : null}
       <${Campo} id="orc-pedido" rotulo="O que o cliente pediu"><${Area} id="orc-pedido" rows="2" valor=${o.reclamacao} disabled=${!edita} onMuda=${v => set({ reclamacao: v })} /></${Campo}>
     </section>
 

@@ -3,14 +3,21 @@
 // qualquer item incluído à mão, com a baixa do estoque de sempre). Regras: js/fichaos.js.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { useApp, Modal } from "../ui.js";
-import { uuid, reais, qtdFmt, precoTabela, exPlaca } from "../util.js";
+import { uuid, reais, qtdFmt, precoTabela, exPlaca, norm } from "../util.js";
 import { carregarCatalogo, indiceEstoque } from "../catalogo.js";
 import { candidatosOleo, filtrosDaFicha, litrosDaFicha } from "../fichaos.js";
 
 const num = t => Number(String(t).replace(",", ".")) || 0;
 
-export function LancarFicha({ o, v, itens, tabela, onFechar, onLancar }) {
-  const { dados } = useApp();
+// Mão de obra da troca: serviços do cadastro com "troca/subst." e "óleo" na descrição (ex.: "SUBST. DE ÓLEO E FILTRO"); o que já está na lista não é marcado de novo.
+const eTrocaOleo = p => p.tipo === "servico" && p.ativo !== false && /\b(troca|trocar|subst\w*)\b/.test(norm(p.descricao)) && /oleo/.test(norm(p.descricao));
+const itemServico = (p, tabela, valorHora) => p.cobranca === "hora"
+  ? { tipo: "servico", horas: Number(p.horas) || 1, qtd: Number(p.horas) || 1, valor_unit: Number(valorHora) || 0 }
+  : { tipo: "servico", horas: null, qtd: 1, valor_unit: precoTabela(p, tabela) };
+
+// orcamento = true: o orçamento não reserva nem barra por falta de estoque (como o ItemModal)
+export function LancarFicha({ o, v, itens, tabela, onFechar, onLancar, orcamento = false }) {
+  const { dados, cfg } = useApp();
   const f = v.ficha_oleo;
   const [cat, setCat] = useState(null), [erro, setErro] = useState("");
   useEffect(() => { let vivo = true; carregarCatalogo().then(c => vivo && setCat(c)).catch(() => vivo && setErro("Não deu para carregar o catálogo neste aparelho.")); return () => { vivo = false; }; }, []);
@@ -23,16 +30,23 @@ export function LancarFicha({ o, v, itens, tabela, onFechar, onLancar }) {
   const [sel, setSel] = useState({}), [oleoId, setOleoId] = useState(""), [qOleo, setQOleo] = useState(lt.qtd ? String(lt.qtd).replace(".", ",") : ""), [qtds, setQtds] = useState({});
   useEffect(() => { if (oleos.length && !oleoId) { setOleoId(oleos[0].id); setSel(s => ({ ...s, oleo: !jaNaOS(oleos[0].id) && lt.qtd > 0 })); } }, [oleos]);
   useEffect(() => { setSel(s => { const n = { ...s }; for (const x of filtros) if (!(x.k in n)) n[x.k] = !!x.produto && !jaNaOS(x.produto.id); return n; }); }, [filtros]);
+  const servicos = useMemo(() => (dados.produtos || []).filter(eTrocaOleo).sort((a, b) => a.descricao.localeCompare(b.descricao)), [dados.produtos]);
+  const [servId, setServId] = useState(""), [servSel, setServSel] = useState(false);
+  useEffect(() => { if (servicos.length && !servId) { setServId(servicos[0].id); setServSel(!jaNaOS(servicos[0].id)); } }, [servicos]);
+  const prodServ = servicos.find(p => p.id === servId) || null;
   const prodOleo = oleos.find(p => p.id === oleoId) || null;
   const linhas = [];   // o que vai para a O.S.
   if (sel.oleo && prodOleo && num(qOleo) > 0) linhas.push({ p: prodOleo, qtd: num(qOleo) });
   for (const x of filtros) if (sel[x.k] && x.produto) linhas.push({ p: x.produto, qtd: num(qtds[x.k] || 1) || 1 });
-  const falta = linhas.find(l => l.p.controla_estoque && Number(l.p.estoque_atual) < l.qtd && !l.p.vender_sem_estoque);
-  const total = linhas.reduce((s, l) => s + l.qtd * precoTabela(l.p, tabela), 0);
+  const falta = orcamento ? null : linhas.find(l => l.p.controla_estoque && Number(l.p.estoque_atual) < l.qtd && !l.p.vender_sem_estoque);
+  const itemMO = servSel && prodServ ? itemServico(prodServ, tabela, cfg.valorHora) : null;
+  const total = linhas.reduce((s, l) => s + l.qtd * precoTabela(l.p, tabela), 0) + (itemMO ? itemMO.qtd * itemMO.valor_unit : 0);
   const lancar = () => {
-    if (!linhas.length) return setErro("Marque pelo menos um item.");
+    if (!linhas.length && !itemMO) return setErro("Marque pelo menos um item.");
     if (falta) return setErro("Estoque insuficiente de " + falta.p.descricao + ": há " + qtdFmt(falta.p.estoque_atual) + " " + falta.p.unidade + ".");
-    onLancar(linhas.map(({ p, qtd }) => ({ id: uuid(), tipo: "peca", descricao: p.descricao, produto_id: p.id, codigo: p.referencia || String(p.codigo), qtd, valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, qualidade: "original" })));
+    const pecas = linhas.map(({ p, qtd }) => ({ id: uuid(), tipo: "peca", descricao: p.descricao, produto_id: p.id, codigo: p.referencia || String(p.codigo), qtd, valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, qualidade: "original" }));
+    // a mão de obra vai por último (a lista da O.S. agrupa por tipo, a ordem aqui só vale na gravação)
+    onLancar(itemMO ? [...pecas, { id: uuid(), descricao: prodServ.descricao, produto_id: prodServ.id, servico_id: null, custo_unit: 0, qualidade: "", ...itemMO }] : pecas);
   };
   const confirmada = f.origem === "oficina";
   return html`<${Modal} titulo=${"Óleo e filtros da ficha · " + (o.veiculo && o.veiculo.placa ? exPlaca(o.veiculo.placa) : v.modelo)} largo onFechar=${onFechar}>
@@ -53,7 +67,11 @@ export function LancarFicha({ o, v, itens, tabela, onFechar, onLancar }) {
       ${x.produto ? html`<span class="lf-desc">${x.produto.marca ? x.produto.marca + " " : ""}${x.produto.referencia || x.produto.descricao} · ${qtdFmt(x.produto.estoque_atual)} un. · ${reais(precoTabela(x.produto, tabela))}${jaNaOS(x.produto.id) ? " · já está na O.S." : ""}</span>
           <input class="inp lf-qtd" inputmode="decimal" value=${qtds[x.k] || "1"} onInput=${e => setQtds(q => ({ ...q, [x.k]: e.target.value }))} aria-label=${"Quantidade do filtro de " + x.rotulo.toLowerCase()} />`
         : html`<span class="lf-desc sub">sem estoque. Código: ${x.principais}</span>`}</div>`)}
-    <p class="sub">Total dos itens marcados: <b id="lf-total">${reais(total)}</b>. Mão de obra não entra aqui.</p>
-    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><button type="button" class="btn btn-pri" id="lf-lancar" onClick=${lancar}>Lançar ${linhas.length} ${linhas.length === 1 ? "item" : "itens"}</button></div>
+    <h4 class="sub-titulo">Mão de obra</h4>
+    ${!servicos.length ? html`<p class="sub" id="lf-sem-mo">Nenhum serviço de troca de óleo no cadastro. Lance a mão de obra à mão.</p>`
+      : html`<div class="lf-linha" id="lf-mo"><label><input type="checkbox" id="lf-mo-sel" checked=${servSel} onChange=${e => setServSel(e.target.checked)} /> </label>
+        <select id="lf-mo-prod" class="inp" value=${servId} onChange=${e => { setServId(e.target.value); setServSel(!jaNaOS(e.target.value)); }}>${servicos.map(p => html`<option key=${p.id} value=${p.id}>${p.descricao} · ${p.cobranca === "hora" ? qtdFmt(p.horas) + " h" : reais(precoTabela(p, tabela))}${jaNaOS(p.id) ? " (já na lista)" : ""}</option>`)}</select></div>`}
+    <p class="sub">Total dos itens marcados: <b id="lf-total">${reais(total)}</b>.</p>
+    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><button type="button" class="btn btn-pri" id="lf-lancar" onClick=${lancar}>Lançar ${linhas.length + (itemMO ? 1 : 0)} ${linhas.length + (itemMO ? 1 : 0) === 1 ? "item" : "itens"}</button></div>
   </${Modal}>`;
 }

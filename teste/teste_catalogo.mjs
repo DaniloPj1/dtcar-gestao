@@ -2,7 +2,7 @@
 // Confere a pesquisa por modelo e ano, o código comparável com o estoque, a prioridade do estoque e a conversão.
 // Uso: node teste/teste_catalogo.mjs
 import dados from "../js/catalogodados.js";
-import { chavesDoVeiculo, pesquisarVeiculo, resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
+import { marcarDivergencias, chavesDoVeiculo, pesquisarVeiculo, resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 const cat = prepararCatalogo(dados);
@@ -51,6 +51,21 @@ rs = resumoOleo(pesquisar(cat, "onix", 2018).oleo);
 chk("resumo Onix: o 15W40 da Omnicraft (erro de impressão) não entra", !rs.some(g => g.viscosidade === "15W40"), rs.map(g => g.viscosidade));
 
 chk("resumo Hilux 2018: a linha conferida não leva o selo de divergente", rs[0] && !resumoOleo(pesquisar(cat, "hilux 2.8", 2018).oleo)[0].divergente);
+
+// --- divergência eliminada (pedido do Danilo em 14/11/2026): a fonte mais antiga e duvidosa sai quando duas tabelas discordam
+chk("divergência: o catálogo não tem mais nenhuma linha de óleo divergente", marcarDivergencias(cat.oleo).every(o => !o.divergente), marcarDivergencias(cat.oleo).filter(o => o.divergente).length);
+chk("divergência: Honda City 1.5 não traz mais os 4,2 L da Petronas 2014", !pesquisar(cat, "honda city 1.5", 2014).oleo.some(o => /Petronas/.test(o.fonte)) && pesquisar(cat, "honda city 1.5", 2014).oleo.length > 0);
+chk("divergência: o que ficou foi a fonte mais nova (Omnicraft 2019 / Texaco 2022)", pesquisar(cat, "honda city 1.5", 2014).oleo.every(o => /Omnicraft|Texaco|Ipiranga|Maxon/.test(o.fonte)));
+chk("divergência: modelo que só a fonte antiga tem continua aparecendo", cat.oleo.some(o => /Petronas/.test(o.fonte)));
+chk("divergência: a linha conferida da Hilux nunca é descartada", pesquisar(cat, "hilux 2.8", 2018).oleo.some(o => /Conferido/.test(o.fonte)));
+
+// --- resultado: o mais próximo do ano e o mais confiável vem primeiro
+const topo = (q, ano) => resumoOleo(pesquisar(cat, q, ano).oleo, ano)[0];
+chk("resultado: City 2014 → a linha de 2013 a 2019 (3,6 L), não a de 2012 em diante", topo("honda city 1.5", 2014).litros === "3,6" && /Omnicraft/.test(topo("honda city 1.5", 2014).linha.fonte), topo("honda city 1.5", 2014));
+chk("resultado: Gol 1.0 2012 → o período que contém o ano vem antes do sem período", (t => t.linha.de <= 2012 && t.linha.ate >= 2012)(topo("gol 1.0", 2012)), topo("gol 1.0", 2012).linha);
+chk("resultado: a conferida pela oficina continua em primeiro (Hilux 2.8 2018)", /Conferido/.test(topo("hilux 2.8", 2018).linha.fonte));
+chk("resultado: a linha que representa a resposta é a mais nova da mesma resposta", resumoOleo(pesquisar(cat, "uno 1.0", 2015).oleo, 2015).every(g => g.fontes >= 1));
+chk("resultado: sem ano continua devolvendo as respostas na ordem de sempre", resumoOleo(pesquisar(cat, "honda city 1.5").oleo).length >= 2);
 
 // --- busca pela placa: do veículo para a pesquisa, por palavras-chave
 const ch = v => { const c = chavesDoVeiculo(v); return [c.marca.join(" "), c.nome.join(" "), c.cil, c.ano, c.diesel].join("|"); };

@@ -75,7 +75,7 @@ export function OleoFiltros() {
   const veiculo = doCadastro || daConsulta;
   const pv = useMemo(() => cat && ePlaca && veiculo ? pesquisarVeiculo(cat, veiculo, ano) : null, [cat, ePlaca, veiculo, ano]);
   const r = useMemo(() => !cat ? null : ePlaca ? (pv && pv.r) : pesquisar(cat, q, ano), [cat, q, ano, ePlaca, pv]);
-  const oleos = useMemo(() => r ? resumoOleo(r.oleo) : [], [r]);
+  const oleos = useMemo(() => r ? resumoOleo(r.oleo, r.ano) : [], [r]);
   // A prioridade é o estoque: aplicação de outro catálogo (MANN, Wega, Bosch, Vox) que tem filtro no estoque aparece sem precisar abrir
   // "outros catálogos" — só quando esse filtro do estoque ainda não apareceu na aplicação de cima.
   const outrosComEstoque = useMemo(() => {
@@ -121,7 +121,7 @@ export function OleoFiltros() {
     ${cat && buscou && r.oleo.length ? html`<section class="card" id="of-oleo">
       <h2>Óleo do motor</h2>
       ${!detOleo ? html`<div class="of-oleos">
-        ${oleos.slice(0, OLEO_NO_RESUMO).map((g, i) => html`<div class=${"of-oleo" + (g.divergente ? " of-div" : "")} key=${i}>
+        ${oleos.slice(0, r.ano ? 1 : OLEO_NO_RESUMO).map((g, i) => html`<div class=${"of-oleo" + (g.divergente ? " of-div" : "")} key=${i}>
           <b class="of-litros">${g.litros ? g.litros + " L" : "—"}</b><b class="of-visc">${g.viscosidade || "—"}</b>
           <span class="of-oleo-carro">${g.linha.modelo} ${g.linha.motor}${periodoTexto(g.linha) ? " · " + periodoTexto(g.linha) : ""}</span>
           ${g.divergente ? html`<span class="of-selo of-selo-div">Fontes divergentes: confira</span>` : null}

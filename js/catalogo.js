@@ -44,7 +44,7 @@ export function prepararCatalogo(d) {
   const paraTecfil = new Map();
   const liga = (cod, tec) => { const k = normCodigo(cod); if (!k) return; const l = paraTecfil.get(k); if (!l) paraTecfil.set(k, [tec]); else if (!l.includes(tec)) l.push(tec); };
   for (const tec of Object.keys(d.conv)) { liga(tec, tec); for (const [, cod] of d.conv[tec]) liga(cod, tec); }
-  return { versao: d.versao, oleo, filtros, conv: d.conv, marcasConv: d.marcasConv, paraTecfil };
+  return { versao: d.versao, oleo: podarDivergencias(oleo), oleoTotal: oleo.length, filtros, conv: d.conv, marcasConv: d.marcasConv, paraTecfil };
 }
 
 // "gm onix 1.0 2018" → palavras ["chevrolet", "onix", "1.0"] e ano 2018 (o ano também pode vir no campo próprio)
@@ -106,31 +106,56 @@ const eTabela = r => !/^(Conferido|Indicado)/.test(r.fonte);
 const turbo = r => /turbo|\btb\b|\btd\b|tgdi|tsi|thp|t-?jet|\bgse\b|diesel|tdi|crdi|ctdi|duratorq|multijet|\bhdi\b|\bdci\b|\bcdi\b/i.test(r.motor + " " + r.modelo);
 const litrosNum = l => Number(String(l).replace(",", ".")) || 0;
 const cruzam = (a, b) => (!a.de && !a.ate) || (!b.de && !b.ate) || ((a.de || 0) <= (b.ate || 9999) && (b.de || 0) <= (a.ate || 9999));
-// Marca "divergente" a linha de óleo que tem outra fonte, para o mesmo modelo, a mesma cilindrada e anos que se cruzam, com litros diferentes.
+// Outra fonte de tabela para o mesmo modelo, a mesma cilindrada e anos que se cruzam, com litros diferentes (>= 0,3 L).
+const parceiraDivergente = (a, linhas) => {
+  const ca = cilindradas(a), la = litrosNum(a.litros); if (!ca || !la || !eTabela(a)) return null;
+  return linhas.find(b => b !== a && eTabela(b) && turbo(a) === turbo(b) && familia(b.fonte) !== familia(a.fonte) && b.montadora === a.montadora && cilindradas(b) === ca
+    && (b._m === a._m || b._m.startsWith(a._m + " ") || a._m.startsWith(b._m + " ")) && cruzam(a, b) && litrosNum(b.litros) && Math.abs(litrosNum(b.litros) - la) >= 0.3) || null;
+};
+// Marca "divergente" a linha de óleo que tem outra fonte discordando.
 export function marcarDivergencias(linhas) {
-  return linhas.map(a => {
-    const ca = cilindradas(a), la = litrosNum(a.litros); if (!ca || !la || !eTabela(a)) return a;
-    const outra = linhas.find(b => b !== a && eTabela(b) && turbo(a) === turbo(b) && familia(b.fonte) !== familia(a.fonte) && b.montadora === a.montadora && cilindradas(b) === ca
-      && (b._m === a._m || b._m.startsWith(a._m + " ") || a._m.startsWith(b._m + " ")) && cruzam(a, b) && litrosNum(b.litros) && Math.abs(litrosNum(b.litros) - la) >= 0.3);
-    return outra ? { ...a, divergente: outra.fonte + " indica " + outra.litros + " L" } : a;
-  });
+  return linhas.map(a => { const outra = parceiraDivergente(a, linhas); return outra ? { ...a, divergente: outra.fonte + " indica " + outra.litros + " L" } : a; });
+}
+
+// Pedido do Danilo em 14/11/2026: "temos que eliminar essa divergência, na dúvida exclua o mais duvidoso e o mais antigo".
+// Quando duas tabelas discordam, fica a mais recente e mais confiável; a outra é descartada. Ordem (da mais duvidosa para a melhor):
+// Petronas 2014 (a mais antiga) < Ipiranga/Maxon (mesma base, "sem data, até ~2017"; o 2022 do Maxon é só a data da publicação) < Omnicraft/Motorcraft 2019 < Texaco 2022.
+// Linha conferida pela oficina ou indicada por loja nunca é descartada. Só descarta quando existe a outra fonte para o mesmo modelo.
+const idadeFonte = f => /petronas/i.test(f) ? 0 : /ipiranga|maxon/i.test(f) ? 1 : /omnicraft|motorcraft/i.test(f) ? 2 : /texaco/i.test(f) ? 3 : 2;
+export function podarDivergencias(linhas) {
+  const grupos = new Map();
+  for (const r of linhas) { const k = r.montadora + "|" + cilindradas(r); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+  const fora = new Set();
+  for (const g of grupos.values()) {
+    if (g.length < 2) continue;
+    for (const a of g) for (const b of g) {
+      if (a === b || !eTabela(a) || !eTabela(b) || parceiraDivergente(a, [b]) === null) continue;
+      if (idadeFonte(a.fonte) < idadeFonte(b.fonte)) fora.add(a);
+    }
+  }
+  return linhas.filter(r => !fora.has(r));
 }
 
 // Resumo do óleo para a tela (pedido do Danilo em 14/11/2026: "algo mais resumido"): uma linha por resposta diferente.
 // Linhas com os mesmos litros e a mesma viscosidade viram uma só (conta quantas fontes concordam); a linha de tabela com erro
 // conhecido (tem aviso) não entra no resumo, só nos detalhes. Devolve [{ litros, viscosidade, linha, fontes, divergente }].
 export const linhaSuspeita = r => eTabela(r) && !!r.aviso;
-export function resumoOleo(linhas) {
+// Pedido do Danilo em 14/11/2026: "entregar o mais próximo do ano e o mais confiável". Com o ano do carro, a resposta de cima é a da linha
+// cujo período está mais perto do ano (período curto e que contém o ano ganha de "em diante" e de linha sem ano); empate: a conferida pela
+// oficina, depois a fonte mais nova, depois a resposta em que mais fontes concordam.
+const distanciaAno = (r, ano) => !ano ? 0 : (!r.de && !r.ate) ? 1000 : ((r.ate || ano + 40) - (r.de || ano - 40));
+const melhorLinha = (a, b, ano) => (eTabela(a) - eTabela(b)) || distanciaAno(a, ano) - distanciaAno(b, ano) || idadeFonte(b.fonte) - idadeFonte(a.fonte);
+export function resumoOleo(linhas, ano) {
   const grupos = new Map();
   for (const r of linhas) {
     if (linhaSuspeita(r)) continue;
     const k = litrosNum(r.litros) + "|" + norm(r.viscosidade).split(/\s+ou\s+/).sort().join("/");
     const g = grupos.get(k) || { litros: r.litros, viscosidade: r.viscosidade, linha: r, familias: new Set(), divergente: false };
+    if (melhorLinha(r, g.linha, ano) < 0) g.linha = r; // a linha que representa a resposta é a mais próxima do ano e mais confiável
     g.familias.add(familia(r.fonte)); g.divergente = eTabela(g.linha) && (g.divergente || !!r.divergente); grupos.set(k, g); // linha conferida pela oficina não leva o selo de divergente
   }
-  // primeiro a conferida pela oficina, depois a resposta em que mais fontes concordam (empate: a ordem da pesquisa)
   return [...grupos.values()].map((g, i) => ({ litros: g.litros, viscosidade: g.viscosidade, linha: g.linha, fontes: g.familias.size, divergente: g.divergente, _i: i }))
-    .sort((a, b) => (eTabela(a.linha) - eTabela(b.linha)) || b.fontes - a.fontes || a._i - b._i).map(({ _i, ...g }) => g);
+    .sort((a, b) => melhorLinha(a.linha, b.linha, ano) || b.fontes - a.fontes || a._i - b._i).map(({ _i, ...g }) => g);
 }
 
 // ---------- Busca pela placa: do veículo (cadastro ou consulta da placa) para a pesquisa, por PALAVRAS-CHAVE ----------

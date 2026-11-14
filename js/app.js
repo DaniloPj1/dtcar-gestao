@@ -38,6 +38,7 @@ import { Funcionarios, FuncionarioTela } from "./telas/funcionarios.js";
 import { DocumentosRH } from "./telas/rh.js";
 import { BarraTopo } from "./telas/topo.js";
 import { DadosLocais } from "./telas/dadoslocais.js";
+import { OleoFiltros } from "./telas/oleofiltros.js";
 
 try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo balcão" foi substituído pela interface única
 
@@ -45,7 +46,7 @@ try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo ba
 // Pedido do Danilo em 12/11/2026: a virada foi em 02/11 e a faixa ainda piscava a cada abertura (antes de os Ajustes carregarem)
 // e ficava na tela quando os Ajustes não podiam ser lidos. Sem a informação, não mostra.
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
+const TITULOS = { "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 // no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
@@ -448,7 +449,7 @@ function App() {
     os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} params=${params} key=${param} />`,
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
-    "dados-locais": () => html`<${DadosLocais} />`,
+    "dados-locais": () => html`<${DadosLocais} />`, "oleo-filtros": () => html`<${OleoFiltros} />`,
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, email: () => html`<${Email} params=${params} key=${qs || ""} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,

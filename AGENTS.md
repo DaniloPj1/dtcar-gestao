@@ -427,6 +427,25 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (`cilindradas`, `combustivel` e `marca` são os campos que a documentação não mostra com valor de verdade).
   Testes: `deno run -A teste/teste_placa.ts` (API falsa), `bash teste/teste_v55.sh` (banco inteiro), `python3 teste/teste_placa_tela.py` (telas) e
   `deno run -A teste/teste_agente_mcp.ts`.
+- **Óleo e filtros por veículo (pedido do Danilo em 14/11/2026) — etapa 1 de 4: pesquisa por modelo, só leitura e sem SQL.** Tela
+  `js/telas/oleofiltros.js` (`#/oleo-filtros`; entra pelo botão da gota na barra de cima do PC — o menu lateral já ocupa a altura toda em
+  1366x768, não cabe mais item — e pelo "Mais" do celular; toda a equipe vê). Catálogo como **arquivo fixo do sistema**: `js/catalogodados.js`
+  (gerado, ~2 MB, carregado só quando a tela abre; está na lista do `sw.js`, então funciona sem internet e no programa do PC; nenhuma tabela,
+  nada em backup/réplica/exclusões). **Não edite à mão:** os dados saem de `catalogo/*.csv` por `python3 catalogo/gerar.py catalogo
+  js/catalogodados.js && python3 tools_sw.py`. Fontes: óleo = tabelas Ipiranga, Maxon, Petronas, Texaco e Omnicraft; filtros = Tecfil 2026
+  (principal), MANN 2021/22, Wega 2023/24, Bosch 2019/20 e Vox; conversão entre marcas = Tecfil 2026. Só carros, SUVs e caminhonetes.
+  Regras num lugar só, `js/catalogo.js` (sem window/document, para a ficha do veículo, a O.S. e o conector usarem depois). **Regras do Danilo:**
+  (1) óleo: só litros, viscosidade e norma — a marca do óleo não entra; (2) **a prioridade é o estoque**: filtro com saldo no estoque
+  (`indiceEstoque`: produto ativo de grupo/descrição "filtro", referência comparada por `normCodigo`, que tira espaço, barra, "S/NF" e o nome
+  da marca; a mesma peça em dois cadastros soma) aparece **sozinho**, com o botão "Conversão"; saldo zerado não conta (só o aviso
+  "Cadastrado, sem saldo"); (3) fora do estoque aparecem só **Tecfil, Mahle e MANN** (traço onde a marca não tem código; nunca puxar outra
+  marca para preencher) e as demais marcas e o código original da montadora ficam atrás do botão "Conversão"; (4) é dado de catálogo: a tela
+  manda conferir, mostra a fonte de cada linha e marca "Fontes divergentes" quando outra tabela (Ipiranga e Maxon contam como uma só) dá
+  litros diferentes para o mesmo modelo/cilindrada/ano; correções conferidas ficam em `AVISOS_OLEO`/`EXTRAS_OLEO` do `catalogo/gerar.py`
+  (Hilux 2.8 177 cv = 7,9 L pelo manual; 204 cv 2022+ só "indicado por lojas, não conferido"). Aplicação de outro catálogo com filtro no
+  estoque que a Tecfil não liga aparece em "No seu estoque". Não inventar código, litro nem norma: o que o catálogo não traz fica em branco.
+  **Ainda não feito:** ficha de óleo/filtros gravada no veículo e sugestão automática pela placa (etapa 2, com SQL), lançar na O.S. (etapa 3),
+  conector (etapa 4); fluidos de câmbio/diferencial e palhetas. Testes: `node teste/teste_catalogo.mjs` e `python3 teste/teste_oleo_filtros.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),
   "Manual CNAB 240" do Sicredi v3.0 (maio/2026). `js/cnab.js` monta a remessa e lê o retorno (Nosso Número AA/BXXXXX-D, campo livre,

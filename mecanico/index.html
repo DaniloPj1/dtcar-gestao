@@ -347,7 +347,7 @@ a{color:#174f94}a:hover{color:#0f3a70}
 {{n.falarTexto}}
 </button>
 <button type="button" onClick="{{entender}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Montar a lista</button>
-<div style="font-size: 13px; color: #4a515b; text-align: center">"Falar" usa o microfone do celular e precisa de internet.</div>
+<div style="font-size: 13px; color: #4a515b; text-align: center">"Falar" precisa de internet. Se não ouvir, use o microfone do teclado.</div>
 </div>
 </sc-if>
 
@@ -355,7 +355,7 @@ a{color:#174f94}a:hover{color:#0f3a70}
 <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px">
 <div style="font-size: 15px; color: #33383f">{{n.placa}} · {{n.modelo}}</div>
 <div style="display: flex; align-items: baseline; justify-content: space-between">
-<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Itens no padrão da oficina</div>
+<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Lista corrigida</div>
 <div style="font-size: 14px; font-weight: 700">{{n.total}}</div>
 </div>
 <sc-for list="{{n.itens}}" as="it" hint-placeholder-count="4">
@@ -386,8 +386,8 @@ a{color:#174f94}a:hover{color:#0f3a70}
 </div>
 <div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; flex-direction: column; gap: 6px">
-<label for="busca-oleo" style="font-size: 14px; font-weight: 600; color: #4a515b">Buscar por modelo</label>
-<input id="busca-oleo" type="text" value="{{busca}}" onChange="{{onBusca}}" placeholder="Ex.: Hilux 2.8, Onix 1.0, Gol 1.6" style="height: 52px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 0 14px; font-size: 17px; background: #ffffff; color: #16191d">
+<label for="busca-oleo" style="font-size: 14px; font-weight: 600; color: #4a515b">Buscar por placa ou modelo</label>
+<input id="busca-oleo" type="text" value="{{busca}}" onChange="{{onBusca}}" placeholder="Ex.: ABC1D23 ou Onix 1.0" style="height: 52px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 0 14px; font-size: 17px; background: #ffffff; color: #16191d">
 </div>
 <sc-for list="{{oleos}}" as="o" hint-placeholder-count="4">
 <div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px">

@@ -28,7 +28,11 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `mecanico_id` = o usuário (status diagnostico/aguardando/execucao/pronto), `os_itens` **sem colunas de preço**, `veiculos`/`clientes` (nome)
   pela placa, `tecnicos_lista()`, a função `placa` (ação `basico`, paga, só quando a placa não está no cadastro) e o catálogo de óleo
   (`js/catalogo.js`). **Não grava nada no banco:** início/pausa/fim, apontamentos, KM final, sugestões e o orçamento ficam só na tela
-  (o teste confere que não sai nenhuma gravação). Tem manifesto e service worker próprios (`mecanico/sw.js`, cache `dtcar-mecanico-tN`, que só
+  (o teste confere que não sai nenhuma gravação). **Corretor da lista** (`corrigirFrase` em `mecanico/app.js`): abreviação e palavra errada viram a
+  palavra que a oficina usa ("coxim do amort" → COXIM DO AMORTECEDOR; "ortecedor" → AMORTECEDOR); o vocabulário vem das 3.000 descrições mais
+  recentes de `os_itens` (só `descricao` e `tipo`) mais um glossário fixo, e frase que a oficina já lançou volta com a escrita mais repetida.
+  Aba de óleo aceita placa (cadastro primeiro; placa nova usa a consulta paga, uma vez por placa). "Falar" usa o ditado do Chrome e diz o
+  motivo quando não funciona. Tem manifesto e service worker próprios (`mecanico/sw.js`, cache `dtcar-mecanico-tN`, que só
   apaga as próprias cópias); **não entra em ARQUIVOS nem em INTEGRIDADE do `sw.js` do sistema** e o programa do Windows não a usa.
   `index.html` traz o modelo das telas (`<template id="tela">`, com `{{campo}}`, `<sc-if>` e `<sc-for>`) e `app.js` traz o desenhador e a
   lógica (`class Component`). Mudou algo na pasta: troque a versão de CACHE do `mecanico/sw.js`. Teste: `python3 teste/teste_app_mecanico.py`

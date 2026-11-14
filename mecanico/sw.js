@@ -1,8 +1,9 @@
-// Service worker do app do mecânico (VERSÃO DE TESTE). Vale só para a pasta mecanico/ e não mexe no sw.js do sistema.
+// Service worker do app do mecânico. Vale só para a pasta mecanico/ e não mexe no sw.js do sistema.
 // "Rede primeiro": sempre busca a versão nova; usa a cópia guardada só se a rede falhar.
 // Mudou um arquivo desta pasta? Troque a versão de CACHE.
-const CACHE = "dtcar-mecanico-t1";
+const CACHE = "dtcar-mecanico-t2";
 const ARQUIVOS = ["./", "index.html", "app.js", "manifest.webmanifest", "login.mp4", "login-poster.jpg",
+  "../js/config.js", "../vendor/supabase.js", "../js/catalogo.js", "../js/util.js", "../js/catalogodados.js",
   "../icons/logo-branco-sm.png", "../icons/favicon.png", "../icons/icon-192.png", "../icons/icon-512.png"];
 self.addEventListener("install", e => e.waitUntil(caches.open(CACHE).then(c => Promise.all(ARQUIVOS.map(a => fetch(new Request(a, { cache: "reload" })).then(r => r.status === 200 && c.put(a, r)).catch(() => {})))).then(() => self.skipWaiting())));
 // apaga só as cópias antigas deste app; as do sistema (dtcar-vNNN) não são tocadas

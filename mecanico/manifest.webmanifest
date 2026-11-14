@@ -1,7 +1,7 @@
 {
-  "name": "DTCar Mecânico (teste)",
+  "name": "DTCar Mecânico",
   "short_name": "Mecânico",
-  "description": "Versão de teste do app do mecânico da DTCar Centro Automotivo. Dados fictícios.",
+  "description": "App do mecânico da DTCar Centro Automotivo.",
   "lang": "pt-BR",
   "start_url": "./",
   "scope": "./",

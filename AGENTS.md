@@ -402,7 +402,12 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   do agendamento; no celular só hoje e os dias com agendamento). Tela Agenda com **Semana | Mês** (escolha guardada no aparelho,
   `dtcar-agenda-visao`): o mês mostra o calendário inteiro e o **dia com serviço agendado fica em azul**, com a quantidade escrita; clicar no
   dia lista os agendamentos dele. Nova O.S. vinda da agenda: o vínculo é gravado logo depois de criar a O.S., antes do histórico.
-  **Ainda não feito:** botões de WhatsApp que abrem a mensagem pronta (confirmação, lembrete da véspera,
+  **Etapa 4 — conector (14/11/2026, sem SQL):** ferramenta `oleo_filtros` (só leitura) na função `agente`: placa/veiculo_id do cadastro ou marca+modelo+ano à mão
+  (placa fora do cadastro: `consultar_placa` antes; a ferramenta nunca paga a API). Devolve ficha do veículo, óleo do catálogo (melhor para o ano), filtros por tipo
+  com o que há no estoque, e `produtos_para_lancar` (para o `lancar_itens_os`). Usa `js/catalogo.js`, `js/fichaos.js` e `js/catalogodados.js` do GitHub NUMA VERSÃO
+  TRAVADA (commit no topo de `supabase/functions/agente/ferramentas.ts`, igual ao `folha.js`): mudou um deles ou `catalogo/*.csv`? Troque o commit (imports e
+  `CATALOGO_URL`) e publique a função `agente` de novo. Teste: `deno run -A teste/teste_agente_mcp.ts` (59 ferramentas).
+    **Ainda não feito:** botões de WhatsApp que abrem a mensagem pronta (confirmação, lembrete da véspera,
   remarcar) para o Danilo conferir e enviar — **nada sai sozinho** — e as ferramentas do conector para agendar/remarcar (etapa 3).
   Testes: `bash teste/teste_v54.sh` (banco inteiro) e `python3 teste/teste_agenda.py`.
 - **Consulta do veículo pela placa (v55 + `supabase/functions/placa`, pedido do Danilo em 13/11/2026):** API Placas (apiplacas.com.br; a API é a

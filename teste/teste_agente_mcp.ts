@@ -45,6 +45,8 @@ function fromFalso(t: string) {
     select(c: string, op?: { count?: string }) { reg.sel = c; reg.conta = !!op?.count; return q; },
     order(k: string, op?: { ascending?: boolean }) { reg.ord.push([k, op?.ascending !== false]); return q; },
     range(a: number, b: number) { reg.range = [a, b]; return q; },
+    or() { return q; },       // o filtro "ou" do PostgREST não é simulado: a tabela falsa já traz só o que o teste quer
+    limit() { return q; },
     then(ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) { return Promise.resolve(exec()).then(ok, erro); },
   };
   for (const op of ["eq", "neq", "gt", "gte", "lt", "lte", "in", "is", "ilike", "like"]) q[op] = (k: string, v: unknown) => { reg.f.push([k, op, v]); return q; };
@@ -105,11 +107,13 @@ const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente
   "consultar", "relatorio", "desconto_os", "fornecedor", "venda_balcao", "recibo_avulso", "funcionario", "nota_sefaz", "boleto", "pedido_compra", "parcela",
   "despesa_fixa", "ajustes", "equipe", "site", "rh_documento", "anexar_na_os", "backup_leitura",
   // v55: consulta do veículo pela placa (API Placas)
-  "consultar_placa"].sort();
-confere("58 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+  "consultar_placa",
+  // etapa 4 (14/11/2026): óleo e filtros do veículo
+  "oleo_filtros"].sort();
+confere("59 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("20 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 20, String(leitura));
+confere("21 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 21, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
@@ -273,6 +277,13 @@ Object.assign(tabelasF, {
   nfe_recebidas: [{ id: "n1", numero: "123", xml: "<nfe>…</nfe>", status: "nova" }],
   whatsapp_conexao: [{ id: 1, situacao: "conectado", qr_svg: "<svg/>", motor_hash: "abc" }],
   segredos: [{ chave: "x", valor: "y" }],
+  // etapa 4 (óleo e filtros): veículo do cadastro e estoque de óleo/filtro
+  veiculos: [{ id: "00000000-0000-4000-8000-000000000001", placa: "ABC1D23", marca: "TOYOTA", modelo: "HILUX CD 4X4 SRV", ano_fab: 2018, ano_mod: 2018, motor: "2.8", combustivel: "DIESEL", ficha_oleo: null }],
+  produtos: [
+    { id: "p1", codigo: 100, descricao: "FILTRO OLEO PSL127", referencia: "PSL127 TECFIL", marca: "TECFIL", categoria: "Filtros", unidade: "UN", tipo: "produto", ativo: true, estoque_atual: 3, preco_vista: 49.8, preco_prazo: 55 },
+    { id: "p2", codigo: 200, descricao: "OLEO 5W30 SEMI-SINT MAX BPROAUTO 16 LTR", referencia: "", marca: "BPROAUTO", categoria: "OLEO MOTOR", unidade: "LTR", tipo: "produto", ativo: true, estoque_atual: 16, preco_vista: 52.75, preco_prazo: 55 },
+    { id: "p3", codigo: 201, descricao: "OLEO 0W30 LUBRAX 3 LTR", referencia: "", marca: "LUBRAX", categoria: "OLEO MOTOR", unidade: "LTR", tipo: "produto", ativo: true, estoque_atual: 3, preco_vista: 60, preco_prazo: 65 },
+  ],
   funcionarios: [{ id: "f1", nome: "João Silva", apelido: "Joãozinho", ativo: true, salario: 2200, horas_mes: 220, comissao_pct: 10, vinculo: "clt", funcao: "Mecânico" },
                  { id: "f2", nome: "Carlos", ativo: true, salario: 2000, horas_mes: 220, comissao_pct: 0, vinculo: "clt" }],
   funcionario_lanc: [{ id: "l1", funcionario_id: "f1", competencia: "2026-10-01", data: "2026-10-15", tipo: "vale", valor: 200, qtd: null, descricao: "vale" }],
@@ -340,6 +351,21 @@ c = await chama("relatorio", { tipo: "resumo", de: "2026-10-01", ate: "2026-10-3
 confere("relatorio resumo → painel_resumo", c.fn === "painel_resumo" && c.args?.p_grupo === "dia");
 c = await chama("relatorio", { tipo: "caixa", ate: "2099-12-31" });
 confere("relatorio caixa: até 90 dias", c.r?.isError === true && /90 dias/.test(texto(c.r)));
+// etapa 4: oleo_filtros (catálogo do GitHub + estoque do cadastro)
+c = await chama("oleo_filtros", { placa: "ABC1D23" });
+const of1 = json(c.r);
+confere("oleo_filtros: placa do cadastro acha o óleo do catálogo", !c.r?.isError && Array.isArray(of1.oleo) && of1.oleo.length > 0 && !!of1.oleo[0].viscosidade && of1.oleo[0].melhor === true, texto(c.r).slice(0, 500));
+confere("oleo_filtros: filtros por tipo, com o do estoque", Array.isArray(of1.filtros) && of1.filtros.length >= 1, texto(c.r).slice(0, 600));
+confere("oleo_filtros: filtro de óleo do estoque entra para lançar", (of1.produtos_para_lancar || []).some((x: L) => x.codigo === 100 && x.tipo === "Óleo"), texto(c.r).slice(0, 900));
+confere("oleo_filtros: óleo do estoque com a viscosidade e a quantidade", (of1.produtos_para_lancar || []).some((x: L) => (x.codigo === 200 || x.codigo === 201) && Number(x.qtd_litros) > 0), texto(c.r).slice(0, 900));
+confere("oleo_filtros: avisa que é do catálogo", /catálogo/.test(String(of1.aviso || "")));
+c = await chama("oleo_filtros", { placa: "ZZZ9Z99" });
+confere("oleo_filtros: placa fora do cadastro manda usar consultar_placa", c.r?.isError === true && /consultar_placa/.test(texto(c.r)));
+c = await chama("oleo_filtros", { marca: "VOLKSWAGEN", modelo: "GOL 1.0", ano: 2012 });
+confere("oleo_filtros: marca e modelo à mão", !c.r?.isError && Array.isArray(json(c.r).oleo), texto(c.r).slice(0, 300));
+c = await chama("oleo_filtros", {});
+confere("oleo_filtros: sem dados é recusado", c.r?.isError === true || !!c.erro, texto(c.r).slice(0, 200));
+confere("oleo_filtros: não paga a API da placa", !acordadas.some(([n]) => n === "placa"));
 const hoje = new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
 tabelasF.receber.push({ id: "r2", status: "aberta", valor: 120, vencimento: hoje, cliente_nome: "Bia" }, { id: "r3", status: "aberta", valor: 70, vencimento: "2020-01-01", cliente_nome: "Velha" });
 tabelasF.contas.push({ id: "c1", status: "aberta", valor: 1500, vencimento: hoje, descricao: "Aluguel" });

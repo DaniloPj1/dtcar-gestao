@@ -19,6 +19,9 @@ ITENS = [
  {'id': 'i3', 'ordem_id': 'o1', 'tipo': 'peca', 'descricao': 'OLEO 5W30 1L', 'qtd': 8, 'aprovado': True, 'executado': False, 'posicao': 2},
  {'id': 'i4', 'ordem_id': 'o1', 'tipo': 'servico', 'descricao': 'ITEM RECUSADO', 'qtd': 1, 'aprovado': False, 'executado': False, 'posicao': 3},
  {'id': 'i5', 'ordem_id': 'o2', 'tipo': 'servico', 'descricao': 'DIAGNOSTICO', 'qtd': 1, 'aprovado': None, 'executado': False, 'posicao': 0}]
+# descrições já lançadas nas O.S. (o corretor aprende com elas)
+HIST = [{'descricao': d, 'tipo': tp} for d, tp, n in [('M.O SUBST. AMORTECEDOR DIANT', 'servico', 6), ('AMORTECEDOR DIANTEIRO', 'peca', 9), ('KIT AMORT. TRASEIRO C/COXIM', 'peca', 4),
+  ('SUBST. COXIM DO AMORTECEDOR DIANTEIRO', 'servico', 5), ('AMORTECEDOR TRAZEIRO', 'peca', 1), ('AMORTECEDOR TRASEIRO', 'peca', 7), ('ALINHAMENTO', 'servico', 10), ('PASTILHA DE FREIO DIANTEIRA', 'peca', 8)] for _ in range(n)]
 def montar(pg, papel='admin', pedidos=None):
     def resp(route, corpo, st=200): route.fulfill(status=st, content_type='application/json', body=json.dumps(corpo), headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*'})
     def h(route):
@@ -32,7 +35,7 @@ def montar(pg, papel='admin', pedidos=None):
         if '/auth/v1/logout' in u: return route.fulfill(status=204, headers={'access-control-allow-origin': '*'})
         if '/rest/v1/perfis' in u: return resp(route, [{'id': UID, 'nome': 'Fulano de Teste', 'papel': papel, 'ativo': True}])
         if '/rest/v1/ordens' in u: return resp(route, ORDENS)
-        if '/rest/v1/os_itens' in u: return resp(route, ITENS)
+        if '/rest/v1/os_itens' in u: return resp(route, ITENS if 'ordem_id=' in u else (HIST if 'offset=0' in u or 'offset' not in u else []))
         if '/rest/v1/rpc/tecnicos_lista' in u: return resp(route, [{'tipo': 'acesso', 'id': UID, 'nome': 'Fulano de Teste', 'apelido': '', 'perfil_id': UID, 'funcao': 'admin'}, {'tipo': 'funcionario', 'id': 'f2', 'nome': 'Beltrano Silva', 'apelido': '', 'perfil_id': None, 'funcao': 'Mecânico'}])
         if '/rest/v1/veiculos' in u: return resp(route, [{'id': 'v9', 'placa': 'QQQ1A11', 'marca': 'Fiat', 'modelo': 'STRADA 1.4', 'ano': '2018', 'cor': 'Branca', 'combustivel': 'Flex', 'km_atual': 97310, 'cliente_id': 'c9'}] if 'QQQ1A11' in u else [])
         if '/rest/v1/clientes' in u: return resp(route, [{'nome': 'Cliente do Cadastro'}])
@@ -58,7 +61,7 @@ try:
         t(pg.get_by_text('1 de 2 serviços').count() == 1, 'conta só serviços aprovados (sem peça, sem recusado)')
         t(pg.get_by_text('Orçamento enviado').count() == 1, 'O.S. em orçamento aparece como orçamento')
         u_ord = [x[2] for x in pedidos if x[1] == '/rest/v1/ordens'][0]
-        t('mecanico_id=eq.' + UID in u_ord, 'só as O.S. em que o usuário é o técnico'); t('total' not in u_ord and 'valor' not in [x[2] for x in pedidos if x[1] == '/rest/v1/os_itens'][0], 'não lê preços')
+        t('mecanico_id=eq.' + UID in u_ord, 'só as O.S. em que o usuário é o técnico'); t('total' not in u_ord and not [x for x in pedidos if x[1] == '/rest/v1/os_itens' and ('valor' in x[2] or 'custo' in x[2])], 'não lê preços')
         # detalhe
         pg.get_by_text('ABC1D23').click(); t(pg.get_by_text('SUBST. DE OLEO E FILTROS').count() == 1 and pg.get_by_text('ITEM RECUSADO').count() == 0, 'serviços da O.S.')
         t(pg.get_by_text('Executado (marcado no sistema)').count() == 1, 'executado no sistema'); t(pg.get_by_text('Adm inclui um item').count() == 0, 'sem simulação em O.S. real')
@@ -75,11 +78,22 @@ try:
         pg.get_by_role('button', name='Voltar', exact=True).click(); pg.fill('#nv-placa', 'NOV4A00'); pg.get_by_role('button', name='Buscar veículo').click()
         pg.get_by_text('Placa nova · dados da consulta pela placa').wait_for(); t(pg.get_by_text('Jeep RENEGADE 1.8 2020/2021').count() == 1, 'placa nova pela consulta')
         pg.fill('#nv-cliente', 'Zé'); pg.fill('#nv-km', '5000'); pg.get_by_role('button', name='Continuar para os itens').click()
-        pg.fill('#nv-texto', 'trocar oleo, alinhamento'); pg.get_by_role('button', name='Montar a lista').click(); pg.get_by_role('button', name='Concluir (teste: não salva)').click()
+        pg.fill('#nv-texto', 'coxim do amort, kit amort, ortecedor, pastilha de freio diant, subst coxim do amort diant, amortesedor trazeiro, zzzqqq'); pg.get_by_role('button', name='Montar a lista').click()
+        nomes = pg.evaluate("[...document.querySelectorAll('div')].filter(d => d.style.fontSize === '16px' && d.style.fontWeight === '700').map(d => d.textContent)")
+        t('COXIM DO AMORTECEDOR' in nomes, 'abreviação: coxim do amort → ' + str(nomes)); t('KIT AMORTECEDOR' in nomes, 'abreviação: kit amort'); t('AMORTECEDOR' in nomes, 'palavra cortada: ortecedor')
+        t('PASTILHA DE FREIO DIANTEIRA' in nomes, 'concordância e escrita já usada: pastilha diant'); t('SUBST. COXIM DO AMORTECEDOR DIANTEIRO' in nomes, 'frase já usada pela oficina volta com a escrita dela')
+        t('AMORTECEDOR TRASEIRO' in nomes, 'palavra errada: amortesedor trazeiro'); t(pg.get_by_text('Conferir a escrita').count() == 1, 'palavra desconhecida fica para conferir')
+        t(pg.get_by_text('Você disse: “coxim do amort”').count() == 1, 'mostra o que foi dito')
+        pg.get_by_role('button', name='Concluir (teste: não salva)').click()
         t(pg.get_by_text('Teste: o orçamento NÃO foi salvo no sistema.').count() == 1, 'orçamento não é salvo')
         # óleo pelo catálogo real
         pg.get_by_role('button', name='Óleo', exact=True).click(); pg.get_by_text('7,9 L').wait_for(timeout=20000); t(pg.get_by_text('ABC1D23').count() == 1, 'óleo do veículo da O.S. pelo catálogo')
         pg.fill('#busca-oleo', 'onix 1.0'); pg.get_by_text('3,75 L').first.wait_for(); t(pg.evaluate("document.activeElement.id") == 'busca-oleo', 'busca de óleo mantém o cursor')
+        antes = len([x for x in pedidos if x[1] == '/functions/v1/placa'])
+        pg.fill('#busca-oleo', 'qqq-1a11'); pg.get_by_text('Fiat STRADA 1.4 2018').wait_for(); t(pg.get_by_text('QQQ1A11').count() == 1, 'óleo pela placa do cadastro')
+        t(len([x for x in pedidos if x[1] == '/functions/v1/placa']) == antes, 'placa do cadastro não gasta consulta no óleo')
+        pg.fill('#busca-oleo', 'nov4a00'); pg.get_by_text('Jeep RENEGADE 1.8 2020/2021').wait_for(); t(len([x for x in pedidos if x[1] == '/functions/v1/placa']) == antes + 1, 'placa nova no óleo consulta uma vez')
+        pg.fill('#busca-oleo', 'nov4a0'); pg.fill('#busca-oleo', 'nov4a00'); pg.get_by_text('Jeep RENEGADE 1.8 2020/2021').wait_for(); t(len([x for x in pedidos if x[1] == '/functions/v1/placa']) == antes + 1, 'a mesma placa não é consultada de novo')
         # nada gravado no banco
         grav = [x for x in pedidos if x[0] not in ('GET', 'OPTIONS') and '/auth/' not in x[1] and x[1] not in ('/rest/v1/rpc/tecnicos_lista', '/functions/v1/placa')]
         t(not grav, 'o app não grava nada no banco: ' + str(grav))

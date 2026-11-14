@@ -110,6 +110,81 @@ p.forEach(function (x) { if (x.type === 'hour') h = Number(x.value) % 24; if (x.
 return dia !== 'Sun' && h >= 7 && h < 18;
 }
 window.__dtcarHorario = dentroDoHorario;
+
+// ---------- corretor da lista: abreviação e palavra errada viram a palavra que a oficina usa ----------
+// O vocabulário vem das descrições já lançadas nas O.S. (carregado depois do login) mais um glossário fixo.
+function semAcento(t) { return String(t == null ? '' : t).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase(); }
+var PARADAS = { de: 1, 'do': 1, da: 1, dos: 1, das: 1, e: 1, o: 1, a: 1, os: 1, as: 1, com: 1, c: 1, p: 1, para: 1, no: 1, na: 1, em: 1, um: 1, uma: 1 };
+var ABREV = { amort: 'amortecedor', amorts: 'amortecedores', amortec: 'amortecedor', diant: 'dianteiro', dian: 'dianteiro', tras: 'traseiro', dir: 'direito', esq: 'esquerdo', susp: 'suspensao',
+  embr: 'embreagem', rolam: 'rolamento', rol: 'rolamento', hidr: 'hidraulica', comb: 'combustivel', past: 'pastilha', homoc: 'homocinetica', homo: 'homocinetica', estab: 'estabilizador',
+  band: 'bandeja', term: 'terminal', alin: 'alinhamento', balanc: 'balanceamento', balan: 'balanceamento', corr: 'correia', cx: 'caixa', mot: 'motor', sup: 'superior', inf: 'inferior',
+  bat: 'bateria', lamp: 'lampada', mang: 'mangueira', reserv: 'reservatorio', retent: 'retentor', filt: 'filtro', arref: 'arrefecimento', cabec: 'cabecote', valv: 'valvula', inj: 'injetor', radi: 'radiador' };
+var GLOSSARIO = ('amortecedor amortecedores coxim batente coifa kit mola bieleta bandeja pivo bucha terminal barra axial estabilizador rolamento cubo homocinetica semieixo junta pastilha pastilhas disco discos ' +
+  'tambor lona cilindro fluido freio flexivel pinca oleo filtro ar combustivel cabine vela velas cabo bobina correia dentada alternador tensor polia bomba agua radiador mangueira reservatorio aditivo ' +
+  'valvula termostatica embreagem plato atuador volante caixa direcao hidraulica eletrica bateria lampada farol lanterna palheta limpador escapamento catalisador silencioso sensor sonda injetor bico ' +
+  'corpo borboleta cabecote retentor carter motor cambio diferencial cruzeta alinhamento balanceamento cambagem suspensao dianteiro dianteira traseiro traseira direito direita esquerdo esquerda ' +
+  'superior inferior substituicao subst troca trocar revisao limpeza regulagem diagnostico vazamento barulho arrefecimento').split(' ');
+function distancia(a, b, limite) {
+  if (Math.abs(a.length - b.length) > limite) return limite + 1;
+  var ant = [], i, j;
+  for (j = 0; j <= b.length; j++) ant[j] = j;
+  for (i = 1; i <= a.length; i++) {
+    var atual = [i], menor = i;
+    for (j = 1; j <= b.length; j++) { atual[j] = Math.min(ant[j] + 1, atual[j - 1] + 1, ant[j - 1] + (a.charCodeAt(i - 1) === b.charCodeAt(j - 1) ? 0 : 1)); if (atual[j] < menor) menor = atual[j]; }
+    if (menor > limite) return limite + 1;
+    ant = atual;
+  }
+  return ant[b.length];
+}
+function novoVocabulario(descricoes) {
+  var freq = {}, frases = {};
+  GLOSSARIO.forEach(function (w) { freq[w] = 5; });
+  var voc = { freq: freq, frases: frases, lista: [] };
+  (descricoes || []).forEach(function (d) { semAcento(d.descricao).split(/[^a-z0-9]+/).forEach(function (w) { if (w.length >= 2 && !/^\d+$/.test(w)) freq[w] = (freq[w] || 0) + 1; }); });
+  voc.lista = Object.keys(freq).filter(function (w) { return freq[w] >= 3 && w.length >= 4; }).map(function (w) { return [w, freq[w]]; });
+  // frases já usadas pela oficina, pela "chave" (palavras corrigidas, sem "de/do/com", em ordem): a escrita mais repetida é a que vale
+  (descricoes || []).forEach(function (d) {
+    var k = chaveFrase(voc, d.descricao); if (!k) return;
+    var f = frases[k] || (frases[k] = { total: 0, escritas: {}, tipos: {} }), e = String(d.descricao).trim().toUpperCase();
+    f.total++; f.escritas[e] = (f.escritas[e] || 0) + 1; f.tipos[d.tipo] = (f.tipos[d.tipo] || 0) + 1;
+  });
+  return voc;
+}
+function corrigirPalavra(voc, palavra) {
+  var w = semAcento(palavra);
+  if (!w || PARADAS[w] || /\d/.test(w)) return w;
+  if (ABREV[w]) return ABREV[w];
+  var f = voc.freq[w] || 0, melhor = null, i, x;
+  if (f >= 3) return w;
+  if (w.length >= 4) {   // começo de palavra ("amortec", "bielet")
+    for (i = 0; i < voc.lista.length; i++) { x = voc.lista[i]; if (x[0].length >= w.length + 2 && x[0].indexOf(w) === 0 && (!melhor || x[1] > melhor[1])) melhor = x; }
+    if (melhor) return melhor[0];
+  }
+  if (w.length >= 5) {   // pedaço de palavra ("ortecedor") e letra trocada ("amortesedor")
+    for (i = 0; i < voc.lista.length; i++) { x = voc.lista[i]; if (x[0].length - w.length <= 3 && x[0].length > w.length && x[0].indexOf(w) >= 0 && (!melhor || x[1] > melhor[1])) melhor = x; }
+    if (melhor) return melhor[0];
+    var limite = w.length >= 8 ? 2 : 1, dMelhor = limite + 1;
+    for (i = 0; i < voc.lista.length; i++) { x = voc.lista[i]; var dd = distancia(w, x[0], limite); if (dd < dMelhor || (dd === dMelhor && dd <= limite && melhor && x[1] > melhor[1])) { dMelhor = dd; melhor = x; } }
+    if (melhor && dMelhor <= limite) return melhor[0];
+  }
+  return w;
+}
+function palavrasDe(t) { return String(t).trim().split(/\s+/).map(function (x) { return x.replace(/^[^0-9A-Za-zÀ-ÿ]+|[^0-9A-Za-zÀ-ÿ]+$/g, ''); }).filter(Boolean); }
+var FEMININO = { dianteiro: 'dianteira', traseiro: 'traseira', direito: 'direita', esquerdo: 'esquerda' };
+var NAO_E_A_PECA = { subst: 1, substituicao: 1, troca: 1, trocar: 1, kit: 1, jogo: 1, par: 1, mo: 1, m: 1, limpeza: 1, revisao: 1, regulagem: 1 };
+function corrigirFrase(voc, t) {
+  var ps = palavrasDe(t), abreviada = [];
+  var out = ps.map(function (x, i) { if (/[\/.]/.test(x) && !/^[A-Za-zÀ-ÿ]+$/.test(x)) return semAcento(x); abreviada[i] = !!ABREV[semAcento(x)]; return corrigirPalavra(voc, x); });
+  // "pastilha diant" → dianteira: a abreviação concorda com a peça (primeira palavra que não é "subst", "kit", "de"…)
+  var peca = out.filter(function (w) { return !PARADAS[w] && !NAO_E_A_PECA[w]; })[0] || '';
+  if (/a$/.test(peca)) out = out.map(function (w, i) { return abreviada[i] && FEMININO[w] ? FEMININO[w] : w; });
+  return out.join(' ').toUpperCase();
+}
+function chaveFrase(voc, t) {
+  return semAcento(t).split(/[^a-z0-9]+/).filter(function (w) { return w && !PARADAS[w]; }).map(function (w) { return ABREV[w] || w; }).sort().join(' ');
+}
+var E_SERVICO = /^(m\.?\s?o\b|mao de obra|subst|troca|trocar|revis|limpeza|limpar|regul|diagn|alinh|balanc|cambag|verific|conferir|reparo|reparar|remoc|remover|instal|montagem|desmont|aperto|sangria|scanner|teste)/;
+window.__dtcarCorretor = { novo: novoVocabulario, palavra: corrigirPalavra, frase: corrigirFrase };
 class Component extends DCLogic {
 constructor(props) {
 super(props);
@@ -152,7 +227,7 @@ if (!pf || pf.ativo === false || pf.papel !== 'admin') { self.setState({ entrand
 var nome = pf.nome || user.email, primeiro = nome.split(' ')[0];
 guardar('dtcar-mecanico-email', user.email); guardar('dtcar-mecanico-nome', primeiro);
 self.setState({ logado: true, entrando: false, senha: '', loginMotivo: '', emailSalvo: user.email, nomeSalvo: primeiro, usuario: { id: pf.id, nome: nome, primeiro: primeiro } });
-self.carregar();
+self.carregar(); self.carregarVocabulario();
 });
 }
 carregar() {
@@ -184,6 +259,30 @@ if (r.error || !r.data) return;
 self.setState({ tecnicos: r.data.filter(function (t) { return t.perfil_id !== u.id; }).map(function (t) { return (t.apelido || t.nome || '').split(' ')[0]; }).filter(Boolean) });
 });
 }
+carregarVocabulario() {
+var self = this;
+if (this._voc) return; this._voc = true;
+var pagina = function (n) { return self.sb.from('os_itens').select('descricao,tipo').order('criado_em', { ascending: false }).range(n * 1000, n * 1000 + 999).then(function (r) { if (r.error) throw r.error; return r.data || []; }); };
+Promise.all([pagina(0), pagina(1), pagina(2)]).then(function (ps) { self.voc = novoVocabulario(ps[0].concat(ps[1], ps[2])); })
+.catch(function () { self._voc = false; });
+}
+buscarPlacaOleo(pl) {
+var self = this;
+this._placas = this._placas || {};
+if (this._placas[pl]) return;
+this._placas[pl] = { estado: 'buscando' };
+var fim = function (o) { self._placas[pl] = o; self.forceUpdate(); };
+this.sb.from('veiculos').select('placa,marca,modelo,ano,motor,combustivel').eq('placa', pl).limit(1).then(function (r) {
+var vc = r.data && r.data[0];
+if (vc) { fim({ estado: 'ok', origem: 'cadastro', dados: vc }); return; }
+return self.sb.functions.invoke('placa', { body: { acao: 'basico', placa: pl } }).then(function (rp) {
+var x = rp && rp.data, dd = x && x.dados;
+if (!x || x.ok !== true || !x.encontrado || !dd) { fim({ estado: 'erro', msg: (x && x.erro) || 'Não achei essa placa.' }); return; }
+var ano = dd.ano_fab && dd.ano_mod && dd.ano_fab !== dd.ano_mod ? dd.ano_fab + '/' + dd.ano_mod : (dd.ano_mod || dd.ano_fab || '');
+fim({ estado: 'ok', origem: 'consulta', dados: { placa: pl, marca: dd.marca, modelo: dd.modelo, ano: String(ano), motor: dd.motor, combustivel: dd.combustivel } });
+});
+}).catch(function () { delete self._placas[pl]; fim({ estado: 'erro', msg: 'Sem resposta. Confira a internet.' }); delete self._placas[pl]; });
+}
 carregarCatalogo() {
 var self = this;
 if (this._cat) return; this._cat = true;
@@ -192,43 +291,37 @@ import('../js/catalogo.js').then(function (m) { self.catMod = m; return m.carreg
 }
 ouvir(aoTerminar) {
 var R = window.SpeechRecognition || window.webkitSpeechRecognition, self = this;
-if (!R) { this.avisar('Este aparelho não tem ditado aqui. Use o microfone do teclado.'); return false; }
-var r = new R(); r.lang = 'pt-BR'; r.interimResults = false; r.maxAlternatives = 1;
-r.onresult = function (e) { aoTerminar(e.results[0][0].transcript || ''); };
-r.onerror = function () { aoTerminar(''); self.avisar('Não consegui ouvir. Tente de novo ou use o teclado.'); };
-r.onend = function () { aoTerminar(null); };
-try { r.start(); } catch (e) { return false; }
+if (!R) { this.avisar('Este navegador não tem ditado. Abra o app pelo Chrome ou use o microfone do teclado.'); return false; }
+if (navigator.onLine === false) { this.avisar('O ditado precisa de internet.'); return false; }
+var MOTIVO = { 'not-allowed': 'O microfone está bloqueado para este app. Libere em Configurações do site › Microfone.', 'service-not-allowed': 'O ditado está desligado neste celular. Use o microfone do teclado.',
+  'no-speech': 'Não ouvi nada. Fale perto do celular e tente de novo.', 'audio-capture': 'Não achei o microfone do celular.', network: 'O ditado precisa de internet.', 'language-not-supported': 'Este celular não tem ditado em português.' };
+var comecar = function () {
+var r = new R(), falou = false; r.lang = 'pt-BR'; r.interimResults = false; r.maxAlternatives = 1; r.continuous = false;
+r.onresult = function (e) { var t = ''; for (var i = 0; i < e.results.length; i++) t += e.results[i][0].transcript + ' '; falou = true; aoTerminar(t.trim()); };
+r.onerror = function (e) { falou = true; aoTerminar(''); self.avisar(MOTIVO[e.error] || 'Não consegui ouvir (' + e.error + '). Use o microfone do teclado.'); };
+r.onend = function () { aoTerminar(null); if (!falou) self.avisar(MOTIVO['no-speech']); };
+try { r.start(); } catch (e) { aoTerminar(null); self.avisar('Não consegui ligar o ditado. Use o microfone do teclado.'); }
+};
+// pede a permissão do microfone antes: sem isso, no app instalado o ditado pode falhar calado
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+navigator.mediaDevices.getUserMedia({ audio: true }).then(function (fluxo) { fluxo.getTracks().forEach(function (t) { t.stop(); }); comecar(); })
+.catch(function () { aoTerminar(null); self.avisar(MOTIVO['not-allowed']); });
+} else comecar();
 return true;
 }
 entenderTexto(texto) {
-var R = [
-[/filtro de [oó]leo/, [['Filtro de óleo', 'Peça']]],
-[/filtro de ar( |$)/, [['Filtro de ar do motor', 'Peça']]],
-[/filtro de combust/, [['Filtro de combustível', 'Peça']]],
-[/cabine|ar.condicionado/, [['Filtro de cabine', 'Peça']]],
-[/fluido de freio/, [['Troca do fluido de freio', 'Serviço']]],
-[/pastilha.*tras/, [['Pastilhas de freio traseiras (jogo)', 'Peça'], ['Mão de obra: troca de pastilhas', 'Serviço']]],
-[/pastilha/, [['Pastilhas de freio dianteiras (jogo)', 'Peça'], ['Mão de obra: troca de pastilhas', 'Serviço']]],
-[/disco/, [['Discos de freio dianteiros (par)', 'Peça']]],
-[/amortecedor.*tras/, [['Amortecedores traseiros (par)', 'Peça']]],
-[/amortecedor/, [['Amortecedores dianteiros (par)', 'Peça']]],
-[/bieleta/, [['Bieletas dianteiras (par)', 'Peça']]],
-[/suspens|barulho/, [['Diagnóstico de suspensão', 'Serviço']]],
-[/alinhamento/, [['Alinhamento', 'Serviço']]],
-[/balanceamento/, [['Balanceamento', 'Serviço']]],
-[/correia/, [['Kit correia dentada', 'Peça'], ['Mão de obra: correia dentada', 'Serviço']]],
-[/bateria/, [['Bateria', 'Peça']]],
-[/vela/, [['Jogo de velas de ignição', 'Peça']]],
-[/arrefec|radiador|aditivo/, [['Troca do líquido de arrefecimento', 'Serviço']]],
-[/[oó]leo/, [['Óleo de motor', 'Peça'], ['Mão de obra: troca de óleo', 'Serviço']]]
-];
+var voc = this.voc || (this._vocBase = this._vocBase || novoVocabulario([]));
 var out = [], vistos = {}, id = 1;
-texto.split(/[,;\n.]+|\s+e\s+/).forEach(function (f) {
+String(texto).split(/[,;\n]+|\s+e\s+|\.(?=\s|$)/).forEach(function (f) {
 var t = f.trim(); if (!t) return;
-var low = t.toLowerCase(), achou = null;
-for (var k = 0; k < R.length; k++) { if (R[k][0].test(low)) { achou = R[k][1]; break; } }
-if (!achou) { out.push({ id: id++, disse: t, nome: t.charAt(0).toUpperCase() + t.slice(1), tipo: 'Conferir: não encontrei no cadastro', conferir: true }); return; }
-achou.forEach(function (a) { if (vistos[a[0]]) return; vistos[a[0]] = 1; out.push({ id: id++, disse: t, nome: a[0], tipo: a[1], conferir: false }); });
+var corrigida = corrigirFrase(voc, t), usada = voc.frases[chaveFrase(voc, corrigida)], nome = corrigida, tipo;
+if (usada) {   // a oficina já lançou exatamente isso: usa a escrita mais repetida
+nome = Object.keys(usada.escritas).sort(function (x, y) { return usada.escritas[y] - usada.escritas[x]; })[0];
+tipo = (usada.tipos.peca || 0) >= (usada.tipos.servico || 0) + (usada.tipos.terceiro || 0) ? 'Peça' : 'Serviço';
+} else tipo = E_SERVICO.test(semAcento(corrigida)) ? 'Serviço' : 'Peça';
+var estranha = palavrasDe(corrigida).some(function (w) { w = semAcento(w); return w.length >= 4 && !/\d/.test(w) && !PARADAS[w] && !(voc.freq[w] > 0); });
+if (vistos[nome]) return; vistos[nome] = 1;
+out.push({ id: id++, disse: t, nome: nome, tipo: estranha ? 'Conferir a escrita: palavra que a oficina ainda não usou' : tipo, conferir: estranha });
 });
 return out;
 }
@@ -346,7 +439,16 @@ var linhaDe = function (titulo, placa, lista) {
 if (!lista.length) return [{ modelo: titulo, placa: placa, litros: '—', visc: 'não achei' }];
 return lista.slice(0, placa ? 1 : 4).map(function (x) { return { modelo: placa ? titulo : [x.linha.montadora, x.linha.modelo, x.linha.motor, M.periodoTexto(x.linha)].filter(Boolean).join(' '), placa: placa, litros: x.litros + ' L', visc: x.viscosidade }; });
 };
-if (q.length >= 3) {
+var plq = q.toUpperCase().replace(/[^A-Z0-9]/g, '');
+if (/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(plq)) {
+var achada = (self._placas || {})[plq];
+if (!achada || achada.estado === 'buscando') oleoVazioTexto = 'Buscando a placa ' + plq + '…';
+else if (achada.estado === 'erro') oleoVazioTexto = achada.msg;
+else {
+var dv = achada.dados, pv2 = M.pesquisarVeiculo(s.cat, dv);
+oleos = linhaDe([dv.marca, dv.modelo, dv.ano].filter(Boolean).join(' '), plq, pv2.r ? M.resumoOleo(pv2.r.oleo, pv2.r.ano) : []);
+}
+} else if (q.length >= 3) {
 if (self._oq !== q) { var pr = M.pesquisar(s.cat, q); self._oq = q; self._or = linhaDe(q, '', M.resumoOleo(pr.oleo, pr.ano)); if (!pr.oleo.length) self._or = []; }
 oleos = self._or; oleoVazioTexto = 'Não achei esse modelo no catálogo.';
 } else {
@@ -443,7 +545,7 @@ self.avisar('Teste: o orçamento NÃO foi salvo no sistema.');
 irVeiculos: function () { self.setState({ aba: 'veiculos' }); },
 irOleo: function () { self.setState({ aba: 'oleo' }); self.carregarCatalogo(); },
 voltar: function () { self.setState({ aberto: null, folha: null, editando: false }); },
-onBusca: function (e) { self.setState({ busca: e.target.value }); },
+onBusca: function (e) { var t = e.target.value, pl = t.toUpperCase().replace(/[^A-Z0-9]/g, ''); self.setState({ busca: t }); if (/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(pl) && self.sb) self.buscarPlacaOleo(pl); },
 onKm: function (e) { self.setState({ kmInput: e.target.value.replace(/[^0-9]/g, ''), kmErro: '' }); },
 fecharFolha: function () { clearTimeout(self._g); self.setState({ folha: null, itemFolha: null, kmErro: '', addOuvindo: false }); },
 alternarEdicao: function () { self.setState({ editando: !s.editando }); },

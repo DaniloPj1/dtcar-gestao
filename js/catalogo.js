@@ -170,12 +170,13 @@ export function chavesDoVeiculo(v) {
   let m = norm(v.modelo).replace(/^i\s*\/\s*/, "").replace(/(\d),(\d)/g, "$1.$2")
     .replace(/(\d\.\d)(?=[a-z])/g, "$1 ").replace(/([a-z])(\d\.\d)/g, "$1 $2");   // "1.4MT" → "1.4 MT"; "XEI2.0" → "XEI 2.0"
   let t = m.split(/[^a-z0-9.]+/).filter(Boolean);
-  if (marca.length && t[0] && marca.includes(APELIDOS[t[0]] || t[0])) t = t.slice(1);   // "TOYOTA COROLLA": a marca veio repetida no modelo
+  // "TOYOTA COROLLA": a marca veio repetida no modelo; "T/CITROEN C4", "I/TOYOTA COROLLA": letra de importado e marca na frente
+  while (t.length > 1 && (t[0].length === 1 || (marca.length && marca.includes(APELIDOS[t[0]] || t[0])))) t = t.slice(1);
   const nome = t.length > 1 && COMECO_COMPOSTO.has(t[0]) ? [t[0], t[1]] : t.slice(0, 1);
   const resto = t.slice(nome.length);
   let cil = (resto.find(x => /^\d\.\d$/.test(x)) || "");
   // cilindrada sem ponto, como vem do documento: "ONIX 10MT", "SANDERO EXPR 10", "COROLLA XEI20FLEX" → 1.0, 1.0, 2.0
-  if (!cil) { const g = resto.map(x => x.match(/^(?:[a-z]{2,})?([1-6])(\d)(?:mt|at|m|a|t|flex|fl|tb)?$/)).find(Boolean); if (g) cil = g[1] + "." + g[2]; }
+  if (!cil) { const g = resto.map(x => x.match(/^(?:[a-z]{2,})?([1-6])(\d)(?:mt|at|m|a|t|flex|fl|tb|glx?\d?p?|gls)?$/)).find(Boolean); if (g) cil = g[1] + "." + g[2]; }
   if (!cil) { const mm = String(v.motor || "").replace(",", ".").match(/(?<![\d.])(\d\.\d)(?!\d)/) || String(v.motor || "").match(/(?<!\d)([1-6])(\d)\d{2}(?!\d)/); if (mm) cil = mm[2] !== undefined ? mm[1] + "." + mm[2] : mm[1]; }
   const comb = norm(v.combustivel), diesel = /diesel/.test(comb) || /diesel|\btdi\b|\bcrdi\b/.test(m) ? true : comb && /flex|gasolina|etanol|alcool|gnv/.test(comb) ? false : null;
   const extras = resto.filter(x => x !== cil && x.length > 1 && !SEM_VALOR.has(x) && !/^\d+[a-z]{0,4}$/.test(x) || /^\d{1,2}v$/.test(x));

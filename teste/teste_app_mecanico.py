@@ -1,6 +1,7 @@
-# Teste do app do mecânico (VERSÃO DE TESTE, pasta mecanico/): login, trava do Wi-Fi, orçamento, serviços, apontamento e óleo.
+# Teste do app do mecânico (pasta mecanico/), etapa 1: login real, leitura das O.S. do técnico, placa, serviços, óleo.
+# O Supabase é de mentira (respostas montadas aqui). Confere também que o app NÃO grava nada no banco.
 # Uso: python3 teste/teste_app_mecanico.py   (precisa de: pip install playwright && playwright install chromium)
-import sys, subprocess, time, os
+import sys, subprocess, time, os, json
 from playwright.sync_api import sync_playwright
 raiz = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 srv = subprocess.Popen([sys.executable, '-m', 'http.server', '8765', '-d', raiz], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -8,50 +9,90 @@ time.sleep(1); ok = 0
 def t(c, m):
     global ok
     assert c, m; ok += 1
+UID = '11111111-1111-1111-1111-111111111111'
+ORDENS = [
+ {'id': 'o1', 'numero': 2001, 'status': 'execucao', 'cliente': {'nome': 'Cliente Teste'}, 'veiculo': {'placa': 'abc1d23', 'marca': 'Toyota', 'modelo': 'HILUX CD4X4 SRV', 'ano': '2019', 'motor': 'Diesel'}, 'km_entrada': 84050, 'km_saida': None, 'reclamacao': 'Revisão'},
+ {'id': 'o2', 'numero': 2002, 'status': 'diagnostico', 'cliente': {}, 'veiculo': {'placa': 'XYZ9A88', 'marca': 'Chevrolet', 'modelo': 'PRISMA 1.4AT LT', 'ano': '2017/2018'}, 'km_entrada': 0, 'km_saida': None, 'reclamacao': 'Barulho'}]
+ITENS = [
+ {'id': 'i1', 'ordem_id': 'o1', 'tipo': 'servico', 'descricao': 'SUBST. DE OLEO E FILTROS', 'qtd': 1, 'aprovado': True, 'executado': True, 'posicao': 0},
+ {'id': 'i2', 'ordem_id': 'o1', 'tipo': 'servico', 'descricao': 'SUBST. PASTILHAS DIANT.', 'qtd': 1, 'aprovado': True, 'executado': False, 'posicao': 1},
+ {'id': 'i3', 'ordem_id': 'o1', 'tipo': 'peca', 'descricao': 'OLEO 5W30 1L', 'qtd': 8, 'aprovado': True, 'executado': False, 'posicao': 2},
+ {'id': 'i4', 'ordem_id': 'o1', 'tipo': 'servico', 'descricao': 'ITEM RECUSADO', 'qtd': 1, 'aprovado': False, 'executado': False, 'posicao': 3},
+ {'id': 'i5', 'ordem_id': 'o2', 'tipo': 'servico', 'descricao': 'DIAGNOSTICO', 'qtd': 1, 'aprovado': None, 'executado': False, 'posicao': 0}]
+def montar(pg, papel='admin', pedidos=None):
+    def resp(route, corpo, st=200): route.fulfill(status=st, content_type='application/json', body=json.dumps(corpo), headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*'})
+    def h(route):
+        rq = route.request; u = rq.url
+        if pedidos is not None: pedidos.append((rq.method, u.split('.co')[1].split('?')[0], u))
+        if rq.method == 'OPTIONS': return route.fulfill(status=204, headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*', 'access-control-allow-methods': '*'})
+        if '/auth/v1/token' in u:
+            d = json.loads(rq.post_data or '{}')
+            if d.get('password') != 'certa': return resp(route, {'error': 'invalid_grant', 'error_description': 'Invalid login credentials', 'msg': 'Invalid login credentials'}, 400)
+            return resp(route, {'access_token': 'a.b.c', 'token_type': 'bearer', 'expires_in': 3600, 'expires_at': int(time.time()) + 3600, 'refresh_token': 'r', 'user': {'id': UID, 'email': d.get('email'), 'aud': 'authenticated', 'role': 'authenticated'}})
+        if '/auth/v1/logout' in u: return route.fulfill(status=204, headers={'access-control-allow-origin': '*'})
+        if '/rest/v1/perfis' in u: return resp(route, [{'id': UID, 'nome': 'Fulano de Teste', 'papel': papel, 'ativo': True}])
+        if '/rest/v1/ordens' in u: return resp(route, ORDENS)
+        if '/rest/v1/os_itens' in u: return resp(route, ITENS)
+        if '/rest/v1/rpc/tecnicos_lista' in u: return resp(route, [{'tipo': 'acesso', 'id': UID, 'nome': 'Fulano de Teste', 'apelido': '', 'perfil_id': UID, 'funcao': 'admin'}, {'tipo': 'funcionario', 'id': 'f2', 'nome': 'Beltrano Silva', 'apelido': '', 'perfil_id': None, 'funcao': 'Mecânico'}])
+        if '/rest/v1/veiculos' in u: return resp(route, [{'id': 'v9', 'placa': 'QQQ1A11', 'marca': 'Fiat', 'modelo': 'STRADA 1.4', 'ano': '2018', 'cor': 'Branca', 'combustivel': 'Flex', 'km_atual': 97310, 'cliente_id': 'c9'}] if 'QQQ1A11' in u else [])
+        if '/rest/v1/clientes' in u: return resp(route, [{'nome': 'Cliente do Cadastro'}])
+        if '/functions/v1/placa' in u: return resp(route, {'ok': True, 'encontrado': True, 'origem': 'api', 'valor_centavos': 3, 'dados': {'marca': 'Jeep', 'modelo': 'RENEGADE 1.8', 'ano_fab': 2020, 'ano_mod': 2021, 'cor': 'Prata', 'combustivel': 'Flex'}})
+        return resp(route, [], 200)
+    pg.route('**/*.supabase.co/**', h)
 try:
     with sync_playwright() as p:
         b = p.chromium.launch()
-        pg = b.new_page(viewport={'width': 390, 'height': 844}, service_workers='block')
-        erros = []; pg.on('pageerror', lambda e: erros.append(str(e))); pg.on('console', lambda m: m.type == 'error' and erros.append(m.text))
+        ctx = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block'); pg = ctx.new_page(); pedidos = []
+        erros = []; pg.on('pageerror', lambda e: erros.append(str(e))); pg.on('console', lambda m: m.type == 'error' and 'Failed to load resource' not in m.text and erros.append(m.text))
+        montar(pg, pedidos=pedidos)
         pg.goto('http://localhost:8765/mecanico/'); pg.wait_for_selector('#lg-senha')
-        t(pg.locator('video').count() == 1, 'vídeo no login'); t(pg.get_by_text('Olá, Carlos').count() == 1, 'saudação')
-        pg.get_by_role('button', name='ENTRAR').click(); t(pg.get_by_text('Digite sua senha.').count() == 1, 'pede a senha')
-        pg.fill('#lg-senha', 'abc'); t(pg.evaluate("document.activeElement.id") == 'lg-senha', 'cursor continua na senha')
-        t(pg.evaluate("document.querySelector('video') === window.__v0 || (window.__v0 = document.querySelector('video'), true)"), 'guarda vídeo')
-        pg.type('#lg-senha', 'd'); t(pg.evaluate("document.querySelector('video') === window.__v0"), 'vídeo não reinicia ao digitar')
-        t(pg.input_value('#lg-senha') == 'abcd', 'senha digitada')
-        # fora do wifi
-        pg.get_by_text('simulando NO Wi-Fi').click(); pg.get_by_role('button', name='ENTRAR').click()
-        t(pg.get_by_text('Conecte-se ao Wi-Fi da oficina').count() == 1, 'trava do wifi')
-        pg.get_by_text('simular que conectou').click(); pg.get_by_role('button', name='Tentar de novo').click()
-        t(pg.get_by_text('Meus veículos de hoje').count() == 1, 'lista de veículos'); t(pg.locator('video').count() == 0, 'sem vídeo fora do login')
-        t(pg.get_by_text('2 de 3 serviços').count() == 1, 'progresso em serviços')
-        # receber veículo
-        pg.get_by_role('button', name='Receber veículo e fazer orçamento').click()
-        pg.fill('#nv-placa', 'ozr3b82'); t(pg.input_value('#nv-placa') == 'OZR3B82', 'placa em maiúsculas')
-        pg.get_by_role('button', name='Buscar veículo').click(); t(pg.get_by_text('Encontrado no cadastro da oficina').count() == 1, 'placa cadastrada')
-        pg.fill('#nv-km', '98000'); pg.get_by_role('button', name='Continuar para os itens').click()
-        pg.fill('#nv-texto', 'trocar oleo e filtro de oleo, pastilha dianteira, alinhamento, limpeza de bico')
-        pg.get_by_role('button', name='Montar a lista').click(); t(pg.get_by_text('7 itens').count() == 1, 'lista com 7 itens')
-        pg.get_by_role('button', name='Enviar orçamento para a oficina').click()
-        t(pg.get_by_text('ORC 0057 enviado para a oficina.').count() == 1, 'orçamento enviado'); t(pg.get_by_text('Orçamento enviado', exact=True).count() == 1, 'etapa orçamento')
-        pg.get_by_text('OZR3B82').click(); pg.get_by_role('button', name='Aprovar: vira O.S.').click()
-        t(pg.get_by_text('Serviços da O.S.').count() == 1, 'virou lista de serviços'); t(pg.get_by_text('Subst. de óleo e filtros').count() == 1, 'serviço agrupado')
-        pg.get_by_role('button', name='Ver peças (2)').first.click(); t(pg.get_by_text('Filtro de óleo').count() >= 1, 'peças do serviço')
-        pg.get_by_role('button', name='Iniciar serviço').click(); t(pg.get_by_text('Iniciado às').count() == 1, 'iniciado, sem cronômetro')
-        pg.get_by_role('button', name='Marcar como feito por mim: Subst. de óleo e filtros').click(); t(pg.get_by_text('Feito por você').count() == 1, 'apontado por mim')
-        pg.get_by_role('button', name='Outro mecânico').first.click(); pg.get_by_role('button', name='Rafael').click(); t(pg.get_by_text('Feito por Rafael').count() == 1, 'apontado por outro')
-        pg.get_by_role('button', name='Adm inclui um item').click(); t(pg.get_by_text('Incluído pelo administrador').count() == 1, 'item do adm')
-        pg.get_by_role('button', name='Pausar').click(); pg.get_by_role('button', name='Aguardando peça').click(); t(pg.get_by_text('Motivo da pausa').count() == 1, 'pausa com motivo')
-        pg.get_by_role('button', name='Voltar para meus veículos').click(); t(pg.get_by_role('button', name='Notificações: 2').count() == 1, 'sino com 2')
-        pg.get_by_role('button', name='Óleo', exact=True).click(); pg.fill('#busca-oleo', 'hilux'); t(pg.get_by_text('7,9 L').count() == 1 and pg.get_by_text('Chevrolet Onix').count() == 0, 'busca de óleo')
-        pg.get_by_role('button', name='Veículos', exact=True).click(); pg.get_by_text('simular fim do horário comercial').click()
-        t(pg.get_by_text('Fora do horário comercial (7h às 18h)').count() == 1, 'saiu fora do horário')
+        t(pg.locator('video').count() == 1, 'vídeo no login'); t(pg.locator('#lg-email').count() == 1, 'primeira vez pede o e-mail')
+        pg.get_by_role('button', name='ENTRAR').click(); t(pg.get_by_text('Digite o seu e-mail.').count() == 1, 'pede o e-mail')
+        pg.fill('#lg-email', 'teste@exemplo.com'); pg.fill('#lg-senha', 'errada'); pg.get_by_role('button', name='ENTRAR').click()
+        pg.get_by_text('E-mail ou senha incorretos.').wait_for(); t(True, 'senha errada não entra')
+        pg.evaluate("window.__v0 = document.querySelector('video')"); pg.fill('#lg-senha', 'certa')
+        t(pg.evaluate("document.querySelector('video') === window.__v0"), 'vídeo não reinicia ao digitar')
+        pg.get_by_role('button', name='ENTRAR').click(); pg.get_by_text('O.S. 2001').wait_for()
+        t(pg.get_by_text('Fulano · teste: nada é salvo').count() == 1, 'nome do usuário e aviso de teste')
+        t(pg.get_by_text('ABC1D23').count() == 1 and pg.get_by_text('Toyota HILUX CD4X4 SRV 2019').count() == 1, 'O.S. real na lista')
+        t(pg.get_by_text('1 de 2 serviços').count() == 1, 'conta só serviços aprovados (sem peça, sem recusado)')
+        t(pg.get_by_text('Orçamento enviado').count() == 1, 'O.S. em orçamento aparece como orçamento')
+        u_ord = [x[2] for x in pedidos if x[1] == '/rest/v1/ordens'][0]
+        t('mecanico_id=eq.' + UID in u_ord, 'só as O.S. em que o usuário é o técnico'); t('total' not in u_ord and 'valor' not in [x[2] for x in pedidos if x[1] == '/rest/v1/os_itens'][0], 'não lê preços')
+        # detalhe
+        pg.get_by_text('ABC1D23').click(); t(pg.get_by_text('SUBST. DE OLEO E FILTROS').count() == 1 and pg.get_by_text('ITEM RECUSADO').count() == 0, 'serviços da O.S.')
+        t(pg.get_by_text('Executado (marcado no sistema)').count() == 1, 'executado no sistema'); t(pg.get_by_text('Adm inclui um item').count() == 0, 'sem simulação em O.S. real')
+        pg.get_by_role('button', name='Ver peças da O.S. (1)').click(); t(pg.get_by_text('OLEO 5W30 1L · 8').count() == 1, 'peças da O.S.')
+        pg.get_by_role('button', name='Iniciar serviço').click(); pg.get_by_role('button', name='Marcar como feito por mim: SUBST. PASTILHAS DIANT.').click()
+        t(pg.get_by_text('Feito por você').count() == 1, 'apontamento na tela')
+        pg.get_by_role('button', name='Finalizar').click(); pg.fill('#km-final', '100'); pg.get_by_role('button', name='Confirmar e finalizar').click(); t(pg.get_by_text('não pode ser menor').count() == 1, 'KM final menor é recusado')
+        pg.fill('#km-final', '84100'); pg.get_by_role('button', name='Confirmar e finalizar').click(); t(pg.get_by_text('Serviço finalizado · KM final 84.100').count() == 1, 'finaliza com KM')
+        pg.get_by_role('button', name='Voltar para meus veículos').click()
+        # receber veículo: cadastro e consulta
+        pg.get_by_role('button', name='Receber veículo e fazer orçamento').click(); pg.fill('#nv-placa', 'qqq1a11'); pg.get_by_role('button', name='Buscar veículo').click()
+        pg.get_by_text('Encontrado no cadastro da oficina').wait_for(); t(pg.get_by_text('Cliente do Cadastro').count() == 1 and pg.get_by_text('Fiat STRADA 1.4 2018').count() == 1, 'placa do cadastro')
+        t(not [x for x in pedidos if x[1] == '/functions/v1/placa'], 'placa do cadastro não gasta consulta')
+        pg.get_by_role('button', name='Voltar', exact=True).click(); pg.fill('#nv-placa', 'NOV4A00'); pg.get_by_role('button', name='Buscar veículo').click()
+        pg.get_by_text('Placa nova · dados da consulta pela placa').wait_for(); t(pg.get_by_text('Jeep RENEGADE 1.8 2020/2021').count() == 1, 'placa nova pela consulta')
+        pg.fill('#nv-cliente', 'Zé'); pg.fill('#nv-km', '5000'); pg.get_by_role('button', name='Continuar para os itens').click()
+        pg.fill('#nv-texto', 'trocar oleo, alinhamento'); pg.get_by_role('button', name='Montar a lista').click(); pg.get_by_role('button', name='Concluir (teste: não salva)').click()
+        t(pg.get_by_text('Teste: o orçamento NÃO foi salvo no sistema.').count() == 1, 'orçamento não é salvo')
+        # óleo pelo catálogo real
+        pg.get_by_role('button', name='Óleo', exact=True).click(); pg.get_by_text('7,9 L').wait_for(timeout=20000); t(pg.get_by_text('ABC1D23').count() == 1, 'óleo do veículo da O.S. pelo catálogo')
+        pg.fill('#busca-oleo', 'onix 1.0'); pg.get_by_text('3,75 L').first.wait_for(); t(pg.evaluate("document.activeElement.id") == 'busca-oleo', 'busca de óleo mantém o cursor')
+        # nada gravado no banco
+        grav = [x for x in pedidos if x[0] not in ('GET', 'OPTIONS') and '/auth/' not in x[1] and x[1] not in ('/rest/v1/rpc/tecnicos_lista', '/functions/v1/placa')]
+        t(not grav, 'o app não grava nada no banco: ' + str(grav))
+        # login guardado em separado do sistema
+        t(pg.evaluate("!!localStorage.getItem('dtcar-mecanico-auth') && !Object.keys(localStorage).some(k => /^sb-.*-auth-token$/.test(k))"), 'login separado do sistema principal')
+        pg.get_by_role('button', name='Veículos', exact=True).click(); pg.get_by_role('button', name='Sair').click(); pg.wait_for_selector('#lg-senha')
+        t(pg.get_by_text('Olá, Fulano').count() == 1 and pg.locator('#lg-email').count() == 0, 'login salvo: pede só a senha')
+        t(pg.evaluate("[window.__dtcarHorario(new Date('2026-11-16T10:00:00-03:00')), window.__dtcarHorario(new Date('2026-11-16T18:00:00-03:00')), window.__dtcarHorario(new Date('2026-11-16T06:59:00-03:00')), window.__dtcarHorario(new Date('2026-11-14T17:59:00-03:00')), window.__dtcarHorario(new Date('2026-11-15T10:00:00-03:00'))].join()") == 'true,false,false,true,false', 'horário: seg a sáb, 7h às 18h')
         t(not erros, 'sem erro no console: ' + '; '.join(erros))
-        # tela larga (PC): fica centralizado
-        pg2 = b.new_page(viewport={'width': 1366, 'height': 768}, service_workers='block'); pg2.goto('http://localhost:8765/mecanico/'); pg2.wait_for_selector('#lg-senha')
-        t(pg2.evaluate("document.getElementById('app').getBoundingClientRect().width") == 480, 'largura máxima no PC')
-        # o sistema principal não mudou de comportamento: abre normalmente
+        # quem não é administrador não entra
+        ctx2 = b.new_context(viewport={'width': 390, 'height': 844}, service_workers='block'); pg2 = ctx2.new_page(); montar(pg2, papel='mecanico')
+        pg2.goto('http://localhost:8765/mecanico/'); pg2.fill('#lg-email', 'm@exemplo.com'); pg2.fill('#lg-senha', 'certa'); pg2.get_by_role('button', name='ENTRAR').click()
+        pg2.get_by_text('liberado só para o administrador').wait_for(); t(pg2.locator('#lg-senha').count() == 1, 'outro papel fica no login')
         b.close()
     print(ok, 'verificações OK')
 finally:

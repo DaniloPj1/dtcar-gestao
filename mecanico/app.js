@@ -1,4 +1,5 @@
-// DTCar Mecânico — VERSÃO DE TESTE (dados fictícios, sem login real e sem ligação com o banco).
+// DTCar Mecânico — ETAPA 1: login real e LEITURA dos dados reais (O.S. em que o usuário é o técnico, cadastro de veículos,
+// catálogo de óleo). NADA do que é feito no app é gravado no banco: apontamentos, orçamento e KM ficam só na tela.
 // Este arquivo tem duas partes: (1) um desenhador pequeno, que monta a tela a partir do modelo
 // que está no index.html (<template id="tela">); (2) a lógica das telas (class Component).
 (function () {
@@ -99,37 +100,105 @@ DCLogic.prototype.setState = function (o) { this.state = Object.assign({}, this.
 DCLogic.prototype.forceUpdate = function () { if (instancia === this) desenhar(); };
 
 // ---------- (2) lógica das telas ----------
+function guardado(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+function guardar(k, v) { try { if (v) localStorage.setItem(k, v); else localStorage.removeItem(k); } catch (e) {} }
+// horário comercial do app: segunda a sábado, das 7h às 18h, pelo relógio de Brasília
+function dentroDoHorario(agora) {
+var p = new Intl.DateTimeFormat('en-US', { timeZone: 'America/Sao_Paulo', hour: 'numeric', hour12: false, weekday: 'short' }).formatToParts(agora || new Date());
+var h = 0, dia = '';
+p.forEach(function (x) { if (x.type === 'hour') h = Number(x.value) % 24; if (x.type === 'weekday') dia = x.value; });
+return dia !== 'Sun' && h >= 7 && h < 18;
+}
+window.__dtcarHorario = dentroDoHorario;
 class Component extends DCLogic {
 constructor(props) {
 super(props);
 var agora = Date.now();
 this.state = {
+carregando: false, erroCarga: '', usuario: null, emailSalvo: guardado('dtcar-mecanico-email'), nomeSalvo: guardado('dtcar-mecanico-nome'), emailInput: '', entrando: false, tecnicos: [], pecasOSAberto: false, cat: null, catErro: '',
 aba: 'veiculos', aberto: null, folha: null, itemFolha: null,
 kmInput: '', kmErro: '', busca: '', aviso: '', nova: null, proxOS: 1924, proxORC: 57, editando: false, addTexto: '', addOuvindo: false, foraWifi: false, notifs: [], admIdx: 0, logado: false, bloqueado: false, senha: '', loginMotivo: '', svAberto: null,
-veic: [
-{ id: 1, placa: 'RBA2C47', modelo: 'Toyota Hilux 2.8 Diesel 2019', os: '1921', queixa: 'Revisão com troca de óleo e freios dianteiros', kmEntrada: 84050, status: 'andamento', acumulado: 0, inicio: agora - 1512000, motivo: '', kmFinal: null,
-  itens: [
-  { id: 1, nome: 'Subst. de óleo e filtros', qtd: '', tipo: 'Serviço', feito: true, por: 'Carlos', pecas: ['Óleo de motor 5W-30 · 7,9 L', 'Filtro de óleo · 1 un', 'Filtro de ar · 1 un'] },
-  { id: 2, nome: 'Subst. de pastilhas de freio dianteiras', qtd: '', tipo: 'Serviço', feito: true, por: 'Rafael', pecas: ['Pastilhas de freio dianteiras · 1 jogo'] },
-  { id: 3, nome: 'Revisão geral', qtd: '', tipo: 'Serviço', feito: false, por: '' }
-  ] },
-{ id: 2, placa: 'QXT8F15', modelo: 'Chevrolet Onix 1.0 2020', os: '1923', queixa: 'Barulho na suspensão dianteira', kmEntrada: 61200, status: 'aguardando', acumulado: 0, inicio: null, motivo: '', kmFinal: null,
-  itens: [
-  { id: 1, nome: 'Subst. de bieletas dianteiras', qtd: '', tipo: 'Serviço', feito: false, por: '', pecas: ['Bieleta dianteira · 2 un'] },
-  { id: 2, nome: 'Subst. de buchas da bandeja', qtd: '', tipo: 'Serviço', feito: false, por: '', pecas: ['Bucha da bandeja · 2 un'] },
-  { id: 3, nome: 'Alinhamento de direção', qtd: '', tipo: 'Serviço', feito: false, por: '' }
-  ] },
-{ id: 3, placa: 'PPK5H90', modelo: 'Volkswagen Gol 1.6 2015', os: '1917', queixa: 'Troca da correia dentada', kmEntrada: 132480, status: 'pausado', acumulado: 2940, inicio: null, motivo: 'Aguardando peça', kmFinal: null,
-  itens: [
-  { id: 1, nome: 'Subst. de correia dentada', qtd: '', tipo: 'Serviço', feito: false, por: '', pecas: ['Kit correia dentada · 1 kit'] },
-  { id: 2, nome: 'Subst. de bomba d\u2019água', qtd: '', tipo: 'Serviço', feito: true, por: 'Carlos' }
-  ] }
-]
+veic: []
 };
 }
 componentWillUnmount() {
 clearTimeout(this._a);
 clearTimeout(this._f);
+}
+componentDidMount() {
+var self = this, cfg = window.DTCAR_CONFIG || {};
+if (!window.supabase || !cfg.SUPABASE_URL) { this.avisar('Sem conexão com o sistema.'); return; }
+// guarda o login em separado do sistema principal: sair do app não tira o login do DTCar Gestão neste aparelho
+this.sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { storageKey: 'dtcar-mecanico-auth', persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+this.sb.auth.getSession().then(function (r) {
+var sessao = r && r.data && r.data.session;
+if (!sessao) return;
+if (!dentroDoHorario()) { self.encerrar('Fora do horário comercial (7h às 18h). Digite sua senha para entrar.'); return; }
+self.entrouNoHorario = true; self.aposLogin(sessao.user);
+});
+// virou 18h com o app aberto: sai e pede a senha
+this._h = setInterval(function () { if (self.state.logado && self.entrouNoHorario && !dentroDoHorario()) self.encerrar('Fora do horário comercial (7h às 18h). Digite sua senha para entrar.'); }, 60000);
+}
+encerrar(motivo) {
+if (this.sb) this.sb.auth.signOut({ scope: 'local' }).catch(function () {});
+this.setState({ logado: false, usuario: null, senha: '', veic: [], aberto: null, nova: null, folha: null, notifs: [], loginMotivo: motivo || '' });
+}
+aposLogin(user) {
+var self = this;
+this.sb.from('perfis').select('id,nome,papel,ativo').eq('id', user.id).maybeSingle().then(function (r) {
+var pf = r.data;
+if (r.error) { self.setState({ entrando: false }); self.avisar('Não consegui conferir o seu acesso. Tente de novo.'); return; }
+if (!pf || pf.ativo === false || pf.papel !== 'admin') { self.setState({ entrando: false }); self.encerrar(''); self.avisar('Por enquanto o app está liberado só para o administrador.'); return; }
+var nome = pf.nome || user.email, primeiro = nome.split(' ')[0];
+guardar('dtcar-mecanico-email', user.email); guardar('dtcar-mecanico-nome', primeiro);
+self.setState({ logado: true, entrando: false, senha: '', loginMotivo: '', emailSalvo: user.email, nomeSalvo: primeiro, usuario: { id: pf.id, nome: nome, primeiro: primeiro } });
+self.carregar();
+});
+}
+carregar() {
+var self = this, u = this.state.usuario; if (!u) return;
+this.setState({ carregando: true, erroCarga: '' });
+var MAPA = { diagnostico: 'orcamento', aguardando: 'orcamento', execucao: 'aguardando', pronto: 'finalizado' };
+this.sb.from('ordens').select('id,numero,status,cliente,veiculo,km_entrada,km_saida,reclamacao').eq('mecanico_id', u.id).in('status', Object.keys(MAPA)).order('numero', { ascending: false }).limit(60).then(function (r) {
+if (r.error) throw r.error;
+var ordens = r.data || [];
+if (!ordens.length) return { ordens: ordens, itens: [] };
+// sem preço: o app do mecânico não lê valores
+return self.sb.from('os_itens').select('id,ordem_id,tipo,descricao,qtd,aprovado,executado,posicao').in('ordem_id', ordens.map(function (o) { return o.id; })).order('posicao').then(function (ri) {
+if (ri.error) throw ri.error; return { ordens: ordens, itens: ri.data || [] };
+});
+}).then(function (x) {
+var locais = self.state.veic.filter(function (v) { return !v.real; });   // orçamentos de teste criados no app continuam na tela
+var reais = x.ordens.map(function (o) {
+var vj = o.veiculo || {}, its = x.itens.filter(function (i) { return i.ordem_id === o.id && i.aprovado !== false; });
+var qtd = function (i) { var n = Number(i.qtd) || 0; return n && n !== 1 ? ' · ' + String(n).replace('.', ',') : ''; };
+return { id: o.id, real: true, placa: String(vj.placa || '').toUpperCase(), modelo: [vj.marca, vj.modelo, vj.ano].filter(Boolean).join(' '), dadosVeiculo: vj, os: String(o.numero), orc: '', queixa: o.reclamacao || '',
+kmEntrada: o.km_entrada || 0, status: MAPA[o.status], acumulado: 0, inicio: null, motivo: '', kmFinal: o.km_saida || null,
+itens: its.filter(function (i) { return i.tipo !== 'peca'; }).map(function (i) { return { id: i.id, nome: i.descricao, qtd: '', tipo: i.tipo === 'terceiro' ? 'Serviço de terceiro' : 'Serviço', feito: !!i.executado, por: '' }; }),
+pecasOS: its.filter(function (i) { return i.tipo === 'peca'; }).map(function (i) { return i.descricao + qtd(i); }) };
+});
+self.setState({ veic: locais.concat(reais), carregando: false });
+}).catch(function (e) { self.setState({ carregando: false, erroCarga: 'Não consegui carregar as O.S. Confira a internet e toque em Atualizar.' }); });
+this.sb.rpc('tecnicos_lista').then(function (r) {
+if (r.error || !r.data) return;
+self.setState({ tecnicos: r.data.filter(function (t) { return t.perfil_id !== u.id; }).map(function (t) { return (t.apelido || t.nome || '').split(' ')[0]; }).filter(Boolean) });
+});
+}
+carregarCatalogo() {
+var self = this;
+if (this._cat) return; this._cat = true;
+import('../js/catalogo.js').then(function (m) { self.catMod = m; return m.carregarCatalogo(); }).then(function (cat) { self.setState({ cat: cat }); })
+.catch(function () { self._cat = false; self.setState({ catErro: 'Não consegui carregar o catálogo de óleo.' }); });
+}
+ouvir(aoTerminar) {
+var R = window.SpeechRecognition || window.webkitSpeechRecognition, self = this;
+if (!R) { this.avisar('Este aparelho não tem ditado aqui. Use o microfone do teclado.'); return false; }
+var r = new R(); r.lang = 'pt-BR'; r.interimResults = false; r.maxAlternatives = 1;
+r.onresult = function (e) { aoTerminar(e.results[0][0].transcript || ''); };
+r.onerror = function () { aoTerminar(''); self.avisar('Não consegui ouvir. Tente de novo ou use o teclado.'); };
+r.onend = function () { aoTerminar(null); };
+try { r.start(); } catch (e) { return false; }
+return true;
 }
 entenderTexto(texto) {
 var R = [
@@ -173,7 +242,7 @@ this.setState({ aviso: msg });
 this._a = setTimeout(function () { self.setState({ aviso: '' }); }, 2800);
 }
 renderVals() {
-var self = this, s = this.state, eu = 'Carlos';
+var self = this, s = this.state, eu = s.usuario ? s.usuario.primeiro : 'Você';
 var ST = {
 orcamento: { nome: 'Orçamento enviado', bg: '#fff0cc', fg: '#6b4300' },
 recusado: { nome: 'Recusado', bg: '#fbe3e0', fg: '#8f1d14' },
@@ -209,11 +278,11 @@ var prog = function (v) { var ok = v.itens.filter(function (i) { return !i.pend;
 var lista = s.veic.map(function (v) {
 var st = ST[v.status];
 return { placa: v.placa, modelo: v.modelo, doc: docDe(v), queixa: v.queixa, statusNome: st.nome, chipBg: st.bg, chipFg: st.fg, progresso: prog(v),
-abrir: function () { self.setState({ aberto: v.id, editando: false, svAberto: null }); } };
+abrir: function () { self.setState({ aberto: v.id, editando: false, svAberto: null, pecasOSAberto: false }); } };
 });
 
 var v = s.veic.filter(function (x) { return x.id === s.aberto; })[0] || null;
-var d = { tituloLista: '', simAdm: false, podeAdd: false, addRotulo: '', addAjuda: '', doc: '', recusado: false, editando: false, mostraEditar: false, editarTexto: '', placa: '', modelo: '', os: '', queixa: '', kmEntrada: '', statusNome: '', chipBg: '#fff', chipFg: '#000', linha: '', temLinha: false, orcamento: false, progresso: '', itens: [], equipe: '', motivo: '', kmFinal: '', mostraIniciar: false, mostraPausar: false, mostraRetomar: false, finalizado: false };
+var d = { orcTexto: '', simOrc: false, temPecasOS: false, pecasOSRotulo: '', pecasOSAberto: false, pecasOSTexto: '', tituloLista: '', simAdm: false, podeAdd: false, addRotulo: '', addAjuda: '', doc: '', recusado: false, editando: false, mostraEditar: false, editarTexto: '', placa: '', modelo: '', os: '', queixa: '', kmEntrada: '', statusNome: '', chipBg: '#fff', chipFg: '#000', linha: '', temLinha: false, orcamento: false, progresso: '', itens: [], equipe: '', motivo: '', kmFinal: '', mostraIniciar: false, mostraPausar: false, mostraRetomar: false, finalizado: false };
 if (v) {
 var st = ST[v.status];
 var pode = v.status === 'andamento';
@@ -221,9 +290,10 @@ var editavel = v.status !== 'finalizado' && v.status !== 'recusado';
 var emEdicao = v.status === 'orcamento';
 var aprovada = v.status === 'aguardando' || v.status === 'andamento' || v.status === 'pausado';
 var nomes = [];
-v.itens.forEach(function (i) { if (i.feito && nomes.indexOf(i.por) < 0) nomes.push(i.por); });
+v.itens.forEach(function (i) { if (i.feito && i.por && nomes.indexOf(i.por) < 0) nomes.push(i.por); });
 d = {
-doc: docDe(v), recusado: v.status === 'recusado', editando: emEdicao, mostraEditar: false, editarTexto: '', tituloLista: v.os ? 'Serviços da O.S.' : 'Minha lista', simAdm: aprovada, podeAdd: editavel, addRotulo: emEdicao ? '+ Adicionar item à lista' : '+ Sugerir serviço ao administrador', addAjuda: emEdicao ? 'Você pode alterar a lista enquanto for orçamento.' : 'Depois de aprovada, a lista só muda pelo sistema principal. Sua sugestão fica aguardando aprovação.',
+doc: docDe(v), recusado: v.status === 'recusado', editando: emEdicao, mostraEditar: false, editarTexto: '', tituloLista: v.os ? 'Serviços da O.S.' : 'Minha lista', simAdm: aprovada && !v.real, simOrc: !v.real, orcTexto: v.real ? 'Orçamento no sistema. Aguardando aprovação.' : 'Orçamento de teste (não foi salvo no sistema).',
+temPecasOS: !!(v.pecasOS && v.pecasOS.length), pecasOSRotulo: s.pecasOSAberto ? 'Ocultar peças da O.S.' : 'Ver peças da O.S. (' + (v.pecasOS ? v.pecasOS.length : 0) + ')', pecasOSAberto: s.pecasOSAberto, pecasOSTexto: (v.pecasOS || []).join('\n'), podeAdd: editavel, addRotulo: emEdicao ? '+ Adicionar item à lista' : '+ Sugerir serviço ao administrador', addAjuda: emEdicao ? 'Você pode alterar a lista enquanto for orçamento.' : 'Depois de aprovada, a lista só muda pelo sistema principal. Sua sugestão fica aguardando aprovação.',
 placa: v.placa, modelo: v.modelo, os: v.os, queixa: v.queixa, kmEntrada: km(v.kmEntrada), statusNome: st.nome, chipBg: st.bg, chipFg: st.fg,
 linha: v.status === 'andamento' && v.inicio ? 'Iniciado às ' + hora(v.inicio) : '', temLinha: v.status === 'andamento' && !!v.inicio, orcamento: v.status === 'orcamento', progresso: prog(v), motivo: v.motivo, kmFinal: km(v.kmFinal),
 equipe: nomes.length ? nomes.map(function (n) { return n === eu ? 'Você (' + eu + ')' : n; }).join(', ') : 'Ninguém apontou item ainda',
@@ -235,7 +305,7 @@ modoApontar: !emEdicao && v.status !== 'recusado' && !i.pend, mostraOutro: !emEd
 remover: function () { self.mudar(v.id, function (x) { return Object.assign({}, x, { itens: x.itens.filter(function (k) { return k.id !== i.id; }) }); }); },
 rotulo: (i.feito ? 'Desmarcar ' : 'Marcar como feito por mim: ') + i.nome,
 caixaFundo: i.feito ? '#1b6b34' : '#ffffff', caixaBorda: i.feito ? '#1b6b34' : '#6b727c',
-situacao: i.pend ? 'Aguardando aprovação do administrador' : i.feito ? ('Feito por ' + (i.por === eu ? 'você' : i.por)) : 'Pendente',
+situacao: i.pend ? 'Aguardando aprovação do administrador' : i.feito ? (i.por ? 'Feito por ' + (i.por === eu ? 'você' : i.por) : 'Executado (marcado no sistema)') : 'Pendente',
 situacaoCor: i.feito ? '#17592c' : '#6b4300',
 marcar: function () {
 if (!pode) { self.avisar(v.status === 'finalizado' ? 'Serviço já finalizado.' : v.status === 'orcamento' ? 'Ainda é orçamento. Aguarde virar O.S.' : 'Inicie ou retome o serviço para apontar.'); return; }
@@ -243,6 +313,7 @@ self.mudar(v.id, function (x) { return Object.assign({}, x, { itens: x.itens.map
 },
 outro: function () {
 if (!pode) { self.avisar(v.status === 'orcamento' ? 'O.S. ainda em orçamento.' : 'Inicie ou retome o serviço para apontar.'); return; }
+if (!s.tecnicos.length) { self.avisar('Não há outro técnico cadastrado no sistema.'); return; }
 self.setState({ folha: 'mec', itemFolha: i.id });
 }
 };
@@ -251,7 +322,7 @@ self.setState({ folha: 'mec', itemFolha: i.id });
 }
 
 var itemSel = v ? v.itens.filter(function (i) { return i.id === s.itemFolha; })[0] : null;
-var mecanicos = ['Rafael', 'João', 'Marcos'].map(function (n) {
+var mecanicos = s.tecnicos.map(function (n) {
 return { nome: n, escolher: function () {
 if (!v) return;
 self.mudar(v.id, function (x) { return Object.assign({}, x, { itens: x.itens.map(function (k) { return k.id === s.itemFolha ? Object.assign({}, k, { feito: true, por: n }) : k; }) }); });
@@ -266,16 +337,29 @@ self.setState({ folha: null });
 } };
 });
 
-var base = [
-{ modelo: 'Toyota Hilux 2.8 Diesel 2019', placa: 'RBA2C47', litros: '7,9 L', visc: '5W-30' },
-{ modelo: 'Chevrolet Onix 1.0 2020', placa: 'QXT8F15', litros: '3,5 L', visc: '5W-30' },
-{ modelo: 'Volkswagen Gol 1.6 2015', placa: 'PPK5H90', litros: '3,5 L', visc: '5W-40' },
-{ modelo: 'Fiat Strada 1.4 2018', placa: '', litros: '2,7 L', visc: '5W-30' },
-{ modelo: 'Ford Ranger 3.2 Diesel 2017', placa: '', litros: '9,8 L', visc: '5W-30' },
-{ modelo: 'Hyundai HB20 1.0 2019', placa: '', litros: '3,6 L', visc: '5W-30' }
-];
-var q = s.busca.trim().toLowerCase();
-var oleos = base.filter(function (o) { return !q || (o.modelo + ' ' + o.placa).toLowerCase().indexOf(q) >= 0; });
+var oleos = [], oleoVazioTexto = 'Nenhum veículo encontrado.';
+if (s.aba === 'oleo') {
+if (!s.cat) { oleoVazioTexto = s.catErro || 'Carregando o catálogo de óleo…'; }
+else {
+var M = self.catMod, q = s.busca.trim();
+var linhaDe = function (titulo, placa, lista) {
+if (!lista.length) return [{ modelo: titulo, placa: placa, litros: '—', visc: 'não achei' }];
+return lista.slice(0, placa ? 1 : 4).map(function (x) { return { modelo: placa ? titulo : [x.linha.montadora, x.linha.modelo, x.linha.motor, M.periodoTexto(x.linha)].filter(Boolean).join(' '), placa: placa, litros: x.litros + ' L', visc: x.viscosidade }; });
+};
+if (q.length >= 3) {
+if (self._oq !== q) { var pr = M.pesquisar(s.cat, q); self._oq = q; self._or = linhaDe(q, '', M.resumoOleo(pr.oleo, pr.ano)); if (!pr.oleo.length) self._or = []; }
+oleos = self._or; oleoVazioTexto = 'Não achei esse modelo no catálogo.';
+} else {
+var vistos = {};
+s.veic.forEach(function (x) {
+if (!x.dadosVeiculo || vistos[x.placa]) return; vistos[x.placa] = 1;
+var pv = M.pesquisarVeiculo(s.cat, x.dadosVeiculo);
+oleos = oleos.concat(linhaDe(x.modelo, x.placa, pv.r ? M.resumoOleo(pv.r.oleo, pv.r.ano) : []));
+});
+oleoVazioTexto = 'Digite o modelo para buscar (ex.: Onix 1.0).';
+}
+}
+}
 
 var N = s.nova;
 var setN = function (o) { self.setState({ nova: Object.assign({}, self.state.nova, o) }); };
@@ -301,17 +385,24 @@ var fora = !s.logado;
 var naLista = !v && !N && !fora;
 var azul = '#174f94', cinza = '#4a515b';
 return {
-telaLista: naLista && s.aba === 'veiculos', telaVeiculo: !!v && !N && !fora, telaNova: !!N && !fora, telaBloqueio: fora && s.bloqueado, telaLogin: fora && !s.bloqueado, senha: s.senha, loginMotivo: s.loginMotivo, temMotivo: !!s.loginMotivo, sim: true, wifiSimTexto: s.foraWifi ? 'Versão de teste · simulando FORA do Wi-Fi da oficina (tocar para mudar)' : 'Versão de teste · qualquer senha serve · simulando NO Wi-Fi da oficina (tocar para mudar)', n: n,
+telaLista: naLista && s.aba === 'veiculos', telaVeiculo: !!v && !N && !fora, telaNova: !!N && !fora, telaBloqueio: fora && s.bloqueado, telaLogin: fora && !s.bloqueado, senha: s.senha, loginMotivo: s.loginMotivo, temMotivo: !!s.loginMotivo, sim: true,  n: n,
 notifs: s.notifs.map(function (t) { return { titulo: t.titulo, texto: t.texto, abrir: function () { self.setState({ notifs: self.state.notifs.filter(function (k) { return k.id !== t.id; }), folha: null, aberto: t.veicId, nova: null }); } }; }),
 temNotifs: s.notifs.length > 0, semNotifs: s.notifs.length === 0, qtdNotifs: String(s.notifs.length), sinoRotulo: 'Notificações: ' + s.notifs.length, folhaNotifs: s.folha === 'notifs' && !fora, telaOleo: naLista && s.aba === 'oleo', mostraAbas: naLista,
-lista: lista, d: d, oleos: oleos, semOleo: oleos.length === 0, busca: s.busca,
+lista: lista, d: d, oleos: oleos, semOleo: oleos.length === 0, oleoVazioTexto: oleoVazioTexto, busca: s.busca,
+nomeUsuario: s.usuario ? s.usuario.primeiro : '', carregando: s.carregando, erroCarga: s.erroCarga, temErroCarga: !!s.erroCarga, listaVazia: !s.carregando && !s.erroCarga && s.veic.length === 0,
+saudacao: s.emailSalvo && s.nomeSalvo ? 'Olá, ' + s.nomeSalvo : 'DTCar Mecânico', loginSub: s.entrando ? 'Entrando…' : s.emailSalvo ? 'Digite sua senha para entrar' : 'Entre com o e-mail e a senha do sistema', pedeEmail: !s.emailSalvo, temEmailSalvo: !!s.emailSalvo, emailInput: s.emailInput,
+onEmail: function (e) { self.setState({ emailInput: e.target.value }); },
+trocarUsuario: function () { guardar('dtcar-mecanico-email', ''); guardar('dtcar-mecanico-nome', ''); self.setState({ emailSalvo: '', nomeSalvo: '', emailInput: '', senha: '' }); },
+atualizar: function () { self.carregar(); },
+sair: function () { self.encerrar(''); },
+alternarPecasOS: function () { self.setState({ pecasOSAberto: !s.pecasOSAberto }); },
 abaVeicCor: s.aba === 'veiculos' ? azul : cinza, abaVeicBorda: s.aba === 'veiculos' ? azul : '#ffffff',
 abaOleoCor: s.aba === 'oleo' ? azul : cinza, abaOleoBorda: s.aba === 'oleo' ? azul : '#ffffff',
 aviso: s.aviso, temAviso: !!s.aviso,
 folhaPausa: s.folha === 'pausa' && !fora, folhaMec: s.folha === 'mec' && !fora, folhaKm: s.folha === 'km' && !fora, folhaAdd: s.folha === 'add' && !fora, addTexto: s.addTexto, addFalarBg: s.addOuvindo ? '#16191d' : '#ffffff', addFalarFg: s.addOuvindo ? '#ffffff' : '#16191d', addFalarTexto: s.addOuvindo ? 'Ouvindo…' : 'Falar',
 itemFolha: itemSel ? itemSel.nome : '', mecanicos: mecanicos, motivos: motivos,
 kmInput: s.kmInput, kmErro: s.kmErro, temKmErro: !!s.kmErro,
-novaAbrir: function () { self.setState({ nova: { passo: 'foto', placaInput: '', placa: '', modelo: '', detalhe: '', cadastrado: false, cliente: '', kmAnterior: null, clienteInput: '', foneInput: '', kmInput: '', texto: '', ouvindo: false, itens: [] } }); },
+novaAbrir: function () { self.setState({ nova: { passo: 'foto', buscando: false, dadosVeiculo: null, placaInput: '', placa: '', modelo: '', detalhe: '', cadastrado: false, cliente: '', kmAnterior: null, clienteInput: '', foneInput: '', kmInput: '', texto: '', ouvindo: false, itens: [] } }); },
 novaVoltar: function () {
 var ordem = ['foto', 'dados', 'itens', 'lista'], i = ordem.indexOf(N.passo);
 clearTimeout(self._f);
@@ -329,12 +420,12 @@ setN({ passo: 'itens' });
 },
 falar: function () {
 if (N.ouvindo) return;
-setN({ ouvindo: true });
-self._f = setTimeout(function () {
+var ok = self.ouvir(function (t) {
 var atual = self.state.nova; if (!atual) return;
-var ex = 'trocar óleo e filtro de óleo, pastilha dianteira, barulho na suspensão, alinhamento, limpeza de bico';
-setN({ ouvindo: false, texto: atual.texto ? atual.texto.replace(/[\s,]+$/, '') + ', ' + ex : ex });
-}, 1600);
+if (t === null) { if (atual.ouvindo) setN({ ouvindo: false }); return; }
+if (t) setN({ ouvindo: false, texto: atual.texto ? atual.texto.replace(/[\s,]+$/, '') + ', ' + t : t });
+});
+if (ok) setN({ ouvindo: true });
 },
 entender: function () {
 if (!N.texto.trim()) { self.avisar('Escreva ou fale o que precisa ser feito.'); return; }
@@ -344,13 +435,13 @@ corrigir: function () { setN({ passo: 'itens' }); },
 abrirOS: function () {
 if (!N.itens.length) { self.avisar('A lista está vazia.'); return; }
 var num = String(s.proxORC).padStart(4, '0');
-var novoV = { id: Date.now(), placa: N.placa, modelo: N.modelo, os: '', orc: num, queixa: N.texto.trim(), kmEntrada: parseInt(N.kmInput, 10), status: 'orcamento', acumulado: 0, inicio: null, motivo: '', kmFinal: null,
+var novoV = { id: Date.now(), real: false, dadosVeiculo: N.dadosVeiculo || null, placa: N.placa, modelo: N.modelo, os: '', orc: num, queixa: N.texto.trim(), kmEntrada: parseInt(N.kmInput, 10), status: 'orcamento', acumulado: 0, inicio: null, motivo: '', kmFinal: null,
 itens: N.itens.map(function (i, k) { return { id: k + 1, nome: i.nome, qtd: i.conferir ? 'a conferir' : (i.tipo === 'Serviço' ? '1 serviço' : '1 un'), tipo: i.conferir ? 'Conferir' : i.tipo, feito: false, por: '', disse: i.disse, depois: false }; }) };
 self.setState({ veic: [novoV].concat(s.veic), nova: null, proxORC: s.proxORC + 1, aba: 'veiculos' });
-self.avisar('ORC ' + num + ' enviado para a oficina.');
+self.avisar('Teste: o orçamento NÃO foi salvo no sistema.');
 },
 irVeiculos: function () { self.setState({ aba: 'veiculos' }); },
-irOleo: function () { self.setState({ aba: 'oleo' }); },
+irOleo: function () { self.setState({ aba: 'oleo' }); self.carregarCatalogo(); },
 voltar: function () { self.setState({ aberto: null, folha: null, editando: false }); },
 onBusca: function (e) { self.setState({ busca: e.target.value }); },
 onKm: function (e) { self.setState({ kmInput: e.target.value.replace(/[^0-9]/g, ''), kmErro: '' }); },
@@ -360,8 +451,12 @@ addAbrir: function () { self.setState({ folha: 'add', addTexto: '', addOuvindo: 
 onAddTexto: function (e) { self.setState({ addTexto: e.target.value }); },
 addFalar: function () {
 if (s.addOuvindo) return;
-self.setState({ addOuvindo: true });
-self._g = setTimeout(function () { var t = self.state.addTexto; var ex = 'disco de freio, fluido de freio'; self.setState({ addOuvindo: false, addTexto: t ? t.replace(/[\s,]+$/, '') + ', ' + ex : ex }); }, 1400);
+var ok = self.ouvir(function (t) {
+if (t === null) { if (self.state.addOuvindo) self.setState({ addOuvindo: false }); return; }
+var at = self.state.addTexto;
+if (t) self.setState({ addOuvindo: false, addTexto: at ? at.replace(/[\s,]+$/, '') + ', ' + t : t });
+});
+if (ok) self.setState({ addOuvindo: true });
 },
 addConfirmar: function () {
 if (!v) return;
@@ -393,17 +488,20 @@ self.mudar(v.id, function (x) { var fixos = x.itens.filter(function (i) { return
 notificar('Sugestão aprovada', v.placa + ': ' + (n0 === 1 ? '1 sugestão entrou' : n0 + ' sugestões entraram') + ' na ' + docDe(v) + '.', v.id);
 self.avisar('Notificação: sugestão aprovada.');
 },
-simFimExpediente: function () { clearTimeout(self._f); clearTimeout(self._g); self.setState({ logado: false, bloqueado: false, senha: '', aberto: null, nova: null, folha: null, editando: false, loginMotivo: 'Fora do horário comercial (7h às 18h). Digite sua senha para entrar.' }); },
 onSenha: function (e) { self.setState({ senha: e.target.value }); },
-alternarWifi: function () { self.setState({ foraWifi: !s.foraWifi }); },
 entrar: function () {
+if (s.entrando || !self.sb) return;
+var email = (s.emailSalvo || s.emailInput || '').trim();
+if (!email) { self.avisar('Digite o seu e-mail.'); return; }
 if (!s.senha) { self.avisar('Digite sua senha.'); return; }
-if (s.foraWifi) { self.setState({ bloqueado: true, senha: '' }); return; }
-self.setState({ logado: true, bloqueado: false, senha: '' });
+self.setState({ entrando: true });
+self.sb.auth.signInWithPassword({ email: email, password: s.senha }).then(function (r) {
+if (r.error || !r.data || !r.data.user) { self.setState({ entrando: false, senha: '' }); self.avisar(/invalid/i.test((r.error && r.error.message) || '') ? 'E-mail ou senha incorretos.' : 'Não consegui entrar. Confira a internet.'); return; }
+self.entrouNoHorario = dentroDoHorario();
+self.aposLogin(r.data.user);
+}).catch(function () { self.setState({ entrando: false }); self.avisar('Não consegui entrar. Confira a internet.'); });
 },
-tentarWifi: function () { if (s.foraWifi) { self.avisar('Ainda fora do Wi-Fi da oficina.'); return; } self.setState({ logado: true, bloqueado: false }); },
-voltarLogin: function () { self.setState({ bloqueado: false }); },
-simVoltarWifi: function () { self.setState({ foraWifi: false }); self.avisar('Wi-Fi da oficina conectado. Toque em Tentar de novo.'); },
+tentarWifi: function () {}, voltarLogin: function () {}, simVoltarWifi: function () {},
 abrirNotifs: function () { self.setState({ folha: 'notifs' }); },
 simRecusar: function () { if (!v) return; self.mudar(v.id, function (x) { return Object.assign({}, x, { status: 'recusado' }); }); self.avisar('Orçamento recusado.'); },
 onPlaca: function (e) { setN({ placaInput: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7) }); },
@@ -412,8 +510,26 @@ var pl = N.placaInput;
 if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(pl)) { self.avisar('Placa incompleta ou fora do padrão.'); return; }
 var ja = s.veic.filter(function (x) { return x.placa === pl && x.status !== 'finalizado' && x.status !== 'recusado'; })[0];
 if (ja) { self.avisar('Esse veículo já está na sua lista (' + docDe(ja) + ').'); return; }
-if (pl === 'OZR3B82') setN({ passo: 'dados', placa: pl, modelo: 'Fiat Strada 1.4 2018', detalhe: 'Branca · Flex', cadastrado: true, cliente: 'José Almeida', kmAnterior: 97310 });
-else setN({ passo: 'dados', placa: pl, modelo: 'Jeep Renegade 1.8 2021', detalhe: 'Prata · Flex', cadastrado: false, cliente: '', kmAnterior: null });
+if (N.buscando) return;
+setN({ buscando: true }); self.avisar('Buscando a placa…');
+var achou = function (o) { if (self.state.nova) setN(Object.assign({ passo: 'dados', placa: pl, buscando: false }, o)); };
+self.sb.from('veiculos').select('id,placa,marca,modelo,ano,cor,combustivel,km_atual,cliente_id').eq('placa', pl).limit(1).then(function (r) {
+var vc = r.data && r.data[0];
+if (vc) {
+var dv = { placa: pl, marca: vc.marca, modelo: vc.modelo, ano: vc.ano, combustivel: vc.combustivel };
+var fim = function (nome) { achou({ modelo: [vc.marca, vc.modelo, vc.ano].filter(Boolean).join(' '), detalhe: [vc.cor, vc.combustivel].filter(Boolean).join(' · '), cadastrado: true, cliente: nome || 'Cliente não informado', kmAnterior: vc.km_atual || null, dadosVeiculo: dv }); };
+if (!vc.cliente_id) { fim(''); return; }
+self.sb.from('clientes').select('nome').eq('id', vc.cliente_id).maybeSingle().then(function (rc) { fim(rc.data && rc.data.nome); });
+return;
+}
+// não está no cadastro: consulta pela placa (paga), a mesma função que o sistema usa
+self.sb.functions.invoke('placa', { body: { acao: 'basico', placa: pl } }).then(function (rp) {
+var x = rp && rp.data, dd = x && x.dados;
+if (!x || x.ok !== true || !x.encontrado || !dd) { if (self.state.nova) setN({ buscando: false }); self.avisar((x && x.erro) || 'Não achei essa placa. Confira e tente de novo.'); return; }
+var ano = dd.ano_fab && dd.ano_mod && dd.ano_fab !== dd.ano_mod ? dd.ano_fab + '/' + dd.ano_mod : (dd.ano_mod || dd.ano_fab || '');
+achou({ modelo: [dd.marca, dd.modelo, ano].filter(Boolean).join(' '), detalhe: [dd.cor, dd.combustivel].filter(Boolean).join(' · '), cadastrado: false, cliente: '', kmAnterior: null, dadosVeiculo: { placa: pl, marca: dd.marca, modelo: dd.modelo, ano: String(ano), motor: dd.motor, combustivel: dd.combustivel } });
+}).catch(function () { if (self.state.nova) setN({ buscando: false }); self.avisar('Sem resposta da consulta de placa.'); });
+}).catch(function () { if (self.state.nova) setN({ buscando: false }); self.avisar('Não consegui consultar o cadastro. Confira a internet.'); });
 },
 iniciar: function () { if (v) self.mudar(v.id, function (x) { return Object.assign({}, x, { status: 'andamento', inicio: Date.now() }); }); },
 retomar: function () { if (v) self.mudar(v.id, function (x) { return Object.assign({}, x, { status: 'andamento', inicio: Date.now(), motivo: '' }); }); },
@@ -439,5 +555,6 @@ self.setState({ folha: null, kmInput: '', kmErro: '' });
 
 instancia = new Component({});
 desenhar();
+if (instancia.componentDidMount) instancia.componentDidMount();
 if ("serviceWorker" in navigator) window.addEventListener("load", function () { navigator.serviceWorker.register("sw.js").catch(function () {}); });
 })();

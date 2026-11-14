@@ -475,7 +475,14 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   catálogo" mostra as versões do carro (motor) e as respostas de óleo; a oficina escolhe uma vez por carro e a ficha fica gravada (e o motor, se o cadastro não tinha).
   Selo "Do catálogo, confira" até clicar em "Confirmar". O card só aparece se a linha do veículo tem a chave `ficha_oleo` (depois do v57), então o site pode
   ser publicado antes do SQL. Quem edita: perfil com "cadastrar". Teste: `teste/teste_ficha_oleo.py`.
-  **Ainda não feito:** lançar na O.S. (etapa 3),
+  **Etapa 3 — lançar na O.S. (14/11/2026, v135, sem SQL):** na aba de peças da O.S., botão "Óleo e filtros da ficha" (só se o veículo tem `ficha_oleo`;
+  `js/telas/lancarficha.js` + regras puras em `js/fichaos.js`). Lança de uma vez o ÓLEO (produto do estoque de óleo de motor com a viscosidade da ficha,
+  quantidade = litros da ficha, editável; quem tem saldo vem primeiro; óleo diesel só na frente se o carro for diesel) e os FILTROS que estão no estoque
+  (achados pela conversão Tecfil; filtro sem saldo não é lançado, só mostra o código). Sai pelo mesmo caminho do item incluído à mão (`lancarFicha` em
+  ordem.js grava com `salvar`), então a baixa do estoque e o preço da tabela são os de sempre; item que já está na O.S. vem desmarcado; estoque insuficiente
+  barra (salvo "vender sem estoque"). Mão de obra NÃO entra. Ficha "Do catálogo, confira" avisa antes de lançar. Só na O.S. (o orçamento separado ORC fica para depois).
+  Testes: `teste/teste_fichaos.mjs` (17) e `teste/teste_lancar_ficha.py` (15).
+  **Ainda não feito:**
   conector (etapa 4); fluidos de câmbio/diferencial e palhetas. Testes: `node teste/teste_catalogo.mjs` e `python3 teste/teste_oleo_filtros.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),

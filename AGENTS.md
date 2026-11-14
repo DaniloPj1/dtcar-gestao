@@ -463,7 +463,12 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   conferida pela oficina/indicada por loja nunca sai (322 de 3.048 linhas saíram; 0 divergências restam). O arquivo `catalogodados.js` não muda.
   **Resultado = o mais próximo do ano e o mais confiável:** `resumoOleo(linhas, ano)` põe em primeiro a conferida, depois o período mais curto que
   contém o ano, depois a fonte mais nova; com ano a tela mostra só 1 resposta (o resto em "Ver detalhes"), sem ano mostra até 3.
-  **Ainda não feito:** ficha de óleo/filtros gravada no veículo e sugestão automática pela placa (etapa 2, com SQL), lançar na O.S. (etapa 3),
+  **Etapa 2 — ficha no veículo (14/11/2026, `supabase/v57.sql`, v134):** coluna `veiculos.ficha_oleo` (jsonb: litros, viscosidade, norma, `filtros` {oleo, ar, combustivel, cabine},
+  marca do catálogo, base, `origem` "catalogo"|"oficina", datas). `js/telas/fichaoleo.js`, card "Óleo e filtros" na página do veículo (`cadastros.js`): "Preencher pelo
+  catálogo" mostra as versões do carro (motor) e as respostas de óleo; a oficina escolhe uma vez por carro e a ficha fica gravada (e o motor, se o cadastro não tinha).
+  Selo "Do catálogo, confira" até clicar em "Confirmar". O card só aparece se a linha do veículo tem a chave `ficha_oleo` (depois do v57), então o site pode
+  ser publicado antes do SQL. Quem edita: perfil com "cadastrar". Teste: `teste/teste_ficha_oleo.py`.
+  **Ainda não feito:** lançar na O.S. (etapa 3),
   conector (etapa 4); fluidos de câmbio/diferencial e palhetas. Testes: `node teste/teste_catalogo.mjs` e `python3 teste/teste_oleo_filtros.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).
 - **Boletos Sicredi por arquivo (v28; rodado no Supabase em 03/11/2026 com o nome antigo v26 do PR #25), Financeiro › Contas a receber › Boletos Sicredi:** CNAB240 híbrido (boleto + QR Code Pix),

@@ -10,6 +10,7 @@ import { consultarPlaca, tirarPreenchidos, camposNovos, paraFicha, anoFabMod, av
 import { prepararNovaOS, ORIGENS } from "./entrada.js";
 import { ProdutosLista } from "./produtos.js";
 import { FornecedoresLista } from "./compras.js";
+import { FichaOleo } from "./fichaoleo.js";
 
 const DIA = 86400000;
 const meses = iso => Math.floor((Date.now() - new Date(iso)) / (30.4 * DIA));
@@ -414,6 +415,7 @@ export function VeiculoTela({ id }) {
       ${v.obs ? html`<div class="texto-pre sub">${v.obs}</div>` : null}
       ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-pri" onClick=${() => { prepararNovaOS(v); ir("/entrada"); }}>+ Nova O.S. para este veículo</button>` : null}
     </section>
+    ${"ficha_oleo" in v ? html`<${FichaOleo} v=${v} />` : null}
     ${os.filter(o => o.status !== "entregue").length ? html`<section class="card"><h3>Em andamento e outras</h3><div class="lista">${os.filter(o => o.status !== "entregue").map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} onClick=${() => ir("/os/" + o.id)} />`)}</div></section>` : null}
     <section class="card"><h3>Serviços executados</h3>
       ${!entregues.length ? html`<span class="dica">Nenhum serviço entregue ainda.</span>` : !itens ? html`<span class="dica">Carregando…</span>`

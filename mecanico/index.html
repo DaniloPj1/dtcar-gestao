@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#16191d">
+<title>DTCar Mecânico (teste)</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="../icons/favicon.png">
+<link rel="apple-touch-icon" href="../icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600;700&family=Barlow+Condensed:wght@600;700&display=swap">
+<style>
+html,body{margin:0;height:100%;background:#16191d}
+#app{height:100vh;height:100dvh;max-width:480px;margin:0 auto}
+button,input,textarea{font-family:inherit}
+a{color:#174f94}a:hover{color:#0f3a70}
+*{scrollbar-width:none;-webkit-tap-highlight-color:transparent}
+*::-webkit-scrollbar{width:0;height:0;display:none}
+</style>
+</head>
+<body>
+<!-- VERSÃO DE TESTE do app do mecânico: dados fictícios, sem login real e sem ligação com o banco. -->
+<div id="app"></div>
+<template id="tela">
+<div style="width: 100%; height: 100%; box-sizing: border-box; position: relative; overflow: hidden; display: flex; flex-direction: column; background: #eceef0; font-family: Barlow, system-ui, sans-serif; color: #16191d">
+
+<sc-if value="{{telaLista}}" hint-placeholder-val="{{true}}">
+<div style="background: #16191d; color: #ffffff; padding: 20px 20px 16px; display: flex; align-items: center; justify-content: space-between">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" style="width: 111px; height: 48px; object-fit: contain">
+<div style="font-size: 14px; color: #c3c8cf">Carlos · versão de teste</div>
+</div>
+<button type="button" aria-label="{{sinoRotulo}}" onClick="{{abrirNotifs}}" style="position: relative; width: 48px; height: 48px; background: transparent; border: 1px solid #3a4049; border-radius: 6px; color: #ffffff; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.500 2h-15zM10 20a2 2 0 0 0 4 0"/></svg>
+<sc-if value="{{temNotifs}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; top: -6px; right: -6px; min-width: 22px; height: 22px; box-sizing: border-box; padding: 0 5px; border-radius: 11px; background: #ffffff; color: #16191d; font-size: 13px; font-weight: 700; line-height: 22px; text-align: center">{{qtdNotifs}}</div>
+</sc-if>
+</button>
+</div>
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px 16px 104px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Meus veículos de hoje</div>
+<sc-for list="{{lista}}" as="v" hint-placeholder-count="3">
+<button type="button" onClick="{{v.abrir}}" style="text-align: left; background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; color: #16191d">
+<div style="display: flex; align-items: center; justify-content: space-between; gap: 12px">
+<div style="border: 2px solid #16191d; border-radius: 5px; overflow: hidden; width: 142px; background: #ffffff">
+<div style="background: #174f94; color: #ffffff; font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-align: center; padding: 2px 0">BRASIL</div>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: 2px; text-align: center; line-height: 30px">{{v.placa}}</div>
+</div>
+<div style="font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 4px; background: {{v.chipBg}}; color: {{v.chipFg}}">{{v.statusNome}}</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 18px; font-weight: 700">{{v.modelo}}</div>
+<div style="font-size: 14px; color: #4a515b">{{v.doc}} · {{v.queixa}}</div>
+</div>
+<div style="border-top: 1px solid #e4e7ea; padding-top: 10px; font-size: 14px; font-weight: 600; color: #4a515b">{{v.progresso}}</div>
+</button>
+</sc-for>
+<button type="button" onClick="{{simFimExpediente}}" style="min-height: 48px; background: transparent; color: #33383f; border: 1px dashed #9aa1ab; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer">Só na versão de teste: simular fim do horário comercial</button>
+</div>
+<button type="button" aria-label="Receber veículo e fazer orçamento" onClick="{{novaAbrir}}" style="position: absolute; right: 18px; bottom: 82px; width: 72px; height: 72px; border-radius: 36px; background: #174f94; color: #ffffff; border: 4px solid #ffffff; box-shadow: 0 4px 14px rgba(22, 25, 29, 0.35); cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"><path d="M12 4v16M4 12h16"/></svg>
+</button>
+</sc-if>
+
+<sc-if value="{{telaLogin}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; min-height: 0; position: relative; background: #000000; color: #ffffff; display: flex; flex-direction: column; justify-content: space-between">
+<video src="login.mp4" poster="login-poster.jpg" autoPlay="{{sim}}" muted="{{sim}}" playsInline="{{sim}}" aria-label="Abertura DTCar Centro Automotivo" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover"></video>
+<div style="position: relative; padding: 16px 16px 0; min-height: 56px">
+<sc-if value="{{temMotivo}}" hint-placeholder-val="{{false}}">
+<div style="background: #fff0cc; color: #6b4300; border-radius: 8px; padding: 10px 14px; font-size: 14px; font-weight: 600; line-height: 19px; text-align: center">{{loginMotivo}}</div>
+</sc-if>
+</div>
+<div style="position: relative; padding: 72px 24px 20px; background: linear-gradient(to bottom, rgba(5, 7, 10, 0) 0px, rgba(5, 7, 10, 0.94) 96px); display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 34px; line-height: 36px; letter-spacing: 0.5px">Olá, Carlos</div>
+<div style="font-size: 15px; color: #c3c8cf">Digite sua senha para entrar</div>
+</div>
+<div style="position: relative">
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#4a515b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="position: absolute; left: 16px; top: 17px"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg>
+<input id="lg-senha" type="password" aria-label="Senha" autocomplete="off" value="{{senha}}" onChange="{{onSenha}}" placeholder="Senha" style="width: 100%; height: 56px; box-sizing: border-box; border: 2px solid #ffffff; border-radius: 8px; padding: 0 16px 0 50px; font-size: 19px; background: #ffffff; color: #16191d">
+</div>
+<button type="button" onClick="{{entrar}}" style="height: 56px; background: #174f94; color: #ffffff; border: 1px solid #4f8fdc; border-radius: 8px; font-family: 'Barlow Condensed', sans-serif; font-size: 23px; font-weight: 700; letter-spacing: 2.5px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px">ENTRAR
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+</button>
+<button type="button" onClick="{{alternarWifi}}" style="min-height: 44px; background: transparent; color: #c3c8cf; border: none; font-size: 12px; font-weight: 500; line-height: 16px; cursor: pointer">{{wifiSimTexto}}</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{telaBloqueio}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; background: #16191d; color: #ffffff; padding: 32px 24px; display: flex; flex-direction: column; justify-content: center; gap: 18px">
+<svg aria-hidden="true" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.800" stroke-linecap="round" stroke-linejoin="round"><path d="M2.500 9a14 14 0 0 1 19 0M5.500 12.500a9.500 9.500 0 0 1 13 0M8.500 16a5 5 0 0 1 7 0"/><circle cx="12" cy="19.500" r="1"/><path d="M4 3l16 18"/></svg>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 34px; line-height: 36px">Conecte-se ao Wi-Fi da oficina</div>
+<div style="font-size: 17px; line-height: 25px; color: #d5d9de">Sua senha está certa, mas este aplicativo só entra dentro da DTCar. Ligue o Wi-Fi do celular, entre na rede da oficina e tente de novo.</div>
+<button type="button" onClick="{{tentarWifi}}" style="min-height: 56px; background: #ffffff; color: #16191d; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Tentar de novo</button>
+<button type="button" onClick="{{voltarLogin}}" style="min-height: 52px; background: transparent; color: #ffffff; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer">Voltar ao login</button>
+<button type="button" onClick="{{simVoltarWifi}}" style="min-height: 48px; background: transparent; color: #d5d9de; border: 1px dashed #9aa1ab; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer">Só na versão de teste: simular que conectou no Wi-Fi</button>
+</div>
+</sc-if>
+
+<sc-if value="{{telaVeiculo}}" hint-placeholder-val="{{false}}">
+<div style="background: #16191d; color: #ffffff; padding: 12px 12px 14px; display: flex; align-items: center; gap: 8px">
+<button type="button" aria-label="Voltar para meus veículos" onClick="{{voltar}}" style="width: 48px; height: 48px; background: transparent; border: none; color: #ffffff; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+</button>
+<div style="display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 26px; letter-spacing: 2px; line-height: 28px">{{d.placa}}</div>
+<div style="font-size: 14px; color: #c3c8cf">{{d.modelo}} · {{d.doc}}</div>
+</div>
+</div>
+
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; align-items: center; justify-content: space-between">
+<div style="font-size: 13px; font-weight: 700; padding: 6px 10px; border-radius: 4px; background: {{d.chipBg}}; color: {{d.chipFg}}">{{d.statusNome}}</div>
+<div style="font-size: 13px; color: #4a515b">KM de entrada {{d.kmEntrada}}</div>
+</div>
+<sc-if value="{{d.temLinha}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 15px; color: #33383f">{{d.linha}}</div>
+</sc-if>
+
+<sc-if value="{{d.mostraIniciar}}" hint-placeholder-val="{{false}}">
+<button type="button" onClick="{{iniciar}}" style="height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Iniciar serviço</button>
+</sc-if>
+
+<sc-if value="{{d.mostraPausar}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<button type="button" onClick="{{abrirPausa}}" style="height: 56px; background: #ffffff; color: #16191d; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Pausar</button>
+<button type="button" onClick="{{abrirFim}}" style="height: 56px; background: #16191d; color: #ffffff; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Finalizar</button>
+</div>
+</sc-if>
+
+<sc-if value="{{d.mostraRetomar}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 14px; color: #3a3f46; text-align: center">Motivo da pausa: <strong>{{d.motivo}}</strong></div>
+<button type="button" onClick="{{retomar}}" style="height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Retomar serviço</button>
+</div>
+</sc-if>
+
+<sc-if value="{{d.orcamento}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 12px">
+<div style="background: #fff0cc; color: #6b4300; border-radius: 6px; padding: 12px; font-size: 15px; font-weight: 600; text-align: center">Enviado para a oficina. Aguardando virar O.S.</div>
+<div style="border: 1px dashed #9aa1ab; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; color: #4a515b">Só na versão de teste: simula a sua decisão no sistema principal.</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button type="button" onClick="{{simAprovar}}" style="min-height: 48px; background: #ffffff; color: #17592c; border: 2px solid #1b6b34; border-radius: 6px; font-size: 15px; font-weight: 700; cursor: pointer">Aprovar: vira O.S.</button>
+<button type="button" onClick="{{simRecusar}}" style="min-height: 48px; background: #ffffff; color: #8f1d14; border: 2px solid #a3261c; border-radius: 6px; font-size: 15px; font-weight: 700; cursor: pointer">Recusar</button>
+</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{d.simAdm}}" hint-placeholder-val="{{false}}">
+<div style="border: 1px dashed #9aa1ab; border-radius: 6px; padding: 10px; display: flex; flex-direction: column; gap: 8px">
+<div style="font-size: 13px; color: #4a515b">Só na versão de teste: simula o administrador no sistema principal.</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px">
+<button type="button" onClick="{{simAdmAdd}}" style="min-height: 48px; background: #ffffff; color: #174f94; border: 2px solid #174f94; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer">Adm inclui um item</button>
+<button type="button" onClick="{{simAdmAprova}}" style="min-height: 48px; background: #ffffff; color: #17592c; border: 2px solid #1b6b34; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer">Adm aprova pendentes</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{d.recusado}}" hint-placeholder-val="{{false}}">
+<div style="background: #fbe3e0; color: #8f1d14; border-radius: 6px; padding: 12px; font-size: 15px; font-weight: 600; text-align: center">Orçamento recusado. A lista fica guardada só para consulta.</div>
+</sc-if>
+
+<sc-if value="{{d.finalizado}}" hint-placeholder-val="{{false}}">
+<div style="background: #dff2e4; color: #17592c; border-radius: 6px; padding: 12px; font-size: 15px; font-weight: 600; text-align: center">Serviço finalizado · KM final {{d.kmFinal}}</div>
+</sc-if>
+</div>
+
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 13px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Reclamação do cliente</div>
+<div style="font-size: 16px">{{d.queixa}}</div>
+</div>
+
+<div style="display: flex; align-items: center; justify-content: space-between; padding-top: 4px; min-height: 44px">
+<div style="display: flex; flex-direction: column; gap: 1px">
+<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">{{d.tituloLista}}</div>
+<div style="font-size: 14px; font-weight: 700">{{d.progresso}}</div>
+</div>
+<sc-if value="{{d.mostraEditar}}" hint-placeholder-val="{{false}}">
+<button type="button" onClick="{{alternarEdicao}}" style="min-height: 44px; padding: 0 14px; background: #ffffff; color: #16191d; border: 1px solid #16191d; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer">{{d.editarTexto}}</button>
+</sc-if>
+</div>
+
+<sc-for list="{{d.itens}}" as="item" hint-placeholder-count="4">
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 10px; display: flex; align-items: center; gap: 10px">
+<sc-if value="{{item.modoApontar}}" hint-placeholder-val="{{true}}">
+<button type="button" aria-label="{{item.rotulo}}" onClick="{{item.marcar}}" style="flex: none; width: 48px; height: 48px; border-radius: 6px; border: 2px solid {{item.caixaBorda}}; background: {{item.caixaFundo}}; color: #ffffff; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<sc-if value="{{item.feito}}" hint-placeholder-val="{{false}}">
+<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+</sc-if>
+</button>
+</sc-if>
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 16px; font-weight: 600; line-height: 20px">{{item.nome}}</div>
+<div style="font-size: 13px; color: #4a515b">{{item.linha}}</div>
+<sc-if value="{{item.temPecas}}" hint-placeholder-val="{{false}}">
+<button type="button" onClick="{{item.alternar}}" style="align-self: flex-start; min-height: 44px; padding: 0 12px; background: #eceef0; color: #16191d; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 14px; font-weight: 700; cursor: pointer">{{item.pecasRotulo}}</button>
+</sc-if>
+<sc-if value="{{item.aberto}}" hint-placeholder-val="{{false}}">
+<div style="background: #eceef0; border-radius: 6px; padding: 10px 12px; font-size: 14px; line-height: 22px; color: #16191d; white-space: pre-line">{{item.pecasTexto}}</div>
+</sc-if>
+<sc-if value="{{item.temDisse}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 13px; color: #4a515b">Você disse: “{{item.disse}}”</div>
+</sc-if>
+<sc-if value="{{item.temNota}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 13px; font-weight: 700; color: #174f94">{{item.nota}}</div>
+</sc-if>
+<div style="font-size: 13px; font-weight: 700; color: {{item.situacaoCor}}">{{item.situacao}}</div>
+</div>
+<sc-if value="{{item.mostraOutro}}" hint-placeholder-val="{{true}}">
+<button type="button" onClick="{{item.outro}}" style="flex: none; min-height: 48px; padding: 0 10px; background: #ffffff; color: #174f94; border: 1px solid #174f94; border-radius: 6px; font-size: 13px; font-weight: 700; line-height: 15px; cursor: pointer; width: 84px">Outro mecânico</button>
+</sc-if>
+<sc-if value="{{item.mostraRemover}}" hint-placeholder-val="{{false}}">
+<button type="button" aria-label="{{item.rotuloRemover}}" onClick="{{item.remover}}" style="flex: none; width: 48px; height: 48px; background: #ffffff; border: 1px solid #a3261c; border-radius: 6px; color: #a3261c; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+</button>
+</sc-if>
+</div>
+</sc-for>
+
+<sc-if value="{{d.podeAdd}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<button type="button" onClick="{{addAbrir}}" style="min-height: 56px; background: #ffffff; color: #174f94; border: 2px dashed #174f94; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">{{d.addRotulo}}</button>
+<div style="font-size: 13px; color: #4a515b; text-align: center">{{d.addAjuda}}</div>
+</div>
+</sc-if>
+
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 4px">
+<div style="font-size: 13px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Quem trabalhou neste carro</div>
+<div style="font-size: 16px">{{d.equipe}}</div>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{telaNova}}" hint-placeholder-val="{{false}}">
+<div style="background: #16191d; color: #ffffff; padding: 12px 12px 14px; display: flex; align-items: center; gap: 8px">
+<button type="button" aria-label="Voltar" onClick="{{novaVoltar}}" style="width: 48px; height: 48px; background: transparent; border: none; color: #ffffff; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+</button>
+<div style="display: flex; flex-direction: column; gap: 1px; flex: 1; min-width: 0">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: 0.5px">RECEBER VEÍCULO</div>
+<div style="font-size: 14px; color: #c3c8cf">{{n.passoNome}}</div>
+</div>
+</div>
+
+<sc-if value="{{n.foto}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="display: flex; flex-direction: column; gap: 8px">
+<label for="nv-placa" style="font-size: 16px; font-weight: 700">Placa do veículo</label>
+<div style="border: 3px solid #16191d; border-radius: 8px; overflow: hidden; background: #ffffff">
+<div style="background: #174f94; color: #ffffff; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-align: center; padding: 4px 0">BRASIL</div>
+<input id="nv-placa" type="text" autocapitalize="characters" autocomplete="off" maxlength="8" value="{{n.placaInput}}" onChange="{{onPlaca}}" placeholder="ABC1D23" style="width: 100%; height: 76px; box-sizing: border-box; border: none; outline-offset: -4px; text-align: center; font-family: 'Barlow Condensed', sans-serif; font-size: 52px; font-weight: 700; letter-spacing: 6px; background: #ffffff; color: #16191d">
+</div>
+<div style="font-size: 14px; color: #4a515b">Aceita placa Mercosul (ABC1D23) ou antiga (ABC1234).</div>
+</div>
+<button type="button" onClick="{{buscarPlaca}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Buscar veículo</button>
+<div style="font-size: 13px; color: #4a515b; border: 1px dashed #9aa1ab; border-radius: 6px; padding: 10px 12px">Só na versão de teste: a placa OZR3B82 já está no cadastro. Qualquer outra simula a consulta pela placa.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{n.dados}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; align-items: center; gap: 14px">
+<div style="border: 2px solid #16191d; border-radius: 5px; overflow: hidden; width: 140px; background: #ffffff; flex: none">
+<div style="background: #174f94; color: #ffffff; font-size: 9px; font-weight: 700; letter-spacing: 1.5px; text-align: center; padding: 2px 0">BRASIL</div>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 30px; letter-spacing: 2px; text-align: center; line-height: 34px">{{n.placa}}</div>
+</div>
+<div style="font-size: 13px; color: #4a515b">Confira os dados antes de continuar.</div>
+</div>
+<div style="font-size: 14px; font-weight: 700; padding: 8px 10px; border-radius: 4px; background: {{n.origemBg}}; color: {{n.origemFg}}">{{n.origem}}</div>
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 19px; font-weight: 700">{{n.modelo}}</div>
+<div style="font-size: 15px; color: #4a515b">{{n.detalhe}}</div>
+</div>
+<sc-if value="{{n.cadastrado}}" hint-placeholder-val="{{true}}">
+<div style="border-top: 1px solid #e4e7ea; padding-top: 10px; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 12px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Cliente</div>
+<div style="font-size: 17px; font-weight: 600">{{n.cliente}}</div>
+<div style="font-size: 14px; color: #4a515b">Última visita: KM {{n.kmAnterior}}</div>
+</div>
+</sc-if>
+</div>
+<sc-if value="{{n.novo}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="nv-cliente" style="font-size: 14px; font-weight: 600; color: #4a515b">Nome do cliente</label>
+<input id="nv-cliente" type="text" value="{{n.clienteInput}}" onChange="{{onCliente}}" placeholder="Nome de quem trouxe o carro" style="height: 52px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 0 14px; font-size: 17px; background: #ffffff; color: #16191d">
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="nv-fone" style="font-size: 14px; font-weight: 600; color: #4a515b">Telefone (WhatsApp)</label>
+<input id="nv-fone" type="text" inputmode="tel" value="{{n.foneInput}}" onChange="{{onFone}}" placeholder="(27) 9 0000-0000" style="height: 52px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 0 14px; font-size: 17px; background: #ffffff; color: #16191d">
+</div>
+</sc-if>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="nv-km" style="font-size: 14px; font-weight: 600; color: #4a515b">KM de entrada</label>
+<input id="nv-km" type="text" inputmode="numeric" value="{{n.kmInput}}" onChange="{{onKmEntrada}}" placeholder="KM do painel" style="height: 56px; box-sizing: border-box; border: 2px solid #16191d; border-radius: 6px; padding: 0 14px; font-family: 'Barlow Condensed', sans-serif; font-size: 26px; font-weight: 700; letter-spacing: 1px; background: #ffffff; color: #16191d">
+</div>
+<button type="button" onClick="{{dadosOk}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Continuar para os itens</button>
+</div>
+</sc-if>
+
+<sc-if value="{{n.itensPasso}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="font-size: 15px; color: #33383f">{{n.placa}} · {{n.modelo}}</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="nv-texto" style="font-size: 16px; font-weight: 700">O que precisa ser feito?</label>
+<div style="font-size: 14px; color: #4a515b">Escreva ou fale do seu jeito. O sistema organiza depois.</div>
+<textarea id="nv-texto" value="{{n.texto}}" onChange="{{onTexto}}" placeholder="Ex.: trocar óleo e filtro, pastilha dianteira, barulho na suspensão" style="height: 170px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 12px 14px; font-family: inherit; font-size: 17px; line-height: 24px; background: #ffffff; color: #16191d; resize: none"></textarea>
+</div>
+<button type="button" onClick="{{falar}}" style="min-height: 60px; background: {{n.falarBg}}; color: {{n.falarFg}}; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.500 11a6.500 6.500 0 0 0 13 0M12 17.500V21"/></svg>
+{{n.falarTexto}}
+</button>
+<button type="button" onClick="{{entender}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Montar a lista</button>
+<div style="font-size: 13px; color: #4a515b; text-align: center">Na versão de teste a voz é simulada: tocar em "Falar" preenche um exemplo.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{n.listaPasso}}" hint-placeholder-val="{{false}}">
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 15px; color: #33383f">{{n.placa}} · {{n.modelo}}</div>
+<div style="display: flex; align-items: baseline; justify-content: space-between">
+<div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Itens no padrão da oficina</div>
+<div style="font-size: 14px; font-weight: 700">{{n.total}}</div>
+</div>
+<sc-for list="{{n.itens}}" as="it" hint-placeholder-count="4">
+<div style="background: #ffffff; border: 1px solid {{it.borda}}; border-radius: 6px; padding: 10px 6px 10px 12px; display: flex; align-items: center; gap: 8px">
+<div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 16px; font-weight: 700; line-height: 20px">{{it.nome}}</div>
+<div style="font-size: 13px; font-weight: 700; color: {{it.tipoCor}}">{{it.tipo}}</div>
+<div style="font-size: 13px; color: #4a515b">Você disse: “{{it.disse}}”</div>
+</div>
+<button type="button" aria-label="{{it.rotulo}}" onClick="{{it.remover}}" style="flex: none; width: 48px; height: 48px; background: transparent; border: none; color: #4a515b; cursor: pointer; display: flex; align-items: center; justify-content: center">
+<svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg>
+</button>
+</div>
+</sc-for>
+<sc-if value="{{n.vazio}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 15px; color: #4a515b; text-align: center; padding: 16px 0">Nenhum item na lista. Volte e descreva o serviço.</div>
+</sc-if>
+<button type="button" onClick="{{abrirOS}}" style="min-height: 56px; background: #16191d; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer; margin-top: 4px">Enviar orçamento para a oficina</button>
+<button type="button" onClick="{{corrigir}}" style="min-height: 52px; background: #ffffff; color: #16191d; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 16px; font-weight: 700; cursor: pointer">Voltar e corrigir o texto</button>
+</div>
+</sc-if>
+</sc-if>
+
+<sc-if value="{{telaOleo}}" hint-placeholder-val="{{false}}">
+<div style="background: #16191d; color: #ffffff; padding: 20px 20px 16px; display: flex; flex-direction: column; gap: 2px">
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 24px; letter-spacing: 0.5px">ÓLEO LUBRIFICANTE</div>
+<div style="font-size: 14px; color: #c3c8cf">Litragem e viscosidade por veículo</div>
+</div>
+<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="busca-oleo" style="font-size: 14px; font-weight: 600; color: #4a515b">Buscar por placa ou modelo</label>
+<input id="busca-oleo" type="text" value="{{busca}}" onChange="{{onBusca}}" placeholder="Ex.: Hilux, Onix, RBA2C47" style="height: 52px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 0 14px; font-size: 17px; background: #ffffff; color: #16191d">
+</div>
+<sc-for list="{{oleos}}" as="o" hint-placeholder-count="4">
+<div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 14px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; align-items: baseline; justify-content: space-between; gap: 8px">
+<div style="font-size: 17px; font-weight: 700">{{o.modelo}}</div>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 17px; letter-spacing: 1.5px; color: #174f94">{{o.placa}}</div>
+</div>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<div style="background: #eceef0; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 12px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Litragem</div>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 30px; line-height: 32px">{{o.litros}}</div>
+</div>
+<div style="background: #eceef0; border-radius: 6px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 12px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Viscosidade</div>
+<div style="font-family: 'Barlow Condensed', sans-serif; font-weight: 700; font-size: 30px; line-height: 32px">{{o.visc}}</div>
+</div>
+</div>
+</div>
+</sc-for>
+<sc-if value="{{semOleo}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 15px; color: #4a515b; text-align: center; padding: 20px 0">Nenhum veículo encontrado.</div>
+</sc-if>
+<div style="font-size: 13px; color: #4a515b; text-align: center">Dados de exemplo da versão de teste. No app, vêm do catálogo do sistema.</div>
+</div>
+</sc-if>
+
+<sc-if value="{{mostraAbas}}" hint-placeholder-val="{{true}}">
+<div style="background: #ffffff; border-top: 1px solid #d5d9de; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr))">
+<button type="button" onClick="{{irVeiculos}}" style="height: 64px; background: #ffffff; border: none; border-top: 3px solid {{abaVeicBorda}}; color: {{abaVeicCor}}; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; font-weight: 700">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 13l2-5.5A2 2 0 0 1 6.9 6h10.2a2 2 0 0 1 1.9 1.5L21 13v5h-2.5v-2h-13v2H3z"/><circle cx="7.5" cy="13.5" r="1"/><circle cx="16.5" cy="13.5" r="1"/></svg>
+Veículos
+</button>
+<button type="button" onClick="{{irOleo}}" style="height: 64px; background: #ffffff; border: none; border-top: 3px solid {{abaOleoBorda}}; color: {{abaOleoCor}}; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 13px; font-weight: 700">
+<svg aria-hidden="true" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c3.5 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 2.5-6.500 6-11z"/></svg>
+Óleo
+</button>
+</div>
+</sc-if>
+
+<sc-if value="{{temAviso}}" hint-placeholder-val="{{false}}">
+<div role="status" style="position: absolute; left: 16px; right: 16px; bottom: 24px; background: #16191d; color: #ffffff; border-radius: 6px; padding: 14px 16px; font-size: 15px; font-weight: 600; text-align: center">{{aviso}}</div>
+</sc-if>
+
+<sc-if value="{{folhaPausa}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; background: rgba(22, 25, 29, 0.55); display: flex; flex-direction: column; justify-content: flex-end">
+<div style="background: #ffffff; border-radius: 12px 12px 0 0; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 20px; font-weight: 700">Por que está pausando?</div>
+<sc-for list="{{motivos}}" as="m" hint-placeholder-count="4">
+<button type="button" onClick="{{m.escolher}}" style="height: 54px; text-align: left; padding: 0 14px; background: #ffffff; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 17px; font-weight: 600; color: #16191d; cursor: pointer">{{m.nome}}</button>
+</sc-for>
+<button type="button" onClick="{{fecharFolha}}" style="height: 52px; background: transparent; border: none; font-size: 16px; font-weight: 700; color: #4a515b; cursor: pointer">Cancelar</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{folhaMec}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; background: rgba(22, 25, 29, 0.55); display: flex; flex-direction: column; justify-content: flex-end">
+<div style="background: #ffffff; border-radius: 12px 12px 0 0; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 20px; font-weight: 700">Quem executou este item?</div>
+<div style="font-size: 15px; color: #4a515b">{{itemFolha}}</div>
+</div>
+<sc-for list="{{mecanicos}}" as="m" hint-placeholder-count="3">
+<button type="button" onClick="{{m.escolher}}" style="height: 54px; text-align: left; padding: 0 14px; background: #ffffff; border: 1px solid #9aa1ab; border-radius: 6px; font-size: 17px; font-weight: 600; color: #16191d; cursor: pointer">{{m.nome}}</button>
+</sc-for>
+<button type="button" onClick="{{fecharFolha}}" style="height: 52px; background: transparent; border: none; font-size: 16px; font-weight: 700; color: #4a515b; cursor: pointer">Cancelar</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{folhaAdd}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; background: rgba(22, 25, 29, 0.55); display: flex; flex-direction: column; justify-content: flex-end">
+<div style="background: #ffffff; border-radius: 12px 12px 0 0; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 10px">
+<label for="add-texto" style="font-size: 20px; font-weight: 700">O que mais precisa ser feito?</label>
+<textarea id="add-texto" value="{{addTexto}}" onChange="{{onAddTexto}}" placeholder="Escreva ou fale do seu jeito" style="height: 110px; box-sizing: border-box; border: 1px solid #9aa1ab; border-radius: 6px; padding: 12px 14px; font-family: inherit; font-size: 17px; line-height: 24px; background: #ffffff; color: #16191d; resize: none"></textarea>
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<button type="button" onClick="{{addFalar}}" style="min-height: 54px; background: {{addFalarBg}}; color: {{addFalarFg}}; border: 2px solid #16191d; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">{{addFalarTexto}}</button>
+<button type="button" onClick="{{addConfirmar}}" style="min-height: 54px; background: #174f94; color: #ffffff; border: 2px solid #174f94; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">Adicionar</button>
+</div>
+<button type="button" onClick="{{fecharFolha}}" style="height: 52px; background: transparent; border: none; font-size: 16px; font-weight: 700; color: #4a515b; cursor: pointer">Cancelar</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{folhaNotifs}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; background: rgba(22, 25, 29, 0.55); display: flex; flex-direction: column; justify-content: flex-end">
+<div style="background: #ffffff; border-radius: 12px 12px 0 0; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 10px; max-height: 620px; overflow-y: auto">
+<div style="font-size: 20px; font-weight: 700">Notificações</div>
+<sc-for list="{{notifs}}" as="nt" hint-placeholder-count="2">
+<button type="button" onClick="{{nt.abrir}}" style="text-align: left; padding: 12px 14px; background: #e1ebf7; border: 1px solid #174f94; border-radius: 6px; color: #16191d; cursor: pointer; display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 16px; font-weight: 700">{{nt.titulo}}</div>
+<div style="font-size: 14px; color: #33383f">{{nt.texto}}</div>
+</button>
+</sc-for>
+<sc-if value="{{semNotifs}}" hint-placeholder-val="{{false}}">
+<div style="font-size: 15px; color: #4a515b; padding: 12px 0">Nenhuma notificação nova.</div>
+</sc-if>
+<button type="button" onClick="{{fecharFolha}}" style="height: 52px; background: transparent; border: none; font-size: 16px; font-weight: 700; color: #4a515b; cursor: pointer">Fechar</button>
+</div>
+</div>
+</sc-if>
+
+<sc-if value="{{folhaKm}}" hint-placeholder-val="{{false}}">
+<div style="position: absolute; inset: 0; background: rgba(22, 25, 29, 0.55); display: flex; flex-direction: column; justify-content: flex-end">
+<div style="background: #ffffff; border-radius: 12px 12px 0 0; padding: 20px 16px 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="display: flex; flex-direction: column; gap: 2px">
+<div style="font-size: 20px; font-weight: 700">Finalizar serviço</div>
+<div style="font-size: 15px; color: #4a515b">{{d.placa}} · KM de entrada {{d.kmEntrada}}</div>
+</div>
+<div style="display: flex; flex-direction: column; gap: 6px">
+<label for="km-final" style="font-size: 14px; font-weight: 600; color: #4a515b">KM final do veículo</label>
+<input id="km-final" type="text" inputmode="numeric" value="{{kmInput}}" onChange="{{onKm}}" placeholder="Digite o KM do painel" style="height: 60px; box-sizing: border-box; border: 2px solid #16191d; border-radius: 6px; padding: 0 14px; font-family: 'Barlow Condensed', sans-serif; font-size: 30px; font-weight: 700; letter-spacing: 1px; color: #16191d; background: #ffffff">
+<sc-if value="{{temKmErro}}" hint-placeholder-val="{{false}}">
+<div role="alert" style="font-size: 14px; font-weight: 700; color: #a3261c">{{kmErro}}</div>
+</sc-if>
+</div>
+<button type="button" onClick="{{confirmarFim}}" style="height: 56px; background: #16191d; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Confirmar e finalizar</button>
+<button type="button" onClick="{{fecharFolha}}" style="height: 52px; background: transparent; border: none; font-size: 16px; font-weight: 700; color: #4a515b; cursor: pointer">Cancelar</button>
+</div>
+</div>
+</sc-if>
+
+</div>
+</template>
+<script src="app.js"></script>
+</body>
+</html>

@@ -13,7 +13,7 @@ const cods = l => l && l.length ? l.join(" / ") : "—";
 const OLEO_NO_RESUMO = 3;
 
 // um filtro numa linha: "Óleo  [Em estoque] MANN W7283 (5 un.)" ou "Ar  Tecfil ARL2219 · Mahle — · MANN —"
-function LinhaFiltro({ rotulo, f, onConversao }) {
+export function LinhaFiltro({ rotulo, f, onConversao }) {
   if (!f) return html`<div class="of-filtro"><span class="of-tipo">${rotulo}</span><span class="of-nada">sem código no catálogo</span></div>`;
   return html`<div class=${"of-filtro" + (f.estoque ? " of-tem" : "")}>
     <span class="of-tipo">${rotulo}</span>
@@ -36,7 +36,7 @@ function Aplicacao({ a, cat, estoque, onConversao, tipos, detalhes }) {
   </article>`;
 }
 
-function ConversaoModal({ c, onFechar }) {
+export function ConversaoModal({ c, onFechar }) {
   const { f, rotulo, a } = c;
   const marcas = f.conversao.filter(x => !x.original), originais = f.conversao.filter(x => x.original);
   const bloco = (titulo, l) => !l.length ? null : html`<h4 class="sub-titulo">${titulo}</h4>

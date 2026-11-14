@@ -96,7 +96,8 @@ export function motorDe(cil: unknown): string {
   const dec = t.match(/^(\d{1,2})\.(\d)\d?$/);
   if (dec) return dec[1] + "." + dec[2];
   const cc = Number(t.replace(/\D/g, ""));
-  return /^\d{2,5}(\s*(cc|cm3|cm³))?$/i.test(t) && cc >= 50 && cc <= 20000 ? (Math.round(cc / 100) / 10).toFixed(1) : "";
+  if (!(/^\d{2,5}(\s*(cc|cm3|cm³))?$/i.test(t) && cc >= 50 && cc <= 20000)) return "";
+  return cc < 500 ? cc + " cc" : (Math.round(cc / 100) / 10).toFixed(1);   // moto: 149 cc (em litros ficaria "0.1")
 }
 
 const CORES: Record<string, string> = { GRENA: "Grená" };

@@ -17,6 +17,13 @@ confere("marca por extenso, como a oficina escreve", marcaDe("VW") === "Volkswag
   && marcaDe("fiat") === "Fiat" && marcaDe("TOYOTA") === "Toyota" && marcaDe("CHEV") === "Chevrolet" && marcaDe("LAND ROVER") === "Land Rover" && marcaDe("IMP/JEEP") === "Jeep"
   && marcaDe("CITROEN") === "Citroën" && marcaDe("Citroën") === "Citroën" && marcaDe("BYD") === "BYD" && marcaDe("") === "" && marcaDe("HARLEY-DAVIDSON") === "Harley-Davidson",
   [marcaDe("VW"), marcaDe("I/BMW"), marcaDe("GM - Chevrolet"), marcaDe("M.BENZ"), marcaDe("IMP/JEEP"), marcaDe("Citroën"), marcaDe("HARLEY-DAVIDSON")].join("|"));
+{ // resposta REAL da API (MST2E41, 14/11/2026, consulta básica)
+  const real = { error: false, basico: { dados: { uf: "ES", ano: "2009", cor: "Preta", tipo: "Motocicleta", marca: "HONDA", motor: "0.1", modelo: "CG 150 TITAN KS", anoModelo: "2009", municipio: "COLATINA", cilindradas: "149", combustivel: "Gasolina", marcamodelo: "HONDA/CG 150 TITAN KS", final_chassi: "05292", placa_modelo_novo: "MST2E41" }, error: false }, message: "Consulta efetuada com sucesso" };
+  const d = normalizar(real as never, "basico") as Record<string, unknown>;
+  confere("resposta real da API (CG 150)", d.marca === "Honda" && d.modelo === "CG 150 TITAN KS" && d.ano_fab === 2009 && d.cor === "Preta" && d.combustivel === "Gasolina" && d.motor === "149 cc", JSON.stringify(d));
+}
+confere("motor de moto em cc (CG 150 = 149 cilindradas, não 0.1)", motorDe("149") === "149 cc" && motorDe("49") === "" && motorDe("499") === "499 cc" && motorDe("500") === "0.5" && motorDe("999") === "1.0",
+  [motorDe("149"), motorDe("49"), motorDe("499"), motorDe("500")].join("|"));
 confere("motor pela cilindrada", motorDe("1598") === "1.6" && motorDe("999") === "1.0" && motorDe("1984 cc") === "2.0" && motorDe("2776") === "2.8" && motorDe("1.6") === "1.6"
   && motorDe("2,0") === "2.0" && motorDe("exemplo") === "" && motorDe("") === "" && motorDe("16V") === "" && motorDe(1368) === "1.4",
   [motorDe("1598"), motorDe("1984 cc"), motorDe("1.6"), motorDe("2,0"), motorDe("16V"), motorDe(1368)].join("|"));

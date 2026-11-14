@@ -495,8 +495,10 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   quantidade = litros da ficha, editável; quem tem saldo vem primeiro; óleo diesel só na frente se o carro for diesel) e os FILTROS que estão no estoque
   (achados pela conversão Tecfil; filtro sem saldo não é lançado, só mostra o código). Sai pelo mesmo caminho do item incluído à mão (`lancarFicha` em
   ordem.js grava com `salvar`), então a baixa do estoque e o preço da tabela são os de sempre; item que já está na O.S. vem desmarcado; estoque insuficiente
-  barra (salvo "vender sem estoque"). Mão de obra NÃO entra. Ficha "Do catálogo, confira" avisa antes de lançar. Só na O.S. (o orçamento separado ORC fica para depois).
-  Testes: `teste/teste_fichaos.mjs` (17) e `teste/teste_lancar_ficha.py` (15).
+  barra (salvo "vender sem estoque"). Mão de obra (v136): o serviço do cadastro com "troca/subst." e "óleo" na descrição (ex.: "SUBST. DE ÓLEO E FILTRO") vem marcado e entra junto
+  como serviço (preço da tabela, ou horas × valor-hora se for por hora); não achando, avisa para lançar à mão. Ficha "Do catálogo, confira" avisa antes de lançar.
+  O mesmo botão existe no orçamento separado (ORC), com `orcamento` ligado: não reserva nem barra por falta de estoque.
+  Testes: `teste/teste_fichaos.mjs` (17) e `teste/teste_lancar_ficha.py` (O.S., mão de obra e orçamento).
   **Ainda não feito:**
   conector (etapa 4); fluidos de câmbio/diferencial e palhetas. Testes: `node teste/teste_catalogo.mjs` e `python3 teste/teste_oleo_filtros.py`.
 - Pagamento a prazo vira parcelas na tabela `receber` (boleto/promissória em N vezes, vencimento e alerta de atraso).

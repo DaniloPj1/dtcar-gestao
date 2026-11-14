@@ -9,6 +9,7 @@ import { lsGet, lsSet, norm, uuid, reais, fmtData, fmtTel, fmtDataHora, totais, 
 import { pode, SITUACOES_ORC, situacaoORC, TABELAS_PRECO } from "../regras.js";
 import { pdfOS, entregarArquivo } from "../pdf.js";
 import { ItemModal, ItemLinha } from "./ordem.js";
+import { LancarFicha } from "./lancarficha.js";
 import { CampoDesconto } from "./acoesos.js";
 import { LS_ORC_AGENDA } from "./agenda.js";
 import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
@@ -70,7 +71,7 @@ export function Orcamento({ id }) {
   const [daAgenda] = useState(() => { if (!novo) return null; const x = lsGet(LS_ORC_AGENDA); lsSet(LS_ORC_AGENDA, null); return x && x.agendaId ? x : null; });
   const [o, setO] = useState(() => !novo ? null : daAgenda ? { ...NOVO(cfg), cliente_id: daAgenda.cliente_id || "", veiculo_id: daAgenda.veiculo_id || "",
     cliente: { nome: "", telefone: "", ...(daAgenda.cliente || {}) }, veiculo: { placa: "", marca: "", modelo: "", ano: "", ...(daAgenda.veiculo || {}) }, reclamacao: daAgenda.reclamacao || "" } : NOVO(cfg)), [itens, setItens] = useState([]), [erro, setErro] = useState(""), [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false);
-  const [modal, setModal] = useState(null), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(!!(daAgenda && !daAgenda.cliente_id)), [aprovar, setAprovar] = useState(false);
+  const [modal, setModal] = useState(null), [fichaAberta, setFichaAberta] = useState(false), [recusa, setRecusa] = useState(null), [semCad, setSemCad] = useState(!!(daAgenda && !daAgenda.cliente_id)), [aprovar, setAprovar] = useState(false);
   // Placa digitada (veículo sem cadastro) e sem marca/modelo: busca pela placa (v55). Placa que já está no cadastro usa o cadastro, sem consulta.
   // Só em orçamento novo ou depois de a placa ser digitada nesta tela: abrir um orçamento antigo não consulta nem muda nada sozinho.
   const [mexeuPlaca, setMexeuPlaca] = useState(novo);
@@ -102,6 +103,9 @@ export function Orcamento({ id }) {
     set(v ? { veiculo_id: vid, veiculo: { placa: v.placa || "", marca: v.marca || "", modelo: v.modelo || "", ano: v.ano || "" } } : { veiculo_id: "" }); };
   const salvarItem = it => { const { _novo, _conta, ...i } = it; setItens(l => _novo ? l.concat([i]) : l.map(x => x.id === i.id ? i : x)); setSujo(true); setModal(null); };
   const excluirItem = it => { setItens(l => l.filter(x => x.id !== it.id)); setSujo(true); setModal(null); };
+  // óleo e filtros da ficha do veículo (etapa 3 estendida ao orçamento): só no veículo do cadastro e com ficha; não reserva estoque
+  const vFicha = o.veiculo_id ? dados.veiculos.find(v => v.id === o.veiculo_id) : null;
+  const lancarFicha = lista => { setItens(l => l.concat(lista.map(x => ({ codigo: "", fornecedor: "", desconto: 0, horas: null, servico_id: null, fornecida_cliente: false, aprovado: null, ...x })))); setSujo(true); setFichaAberta(false); };
   const incluir = tipo => setModal({ _novo: true, id: uuid(), tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", aprovado: null });
 
   const validar = () => !String(o.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome." : Number(o.desconto) > t.subtotal + 0.001 ? "O desconto não pode ser maior que o valor dos itens." : "";
@@ -165,7 +169,7 @@ export function Orcamento({ id }) {
         ${edita ? html`<label class="filtro orc-tabela"><span>Tabela de preço</span><select id="orc-tabela" class="inp" value=${o.tabela_preco} onChange=${e => set({ tabela_preco: e.target.value })}>${Object.entries(TABELAS_PRECO).map(([k, n]) => html`<option value=${k}>${n}</option>`)}</select></label>` : null}</div>
       ${itens.length ? html`<div class="lista">${itens.map(i => html`<${ItemLinha} key=${i.id} i=${i} verValores=${ver} mostrarAprov=${false} onClick=${edita ? () => setModal(i) : null} rotuloExcluir="Excluir do orçamento" onExcluir=${edita ? () => excluirItem(i) : null} />`)}</div>`
         : html`<${Vazio}>Nenhum item ainda.</${Vazio}>`}
-      ${edita ? html`<div class="acoes orc-incluir"><button type="button" class="btn" onClick=${() => incluir("peca")}>+ Produto / peça</button><button type="button" class="btn" onClick=${() => incluir("servico")}>+ Serviço</button><button type="button" class="btn" onClick=${() => incluir("terceiro")}>+ Serviço de terceiro</button></div>` : null}
+      ${edita ? html`<div class="acoes orc-incluir"><button type="button" class="btn" onClick=${() => incluir("peca")}>+ Produto / peça</button><button type="button" class="btn" onClick=${() => incluir("servico")}>+ Serviço</button><button type="button" class="btn" onClick=${() => incluir("terceiro")}>+ Serviço de terceiro</button>${vFicha && vFicha.ficha_oleo ? html`<button type="button" class="btn" id="orc-ficha-oleo" onClick=${() => setFichaAberta(true)}>Óleo e filtros da ficha</button>` : null}</div>` : null}
       ${ver ? html`<div class="orc-totais">
         ${t.pecas ? html`<div><span>Produtos</span><b>${reais(t.pecas)}</b></div>` : null}${t.servicos ? html`<div><span>Serviços</span><b>${reais(t.servicos)}</b></div>` : null}${t.terceiros ? html`<div><span>Serviços de terceiros</span><b>${reais(t.terceiros)}</b></div>` : null}
         <div class="orc-desc"><label for="orc-desconto">Desconto</label><${CampoDesconto} id="orc-desconto" subtotal=${t.subtotal} valor=${o.desconto} disabled=${!edita} onMuda=${v => set({ desconto: v })} /></div>
@@ -193,6 +197,7 @@ export function Orcamento({ id }) {
     </div>` : null}
     ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${r => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "."); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
 
+    ${fichaAberta && vFicha ? html`<${LancarFicha} o=${o} v=${vFicha} itens=${itens} tabela=${o.tabela_preco} orcamento onFechar=${() => setFichaAberta(false)} onLancar=${lancarFicha} />` : null}
     ${modal ? html`<${ItemModal} item=${modal} tabela=${o.tabela_preco} orcamento onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal)} onFechar=${() => setModal(null)} />` : null}
     ${recusa !== null ? html`<${Modal} titulo="Cliente recusou o orçamento" onFechar=${() => setRecusa(null)}>
       <p class="sub">O orçamento continua na consulta, com o motivo. Serve para saber por que a oficina perde serviço.</p>

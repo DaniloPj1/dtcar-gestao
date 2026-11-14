@@ -4,6 +4,7 @@ import { api } from "../api.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, Modal, Vazio, I, Dinheiro, BuscaCliente } from "../ui.js";
 import { soDig, norm, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, reais, fmtData, numOS, linkWhats, qtdFmt, hojeISO, endCompleto } from "../util.js";
 import { pode, ABERTOS, SITUACAO_CLIENTE, COMBUSTIVEIS, ESTADO_CIVIL } from "../regras.js";
+import { etapaNoResumo } from "../resumoos.js";
 import { LinhaOS } from "./painel.js";
 import { prepararNovaOS, ORIGENS } from "./entrada.js";
 import { ProdutosLista } from "./produtos.js";
@@ -290,6 +291,7 @@ export function ClienteTela({ id }) {
       <div class="ficha-cab"><div class="meio"><span class="sub">Cliente cód. ${c.codigo ?? "—"}${c.tipo_cliente ? " · " + c.tipo_cliente : ""}</span><h2>${c.nome} <${SitCliente} c=${c} /></h2>${c.fantasia ? html`<span class="sub">${c.fantasia}</span>` : null}</div>
         <div class="acoes">${soDig(c.telefone).length >= 10 ? html`<a class="btn btn-sm btn-whats" href=${linkWhats(c.telefone, "Olá, " + c.nome.split(" ")[0] + "! ")} target="_blank" rel="noopener">${I.whats} WhatsApp</a>` : null}
           <button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/cliente/" + c.id)}>Imprimir ficha</button>
+          ${ver && os.some(etapaNoResumo) ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/resumo/" + c.id + "?de=cliente")}>Resumo das O.S. em aberto</button>` : null}
           <button type="button" class="btn btn-sm" onClick=${() => setEd(edCliente(c))}>${pode(perfil, "cadastrar") ? "Editar cadastro" : "Ver cadastro"}</button></div></div>
       ${c.situacao && c.situacao !== "liberado" ? html`<div class=${c.situacao === "bloqueado" ? "erros" : "aviso"}><b>Cadastro ${SITUACAO_CLIENTE[c.situacao].t.toLowerCase()}:</b> ${c.restricao || "motivo não informado"}</div>` : null}
       <div class="kv">
@@ -332,7 +334,7 @@ export function VeiculoTela({ id }) {
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/cadastros")}>← Voltar</button>
     <section class="card">
       <div class="det-cab"><${Placa} placa=${v.placa} grande /><div class="meio"><h2>${v.marca} ${v.modelo}</h2><div class="sub">${[v.ano, v.cor, v.motor, v.combustivel].filter(Boolean).join(" · ")}</div></div>
-        <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/veiculo/" + v.id)}>Imprimir ficha</button><button type="button" class="btn btn-sm" onClick=${() => setEd(edVeiculo(v))}>${pode(perfil, "cadastrar") ? "Editar ficha" : "Ver ficha"}</button></div></div>
+        <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/veiculo/" + v.id)}>Imprimir ficha</button>${ver && os.some(etapaNoResumo) ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/resumo/" + v.id + "?de=veiculo")}>Resumo das O.S. em aberto</button>` : null}<button type="button" class="btn btn-sm" onClick=${() => setEd(edVeiculo(v))}>${pode(perfil, "cadastrar") ? "Editar ficha" : "Ver ficha"}</button></div></div>
       <div class="kv">${kv("KM atual", fmtKm(v.km_atual))}<div><span>Proprietário</span><b>${dono ? html`<button type="button" class="btn-link" onClick=${() => ir("/cliente/" + dono.id)}>${dono.nome}</button>` : "—"}</b></div>
         ${kv("Motorista", v.motorista)}${kv("Chassi", v.chassi)}${kv("Renavam", v.renavam)}${kv("O.S.", String(os.length))}${ver ? kv("Total em serviços", reais(entregues.reduce((s, o) => s + Number(o.total || 0), 0))) : null}</div>
       ${manut.length ? html`<div class="kv">${manut.map(([t, d, k]) => html`<div key=${t}><span>${t}</span><b>${[d ? fmtData(d) : "", k ? fmtKm(k) : ""].filter(Boolean).join(" · ")}</b></div>`)}</div>` : null}

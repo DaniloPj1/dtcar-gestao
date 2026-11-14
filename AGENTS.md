@@ -348,6 +348,30 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `usarLeitorImagem` liga os dois geradores). **Mudou `js/osrecibo.js` ou `js/pdfrecibo.js`? Troque o commit no `email/site.ts`, merge com
   "Create a merge commit", publique a função "email"; a função "agente" só precisa de nova publicação quando mudar a descrição das ferramentas.**
   Testes: `python3 teste/teste_os_recibo.py` (tela, janela, A4, celular) e `deno run -A teste/teste_os_recibo_pdf.ts` (PDF pelo conector).
+- **Resumo de O.S. em aberto (pedido do Danilo em 13/11/2026):** as O.S. em aberto de um cliente ou de um veículo num documento só, no
+  padrão da O.S. (mesmo cabeçalho, quadros de cliente e veículo e tabelas de itens): cada O.S. com a faixa do número e da etapa (sempre
+  escrita), produtos, serviços e terceiros com os totais, desconto, total, recebido e falta receber; no fim o quadro "Resumo geral" com o
+  total geral. **Só leitura e sem SQL:** não mexe em O.S., estoque, financeiro nem no banco; a O.S. normal, o `pdfOS` e a O.S. Recibo
+  continuam iguais. Regras e contas num lugar só: `js/resumoos.js` (sem window/document) — `etapaNoResumo` (orçamento, execução e
+  aguardando pagamento; fechada, recusada, cancelada e a antiga entregue sem "a receber" não entram), `marcadaNoResumo` (aprovadas e a
+  receber entram marcadas; **orçamento não aprovado só se o Danilo marcar**), `dadosResumoOS` (itens pela mesma regra da ViaOS; falta
+  receber = total − `ordens.recebido`; quadro geral com no máximo 4 colunas: produtos/serviços/terceiros/total ou, com algum recebimento,
+  total/recebido/falta receber), `fechoDaOS`, `rotuloNoResumo`, `nomeArquivoResumo`. Pelo veículo, o cabeçalho leva o proprietário do
+  cadastro (O.S. do mesmo carro em nomes diferentes: aviso só na tela e na prévia do conector).
+  Tela: ficha do cliente e ficha do veículo › "Resumo das O.S. em aberto" (só com O.S. em aberto e para quem vê valores) →
+  `#/imprimir/resumo/<id>?de=cliente|veiculo[&os=1927,1928][&itens=0]` (`ResumoOS` em `js/telas/imprimir.js`): quadro só de tela para
+  marcar/desmarcar O.S. e escolher "Detalhado | Só o resumo"; a rota recusa quem não tem `verValores`. **Sem internet:** no
+  programa Windows os itens vêm do banco do PC; no navegador e no celular, da cópia de cada O.S. em aberto guardada no aparelho
+  (`copiasParaResumo`: a mesma cópia que abre a O.S. sem internet). O.S. sem cópia **não vira lista vazia** (o total sairia errado): a tela
+  diz qual falta. Vale o registro mais novo entre a cópia e a lista; cópia mais antiga que a lista → aviso só de tela com o número da O.S.
+  PDF: `js/pdfresumo.js` (`pdfResumoOS`, arquivo separado do `js/pdf.js`, com o próprio
+  `usarLeitorImagem`; O.S. que cabe numa folha não é cortada; mais de uma folha ganha "Página i de n") — **mesmo leiaute da tela: mudou
+  um, mude o outro.** Conector: anexo `{fonte:"resumo", de:"cliente"|"veiculo", orcamentos?, itens?}` no `whatsapp_enviar` (sempre do
+  cliente ou do veículo da O.S. da mensagem, `numero_os`) e `{fonte:"resumo", numero, de, ...}` no `email_enviar`/`email_responder`
+  (`doResumo` em `email/anexos.ts`; a prévia traz as O.S. que entraram, o total e o que falta receber). **Mudou `js/resumoos.js` ou
+  `js/pdfresumo.js`? Troque o commit no `email/site.ts`, merge com "Create a merge commit", publique a função "email"; a função "agente"
+  só precisa de nova publicação quando mudar a descrição das ferramentas (como agora).** Testes: `python3 teste/teste_resumo_os.py`
+  (tela, fichas, uma folha A4 no caso do Jeep, mecânico, celular, sem internet) e `deno run -A teste/teste_resumo_os_pdf.ts` (PDF pelo conector).
 - **Agenda da oficina (v54, pedido do Danilo em 12/11/2026) — etapas 1 e 2 de 3:** tabela `agendamentos` (dia, horário opcional, cliente e
   veículo do cadastro OU só digitados — cópia em `cliente`/`veiculo`, sem chave estrangeira, como `orcamentos` —, serviço combinado, anotação
   interna). **Agenda livre** (decisão do Danilo: sem limite de carros por dia ou horário). Situações gravadas: `agendado`, `confirmado`, `chegou`,

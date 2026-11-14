@@ -494,7 +494,7 @@ function criarApiSupabase() {
       const out = [];
       for (let i = 0; i < ids.length; i += 60) {
         const parte = ids.slice(i, i + 60);
-        out.push(...await todos(() => sb.from("os_itens").select("id,ordem_id,tipo,descricao,codigo,qtd,valor_unit,desconto,custo_unit,aprovado,executado,produto_id,fornecida_cliente").in("ordem_id", parte).order("id")));
+        out.push(...await todos(() => sb.from("os_itens").select("id,ordem_id,tipo,descricao,codigo,qtd,valor_unit,desconto,custo_unit,aprovado,executado,produto_id,fornecida_cliente,posicao,horas,qualidade,criado_em").in("ordem_id", parte).order("id")));
       }
       return out;
     },

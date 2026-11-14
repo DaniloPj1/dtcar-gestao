@@ -1,12 +1,14 @@
-// Impressão: O.S. (A4 ou cupom 80 mm), recibo de pagamento e fichas cadastrais (cliente e veículo)
+// Impressão: O.S. (A4 ou cupom 80 mm), recibo de pagamento, fichas cadastrais (cliente e veículo) e resumo das O.S. em aberto
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
+import { erroDeRede } from "../local.js";
 import { useApp, Foto } from "../ui.js";
 import { fmtDoc, fmtTel, fmtKm, fmtDataHora, fmtData, reais, qtdFmt, totais, totalItem, numOS, somaDias, exPlaca, extenso, endCompleto } from "../util.js";
 import { STATUS, situacaoOS, pode, TERMO_GARANTIA, TERMO_ORCAMENTO, SITUACAO_CLIENTE, TABELAS_PRECO } from "../regras.js";
 import { diasDoMes, nomeMes, horasSemana, fmtHoras, VINCULOS, calcularMes, com_encargos } from "../folha.js";
 import { dadosDoMes } from "./funcionarios.js";
 import { dadosOSRecibo, condicoesGarantia, CUIDADOS_MOTOR, osQuitada } from "../osrecibo.js";
+import { etapaNoResumo, marcadaNoResumo, dadosResumoOS, rotuloNoResumo, fechoDaOS } from "../resumoos.js";
 
 const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const dataExtenso = iso => { const d = /^\d{4}-\d{2}-\d{2}$/.test(iso || "") ? new Date(iso + "T12:00:00") : new Date(iso || Date.now()); return `${d.getDate()} de ${MESES[d.getMonth()]} de ${d.getFullYear()}`; };
@@ -305,6 +307,77 @@ function FichaVeiculo({ v }) {
   </article>`;
 }
 
+/* ---------------- Resumo de O.S. em aberto (pedido do Danilo em 13/11/2026) ----------------
+ * As O.S. em aberto de um cliente ou de um veículo num documento só, no padrão da O.S. (mesmo cabeçalho, quadros e tabelas).
+ * Contas e textos em js/resumoos.js. O PDF do conector (js/pdfresumo.js) segue este leiaute: mudou um, mude o outro. */
+/** Sem internet no navegador ou no celular (no programa Windows o banco do PC responde antes): os itens vêm da cópia de cada O.S.
+ * guardada no aparelho, a mesma que abre a O.S. sem internet. O.S. sem cópia NÃO vira lista vazia (o total sairia errado): avisa
+ * quais faltam. Vale o registro mais novo: a cópia (cabeçalho e itens juntos) ou, se a lista for mais nova que a cópia, a linha da
+ * lista com os itens da cópia — e a tela avisa que os itens dessa O.S. podem estar desatualizados. */
+async function copiasParaResumo(ordens) {
+  const faltam = [], antigas = [], usadas = [], itens = [];
+  for (const o of ordens) {
+    const c = api.ordemNoAparelho ? await api.ordemNoAparelho(o.id) : null;
+    if (!c || !Array.isArray(c.itens)) { faltam.push(n5(o.numero)); continue; }
+    const { itens: daCopia, fotos, eventos, _local, ...cab } = c;
+    const antiga = !o._pendente && Date.parse(c.atualizado_em || "") < Date.parse(o.atualizado_em || "");
+    if (antiga) antigas.push(n5(o.numero));
+    usadas.push(antiga ? o : { ...o, ...cab }); itens.push(...daCopia);
+  }
+  if (faltam.length) throw new Error("Sem conexão com a internet: " + (faltam.length > 1 ? "as O.S. " + faltam.join(", ") + " não estão guardadas" : "a O.S. " + faltam[0] + " não está guardada")
+    + " neste aparelho. O resumo abre quando a conexão voltar.");
+  const abertas = usadas.filter(etapaNoResumo);
+  return { ordens: abertas, itens, semInternet: true, copiasAntigas: antigas.filter(n => abertas.some(o => n5(o.numero) === n)) };
+}
+function ResumoOS({ doc, params }) {
+  const pedidas = String(params.os || "").split(/[^0-9]+/).filter(Boolean).map(Number);
+  const [marcadas, setMarcadas] = useState(() => new Set(doc.ordens.filter(o => pedidas.length ? pedidas.includes(Number(o.numero)) : marcadaNoResumo(o)).map(o => o.id)));
+  const [detalhe, setDetalhe] = useState(params.itens !== "0");
+  const [agora] = useState(() => new Date().toISOString());
+  const trocar = id => setMarcadas(m => { const n = new Set(m); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const escolhidas = doc.ordens.filter(o => marcadas.has(o.id));
+  const d = dadosResumoOS({ ordens: escolhidas, itens: doc.itens, de: doc.de, cliente: doc.cliente, veiculo: doc.veiculo, agora });
+  const dono = doc.de === "veiculo" ? "deste veículo" : "deste cliente";
+  return html`
+    <section class="resos-escolha so-tela" aria-label="O.S. deste resumo">
+      <div class="resos-escolha-topo"><b>O.S. em aberto ${dono}</b>
+        <div class="seg" role="group" aria-label="Nível de detalhe">${[[true, "Detalhado"], [false, "Só o resumo"]].map(([v, t]) => html`<button type="button" key=${t} aria-pressed=${detalhe === v ? "true" : "false"} onClick=${() => setDetalhe(v)}>${t}</button>`)}</div></div>
+      ${doc.ordens.length ? html`<div class="resos-opcoes">${doc.ordens.map(o => html`<label class="linha-check" key=${o.id}><input type="checkbox" checked=${marcadas.has(o.id)} onChange=${() => trocar(o.id)} />
+        <span><b>O.S. ${n5(o.numero)}</b> · ${[exPlaca((o.veiculo || {}).placa), (o.cliente || {}).nome].filter(Boolean).join(" · ")} · ${(situacaoOS(o) || {}).t} · ${reais(o.total)}</span></label>`)}</div>
+        <p class="dica">Orçamento ainda não aprovado entra só se você marcar. O que estiver marcado sai na folha abaixo.</p>` : html`<p class="dica">Nenhuma O.S. em aberto ${dono}.</p>`}
+      ${doc.semInternet ? html`<div class="aviso">Sem internet: os itens e os valores são da cópia das O.S. guardada neste aparelho.${(doc.copiasAntigas || []).length
+        ? (doc.copiasAntigas.length > 1 ? " As cópias das O.S. " + doc.copiasAntigas.join(", ") + " são mais antigas" : " A cópia da O.S. " + doc.copiasAntigas[0] + " é mais antiga") + " que a lista: os itens podem estar desatualizados." : ""} Confira de novo quando a conexão voltar.</div>` : null}
+      ${d.clientesDiferentes.length ? html`<div class="aviso">As O.S. marcadas estão em nomes diferentes (${d.clientesDiferentes.join("; ")}). O resumo sai no nome de ${d.cli ? d.cli.nome : "—"}.</div>` : null}
+    </section>
+    ${!escolhidas.length ? (doc.ordens.length ? html`<div class="erros so-tela">Marque pelo menos uma O.S. para montar o resumo.</div>` : null) : html`<article class="folha os-a4 resos">
+      <${Cabecalho} titulo="RESUMO DE ORDENS DE SERVIÇO" numero=${d.numeroCab} direita=${html`${d.tituloQtd ? html`<strong>${d.tituloQtd}</strong>` : null}<span>Emitido em ${d.emitidoEm}</span>`} />
+      <section class="imp-duas imp-comp">
+        <div class="imp-bloco"><h4>Cliente</h4>
+          ${d.cli ? html`<div class="imp-l"><b class="imp-dest">${d.cli.nome}</b>${d.cli.codigo != null ? html`<span class="imp-cod">(cód. ${d.cli.codigo})</span>` : null}</div>
+            <div class="imp-l"><${Inl} r="CPF/CNPJ" v=${d.cli.doc} /><${Inl} r="Tel." v=${d.cli.telefone} /></div>
+            <div class="imp-l"><${Inl} r="End." v=${d.cli.endereco} /></div>` : html`<div class="imp-l">Clientes diferentes nas O.S.</div>`}</div>
+        <div class="imp-bloco"><h4>${d.vei ? "Veículo" : "Veículos"}</h4>
+          ${d.vei ? html`<div class="imp-l"><b class="imp-dest">${d.vei.placa}</b><b>${d.vei.modelo}</b></div><div class="imp-l"><${Inl} r="Ano" v=${d.vei.ano} /><${Inl} r="Cor" v=${d.vei.cor} /></div>`
+            : html`<div class="imp-l">${d.veiculos.map((v, n) => html`<span key=${n}><b>${v.placa}</b> ${v.modelo}</span>`)}</div>`}</div>
+      </section>
+      ${detalhe ? d.blocos.map(b => html`<section class="resos-os" key=${b.id}>
+        <div class="resos-faixa"><span><b>ORDEM DE SERVIÇO Nº ${b.n5}</b>${b.faixaVeiculo ? " · " + b.faixaVeiculo : ""}${b.recNaFaixa ? " · " + b.reclamacao : ""}</span>
+          <span class="dir">${b.aberta ? "Aberta em " + b.aberta + " · " : ""}${b.situacao}</span></div>
+        ${b.reclamacao && !b.recNaFaixa ? html`<p class="resos-rec"><b>Reclamação:</b> ${b.reclamacao}</p>` : null}
+        <${TabelaItens} titulo="Produtos e peças" itens=${b.pecas} valores=${true} total=${["Total de produtos", b.t.pecas]} />
+        <${TabelaItens} titulo="Serviços" itens=${b.servicos} valores=${true} total=${["Total de serviços", b.t.servicos]} />
+        <${TabelaItens} titulo="Serviços de terceiros" itens=${b.terceiros} valores=${true} total=${["Total de serviços de terceiros", b.t.terceiros]} />
+        ${!b.pecas.length && !b.servicos.length && !b.terceiros.length ? html`<p class="resos-rec">Sem itens lançados.</p>` : null}
+        <div class="resos-fecho">${fechoDaOS(b).map(l => html`<div key=${l.r} class=${l.forte ? "forte" : ""}><span>${l.r}</span><b>${l.menos ? "− " : ""}${reais(l.v)}</b></div>`)}</div>
+      </section>`) : null}
+      <table class="imp-tab resos-geral"><thead><tr><th>Resumo geral</th>${d.colunas.map(c => html`<th class="num" key=${c.t}>${c.t}</th>`)}</tr></thead>
+        <tbody>${d.blocos.map(b => html`<tr key=${b.id}><td>${rotuloNoResumo(b, d)}${!detalhe ? html`<span class="resos-sit">${b.situacao}</span>` : null}</td>${d.colunas.map(c => html`<td class="num" key=${c.t}>${reais(c.de(b))}</td>`)}</tr>`)}</tbody>
+        <tfoot><tr><td>Total geral</td>${d.colunas.map(c => html`<td class=${"num" + (c.forte ? " forte" : "")} key=${c.t}>${reais(c.soma)}</td>`)}</tr></tfoot></table>
+      <p class="imp-termo">${d.nota}</p>
+      <footer class="imp-rodape">Não vale como recibo de pagamento</footer>
+    </article>`}`;
+}
+
 /* ---------------- folha de ponto mensal (para anotar e assinar) ---------------- */
 function FolhaPonto({ f, ym, extras }) {
   const { cfg } = useApp();
@@ -362,6 +435,19 @@ export function Imprimir({ tipo, id, params }) {
       Promise.all([api.ordem(id), api.recibos.listar({ ordemId: id })]).then(([o, r]) => setDoc({ ...o, recibosDaOS: r || [] })).catch(e => setErro(e.message));
     }
     else if (tipo === "recibo") api.recibos.um(id).then(setDoc).catch(e => setErro(e.message));
+    else if (tipo === "resumo") {
+      // mostra preços e totais: só para quem vê valores (a rota de impressão abre antes de "restrito")
+      if (!pode(perfil, "verValores")) { setErro("O resumo das O.S. mostra valores: só para quem tem acesso aos valores da O.S."); return; }
+      const de = params.de === "veiculo" ? "veiculo" : "cliente";
+      const ficha = de === "veiculo" ? dados.veiculos.find(x => x.id === id) : dados.clientes.find(x => x.id === id);
+      if (!ficha) { setErro(de === "veiculo" ? "Veículo não encontrado." : "Cliente não encontrado."); return; }
+      const ordens = dados.ordens.filter(o => (de === "veiculo" ? o.veiculo_id === id : o.cliente_id === id) && etapaNoResumo(o)).sort((a, b) => Number(a.numero) - Number(b.numero));
+      // pelo veículo, o cabeçalho leva o proprietário do cadastro
+      const base = { de, ordens, cliente: de === "veiculo" ? dados.clientes.find(c => c.id === ficha.cliente_id) || null : ficha, veiculo: de === "veiculo" ? ficha : null };
+      if (!ordens.length) setDoc({ ...base, itens: [] });
+      else api.itensDasOrdens(ordens.map(o => o.id)).then(itens => setDoc({ ...base, itens }))
+        .catch(e => erroDeRede(e) ? copiasParaResumo(ordens).then(c => setDoc({ ...base, ...c })) : Promise.reject(e)).catch(e => setErro(e.message));
+    }
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }
     else if (tipo === "veiculo") { const v = dados.veiculos.find(x => x.id === id); v ? setDoc(v) : setErro("Veículo não encontrado."); }
@@ -372,8 +458,8 @@ export function Imprimir({ tipo, id, params }) {
     }
     else setErro("Documento desconhecido.");
   }, [tipo, id]);
-  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), osrecibo: "OS Recibo " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
-  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" || tipo === "osrecibo" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : "/veiculo/" + id);
+  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), osrecibo: "OS Recibo " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : ""), resumo: "Resumo OS " + (doc.veiculo ? doc.veiculo.placa || "" : doc.cliente ? doc.cliente.nome || "" : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
+  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" || tipo === "osrecibo" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : tipo === "resumo" && params.de !== "veiculo" ? "/cliente/" + id : "/veiculo/" + id);
   const cancelarRecibo = async () => {
     if (!await confirmar({ titulo: "Cancelar recibo " + n5(doc.numero), texto: "O recibo continua registrado, marcado como cancelado, e deixa de contar como pagamento recebido.", botao: "Cancelar recibo", perigo: true })) return;
     try { await api.recibos.salvar({ id: doc.id, cancelado: true, cancelado_motivo: "Cancelado por " + perfil.nome + " em " + new Date().toLocaleDateString("pt-BR") });
@@ -386,7 +472,7 @@ export function Imprimir({ tipo, id, params }) {
   };
   const cli = doc && (tipo === "os" || tipo === "osrecibo") ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
   const vei = doc && tipo === "os" ? dados.veiculos.find(v => v.id === doc.veiculo_id) : null;
-  const nVias = formato === "cupom" || tipo === "salao" || tipo === "osrecibo" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
+  const nVias = formato === "cupom" || tipo === "salao" || tipo === "osrecibo" || tipo === "resumo" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
   return html`<div class=${"imprimir" + (formato === "cupom" ? " imp-cupom" : "")}>
     ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : (tipo === "salao" ? html`<style>@page { size: A4; margin: 12mm; }</style>` : tipo === "osrecibo" ? html`<style>@page { size: A4; margin: 9mm 11mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`)}
     <div class="imp-barra so-tela">
@@ -403,6 +489,7 @@ export function Imprimir({ tipo, id, params }) {
       : tipo === "os" ? (formato === "cupom" ? html`<${CupomOS} o=${doc} valores=${valores} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaOS} key=${n} o=${doc} cli=${cli} vei=${vei} valores=${valores} via=${n + 1} nVias=${nVias} />`))
       : tipo === "salao" ? html`<${FichaSalao} o=${doc} />`
       : tipo === "osrecibo" ? html`<${ViaOSRecibo} o=${doc} recibos=${doc.recibosDaOS} cli=${cli} motor=${params.motor !== "0"} />`
+      : tipo === "resumo" ? html`<${ResumoOS} doc=${doc} params=${params} />`
       : tipo === "venda" ? (formato === "cupom" ? html`<${CupomVenda} v=${doc} />` : Array.from({ length: nVias }, (_, n) => html`<${ViaVenda} key=${n} v=${doc} via=${n + 1} nVias=${nVias} />`))
       : tipo === "recibo" ? html`<div class=${"recibos-folha v" + nVias}>${Array.from({ length: nVias }, (_, n) => html`<${ViaRecibo} key=${n} r=${doc} via=${n + 1} nVias=${nVias} />`)}</div>`
       : tipo === "ponto" ? html`<${FolhaPonto} f=${doc.f} ym=${params.mes} extras=${String(params.feriados || "").split(/[^0-9]+/).filter(Boolean).map(Number)} />`

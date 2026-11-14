@@ -5,7 +5,9 @@
 //   - modelo: texto montado com js/mensagens.js (os mesmos textos da tela da O.S.): entrada, orcamento, adicionais, pronto,
 //     entrega, cobranca (parcelas em aberto da O.S.) e boas_vindas. Texto ditado pelo Danilo (texto) vale por cima do modelo.
 //   - anexo: UM PDF — {fonte:"os", documento: os|orcamento|entrada|recibo, fotos?, motor?}, {fonte:"boleto", os | nosso_numero}
-//     (pela O.S., todos os boletos em aberto num PDF só) ou {fonte:"nf", os | id} (o PDF da NF anexada na O.S.).
+//     (pela O.S., todos os boletos em aberto num PDF só), {fonte:"nf", os | id} (o PDF da NF anexada na O.S.) ou
+//     {fonte:"resumo", de: cliente|veiculo, orcamentos?, itens?} (13/11/2026: as O.S. em aberto do cliente ou do veículo da
+//     O.S. da mensagem num PDF só).
 //   - Sem confirmar: só a prévia (texto, arquivo, erros e avisos da fila). Nada é guardado.
 //   - confirmar=true e sem erros: guarda o PDF na pasta privada "whatsapp-envio" (AAAA/MM/<uuid>.pdf) e põe na fila
 //     (whatsapp_enfileirar, com o login de quem pediu: só administrador). Se a fila recusar, o PDF é apagado.
@@ -84,7 +86,7 @@ async function textoDoModelo(d: DepsZap, p: Record<string, unknown>, avisos: str
 /** O PDF pedido (um só). */
 async function pdfDoPedido(d: DepsZap, anexo: Record<string, unknown>): Promise<{ arquivo: Arquivo; avisos: string[] }> {
   const fonte = String(anexo.fonte || "");
-  if (!["os", "boleto", "nf"].includes(fonte)) throw new ErroAnexo('No WhatsApp vai um PDF: fonte "os" (O.S., orçamento ou checklist), "boleto" ou "nf".');
+  if (!["os", "boleto", "nf", "resumo"].includes(fonte)) throw new ErroAnexo('No WhatsApp vai um PDF: fonte "os" (O.S., orçamento ou checklist), "resumo" (O.S. em aberto do cliente ou do veículo), "boleto" ou "nf".');
   const { arquivos, avisos } = await montarAnexos(d.adm, "", [anexo], d.geradores, d.site);
   const pdfs = arquivos.filter((a) => a.tipo === "application/pdf" || /\.pdf$/i.test(a.nome));
   if (!pdfs.length) throw new ErroAnexo(fonte === "nf" ? "A NF anexada na O.S. não tem PDF (só o XML): anexe o DANFE em PDF na tela da O.S." : "Nenhum PDF gerado.");
@@ -107,7 +109,8 @@ export async function prepararWhatsApp(d: DepsZap, p: Record<string, unknown>): 
     // sem número no anexo: o da O.S. da mensagem
     const a = { ...(p.anexo as Record<string, unknown>) }, num = numeroOS(p.numero_os);
     if (!num) throw new ErroAnexo("O PDF é de uma O.S.: informe a O.S. da mensagem (numero_os).");
-    if (num && a.fonte === "os" && !a.numero) a.numero = num;
+    // resumo das O.S. em aberto: do cliente ou do veículo da O.S. da mensagem (nunca de outro cliente)
+    if (num && (a.fonte === "os" || a.fonte === "resumo") && !a.numero) a.numero = num;
     if (num && (a.fonte === "boleto" || a.fonte === "nf") && !a.os && !a.nosso_numero && !a.id) a.os = num;
     // O.S. informada no próprio anexo: tem de ser a mesma da mensagem; sem O.S. na mensagem, o PDF de O.S. não sai
     // (o destinatário vem da O.S. da mensagem: nunca o documento de outro cliente)

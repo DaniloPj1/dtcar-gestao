@@ -2,7 +2,7 @@
 // Confere a pesquisa por modelo e ano, o código comparável com o estoque, a prioridade do estoque e a conversão.
 // Uso: node teste/teste_catalogo.mjs
 import dados from "../js/catalogodados.js";
-import { resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
+import { marcarDivergencias, chavesDoVeiculo, pesquisarVeiculo, resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 const cat = prepararCatalogo(dados);
@@ -49,6 +49,46 @@ rs = resumoOleo(pesquisar(cat, "palio fire", 2010).oleo);
 chk("resumo Palio Fire: Ipiranga e Maxon iguais contam como uma fonte", rs[0].litros === "2,7" && rs[0].fontes === 2, rs.map(g => g.litros + " x" + g.fontes));
 rs = resumoOleo(pesquisar(cat, "onix", 2018).oleo);
 chk("resumo Onix: o 15W40 da Omnicraft (erro de impressão) não entra", !rs.some(g => g.viscosidade === "15W40"), rs.map(g => g.viscosidade));
+
+chk("resumo Hilux 2018: a linha conferida não leva o selo de divergente", rs[0] && !resumoOleo(pesquisar(cat, "hilux 2.8", 2018).oleo)[0].divergente);
+
+// --- divergência eliminada (pedido do Danilo em 14/11/2026): a fonte mais antiga e duvidosa sai quando duas tabelas discordam
+chk("divergência: o catálogo não tem mais nenhuma linha de óleo divergente", marcarDivergencias(cat.oleo).every(o => !o.divergente), marcarDivergencias(cat.oleo).filter(o => o.divergente).length);
+chk("divergência: Honda City 1.5 não traz mais os 4,2 L da Petronas 2014", !pesquisar(cat, "honda city 1.5", 2014).oleo.some(o => /Petronas/.test(o.fonte)) && pesquisar(cat, "honda city 1.5", 2014).oleo.length > 0);
+chk("divergência: o que ficou foi a fonte mais nova (Omnicraft 2019 / Texaco 2022)", pesquisar(cat, "honda city 1.5", 2014).oleo.every(o => /Omnicraft|Texaco|Ipiranga|Maxon/.test(o.fonte)));
+chk("divergência: modelo que só a fonte antiga tem continua aparecendo", cat.oleo.some(o => /Petronas/.test(o.fonte)));
+chk("divergência: a linha conferida da Hilux nunca é descartada", pesquisar(cat, "hilux 2.8", 2018).oleo.some(o => /Conferido/.test(o.fonte)));
+
+// --- resultado: o mais próximo do ano e o mais confiável vem primeiro
+const topo = (q, ano) => resumoOleo(pesquisar(cat, q, ano).oleo, ano)[0];
+chk("resultado: City 2014 → a linha de 2013 a 2019 (3,6 L), não a de 2012 em diante", topo("honda city 1.5", 2014).litros === "3,6" && /Omnicraft/.test(topo("honda city 1.5", 2014).linha.fonte), topo("honda city 1.5", 2014));
+chk("resultado: Gol 1.0 2012 → o período que contém o ano vem antes do sem período", (t => t.linha.de <= 2012 && t.linha.ate >= 2012)(topo("gol 1.0", 2012)), topo("gol 1.0", 2012).linha);
+chk("resultado: a conferida pela oficina continua em primeiro (Hilux 2.8 2018)", /Conferido/.test(topo("hilux 2.8", 2018).linha.fonte));
+chk("resultado: a linha que representa a resposta é a mais nova da mesma resposta", resumoOleo(pesquisar(cat, "uno 1.0", 2015).oleo, 2015).every(g => g.fontes >= 1));
+chk("resultado: sem ano continua devolvendo as respostas na ordem de sempre", resumoOleo(pesquisar(cat, "honda city 1.5").oleo).length >= 2);
+
+// --- busca pela placa: do veículo para a pesquisa, por palavras-chave
+const ch = v => { const c = chavesDoVeiculo(v); return [c.marca.join(" "), c.nome.join(" "), c.cil, c.ano, c.diesel].join("|"); };
+chk("chaves: PRISMA 1.4MT LT", ch({ marca: "Chevrolet", modelo: "PRISMA 1.4MT LT", ano: "2015" }) === "chevrolet|prisma|1.4|2015|", ch({ marca: "Chevrolet", modelo: "PRISMA 1.4MT LT", ano: "2015" }));
+chk("chaves: cilindrada colada (COROLLA XEI20FLEX, ONIX 10MT, SANDERO EXPR 10)", chavesDoVeiculo({ marca: "I/TOYOTA", modelo: "COROLLA XEI20FLEX" }).cil === "2.0" && chavesDoVeiculo({ modelo: "ONIX 10MT JOYE" }).cil === "1.0" && chavesDoVeiculo({ modelo: "SANDERO EXPR 10" }).cil === "1.0");
+chk("chaves: marca importada e apelido (I/TOYOTA, GM - Chevrolet, VW)", chavesDoVeiculo({ marca: "I/TOYOTA", modelo: "COROLLA" }).marca.join() === "toyota" && chavesDoVeiculo({ marca: "GM - Chevrolet", modelo: "S10" }).marca.join() === "chevrolet" && chavesDoVeiculo({ marca: "VW", modelo: "GOL" }).marca.join() === "volkswagen");
+chk("chaves: cilindrada do campo motor e ano do modelo em 2018/2019", ch({ marca: "Toyota", modelo: "HILUX CD4X4 SRV", motor: "2.8", ano: "2018/2019", combustivel: "Diesel" }) === "toyota|hilux|2.8|2019|true");
+chk("chaves: nome composto (GRAND SIENA) e marca repetida no modelo", chavesDoVeiculo({ marca: "Fiat", modelo: "GRAND SIENA ATTRACTIV 1.4" }).nome.join(" ") === "grand siena" && chavesDoVeiculo({ marca: "Toyota", modelo: "TOYOTA COROLLA XEI" }).nome.join() === "corolla");
+const pvz = v => { const x = pesquisarVeiculo(cat, v); return { e: x.entendido, f: x.r && x.r.filtros[0], o: x.r && resumoOleo(x.r.oleo)[0] }; };
+let z = pvz({ marca: "Toyota", modelo: "HILUX SW4 SRX 4X4 2.8 TDI", ano: "2022", combustivel: "Diesel" });
+chk("placa → Hilux 2.8 diesel 2022: filtros do 204 cv e óleo 8 L", z.f && z.f.oleo.includes("PSL916") && z.o && z.o.litros === "8" && z.e === "HILUX 2.8 diesel 2022", z.e);
+z = pvz({ marca: "Chevrolet", modelo: "PRISMA 1.4MT LT", ano: "2015" });
+chk("placa → Prisma 1.4 2015: acha filtros e óleo 3,5 L", z.f && /prisma/i.test(z.f.modelo) && z.o && z.o.litros === "3,5", z.f && z.f.modelo);
+z = pvz({ marca: "Volkswagen", modelo: "NOVO GOL 1.0 TL MCV", ano: "2017" });
+chk("placa → NOVO GOL: acha o Gol, nunca o Golf", z.f && /^gol\b/i.test(z.f.modelo) && !/golf/i.test(z.f.modelo), z.f && z.f.modelo);
+z = pvz({ marca: "Honda", modelo: "CG 160 FAN", ano: "2020" });
+chk("placa → moto: não inventa (nada no catálogo)", !z.f && !z.o);
+z = pvz({ marca: "VW", modelo: "AMAROK CD 4X4 HIGH", ano: "2015", combustivel: "Diesel" });
+chk("placa → sem cilindrada: afrouxa e acha a Amarok diesel", z.f && /amarok/i.test(z.f.modelo));
+z = pvz({ marca: "Fiat", modelo: "Uno", ano: "2015" });
+chk("placa → só o nome do modelo: acha o Uno", z.f && /^uno/i.test(z.f.modelo) && z.o);
+z = pvz({ marca: "Chevrolet", modelo: "ONIX 1.0MT LT", ano: "2019" });
+chk("placa → aspirado não recebe a aplicação do turbo", z.f && !/turbo/i.test(z.f.motor + z.f.versao), z.f && z.f.motor);
 
 // --- filtros: Tecfil, Mahle e MANN; o resto na conversão
 const semEstoque = new Map();

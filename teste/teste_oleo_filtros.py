@@ -1,5 +1,5 @@
 # Óleo e filtros por veículo (14/11/2026), etapa 1: tela de pesquisa por modelo (#/oleo-filtros), só leitura.
-# Confere: tela resumida (óleo em uma linha por resposta, uma aplicação de filtros, detalhes e outras versões atrás de botões),
+# Confere: busca pela placa (cadastro sem custo; fora do cadastro pela consulta, sem cadastrar), tela resumida (óleo em uma linha por resposta, uma aplicação de filtros, detalhes e outras versões atrás de botões),
 # botão da barra de cima do PC e "Mais" do celular, pesquisa por modelo e ano, litros e viscosidade, filtros com Tecfil/Mahle/MANN,
 # prioridade do estoque (aparece só o do estoque + Conversão), saldo zerado, quadro de conversão, sem rolagem lateral no celular,
 # menu lateral e barra de cima do PC cabendo em 1366x768 e que a tela não grava nada.
@@ -88,6 +88,31 @@ try:
     chk("Onix: nova busca volta ao resumo (versões recolhidas)", pg.locator("#of-filtros .of-app").count() == 1 and pg.locator("button.of-outros").count() == 0)
     chk("Onix: filtros sem estoque mostram as três marcas", pg.locator("#of-filtros .of-app").first.locator(".of-filtro").nth(0).locator(".of-marca").count() == 3)
     pg.screenshot(path=os.path.join(TMP, "pc_onix.png"), full_page=True)
+    # ---------- busca pela placa ----------
+    cham = lambda: pg.evaluate("((window.__PLACA || {}).chamadas || []).filter(c => c.acao !== 'saldo')")
+    buscar(pg, "QXN1E49"); pg.wait_for_timeout(1200)   # Toyota Hilux 2022 do cadastro
+    fx = pg.locator("#of-placa")
+    chk("placa do cadastro: usa o cadastro e não chama a consulta paga", fx.count() == 1 and "do cadastro: Toyota Hilux 2022" in fx.inner_text() and len(cham()) == 0, [fx.inner_text() if fx.count() else "", cham()])
+    chk("placa do cadastro: mostra por quais palavras buscou", "Buscando por: HILUX 2022" in fx.inner_text(), fx.inner_text())
+    chk("placa do cadastro: traz óleo e filtros da Hilux", pg.locator("#of-oleo .of-oleo").count() >= 1 and "Hilux" in pg.locator("#of-filtros .of-app header").first.inner_text())
+    buscar(pg, "qxn-1e49"); pg.wait_for_timeout(600)
+    chk("placa com traço e minúscula também vale", pg.locator("#of-placa").count() == 1 and len(cham()) == 0)
+    pg.screenshot(path=os.path.join(TMP, "pc_placa.png"), full_page=True)
+    buscar(pg, "INT8C36"); pg.wait_for_timeout(1800)   # fora do cadastro: a consulta de mentira responde um VW CrossFox
+    fx = pg.locator("#of-placa"); c = cham()
+    chk("placa fora do cadastro: uma consulta básica só", len(c) == 1 and c[0]["acao"] == "basico" and c[0]["placa"] == "INT8C36", c)
+    chk("placa fora do cadastro: diz de onde veio e o que entendeu", "fora do cadastro, pela consulta da placa" in fx.inner_text() and "Buscando por: CROSSFOX" in fx.inner_text(), fx.inner_text())
+    chk("placa fora do cadastro: traz os filtros do CrossFox", pg.locator("#of-filtros .of-app").count() >= 1 and "CrossFox" in pg.locator("#of-filtros .of-app header").first.inner_text(), pg.locator("#of-filtros .of-app header").first.inner_text() if pg.locator("#of-filtros .of-app").count() else "")
+    chk("placa fora do cadastro: a tela não cadastra o veículo", pg.evaluate("() => window.__DB.veiculos.some(v => v.placa === 'INT8C36')") is False)
+    buscar(pg, "hilux"); buscar(pg, "INT8C36"); pg.wait_for_timeout(1500)
+    chk("a mesma placa não é consultada duas vezes", len(cham()) == 1, cham())
+    buscar(pg, "ZZZ9Z99"); pg.wait_for_timeout(1800)
+    chk("placa que a consulta não acha: avisa e pede o modelo", "placa não encontrada" in pg.locator("#of-placa").inner_text() and pg.locator("#of-filtros").count() == 0)
+    pg.evaluate("() => { window.__PLACA.situacao = 'saldo'; }"); buscar(pg, "ABD2E34"); pg.wait_for_timeout(1800)
+    chk("consulta sem saldo: avisa e pede o modelo, sem travar", "sem saldo" in pg.locator("#of-placa").inner_text() and pg.locator(".vazio", has_text="Carregando").count() == 0, pg.locator("#of-placa").inner_text())
+    pg.evaluate("() => { window.__PLACA.situacao = ''; }")
+    buscar(pg, "gol 1.6", "2012")
+    chk("modelo digitado continua sem faixa de placa", pg.locator("#of-placa").count() == 0)
     buscar(pg, "xyzxyz")
     chk("modelo que não existe: mensagem clara", pg.locator(".vazio", has_text="Nada no catálogo").count() == 1)
     buscar(pg, "gol 1.6", "2012"); pg.goto(U + "#/painel"); pg.wait_for_timeout(600); pg.goto(U + "#/oleo-filtros"); pg.wait_for_timeout(1200)

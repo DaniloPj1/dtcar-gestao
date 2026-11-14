@@ -5,8 +5,9 @@
 // e cada filtro em uma linha; norma, fonte, observações do catálogo e as outras versões ficam atrás de botões.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { useApp, Modal, Vazio } from "../ui.js";
-import { lsGet, lsSet, qtdFmt } from "../util.js";
-import { carregarCatalogo, pesquisar, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS, LIMITE_BUSCA } from "../catalogo.js";
+import { lsGet, lsSet, qtdFmt, normPlaca, placaValida, exPlaca, reais } from "../util.js";
+import { consultarPlaca, paraResumo } from "../placa.js";
+import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS, LIMITE_BUSCA } from "../catalogo.js";
 
 const cods = l => l && l.length ? l.join(" / ") : "—";
 const OLEO_NO_RESUMO = 3;
@@ -59,40 +60,68 @@ export function OleoFiltros() {
   useEffect(carregar, []);
   useEffect(() => { lsSet("dtcar-oleo-filtros", { q, ano }); setDetOleo(false); setVersoes(false); setVerOutros(false); }, [q, ano]);
   const estoque = useMemo(() => indiceEstoque(dados.produtos), [dados.produtos]);
-  const r = useMemo(() => cat ? pesquisar(cat, q, ano) : null, [cat, q, ano]);
-  const oleos = useMemo(() => r ? resumoOleo(r.oleo) : [], [r]);
+  // Busca pela placa (pedido do Danilo em 14/11/2026): placa do cadastro usa o cadastro, sem custo; placa de fora consulta a função
+  // "placa" (básica), que guarda a cópia da consulta — quando o carro for cadastrado depois, não paga de novo. Esta tela não grava nada.
+  const placa = normPlaca(q), ePlaca = placaValida(placa) && q.trim().replace(/[\s-]/g, "").length === 7;
+  const doCadastro = useMemo(() => ePlaca ? dados.veiculos.find(v => v.placa === placa) || null : null, [ePlaca, placa, dados.veiculos]);
+  const [cons, setCons] = useState(null);   // { placa, buscando } | { placa, r }
+  useEffect(() => {
+    if (!ePlaca || doCadastro) { setCons(null); return; }
+    let vivo = true; setCons({ placa, buscando: true });
+    const t = setTimeout(() => consultarPlaca(placa, "basico", { manual: true }).then(x => { if (vivo) setCons({ placa, r: x }); }), 600);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [ePlaca, placa, doCadastro]);
+  const daConsulta = cons && cons.placa === placa && cons.r && cons.r.ok && cons.r.encontrado ? paraResumo(cons.r.dados || {}) : null;
+  const veiculo = doCadastro || daConsulta;
+  const pv = useMemo(() => cat && ePlaca && veiculo ? pesquisarVeiculo(cat, veiculo, ano) : null, [cat, ePlaca, veiculo, ano]);
+  const r = useMemo(() => !cat ? null : ePlaca ? (pv && pv.r) : pesquisar(cat, q, ano), [cat, q, ano, ePlaca, pv]);
+  const oleos = useMemo(() => r ? resumoOleo(r.oleo, r.ano) : [], [r]);
   // A prioridade é o estoque: aplicação de outro catálogo (MANN, Wega, Bosch, Vox) que tem filtro no estoque aparece sem precisar abrir
   // "outros catálogos" — só quando esse filtro do estoque ainda não apareceu na aplicação de cima.
   const outrosComEstoque = useMemo(() => {
     if (!r || !cat) return [];
     const noEstoque = a => TIPOS_FILTRO.flatMap(([k]) => { const f = filtroParaMostrar(cat, estoque, a.marca, a[k]); return f && f.estoque ? f.estoque.map(e => k + ":" + e.codigo) : []; });
+    // Risco de peça errada (visto em 14/11/2026: Gol 1.6 2012 recebeu o filtro do Gol AP, "1996 em diante"): aplicação de outro catálogo
+    // só entra aqui com o ano informado e período que não comece mais de 10 anos antes dele quando não tem ano final.
+    const confiavel = a => !!r.ano && (a.de || a.ate) && (a.ate ? true : r.ano - a.de <= 10);
     const vistos = new Set(r.filtros.slice(0, 1).flatMap(noEstoque)), l = [];
-    for (const a of r.outros) { const novos = noEstoque(a).filter(c => !vistos.has(c)); if (!novos.length) continue; novos.forEach(c => vistos.add(c)); l.push({ a, tipos: [...new Set(novos.map(c => c.split(":")[0]))] }); if (l.length >= 3) break; }
+    for (const a of r.outros) { if (!confiavel(a)) continue; const novos = noEstoque(a).filter(c => !vistos.has(c)); if (!novos.length) continue; novos.forEach(c => vistos.add(c)); l.push({ a, tipos: [...new Set(novos.map(c => c.split(":")[0]))] }); if (l.length >= 3) break; }
     return l;
   }, [r, cat, estoque]);
   const buscou = r && r.palavras.length > 0 && r.palavras.join("").length >= 2;
+  const nomeVeic = v => [v.marca, v.modelo, v.ano].filter(Boolean).join(" ");
+  const cr = cons && cons.placa === placa ? cons.r : null;
+  const faixaPlaca = !ePlaca ? null : html`<div class=${"of-placa" + (veiculo ? "" : " of-placa-sem")} id="of-placa" role="status"><b>${exPlaca(placa)}</b>
+    ${doCadastro ? html`<span>do cadastro: ${nomeVeic(doCadastro)}</span>`
+      : cons && cons.buscando ? html`<span>fora do cadastro: consultando a placa…</span>`
+      : daConsulta ? html`<span>fora do cadastro, pela consulta da placa: ${nomeVeic(daConsulta)}${cr.origem === "api" && cr.valor_centavos ? " (consulta paga: " + reais(cr.valor_centavos / 100) + ")" : " (sem custo: já consultada antes)"}</span>`
+      : cr && cr.ok ? html`<span>placa não encontrada na consulta. Digite o modelo.</span>`
+      : cr ? html`<span>fora do cadastro e a consulta não respondeu${cr.semRede ? " (sem internet)" : cr.sem_saldo ? " (sem saldo no API Placas)" : cr.desligada ? " (consulta de placa desligada)" : ""}. Digite o modelo.</span>` : null}
+    ${pv && pv.entendido ? html`<span class="of-entendido">Buscando por: <b>${pv.entendido}</b></span>` : null}</div>`;
   const app = (a, tipos, detalhes) => html`<${Aplicacao} key=${(tipos ? "e" : "") + a.marca + a.modelo + a.versao + a.motor + a.de + a.ate + a.oleo + a.ar} a=${a} cat=${cat} estoque=${estoque} onConversao=${setConv} tipos=${tipos} detalhes=${detalhes} />`;
   const maisVersoes = r ? r.filtros.length - 1 : 0;
 
   return html`<div class="pagina of-pagina">
     <section class="card">
       <div class="of-busca">
-        <label class="of-campo of-campo-modelo"><span>Modelo do carro</span>
-          <input id="of-q" class="inp" type="search" autocomplete="off" placeholder="Ex.: onix 1.0, hilux 2.8, gol 1.6" value=${q} onInput=${e => setQ(e.target.value)} /></label>
+        <label class="of-campo of-campo-modelo"><span>Modelo do carro ou placa</span>
+          <input id="of-q" class="inp" type="search" autocomplete="off" placeholder="Ex.: onix 1.0, hilux 2.8 ou a placa" value=${q} onInput=${e => setQ(e.target.value)} /></label>
         <label class="of-campo of-campo-ano"><span>Ano</span>
           <input id="of-ano" class="inp" inputmode="numeric" maxlength="4" placeholder="Opcional" value=${ano} onInput=${e => setAno(e.target.value.replace(/\D/g, "").slice(0, 4))} /></label>
       </div>
+      ${faixaPlaca}
       <p class="sub">Dado de catálogo: confira antes de aplicar.</p>
     </section>
     ${erro ? html`<div class="aviso aviso-erro">${erro} <button type="button" class="btn-link" onClick=${carregar}>Tentar de novo</button></div>` : null}
     ${!cat && !erro ? html`<${Vazio}>Carregando o catálogo…</${Vazio}>` : null}
-    ${cat && !buscou ? html`<${Vazio}>Digite o modelo do carro. Dá para juntar marca, motor e ano: "gm onix 1.0 2018".</${Vazio}>` : null}
-    ${cat && buscou && !r.oleo.length && !r.filtros.length ? html`<${Vazio}>Nada no catálogo para "${q.trim()}"${r.ano ? " em " + r.ano : ""}. Tente só o nome do modelo, sem a versão.</${Vazio}>` : null}
+    ${cat && !buscou && !ePlaca ? html`<${Vazio}>Digite o modelo do carro ou a placa. Dá para juntar marca, motor e ano: "gm onix 1.0 2018".</${Vazio}>` : null}
+    ${cat && ePlaca && veiculo && !buscou ? html`<${Vazio}>Não achei "${pv ? pv.entendido : ""}" no catálogo. Digite o modelo do jeito mais simples (ex.: "gol 1.6").</${Vazio}>` : null}
+    ${cat && buscou && !ePlaca && !r.oleo.length && !r.filtros.length ? html`<${Vazio}>Nada no catálogo para "${q.trim()}"${r.ano ? " em " + r.ano : ""}. Tente só o nome do modelo, sem a versão.</${Vazio}>` : null}
 
     ${cat && buscou && r.oleo.length ? html`<section class="card" id="of-oleo">
       <h2>Óleo do motor</h2>
       ${!detOleo ? html`<div class="of-oleos">
-        ${oleos.slice(0, OLEO_NO_RESUMO).map((g, i) => html`<div class=${"of-oleo" + (g.divergente ? " of-div" : "")} key=${i}>
+        ${oleos.slice(0, r.ano ? 1 : OLEO_NO_RESUMO).map((g, i) => html`<div class=${"of-oleo" + (g.divergente ? " of-div" : "")} key=${i}>
           <b class="of-litros">${g.litros ? g.litros + " L" : "—"}</b><b class="of-visc">${g.viscosidade || "—"}</b>
           <span class="of-oleo-carro">${g.linha.modelo} ${g.linha.motor}${periodoTexto(g.linha) ? " · " + periodoTexto(g.linha) : ""}</span>
           ${g.divergente ? html`<span class="of-selo of-selo-div">Fontes divergentes: confira</span>` : null}

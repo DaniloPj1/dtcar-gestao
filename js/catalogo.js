@@ -44,7 +44,7 @@ export function prepararCatalogo(d) {
   const paraTecfil = new Map();
   const liga = (cod, tec) => { const k = normCodigo(cod); if (!k) return; const l = paraTecfil.get(k); if (!l) paraTecfil.set(k, [tec]); else if (!l.includes(tec)) l.push(tec); };
   for (const tec of Object.keys(d.conv)) { liga(tec, tec); for (const [, cod] of d.conv[tec]) liga(cod, tec); }
-  return { versao: d.versao, oleo, filtros, conv: d.conv, marcasConv: d.marcasConv, paraTecfil };
+  return { versao: d.versao, oleo: podarDivergencias(oleo), oleoTotal: oleo.length, filtros, conv: d.conv, marcasConv: d.marcasConv, paraTecfil };
 }
 
 // "gm onix 1.0 2018" → palavras ["chevrolet", "onix", "1.0"] e ano 2018 (o ano também pode vir no campo próprio)
@@ -69,15 +69,28 @@ function nota(r, palavras) {
   }
   return n;
 }
+const E_DIESEL = /diesel|\btdi\b|\bcrdi\b|\bctdi\b|\btd\b|\bhdi\b|\bdci\b|\bcdi\b|multijet|duratorq/, E_OTTO = /flex|gasolina|etanol|alcool|\bgnv\b/;
+const E_TURBO = /turbo|\btsi\b|tgdi|\bthp\b|t-?jet|\bgse\b|\btb\b/;
+function notaExtras(r, extras) {
+  if (!extras) return 0; let n = 0;
+  for (const p of extras.inteiras || []) if (!new RegExp("(^|[^a-z0-9])" + p + "($|[^a-z0-9])").test(r._m)) return -99;   // nome do modelo tem de ser palavra inteira (gol não é golf)
+  for (const p of extras.palavras || []) if (r._t.includes(p)) n += 0.5;
+  if (extras.diesel === true) n += E_DIESEL.test(r._t) ? 1 : E_OTTO.test(r._t) ? -3 : 0;
+  if (extras.diesel === false) n += E_DIESEL.test(r._t) ? -3 : 0;
+  if (extras.diesel !== true && extras.turbo !== undefined) n += E_TURBO.test(r._t) === extras.turbo ? 0.5 : -1;   // aspirado não puxa a linha do turbo, e vice-versa
+  return n;
+}
 const porNota = (a, b) => b._n - a._n || a.montadora.localeCompare(b.montadora) || a.modelo.localeCompare(b.modelo, "pt-BR", { numeric: true }) || (b.de || 0) - (a.de || 0);
 
 export const LIMITE_BUSCA = 40;
 // Pesquisa por modelo (e ano). Devolve as linhas de óleo e as aplicações de filtros que servem, da melhor para a pior.
-export function pesquisar(cat, txt, anoCampo) {
+// extras (busca pela placa): palavras-chave que não são obrigatórias, mas põem na frente a linha que as tem (versão, turbo, 16v…),
+// e o combustível do carro, que empurra para trás a linha de outro combustível (diesel x flex/gasolina).
+export function pesquisar(cat, txt, anoCampo, extras) {
   const { palavras, ano } = lerBusca(txt, anoCampo);
   if (!palavras.length || palavras.join("").length < 2) return { palavras, ano, oleo: [], filtros: [], outros: [], totalOleo: 0, totalFiltros: 0 };
   // com o ano informado, a linha que diz de que ano é vem antes da que não diz; a conferida pela oficina vem antes de todas
-  const acha = lista => lista.map(r => { const n = nota(r, palavras); return n < 0 || !serve(r, ano) ? null : { ...r, _n: n + (ano && (r.de || r.ate) ? 1 : 0) + (/^Conferido/.test(r.fonte || "") ? 5 : 0) }; }).filter(Boolean).sort(porNota);
+  const acha = lista => lista.map(r => { const n = nota(r, palavras); const x = n < 0 || !serve(r, ano) ? -99 : notaExtras(r, extras); return x <= -99 ? null : { ...r, _n: n + (ano && (r.de || r.ate) ? 1 : 0) + (/^Conferido/.test(r.fonte || "") ? 5 : 0) + x }; }).filter(Boolean).sort(porNota);
   const oleo = acha(cat.oleo), todos = acha(cat.filtros);
   const tecfil = todos.filter(f => f.ordem === 0), outros = todos.filter(f => f.ordem !== 0).sort((a, b) => b._n - a._n || a.ordem - b.ordem || porNota(a, b));
   return { palavras, ano, oleo: marcarDivergencias(oleo.slice(0, LIMITE_BUSCA)), totalOleo: oleo.length,
@@ -93,31 +106,93 @@ const eTabela = r => !/^(Conferido|Indicado)/.test(r.fonte);
 const turbo = r => /turbo|\btb\b|\btd\b|tgdi|tsi|thp|t-?jet|\bgse\b|diesel|tdi|crdi|ctdi|duratorq|multijet|\bhdi\b|\bdci\b|\bcdi\b/i.test(r.motor + " " + r.modelo);
 const litrosNum = l => Number(String(l).replace(",", ".")) || 0;
 const cruzam = (a, b) => (!a.de && !a.ate) || (!b.de && !b.ate) || ((a.de || 0) <= (b.ate || 9999) && (b.de || 0) <= (a.ate || 9999));
-// Marca "divergente" a linha de óleo que tem outra fonte, para o mesmo modelo, a mesma cilindrada e anos que se cruzam, com litros diferentes.
+// Outra fonte de tabela para o mesmo modelo, a mesma cilindrada e anos que se cruzam, com litros diferentes (>= 0,3 L).
+const parceiraDivergente = (a, linhas) => {
+  const ca = cilindradas(a), la = litrosNum(a.litros); if (!ca || !la || !eTabela(a)) return null;
+  return linhas.find(b => b !== a && eTabela(b) && turbo(a) === turbo(b) && familia(b.fonte) !== familia(a.fonte) && b.montadora === a.montadora && cilindradas(b) === ca
+    && (b._m === a._m || b._m.startsWith(a._m + " ") || a._m.startsWith(b._m + " ")) && cruzam(a, b) && litrosNum(b.litros) && Math.abs(litrosNum(b.litros) - la) >= 0.3) || null;
+};
+// Marca "divergente" a linha de óleo que tem outra fonte discordando.
 export function marcarDivergencias(linhas) {
-  return linhas.map(a => {
-    const ca = cilindradas(a), la = litrosNum(a.litros); if (!ca || !la || !eTabela(a)) return a;
-    const outra = linhas.find(b => b !== a && eTabela(b) && turbo(a) === turbo(b) && familia(b.fonte) !== familia(a.fonte) && b.montadora === a.montadora && cilindradas(b) === ca
-      && (b._m === a._m || b._m.startsWith(a._m + " ") || a._m.startsWith(b._m + " ")) && cruzam(a, b) && litrosNum(b.litros) && Math.abs(litrosNum(b.litros) - la) >= 0.3);
-    return outra ? { ...a, divergente: outra.fonte + " indica " + outra.litros + " L" } : a;
-  });
+  return linhas.map(a => { const outra = parceiraDivergente(a, linhas); return outra ? { ...a, divergente: outra.fonte + " indica " + outra.litros + " L" } : a; });
+}
+
+// Pedido do Danilo em 14/11/2026: "temos que eliminar essa divergência, na dúvida exclua o mais duvidoso e o mais antigo".
+// Quando duas tabelas discordam, fica a mais recente e mais confiável; a outra é descartada. Ordem (da mais duvidosa para a melhor):
+// Petronas 2014 (a mais antiga) < Ipiranga/Maxon (mesma base, "sem data, até ~2017"; o 2022 do Maxon é só a data da publicação) < Omnicraft/Motorcraft 2019 < Texaco 2022.
+// Linha conferida pela oficina ou indicada por loja nunca é descartada. Só descarta quando existe a outra fonte para o mesmo modelo.
+const idadeFonte = f => /petronas/i.test(f) ? 0 : /ipiranga|maxon/i.test(f) ? 1 : /omnicraft|motorcraft/i.test(f) ? 2 : /texaco/i.test(f) ? 3 : 2;
+export function podarDivergencias(linhas) {
+  const grupos = new Map();
+  for (const r of linhas) { const k = r.montadora + "|" + cilindradas(r); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
+  const fora = new Set();
+  for (const g of grupos.values()) {
+    if (g.length < 2) continue;
+    for (const a of g) for (const b of g) {
+      if (a === b || !eTabela(a) || !eTabela(b) || parceiraDivergente(a, [b]) === null) continue;
+      if (idadeFonte(a.fonte) < idadeFonte(b.fonte)) fora.add(a);
+    }
+  }
+  return linhas.filter(r => !fora.has(r));
 }
 
 // Resumo do óleo para a tela (pedido do Danilo em 14/11/2026: "algo mais resumido"): uma linha por resposta diferente.
 // Linhas com os mesmos litros e a mesma viscosidade viram uma só (conta quantas fontes concordam); a linha de tabela com erro
 // conhecido (tem aviso) não entra no resumo, só nos detalhes. Devolve [{ litros, viscosidade, linha, fontes, divergente }].
 export const linhaSuspeita = r => eTabela(r) && !!r.aviso;
-export function resumoOleo(linhas) {
+// Pedido do Danilo em 14/11/2026: "entregar o mais próximo do ano e o mais confiável". Com o ano do carro, a resposta de cima é a da linha
+// cujo período está mais perto do ano (período curto e que contém o ano ganha de "em diante" e de linha sem ano); empate: a conferida pela
+// oficina, depois a fonte mais nova, depois a resposta em que mais fontes concordam.
+const distanciaAno = (r, ano) => !ano ? 0 : (!r.de && !r.ate) ? 1000 : ((r.ate || ano + 40) - (r.de || ano - 40));
+const melhorLinha = (a, b, ano) => (eTabela(a) - eTabela(b)) || distanciaAno(a, ano) - distanciaAno(b, ano) || idadeFonte(b.fonte) - idadeFonte(a.fonte);
+export function resumoOleo(linhas, ano) {
   const grupos = new Map();
   for (const r of linhas) {
     if (linhaSuspeita(r)) continue;
     const k = litrosNum(r.litros) + "|" + norm(r.viscosidade).split(/\s+ou\s+/).sort().join("/");
     const g = grupos.get(k) || { litros: r.litros, viscosidade: r.viscosidade, linha: r, familias: new Set(), divergente: false };
-    g.familias.add(familia(r.fonte)); g.divergente = g.divergente || !!r.divergente; grupos.set(k, g);
+    if (melhorLinha(r, g.linha, ano) < 0) g.linha = r; // a linha que representa a resposta é a mais próxima do ano e mais confiável
+    g.familias.add(familia(r.fonte)); g.divergente = eTabela(g.linha) && (g.divergente || !!r.divergente); grupos.set(k, g); // linha conferida pela oficina não leva o selo de divergente
   }
-  // primeiro a conferida pela oficina, depois a resposta em que mais fontes concordam (empate: a ordem da pesquisa)
   return [...grupos.values()].map((g, i) => ({ litros: g.litros, viscosidade: g.viscosidade, linha: g.linha, fontes: g.familias.size, divergente: g.divergente, _i: i }))
-    .sort((a, b) => (eTabela(a.linha) - eTabela(b.linha)) || b.fontes - a.fontes || a._i - b._i).map(({ _i, ...g }) => g);
+    .sort((a, b) => melhorLinha(a.linha, b.linha, ano) || b.fontes - a.fontes || a._i - b._i).map(({ _i, ...g }) => g);
+}
+
+// ---------- Busca pela placa: do veículo (cadastro ou consulta da placa) para a pesquisa, por PALAVRAS-CHAVE ----------
+// O modelo vem escrito de muitos jeitos ("PRISMA 1.4MT LT", "HILUX CD4X4 SRV", "I/TOYOTA COROLLA XEI20FLEX"). Em vez de comparar o texto
+// inteiro, tiramos as palavras-chave: marca, nome do modelo, cilindrada (do modelo ou do campo motor) e ano; o resto (versão, turbo,
+// 16v, combustível) só ajuda a pôr a linha certa na frente. Se a combinação mais exigente não acha nada, afrouxa: sem a marca, depois sem
+// a cilindrada. Devolve { r, consulta, ano, entendido, chaves } — "entendido" é o que a tela mostra para a pessoa conferir.
+const COMECO_COMPOSTO = new Set(["novo", "nova", "new", "grand", "gran", "grande", "land", "range", "santa", "monte", "pick", "space", "cross", "up"]);
+const SEM_VALOR = new Set(["mt", "at", "aut", "mec", "cv", "hp", "de", "da", "do", "e", "c", "com", "p", "4p", "2p", "5p", "3p", "i", "imp"]);
+export function chavesDoVeiculo(v) {
+  const marca = [...new Set(norm(v.marca).replace(/^i\s*\/\s*/, "").split(/[^a-z0-9]+/).filter(x => x.length > 1).map(x => APELIDOS[x] || x))].slice(0, 2);
+  let m = norm(v.modelo).replace(/^i\s*\/\s*/, "").replace(/(\d),(\d)/g, "$1.$2")
+    .replace(/(\d\.\d)(?=[a-z])/g, "$1 ").replace(/([a-z])(\d\.\d)/g, "$1 $2");   // "1.4MT" → "1.4 MT"; "XEI2.0" → "XEI 2.0"
+  let t = m.split(/[^a-z0-9.]+/).filter(Boolean);
+  if (marca.length && t[0] && marca.includes(APELIDOS[t[0]] || t[0])) t = t.slice(1);   // "TOYOTA COROLLA": a marca veio repetida no modelo
+  const nome = t.length > 1 && COMECO_COMPOSTO.has(t[0]) ? [t[0], t[1]] : t.slice(0, 1);
+  const resto = t.slice(nome.length);
+  let cil = (resto.find(x => /^\d\.\d$/.test(x)) || "");
+  // cilindrada sem ponto, como vem do documento: "ONIX 10MT", "SANDERO EXPR 10", "COROLLA XEI20FLEX" → 1.0, 1.0, 2.0
+  if (!cil) { const g = resto.map(x => x.match(/^(?:[a-z]{2,})?([1-6])(\d)(?:mt|at|m|a|t|flex|fl|tb)?$/)).find(Boolean); if (g) cil = g[1] + "." + g[2]; }
+  if (!cil) { const mm = String(v.motor || "").replace(",", ".").match(/(?<![\d.])(\d\.\d)(?!\d)/) || String(v.motor || "").match(/(?<!\d)([1-6])(\d)\d{2}(?!\d)/); if (mm) cil = mm[2] !== undefined ? mm[1] + "." + mm[2] : mm[1]; }
+  const comb = norm(v.combustivel), diesel = /diesel/.test(comb) || /diesel|\btdi\b|\bcrdi\b/.test(m) ? true : comb && /flex|gasolina|etanol|alcool|gnv/.test(comb) ? false : null;
+  const extras = resto.filter(x => x !== cil && x.length > 1 && !SEM_VALOR.has(x) && !/^\d+[a-z]{0,4}$/.test(x) || /^\d{1,2}v$/.test(x));
+  const anos = String(v.ano_mod || v.ano || v.ano_fab || "").match(/(19|20)\d\d/g) || [];
+  return { marca, nome, cil, extras, diesel, ano: anos.length ? Number(anos[anos.length - 1]) : 0 };   // "2015/2016": vale o ano do modelo
+}
+export function pesquisarVeiculo(cat, v, anoCampo) {
+  const c = chavesDoVeiculo(v), ano = Number(anoCampo) || c.ano;
+  // "NOVO GOL": os catálogos de filtro não escrevem o "novo"; o nome que vale é a última palavra
+  const base = c.nome.length > 1 && /^(novo|nova|new)$/.test(c.nome[0]) ? c.nome.slice(1) : c.nome;
+  const extras = { palavras: c.extras, diesel: c.diesel, inteiras: base, turbo: E_TURBO.test(norm(v.modelo) + " " + norm(v.motor)) };
+  if (!c.nome.length) return { r: null, consulta: "", ano, chaves: c, entendido: "" };
+  const tentativas = [[...c.marca, ...base, c.cil], [...base, c.cil], [...c.marca, ...base], base].map(l => l.filter(Boolean).join(" "));
+  let r = null, consulta = "";
+  for (const q of [...new Set(tentativas)]) { const x = pesquisar(cat, q, ano, extras); if (x.oleo.length || x.filtros.length) { if (!r || (!r.filtros.length && x.filtros.length)) { r = x; consulta = q; } if (x.filtros.length && x.oleo.length) break; } }
+  const entendido = [c.nome.join(" ").toUpperCase(), c.cil, c.diesel === true ? "diesel" : "", ano || ""].filter(Boolean).join(" ");
+  return { r, consulta, ano, chaves: c, entendido };
 }
 
 export const periodoTexto = r => r.de && r.ate ? (r.de === r.ate ? String(r.de) : r.de + " a " + r.ate) : r.de ? r.de + " em diante" : r.ate ? "até " + r.ate : "";

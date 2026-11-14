@@ -5,7 +5,7 @@ const confere = (n: string, c: boolean, x = "") => (c ? ok : falhas).push(n + (x
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { executar, normalizar, temVeiculo, combustivelDe, marcaDe, motorDe, corDe, titulo, erroDaApi, lerSaldo, doCadastro, temBasico, temCompleta, depsDoBanco, ErroUso, Desligada, BASE, atender } = await import("../supabase/functions/placa/index.ts");
+const { executar, normalizar, temVeiculo, combustivelDe, marcaDe, motorDe, corDe, titulo, erroDaApi, lerSaldo, doCadastro, soDoTipo, temBasico, temCompleta, depsDoBanco, ErroUso, Desligada, BASE, atender } = await import("../supabase/functions/placa/index.ts");
 // deno-lint-ignore no-explicit-any
 type L = Record<string, any>;
 
@@ -63,6 +63,11 @@ const SALDO = (c: number) => ({ cliente_id: "x", nome: "DTCar", produto: "vehicl
   precos: { consulta_centavos: 3, extras_centavos: { fipe: 5, renavam: 12, chassi: 12, motor: 12 }, endpoints: { "/v3/completa": { produto: "vehicle_full", centavos: 20 } } }, consultas_disponiveis: Math.floor(c / 3) });
 const ls = lerSaldo(SALDO(997));
 confere("saldo e preços da rota /saldo", ls.saldo_centavos === 997 && ls.saldo_formatado === "R$ 9,97" && ls.consultas_disponiveis === 332 && ls.preco.basico === 3 && ls.preco.completa === 20);
+const l3 = lerSaldo({ ...SALDO(4977), precos: { consulta_centavos: 3, endpoints: { "/v3/completa": { produto: "vehicle_full", centavos: 3 } } } });
+confere("a rota /saldo informa R$ 0,03 para a completa (14/11/2026): vale a tabela, R$ 0,20", l3.preco.completa === 20 && l3.preco.basico === 3 && l3.saldo_centavos === 4977
+  && lerSaldo({ precos: { endpoints: { "/v3/completa": { centavos: 25 } } } }).preco.completa === 25);
+confere("dados guardados: a básica não leva chassi, Renavam nem nº do motor", JSON.stringify(soDoTipo({ marca: "Honda", final_chassi: "05292", chassi: "X", renavam: "1", motor_numero: "M" }, "basico")) === JSON.stringify({ marca: "Honda", final_chassi: "05292" })
+  && soDoTipo({ marca: "Honda", chassi: "X" }, "completa").chassi === "X");
 const lv = lerSaldo({ saldo_centavos: "abc", precos: { consulta_centavos: 0, endpoints: {} } });
 confere("saldo estranho: preço da tabela e saldo vazio", lv.saldo_centavos === null && lv.preco.basico === 3 && lv.preco.completa === 20 && lerSaldo(null).preco.completa === 20);
 confere("o cadastro tem os dados?", temBasico(doCadastro({ marca: "Fiat", modelo: "UNO", ano_mod: 2011, cor: "Branca", combustivel: "Flex" }))
@@ -72,13 +77,22 @@ confere("o cadastro tem os dados?", temBasico(doCadastro({ marca: "Fiat", modelo
 // ---------- API falsa + banco falso
 const chamadas: string[] = [];
 let saldoCentavos = 1000, saldoFora = false;
+// como o API Placas fez em 14/11/2026: a completa desconta R$ 0,03 na hora e o resto (R$ 0,17) só depois da leitura de saldo seguinte,
+// e a rota /saldo informa R$ 0,03 como preço da completa
+let emDuasVezes = false, pendente = 0;
 const falso = (url: string | URL | Request, init: RequestInit = {}) => {
   const u = new URL(String(url)), h = (init.headers || {}) as Record<string, string>;
   chamadas.push(u.pathname);
   const r = (s: number, j: unknown) => Promise.resolve(new Response(JSON.stringify(j), { status: s, headers: { "content-type": "application/json" } }));
   if (!String(url).startsWith(BASE)) return r(404, { error: true, codigo: "not_found" });
   if (h.authorization !== "Bearer chave-certa") return r(401, { error: true, codigo: "nao_autorizado", message: "Token ausente ou inválido." });
-  if (u.pathname === "/v3/saldo") return saldoFora ? r(503, { error: true, codigo: "servico_indisponivel" }) : r(200, SALDO(saldoCentavos));
+  if (u.pathname === "/v3/saldo") {
+    if (saldoFora) return r(503, { error: true, codigo: "servico_indisponivel" });
+    const s = SALDO(saldoCentavos);
+    if (emDuasVezes) s.precos.endpoints["/v3/completa"].centavos = 3;
+    saldoCentavos -= pendente; pendente = 0;
+    return r(200, s);
+  }
   const [, , tipo, placa] = u.pathname.split("/");
   if (placa === "ZZZ9Z99") return r(404, { error: true, codigo: "placa_nao_encontrada", message: "Nenhum registro encontrado para a placa informada." });
   if (placa === "CAI0A00") return r(503, { error: true, codigo: "servico_indisponivel" });
@@ -88,7 +102,7 @@ const falso = (url: string | URL | Request, init: RequestInit = {}) => {
   if (placa === "EST4D00") { saldoCentavos -= 3; return r(200, { basico: { error: false, dados: { fabricante: "FIAT", descricao: "UNO" } }, error: false }); }
   const preco = tipo === "completa" ? 20 : 3;
   if (saldoCentavos < preco) return r(402, { error: true, codigo: "saldo_insuficiente", saldo_centavos: saldoCentavos, valor_centavos: preco });
-  saldoCentavos -= preco;
+  if (emDuasVezes && tipo === "completa") { saldoCentavos -= 3; pendente = 17; } else saldoCentavos -= preco;
   return r(200, tipo === "completa" ? COMPLETA : BASICO);
 };
 const pagas = () => chamadas.filter((c) => /^\/v3\/(basico|completa)\//.test(c)).length;
@@ -117,8 +131,10 @@ confere("cópia é montada de novo pela resposta guardada (melhoria da conversã
 banco[0].resposta = null;
 r = await executar({ acao: "basico", placa: "INT8C36" }, deps());
 confere("cópia sem a resposta inteira: usa os dados guardados", r.origem === "copia" && r.dados.marca === "VELHO");
+const nAntesCompleta = chamadas.length;
 r = await executar({ acao: "completa", placa: "INT8C36" }, deps());
 confere("completa não usa a cópia da básica", r.origem === "api" && r.valor_centavos === 20 && r.dados.chassi === "9BWZZZ377VT004251" && pagas() === 2 && r.saldo_centavos === 977);
+confere("completa lê o saldo antes e depois de pagar (as duas leituras sem custo)", chamadas.slice(nAntesCompleta).join() === "/v3/saldo,/v3/completa/INT8C36,/v3/saldo", chamadas.slice(nAntesCompleta).join());
 r = await executar({ acao: "completa", placa: "INT8C36" }, deps());
 confere("completa repetida sai da cópia", r.origem === "copia" && pagas() === 2);
 r = await executar({ acao: "completa", placa: "INT8C36", forcar: true }, deps());
@@ -126,6 +142,16 @@ confere("consultar de novo (forcar) paga outra vez", r.origem === "api" && pagas
 banco = banco.filter((l) => l.tipo === "completa").slice(0, 1);
 r = await executar({ acao: "basico", placa: "INT8C36" }, deps());
 confere("básica aproveita a completa (com chassi)", r.origem === "copia" && r.tipo === "completa" && r.dados.chassi === "9BWZZZ377VT004251" && pagas() === 3);
+// regra do Danilo (14/11/2026): o que só a completa traz é só do administrador
+for (const [quem, papel] of [["consultor", { membro: true, gestor: true, admin: false }], ["mecânico", { membro: true, gestor: false, admin: false }]] as const) {
+  r = await executar({ acao: "basico", placa: "INT8C36" }, deps(papel));
+  confere(quem + ": a básica aproveita a cópia da completa SEM chassi, Renavam nem nº do motor", r.origem === "copia" && r.tipo === "basico" && r.valor_centavos === 0 && pagas() === 3
+    && r.dados.marca === "Volkswagen" && !("chassi" in r.dados) && !("renavam" in r.dados) && !("motor_numero" in r.dados) && !/9BWZZZ377VT004251/.test(JSON.stringify(r)), JSON.stringify(r));
+}
+{ const guardada = banco[0].resposta; banco[0].resposta = null;
+  r = await executar({ acao: "basico", placa: "INT8C36" }, deps({ membro: true, gestor: true, admin: false }));
+  confere("consultor, cópia sem a resposta inteira: os dados guardados também saem sem chassi e Renavam", r.origem === "copia" && r.tipo === "basico" && !!r.dados.marca && !("chassi" in r.dados) && !("renavam" in r.dados) && !("motor_numero" in r.dados), JSON.stringify(r));
+  banco[0].resposta = guardada; }
 agora = new Date("2027-12-01T15:00:00Z");
 r = await executar({ acao: "basico", placa: "INT8C36" }, deps());
 confere("cópia vencida: consulta de novo", r.origem === "api" && pagas() === 4);
@@ -161,6 +187,21 @@ r = await executar({ acao: "basico", placa: "SLD0A11" }, deps());
 confere("rota /saldo fora do ar: a consulta vale, com o preço da tabela e saldo vazio", r.ok === true && r.origem === "api" && r.valor_centavos === 3 && r.saldo_centavos === null && banco.at(-1)!.saldo_centavos === null);
 saldoFora = false;
 
+// ---------- completa descontada em duas vezes, com a rota /saldo informando R$ 0,03 (o que aconteceu em 14/11/2026 com a MST2E41)
+emDuasVezes = true; saldoCentavos = 4997;
+r = await executar({ acao: "completa", placa: "MST2E41" }, deps());
+confere("completa em duas vezes: grava R$ 0,20 e o saldo de antes menos R$ 0,20 (não os R$ 0,03 e R$ 49,94 da leitura)", r.origem === "api" && r.valor_centavos === 20 && r.saldo_centavos === 4977
+  && banco.at(-1)!.placa === "MST2E41" && banco.at(-1)!.valor_centavos === 20 && banco.at(-1)!.saldo_centavos === 4977 && saldoCentavos === 4977, JSON.stringify([r.valor_centavos, r.saldo_centavos, saldoCentavos]));
+r = await executar({ acao: "saldo" }, deps());
+confere("saldo: a completa aparece a R$ 0,20 mesmo com a rota informando R$ 0,03", r.ok === true && r.preco.completa === 20 && r.saldo_centavos === 4977, JSON.stringify(r));
+r = await executar({ acao: "basico", placa: "BAS1C22" }, deps());
+confere("básica não muda: uma leitura de saldo só, valor e saldo da rota", r.origem === "api" && r.valor_centavos === 3 && r.saldo_centavos === 4974 && chamadas.slice(-2).join() === "/v3/basico/BAS1C22,/v3/saldo", JSON.stringify(r));
+saldoFora = true;
+r = await executar({ acao: "completa", placa: "SLD1B22" }, deps());
+confere("completa com a rota /saldo fora do ar: vale, R$ 0,20 da tabela e saldo vazio", r.ok === true && r.origem === "api" && r.valor_centavos === 20 && r.saldo_centavos === null && banco.at(-1)!.valor_centavos === 20);
+saldoFora = false; saldoCentavos -= pendente; pendente = 0;
+emDuasVezes = false; saldoCentavos = 1000;
+
 // ---------- regra do Danilo: só vai à API quando o sistema não tem os dados
 cadastro = [{ id: "v1", placa: "MTX1A23", marca: "Fiat", modelo: "UNO", ano_fab: 2010, ano_mod: 2011, cor: "Branca", combustivel: "Flex", motor: "", chassi: "", renavam: "" },
   { id: "v2", placa: "PPW2B34", marca: "Ford", modelo: "KA", chassi: "9BFZH55L0K8000001", renavam: "01234567890" },
@@ -193,7 +234,10 @@ cadastro = [];
 const erroDe = async (c: Record<string, unknown>, d: L) => { try { await executar(c, d as never); return ""; } catch (e) { return (e instanceof ErroUso ? "uso:" : "") + (e as Error).message; } };
 const mecanico = { membro: true, gestor: false, admin: false };
 confere("mecânico faz a básica", (await executar({ acao: "basico", placa: "ABC1234" }, deps(mecanico))).encontrado === true);
-confere("mecânico não faz a completa", /^uso:.*administrador e consultor/.test(await erroDe({ acao: "completa", placa: "ABC1234" }, deps(mecanico))));
+antes = chamadas.length;
+confere("mecânico não faz a completa", /^uso:.*só para o administrador/.test(await erroDe({ acao: "completa", placa: "ABC1234" }, deps(mecanico))));
+confere("consultor não faz a completa (só o administrador), nem \"consultar de novo\", e nada é pago", /^uso:.*só para o administrador/.test(await erroDe({ acao: "completa", placa: "ABC1234" }, deps({ membro: true, gestor: true, admin: false })))
+  && /^uso:.*só para o administrador/.test(await erroDe({ acao: "completa", placa: "INT8C36", forcar: true }, deps({ membro: true, gestor: true, admin: false }))) && chamadas.length === antes);
 confere("pendente não consulta", /^uso:.*liberado/.test(await erroDe({ acao: "basico", placa: "ABC1234" }, deps({ membro: false, gestor: false, admin: false }))));
 confere("placa inválida recusada antes de pagar", /^uso:.*Placa inválida/.test(await erroDe({ acao: "basico", placa: "AB12" }, deps())) && /^uso:/.test(await erroDe({ acao: "basico" }, deps())));
 confere("ação desconhecida", /^uso:/.test(await erroDe({ acao: "fipe", placa: "ABC1234" }, deps())));

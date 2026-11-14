@@ -2,14 +2,15 @@
 //
 // Ações (POST com { acao, placa, forcar? }):
 //   basico    — marca, modelo, anos, cor, combustível e motor (cilindrada). Qualquer pessoa da equipe (e_membro).
-//   completa  — o básico + chassi, Renavam e número do motor. Administrador e consultor (e_gestor).
+//   completa  — o básico + chassi, Renavam e número do motor. SÓ o administrador (e_admin) — regra do Danilo, 14/11/2026.
 //   saldo     — saldo e preços da conta no API Placas (não cobra). Só administrador.
 //
 // REGRA DO DANILO (13/11/2026): só vai à API quando o sistema ainda não tem os dados. Ordem:
 //   1º o cadastro de veículos — básica: já tem marca, modelo, ano, cor e combustível; completa: já tem chassi e Renavam →
 //      responde dele, sem pagar;
 //   2º a cópia das consultas já pagas (tabela placa_consultas, v55): a mesma placa não é paga duas vezes — a básica vale
-//      180 dias, a completa 365 (a completa também serve de básica);
+//      180 dias, a completa 365 (a completa também serve de básica — mas chassi, Renavam e nº do motor da cópia só saem
+//      para o administrador: para o resto da equipe o pedido básico devolve só o básico);
 //   3º só então a API (paga).
 // "forcar: true" (botão "Consultar de novo", só na completa) pula o cadastro e a cópia.
 // A resposta diz de onde veio: origem = "cadastro" | "copia" | "api". Veículo que está no cadastro mas com dado faltando:
@@ -17,8 +18,11 @@
 //
 // Trava de gasto: no máximo PLACA_LIMITE_DIA consultas pagas por dia (padrão 100), para um erro de tela nunca esvaziar o saldo.
 // Placa não encontrada e erros não são cobrados pela API e não entram na cópia.
-// Depois de cada consulta paga a função pergunta o saldo (rota /saldo, sem custo) e guarda o valor cobrado de verdade e o
+// Depois de cada consulta paga a função pergunta o saldo (rota /saldo, sem custo) e guarda o valor cobrado e o
 // saldo que sobrou (a tela Ajustes mostra; a resposta leva "saldo_centavos" para o aviso de saldo acabando).
+// COMPLETA (visto na 1ª consulta de verdade, MST2E41 em 14/11/2026): custa R$ 0,20, mas o API Placas desconta em duas vezes
+// (R$ 0,03 na hora, R$ 0,17 logo depois) e a rota /saldo informava R$ 0,03 como preço dela. Por isso: (a) o valor da completa
+// nunca fica abaixo do da tabela (PRECO_PADRAO); (b) a função lê o saldo ANTES de pagar e grava, no máximo, saldo de antes − valor.
 // A cópia guarda a resposta inteira da API ("resposta"): os dados são montados de novo a cada leitura, então melhorar a
 // conversão aqui vale também para as consultas antigas.
 //
@@ -34,9 +38,11 @@ import { withSupabase } from "npm:@supabase/server@1.9.2";
 
 export const BASE = "https://wdapi2.com.br/v3";
 // O site espera no máximo 15 s por resposta (fetchComLimite em js/api.js): a consulta e o saldo, somados, ficam abaixo disso.
-const LIMITE_MS = 9000, LIMITE_SALDO_MS = 2500;
+// Na completa há mais uma leitura de saldo, antes de pagar (LIMITE_SALDO_ANTES_MS): 1,5 + 9 + 2,5 = 13 s.
+const LIMITE_MS = 9000, LIMITE_SALDO_MS = 2500, LIMITE_SALDO_ANTES_MS = 1500;
 const VALIDADE_DIAS = { basico: 180, completa: 365 } as const;
-/** centavos (tabela de valores do API Placas em 13/11/2026); o valor de verdade vem da rota /saldo depois de cada consulta */
+/** centavos (tabela de valores do API Placas em 13/11/2026, confirmada pelo Danilo em 14/11/2026: a completa é R$ 0,20).
+ *  A básica vale o que a rota /saldo informar; a completa, o maior entre o informado e este (ver o cabeçalho). Mudou o preço lá? Mude aqui. */
 export const PRECO_PADRAO = { basico: 3, completa: 20 } as const;
 const COMBUSTIVEIS = ["Flex", "Gasolina", "Etanol", "Diesel", "GNV", "Híbrido", "Elétrico"];
 
@@ -165,6 +171,12 @@ export function doCadastro(v: Json): Dados {
   return { marca: txt(v.marca), modelo: txt(v.modelo), ano_fab: n(v.ano_fab) ?? n(v.ano_mod), ano_mod: n(v.ano_mod) ?? n(v.ano_fab), cor: txt(v.cor), combustivel: txt(v.combustivel),
     motor: txt(v.motor), chassi: txt(v.chassi).replace(/\s/g, "").toUpperCase(), renavam: txt(v.renavam).replace(/\D/g, "") };
 }
+/** Dados já guardados (cópia sem a resposta inteira) só com o que o tipo pedido pode ver: a básica não leva chassi, Renavam nem nº do motor */
+export function soDoTipo(d: Dados, tipo: Tipo): Dados {
+  if (tipo === "completa" || !d) return d;
+  const { chassi: _c, renavam: _r, motor_numero: _m, ...resto } = d;
+  return resto;
+}
 /** O cadastro já tem tudo o que a básica traria? (motor/cilindrada não conta: é detalhe) */
 export const temBasico = (d: Dados) => !!d.marca && !!d.modelo && !!(d.ano_fab || d.ano_mod) && !!d.cor && !!d.combustivel;
 /** O cadastro já tem o que a completa traz a mais? (chassi e Renavam) */
@@ -179,7 +191,8 @@ export function lerSaldo(c: Json | null): { saldo_centavos: number | null; saldo
   return { saldo_centavos: saldo, saldo_formatado: txt(c && c.saldo_formatado) || (saldo === null ? "" : "R$ " + (saldo / 100).toFixed(2).replace(".", ",")),
     consultas_disponiveis: int(c && c.consultas_disponiveis),
     preco: { basico: preco(p.consulta_centavos ?? (c && c.preco_consulta_centavos), PRECO_PADRAO.basico),
-      completa: preco(p.endpoints && p.endpoints["/v3/completa"] && p.endpoints["/v3/completa"].centavos, PRECO_PADRAO.completa) } };
+      // a rota já informou R$ 0,03 para a completa, que custa R$ 0,20 (14/11/2026): nunca abaixo da tabela
+      completa: Math.max(preco(p.endpoints && p.endpoints["/v3/completa"] && p.endpoints["/v3/completa"].centavos, PRECO_PADRAO.completa), PRECO_PADRAO.completa) } };
 }
 
 export type Linha = { placa: string; tipo: Tipo; dados: Dados; resposta?: Json | null; em: string };
@@ -222,7 +235,7 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
   }
   if (acao !== "basico" && acao !== "completa") throw new ErroUso("Ação desconhecida: " + acao);
   const tipo = acao as Tipo;
-  if (tipo === "completa" && !deps.papel.gestor) throw new ErroUso("A consulta completa é só para administrador e consultor.");
+  if (tipo === "completa" && !deps.papel.admin) throw new ErroUso("A consulta completa é só para o administrador.");
   const placa = normPlaca(corpo.placa);
   if (!placaValida(placa)) throw new ErroUso("Placa inválida. Use o formato ABC1234 ou ABC1D23.");
 
@@ -242,10 +255,12 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
       ? (await deps.copia(placa, ["completa"], desde(VALIDADE_DIAS.completa))) || (await deps.copia(placa, ["basico"], desde(VALIDADE_DIAS.basico)))
       : await deps.copia(placa, ["completa"], desde(VALIDADE_DIAS.completa));
     if (c) {
-      const dados = c.resposta && c.resposta.basico ? normalizar(c.resposta, c.tipo) : c.dados;
+      // a cópia da completa serve de básica, mas o que só a completa traz (chassi, Renavam, nº do motor) sai só para o administrador
+      const como: Tipo = c.tipo === "completa" && !deps.papel.admin ? "basico" : c.tipo;
+      const dados = c.resposta && c.resposta.basico ? normalizar(c.resposta, como) : soDoTipo(c.dados, como);
       // consulta paga que veio sem marca e modelo: não paga de novo; quando a conversão melhorar, a mesma cópia passa a servir
       if (!temVeiculo(dados)) return { ok: true, encontrado: false, placa, origem: "copia", em: c.em, valor_centavos: 0 };
-      return { ok: true, encontrado: true, placa, tipo: c.tipo, dados, origem: "copia", em: c.em, valor_centavos: 0, ...cad };
+      return { ok: true, encontrado: true, placa, tipo: como, dados, origem: "copia", em: c.em, valor_centavos: 0, ...cad };
     }
   }
 
@@ -253,6 +268,11 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
   if (!deps.token) return { ...SEM_CHAVE, placa };
   if ((await deps.pagasHoje()) >= deps.limiteDia) {
     return { ok: false, placa, erro: `Limite de ${deps.limiteDia} consultas pagas por dia atingido (proteção do saldo). Amanhã volta a funcionar.` };
+  }
+  // completa: o saldo de ANTES (rota sem custo), porque o desconto dela não aparece inteiro na leitura de depois (ver o cabeçalho)
+  let saldoAntes: number | null = null;
+  if (tipo === "completa") {
+    try { const s = await chamar(deps, "/saldo", LIMITE_SALDO_ANTES_MS); if (s.status === 200) saldoAntes = lerSaldo(s.corpo).saldo_centavos; } catch (_e) { /* segue sem o saldo de antes */ }
   }
   const r = await chamar(deps, "/" + tipo + "/" + placa);
   if (r.status !== 200 || !r.corpo || r.corpo.error === true) {
@@ -263,9 +283,11 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
   const blocoBasico = r.corpo.basico;
   if (!blocoBasico || blocoBasico.error === true || !blocoBasico.dados) return { ok: true, placa, encontrado: false };
   const dados = normalizar(r.corpo, tipo);
-  // saldo que sobrou e o preço de verdade (rota sem custo); se não responder, fica o preço da tabela
+  // saldo que sobrou e o preço (rota sem custo); se não responder, fica o preço da tabela
   let valor: number = PRECO_PADRAO[tipo], saldo: number | null = null;
   try { const s = await chamar(deps, "/saldo", LIMITE_SALDO_MS); if (s.status === 200) { const l = lerSaldo(s.corpo); valor = l.preco[tipo]; saldo = l.saldo_centavos; } } catch (_e) { /* fica o preço da tabela */ }
+  // completa: o saldo gravado nunca passa do saldo de antes menos o valor dela (a leitura de depois ainda não tem o desconto inteiro)
+  if (saldoAntes !== null) saldo = Math.max(0, Math.min(saldo ?? saldoAntes, saldoAntes - valor));
   // a API respondeu com o bloco básico: a consulta foi cobrada. Guarda SEMPRE (mesmo sem marca e modelo, para não pagar de novo
   // pela mesma placa e poder corrigir a conversão depois, já que a resposta inteira fica guardada).
   await deps.guardar({ placa, tipo, dados, resposta: r.corpo, valor_centavos: valor, saldo_centavos: saldo, por: deps.usuario });

@@ -68,7 +68,7 @@ const banco: Banco = {
     if (nome === "sicredi" && op.body?.acao === "baixar") return Promise.resolve({ data: { ok: true }, error: null });
     if (nome === "sicredi" && sicrediRecusa) return Promise.resolve({ data: { erro: sicrediRecusa === "rede" ? "O Sicredi não respondeu em 25 s." : "Pedido recusado pelo Sicredi: CEP inválido" }, error: null });
     if (nome === "sicredi") return Promise.resolve({ data: { nossoNumero: "260000011", linhaDigitavel: "74891", codigoBarras: "748", qrCode: "000201x", txid: "t" }, error: null });
-    if (nome === "placa" && op.body?.placa === "SEM0A00") return Promise.resolve({ data: null, error: { message: "erro", context: { json: () => Promise.resolve({ erro: "A consulta completa é só para administrador e consultor." }) } } });
+    if (nome === "placa" && op.body?.placa === "SEM0A00") return Promise.resolve({ data: null, error: { message: "erro", context: { json: () => Promise.resolve({ erro: "A consulta completa é só para o administrador." }) } } });
     if (nome === "placa" && op.body?.acao === "saldo") return Promise.resolve({ data: { ok: true, saldo: { saldo_centavos: 950 } }, error: null });
     if (nome === "placa") return Promise.resolve({ data: op.body.placa === "FOR4A00" ? { ok: false, erro: "Acabou o saldo do API Placas." }
       : { ok: true, encontrado: true, placa: op.body.placa, tipo: op.body.acao, origem: op.body.forcar ? "api" : "cadastro", dados: { marca: "FIAT", modelo: "UNO" }, valor_centavos: op.body.forcar ? 20 : 0 }, error: null });
@@ -472,7 +472,7 @@ confere("consultar_placa: completa de novo manda forcar", (acordadas[0][1] as L)
 rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "FOR4A00" } });
 confere("consultar_placa: erro da função (sem saldo) vira erro da ferramenta", rp.corpo.result?.isError === true && /saldo/.test(rp.corpo.result?.content?.[0]?.text || ""));
 rp = await rpc("tools/call", { name: "consultar_placa", arguments: { placa: "SEM0A00", tipo: "completa" } });
-confere("consultar_placa: recusa da função com a mensagem dela", rp.corpo.result?.isError === true && /administrador e consultor/.test(rp.corpo.result?.content?.[0]?.text || ""));
+confere("consultar_placa: recusa da função com a mensagem dela", rp.corpo.result?.isError === true && /só para o administrador/.test(rp.corpo.result?.content?.[0]?.text || ""));
 acordadas.length = 0;
 rp = await rpc("tools/call", { name: "consultar_placa", arguments: { tipo: "saldo" } });
 confere("consultar_placa: saldo", (acordadas[0][1] as L).acao === "saldo" && JSON.parse(rp.corpo.result?.content?.[0]?.text || "{}").saldo?.saldo_centavos === 950);

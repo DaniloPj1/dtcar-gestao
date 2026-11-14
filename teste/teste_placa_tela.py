@@ -237,6 +237,33 @@ try:
       pm.click("button:has-text('Editar ficha'), button:has-text('Ver ficha')"); pm.wait_for_timeout(600)
       chk("mecânico: na ficha não há botões de consulta", pm.query_selector("#v-consulta-completa") is None and pm.query_selector("#v-buscar-placa") is None)
     ctx2.close()
+
+    # ================= consultor: busca a básica; a consulta completa é só do administrador (regra do Danilo, 14/11/2026) =================
+    for nome, larg, alt in (("PC", 1400, 950), ("celular", 390, 844)):
+      ctx3 = b.new_context(viewport={"width": larg, "height": alt}); pc = ctx3.new_page()
+      pc.on("pageerror", lambda e: erros.append("PAGEERR consultor " + str(e)))
+      pc.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+      pc.add_init_script("if (window.__DB) window.__DB.perfis[0].papel = 'consultor';")
+      pc.goto(U + "#/cadastros?aba=veiculos"); pc.wait_for_timeout(2500)
+      pc.click("button:has-text('+ Novo')"); pc.wait_for_timeout(400)
+      pc.fill("#v-placa", "CON1A11"); pc.wait_for_timeout(1600)
+      cc = pc.evaluate("((window.__PLACA || {}).chamadas || [])")
+      chk("consultor (" + nome + "): a ficha nova busca a básica sozinha", len(cc) == 1 and cc[0]["acao"] == "basico" and pc.input_value("#v-marca") == "Volkswagen" and pc.input_value("#v-chassi") == "", cc)
+      chk("consultor (" + nome + "): sem botão nem texto da consulta completa", pc.query_selector("#v-consulta-completa") is None and "completa" not in pc.inner_text(".modal").lower(), pc.inner_text(".modal")[-400:])
+      pc.fill("#v-cor", ""); pc.wait_for_timeout(300)
+      chk("consultor (" + nome + "): faltando dado, continua o botão Buscar dados pela placa (básica), sem falar da completa",
+          pc.query_selector("#v-buscar-placa") is not None and pc.query_selector("#v-consulta-completa") is None and "A busca traz marca" in pc.inner_text(".placa-botoes") and "completa" not in pc.inner_text(".placa-botoes").lower(), pc.inner_text(".modal")[-400:])
+      if nome == "PC": pc.screenshot(path=SAIDA + "/placa-consultor-ficha.png")
+      ctx3.close()
+    # administrador no celular: o botão da completa continua lá
+    ctx4 = b.new_context(viewport={"width": 390, "height": 844}); pa = ctx4.new_page()
+    pa.on("pageerror", lambda e: erros.append("PAGEERR admin celular " + str(e)))
+    pa.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    pa.goto(U + "#/cadastros?aba=veiculos"); pa.wait_for_timeout(2500)
+    pa.click("button:has-text('+ Novo')"); pa.wait_for_timeout(400)
+    pa.fill("#v-placa", "ADM1A11"); pa.wait_for_timeout(1600)
+    chk("administrador (celular): o botão da consulta completa continua", pa.query_selector("#v-consulta-completa") is not None and "A completa traz também chassi" in pa.inner_text(".placa-botoes").replace("\xa0", " "))
+    ctx4.close()
     b.close()
 finally:
   srv.terminate()

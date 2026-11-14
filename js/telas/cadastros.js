@@ -150,8 +150,10 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
   // ---- Consulta pela placa (v55). Regra do Danilo: só busca quando o sistema ainda não tem os dados.
   // Sozinha: veículo novo, placa que não está no cadastro e marca/modelo em branco (consulta básica).
   // Pelos botões: "Buscar dados pela placa" (básica, quando falta dado) e "Consulta completa" (chassi, Renavam e nº do motor).
+  // A completa é só do administrador (regra do Danilo, 14/11/2026): para o consultor o botão não aparece e a função "placa" recusa.
   // Só preenche campo em branco; se a placa for trocada depois, o que veio da placa antiga sai dos campos.
   const plDig = normPlaca(d.placa), [consulta, setConsulta] = useState({ estado: "" });
+  const podeCompleta = !!perfil && perfil.papel === "admin";
   const ultima = useRef(null), aberto = useRef(true), placaAgora = useRef(plDig);   // ultima: { placa, ficha, linha } que a consulta pôs nos campos
   placaAgora.current = plDig;
   useEffect(() => () => { aberto.current = false; }, []);
@@ -180,6 +182,7 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
   const temCompleta = chassiForm.length === 17 && renavamForm.length >= 9;
   const NOME_CAMPO = { marca: "marca", modelo: "modelo", ano_fab: "ano de fabricação", ano_mod: "ano do modelo", cor: "cor", combustivel: "combustível", motor: "motor", chassi: "chassi", renavam: "Renavam" };
   const consultar = async tipo => {
+    if (tipo === "completa" && !podeCompleta) return;
     if (!placaValida(plDig)) return setConsulta({ estado: "erro", msg: "Digite a placa primeiro (ABC1234 ou ABC1D23)." });
     let forcar = false;
     if (tipo === "completa" && temCompleta) {   // já temos chassi e Renavam: só consulta de novo se ele confirmar
@@ -246,11 +249,11 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
       </div>
       <div class="campo"><label>Combustível</label><${Seg} rotulo="Combustível" opcoes=${COMBUSTIVEIS.map(c => [c, "info"])} valor=${d.combustivel} onEscolha=${v => set("combustivel", v)} /></div>
       ${pode_ && !jaCadastrada ? html`<div class="placa-consulta">
-        <div class="placa-botoes">
+        ${faltaBasico || podeCompleta ? html`<div class="placa-botoes">
           ${faltaBasico ? html`<button type="button" class="btn btn-sm" id="v-buscar-placa" disabled=${consulta.estado === "buscando" || auto.estado === "buscando"} onClick=${() => consultar("basico")}>${consulta.estado === "buscando" && consulta.tipo === "basico" ? "Buscando…" : "Buscar dados pela placa"}</button>` : null}
-          <button type="button" class="btn btn-sm" id="v-consulta-completa" disabled=${consulta.estado === "buscando"} onClick=${() => consultar("completa")}>${consulta.estado === "buscando" && consulta.tipo === "completa" ? "Consultando…" : "Consulta completa pela placa"}</button>
-          <span class="dica">${faltaBasico ? "A busca traz marca, modelo, ano, cor e combustível (" + reais(PRECO_PLACA.basico) + "). " : ""}A completa traz também chassi, Renavam e nº do motor (${reais(PRECO_PLACA.completa)}). Só é cobrado o que o sistema ainda não tem.</span>
-        </div>
+          ${podeCompleta ? html`<button type="button" class="btn btn-sm" id="v-consulta-completa" disabled=${consulta.estado === "buscando"} onClick=${() => consultar("completa")}>${consulta.estado === "buscando" && consulta.tipo === "completa" ? "Consultando…" : "Consulta completa pela placa"}</button>` : null}
+          <span class="dica">${faltaBasico ? "A busca traz marca, modelo, ano, cor e combustível (" + reais(PRECO_PLACA.basico) + "). " : ""}${podeCompleta ? html`A completa traz também chassi, Renavam e nº do motor (${reais(PRECO_PLACA.completa)}). Só é cobrado o que o sistema ainda não tem.` : "Só é cobrado o que o sistema ainda não tem."}</span>
+        </div>` : null}
         ${consulta.msg ? html`<div class=${consulta.estado === "erro" ? "dica erro" : "dica"} role="status">${consulta.msg}${consulta.aviso ? html` <b>${consulta.aviso}</b>` : null}</div>` : null}
         ${cd ? html`<div class="placa-resultado"><b>Na consulta:</b> ${[[cd.marca, cd.modelo].filter(Boolean).join(" "), anoFabMod(cd.ano_fab, cd.ano_mod), cd.cor, cd.combustivel || cd.combustivel_detran, cd.motor ? "motor " + cd.motor : "",
             cd.chassi ? "chassi " + cd.chassi : cd.final_chassi ? "chassi final " + cd.final_chassi : "", cd.renavam ? "Renavam " + cd.renavam : "", cd.motor_numero ? "nº do motor " + cd.motor_numero : "",

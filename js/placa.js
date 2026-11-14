@@ -3,7 +3,8 @@
 //   - Placa que já está no cadastro: as telas usam o cadastro e nem chamam a função.
 //   - Placa nova: a função ainda confere o cadastro e a cópia das consultas já pagas antes de pagar outra.
 // A busca automática (ao digitar a placa) é sempre a "básica" (marca, modelo, anos, cor, combustível, motor) e pode ser
-// desligada em Ajustes (cfg.placaAuto = false). A "completa" (chassi, Renavam, nº do motor) só sai pelo botão, na ficha do veículo.
+// desligada em Ajustes (cfg.placaAuto = false). A "completa" (chassi, Renavam, nº do motor) só sai pelo botão, na ficha do veículo,
+// e só para o administrador (regra do Danilo, 14/11/2026): para o resto da equipe a função devolve só o básico, mesmo da cópia da completa.
 // A busca só preenche campo em branco: nunca troca o que a pessoa digitou.
 import { html, useState, useEffect, useRef } from "./lib.js";
 import { api } from "./api.js";
@@ -180,7 +181,7 @@ export function CartaoPlaca({ auto, onAuto }) {
       Hoje: ${doDia.length}${s && s.limite_dia ? " de " + s.limite_dia + " (limite de proteção do saldo)" : ""}.</p>` : null}
     <label class="linha-check"><input type="checkbox" checked=${auto !== false} onChange=${e => onAuto(e.target.checked)} />
       <span>Buscar sozinho ao digitar uma placa que não está no cadastro (${reais(PRECO_PLACA.basico)} por placa nova)</span></label>
-    <span class="dica">A consulta completa (chassi, Renavam e nº do motor, ${reais(PRECO_PLACA.completa)}) é sempre pelo botão, na ficha do veículo.</span>
+    <span class="dica">A consulta completa (chassi, Renavam e nº do motor, ${reais(PRECO_PLACA.completa)}) é só do administrador, sempre pelo botão, na ficha do veículo.</span>
     <div class="acoes"><button type="button" class="btn btn-sm" disabled=${lendo} onClick=${ler}>${lendo ? "Conferindo…" : "Conferir de novo"}</button>
       <a class="btn btn-sm" href="https://apiplacas.com.br/dashboard" target="_blank" rel="noopener">Abrir o painel do API Placas</a></div>
   </section>`;

@@ -142,6 +142,8 @@
       if (P.situacao === "semresposta") return { ok: false, semRede: true, erro: "Sem resposta da consulta de placa (sem conexão, ou a consulta ainda não foi ligada no Supabase)." };
       if (body.acao === "saldo") return { ok: true, saldo_centavos: P.saldo, saldo_formatado: "R$ " + (P.saldo / 100).toFixed(2).replace(".", ","), consultas_disponiveis: Math.floor(P.saldo / 3), preco: { basico: 3, completa: 20 }, limite_dia: 100, pagas_hoje: 0 };
       if (P.situacao === "saldo") return { ok: false, sem_saldo: true, erro: "Acabou o saldo da consulta de placa (API Placas)." };
+      // a completa é só do administrador (regra do Danilo, 14/11/2026): a função recusa os outros
+      if (body.acao === "completa" && db.perfis[0].papel !== "admin") return { ok: false, erro: "A consulta completa é só para o administrador." };
       if (body.placa === "ZZZ9Z99") return { ok: true, encontrado: false, placa: body.placa };
       const cad = db.veiculos.find(v => v.placa === body.placa);
       if (cad && body.acao === "basico" && cad.marca && cad.modelo && cad.ano_fab && cad.cor && cad.combustivel) return { ok: true, encontrado: true, placa: body.placa, tipo: "basico", origem: "cadastro", dados: cad, valor_centavos: 0 };

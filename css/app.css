@@ -1429,3 +1429,47 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .resos-geral tfoot td.forte{font-size:1.25em}
 @media (max-width:640px){.resos-escolha{margin:10px 10px 0}.resos-faixa .dir{margin-left:0;text-align:left}.resos .imp-tab{font-size:11px}.resos .resos-geral{font-size:10.5px}.resos-geral th,.resos-geral td{padding:3px 4px}.resos-geral tfoot td,.resos-geral tfoot td.forte{font-size:1em}}
 @media print{.resos-os,.resos-geral,.resos-fecho{break-inside:avoid}}
+
+/* ===== Óleo e filtros por veículo (14/11/2026). Classes só desta tela (of-): não mexem em nenhuma outra. ===== */
+.of-pagina{max-width:860px}
+.of-busca{display:grid;grid-template-columns:minmax(0,1fr) 130px;gap:12px}
+.of-campo{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:13.5px}
+.of-oleos{display:flex;flex-direction:column}
+.of-oleo{display:flex;flex-wrap:wrap;align-items:baseline;gap:4px 14px;padding:8px 2px;border-bottom:1px solid var(--line)}
+.of-oleo:last-child{border-bottom:0}
+.of-litros,.of-visc{font:700 21px var(--f-display);font-variant-numeric:tabular-nums;white-space:nowrap}
+.of-litros{min-width:64px}
+.of-oleo-carro{flex:1 1 220px;min-width:0;color:var(--muted);font-size:13.5px}
+.of-oleo-pe{flex:1 1 100%}
+.of-selo{font-size:12.5px;font-weight:600;border-radius:6px;padding:2px 8px}
+.of-selo-div{background:var(--warn-soft);color:var(--warn)}
+.of-selo-aviso{background:var(--brand-soft);color:var(--brand-strong)}
+.of-mais,.of-outros{align-self:flex-start}
+.of-app{border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.of-app header{background:var(--surface-2);padding:8px 12px;border-bottom:1px solid var(--line)}
+.of-app footer{padding:7px 12px}
+.of-filtro{display:grid;grid-template-columns:104px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 12px;border-bottom:1px solid var(--line)}
+.of-app .of-filtro:last-child{border-bottom:0}
+.of-tipo{font-weight:700}
+.of-nada,.of-traco{color:var(--muted);font-weight:500}
+.of-cods{display:flex;flex-wrap:wrap;gap:2px 18px;align-items:baseline;min-width:0}
+.of-marca small{font-size:12.5px;color:var(--muted);font-weight:600}
+.of-marca b,.of-est-item b{font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.of-semsaldo{flex:1 1 100%;font-size:12.5px;color:var(--muted)}
+.of-filtro.of-tem{background:var(--ok-soft)}
+.of-est-item em{font-style:normal;font-size:12px;font-weight:700;color:var(--ok);border:1px solid var(--ok);border-radius:5px;padding:1px 6px;margin-right:8px}
+.of-est-item b{font-size:16px}
+.of-conv-lista{display:flex;flex-direction:column}
+.of-conv-lista div{display:grid;grid-template-columns:140px minmax(0,1fr);gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
+.of-conv-lista span{color:var(--muted);font-weight:600}
+.of-conv-lista b{overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+/* botão da barra de cima (só PC): o menu lateral já ocupa a altura toda em 1366x768, então a tela entra por aqui e pelo "Mais" do celular */
+.bt-oleo{display:inline-flex;align-items:center;gap:6px}.bt-oleo svg{width:16px;height:16px}
+@media (max-width:1500px){.bt-oleo span{display:none}.bt-oleo{padding:0 10px}}
+@media (max-width:1100px){.bt-oleo{display:none}}
+@media (max-width:640px){
+  .of-busca{grid-template-columns:minmax(0,1fr) 96px}
+  .of-filtro{grid-template-columns:minmax(0,1fr) auto;gap:4px 10px}.of-filtro .of-conv{grid-column:2;grid-row:1}
+  .of-cods,.of-nada{grid-column:1/-1}
+  .of-conv-lista div{grid-template-columns:110px minmax(0,1fr)}
+}

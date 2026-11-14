@@ -15,6 +15,7 @@ export function Mais() {
     <section class="card"><div class="lista">
       ${it("/agenda", "Agenda", "Serviços agendados da semana", I.calendario)}
       ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
+      ${it("/oleo-filtros", "Óleo e filtros", "Litros, viscosidade e filtros pelo modelo do carro", I.gota)}
       ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}
       ${pode(perfil, "verValores") ? it("/balcao", "Venda de balcão", "Vender peças e serviços sem O.S.", I.carrinho) : null}
       ${pode(perfil, "cadastrar") ? it("/sefaz", "Notas da SEFAZ", "Notas de compra emitidas para o CNPJ da oficina", I.nuvem) : null}

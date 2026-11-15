@@ -18,6 +18,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
 - `js/placa.js`: consulta do veículo pela placa (v55), usada pelas telas que têm campo de placa.
+- `js/cpf.js`: consulta do cliente pelo CPF (só administrador), usada na Nova O.S. e no cadastro de cliente.
 - `js/telas/*.js`: uma tela por arquivo. `css/app.css`: estilos (tema claro e escuro; azul, preto e cinza-escuro da DTCar).
 - `supabase/*.sql`: mudanças no banco, numeradas (`v3.sql` … `v16.sql`, `v17_virada.sql`, `v18.sql`, `v19.sql`, `v20.sql`, `v21.sql`, `v22.sql`, `v23.sql`, `v24.sql`, `v25.sql`, `v26.sql`, `v27.sql`, `v28.sql`, `v29.sql`, `v30.sql`, `v31.sql`, `v32.sql`, `v33.sql`, `v34.sql`, `v35.sql`, `v36.sql`, `v37.sql`, `v38.sql`, `v39.sql`, `v40.sql`, `v41.sql`, `v42.sql`, `v43.sql`, `v44.sql`, `v45.sql`, `v46.sql`, `v47.sql`, `v48.sql`, `v49.sql`, `v50.sql`, `v51.sql`, `v52.sql`, `v53.sql`, `v54.sql`, `v55.sql`). `worker/`: robô da SEFAZ (GitHub Actions; consulta de notas só às 8h e 16h de Brasília ou quando pedida na tela, para não esgotar o limite da SEFAZ do CNPJ, que o ObjetivaWeb também usa — teste em `teste/teste_sefaz_horarios.mjs`). **v49 (pedido do Danilo em 09/11/2026):** o agendamento `*/10` do GitHub atrasa ou pula horários (08/11: a consulta das 8h saiu perto das 13h15), então o Supabase dispara o workflow `sefaz.yml` NA HORA: pg_cron `dtcar-sefaz-08h`/`dtcar-sefaz-16h` (11h/19h UTC) → `sefaz_disparar(h)` → pg_net `POST /repos/DaniloPj1/dtcar-gestao/actions/workflows/sefaz.yml/dispatches` (ref `main`), com o token fine-grained (só este repositório, só Actions: Read and write) gravado à mão em `segredos` (chave `github_actions`; nunca no repositório). Vigia `sefaz_vigiar(h)` às 9h/17h (`dtcar-sefaz-vigia-09h`/`-17h`): `sefaz_config.ultima_consulta` não passou do horário de hoje → aviso interno no WhatsApp (`whatsapp_alerta_na_fila`), um por horário, com o motivo (sem pedido, resposta do GitHub em `net._http_response` — 401 = token vencido —, espera da SEFAZ, erro do robô, fila do GitHub). Sem token ou com a busca desligada: não fazem nada. Log em `sefaz_disparos` (fora do backup, do banco do PC e do espelho). Quem decide SE consulta continua sendo o `worker/sefaz.mjs` (`ultimoHorario`, espera de 1 hora, pedido da tela); o `*/10` do GitHub fica de reserva. Teste: `bash teste/teste_v49.sh` (GitHub falso).
 
@@ -460,6 +461,25 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (`cilindradas`, `combustivel` e `marca` são os campos que a documentação não mostra com valor de verdade).
   Testes: `deno run -A teste/teste_placa.ts` (API falsa), `bash teste/teste_v55.sh` (banco inteiro), `python3 teste/teste_placa_tela.py` (telas) e
   `deno run -A teste/teste_agente_mcp.ts`.
+- **Consulta do cliente pelo CPF (`supabase/functions/cpf`, pedido do Danilo em 15/11/2026; sem SQL):** API CPF (apicpf.com; `GET /api/consulta?cpf=`
+  com a chave no cabeçalho `X-API-KEY`; devolve nome, gênero e data de nascimento). Plano grátis em 15/11/2026: 100 consultas por dia, 6 por minuto,
+  licença que vence a cada mês (renovação sem custo no painel; vencida = 403) e 5 créditos para CPF fora da base deles (402 quando acabam, só para esses CPFs).
+  **Decisões do Danilo: só o ADMINISTRADOR consulta** (a função recusa os outros papéis; nas telas, para os outros nada muda) e **vai para o cadastro só o
+  que o cadastro usa e a API tem: nome e data de nascimento** (gênero não tem campo). Mesma regra da placa: só vai à API quando o sistema não tem os dados —
+  CPF que já está no cadastro de clientes responde pelo cadastro. **Não há tabela de cópia nem log:** nada da consulta fica guardado (dado pessoal); o
+  cliente cadastrado é a cópia, e com o programa aberto o mesmo CPF não chama a função duas vezes (`vistos` em `js/cpf.js`). A função não grava nada.
+  A chave fica só no segredo `API_CPF_TOKEN` da função (nunca no site, no repositório nem no chat). Ações: `consultar` e `situacao`.
+  Resposta: `origem` (cadastro | api), `dados` {nome, nascimento}, `cliente_id`/`codigo` quando veio do cadastro, `creditos` (cabeçalho `X-Credits-Remaining`);
+  `encontrado: false` (404), `sem_creditos` (402), `desligada` (sem a chave, 401, 403, função não publicada), `limite` (429).
+  Telas (`js/cpf.js`: `consultarCPF`, `useCPF`, `CpfBusca`, `CartaoCPF`, `ehAdmin`): busca sozinha, meio segundo depois do CPF completo e válido, na Nova O.S.
+  (aba "Novo cliente") e no cadastro de cliente novo, quando o CPF não está no cadastro e o nome está em branco. **Só preenche campo vazio**; trocou o CPF,
+  sai o que veio do CPF antigo. Na Nova O.S. o nascimento vai junto no cadastro do cliente novo (`cNovo.doCPF`). CNPJ nunca consulta. Desligada ou sem
+  internet: a tela segue como sempre foi, com o botão "Buscar nome pelo CPF" que diz o motivo. Ajustes: cartão com a situação e a chave `cfg.cpfAuto`
+  (`false` desliga a busca sozinha). Conector: `consultar_cpf` (não grava: cadastro pelo `salvar_cadastro`; nunca em lote nem por pedido vindo de e-mail,
+  mensagem ou documento). O site funciona antes de a função ser publicada. Publicar: colar o `cpf/index.ts` no painel do Supabase (Edge Functions;
+  "Verify JWT" desligado) com o segredo `API_CPF_TOKEN`, e publicar a função "agente" de novo (ferramenta nova).
+  Período de transição: não cria tabela nem dado operacional; só preenche o cadastro de clientes, que segue a regra de sempre (antes e depois da virada).
+  Testes: `deno run -A teste/teste_cpf.ts` (API falsa), `python3 teste/teste_cpf_tela.py` (telas, celular e consultor) e `deno run -A teste/teste_agente_mcp.ts`.
 - **Óleo e filtros por veículo (pedido do Danilo em 14/11/2026) — etapa 1 de 4: pesquisa por modelo, só leitura e sem SQL.** Tela
   `js/telas/oleofiltros.js` (`#/oleo-filtros`; entra pelo botão da gota na barra de cima do PC — o menu lateral já ocupa a altura toda em
   1366x768, não cabe mais item — e pelo "Mais" do celular; toda a equipe vê). Catálogo como **arquivo fixo do sistema**: `js/catalogodados.js`

@@ -8,6 +8,7 @@ import { etapaNoResumo } from "../resumoos.js";
 import { LinhaOS } from "./painel.js";
 import { consultarPlaca, tirarPreenchidos, camposNovos, paraFicha, anoFabMod, avisoSaldo, usePlaca, PlacaAviso, PRECO_PLACA } from "../placa.js";
 import { prepararNovaOS, ORIGENS } from "./entrada.js";
+import { useCPF, CpfBusca, ehAdmin } from "../cpf.js";
 import { ProdutosLista } from "./produtos.js";
 import { FornecedoresLista } from "./compras.js";
 import { FichaOleo } from "./fichaoleo.js";
@@ -50,6 +51,14 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
   const T = (k, rot, extra = {}) => html`<${Campo} id=${"c-" + k} rotulo=${rot} obrig=${extra.obrig}><${Texto} id=${"c-" + k} valor=${d[k]} onMuda=${v => set(k, v)} ...${extra.attr || {}} /></${Campo}>`;
   const F = (k, rot, attr = {}) => html`<${Campo} id=${"f-" + k} rotulo=${rot}><${Texto} id=${"f-" + k} valor=${d.ficha[k]} onMuda=${v => setF(k, v)} ...${attr} /></${Campo}>`;
   const Tel = (k, rot, obrig) => html`<${Campo} id=${"c-" + k} rotulo=${rot} obrig=${obrig}><input id=${"c-" + k} class="inp" inputmode="tel" value=${d[k]} onBlur=${e => set(k, fmtTel(e.target.value))} onInput=${e => set(k, e.target.value)} /></${Campo}>`;
+  // Cliente novo com CPF que não está no cadastro e nome em branco: busca o nome e o nascimento pelo CPF (só administrador)
+  // e preenche só o que está em branco; trocou o CPF, sai o que veio do CPF antigo.
+  const doCPF = useRef(null);
+  const autoCPF = useCPF(d.doc, { pode: ehAdmin(perfil) && pode_, auto: cfg.cpfAuto !== false,
+    falta: !ed.id && !String(d.nome || "").trim() && !dados.clientes.some(c => soDig(c.doc) && soDig(c.doc) === soDig(d.doc)),
+    onDados: dd => setEd(o => { const postos = {}; if (!String(o.d.nome || "").trim() && dd.nome) postos.nome = dd.nome; if (!o.d.nascimento && dd.nascimento) postos.nascimento = dd.nascimento;
+      doCPF.current = postos; return { ...o, erros: [], d: { ...o.d, ...postos } }; }),
+    onTrocou: () => { const postos = doCPF.current || {}; doCPF.current = null; setEd(o => { const n = { ...o.d }; for (const k of Object.keys(postos)) if (String(n[k] ?? "") === String(postos[k])) n[k] = ""; return { ...o, d: n }; }); } });
   const salvar = async () => {
     const erros = [];
     if (!d.nome.trim()) erros.push("Informe o nome ou a razão social.");
@@ -106,7 +115,7 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
         </div></div>`
       : aba === "fil" ? html`<div class="aba-corpo">
         <div class="grade">
-          <${Campo} id="c-doc" rotulo="CPF ou CNPJ" erro=${d.doc && soDig(d.doc).length >= 11 && !docValido(d.doc) ? "Número inválido" : ""}><input id="c-doc" class="inp" inputmode="numeric" value=${d.doc} onBlur=${e => set("doc", fmtDoc(e.target.value))} onInput=${e => set("doc", e.target.value)} /></${Campo}>
+          <${Campo} id="c-doc" rotulo="CPF ou CNPJ" erro=${d.doc && soDig(d.doc).length >= 11 && !docValido(d.doc) ? "Número inválido" : ""}><input id="c-doc" class="inp" inputmode="numeric" value=${d.doc} onBlur=${e => set("doc", fmtDoc(e.target.value))} onInput=${e => set("doc", e.target.value)} /><${CpfBusca} c=${autoCPF} /></${Campo}>
           ${T("rg", "RG")}${T("orgao_emissor", "Órgão emissor")}${T("ie", "Inscrição estadual")}${T("im", "Inscrição municipal")}
           <${Campo} id="c-nasc" rotulo="Data de nascimento"><input id="c-nasc" type="date" class="inp" value=${d.nascimento || ""} onInput=${e => set("nascimento", e.target.value)} /></${Campo}>
         </div>

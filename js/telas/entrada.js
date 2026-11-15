@@ -5,6 +5,7 @@ import { fila, servidorResponde } from "../fila.js";
 import { local, erroDeRede } from "../local.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, SecaoChecklist, PadAssinatura, Foto } from "../ui.js";
 import { usePlaca, PlacaBusca, tirarPreenchidos, paraResumo, anoFabMod } from "../placa.js";
+import { useCPF, CpfBusca, ehAdmin } from "../cpf.js";
 import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
 import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
 
@@ -101,6 +102,16 @@ export function NovaOS() {
   useEffect(() => { if (f.veiculoId || !placaValida(f.placa)) return; const v = dados.veiculos.find(x => x.placa === f.placa); if (v) setF(o => o.veiculoId || o.placa !== v.placa ? o : { ...o, veiculoId: v.id, clienteId: v.cliente_id || o.clienteId }); }, [dados.veiculos, f.placa]);
   // a placa foi trocada depois do preenchimento (mesmo num rascunho reaberto): o que veio da placa antiga sai dos campos
   useEffect(() => { const p = f.vNovo.daPlaca; if (p && p.placa !== f.placa) setF(o => { const { daPlaca, ...v } = tirarPreenchidos(o.vNovo, (o.vNovo.daPlaca || {}).campos || {}); return { ...o, vNovo: v }; }); }, [f.placa]);
+  // Cliente novo com CPF que não está no cadastro e nome em branco: busca o nome e o nascimento pelo CPF (só administrador) e
+  // preenche só o que está em branco. cNovo.doCPF guarda de qual CPF veio, o nome posto na tela e o nascimento (que vai para o cadastro).
+  const cpfNovo = soDig(f.cNovo.doc);
+  const autoCPF = useCPF(f.cNovo.doc, { pode: ehAdmin(perfil), auto: cfg.cpfAuto !== false,
+    falta: !f.clienteId && f.modoCliente === "novo" && !f.cNovo.nome.trim() && !dados.clientes.some(c => soDig(c.doc) === cpfNovo),
+    onDados: (dd, r) => setF(o => ({ ...o, cNovo: { ...o.cNovo, nome: o.cNovo.nome.trim() ? o.cNovo.nome : dd.nome, doCPF: { cpf: r.cpf || soDig(o.cNovo.doc), nome: o.cNovo.nome.trim() ? "" : dd.nome, nascimento: dd.nascimento || "" } } })) });
+  // o CPF foi trocado depois do preenchimento (mesmo num rascunho reaberto): o nome que veio do CPF antigo sai do campo
+  useEffect(() => { const p = f.cNovo.doCPF; if (p && p.cpf !== cpfNovo) setF(o => { const { doCPF, ...c } = o.cNovo; return { ...o, cNovo: { ...c, nome: doCPF && doCPF.nome && c.nome === doCPF.nome ? "" : c.nome } }; }); }, [cpfNovo]);
+  /** nascimento que veio da consulta do CPF que está no campo (vai para o cadastro do cliente novo) */
+  const nascDoCPF = () => { const p = f.cNovo.doCPF; return p && p.cpf === soDig(f.cNovo.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
   const veiculo = dados.veiculos.find(v => v.id === f.veiculoId);
   const cliente = dados.clientes.find(c => c.id === f.clienteId);
   const abertaDoVeiculo = veiculo ? dados.ordens.find(o => o.veiculo_id === veiculo.id && ["diagnostico", "aguardando", "execucao", "pronto"].includes(o.status)) : null;
@@ -116,7 +127,7 @@ export function NovaOS() {
       let cli = cliente, cliId = f.clienteId;
       if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim();
         cli = await api.clientes.salvar({ nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), rua, bairro, cidade: "Colatina", uf: "ES",
-          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "" }); cliId = cli.id; }
+          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "", ...nascDoCPF() }); cliId = cli.id; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo;
       if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
@@ -149,7 +160,7 @@ export function NovaOS() {
       let cli = cliente, cliId = f.clienteId, novoCli = null;
       if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim(); cliId = uuid();
         novoCli = { id: cliId, nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), rua, bairro, cidade: "Colatina", uf: "ES",
-          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "" }; cli = novoCli; }
+          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "", ...nascDoCPF() }; cli = novoCli; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo, novoVei = null, veiAtual = null;
       if (!vei) { novoVei = { id: uuid(), placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
@@ -213,7 +224,7 @@ export function NovaOS() {
           <${Campo} id="c-nome" rotulo="Nome completo" obrig><${Texto} id="c-nome" autocomplete="off" valor=${f.cNovo.nome} onMuda=${v => muda({ cNovo: { ...f.cNovo, nome: v } })} /></${Campo}>
           <${Campo} id="c-tel" rotulo="Telefone / WhatsApp" obrig><input id="c-tel" class="inp" inputmode="tel" value=${f.cNovo.telefone} onBlur=${e => muda({ cNovo: { ...f.cNovo, telefone: fmtTel(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, telefone: e.target.value } })} /></${Campo}>
           <${Campo} id="c-doc" rotulo="CPF ou CNPJ" dica="Opcional. Necessário para nota fiscal em nome do cliente." erro=${f.cNovo.doc && soDig(f.cNovo.doc).length >= 11 && !docValido(f.cNovo.doc) ? "Número inválido" : ""}>
-            <input id="c-doc" class="inp" inputmode="numeric" value=${f.cNovo.doc} onBlur=${e => muda({ cNovo: { ...f.cNovo, doc: fmtDoc(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, doc: e.target.value } })} /></${Campo}>
+            <input id="c-doc" class="inp" inputmode="numeric" value=${f.cNovo.doc} onBlur=${e => muda({ cNovo: { ...f.cNovo, doc: fmtDoc(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, doc: e.target.value } })} /><${CpfBusca} c=${autoCPF} /></${Campo}>
           <${Campo} id="c-end" rotulo="Endereço (rua e número)"><${Texto} id="c-end" valor=${f.cNovo.endereco} onMuda=${v => muda({ cNovo: { ...f.cNovo, endereco: v } })} /></${Campo}>
           <${Campo} id="c-bairro" rotulo="Bairro"><${Texto} id="c-bairro" valor=${f.cNovo.bairro || ""} onMuda=${v => muda({ cNovo: { ...f.cNovo, bairro: v } })} /></${Campo}>
         </div>

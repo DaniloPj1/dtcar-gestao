@@ -11,6 +11,7 @@ import { prepararNovaOS, ORIGENS } from "./entrada.js";
 import { ProdutosLista } from "./produtos.js";
 import { FornecedoresLista } from "./compras.js";
 import { FichaOleo } from "./fichaoleo.js";
+import { CorrigirPelaPlaca } from "./corrigirplaca.js";
 
 const DIA = 86400000;
 const meses = iso => Math.floor((Date.now() - new Date(iso)) / (30.4 * DIA));
@@ -408,7 +409,7 @@ export function VeiculoTela({ id }) {
     <button type="button" class="btn-link voltar" onClick=${() => history.length > 1 ? history.back() : ir("/cadastros")}>← Voltar</button>
     <section class="card">
       <div class="det-cab"><${Placa} placa=${v.placa} grande /><div class="meio"><h2>${v.marca} ${v.modelo}</h2><div class="sub">${[v.ano, v.cor, v.motor, v.combustivel].filter(Boolean).join(" · ")}</div></div>
-        <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/veiculo/" + v.id)}>Imprimir ficha</button>${ver && os.some(etapaNoResumo) ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/resumo/" + v.id + "?de=veiculo")}>Resumo das O.S. em aberto</button>` : null}<button type="button" class="btn btn-sm" onClick=${() => setEd(edVeiculo(v))}>${pode(perfil, "cadastrar") ? "Editar ficha" : "Ver ficha"}</button></div></div>
+        <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/veiculo/" + v.id)}>Imprimir ficha</button>${pode(perfil, "cadastrar") ? html`<${CorrigirPelaPlaca} v=${v} />` : null}${ver && os.some(etapaNoResumo) ? html`<button type="button" class="btn btn-sm" onClick=${() => ir("/imprimir/resumo/" + v.id + "?de=veiculo")}>Resumo das O.S. em aberto</button>` : null}<button type="button" class="btn btn-sm" onClick=${() => setEd(edVeiculo(v))}>${pode(perfil, "cadastrar") ? "Editar ficha" : "Ver ficha"}</button></div></div>
       <div class="kv">${kv("KM atual", fmtKm(v.km_atual))}<div><span>Proprietário</span><b>${dono ? html`<button type="button" class="btn-link" onClick=${() => ir("/cliente/" + dono.id)}>${dono.nome}</button>` : "—"}</b></div>
         ${kv("Motorista", v.motorista)}${kv("Chassi", v.chassi)}${kv("Renavam", v.renavam)}${kv("O.S.", String(os.length))}${ver ? kv("Total em serviços", reais(entregues.reduce((s, o) => s + Number(o.total || 0), 0))) : null}</div>
       ${manut.length ? html`<div class="kv">${manut.map(([t, d, k]) => html`<div key=${t}><span>${t}</span><b>${[d ? fmtData(d) : "", k ? fmtKm(k) : ""].filter(Boolean).join(" · ")}</b></div>`)}</div>` : null}

@@ -163,15 +163,35 @@ export function resumoOleo(linhas, ano) {
 // inteiro, tiramos as palavras-chave: marca, nome do modelo, cilindrada (do modelo ou do campo motor) e ano; o resto (versão, turbo,
 // 16v, combustível) só ajuda a pôr a linha certa na frente. Se a combinação mais exigente não acha nada, afrouxa: sem a marca, depois sem
 // a cilindrada. Devolve { r, consulta, ano, entendido, chaves } — "entendido" é o que a tela mostra para a pessoa conferir.
-const COMECO_COMPOSTO = new Set(["novo", "nova", "new", "grand", "gran", "grande", "land", "range", "santa", "monte", "pick", "space", "cross", "up"]);
+// Cadastro escrito do jeito do documento do carro ("VW/GOL 1.0 GIV", "CHEV/ONIX JOY/CHEV/ONIX JOY", "M.BENZ313CDI/SPRINTERF", "TOYOTA HILUX" na marca Ford):
+// tira o prefixo da marca antes da barra, a marca escrita no começo do modelo e corrige os erros de digitação mais comuns de modelo.
+const MARCAS_NO_MODELO = new Set(["vw", "gm", "chev", "chevrolet", "volkswagen", "volks", "hyundai", "toyota", "fiat", "ford", "honda", "renault", "nissan", "jeep", "peugeot", "citroen", "mitsubishi", "kia", "bmw", "audi", "iveco", "ivecofiat", "m.benz", "mbenz", "mercedes", "lr", "chery", "caoa"]);
+export function limparModelo(m) {
+  m = m.replace(/^i\s*\/\s*/, "");
+  const partes = m.split("/").map(x => x.trim()).filter(Boolean);
+  // "marca/modelo...": a parte da esquerda é só a marca (uma palavra, sem número de cilindrada) e some; o que vem depois de uma segunda barra é repetição
+  if (partes.length > 1 && /^[a-z][a-z0-9.\-]{0,13}$/.test(partes[0]) && !/\d\.\d/.test(partes[0])) m = partes[1];
+  return m;
+}
+const ALIAS_MODELO = { hillux: ["hilux"], hiluxsw4: ["hilux", "sw4"], swsrxa4rd: ["hilux", "sw4"], corola: ["corolla"], ecosporte: ["ecosport"], crosfox: ["crossfox"], paratti: ["parati"], ideia: ["idea"], disc: ["discovery"], sprinterf: ["sprinter"] };
+const STEMS_MODELO = ["sprinter", "daily"];   // "516 SPRINTER", "312D SPRINTER M", "DAILY4912 VAN1": o nome do modelo é a palavra-raiz
+function apelidarModelo(t) {
+  if (t.some(x => /^[3-5]\d\dcdi/.test(x))) return ["sprinter", ...t.filter(x => !/^[3-5]\d\dcdi/.test(x))];   // "311CDISTREETC", "313CDI": Sprinter
+  const st = STEMS_MODELO.find(w => t.some(x => x.startsWith(w)));
+  if (st) return [st, ...t.filter(x => !x.startsWith(st) && !/^\d{3}[a-z]?$/.test(x))];
+  const a = ALIAS_MODELO[t[0]];
+  return a ? [...a, ...t.slice(1)] : t;
+}
+const COMECO_COMPOSTO = new Set(["novo", "nova", "new", "grand", "gran", "grande", "land", "range", "santa", "monte", "pick", "space", "cross"]);
 const SEM_VALOR = new Set(["mt", "at", "aut", "mec", "cv", "hp", "de", "da", "do", "e", "c", "com", "p", "4p", "2p", "5p", "3p", "i", "imp"]);
 export function chavesDoVeiculo(v) {
   const marca = [...new Set(norm(v.marca).replace(/^i\s*\/\s*/, "").split(/[^a-z0-9]+/).filter(x => x.length > 1).map(x => APELIDOS[x] || x))].slice(0, 2);
-  let m = norm(v.modelo).replace(/^i\s*\/\s*/, "").replace(/(\d),(\d)/g, "$1.$2")
+  let m = limparModelo(norm(v.modelo)).replace(/(\d),(\d)/g, "$1.$2")
     .replace(/(\d\.\d)(?=[a-z])/g, "$1 ").replace(/([a-z])(\d\.\d)/g, "$1 $2");   // "1.4MT" → "1.4 MT"; "XEI2.0" → "XEI 2.0"
   let t = m.split(/[^a-z0-9.]+/).filter(Boolean);
   // "TOYOTA COROLLA": a marca veio repetida no modelo; "T/CITROEN C4", "I/TOYOTA COROLLA": letra de importado e marca na frente
-  while (t.length > 1 && (t[0].length === 1 || (marca.length && marca.includes(APELIDOS[t[0]] || t[0])))) t = t.slice(1);
+  while (t.length > 1 && (t[0].length === 1 || MARCAS_NO_MODELO.has(t[0]) || (marca.length && marca.includes(APELIDOS[t[0]] || t[0])))) t = t.slice(1);
+  t = apelidarModelo(t);
   const nome = t.length > 1 && COMECO_COMPOSTO.has(t[0]) ? [t[0], t[1]] : t.slice(0, 1);
   const resto = t.slice(nome.length);
   let cil = (resto.find(x => /^\d\.\d$/.test(x)) || "");

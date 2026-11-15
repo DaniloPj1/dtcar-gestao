@@ -35,3 +35,11 @@ export function filtrosDaFicha(cat, estoque, produtos, ficha) {
     return { k, rotulo, codigos, produto: cand[0] || null, outros: cand.slice(1), principais };
   }).filter(Boolean);
 }
+
+// Caminhonete (o cadastro tem um serviço de troca de óleo mais caro para elas): pelo nome do modelo.
+export const ehCaminhonete = v => /\b(hilux|s10|s-10|ranger|amarok|l200|triton|frontier|toro|strada|saveiro|montana|oroch|d20|silverado|f-?250|f-?1000|f-?350|ram|hilux)\b/.test(norm([v && v.modelo, v && v.marca].join(" ")));
+// Serviço de troca de óleo que já vem marcado: o "CAMINHONETE" para caminhonete, o comum para os outros (sem o do tipo certo, o primeiro).
+export function servicoPadrao(servicos, v) {
+  const cam = ehCaminhonete(v), eCam = p => /caminhonete/.test(norm(p.descricao));
+  return (servicos || []).find(p => eCam(p) === cam) || (servicos || [])[0] || null;
+}

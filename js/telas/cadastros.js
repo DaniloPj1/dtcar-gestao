@@ -99,6 +99,7 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
         <${Campo} id="c-data" rotulo="Data do cadastro"><input id="c-data" type="date" class="inp" value=${d.data || ""} onInput=${e => set("data", e.target.value)} /></${Campo}>
       </div>
       <div class="grade">
+        <${Campo} id="c-doc" rotulo="CPF ou CNPJ" erro=${d.doc && soDig(d.doc).length >= 11 && !docValido(d.doc) ? "Número inválido" : ""}><input id="c-doc" class="inp" inputmode="numeric" value=${d.doc} onBlur=${e => set("doc", fmtDoc(e.target.value))} onInput=${e => set("doc", e.target.value)} /><${CpfBusca} c=${autoCPF} /></${Campo}>
         ${T("nome", "Nome / razão social", { obrig: true })}
         ${T("fantasia", "Nome fantasia / apelido")}
         ${Tel("telefone", "Celular / WhatsApp", !ed.id)}
@@ -108,8 +109,8 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
         ${d.situacao !== "liberado" ? html`<span class="dica">${SITUACAO_CLIENTE[d.situacao].dica}</span>${T("restricao", "Motivo", { obrig: true })}` : null}</div>
       <${Abas} abas=${[["end", "Endereço e contatos"], ["fil", "Documentos, filiação e crédito"], ["obs", "Observações e histórico"]]} ativa=${aba} onTroca=${setAba} />
       ${aba === "end" ? html`<div class="aba-corpo">
-        <div class="grade">${T("rua", "Endereço (rua e número)")}${T("complemento", "Complemento")}${T("bairro", "Bairro")}</div>
-        <div class="grade">${T("cidade", "Cidade")}${T("uf", "UF", { attr: { maxlength: 2 } })}<${CampoCep} id="c-cep" valor=${d.cep} onMuda=${v => set("cep", v)} atual=${d} padrao=${{ cidade: CLIENTE_VAZIO.cidade, uf: CLIENTE_VAZIO.uf }} onAplica=${m => setEd(o => ({ ...o, erros: [], d: { ...o.d, ...m } }))} /></div>
+        <div class="grade"><${CampoCep} id="c-cep" valor=${d.cep} onMuda=${v => set("cep", v)} atual=${d} padrao=${{ cidade: CLIENTE_VAZIO.cidade, uf: CLIENTE_VAZIO.uf }} onAplica=${m => setEd(o => ({ ...o, erros: [], d: { ...o.d, ...m } }))} />${T("rua", "Endereço (rua e número)")}${T("complemento", "Complemento")}${T("bairro", "Bairro")}</div>
+        <div class="grade">${T("cidade", "Cidade")}${T("uf", "UF", { attr: { maxlength: 2 } })}</div>
         <div class="grade">${Tel("telefone2", "Telefone 2")}${Tel("telefone3", "Telefone 3")}${T("email", "E-mail", { attr: { type: "email" } })}${T("contato", "Pessoa de contato")}</div>
         <div class="grade">
           <${Campo} id="c-tipo" rotulo="Tipo de cliente"><${Texto} id="c-tipo" list="tipos-cli" valor=${d.tipo_cliente} onMuda=${v => set("tipo_cliente", v)} /><datalist id="tipos-cli">${tipos.map(t => html`<option value=${t} />`)}</datalist></${Campo}>
@@ -117,7 +118,6 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
         </div></div>`
       : aba === "fil" ? html`<div class="aba-corpo">
         <div class="grade">
-          <${Campo} id="c-doc" rotulo="CPF ou CNPJ" erro=${d.doc && soDig(d.doc).length >= 11 && !docValido(d.doc) ? "Número inválido" : ""}><input id="c-doc" class="inp" inputmode="numeric" value=${d.doc} onBlur=${e => set("doc", fmtDoc(e.target.value))} onInput=${e => set("doc", e.target.value)} /><${CpfBusca} c=${autoCPF} /></${Campo}>
           ${T("rg", "RG")}${T("orgao_emissor", "Órgão emissor")}${T("ie", "Inscrição estadual")}${T("im", "Inscrição municipal")}
           <${Campo} id="c-nasc" rotulo="Data de nascimento"><input id="c-nasc" type="date" class="inp" value=${d.nascimento || ""} onInput=${e => set("nascimento", e.target.value)} /></${Campo}>
         </div>

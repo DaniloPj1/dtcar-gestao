@@ -67,7 +67,7 @@ function FormFicha({ v, cat, onFechar }) {
 export function FichaOleo({ v }) {
   const { dados, perfil, avisar, recarregar } = useApp();
   const pode_ = pode(perfil, "cadastrar"), f = v.ficha_oleo;
-  const [cat, setCat] = useState(null), [aberto, setAberto] = useState(false), [conv, setConv] = useState(null);
+  const [cat, setCat] = useState(null), [aberto, setAberto] = useState(false), [conv, setConv] = useState(null), [aberta, setAberta] = useState(false);
   useEffect(() => { let vivo = true; carregarCatalogo().then(c => vivo && setCat(c)).catch(() => {}); return () => { vivo = false; }; }, []);
   const estoque = useMemo(() => indiceEstoque(dados.produtos), [dados.produtos]);
   const confirmar = async () => {
@@ -75,14 +75,18 @@ export function FichaOleo({ v }) {
     catch (e) { avisar(e.message); }
   };
   const confirmada = f && f.origem === "oficina";
-  return html`<section class="card" id="ficha-oleo"><h3>Óleo e filtros</h3>
-    ${f ? html`<div class="fo-topo"><b class="of-litros">${f.litros} L</b><b class="of-visc">${f.viscosidade || "—"}</b>${f.norma ? html`<span class="sub">${f.norma}</span>` : null}
-        <span class=${"fo-selo " + (confirmada ? "fo-ok" : "fo-cat")} id="fo-selo">${confirmada ? "Confirmado pela oficina" + (f.confirmado_em ? " em " + fmtData(f.confirmado_em) : "") : "Do catálogo, confira"}</span></div>
-      ${cat ? TIPOS_FILTRO.map(([k, t]) => html`<${LinhaFiltro} key=${k} rotulo=${t} f=${filtroParaMostrar(cat, estoque, f.marca || "Tecfil", (f.filtros || {})[k])} onConversao=${x => setConv({ ...x, a: { montadora: v.marca, modelo: v.modelo, motor: v.motor } })} />`) : html`<span class="dica">Carregando o catálogo…</span>`}
+  const selo = f ? html`<span class=${"fo-selo " + (confirmada ? "fo-ok" : "fo-cat")} id="fo-selo">${confirmada ? "Confirmado pela oficina" + (f.confirmado_em ? " em " + fmtData(f.confirmado_em) : "") : "Do catálogo, confira"}</span>` : null;
+  const corpo = html`${f ? html`${cat ? TIPOS_FILTRO.map(([k, t]) => html`<${LinhaFiltro} key=${k} rotulo=${t} f=${filtroParaMostrar(cat, estoque, f.marca || "Tecfil", (f.filtros || {})[k])} onConversao=${x => setConv({ ...x, a: { montadora: v.marca, modelo: v.modelo, motor: v.motor } })} />`) : html`<span class="dica">Carregando o catálogo…</span>`}
       ${f.base ? html`<p class="sub">${f.base}</p>` : null}`
       : html`<span class="dica">Ainda não tem ficha. A escolha é feita uma vez por carro.</span>`}
     ${pode_ ? html`<div class="acoes fo-acoes"><button type="button" class="btn btn-sm" id="fo-abrir" onClick=${() => setAberto(true)}>${f ? "Refazer ou editar" : "Preencher pelo catálogo"}</button>
-      ${f && !confirmada ? html`<button type="button" class="btn btn-sm" id="fo-confirmar" onClick=${confirmar}>Confirmar (conferi)</button>` : null}</div>` : null}
+      ${f && !confirmada ? html`<button type="button" class="btn btn-sm" id="fo-confirmar" onClick=${confirmar}>Confirmar (conferi)</button>` : null}</div>` : null}`;
+  // com ficha gravada o quadro fica recolhido: só a linha de cima aparece e, ao clicar, abre (pedido do Danilo em 15/11/2026)
+  return html`<section class=${"card" + (f && !aberta ? " fo-recolhido" : "")} id="ficha-oleo">
+    ${f ? html`<button type="button" class="fo-cab" id="fo-alternar" aria-expanded=${aberta} aria-controls="fo-corpo" onClick=${() => setAberta(a => !a)}>
+        <h3>Óleo e filtros</h3><span class="fo-resumo"><b class="of-litros">${f.litros} L</b><b class="of-visc">${f.viscosidade || "—"}</b>${selo}</span><span class="fo-seta">${aberta ? "Ocultar" : "Mostrar"}<i aria-hidden="true">${aberta ? "▴" : "▾"}</i></span></button>
+      ${aberta ? html`<div id="fo-corpo"><div class="fo-topo">${f.norma ? html`<span class="sub">${f.norma}</span>` : null}</div>${corpo}</div>` : null}`
+      : html`<h3>Óleo e filtros</h3>${corpo}`}
     ${aberto ? html`<${FormFicha} v=${v} cat=${cat} onFechar=${() => setAberto(false)} />` : null}
     ${conv ? html`<${ConversaoModal} c=${conv} onFechar=${() => setConv(null)} />` : null}
   </section>`;

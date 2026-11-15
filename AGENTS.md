@@ -602,3 +602,6 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
    Mexeu em `desktop/`? Rode também `xvfb-run -a node teste/teste_programa.js` (abre o programa sem internet), depois de `npm install` e `node preparar.js` em `desktop/`.
 5. Não mexer em `CNAME`, nas configurações do GitHub Pages, nem nos segredos do repositório.
 6. Revisão cruzada: quando um agente faz a mudança, o outro revisa o PR (regras acima, textos em português, teste passando) antes do Danilo aprovar.
+
+### Quadro "Óleo e filtros" recolhido na página do veículo (15/11/2026, v138)
+- Com ficha gravada, o card começa recolhido: só a linha de cima (litros, viscosidade, selo) e o botão "Mostrar/Ocultar" (`#fo-alternar`). O corpo (`#fo-corpo`) com filtros, "Refazer ou editar" e "Confirmar" só existe aberto. Sem ficha, o card continua como antes. Vale para PC e celular (é o mesmo componente).

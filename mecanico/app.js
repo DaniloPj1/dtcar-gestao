@@ -632,7 +632,7 @@ return o;
 });
 n.tituloSistema = ativo.nome; n.nomeSistema = ativo.nome; n.extraAberto = !!N.extraAbertoPick; n.extraTexto = N.extraTextoPick || '';
 var totPick = Object.keys(pk).length;
-n.addRotulo = totPick ? 'Adicionar (' + totPick + ')' : 'Adicionar'; n.addBg = totPick ? '#174f94' : '#7d8794';
+n.addRotulo = totPick ? 'Adicionar (' + totPick + ')' : (N.itens.length ? 'Avançar: ver a lista (' + N.itens.length + ')' : 'Adicionar'); n.addBg = totPick || N.itens.length ? '#174f94' : '#7d8794';
 n.listaQtd = String(N.itens.length); n.listaRotuloTopo = 'Ver a lista: ' + N.itens.length + (N.itens.length === 1 ? ' item' : ' itens');
 }
 
@@ -717,7 +717,7 @@ tem[base] = 1;
 novos.push({ id: ++prox, disse: '', base: base, tipo: p.tipo === 'cont' ? 'Peça' : 'Serviço', conferir: false, qtd: p.tipo === 'cont' ? v.q : 1, pedePos: false, pos: '', pedeLado: false, lado: '' });
 });
 });
-if (!Object.keys(pk).length) { self.avisar('Marque uma ou mais peças.'); return; }
+if (!Object.keys(pk).length) { if (at.itens.length) { setN({ passo: 'lista' }); return; } self.avisar('Marque uma ou mais peças.'); return; }
 if (faltam.length) { self.avisar('Escolha a posição de ' + faltam[0] + (faltam.length > 1 ? ' e mais ' + (faltam.length - 1) : '') + '.'); return; }
 setN({ itens: at.itens.concat(novos), pick: {} });
 self.avisar(novos.length ? novos.length + (novos.length === 1 ? ' item' : ' itens') + ' na lista.' + (jaTinha ? ' ' + jaTinha + ' já estava.' : '') : 'Esses itens já estavam na lista.');

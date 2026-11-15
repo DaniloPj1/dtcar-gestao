@@ -140,24 +140,6 @@ a{color:#174f94}a:hover{color:#0f3a70}
 <div style="font-size: 15px; color: #33383f">{{d.linha}}</div>
 </sc-if>
 
-<sc-if value="{{d.mostraIniciar}}" hint-placeholder-val="{{false}}">
-<button type="button" onClick="{{iniciar}}" style="height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Iniciar serviço</button>
-</sc-if>
-
-<sc-if value="{{d.mostraPausar}}" hint-placeholder-val="{{true}}">
-<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
-<button type="button" onClick="{{abrirPausa}}" style="height: 56px; background: #ffffff; color: #16191d; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Pausar</button>
-<button type="button" onClick="{{abrirFim}}" style="height: 56px; background: #16191d; color: #ffffff; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Finalizar</button>
-</div>
-</sc-if>
-
-<sc-if value="{{d.mostraRetomar}}" hint-placeholder-val="{{false}}">
-<div style="display: flex; flex-direction: column; gap: 10px">
-<div style="font-size: 14px; color: #3a3f46; text-align: center">Motivo da pausa: <strong>{{d.motivo}}</strong></div>
-<button type="button" onClick="{{retomar}}" style="height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Retomar serviço</button>
-</div>
-</sc-if>
-
 <sc-if value="{{d.orcamento}}" hint-placeholder-val="{{false}}">
 <div style="display: flex; flex-direction: column; gap: 12px">
 <div style="background: #fff0cc; color: #6b4300; border-radius: 6px; padding: 12px; font-size: 15px; font-weight: 600; text-align: center">{{d.orcTexto}}</div>
@@ -265,6 +247,20 @@ a{color:#174f94}a:hover{color:#0f3a70}
 <div style="font-size: 16px">{{d.equipe}}</div>
 </div>
 </div>
+<div style="flex: none; padding: 10px 16px 16px; background: #eceef0; border-top: 1px solid #d5d9de; display: flex; flex-direction: column; gap: 10px">
+<sc-if value="{{d.mostraIniciar}}" hint-placeholder-val="{{false}}">
+<button type="button" onClick="{{iniciar}}" style="height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Iniciar serviço</button>
+</sc-if><sc-if value="{{d.mostraPausar}}" hint-placeholder-val="{{true}}">
+<div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px">
+<button type="button" onClick="{{abrirPausa}}" style="height: 56px; background: #ffffff; color: #16191d; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Pausar</button>
+<button type="button" onClick="{{abrirFim}}" style="height: 56px; background: #16191d; color: #ffffff; border: 2px solid #16191d; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Finalizar</button>
+</div>
+</sc-if><sc-if value="{{d.mostraRetomar}}" hint-placeholder-val="{{false}}">
+<div style="display: flex; flex-direction: column; gap: 10px">
+<div style="font-size: 14px; color: #3a3f46; text-align: center">Motivo da pausa: <strong>{{d.motivo}}</strong></div>
+<button type="button" onClick="{{retomar}}" style="height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Retomar serviço</button>
+</div>
+</sc-if></div>
 </sc-if>
 
 <sc-if value="{{telaNova}}" hint-placeholder-val="{{false}}">
@@ -282,7 +278,7 @@ a{color:#174f94}a:hover{color:#0f3a70}
 </div>
 
 <sc-if value="{{n.foto}}" hint-placeholder-val="{{false}}">
-<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px">
+<div style="flex: 1; min-height: 0; display: flex; flex-direction: column"><div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 14px">
 <div style="display: flex; flex-direction: column; gap: 8px">
 <label for="nv-placa" style="font-size: 16px; font-weight: 700">Placa do veículo</label>
 <div style="border: 3px solid #16191d; border-radius: 8px; overflow: hidden; background: #ffffff">
@@ -291,13 +287,16 @@ a{color:#174f94}a:hover{color:#0f3a70}
 </div>
 <div style="font-size: 14px; color: #4a515b">Aceita placa Mercosul (ABC1D23) ou antiga (ABC1234).</div>
 </div>
-<button type="button" onClick="{{buscarPlaca}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Buscar veículo</button>
 <div style="font-size: 13px; color: #4a515b; border: 1px dashed #9aa1ab; border-radius: 6px; padding: 10px 12px">Placa do cadastro não tem custo. Placa nova usa a consulta paga pela placa.</div>
+</div>
+<div style="flex: none; padding: 12px 16px 16px; background: #eceef0; border-top: 1px solid #d5d9de; display: flex; flex-direction: column">
+<button type="button" onClick="{{buscarPlaca}}" style="min-height: 60px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Buscar veículo</button>
+</div>
 </div>
 </sc-if>
 
 <sc-if value="{{n.dados}}" hint-placeholder-val="{{false}}">
-<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
+<div style="flex: 1; min-height: 0; display: flex; flex-direction: column"><div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="background: #ffffff; border: 1px solid #d5d9de; border-radius: 6px; padding: 16px; display: flex; flex-direction: column; gap: 12px">
 <div style="display: flex; align-items: center; gap: 14px">
 <div style="border: 2px solid #16191d; border-radius: 5px; overflow: hidden; width: 140px; background: #ffffff; flex: none">
@@ -333,7 +332,10 @@ a{color:#174f94}a:hover{color:#0f3a70}
 <label for="nv-km" style="font-size: 14px; font-weight: 600; color: #4a515b">KM de entrada</label>
 <input id="nv-km" type="text" inputmode="numeric" value="{{n.kmInput}}" onChange="{{onKmEntrada}}" placeholder="KM do painel" style="height: 56px; box-sizing: border-box; border: 2px solid #16191d; border-radius: 6px; padding: 0 14px; font-family: 'Barlow Condensed', sans-serif; font-size: 26px; font-weight: 700; letter-spacing: 1px; background: #ffffff; color: #16191d">
 </div>
-<button type="button" onClick="{{dadosOk}}" style="min-height: 56px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Continuar para os itens</button>
+</div>
+<div style="flex: none; padding: 12px 16px 16px; background: #eceef0; border-top: 1px solid #d5d9de; display: flex; flex-direction: column">
+<button type="button" onClick="{{dadosOk}}" style="min-height: 60px; background: #174f94; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Continuar para os itens</button>
+</div>
 </div>
 </sc-if>
 
@@ -501,7 +503,7 @@ Outras peças de {{n.nomeSistema}}
 </sc-if>
 
 <sc-if value="{{n.listaPasso}}" hint-placeholder-val="{{false}}">
-<div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+<div style="flex: 1; min-height: 0; display: flex; flex-direction: column"><div style="flex: 1; min-height: 0; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px">
 <div style="font-size: 15px; color: #33383f">{{n.placa}} · {{n.modelo}}</div>
 <div style="display: flex; align-items: baseline; justify-content: space-between">
 <div style="font-size: 14px; font-weight: 600; color: #4a515b; text-transform: uppercase; letter-spacing: 0.6px">Lista</div>
@@ -545,7 +547,10 @@ Outras peças de {{n.nomeSistema}}
 <div style="font-size: 15px; color: #4a515b; text-align: center; padding: 16px 0">Nenhum item na lista ainda.</div>
 </sc-if>
 <button type="button" onClick="{{corrigir}}" style="min-height: 56px; background: #ffffff; color: #174f94; border: 2px dashed #174f94; border-radius: 6px; font-size: 17px; font-weight: 700; cursor: pointer">+ Adicionar mais itens</button>
-<button type="button" onClick="{{abrirOS}}" style="min-height: 56px; background: #16191d; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Concluir (teste: não salva)</button>
+</div>
+<div style="flex: none; padding: 12px 16px 16px; background: #eceef0; border-top: 1px solid #d5d9de; display: flex; flex-direction: column">
+<button type="button" onClick="{{abrirOS}}" style="min-height: 60px; background: #16191d; color: #ffffff; border: none; border-radius: 6px; font-size: 18px; font-weight: 700; cursor: pointer">Concluir (teste: não salva)</button>
+</div>
 </div>
 </sc-if>
 </sc-if>

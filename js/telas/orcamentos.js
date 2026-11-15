@@ -197,7 +197,7 @@ export function Orcamento({ id }) {
     ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${(r, faltou) => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "." + (faltou ? " Atenção: " + faltou : ""), !!faltou); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
 
     ${fichaAberta && vFicha ? html`<${LancarFicha} o=${o} v=${vFicha} itens=${itens} tabela=${o.tabela_preco} orcamento onFechar=${() => setFichaAberta(false)} onLancar=${lancarFicha} />` : null}
-    ${modal ? html`<${ItemModal} item=${modal} tabela=${o.tabela_preco} orcamento onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal)} onFechar=${() => setModal(null)} />` : null}
+    ${modal ? html`<${ItemModal} item=${modal} veiculo=${{ ...(o.veiculo || {}), ...((o.veiculo_id && dados.veiculos.find(v => v.id === o.veiculo_id)) || {}) }} tabela=${o.tabela_preco} orcamento onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal)} onFechar=${() => setModal(null)} />` : null}
     ${recusa !== null ? html`<${Modal} titulo="Cliente recusou o orçamento" onFechar=${() => setRecusa(null)}>
       <p class="sub">O orçamento continua na consulta, com o motivo. Serve para saber por que a oficina perde serviço.</p>
       <div class="chips">${["Achou caro", "Fez em outra oficina", "Desistiu do serviço", "Vai fazer depois", "Não respondeu"].map(m => html`<button type="button" key=${m} class=${"chip-f" + (recusa === m ? " ativo" : "")} onClick=${() => setRecusa(m)}>${m}</button>`)}</div>

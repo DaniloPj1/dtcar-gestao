@@ -667,6 +667,21 @@ body{font-size:15px}
 .janela-ctrl b{margin-right:auto;font-family:var(--f-display);font-size:17px}
 .pegador{font-size:18px;color:var(--muted);cursor:grab}
 
+/* peças de catálogo que servem no veículo (js/telas/pecasveiculo.js) */
+.pv{display:flex;flex-direction:column;gap:10px}.pv-sel{flex:0 1 220px}
+.pv-lista{max-height:56vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+.pv-grupo h4{margin:0;padding:8px 12px;background:var(--surface-2);border-top:1px solid var(--line);border-bottom:1px solid var(--line);font-size:14px;position:sticky;top:0;z-index:1}
+.pv-grupo:first-child h4{border-top:0}
+.pv-item{display:grid;grid-template-columns:84px minmax(0,1fr) auto;gap:6px 12px;align-items:start;padding:10px 12px;border-top:1px solid var(--line)}
+.pv-grupo h4+.pv-item{border-top:0}
+.pv-foto{width:84px;height:64px;object-fit:contain;background:#fff;border:1px solid var(--line);border-radius:8px}
+.pv-semfoto{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;background:var(--surface-2)}
+.pv-meio{display:flex;flex-direction:column;gap:2px;min-width:0}.pv-meio strong{overflow-wrap:anywhere}
+.pv-med{font-weight:600;font-size:13.5px}.pv-apl,.pv-cod{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.pv-botoes{display:flex;flex-direction:column;gap:6px}
+.pv-conv{margin-top:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:6px 10px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
+.pv-conv div{display:flex;justify-content:space-between;gap:12px}.pv-conv b{text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+@media (max-width:560px){.pv-item{grid-template-columns:64px minmax(0,1fr)}.pv-foto{width:64px;height:52px}.pv-botoes{grid-column:1 / -1;flex-direction:row}.pv-botoes .btn{flex:1}.pv-sel{flex:1 1 100%}}
 /* catálogo de produtos/serviços na O.S. */
 .cat-topo{display:flex;gap:8px;flex-wrap:wrap}.cat-topo .inp{flex:1 1 260px}
 .catalogo{display:flex;flex-direction:column;max-height:58vh;overflow:auto;border:1px solid var(--line);border-radius:10px}

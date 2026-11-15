@@ -28,6 +28,7 @@ export function Mais() {
       ${pode(perfil, "financeiro") ? it("/funcionarios", "Funcionários", "Cadastro, horário, folha de ponto, vales, comissão e custo da equipe", I.pessoas) : null}
       ${pode(perfil, "verValores") ? it("/relatorios", "Relatórios", "Histórico de serviços, faturamento, caixa, contas, estoque e mais", I.grafico) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}
+      ${pode(perfil, "ajustes") ? it("/app-mecanico", "App do mecânico", "Itens que o mecânico marca ao receber o veículo", I.carro) : null}
       ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
       ${it("/dados-locais", "Dados neste computador", "Pasta de dados no PC, cópia para trabalhar sem internet e O.S. aguardando envio", I.caixa)}
       ${pode(perfil, "ajustes") ? it("/backup", "Backup", "Baixar uma cópia de todos os dados ou restaurar", I.nuvem) : null}
@@ -60,7 +61,7 @@ export function Equipe() {
 
 /* ---------------- Ajustes ---------------- */
 export function Ajustes() {
-  const { cfg, avisar, recarregar } = useApp();
+  const { cfg, avisar, recarregar, ir } = useApp();
   const [c, setC] = useState({ ...CONFIG_PADRAO, ...cfg });
   const [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false), [novoItem, setNovoItem] = useState(""), [novaForma, setNovaForma] = useState(""), [enviando, setEnviando] = useState(false);
   useEffect(() => { if (!sujo) setC({ ...CONFIG_PADRAO, ...cfg }); }, [cfg]);
@@ -84,6 +85,7 @@ export function Ajustes() {
   const termo = (k, rot, padrao, dica) => html`<${Campo} id=${"a-" + k} rotulo=${rot} dica=${dica}><${Area} id=${"a-" + k} style=${{ minHeight: "150px" }} valor=${c[k]} onMuda=${v => set({ [k]: v })} /></${Campo}>
     ${c[k] !== padrao ? html`<button type="button" class="btn-link" onClick=${() => set({ [k]: padrao })}>Restaurar texto padrão</button>` : null}`;
   return html`<div class="pagina">
+    <section class="card"><h2>App do mecânico</h2><span class="sub">Escolha os itens que o mecânico marca no celular ao receber um veículo (por sistema).</span><div class="acoes"><button type="button" class="btn" onClick=${() => ir("/app-mecanico")}>Editar itens da lista do app</button></div></section>
     <section class="card"><h2>Dados da oficina</h2><span class="sub">Aparecem no cabeçalho dos documentos.</span>
       <div class="grade">
         <${Campo} id="a-nome" rotulo="Nome" obrig><${Texto} id="a-nome" valor=${c.nome} onMuda=${v => set({ nome: v })} /></${Campo}>

@@ -6,6 +6,7 @@ import { local, erroDeRede } from "../local.js";
 import { useApp, Placa, Campo, Texto, Area, Seg, Abas, SecaoChecklist, PadAssinatura, Foto } from "../ui.js";
 import { usePlaca, PlacaBusca, tirarPreenchidos, paraResumo, anoFabMod } from "../placa.js";
 import { useCPF, CpfBusca, ehAdmin } from "../cpf.js";
+import { CampoCep, fmtCep } from "../cep.js";
 import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
 import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
 
@@ -14,7 +15,7 @@ export const ORIGENS = ["Indicação", "Cliente antigo", "Google", "Instagram / 
 
 function vazioNova() {
   return { placa: "", veiculoId: "", vNovo: { marca: "", modelo: "", ano: "", cor: "", motor: "", combustivel: "" }, clienteId: "", modoCliente: "busca",
-    cNovo: { nome: "", telefone: "", doc: "", endereco: "", bairro: "", origem: "" }, buscaCliente: "", km: "", kmConfirmado: false, reclamacao: "", consultorId: "", box: "", contato: "", agendaId: "" };
+    cNovo: { nome: "", telefone: "", doc: "", cep: "", endereco: "", bairro: "", cidade: "", uf: "", origem: "" }, buscaCliente: "", km: "", kmConfirmado: false, reclamacao: "", consultorId: "", box: "", contato: "", agendaId: "" };
 }
 /** Deixa a Nova O.S. pré-preenchida com um veículo (usado em Cadastros) */
 export function prepararNovaOS(v) { lsSet(LS_NOVA, { ...vazioNova(), placa: v.placa, veiculoId: v.id, clienteId: v.cliente_id || "" }); }
@@ -112,6 +113,10 @@ export function NovaOS() {
   useEffect(() => { const p = f.cNovo.doCPF; if (p && p.cpf !== cpfNovo) setF(o => { const { doCPF, ...c } = o.cNovo; return { ...o, cNovo: { ...c, nome: doCPF && doCPF.nome && c.nome === doCPF.nome ? "" : c.nome } }; }); }, [cpfNovo]);
   /** nascimento que veio da consulta do CPF que está no campo (vai para o cadastro do cliente novo) */
   const nascDoCPF = () => { const p = f.cNovo.doCPF; return p && p.cpf === soDig(f.cNovo.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
+  /** endereço do cliente novo: rua e bairro da tela; cidade e UF do CEP (sem CEP, Colatina/ES, como sempre foi) */
+  const endNovo = () => { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim(), cep = soDig(f.cNovo.cep).length === 8 ? fmtCep(f.cNovo.cep) : "";
+    const cidade = (cep && (f.cNovo.cidade || "").trim()) || "Colatina", uf = (cep && (f.cNovo.uf || "").trim()) || "ES";
+    return { rua, bairro, cidade, uf, ...(cep ? { cep } : {}), endereco: [rua, bairro, cidade + "/" + uf].filter(Boolean).join(", ") }; };
   const veiculo = dados.veiculos.find(v => v.id === f.veiculoId);
   const cliente = dados.clientes.find(c => c.id === f.clienteId);
   const abertaDoVeiculo = veiculo ? dados.ordens.find(o => o.veiculo_id === veiculo.id && ["diagnostico", "aguardando", "execucao", "pronto"].includes(o.status)) : null;
@@ -125,9 +130,8 @@ export function NovaOS() {
     if (atualizarPendentes && !(await servidorResponde(api))) { await abrirSemInternet(); setSalvando(""); return; }
     try {
       let cli = cliente, cliId = f.clienteId;
-      if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim();
-        cli = await api.clientes.salvar({ nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), rua, bairro, cidade: "Colatina", uf: "ES",
-          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "", ...nascDoCPF() }); cliId = cli.id; }
+      if (!cliId) {
+        cli = await api.clientes.salvar({ nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), ...endNovo(), origem: f.cNovo.origem || "", ...nascDoCPF() }); cliId = cli.id; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo;
       if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
@@ -158,9 +162,8 @@ export function NovaOS() {
     try {
       const agora = new Date().toISOString(), ordemId = uuid(), prov = fila.proximoProvisorio();
       let cli = cliente, cliId = f.clienteId, novoCli = null;
-      if (!cliId) { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim(); cliId = uuid();
-        novoCli = { id: cliId, nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), rua, bairro, cidade: "Colatina", uf: "ES",
-          endereco: [rua, bairro, "Colatina/ES"].filter(Boolean).join(", "), origem: f.cNovo.origem || "", ...nascDoCPF() }; cli = novoCli; }
+      if (!cliId) { cliId = uuid();
+        novoCli = { id: cliId, nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), ...endNovo(), origem: f.cNovo.origem || "", ...nascDoCPF() }; cli = novoCli; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo, novoVei = null, veiAtual = null;
       if (!vei) { novoVei = { id: uuid(), placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
@@ -221,10 +224,12 @@ export function NovaOS() {
             return r.length ? html`<div class="lista">${r.map(c => html`<button type="button" key=${c.id} class="linha" onClick=${() => muda({ clienteId: c.id })}><span class="meio"><strong>${c.nome}</strong><span>${fmtTel(c.telefone)}${c.doc ? " · " + fmtDoc(c.doc) : ""}</span></span><span class="btn btn-sm">Selecionar</span></button>`)}</div>`
               : html`<div class="vazio">Nenhum cliente encontrado. <button type="button" class="btn-link" onClick=${() => muda({ modoCliente: "novo", cNovo: { ...f.cNovo, nome: qd.length ? "" : f.buscaCliente, telefone: qd.length >= 10 ? fmtTel(qd) : f.cNovo.telefone } })}>Cadastrar novo</button></div>`; })()}`
         : html`<div class="grade">
-          <${Campo} id="c-nome" rotulo="Nome completo" obrig><${Texto} id="c-nome" autocomplete="off" valor=${f.cNovo.nome} onMuda=${v => muda({ cNovo: { ...f.cNovo, nome: v } })} /></${Campo}>
-          <${Campo} id="c-tel" rotulo="Telefone / WhatsApp" obrig><input id="c-tel" class="inp" inputmode="tel" value=${f.cNovo.telefone} onBlur=${e => muda({ cNovo: { ...f.cNovo, telefone: fmtTel(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, telefone: e.target.value } })} /></${Campo}>
           <${Campo} id="c-doc" rotulo="CPF ou CNPJ" dica="Opcional. Necessário para nota fiscal em nome do cliente." erro=${f.cNovo.doc && soDig(f.cNovo.doc).length >= 11 && !docValido(f.cNovo.doc) ? "Número inválido" : ""}>
             <input id="c-doc" class="inp" inputmode="numeric" value=${f.cNovo.doc} onBlur=${e => muda({ cNovo: { ...f.cNovo, doc: fmtDoc(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, doc: e.target.value } })} /><${CpfBusca} c=${autoCPF} /></${Campo}>
+          <${Campo} id="c-nome" rotulo="Nome completo" obrig><${Texto} id="c-nome" autocomplete="off" valor=${f.cNovo.nome} onMuda=${v => muda({ cNovo: { ...f.cNovo, nome: v } })} /></${Campo}>
+          <${Campo} id="c-tel" rotulo="Telefone / WhatsApp" obrig><input id="c-tel" class="inp" inputmode="tel" value=${f.cNovo.telefone} onBlur=${e => muda({ cNovo: { ...f.cNovo, telefone: fmtTel(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, telefone: e.target.value } })} /></${Campo}>
+          <${CampoCep} id="c-cep" valor=${f.cNovo.cep || ""} atual=${f.cNovo} chaves=${{ rua: "endereco" }}
+            onMuda=${v => setF(o => ({ ...o, cNovo: { ...o.cNovo, cep: v, ...(soDig(v).length === 8 ? {} : { cidade: "", uf: "" }) } }))} onAplica=${m => setF(o => ({ ...o, cNovo: { ...o.cNovo, ...m } }))} />
           <${Campo} id="c-end" rotulo="Endereço (rua e número)"><${Texto} id="c-end" valor=${f.cNovo.endereco} onMuda=${v => muda({ cNovo: { ...f.cNovo, endereco: v } })} /></${Campo}>
           <${Campo} id="c-bairro" rotulo="Bairro"><${Texto} id="c-bairro" valor=${f.cNovo.bairro || ""} onMuda=${v => muda({ cNovo: { ...f.cNovo, bairro: v } })} /></${Campo}>
         </div>

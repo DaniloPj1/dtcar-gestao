@@ -174,12 +174,11 @@ export function FormFornecedor({ inicial, onFechar, onSalvo }) {
   return html`<${Modal} titulo=${f.id ? "Fornecedor" : "Novo fornecedor"} largo onFechar=${onFechar}>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <fieldset disabled=${!pode(perfil, "cadastrar")} class="sem-borda form-ficha">
-      <div class="grade">${T("razao", "Razão social")}${T("fantasia", "Nome fantasia")}
-        <${Campo} id="fo-cnpj" rotulo="CNPJ / CPF"><input id="fo-cnpj" class="inp" inputmode="numeric" value=${f.cnpj} onBlur=${e => set({ cnpj: fmtDoc(e.target.value) })} onInput=${e => set({ cnpj: e.target.value })} /></${Campo}>
-        ${T("ie", "Inscrição estadual")}</div>
+      <div class="grade"><${Campo} id="fo-cnpj" rotulo="CNPJ / CPF"><input id="fo-cnpj" class="inp" inputmode="numeric" value=${f.cnpj} onBlur=${e => set({ cnpj: fmtDoc(e.target.value) })} onInput=${e => set({ cnpj: e.target.value })} /></${Campo}>
+        ${T("razao", "Razão social")}${T("fantasia", "Nome fantasia")}${T("ie", "Inscrição estadual")}</div>
       <div class="grade"><${Campo} id="fo-tel" rotulo="Telefone / WhatsApp"><input id="fo-tel" class="inp" inputmode="tel" value=${f.telefone} onBlur=${e => set({ telefone: fmtTel(e.target.value) })} onInput=${e => set({ telefone: e.target.value })} /></${Campo}>
         ${T("email", "E-mail", { type: "email" })}${T("contato", "Vendedor / contato")}</div>
-      <div class="grade">${T("endereco", "Endereço")}${T("bairro", "Bairro")}${T("cidade", "Cidade")}${T("uf", "UF", { maxlength: 2 })}<${CampoCep} id="fo-cep" valor=${f.cep} onMuda=${v => set({ cep: v })} atual=${f} chaves=${{ rua: "endereco" }} onAplica=${set} /></div>
+      <div class="grade"><${CampoCep} id="fo-cep" valor=${f.cep} onMuda=${v => set({ cep: v })} atual=${f} chaves=${{ rua: "endereco" }} onAplica=${set} />${T("endereco", "Endereço")}${T("bairro", "Bairro")}${T("cidade", "Cidade")}${T("uf", "UF", { maxlength: 2 })}</div>
       <div class="grade"><${Campo} id="fo-cat" rotulo="Categoria das contas" dica="Usada ao lançar boletos deste fornecedor."><${Texto} id="fo-cat" list="fo-cats" valor=${f.categoria_padrao} onMuda=${v => set({ categoria_padrao: v })} /><datalist id="fo-cats">${(cfg.categoriasDespesa || []).map(x => html`<option value=${x} />`)}</datalist></${Campo}></div>
       <label class="linha-check"><input type="checkbox" checked=${!!f.prestador} onChange=${e => set({ prestador: e.target.checked })} /><span>Presta serviços para a oficina (retífica, torno, guincho, funilaria…)</span></label>
       <${Campo} id="fo-obs" rotulo="Observações"><${Area} id="fo-obs" valor=${f.obs} onMuda=${v => set({ obs: v })} /></${Campo}>

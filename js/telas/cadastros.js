@@ -13,6 +13,7 @@ import { ProdutosLista } from "./produtos.js";
 import { FornecedoresLista } from "./compras.js";
 import { FichaOleo } from "./fichaoleo.js";
 import { CorrigirPelaPlaca } from "./corrigirplaca.js";
+import { CampoCep, fmtCep } from "../cep.js";
 
 const DIA = 86400000;
 const meses = iso => Math.floor((Date.now() - new Date(iso)) / (30.4 * DIA));
@@ -73,7 +74,7 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
     const tx = k => String(d[k] || "").trim();
     const reg = { nome: tx("nome"), fantasia: tx("fantasia"), telefone: soDig(d.telefone), telefone2: soDig(d.telefone2).length >= 10 ? soDig(d.telefone2) : tx("telefone2"), telefone3: soDig(d.telefone3).length >= 10 ? soDig(d.telefone3) : tx("telefone3"),
       email: tx("email").toLowerCase(), contato: tx("contato"), doc: soDig(d.doc), rg: tx("rg"), orgao_emissor: tx("orgao_emissor").toUpperCase(), ie: tx("ie"), im: tx("im"), nascimento: d.nascimento || null,
-      rua: tx("rua"), complemento: tx("complemento"), bairro: tx("bairro"), cidade: tx("cidade"), uf: tx("uf").toUpperCase().slice(0, 2), cep: tx("cep"), tipo_cliente: tx("tipo_cliente"), origem: d.origem || "",
+      rua: tx("rua"), complemento: tx("complemento"), bairro: tx("bairro"), cidade: tx("cidade"), uf: tx("uf").toUpperCase().slice(0, 2), cep: fmtCep(d.cep), tipo_cliente: tx("tipo_cliente"), origem: d.origem || "",
       situacao: d.situacao, restricao: d.situacao === "liberado" ? "" : tx("restricao"), obs: tx("obs"), historico: tx("historico"),
       ficha: Object.fromEntries(Object.entries(d.ficha).filter(([, v]) => v !== "" && v !== 0 && v !== null)) };
     reg.endereco = endCompleto(reg);
@@ -108,7 +109,7 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
       <${Abas} abas=${[["end", "Endereço e contatos"], ["fil", "Documentos, filiação e crédito"], ["obs", "Observações e histórico"]]} ativa=${aba} onTroca=${setAba} />
       ${aba === "end" ? html`<div class="aba-corpo">
         <div class="grade">${T("rua", "Endereço (rua e número)")}${T("complemento", "Complemento")}${T("bairro", "Bairro")}</div>
-        <div class="grade">${T("cidade", "Cidade")}${T("uf", "UF", { attr: { maxlength: 2 } })}${T("cep", "CEP", { attr: { inputmode: "numeric" } })}</div>
+        <div class="grade">${T("cidade", "Cidade")}${T("uf", "UF", { attr: { maxlength: 2 } })}<${CampoCep} id="c-cep" valor=${d.cep} onMuda=${v => set("cep", v)} atual=${d} padrao=${{ cidade: CLIENTE_VAZIO.cidade, uf: CLIENTE_VAZIO.uf }} onAplica=${m => setEd(o => ({ ...o, erros: [], d: { ...o.d, ...m } }))} /></div>
         <div class="grade">${Tel("telefone2", "Telefone 2")}${Tel("telefone3", "Telefone 3")}${T("email", "E-mail", { attr: { type: "email" } })}${T("contato", "Pessoa de contato")}</div>
         <div class="grade">
           <${Campo} id="c-tipo" rotulo="Tipo de cliente"><${Texto} id="c-tipo" list="tipos-cli" valor=${d.tipo_cliente} onMuda=${v => set("tipo_cliente", v)} /><datalist id="tipos-cli">${tipos.map(t => html`<option value=${t} />`)}</datalist></${Campo}>

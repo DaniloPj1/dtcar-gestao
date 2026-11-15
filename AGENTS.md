@@ -636,3 +636,6 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 
 ### Quadro "Óleo e filtros" recolhido na página do veículo (15/11/2026, v138)
 - Com ficha gravada, o card começa recolhido: só a linha de cima (litros, viscosidade, selo) e o botão "Mostrar/Ocultar" (`#fo-alternar`). O corpo (`#fo-corpo`) com filtros, "Refazer ou editar" e "Confirmar" só existe aberto. Sem ficha, o card continua como antes. Vale para PC e celular (é o mesmo componente).
+
+### "Corrigir pela placa" na página do veículo (15/11/2026, v142, sem SQL)
+- Botão `#vei-corrigir-placa` ao lado de "Imprimir ficha" (`js/telas/corrigirplaca.js`, só quem tem "cadastrar"). Pergunta antes (a consulta completa custa R$ 0,20 se o sistema não tiver a cópia), chama a função `placa` (`completa`; cadastro que já tem chassi e Renavam pergunta de novo antes de pagar e usa `forcar`) e abre a **prévia do que está diferente** (marca, modelo, anos, cor, combustível, motor, chassi, Renavam e nº do motor, que vai nas observações). Só grava o que ficar marcado, pelo `api.veiculos.salvar`; não mexe em KM, dono nem na ficha de óleo e filtros. Diferente do botão da ficha de edição, que só preenche campo em branco. Teste: `python3 teste/teste_corrigir_placa.py`.

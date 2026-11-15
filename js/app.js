@@ -17,6 +17,7 @@ import { NovaOS, ChecklistOS } from "./telas/entrada.js";
 import { Ordem } from "./telas/ordem.js";
 import { Cadastros, ClienteTela, VeiculoTela } from "./telas/cadastros.js";
 import { Mais, Equipe, Ajustes } from "./telas/admin.js";
+import { AppMecanico } from "./telas/appmecanico.js";
 import { Recibos } from "./telas/recibos.js";
 import { ContasReceber, diasAte } from "./telas/receber.js";
 import { Boletos } from "./telas/boletos.js";
@@ -46,7 +47,7 @@ try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo ba
 // Pedido do Danilo em 12/11/2026: a virada foi em 02/11 e a faixa ainda piscava a cada abertura (antes de os Ajustes carregarem)
 // e ficava na tela quando os Ajustes não podiam ser lidos. Sem a informação, não mostra.
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
+const TITULOS = { "app-mecanico": "App do mecânico", "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 // no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
@@ -418,7 +419,7 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { orcamentos: "orcar", orcamento: "orcar", whatsapp: "ajustes", email: "ajustes", ajustes: "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", pedidos: "financeiro", receber: "verValores", boletos: "financeiro", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro", rh: "financeiro" };
+  const restrito = { orcamentos: "orcar", orcamento: "orcar", whatsapp: "ajustes", email: "ajustes", ajustes: "ajustes", "app-mecanico": "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", pedidos: "financeiro", receber: "verValores", boletos: "financeiro", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro", rh: "financeiro" };
   const pendOS = pend.filter(op => op.tipo === "abrir_os");
   const pendAlt = pend.filter(ehAlteracao), conflitos = pendAlt.filter(op => op.conflito || (op.erro && op.tentativas >= 3));
   const dadosVis = !pendOS.length ? dados : {
@@ -450,7 +451,7 @@ function App() {
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
     "dados-locais": () => html`<${DadosLocais} />`, "oleo-filtros": () => html`<${OleoFiltros} />`,
-    mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`,
+    mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`, "app-mecanico": () => html`<${AppMecanico} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, email: () => html`<${Email} params=${params} key=${qs || ""} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
     financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, pedidos: () => html`<${PedidosCompra} />`, agenda: () => html`<${Agenda} params=${params} key=${qs || ""} />`, orcamentos: () => html`<${Orcamentos} />`, orcamento: () => html`<${Orcamento} id=${param} key=${param} />`, receber: () => html`<${ContasReceber} />`, boletos: () => html`<${Boletos} />`, caixa: () => html`<${PrevisaoCaixa} />`, backup: () => html`<${Backup} />`,

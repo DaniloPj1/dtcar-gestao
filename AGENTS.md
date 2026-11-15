@@ -38,7 +38,12 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   diz o motivo quando não funciona. Tem manifesto e service worker próprios (`mecanico/sw.js`, cache `dtcar-mecanico-tN`, que só
   apaga as próprias cópias); **não entra em ARQUIVOS nem em INTEGRIDADE do `sw.js` do sistema** e o programa do Windows não a usa.
   `index.html` traz o modelo das telas (`<template id="tela">`, com `{{campo}}`, `<sc-if>` e `<sc-for>`) e `app.js` traz o desenhador e a
-  lógica (`class Component`). Mudou algo na pasta: troque a versão de CACHE do `mecanico/sw.js`. Teste: `python3 teste/teste_app_mecanico.py`
+  lógica (`class Component`). **Itens por sistema (15/11/2026):** a tela de itens do orçamento (Freios, Susp. dianteira/traseira, Direção, Motor, Transmissão)
+  vem de `js/appmecanico.js` (padrão + mescla; fonte única do app e da tela do administrador) e do que o administrador ajusta em
+  `cfg.appMecanico` (tabela `config`, sem tabela nova e sem SQL: já entra no backup e no banco do PC). Tela do administrador: `js/telas/appmecanico.js`
+  (rota `/app-mecanico`, atalho em Ajustes e no menu Mais; permissão `ajustes`): esconder/mostrar, renomear, opções multi-escolha, acrescentar com ícone.
+  Mudou `js/appmecanico.js`? Ele está no cache do app (`mecanico/sw.js`) e do sistema (`tools_sw.py`). Testes: `teste/teste_app_mecanico.py` e `teste/teste_app_mecanico_admin.py`.
+  Mudou algo na pasta: troque a versão de CACHE do `mecanico/sw.js`. Teste: `python3 teste/teste_app_mecanico.py`
   (Supabase de mentira). Regras combinadas e próximas etapas: documento "App do mecânico".
 
 ## Regras do negócio que não podem quebrar

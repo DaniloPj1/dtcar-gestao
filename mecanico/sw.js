@@ -1,7 +1,7 @@
 // Service worker do app do mecânico. Vale só para a pasta mecanico/ e não mexe no sw.js do sistema.
 // "Rede primeiro": sempre busca a versão nova; usa a cópia guardada só se a rede falhar.
 // Mudou um arquivo desta pasta? Troque a versão de CACHE.
-const CACHE = "dtcar-mecanico-t5";
+const CACHE = "dtcar-mecanico-t6";
 const ARQUIVOS = ["./", "index.html", "app.js", "manifest.webmanifest", "login.mp4", "login-poster.jpg",
   "../js/config.js", "../vendor/supabase.js", "../js/catalogo.js", "../js/util.js", "../js/catalogodados.js",
   "../icons/logo-branco-sm.png", "../icons/favicon.png", "../icons/icon-192.png", "../icons/icon-512.png"];

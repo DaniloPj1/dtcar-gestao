@@ -223,6 +223,23 @@ try:
         chk(T("orçamento aprovado: o cliente novo fica no cadastro com CPF, nascimento e endereço do orçamento"), r["aviso"] == "" and c.get("doc") == "86288366757" and c.get("nascimento") == "1985-07-15" and c.get("cep") == "29100-010"
             and c.get("cidade") == "Vila Velha" and c.get("rua") == "Avenida Champagnat" and c.get("bairro") == "Centro", r)
 
+      # achados da revisão: CPF repetido não derruba o endereço e o aviso diz o que faltou; documento pela metade não grava em silêncio
+      r = pg.evaluate("""(async () => { const { api } = await import('/js/api.js'); const { completarClienteNovo, erroClienteDig, copiaClienteDig } = await import('/js/clientedig.js'); const db = window.__DB;
+        const novo = { id: 'cli-rev', nome: 'NOVO DO ORCAMENTO', telefone: '27911112222' }; db.clientes.push(novo); db.ordens.push({ id: 'os-rev', numero: 99001, status: 'execucao', cliente_id: 'cli-rev', cliente: {}, veiculo: {} });
+        const salvar = api.clientes.salvar; api.clientes.salvar = async o => { if (o.doc) throw new Error('duplicate key value violates unique constraint "clientes_doc_unico"'); return salvar(o); };
+        const aviso = await completarClienteNovo(api, 'os-rev', { nome: 'x', doc: '52998224725', nascimento: '1985-07-15', cep: '29100-010', rua: 'Rua A, 1', bairro: 'Centro', cidade: 'Vila Velha', uf: 'ES' });
+        api.clientes.salvar = salvar;
+        return { aviso, cli: db.clientes.find(c => c.id === 'cli-rev'), meio: erroClienteDig({ doc: '529.982.247' }), bom: erroClienteDig({ doc: '529.982.247-25' }), vazio: erroClienteDig({ doc: '' }), copia: copiaClienteDig({ nome: 'a', doc: '529.982.247' }) }; })()""")
+      chk(T("orçamento aprovado com CPF que já é de outro cliente: o endereço vai, o CPF e o nascimento não, e a tela diz o que faltou"), "não foi para o cadastro" in r["aviso"] and r["cli"].get("cep") == "29100-010"
+          and r["cli"].get("rua") == "Rua A, 1" and not r["cli"].get("doc") and not r["cli"].get("nascimento"), r)
+      chk(T("CPF/CNPJ pela metade: a tela avisa antes de gravar (válido e vazio passam)"), "incompleto ou inválido" in r["meio"] and r["bom"] == "" and r["vazio"] == "", r)
+      pg.goto(U + "#/orcamento/novo"); pg.wait_for_timeout(1500)
+      pg.click(".seg button:has-text('Sem cadastro')"); pg.wait_for_timeout(300)
+      pg.fill("#orc-nome", "cliente com cpf pela metade"); pg.fill("#orc-doc", "529.982.247"); pg.wait_for_timeout(300); n = pg.evaluate("(window.__DB.orcamentos || []).length")
+      bt = pg.query_selector("button:has-text('Salvar orçamento'), button.btn-pri:has-text('Salvar')")
+      if bt: bt.click(); pg.wait_for_timeout(900)
+      chk(T("orçamento: CPF pela metade não grava e a tela diz por quê"), pg.evaluate("(window.__DB.orcamentos || []).length") == n and "incompleto ou inválido" in pg.inner_text("main"), pg.inner_text("main")[:200])
+
       # ================= agenda com cliente só digitado =================
       pg.goto(U + "#/agenda"); pg.wait_for_timeout(1500)
       pg.click(".painel-topo button:has-text('+ Agendar')"); pg.wait_for_timeout(500)
@@ -234,6 +251,25 @@ try:
       chk(T("agenda: CPF preenche o nome e o CEP o endereço"), val("#ag-nome") == "MARIA APARECIDA DE SOUZA" and val("#ag-end") == "Rodovia Gether Lopes de Farias", [val("#ag-nome"), val("#ag-end")])
       chk(T("agenda: o quadro não passa da largura"), larg() <= vp["width"] + 2, larg())
       pg.screenshot(path=SAIDA + "/cadapi-agenda-" + nome + ".png")
+      # agendamento salvo e reaberto: trocado o CPF, o nascimento do CPF antigo sai da cópia (não vai para o cadastro de outra pessoa)
+      pg.fill("#ag-tel", "27988883333"); pg.fill("#ag-serv", "Revisão dos 40 mil"); pg.wait_for_timeout(200)
+      pg.click(".modal button.btn-pri:has-text('Agendar')"); pg.wait_for_timeout(1200)
+      ag1 = pg.evaluate("(window.__DB.agendamentos || []).find(a => (a.cliente || {}).doc === '15350946056')")
+      chk(T("agenda gravada com a cópia do cliente: CPF, nascimento, CEP e endereço"), bool(ag1) and ag1["cliente"].get("nascimento") == "1985-07-15" and ag1["cliente"].get("cep") == "29705-390"
+          and ag1["cliente"]["nome"] == "MARIA APARECIDA DE SOUZA", ag1 and ag1["cliente"] or (pg.inner_text(".modal .erros") if pg.query_selector(".modal .erros") else "não gravou"))
+      if ag1:
+        if pg.query_selector(".modal"): pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
+        alvo = pg.query_selector("main button:has-text('MARIA APARECIDA DE SOUZA')")
+        if alvo:
+          alvo.click(); pg.wait_for_timeout(600)
+          ed = pg.query_selector(".modal button:has-text('Editar'), .modal button:has-text('Alterar')")
+          if ed and pg.query_selector("#ag-doc") is None: ed.click(); pg.wait_for_timeout(400)
+        if pg.query_selector("#ag-doc") and not pg.is_disabled("#ag-doc"):
+          pg.fill("#ag-doc", "529.982.247-25"); pg.wait_for_timeout(1300)
+          pg.click(".modal button.btn-pri:has-text('Salvar')"); pg.wait_for_timeout(1200)
+          ag2 = pg.evaluate("(window.__DB.agendamentos || []).find(a => (a.cliente || {}).doc === '52998224725')")
+          chk(T("REVISÃO: agendamento reaberto com o CPF trocado não leva o nascimento do CPF antigo"), bool(ag2) and not ag2["cliente"].get("nascimento"), ag2 and ag2["cliente"])
+        else: chk(T("reabrir o agendamento para trocar o CPF"), False, pg.inner_text("body")[:200])
       ag = {"id": "ag-teste", "cliente_id": "", "veiculo_id": "", "servico": "Revisão", "veiculo": {"placa": "KLM3N45", "marca": "Fiat", "modelo": "ARGO", "ano": "2020"},
             "cliente": {"nome": "MARIA APARECIDA DE SOUZA", "telefone": "27988884444", "doc": "15350946056", "nascimento": "1985-07-15", "cep": "29100-010", "rua": "Avenida Champagnat, 5", "bairro": "Centro", "cidade": "Vila Velha", "uf": "ES"}}
       pg.keyboard.press("Escape"); pg.wait_for_timeout(300)

@@ -12,7 +12,7 @@ import { norm, fmtData, fmtTel, fmtDataHora, hojeISO, somaDias, exPlaca, normPla
 import { pode } from "../regras.js";
 import { prepararNovaOSAgenda, LS_VINCULOS } from "./entrada.js";
 import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
-import { ClienteDigitado, copiaClienteDig } from "../clientedig.js";
+import { ClienteDigitado, copiaClienteDig, erroClienteDig } from "../clientedig.js";
 
 /* ---------------- agenda da oficina (v54, pedido do Danilo em 12/11/2026) ----------------
  * Gravadas no banco: agendado, confirmado, chegou (virou O.S.), faltou, cancelado (com motivo). "Remarcado" não é situação:
@@ -239,7 +239,7 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
       if (!a.cliente_id) return set({ veiculo_id: v.id, veiculo: copiaVei(v) }); }
     set({ veiculo: { ...a.veiculo, placa: p } }); };
 
-  const validar = () => !a.data ? "Informe o dia." : !String(a.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome."
+  const validar = () => !a.data ? "Informe o dia." : !String(a.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome." : (!a.cliente_id && erroClienteDig(a.cliente)) ? erroClienteDig(a.cliente)
     : !String(a.servico || "").trim() ? "Escreva o serviço combinado." : "";
   /** grava (novo ou alteração) e devolve o agendamento como ficou no banco */
   const gravar = async (mudancas = {}, msg) => {

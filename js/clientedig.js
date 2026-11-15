@@ -23,24 +23,30 @@ export function dadosParaCadastro(c = {}) {
   if (rua || bairro || cep) o.endereco = [rua, bairro, (cidade || "Colatina") + "/" + (uf || "ES")].filter(Boolean).join(", ");
   return o;
 }
+/** Aviso para a tela antes de gravar: CPF/CNPJ digitado pela metade ou com dígito errado não some em silêncio ("" = pode gravar) */
+export const erroClienteDig = (c = {}) => tx(c.doc) && !docValido(c.doc) ? "CPF/CNPJ do cliente incompleto ou inválido. Confira os números ou deixe em branco." : "";
 /** A cópia do cliente digitado que vai para o orçamento / agendamento: nome em maiúsculas, telefone e o que mais foi preenchido */
 export const copiaClienteDig = (c = {}) => ({ nome: MAIUSC(c.nome), telefone: c.telefone || "", ...dadosParaCadastro(c) });
 
 /**
  * Orçamento aprovado com cliente só digitado: o banco cadastra o cliente com nome e telefone (v53); aqui o cadastro novo recebe
- * o CPF/CNPJ, o nascimento e o endereço que estavam no orçamento. Nunca lança erro: devolve "" ou o aviso para mostrar.
+ * o CPF/CNPJ, o nascimento e o endereço que estavam no orçamento. Nunca lança erro: devolve "" ou o que faltou, para a tela juntar
+ * ao aviso de que a O.S. foi aberta (um aviso só: o segundo apagaria o primeiro).
  */
 export async function completarClienteNovo(api, ordemId, c) {
   const extras = dadosParaCadastro(c);
   if (!ordemId || !Object.keys(extras).length) return "";
-  try {
-    const r = await api.ordem(ordemId), os = (r && (r.ordem || r)) || {};
-    if (!os.cliente_id) return "A O.S. foi aberta, mas o CPF e o endereço do orçamento não foram para o cadastro do cliente: complete na ficha dele.";
-    await api.clientes.salvar({ id: os.cliente_id, ...extras });
-    return "";
-  } catch (e) {
-    return /doc|cpf|cnpj|duplicate|unique/i.test((e && e.message) || "") ? "A O.S. foi aberta, mas o CPF/CNPJ do orçamento já é de outro cliente do cadastro: confira a ficha do cliente."
-      : "A O.S. foi aberta, mas o CPF e o endereço do orçamento não foram para o cadastro do cliente: complete na ficha dele.";
+  const FALHOU = "o CPF e o endereço do orçamento não foram para o cadastro do cliente: complete na ficha dele.";
+  let id = "";
+  try { const r = await api.ordem(ordemId), os = (r && (r.ordem || r)) || {}; id = os.cliente_id || ""; } catch (e) { /* cai no aviso */ }
+  if (!id) return FALHOU;
+  try { await api.clientes.salvar({ id, ...extras }); return ""; }
+  catch (e) {
+    if (!extras.doc) return FALHOU;
+    // o CPF/CNPJ já é de outro cliente do cadastro (ou foi recusado): o endereço vai mesmo assim, sem o documento e sem o nascimento dele
+    const { doc, nascimento, ...resto } = extras;
+    try { if (Object.keys(resto).length) await api.clientes.salvar({ id, ...resto }); } catch (e2) { return FALHOU; }
+    return "o CPF/CNPJ do orçamento não foi para o cadastro do cliente (já é de outro cliente ou foi recusado): confira a ficha dele.";
   }
 }
 
@@ -53,6 +59,9 @@ export function ClienteDigitado({ p, c, onMuda, disabled }) {
   const atual = useRef(c); atual.current = c;
   const muda = m => onMuda({ ...atual.current, ...m });
   const doCPF = useRef(null), doCNPJ = useRef(null);
+  // nascimento e e-mail vêm da consulta do documento e não têm campo nesta tela: trocados os números do CPF/CNPJ (mesmo num orçamento
+  // reaberto), eles saem — o nascimento de um CPF nunca fica no cadastro de outro
+  const trocaDoc = v => muda({ doc: v, ...(soDig(v) !== soDig(atual.current.doc) ? { nascimento: "", email: "" } : {}) });
   const d = soDig(c.doc), noCadastro = d.length >= 11 ? (dados.clientes || []).find(x => soDig(x.doc) && soDig(x.doc) === d) : null;
   const falta = !disabled && !noCadastro && !tx(c.nome);
   const autoCPF = useCPF(c.doc, { pode: ehAdmin(perfil) && !disabled, auto: cfg.cpfAuto !== false, falta,
@@ -66,7 +75,7 @@ export function ClienteDigitado({ p, c, onMuda, disabled }) {
   return html`<div class="grade cli-dig">
     ${!disabled || tx(c.doc) ? html`<${Campo} id=${p + "-doc"} rotulo="CPF ou CNPJ" erro=${c.doc && d.length >= 11 && !docValido(c.doc) ? "Número inválido" : ""}
         dica=${noCadastro && !disabled ? "Já é do cadastro: " + noCadastro.nome + ". Escolha “Do cadastro”." : ""}>
-      <input id=${p + "-doc"} class="inp" inputmode="numeric" disabled=${disabled} value=${disabled ? fmtDoc(c.doc) : c.doc || ""} onBlur=${e => muda({ doc: fmtDoc(e.target.value) })} onInput=${e => muda({ doc: e.target.value })} />
+      <input id=${p + "-doc"} class="inp" inputmode="numeric" disabled=${disabled} value=${disabled ? fmtDoc(c.doc) : c.doc || ""} onBlur=${e => trocaDoc(fmtDoc(e.target.value))} onInput=${e => trocaDoc(e.target.value)} />
       <${CpfBusca} c=${autoCPF} /><${CnpjAviso} c=${autoCNPJ} /></${Campo}>` : null}
     <${Campo} id=${p + "-nome"} rotulo="Nome do cliente" obrig><${Texto} id=${p + "-nome"} class="inp maiusc" valor=${c.nome} disabled=${disabled} onMuda=${v => muda({ nome: v })} /></${Campo}>
     <${Campo} id=${p + "-tel"} rotulo="Telefone (WhatsApp)"><${Texto} id=${p + "-tel"} inputmode="tel" valor=${disabled ? fmtTel(c.telefone) : c.telefone} disabled=${disabled} onMuda=${v => muda({ telefone: v })} /></${Campo}>

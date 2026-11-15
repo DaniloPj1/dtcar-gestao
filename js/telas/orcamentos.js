@@ -13,7 +13,7 @@ import { LancarFicha } from "./lancarficha.js";
 import { CampoDesconto } from "./acoesos.js";
 import { LS_ORC_AGENDA } from "./agenda.js";
 import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
-import { ClienteDigitado, copiaClienteDig, completarClienteNovo } from "../clientedig.js";
+import { ClienteDigitado, copiaClienteDig, completarClienteNovo, erroClienteDig } from "../clientedig.js";
 
 const FALTA_V53 = e => /orcamento_aprovar|schema cache|could not find|404/i.test((e && e.message) || "");
 const FALTA_V52 = e => /orcamentos|orcamento_salvar|does not exist|schema cache|could not find|404/i.test((e && e.message) || "");
@@ -109,7 +109,7 @@ export function Orcamento({ id }) {
   const lancarFicha = lista => { setItens(l => l.concat(lista.map(x => ({ codigo: "", fornecedor: "", desconto: 0, horas: null, servico_id: null, fornecida_cliente: false, aprovado: null, ...x })))); setSujo(true); setFichaAberta(false); };
   const incluir = tipo => setModal({ _novo: true, id: uuid(), tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", aprovado: null });
 
-  const validar = () => !String(o.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome." : Number(o.desconto) > t.subtotal + 0.001 ? "O desconto não pode ser maior que o valor dos itens." : "";
+  const validar = () => !String(o.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome." : (!o.cliente_id && erroClienteDig(o.cliente)) ? erroClienteDig(o.cliente) : Number(o.desconto) > t.subtotal + 0.001 ? "O desconto não pode ser maior que o valor dos itens." : "";
   /** grava cabeçalho e itens numa transação (orcamento_salvar); mudanças = troca de situação junto */
   const gravar = async (mudancas = {}, aviso = "Orçamento salvo.") => {
     const e = validar(); if (e) { setErro(e); return null; }
@@ -194,7 +194,7 @@ export function Orcamento({ id }) {
           <button type="button" class=${"btn" + (novo || sujo ? " btn-pri" : "")} disabled=${salvando || (!sujo && !novo)} onClick=${() => gravar()}>${salvando ? "Salvando…" : "Salvar orçamento"}</button>
           ${!novo ? html`<button type="button" class=${"btn btn-aprovar" + (sujo ? "" : " btn-pri")} disabled=${salvando} onClick=${abrirAprovar}>Cliente aprovou: virar O.S.</button>` : null}`}
     </div>` : null}
-    ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${r => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "."); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
+    ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${(r, faltou) => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "." + (faltou ? " Atenção: " + faltou : ""), !!faltou); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
 
     ${fichaAberta && vFicha ? html`<${LancarFicha} o=${o} v=${vFicha} itens=${itens} tabela=${o.tabela_preco} orcamento onFechar=${() => setFichaAberta(false)} onLancar=${lancarFicha} />` : null}
     ${modal ? html`<${ItemModal} item=${modal} tabela=${o.tabela_preco} orcamento onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal)} onFechar=${() => setModal(null)} />` : null}
@@ -211,7 +211,7 @@ export function Orcamento({ id }) {
 /* ---------------- aprovar: o que o cliente não tirar vira O.S.; o que tirar fica registrado como não aprovado ---------------- */
 const FORMAS_APROV = ["WhatsApp", "Telefone", "Na oficina"];
 function AprovarModal({ o, itens, ver, onFechar, onFeito }) {
-  const { ir, avisar } = useApp();
+  const { ir } = useApp();
   const [fora, setFora] = useState(() => itens.filter(i => i.aprovado === false).map(i => i.id)), [por, setPor] = useState((o.cliente || {}).nome || ""), [forma, setForma] = useState("WhatsApp");
   const [previa, setPrevia] = useState(null), [erro, setErro] = useState(""), [ocupado, setOcupado] = useState(false);
   const jaRecusados = useMemo(() => new Set(itens.filter(i => i.aprovado === false).map(i => i.id)), [itens]);
@@ -226,8 +226,9 @@ function AprovarModal({ o, itens, ver, onFechar, onFeito }) {
     try { const r = await api.orcamentos.aprovar(o.id, { itensFora: fora, por: por.trim(), forma, gravar: true });
       if (!r.gravado) { setPrevia(r); setOcupado(false); return; }
       // cliente só digitado que o banco acabou de cadastrar: o CPF/CNPJ, o nascimento e o endereço do orçamento vão para o cadastro novo
-      if (r.cliente_novo && !o.cliente_id) { const aviso = await completarClienteNovo(api, r.ordem_id, o.cliente); if (aviso) avisar(aviso, true); }
-      onFeito(r); }
+      let faltou = "";
+      if (r.cliente_novo && !o.cliente_id) faltou = await completarClienteNovo(api, r.ordem_id, o.cliente);
+      onFeito(r, faltou); }
     catch (e) { setErro(e.message); setOcupado(false); } };
   const erros = (previa && previa.erros) || [], avisos = (previa && previa.avisos) || [];
   return html`<${Modal} titulo=${"Aprovar " + numORC(o.numero) + " e abrir a O.S."} largo onFechar=${onFechar}>

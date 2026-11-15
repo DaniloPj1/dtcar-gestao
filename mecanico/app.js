@@ -232,14 +232,8 @@ function nomeFinal(i) {
 function faltaResponder(i) { return (i.pedePos && !i.pos) || (i.pedeLado && !i.lado); }
 
 // ---------- peças por sistema (tela "O que precisa ser feito") ----------
-var SIS_PECAS = [
-  { id: 'fr', nome: 'Freios', icone: 'disco', pecas: [['Pastilha de freio', 'jogo', 'pastilha', 'chips'], ['Disco de freio', 'jogo', 'disco', 'chips'], ['Sapatas de freio traseiras', 'jogo', 'sapata'], ['Tambor de freio traseiro', 'jogo', 'tambor'], ['Cilindro de roda traseiro', 'par', 'cilindro'], ['Fluido de freio DOT 4', 'cont', 'fluido'], ['Cabo do freio de mão', 'par', 'cabo'], ['Servo / cilindro mestre', 'un', 'servo']] },
-  { id: 'sd', nome: 'Susp. dianteira', icone: 'amortecedor', pecas: [['Amortecedor', 'jogo', 'amortecedor'], ['Kit do amortecedor (coxim)', 'par', 'kitamort'], ['Bieleta', 'par', 'bieleta'], ['Bucha da barra estabilizadora', 'par', 'bucha'], ['Pivô', 'par', 'pivo'], ['Bandeja / balança', 'par', 'bandeja'], ['Bucha da bandeja', 'un', 'bucha', 'chips2'], ['Rolamento de roda', 'par', 'rolamento']] },
-  { id: 'st', nome: 'Susp. traseira', icone: 'mola', pecas: [['Amortecedor', 'jogo', 'amortecedor'], ['Kit do amortecedor (coxim)', 'par', 'kitamort'], ['Mola', 'par', 'mola'], ['Bucha do eixo / jumelo', 'par', 'bucha'], ['Rolamento de roda', 'par', 'rolamento'], ['Ponta de eixo', 'par', 'pontaeixo']] },
-  { id: 'di', nome: 'Direção', icone: 'volante', pecas: [['Barra axial', 'par', 'axial'], ['Ponteira', 'par', 'ponteira'], ['Caixa de direção', 'un', 'caixadir'], ['Coifa da caixa', 'par', 'coifa'], ['Alinhamento 3D', 'un', 'alinha']] },
-  { id: 'mo', nome: 'Motor', icone: 'motor', pecas: [['Óleo e filtros', 'un', 'oleo'], ['Kit correia dentada', 'un', 'correia'], ["Bomba d'água", 'un', 'bomba'], ['Válvula termostática', 'un', 'termostato'], ['Velas', 'jogo', 'vela'], ['Coxim do motor', 'par', 'coximmotor']] },
-  { id: 'tr', nome: 'Transmissão', icone: 'engrenagem', pecas: [['Kit de embreagem', 'un', 'embreagem'], ['Homocinética', 'par', 'homocin'], ['Coifa da homocinética', 'par', 'coifa', ['Interna', 'Externa']], ['Óleo do câmbio', 'un', 'engrenagem']] }
-];
+// A lista de peças vem de js/appmecanico.js (padrão + o que o administrador ajustou no sistema); carregada depois do login (carregarPecas).
+var SIS_PECAS = [], ICONE_D = {};
 var SEM_PREFIXO = /^(alinhamento|fluido)/;
 // nome da peça no jeito da oficina, com posição e quantidade
 function nomePeca(p, v) {
@@ -252,7 +246,7 @@ function nomePeca(p, v) {
   if (p.tipo === 'par' && v.q > 1) nome += ' (' + v.q + ' UN)';
   return nome;
 }
-function listaPecas(g, extras) { return g.pecas.map(function (p) { return { nome: p[0], tipo: p[1], icone: p[2], pm: p[3] }; }).concat(((extras || {})[g.id] || []).map(function (nm) { return { nome: nm, tipo: 'par', icone: 'engrenagem' }; })); }
+function listaPecas(g, extras) { return g.pecas.concat(((extras || {})[g.id] || []).map(function (nm) { return { orig: nm, nome: nm, tipo: 'par', icone: 'chave' }; })); }
 function pedePosicao(p) { return p.pm === 'chips' || p.pm === 'chips2' || Array.isArray(p.pm); }
 window.__dtcarCorretor = { nomePeca: nomePeca, novo: novoVocabulario, palavra: corrigirPalavra, frase: corrigirFrase, prelista: montarPrelista, item: criarItem, nome: nomeFinal };
 class Component extends DCLogic {
@@ -356,6 +350,13 @@ var ano = dd.ano_fab && dd.ano_mod && dd.ano_fab !== dd.ano_mod ? dd.ano_fab + '
 fim({ estado: 'ok', origem: 'consulta', dados: { placa: pl, marca: dd.marca, modelo: dd.modelo, ano: String(ano), motor: dd.motor, combustivel: dd.combustivel } });
 });
 }).catch(function () { delete self._placas[pl]; fim({ estado: 'erro', msg: 'Sem resposta. Confira a internet.' }); delete self._placas[pl]; });
+}
+carregarPecas() {
+var self = this; if (this._pecas) return; this._pecas = true;
+import('../js/appmecanico.js').then(function (m) {
+return Promise.resolve(self.sb.from('config').select('dados').eq('id', 1).maybeSingle()).then(function (r) { return (r && r.data && r.data.dados) || {}; }, function () { return {}; })
+.then(function (cfg) { ICONE_D = m.ICONE_D; SIS_PECAS = m.catalogoDoApp(cfg); self.setState({ pecasProntas: true }); });
+}).catch(function () { self._pecas = false; self.avisar('Não consegui carregar a lista de peças.'); });
 }
 carregarCatalogo() {
 var self = this;
@@ -596,17 +597,17 @@ remover: function () { setN({ itens: self.state.nova.itens.filter(function (k) {
 
 var estadoPick = function () { return self.state.nova; };
 var setPick = function (id, v) { var p2 = Object.assign({}, estadoPick().pick); if (v) p2[id] = v; else delete p2[id]; if (v && id === 'sd|Bandeja / balança') delete p2['sd|Bucha da bandeja']; setN({ pick: p2 }); };
-var ativo = SIS_PECAS.filter(function (g) { return g.id === N.sisAtivo; })[0] || SIS_PECAS[0], pk = N.pick || {};
+var ativo = SIS_PECAS.filter(function (g) { return g.id === N.sisAtivo; })[0] || SIS_PECAS[0] || { id: '', nome: '', pecas: [] }, pk = N.pick || {};
 n.sisBotoes = SIS_PECAS.map(function (g) {
 var qt = Object.keys(pk).filter(function (k) { return k.indexOf(g.id + '|') === 0; }).length, on = g.id === ativo.id;
 var o = { nome: g.nome, ativo: on ? 'true' : 'false', borda: on ? '#174f94' : '#d5d9de', fundo: on ? '#174f94' : '#ffffff', cor: on ? '#ffffff' : '#16191d', temSel: qt > 0, qtdSel: String(qt), escolher: function () { setN({ sisAtivo: g.id, extraAbertoPick: false, extraTextoPick: '' }); } };
-o['k_' + g.icone] = true;
+o.d = ICONE_D[g.icone] || '';
 return o;
 });
 var bandejaOn = ativo.id === 'sd' && !!pk['sd|Bandeja / balança'];
 n.pecasPick = listaPecas(ativo, N.extraPick).map(function (p) {
-var id = ativo.id + '|' + p.nome, v = pk[id], on = !!v, par = p.tipo === 'par', cont = p.tipo === 'cont', multi = Array.isArray(p.pm);
-var c1 = on && v.q === 1, c2 = on && v.q === 2, bloq = bandejaOn && p.nome === 'Bucha da bandeja', pede = pedePosicao(p);
+var id = ativo.id + '|' + p.orig, v = pk[id], on = !!v, par = p.tipo === 'par', cont = p.tipo === 'cont', multi = Array.isArray(p.pm);
+var c1 = on && v.q === 1, c2 = on && v.q === 2, bloq = bandejaOn && p.orig === 'Bucha da bandeja', pede = pedePosicao(p);
 var atuais = on && v.pos ? v.pos.split(', ') : [];
 var cur = function () { return estadoPick().pick[id]; };
 var o = {
@@ -627,7 +628,7 @@ return { nome: nm, ativo: a2 ? 'true' : 'false', borda: a2 ? '#174f94' : '#9aa1a
 escolher: function () { var c = cur(); if (!c) return; var at = c.pos ? c.pos.split(', ') : [], ja = multi ? at.indexOf(nm) >= 0 : c.pos === nm; setPick(id, { q: c.q, pos: multi ? (ja ? at.filter(function (x) { return x !== nm; }) : at.concat([nm])).join(', ') : (ja ? '' : nm) }); } };
 })
 };
-o['k_' + p.icone] = true;
+o.d = ICONE_D[p.icone] || ICONE_D.chave || '';
 return o;
 });
 n.tituloSistema = ativo.nome; n.nomeSistema = ativo.nome; n.extraAberto = !!N.extraAbertoPick; n.extraTexto = N.extraTextoPick || '';
@@ -657,7 +658,7 @@ aviso: s.aviso, temAviso: !!s.aviso,
 folhaPausa: s.folha === 'pausa' && !fora, folhaMec: s.folha === 'mec' && !fora, folhaKm: s.folha === 'km' && !fora, folhaAdd: s.folha === 'add' && !fora, addTexto: s.addTexto, addFalarBg: s.addOuvindo ? '#16191d' : '#ffffff', addFalarFg: s.addOuvindo ? '#ffffff' : '#16191d', addFalarTexto: s.addOuvindo ? 'Ouvindo…' : 'Segure para falar',
 itemFolha: itemSel ? itemSel.nome : '', mecanicos: mecanicos, motivos: motivos,
 kmInput: s.kmInput, kmErro: s.kmErro, temKmErro: !!s.kmErro,
-novaAbrir: function () { self.setState({ sistemaAberto: null, nova: { passo: 'foto', buscando: false, dadosVeiculo: null, marcados: {}, parcial: '', placaInput: '', placa: '', modelo: '', detalhe: '', cadastrado: false, cliente: '', kmAnterior: null, clienteInput: '', foneInput: '', kmInput: '', texto: '', ouvindo: false, itens: [], sisAtivo: 'fr', pick: {}, extraPick: {}, extraAbertoPick: false, extraTextoPick: '' } }); },
+novaAbrir: function () { self.carregarPecas(); self.setState({ sistemaAberto: null, nova: { passo: 'foto', buscando: false, dadosVeiculo: null, marcados: {}, parcial: '', placaInput: '', placa: '', modelo: '', detalhe: '', cadastrado: false, cliente: '', kmAnterior: null, clienteInput: '', foneInput: '', kmInput: '', texto: '', ouvindo: false, itens: [], sisAtivo: 'fr', pick: {}, extraPick: {}, extraAbertoPick: false, extraTextoPick: '' } }); },
 novaVoltar: function () {
 var ordem = ['foto', 'dados', 'itens', 'lista'], i = ordem.indexOf(N.passo);
 self.soltar();
@@ -700,6 +701,7 @@ abrirExtraPick: function () { setN({ extraAbertoPick: true }); },
 onExtraPick: function (e) {
 var t = (e.target.value || '').trim().toUpperCase(); if (!t) return;
 var at = self.state.nova, g = SIS_PECAS.filter(function (x) { return x.id === at.sisAtivo; })[0] || SIS_PECAS[0];
+if (!g) return;
 if (listaPecas(g, at.extraPick).some(function (p) { return p.nome.toUpperCase() === t; })) { self.avisar('Essa peça já está na lista de ' + g.nome + '.'); setN({ extraTextoPick: '' }); return; }
 var ex = Object.assign({}, at.extraPick), pk2 = Object.assign({}, at.pick); ex[g.id] = (ex[g.id] || []).concat([t]); pk2[g.id + '|' + t] = { q: 1, pos: '' };
 setN({ extraPick: ex, pick: pk2, extraTextoPick: '' });
@@ -709,7 +711,7 @@ var at = self.state.nova, pk = at.pick || {}, novos = [], faltam = [], jaTinha =
 at.itens.forEach(function (k) { tem[k.base] = 1; });
 SIS_PECAS.forEach(function (g) {
 listaPecas(g, at.extraPick).forEach(function (p) {
-var v = pk[g.id + '|' + p.nome]; if (!v) return;
+var v = pk[g.id + '|' + p.orig]; if (!v) return;
 if (pedePosicao(p) && !v.pos) { faltam.push(p.nome); return; }
 var base = nomePeca(p, v);
 if (tem[base]) { jaTinha++; return; }

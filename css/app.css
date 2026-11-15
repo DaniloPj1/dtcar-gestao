@@ -1505,3 +1505,13 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .lf-linha{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid #e3e6ea;flex-wrap:wrap}
 .lf-linha select{flex:1 1 220px;min-width:0}.lf-desc{flex:1 1 200px}.lf-qtd{width:72px}
 .lf-sem{opacity:.85}
+/* App do mecânico › itens da lista (tela do administrador; não muda nada do celular nem das outras telas) */
+.am-lista{display:flex;flex-direction:column;gap:8px}
+.am-linha{display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--line);border-radius:var(--r);background:var(--surface-2);min-width:0}
+.am-linha.am-off{opacity:.55}
+.am-ic{flex:none;display:grid;place-items:center;width:44px;height:44px;border-radius:10px;background:var(--surface);border:1px solid var(--line)}
+.am-meio{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.am-acoes{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.am-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;max-height:210px;overflow-y:auto;padding:2px}
+.am-grade button{display:grid;place-items:center;height:46px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
+.am-grade button[aria-pressed=true]{border:2px solid var(--brand);background:var(--surface-2)}

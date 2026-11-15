@@ -92,6 +92,9 @@ details.card summary h3::after{content:" ▾";font-size:12px}
 .placa-situacao{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:10px 0 6px}
 /* consulta do cliente pelo CPF (15/11/2026): mesma linha de aviso da placa, dentro do campo */
 .cpf-linha{margin:4px 0 0}
+/* cadastros em letras maiúsculas (regra do Danilo, 15/11/2026): o campo já mostra como vai ser gravado */
+.inp.maiusc{text-transform:uppercase}
+.inp.maiusc::placeholder{text-transform:none}
 .cpf-chave{margin:12px 0 10px}
 .cpf-chave .linha-add .inp{flex:1 1 220px;min-width:0}
 .cpf-msg{font-weight:600}

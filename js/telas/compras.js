@@ -1,5 +1,5 @@
 // Entrada de mercadoria pelo XML da NF-e e cadastro de fornecedores
-import { html, useState, useEffect, useMemo } from "../lib.js";
+import { html, useState, useEffect, useMemo, useRef } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro } from "../ui.js";
 import { norm, soDig, docValido, reais, qtdFmt, fmtData, fmtDataHora, fmtDoc, fmtTel, parseValor, precoPelaMargem, arred } from "../util.js";
@@ -7,6 +7,7 @@ import { pode, UNIDADES, gruposDeProdutos, grupoCanonico } from "../regras.js";
 import { lerNFe, reconhecer, linkImagem } from "../nfe.js";
 import { contasDaNota, somaMes } from "./financeiro.js";
 import { CampoCep, fmtCep } from "../cep.js";
+import { useCNPJ, CnpjAviso, soEmBranco, tirarPostos } from "../cnpj.js";
 
 const COMO = { vinculo: ["Já vinculado a este fornecedor", "ok"], ean: ["Encontrado pelo código de barras", "ok"], referencia: ["Encontrado pela referência", "info"], parecido: ["Há produtos parecidos", "warn"], nenhum: ["Produto novo", "muted"] };
 
@@ -158,6 +159,12 @@ export function FormFornecedor({ inicial, onFechar, onSalvo }) {
   const [f, setF] = useState({ ...FORN_VAZIO, ...inicial, cnpj: fmtDoc(inicial.cnpj || ""), telefone: fmtTel(inicial.telefone || "") }), [erro, setErro] = useState(""), [notas, setNotas] = useState(null);
   useEffect(() => { if (f.id) api.notas.listar().then(l => setNotas(l.filter(n => n.fornecedor_id === f.id))).catch(() => setNotas([])); }, []);
   const set = o => { setF(x => ({ ...x, ...o })); setErro(""); };
+  // CNPJ novo (fora do cadastro) e razão social em branco: busca a empresa pelo CNPJ e preenche só o que está em branco
+  const atualF = useRef(f); atualF.current = f; const doCNPJ = useRef(null);
+  const autoCNPJ = useCNPJ(f.cnpj, { falta: pode(perfil, "cadastrar") && !f.id && !String(f.razao || "").trim() && !dados.fornecedores.some(x => soDig(x.cnpj) && soDig(x.cnpj) === soDig(f.cnpj)),
+    onDados: e => { const postos = soEmBranco(atualF.current, { razao: e.razao, fantasia: e.fantasia, telefone: e.telefone ? fmtTel(e.telefone) : "", email: e.email, cep: e.cep, endereco: e.rua, bairro: e.bairro, cidade: e.cidade, uf: e.uf }, doCNPJ.current || {});
+      doCNPJ.current = postos; if (Object.keys(postos).length) set(postos); },
+    onTrocou: () => { const t = tirarPostos(atualF.current, doCNPJ.current); doCNPJ.current = null; if (Object.keys(t).length) set(t); } });
   const T = (k, rot, attr = {}) => html`<${Campo} id=${"fo-" + k} rotulo=${rot}><${Texto} id=${"fo-" + k} valor=${f[k]} onMuda=${v => set({ [k]: v })} ...${attr} /></${Campo}>`;
   const salvar = async () => {
     if (!f.razao.trim()) return setErro("Informe a razão social.");
@@ -174,7 +181,7 @@ export function FormFornecedor({ inicial, onFechar, onSalvo }) {
   return html`<${Modal} titulo=${f.id ? "Fornecedor" : "Novo fornecedor"} largo onFechar=${onFechar}>
     ${erro ? html`<div class="erros">${erro}</div>` : null}
     <fieldset disabled=${!pode(perfil, "cadastrar")} class="sem-borda form-ficha">
-      <div class="grade"><${Campo} id="fo-cnpj" rotulo="CNPJ / CPF"><input id="fo-cnpj" class="inp" inputmode="numeric" value=${f.cnpj} onBlur=${e => set({ cnpj: fmtDoc(e.target.value) })} onInput=${e => set({ cnpj: e.target.value })} /></${Campo}>
+      <div class="grade"><${Campo} id="fo-cnpj" rotulo="CNPJ / CPF"><input id="fo-cnpj" class="inp" inputmode="numeric" value=${f.cnpj} onBlur=${e => set({ cnpj: fmtDoc(e.target.value) })} onInput=${e => set({ cnpj: e.target.value })} /><${CnpjAviso} c=${autoCNPJ} /></${Campo}>
         ${T("razao", "Razão social")}${T("fantasia", "Nome fantasia")}${T("ie", "Inscrição estadual")}</div>
       <div class="grade"><${Campo} id="fo-tel" rotulo="Telefone / WhatsApp"><input id="fo-tel" class="inp" inputmode="tel" value=${f.telefone} onBlur=${e => set({ telefone: fmtTel(e.target.value) })} onInput=${e => set({ telefone: e.target.value })} /></${Campo}>
         ${T("email", "E-mail", { type: "email" })}${T("contato", "Vendedor / contato")}</div>

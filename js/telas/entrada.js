@@ -9,6 +9,8 @@ import { useCPF, CpfBusca, ehAdmin } from "../cpf.js";
 import { CampoCep, fmtCep } from "../cep.js";
 import { soDig, norm, uuid, docValido, fmtDoc, fmtTel, normPlaca, placaValida, exPlaca, fmtKm, fmtDataHora, lsGet, lsSet, reduzirImagem, numOS, endCompleto } from "../util.js";
 import { SECOES_CHECKLIST, SECOES_EXTERNO, COMBUSTIVEL, COMBUSTIVEIS, SLOTS_FOTO, SLOTS_OBRIG, extrasDe, secoesCheckin, achados, termoEntradaFinal } from "../regras.js";
+import { useCNPJ, CnpjAviso, soEmBranco, tirarPostos } from "../cnpj.js";
+import { MAIUSC } from "../maiusculas.js";
 
 export const LS_NOVA = "dtcar-nova-os-v1";
 export const ORIGENS = ["Indicação", "Cliente antigo", "Google", "Instagram / Facebook", "Passou em frente", "Outro"];
@@ -28,7 +30,10 @@ export function prepararNovaOSAgenda(ag, dados) {
   const clienteId = ag.cliente_id || (vCad && vCad.cliente_id) || "";
   lsSet(LS_NOVA, { ...vazioNova(), agendaId: ag.id, placa: vCad ? vCad.placa : placa, veiculoId: vCad ? vCad.id : "", clienteId,
     vNovo: { ...vazioNova().vNovo, marca: vc.marca || "", modelo: vc.modelo || "", ano: vc.ano || "" },
-    modoCliente: clienteId ? "busca" : "novo", cNovo: { ...vazioNova().cNovo, nome: clienteId ? "" : c.nome || "", telefone: clienteId ? "" : c.telefone || "" },
+    modoCliente: clienteId ? "busca" : "novo",
+    // cliente só digitado no agendamento: o CPF/CNPJ, o nascimento e o endereço que estavam lá seguem para o cadastro do cliente novo
+    cNovo: clienteId ? { ...vazioNova().cNovo } : { ...vazioNova().cNovo, nome: c.nome || "", telefone: c.telefone || "", doc: c.doc ? fmtDoc(c.doc) : "", cep: c.cep || "", endereco: c.rua || "", bairro: c.bairro || "",
+      cidade: c.cidade || "", uf: c.uf || "", ...(c.doc && c.nascimento ? { doCPF: { cpf: soDig(c.doc), nome: "", nascimento: c.nascimento } } : {}) },
     reclamacao: ag.servico || "" });
 }
 /** chegada registrada sem internet na O.S. de um orçamento (v53): guarda para marcar "Chegou" nos agendamentos dele quando voltar a internet */
@@ -113,6 +118,12 @@ export function NovaOS() {
   useEffect(() => { const p = f.cNovo.doCPF; if (p && p.cpf !== cpfNovo) setF(o => { const { doCPF, ...c } = o.cNovo; return { ...o, cNovo: { ...c, nome: doCPF && doCPF.nome && c.nome === doCPF.nome ? "" : c.nome } }; }); }, [cpfNovo]);
   /** nascimento que veio da consulta do CPF que está no campo (vai para o cadastro do cliente novo) */
   const nascDoCPF = () => { const p = f.cNovo.doCPF; return p && p.cpf === soDig(f.cNovo.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
+  // CNPJ no cliente novo (empresa) e nome em branco: busca a razão social, o telefone e o endereço e preenche só o que está em branco
+  const atualC = useRef(f.cNovo); atualC.current = f.cNovo; const doCNPJ = useRef(null);
+  const autoCNPJ = useCNPJ(f.cNovo.doc, { falta: !f.clienteId && f.modoCliente === "novo" && !f.cNovo.nome.trim() && !dados.clientes.some(c => soDig(c.doc) === cpfNovo),
+    onDados: e => { const postos = soEmBranco(atualC.current, { nome: e.razao, telefone: e.telefone ? fmtTel(e.telefone) : "", cep: e.cep, endereco: e.rua, bairro: e.bairro, cidade: e.cidade, uf: e.uf }, doCNPJ.current || {});
+      doCNPJ.current = postos; if (Object.keys(postos).length) setF(o => ({ ...o, cNovo: { ...o.cNovo, ...postos } })); },
+    onTrocou: () => { const t = tirarPostos(atualC.current, doCNPJ.current); doCNPJ.current = null; if (Object.keys(t).length) setF(o => ({ ...o, cNovo: { ...o.cNovo, ...t } })); } });
   /** endereço do cliente novo: rua e bairro da tela; cidade e UF do CEP (sem CEP, Colatina/ES, como sempre foi) */
   const endNovo = () => { const rua = f.cNovo.endereco.trim(), bairro = (f.cNovo.bairro || "").trim(), cep = soDig(f.cNovo.cep).length === 8 ? fmtCep(f.cNovo.cep) : "";
     const cidade = (cep && (f.cNovo.cidade || "").trim()) || "Colatina", uf = (cep && (f.cNovo.uf || "").trim()) || "ES";
@@ -131,7 +142,7 @@ export function NovaOS() {
     try {
       let cli = cliente, cliId = f.clienteId;
       if (!cliId) {
-        cli = await api.clientes.salvar({ nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), ...endNovo(), origem: f.cNovo.origem || "", ...nascDoCPF() }); cliId = cli.id; }
+        cli = await api.clientes.salvar({ nome: MAIUSC(f.cNovo.nome), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), ...endNovo(), origem: f.cNovo.origem || "", ...nascDoCPF() }); cliId = cli.id; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo;
       if (!vei) vei = await api.veiculos.salvar({ placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
@@ -163,7 +174,7 @@ export function NovaOS() {
       const agora = new Date().toISOString(), ordemId = uuid(), prov = fila.proximoProvisorio();
       let cli = cliente, cliId = f.clienteId, novoCli = null;
       if (!cliId) { cliId = uuid();
-        novoCli = { id: cliId, nome: f.cNovo.nome.trim(), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), ...endNovo(), origem: f.cNovo.origem || "", ...nascDoCPF() }; cli = novoCli; }
+        novoCli = { id: cliId, nome: MAIUSC(f.cNovo.nome), telefone: soDig(f.cNovo.telefone), doc: soDig(f.cNovo.doc), ...endNovo(), origem: f.cNovo.origem || "", ...nascDoCPF() }; cli = novoCli; }
       const km = parseInt(soDig(f.km), 10);
       let vei = veiculo, novoVei = null, veiAtual = null;
       if (!vei) { novoVei = { id: uuid(), placa: f.placa, marca: f.vNovo.marca.trim(), modelo: f.vNovo.modelo.trim(), ...anosENumeros(f),
@@ -225,8 +236,8 @@ export function NovaOS() {
               : html`<div class="vazio">Nenhum cliente encontrado. <button type="button" class="btn-link" onClick=${() => muda({ modoCliente: "novo", cNovo: { ...f.cNovo, nome: qd.length ? "" : f.buscaCliente, telefone: qd.length >= 10 ? fmtTel(qd) : f.cNovo.telefone } })}>Cadastrar novo</button></div>`; })()}`
         : html`<div class="grade">
           <${Campo} id="c-doc" rotulo="CPF ou CNPJ" dica="Opcional. Necessário para nota fiscal em nome do cliente." erro=${f.cNovo.doc && soDig(f.cNovo.doc).length >= 11 && !docValido(f.cNovo.doc) ? "Número inválido" : ""}>
-            <input id="c-doc" class="inp" inputmode="numeric" value=${f.cNovo.doc} onBlur=${e => muda({ cNovo: { ...f.cNovo, doc: fmtDoc(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, doc: e.target.value } })} /><${CpfBusca} c=${autoCPF} /></${Campo}>
-          <${Campo} id="c-nome" rotulo="Nome completo" obrig><${Texto} id="c-nome" autocomplete="off" valor=${f.cNovo.nome} onMuda=${v => muda({ cNovo: { ...f.cNovo, nome: v } })} /></${Campo}>
+            <input id="c-doc" class="inp" inputmode="numeric" value=${f.cNovo.doc} onBlur=${e => muda({ cNovo: { ...f.cNovo, doc: fmtDoc(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, doc: e.target.value } })} /><${CpfBusca} c=${autoCPF} /><${CnpjAviso} c=${autoCNPJ} /></${Campo}>
+          <${Campo} id="c-nome" rotulo="Nome completo" obrig><${Texto} id="c-nome" class="inp maiusc" autocomplete="off" valor=${f.cNovo.nome} onMuda=${v => muda({ cNovo: { ...f.cNovo, nome: v } })} /></${Campo}>
           <${Campo} id="c-tel" rotulo="Telefone / WhatsApp" obrig><input id="c-tel" class="inp" inputmode="tel" value=${f.cNovo.telefone} onBlur=${e => muda({ cNovo: { ...f.cNovo, telefone: fmtTel(e.target.value) } })} onInput=${e => muda({ cNovo: { ...f.cNovo, telefone: e.target.value } })} /></${Campo}>
           <${CampoCep} id="c-cep" valor=${f.cNovo.cep || ""} atual=${f.cNovo} chaves=${{ rua: "endereco" }}
             onMuda=${v => setF(o => ({ ...o, cNovo: { ...o.cNovo, cep: v, ...(soDig(v).length === 8 ? {} : { cidade: "", uf: "" }) } }))} onAplica=${m => setF(o => ({ ...o, cNovo: { ...o.cNovo, ...m } }))} />

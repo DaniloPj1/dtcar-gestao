@@ -189,7 +189,7 @@ try:
     t = pg.inner_text("main")
     chk("orçamentos: lista mostra vencido, aprovado com a O.S. e os totais por situação", "Vencido" in t and "ORC-00001" in t and "virou O.S. 1898" in t and "1.900,00" in pg.inner_text(".orc-kpis") and "500,00" in pg.inner_text(".orc-kpis"))
     pg.click(".chip-f:has-text('Vencidos')"); pg.wait_for_timeout(300)
-    chk("orçamentos: filtro por situação", pg.locator(".linha-orc").count() == 1 and "Maria do telefone" in pg.inner_text(".linha-orc"))
+    chk("orçamentos: filtro por situação", pg.locator(".linha-orc").count() == 1 and "MARIA DO TELEFONE" in pg.inner_text(".linha-orc"))   # cliente digitado é gravado em maiúsculas (regra de 15/11/2026)
     pg.goto(U + "#/orcamento/orc-apr"); pg.wait_for_timeout(900)
     chk("orçamento aprovado: trancado e com link para a O.S.", "Não pode mais ser alterado" in pg.inner_text("main") and pg.locator("button:has-text('Salvar orçamento')").count() == 0 and pg.locator("button.btn-link:has-text('O.S. 1898')").count() == 1)
     # PDF com o número do orçamento (nunca número de O.S.) e mensagem do WhatsApp

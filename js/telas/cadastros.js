@@ -14,6 +14,8 @@ import { FornecedoresLista } from "./compras.js";
 import { FichaOleo } from "./fichaoleo.js";
 import { CorrigirPelaPlaca } from "./corrigirplaca.js";
 import { CampoCep, fmtCep } from "../cep.js";
+import { useCNPJ, CnpjAviso, soEmBranco, tirarPostos } from "../cnpj.js";
+import { MAIUSC } from "../maiusculas.js";
 
 const DIA = 86400000;
 const meses = iso => Math.floor((Date.now() - new Date(iso)) / (30.4 * DIA));
@@ -48,8 +50,9 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const [aba, setAba] = useState("end");
   const pode_ = pode(perfil, "cadastrar"), d = ed.d;
-  const set = (k, v) => setEd(o => ({ ...o, erros: [], d: { ...o.d, [k]: v } }));
-  const setF = (k, v) => setEd(o => ({ ...o, erros: [], d: { ...o.d, ficha: { ...o.d.ficha, [k]: v } } }));
+  const aoAbrir = useRef(ed.id ? { ...ed.d } : {});   // o que o cadastro tinha gravado quando a ficha abriu
+  const set = (k, v) => setEd(o => o && ({ ...o, erros: [], d: { ...o.d, [k]: v } }));
+  const setF = (k, v) => setEd(o => o && ({ ...o, erros: [], d: { ...o.d, ficha: { ...o.d.ficha, [k]: v } } }));
   const T = (k, rot, extra = {}) => html`<${Campo} id=${"c-" + k} rotulo=${rot} obrig=${extra.obrig}><${Texto} id=${"c-" + k} valor=${d[k]} onMuda=${v => set(k, v)} ...${extra.attr || {}} /></${Campo}>`;
   const F = (k, rot, attr = {}) => html`<${Campo} id=${"f-" + k} rotulo=${rot}><${Texto} id=${"f-" + k} valor=${d.ficha[k]} onMuda=${v => setF(k, v)} ...${attr} /></${Campo}>`;
   const Tel = (k, rot, obrig) => html`<${Campo} id=${"c-" + k} rotulo=${rot} obrig=${obrig}><input id=${"c-" + k} class="inp" inputmode="tel" value=${d[k]} onBlur=${e => set(k, fmtTel(e.target.value))} onInput=${e => set(k, e.target.value)} /></${Campo}>`;
@@ -58,9 +61,16 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
   const doCPF = useRef(null);
   const autoCPF = useCPF(d.doc, { pode: ehAdmin(perfil) && pode_, auto: cfg.cpfAuto !== false,
     falta: !ed.id && !String(d.nome || "").trim() && !dados.clientes.some(c => soDig(c.doc) && soDig(c.doc) === soDig(d.doc)),
-    onDados: dd => setEd(o => { const postos = {}; if (!String(o.d.nome || "").trim() && dd.nome) postos.nome = dd.nome; if (!o.d.nascimento && dd.nascimento) postos.nascimento = dd.nascimento;
+    onDados: dd => setEd(o => { if (!o) return o; const postos = {}; if (!String(o.d.nome || "").trim() && dd.nome) postos.nome = dd.nome; if (!o.d.nascimento && dd.nascimento) postos.nascimento = dd.nascimento;
       doCPF.current = postos; return { ...o, erros: [], d: { ...o.d, ...postos } }; }),
-    onTrocou: () => { const postos = doCPF.current || {}; doCPF.current = null; setEd(o => { const n = { ...o.d }; for (const k of Object.keys(postos)) if (String(n[k] ?? "") === String(postos[k])) n[k] = ""; return { ...o, d: n }; }); } });
+    onTrocou: () => { const postos = doCPF.current || {}; doCPF.current = null; setEd(o => { if (!o) return o; const n = { ...o.d }; for (const k of Object.keys(postos)) if (String(n[k] ?? "") === String(postos[k])) n[k] = ""; return { ...o, d: n }; }); } });
+  // CNPJ novo e nome em branco: busca a empresa pelo CNPJ (razão social, fantasia, telefone, e-mail e endereço) e preenche só o que está em branco
+  const atualD = useRef(d); atualD.current = d; const doCNPJ = useRef(null);
+  const PADRAO_END = { cidade: CLIENTE_VAZIO.cidade, uf: CLIENTE_VAZIO.uf };
+  const autoCNPJ = useCNPJ(d.doc, { falta: pode_ && !ed.id && !String(d.nome || "").trim() && !dados.clientes.some(c => soDig(c.doc) && soDig(c.doc) === soDig(d.doc)),
+    onDados: e => { const postos = soEmBranco(atualD.current, { nome: e.razao, fantasia: e.fantasia, telefone: e.telefone ? fmtTel(e.telefone) : "", email: e.email, cep: e.cep, rua: e.rua, complemento: e.complemento, bairro: e.bairro, cidade: e.cidade, uf: e.uf }, doCNPJ.current || {}, PADRAO_END);
+      doCNPJ.current = postos; if (Object.keys(postos).length) setEd(o => o && ({ ...o, erros: [], d: { ...o.d, ...postos } })); },
+    onTrocou: () => { const t = tirarPostos(atualD.current, doCNPJ.current, PADRAO_END); doCNPJ.current = null; if (Object.keys(t).length) setEd(o => o && ({ ...o, d: { ...o.d, ...t } })); } });
   const salvar = async () => {
     const erros = [];
     if (!d.nome.trim()) erros.push("Informe o nome ou a razão social.");
@@ -72,7 +82,7 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
     if (d.situacao !== "liberado" && !d.restricao.trim()) erros.push("Informe o motivo da " + (d.situacao === "bloqueado" ? "bloqueio" : "restrição") + ".");
     if (erros.length) return setEd({ ...ed, erros });
     const tx = k => String(d[k] || "").trim();
-    const reg = { nome: tx("nome"), fantasia: tx("fantasia"), telefone: soDig(d.telefone), telefone2: soDig(d.telefone2).length >= 10 ? soDig(d.telefone2) : tx("telefone2"), telefone3: soDig(d.telefone3).length >= 10 ? soDig(d.telefone3) : tx("telefone3"),
+    const reg = { nome: MAIUSC(d.nome), fantasia: tx("fantasia"), telefone: soDig(d.telefone), telefone2: soDig(d.telefone2).length >= 10 ? soDig(d.telefone2) : tx("telefone2"), telefone3: soDig(d.telefone3).length >= 10 ? soDig(d.telefone3) : tx("telefone3"),
       email: tx("email").toLowerCase(), contato: tx("contato"), doc: soDig(d.doc), rg: tx("rg"), orgao_emissor: tx("orgao_emissor").toUpperCase(), ie: tx("ie"), im: tx("im"), nascimento: d.nascimento || null,
       rua: tx("rua"), complemento: tx("complemento"), bairro: tx("bairro"), cidade: tx("cidade"), uf: tx("uf").toUpperCase().slice(0, 2), cep: fmtCep(d.cep), tipo_cliente: tx("tipo_cliente"), origem: d.origem || "",
       situacao: d.situacao, restricao: d.situacao === "liberado" ? "" : tx("restricao"), obs: tx("obs"), historico: tx("historico"),
@@ -91,6 +101,11 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
     try { await api.clientes.excluir(ed.id); setEd(null); avisar("Cliente excluído."); recarregar(["clientes"], { completo: true }); } catch (e) { setEd({ ...ed, erros: [e.message] }); }
   };
   const tipos = [...new Set([...(cfg.tiposCliente || []), ...dados.clientes.map(c => c.tipo_cliente).filter(Boolean)])].sort();
+  // Pessoa física (pedido do Danilo em 15/11/2026): a ficha não mostra Telefone 2, Telefone 3, E-mail, Pessoa de contato, Tipo de cliente
+  // nem Como conheceu a oficina. Empresa (CNPJ) continua com todos. Campo que já tinha algo gravado ao abrir continua à vista
+  // (nada some sem a pessoa ver) e nada é apagado: o que não aparece é gravado como estava.
+  const empresa = soDig(d.doc).length === 14;
+  const mostra = k => empresa || !!String(aoAbrir.current[k] || "").trim();
   return html`<${Modal} titulo=${ed.id ? "Cadastro de cliente" : "Novo cliente"} largo onFechar=${() => setEd(null)}>
     ${ed.erros.length ? html`<div class="erros">${ed.erros.join(" ")}</div>` : null}
     <fieldset disabled=${!pode_} class="sem-borda form-ficha">
@@ -99,8 +114,8 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
         <${Campo} id="c-data" rotulo="Data do cadastro"><input id="c-data" type="date" class="inp" value=${d.data || ""} onInput=${e => set("data", e.target.value)} /></${Campo}>
       </div>
       <div class="grade">
-        <${Campo} id="c-doc" rotulo="CPF ou CNPJ" erro=${d.doc && soDig(d.doc).length >= 11 && !docValido(d.doc) ? "Número inválido" : ""}><input id="c-doc" class="inp" inputmode="numeric" value=${d.doc} onBlur=${e => set("doc", fmtDoc(e.target.value))} onInput=${e => set("doc", e.target.value)} /><${CpfBusca} c=${autoCPF} /></${Campo}>
-        ${T("nome", "Nome / razão social", { obrig: true })}
+        <${Campo} id="c-doc" rotulo="CPF ou CNPJ" erro=${d.doc && soDig(d.doc).length >= 11 && !docValido(d.doc) ? "Número inválido" : ""}><input id="c-doc" class="inp" inputmode="numeric" value=${d.doc} onBlur=${e => set("doc", fmtDoc(e.target.value))} onInput=${e => set("doc", e.target.value)} /><${CpfBusca} c=${autoCPF} /><${CnpjAviso} c=${autoCNPJ} /></${Campo}>
+        ${T("nome", "Nome / razão social", { obrig: true, attr: { class: "inp maiusc" } })}
         ${T("fantasia", "Nome fantasia / apelido")}
         ${Tel("telefone", "Celular / WhatsApp", !ed.id)}
       </div>
@@ -109,13 +124,13 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
         ${d.situacao !== "liberado" ? html`<span class="dica">${SITUACAO_CLIENTE[d.situacao].dica}</span>${T("restricao", "Motivo", { obrig: true })}` : null}</div>
       <${Abas} abas=${[["end", "Endereço e contatos"], ["fil", "Documentos, filiação e crédito"], ["obs", "Observações e histórico"]]} ativa=${aba} onTroca=${setAba} />
       ${aba === "end" ? html`<div class="aba-corpo">
-        <div class="grade"><${CampoCep} id="c-cep" valor=${d.cep} onMuda=${v => set("cep", v)} atual=${d} padrao=${{ cidade: CLIENTE_VAZIO.cidade, uf: CLIENTE_VAZIO.uf }} onAplica=${m => setEd(o => ({ ...o, erros: [], d: { ...o.d, ...m } }))} />${T("rua", "Endereço (rua e número)")}${T("complemento", "Complemento")}${T("bairro", "Bairro")}</div>
+        <div class="grade"><${CampoCep} id="c-cep" valor=${d.cep} onMuda=${v => set("cep", v)} atual=${d} padrao=${{ cidade: CLIENTE_VAZIO.cidade, uf: CLIENTE_VAZIO.uf }} onAplica=${m => setEd(o => o && ({ ...o, erros: [], d: { ...o.d, ...m } }))} />${T("rua", "Endereço (rua e número)")}${T("complemento", "Complemento")}${T("bairro", "Bairro")}</div>
         <div class="grade">${T("cidade", "Cidade")}${T("uf", "UF", { attr: { maxlength: 2 } })}</div>
-        <div class="grade">${Tel("telefone2", "Telefone 2")}${Tel("telefone3", "Telefone 3")}${T("email", "E-mail", { attr: { type: "email" } })}${T("contato", "Pessoa de contato")}</div>
-        <div class="grade">
-          <${Campo} id="c-tipo" rotulo="Tipo de cliente"><${Texto} id="c-tipo" list="tipos-cli" valor=${d.tipo_cliente} onMuda=${v => set("tipo_cliente", v)} /><datalist id="tipos-cli">${tipos.map(t => html`<option value=${t} />`)}</datalist></${Campo}>
-          <${Campo} id="c-origem" rotulo="Como conheceu a oficina"><select id="c-origem" class="inp" value=${d.origem} onChange=${e => set("origem", e.target.value)}><option value="">—</option>${ORIGENS.map(o => html`<option value=${o}>${o}</option>`)}</select></${Campo}>
-        </div></div>`
+        ${["telefone2", "telefone3", "email", "contato"].some(mostra) ? html`<div class="grade">${mostra("telefone2") ? Tel("telefone2", "Telefone 2") : null}${mostra("telefone3") ? Tel("telefone3", "Telefone 3") : null}${mostra("email") ? T("email", "E-mail", { attr: { type: "email" } }) : null}${mostra("contato") ? T("contato", "Pessoa de contato") : null}</div>` : null}
+        ${mostra("tipo_cliente") || mostra("origem") ? html`<div class="grade">
+          ${mostra("tipo_cliente") ? html`<${Campo} id="c-tipo" rotulo="Tipo de cliente"><${Texto} id="c-tipo" list="tipos-cli" valor=${d.tipo_cliente} onMuda=${v => set("tipo_cliente", v)} /><datalist id="tipos-cli">${tipos.map(t => html`<option value=${t} />`)}</datalist></${Campo}>` : null}
+          ${mostra("origem") ? html`<${Campo} id="c-origem" rotulo="Como conheceu a oficina"><select id="c-origem" class="inp" value=${d.origem} onChange=${e => set("origem", e.target.value)}><option value="">—</option>${ORIGENS.map(o => html`<option value=${o}>${o}</option>`)}</select></${Campo}>` : null}
+        </div>` : null}</div>`
       : aba === "fil" ? html`<div class="aba-corpo">
         <div class="grade">
           ${T("rg", "RG")}${T("orgao_emissor", "Órgão emissor")}${T("ie", "Inscrição estadual")}${T("im", "Inscrição municipal")}
@@ -155,7 +170,7 @@ export const anoVeiculo = (f, m) => { f = +f || 0; m = +m || 0; return f && m &&
 export function FormVeiculo({ ed, setEd, onSalvo }) {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const pode_ = pode(perfil, "cadastrar"), d = ed.d;
-  const set = (k, v) => setEd(o => ({ ...o, erros: [], d: { ...o.d, [k]: v } }));
+  const set = (k, v) => setEd(o => o && ({ ...o, erros: [], d: { ...o.d, [k]: v } }));
   const T = (k, rot, attr = {}, obrig) => html`<${Campo} id=${"v-" + k} rotulo=${rot} obrig=${obrig}><${Texto} id=${"v-" + k} valor=${d[k]} onMuda=${v => set(k, v)} ...${attr} /></${Campo}>`;
   const N = (k, rot, max = 7) => html`<${Campo} id=${"v-" + k} rotulo=${rot}><input id=${"v-" + k} class="inp" inputmode="numeric" value=${d[k] === "" || d[k] === null ? "" : Number(d[k]).toLocaleString("pt-BR").replace(/\./g, k.startsWith("ano") ? "" : ".")} onInput=${e => set(k, soDig(e.target.value).slice(0, max))} /></${Campo}>`;
   const D = (k, rot) => html`<${Campo} id=${"v-" + k} rotulo=${rot}><input id=${"v-" + k} type="date" class="inp" value=${d[k] || ""} onInput=${e => set(k, e.target.value)} /></${Campo}>`;

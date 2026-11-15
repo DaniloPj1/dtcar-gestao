@@ -13,6 +13,7 @@ import { LancarFicha } from "./lancarficha.js";
 import { CampoDesconto } from "./acoesos.js";
 import { LS_ORC_AGENDA } from "./agenda.js";
 import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
+import { ClienteDigitado, copiaClienteDig, completarClienteNovo, erroClienteDig } from "../clientedig.js";
 
 const FALTA_V53 = e => /orcamento_aprovar|schema cache|could not find|404/i.test((e && e.message) || "");
 const FALTA_V52 = e => /orcamentos|orcamento_salvar|does not exist|schema cache|could not find|404/i.test((e && e.message) || "");
@@ -108,14 +109,14 @@ export function Orcamento({ id }) {
   const lancarFicha = lista => { setItens(l => l.concat(lista.map(x => ({ codigo: "", fornecedor: "", desconto: 0, horas: null, servico_id: null, fornecida_cliente: false, aprovado: null, ...x })))); setSujo(true); setFichaAberta(false); };
   const incluir = tipo => setModal({ _novo: true, id: uuid(), tipo, descricao: "", codigo: "", fornecedor: "", qtd: 1, valor_unit: 0, custo_unit: 0, desconto: 0, horas: null, fornecida_cliente: false, qualidade: tipo === "peca" ? "original" : "", aprovado: null });
 
-  const validar = () => !String(o.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome." : Number(o.desconto) > t.subtotal + 0.001 ? "O desconto não pode ser maior que o valor dos itens." : "";
+  const validar = () => !String(o.cliente.nome || "").trim() ? "Informe o cliente: escolha no cadastro ou digite o nome." : (!o.cliente_id && erroClienteDig(o.cliente)) ? erroClienteDig(o.cliente) : Number(o.desconto) > t.subtotal + 0.001 ? "O desconto não pode ser maior que o valor dos itens." : "";
   /** grava cabeçalho e itens numa transação (orcamento_salvar); mudanças = troca de situação junto */
   const gravar = async (mudancas = {}, aviso = "Orçamento salvo.") => {
     const e = validar(); if (e) { setErro(e); return null; }
     setSalvando(true);
     try {
       const r = await api.orcamentos.salvar({ ...(novo ? {} : { id: o.id }), cliente_id: o.cliente_id || "", veiculo_id: o.veiculo_id || "",
-        cliente: { nome: String(o.cliente.nome).trim(), telefone: o.cliente.telefone || "" }, veiculo: { ...o.veiculo, placa: normPlaca(o.veiculo.placa) },
+        cliente: o.cliente_id ? { nome: String(o.cliente.nome).trim(), telefone: o.cliente.telefone || "" } : copiaClienteDig(o.cliente), veiculo: { ...o.veiculo, placa: normPlaca(o.veiculo.placa) },
         reclamacao: o.reclamacao, obs: o.obs, obs_internas: o.obs_internas, tabela_preco: o.tabela_preco, condicoes_pagamento: o.condicoes_pagamento, desconto: Number(o.desconto) || 0,
         validade: o.validade || "", situacao: o.situacao, motivo: o.motivo || "", ...mudancas, itens: itens.map((i, n) => ({ ...i, posicao: n + 1 })) });
       avisar(aviso); setO(r); setItens(r.itens || []); setSujo(false); setErro("");
@@ -151,9 +152,7 @@ export function Orcamento({ id }) {
       ${edita ? html`<${Seg} rotulo="Cliente" opcoes=${[["Do cadastro", "info"], ["Sem cadastro", "info"]]} valor=${semCad ? "Sem cadastro" : "Do cadastro"}
         onEscolha=${v => { const s = v === "Sem cadastro"; setSemCad(s); if (s && o.cliente_id) set({ cliente_id: "", veiculo_id: "" }); }} />` : null}
       ${!semCad && edita ? html`<div class="campo"><label for="orc-cli">Cliente</label><${BuscaCliente} id="orc-cli" valor=${o.cliente_id} onEscolha=${escolherCliente} /></div>` : null}
-      ${semCad || !edita ? html`<div class="grade">
-        <${Campo} id="orc-nome" rotulo="Nome do cliente" obrig><${Texto} id="orc-nome" valor=${o.cliente.nome} disabled=${!edita} onMuda=${v => set({ cliente: { ...o.cliente, nome: v } })} /></${Campo}>
-        <${Campo} id="orc-tel" rotulo="Telefone (WhatsApp)"><${Texto} id="orc-tel" inputmode="tel" valor=${edita ? o.cliente.telefone : fmtTel(o.cliente.telefone)} disabled=${!edita} onMuda=${v => set({ cliente: { ...o.cliente, telefone: v } })} /></${Campo}></div>` : null}
+      ${semCad || !edita ? html`<${ClienteDigitado} p="orc" c=${o.cliente} disabled=${!edita || !!o.cliente_id} onMuda=${c => set({ cliente: c })} />` : null}
       ${edita && veiculosCli.length ? html`<div class="campo"><label for="orc-vei">Veículo do cadastro</label><select id="orc-vei" class="inp" value=${o.veiculo_id || ""} onChange=${e => escolherVeiculo(e.target.value)}>
         <option value="">Outro veículo (digitar)</option>${veiculosCli.map(v => html`<option value=${v.id}>${[exPlaca(v.placa), v.marca, v.modelo, v.ano].filter(Boolean).join(" ")}</option>`)}</select></div>` : null}
       <div class="grade orc-veic">
@@ -195,7 +194,7 @@ export function Orcamento({ id }) {
           <button type="button" class=${"btn" + (novo || sujo ? " btn-pri" : "")} disabled=${salvando || (!sujo && !novo)} onClick=${() => gravar()}>${salvando ? "Salvando…" : "Salvar orçamento"}</button>
           ${!novo ? html`<button type="button" class=${"btn btn-aprovar" + (sujo ? "" : " btn-pri")} disabled=${salvando} onClick=${abrirAprovar}>Cliente aprovou: virar O.S.</button>` : null}`}
     </div>` : null}
-    ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${r => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "."); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
+    ${aprovar ? html`<${AprovarModal} o=${o} itens=${itens} ver=${ver} onFechar=${() => setAprovar(false)} onFeito=${(r, faltou) => { setAprovar(false); avisar("Orçamento aprovado: virou a O.S. " + r.os_numero + "." + (faltou ? " Atenção: " + faltou : ""), !!faltou); recarregar(["ordens", "clientes", "veiculos", "produtos"]); ir("/os/" + r.ordem_id); }} />` : null}
 
     ${fichaAberta && vFicha ? html`<${LancarFicha} o=${o} v=${vFicha} itens=${itens} tabela=${o.tabela_preco} orcamento onFechar=${() => setFichaAberta(false)} onLancar=${lancarFicha} />` : null}
     ${modal ? html`<${ItemModal} item=${modal} tabela=${o.tabela_preco} orcamento onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal)} onFechar=${() => setModal(null)} />` : null}
@@ -225,7 +224,11 @@ function AprovarModal({ o, itens, ver, onFechar, onFeito }) {
   const vao = itens.filter(i => !fora.includes(i.id)), t = totais(vao.map(i => ({ ...i, aprovado: null })), o.desconto);
   const confirmar = async () => { setOcupado(true); setErro("");
     try { const r = await api.orcamentos.aprovar(o.id, { itensFora: fora, por: por.trim(), forma, gravar: true });
-      if (!r.gravado) { setPrevia(r); setOcupado(false); return; } onFeito(r); }
+      if (!r.gravado) { setPrevia(r); setOcupado(false); return; }
+      // cliente só digitado que o banco acabou de cadastrar: o CPF/CNPJ, o nascimento e o endereço do orçamento vão para o cadastro novo
+      let faltou = "";
+      if (r.cliente_novo && !o.cliente_id) faltou = await completarClienteNovo(api, r.ordem_id, o.cliente);
+      onFeito(r, faltou); }
     catch (e) { setErro(e.message); setOcupado(false); } };
   const erros = (previa && previa.erros) || [], avisos = (previa && previa.avisos) || [];
   return html`<${Modal} titulo=${"Aprovar " + numORC(o.numero) + " e abrir a O.S."} largo onFechar=${onFechar}>

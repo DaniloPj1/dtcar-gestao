@@ -1,5 +1,9 @@
 // Busca dos dados da empresa pelo CNPJ (pedido do Danilo em 15/11/2026: "não deixe nada de fora"). Gratuita e sem chave:
-//   1º BrasilAPI (brasilapi.com.br/api/cnpj/v1); 2º Minha Receita (minhareceita.org), que responde com os mesmos nomes de campo.
+//   1º BrasilAPI (brasilapi.com.br/api/cnpj/v1); 2º Minha Receita (minhareceita.org), que responde com os mesmos nomes de campo;
+//   3º CNPJ.ws pública (publica.cnpj.ws/cnpj), base independente das duas primeiras (a BrasilAPI consulta a Minha Receita por trás),
+//      limitada a 3 consultas por minuto — por isso fica por último.
+// Escolha conferida ao vivo em 15/11/2026 a partir do endereço do sistema: as três respondem ao navegador sem chave; a ReceitaWS e a
+// OpenCNPJ não aceitam chamada direta do navegador (CORS) e ficaram de fora.
 // São dados públicos do cadastro de empresas da Receita Federal (razão social, fantasia, endereço, telefone e e-mail).
 // Regras (as mesmas do CEP):
 //   - Uma consulta por CNPJ digitado (14 números com dígito válido), nunca em lote.
@@ -10,7 +14,8 @@ import { html, useState, useEffect, useRef } from "./lib.js";
 import { soDig, validaCNPJ } from "./util.js";
 import { fmtCep } from "./cep.js";
 
-const FONTES = [["brasilapi", c => "https://brasilapi.com.br/api/cnpj/v1/" + c], ["minhareceita", c => "https://minhareceita.org/" + c]];
+const FONTES = [["brasilapi", c => "https://brasilapi.com.br/api/cnpj/v1/" + c, j => lerCnpj(j)], ["minhareceita", c => "https://minhareceita.org/" + c, j => lerCnpj(j)],
+  ["cnpjws", c => "https://publica.cnpj.ws/cnpj/" + c, j => lerCnpjWs(j)]];
 const ESPERA = 6000, CHAVE = "dtcar-cnpj", MAX = 100;
 const vistos = new Map();
 const guardados = () => { try { return JSON.parse(localStorage.getItem(CHAVE) || "{}") || {}; } catch (e) { return {}; } };
@@ -30,13 +35,22 @@ export function lerCnpj(j) {
     situacao: limpo(j.descricao_situacao_cadastral).toUpperCase() };
 }
 
-async function pedir(url) {
+/** Resposta da CNPJ.ws pública (outro formato: os dados do endereço ficam em "estabelecimento") → os mesmos nomes do cadastro */
+export function lerCnpjWs(j) {
+  const e = j && typeof j === "object" && j.estabelecimento;
+  if (!e || typeof e !== "object") return null;
+  return lerCnpj({ razao_social: j.razao_social, nome_fantasia: e.nome_fantasia, descricao_tipo_de_logradouro: e.tipo_logradouro, logradouro: e.logradouro, numero: e.numero,
+    complemento: e.complemento, bairro: e.bairro, municipio: e.cidade && e.cidade.nome, uf: e.estado && e.estado.sigla, cep: e.cep,
+    ddd_telefone_1: String(e.ddd1 || "") + String(e.telefone1 || ""), email: e.email, descricao_situacao_cadastral: e.situacao_cadastral });
+}
+
+async function pedir(url, ler) {
   const ctl = typeof AbortController !== "undefined" ? new AbortController() : null, t = ctl ? setTimeout(() => ctl.abort(), ESPERA) : 0;
   try {
     const r = await fetch(url, { signal: ctl ? ctl.signal : undefined, headers: { Accept: "application/json" } });
     if (r.status === 404 || r.status === 400) return { achou: false };
     if (!r.ok) return { falhou: true };
-    const d = lerCnpj(await r.json());
+    const d = ler(await r.json());
     return d ? { achou: true, dados: d } : { achou: false };
   } catch (e) { return { falhou: true }; }
   finally { if (t) clearTimeout(t); }
@@ -56,8 +70,8 @@ export async function consultarCnpj(cnpj) {
   if (g && g.razao) { vistos.set(c, g); return { ok: true, encontrado: true, dados: g, origem: "guardado" }; }
   if (typeof navigator !== "undefined" && navigator.onLine === false) return { ok: false, semRede: true, erro: "Sem internet agora." };
   let respondeu = false;
-  for (const [nome, url] of FONTES) {
-    const r = await pedir(url(c));
+  for (const [nome, url, ler] of FONTES) {
+    const r = await pedir(url(c), ler);
     if (r.achou) { vistos.set(c, r.dados); guardar(c, r.dados); return { ok: true, encontrado: true, dados: r.dados, origem: nome }; }
     if (!r.falhou) respondeu = true;
   }

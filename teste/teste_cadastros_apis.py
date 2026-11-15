@@ -27,6 +27,13 @@ def minha(route):
     c = route.request.url.rstrip("/").split("/")[-1]; chamadas_cnpj.append("minhareceita:" + c)
     if c in CNPJ: route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps(CNPJ[c]))
     else: route.fulfill(status=404, content_type="application/json", headers={"access-control-allow-origin": "*"}, body='{"message":"nao encontrado"}')
+WS = {"razao_social": "EMPRESA SO DA TERCEIRA FONTE LTDA", "estabelecimento": {"nome_fantasia": "Terceira", "tipo_logradouro": "RUA", "logradouro": "DAS FLORES", "numero": "55", "complemento": "",
+      "bairro": "CENTRO", "cep": "29700010", "ddd1": "27", "telefone1": "37211234", "email": "CONTATO@TERCEIRA.COM.BR", "situacao_cadastral": "Ativa",
+      "cidade": {"nome": "Colatina"}, "estado": {"sigla": "ES"}}}
+def cnpjws(route):
+    c = route.request.url.rstrip("/").split("/")[-1]; chamadas_cnpj.append("cnpjws:" + c)
+    if c == "00000000000191": route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps(WS))
+    else: route.fulfill(status=404, content_type="application/json", headers={"access-control-allow-origin": "*"}, body='{"status":404}')
 def via(route):
     c = route.request.url.rstrip("/").split("/")[-2]
     route.fulfill(status=200, content_type="application/json", headers={"access-control-allow-origin": "*"}, body=json.dumps(VIA.get(c) or {"erro": "true"}))
@@ -40,9 +47,9 @@ try:
       ctx = b.new_context(viewport=vp); pg = ctx.new_page()
       pg.on("pageerror", lambda e: erros.append("PAGEERR " + str(e)))
       pg.route("https://viacep.com.br/**", via); pg.route("https://opencep.com/**", lambda r: r.fulfill(status=404, body="{}"))
-      pg.route("https://brasilapi.com.br/**", brasilapi); pg.route("https://minhareceita.org/**", minha); del chamadas_cnpj[:]; modo["brasilapi"] = "ok"
+      pg.route("https://brasilapi.com.br/**", brasilapi); pg.route("https://minhareceita.org/**", minha); pg.route("https://publica.cnpj.ws/**", cnpjws); del chamadas_cnpj[:]; modo["brasilapi"] = "ok"
       fora = []
-      pg.on("request", lambda r: fora.append(r.url) if r.url.startswith("http") and not r.url.startswith(U) and not any(h in r.url for h in ("viacep.com.br", "opencep.com", "brasilapi.com.br", "minhareceita.org", "fonts.g")) else None)
+      pg.on("request", lambda r: fora.append(r.url) if r.url.startswith("http") and not r.url.startswith(U) and not any(h in r.url for h in ("viacep.com.br", "opencep.com", "publica.cnpj.ws", "brasilapi.com.br", "minhareceita.org", "fonts.g")) else None)
       pg.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
       T = lambda s: nome + ": " + s
       val = lambda sel: pg.input_value(sel)
@@ -222,6 +229,14 @@ try:
         c = r["cli"]
         chk(T("orçamento aprovado: o cliente novo fica no cadastro com CPF, nascimento e endereço do orçamento"), r["aviso"] == "" and c.get("doc") == "86288366757" and c.get("nascimento") == "1985-07-15" and c.get("cep") == "29100-010"
             and c.get("cidade") == "Vila Velha" and c.get("rua") == "Avenida Champagnat" and c.get("bairro") == "Centro", r)
+
+      # terceira fonte (CNPJ.ws pública, outro formato): entra quando as duas primeiras não conhecem o CNPJ
+      n = len(chamadas_cnpj)
+      r = pg.evaluate("(async () => { const { consultarCnpj } = await import('/js/cnpj.js'); return consultarCnpj('00.000.000/0001-91'); })()")
+      d = r.get("dados") or {}
+      chk(T("CNPJ: as duas primeiras não conhecem, a CNPJ.ws responde e os dados chegam nos mesmos nomes"), r.get("origem") == "cnpjws" and [x.split(":")[0] for x in chamadas_cnpj[n:]] == ["brasilapi", "minhareceita", "cnpjws"]
+          and d.get("razao") == "EMPRESA SO DA TERCEIRA FONTE LTDA" and d.get("fantasia") == "TERCEIRA" and d.get("rua") == "RUA DAS FLORES, 55" and d.get("cidade") == "Colatina" and d.get("uf") == "ES"
+          and d.get("cep") == "29700-010" and d.get("telefone") == "2737211234" and d.get("email") == "contato@terceira.com.br" and d.get("situacao") == "ATIVA", [r, chamadas_cnpj[n:]])
 
       # achados da revisão: CPF repetido não derruba o endereço e o aviso diz o que faltou; documento pela metade não grava em silêncio
       r = pg.evaluate("""(async () => { const { api } = await import('/js/api.js'); const { completarClienteNovo, erroClienteDig, copiaClienteDig } = await import('/js/clientedig.js'); const db = window.__DB;

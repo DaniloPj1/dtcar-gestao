@@ -230,7 +230,31 @@ function nomeFinal(i) {
   return [i.base, POS[i.pos] || '', LADO[i.lado] || ''].filter(Boolean).join(' ');
 }
 function faltaResponder(i) { return (i.pedePos && !i.pos) || (i.pedeLado && !i.lado); }
-window.__dtcarCorretor = { novo: novoVocabulario, palavra: corrigirPalavra, frase: corrigirFrase, prelista: montarPrelista, item: criarItem, nome: nomeFinal };
+
+// ---------- peças por sistema (tela "O que precisa ser feito") ----------
+var SIS_PECAS = [
+  { id: 'fr', nome: 'Freios', icone: 'disco', pecas: [['Pastilha de freio', 'jogo', 'pastilha', 'chips'], ['Disco de freio', 'jogo', 'disco', 'chips'], ['Sapatas de freio traseiras', 'jogo', 'sapata'], ['Tambor de freio traseiro', 'jogo', 'tambor'], ['Cilindro de roda traseiro', 'par', 'cilindro'], ['Fluido de freio DOT 4', 'cont', 'fluido'], ['Cabo do freio de mão', 'par', 'cabo'], ['Servo / cilindro mestre', 'un', 'servo']] },
+  { id: 'sd', nome: 'Susp. dianteira', icone: 'amortecedor', pecas: [['Amortecedor', 'jogo', 'amortecedor'], ['Kit do amortecedor (coxim)', 'par', 'kitamort'], ['Bieleta', 'par', 'bieleta'], ['Bucha da barra estabilizadora', 'par', 'bucha'], ['Pivô', 'par', 'pivo'], ['Bandeja / balança', 'par', 'bandeja'], ['Bucha da bandeja', 'un', 'bucha', 'chips2'], ['Rolamento de roda', 'par', 'rolamento']] },
+  { id: 'st', nome: 'Susp. traseira', icone: 'mola', pecas: [['Amortecedor', 'jogo', 'amortecedor'], ['Kit do amortecedor (coxim)', 'par', 'kitamort'], ['Mola', 'par', 'mola'], ['Bucha do eixo / jumelo', 'par', 'bucha'], ['Rolamento de roda', 'par', 'rolamento'], ['Ponta de eixo', 'par', 'pontaeixo']] },
+  { id: 'di', nome: 'Direção', icone: 'volante', pecas: [['Barra axial', 'par', 'axial'], ['Ponteira', 'par', 'ponteira'], ['Caixa de direção', 'un', 'caixadir'], ['Coifa da caixa', 'par', 'coifa'], ['Alinhamento 3D', 'un', 'alinha']] },
+  { id: 'mo', nome: 'Motor', icone: 'motor', pecas: [['Óleo e filtros', 'un', 'oleo'], ['Kit correia dentada', 'un', 'correia'], ["Bomba d'água", 'un', 'bomba'], ['Válvula termostática', 'un', 'termostato'], ['Velas', 'jogo', 'vela'], ['Coxim do motor', 'par', 'coximmotor']] },
+  { id: 'tr', nome: 'Transmissão', icone: 'engrenagem', pecas: [['Kit de embreagem', 'un', 'embreagem'], ['Homocinética', 'par', 'homocin'], ['Coifa da homocinética', 'par', 'coifa', ['Interna', 'Externa']], ['Óleo do câmbio', 'un', 'engrenagem']] }
+];
+var SEM_PREFIXO = /^(alinhamento|fluido)/;
+// nome da peça no jeito da oficina, com posição e quantidade
+function nomePeca(p, v) {
+  var base = p.nome.toUpperCase(), f = /A$/.test(base.split(/[^A-ZÀ-Ú]+/)[0] || ''), pos = '';
+  if (v.pos) {
+    var mapa = { 'Diant.': f ? 'DIANTEIRA' : 'DIANTEIRO', 'Tras.': f ? 'TRASEIRA' : 'TRASEIRO', 'Os 2': f ? 'DIANTEIRA E TRASEIRA' : 'DIANTEIRO E TRASEIRO', Dianteira: 'DIANTEIRA', Traseira: 'TRASEIRA', 'As 2': 'DIANTEIRA E TRASEIRA' };
+    pos = v.pos.split(', ').map(function (x) { return mapa[x] || x.toUpperCase(); }).join(' E ');
+  }
+  var nome = (SEM_PREFIXO.test(semAcento(base)) ? '' : 'SUBST. ') + base + (pos ? ' ' + pos : '');
+  if (p.tipo === 'par' && v.q > 1) nome += ' (' + v.q + ' UN)';
+  return nome;
+}
+function listaPecas(g, extras) { return g.pecas.map(function (p) { return { nome: p[0], tipo: p[1], icone: p[2], pm: p[3] }; }).concat(((extras || {})[g.id] || []).map(function (nm) { return { nome: nm, tipo: 'par', icone: 'engrenagem' }; })); }
+function pedePosicao(p) { return p.pm === 'chips' || p.pm === 'chips2' || Array.isArray(p.pm); }
+window.__dtcarCorretor = { nomePeca: nomePeca, novo: novoVocabulario, palavra: corrigirPalavra, frase: corrigirFrase, prelista: montarPrelista, item: criarItem, nome: nomeFinal };
 class Component extends DCLogic {
 constructor(props) {
 super(props);
@@ -569,6 +593,47 @@ mais: function () { mudar({ qtd: Math.min(99, i.qtd + 1) }); }, menos: function 
 remover: function () { setN({ itens: self.state.nova.itens.filter(function (k) { return k.id !== i.id; }) }); } };
 })
 };
+
+var estadoPick = function () { return self.state.nova; };
+var setPick = function (id, v) { var p2 = Object.assign({}, estadoPick().pick); if (v) p2[id] = v; else delete p2[id]; if (v && id === 'sd|Bandeja / balança') delete p2['sd|Bucha da bandeja']; setN({ pick: p2 }); };
+var ativo = SIS_PECAS.filter(function (g) { return g.id === N.sisAtivo; })[0] || SIS_PECAS[0], pk = N.pick || {};
+n.sisBotoes = SIS_PECAS.map(function (g) {
+var qt = Object.keys(pk).filter(function (k) { return k.indexOf(g.id + '|') === 0; }).length, on = g.id === ativo.id;
+var o = { nome: g.nome, ativo: on ? 'true' : 'false', borda: on ? '#174f94' : '#d5d9de', fundo: on ? '#174f94' : '#ffffff', cor: on ? '#ffffff' : '#16191d', temSel: qt > 0, qtdSel: String(qt), escolher: function () { setN({ sisAtivo: g.id, extraAbertoPick: false, extraTextoPick: '' }); } };
+o['k_' + g.icone] = true;
+return o;
+});
+var bandejaOn = ativo.id === 'sd' && !!pk['sd|Bandeja / balança'];
+n.pecasPick = listaPecas(ativo, N.extraPick).map(function (p) {
+var id = ativo.id + '|' + p.nome, v = pk[id], on = !!v, par = p.tipo === 'par', cont = p.tipo === 'cont', multi = Array.isArray(p.pm);
+var c1 = on && v.q === 1, c2 = on && v.q === 2, bloq = bandejaOn && p.nome === 'Bucha da bandeja', pede = pedePosicao(p);
+var atuais = on && v.pos ? v.pos.split(', ') : [];
+var cur = function () { return estadoPick().pick[id]; };
+var o = {
+nome: p.nome, marcado: on, ehJogo: p.tipo === 'jogo' && !bloq, temNota: bloq, nota: 'Já vem na bandeja', ehPar: par, ehCont: cont, ehTick: !par && !cont && !bloq, qtd: on ? String(v.q) : '0',
+borda: on ? '#174f94' : '#e4e7ea', fundo: bloq ? '#f1f2f4' : (on ? '#e8f0fa' : '#ffffff'), icoFundo: on ? '#174f94' : '#eceef0', icoCor: on ? '#ffffff' : (bloq ? '#9aa1ab' : '#16191d'),
+alternar: function () { if (bloq) return; setPick(id, cur() ? null : { q: 1, pos: '' }); },
+mais: function () { var c = cur(); setPick(id, { q: (c ? c.q : 0) + 1, pos: c ? c.pos : '' }); },
+menos: function () { var c = cur(); setPick(id, c && c.q > 1 ? { q: c.q - 1, pos: c.pos } : null); },
+rotulo1: p.nome + ', 1 unidade', rotulo2: p.nome + ', 2 unidades', q1: c1 ? 'true' : 'false', q2: c2 ? 'true' : 'false',
+set1: function () { var c = cur(); setPick(id, c && c.q === 1 ? null : { q: 1, pos: c ? c.pos : '' }); },
+set2: function () { var c = cur(); setPick(id, c && c.q === 2 ? null : { q: 2, pos: c ? c.pos : '' }); },
+b1: (par ? c1 : on) ? '#174f94' : '#9aa1ab', f1: (par ? c1 : on) ? '#174f94' : '#ffffff', c1: c1 ? '#ffffff' : '#16191d',
+b2: c2 ? '#174f94' : '#9aa1ab', f2: c2 ? '#174f94' : '#ffffff', c2: c2 ? '#ffffff' : '#16191d',
+pedePos: false, onPos: function () {}, pedeChips: on && pede, multi: multi, pos: '',
+opcoes: (multi ? p.pm : p.pm === 'chips2' ? ['Dianteira', 'Traseira', 'As 2'] : ['Diant.', 'Tras.', 'Os 2']).map(function (nm) {
+var a2 = on && (multi ? atuais.indexOf(nm) >= 0 : v.pos === nm);
+return { nome: nm, ativo: a2 ? 'true' : 'false', borda: a2 ? '#174f94' : '#9aa1ab', fundo: a2 ? '#174f94' : '#ffffff', cor: a2 ? '#ffffff' : '#16191d',
+escolher: function () { var c = cur(); if (!c) return; var at = c.pos ? c.pos.split(', ') : [], ja = multi ? at.indexOf(nm) >= 0 : c.pos === nm; setPick(id, { q: c.q, pos: multi ? (ja ? at.filter(function (x) { return x !== nm; }) : at.concat([nm])).join(', ') : (ja ? '' : nm) }); } };
+})
+};
+o['k_' + p.icone] = true;
+return o;
+});
+n.tituloSistema = ativo.nome; n.nomeSistema = ativo.nome; n.extraAberto = !!N.extraAbertoPick; n.extraTexto = N.extraTextoPick || '';
+var totPick = Object.keys(pk).length;
+n.addRotulo = totPick ? 'Adicionar (' + totPick + ')' : 'Adicionar'; n.addBg = totPick ? '#174f94' : '#7d8794';
+n.listaQtd = String(N.itens.length); n.listaRotuloTopo = 'Ver a lista: ' + N.itens.length + (N.itens.length === 1 ? ' item' : ' itens');
 }
 
 var fora = !s.logado;
@@ -592,7 +657,7 @@ aviso: s.aviso, temAviso: !!s.aviso,
 folhaPausa: s.folha === 'pausa' && !fora, folhaMec: s.folha === 'mec' && !fora, folhaKm: s.folha === 'km' && !fora, folhaAdd: s.folha === 'add' && !fora, addTexto: s.addTexto, addFalarBg: s.addOuvindo ? '#16191d' : '#ffffff', addFalarFg: s.addOuvindo ? '#ffffff' : '#16191d', addFalarTexto: s.addOuvindo ? 'Ouvindo…' : 'Segure para falar',
 itemFolha: itemSel ? itemSel.nome : '', mecanicos: mecanicos, motivos: motivos,
 kmInput: s.kmInput, kmErro: s.kmErro, temKmErro: !!s.kmErro,
-novaAbrir: function () { self.setState({ sistemaAberto: null, nova: { passo: 'foto', buscando: false, dadosVeiculo: null, marcados: {}, parcial: '', placaInput: '', placa: '', modelo: '', detalhe: '', cadastrado: false, cliente: '', kmAnterior: null, clienteInput: '', foneInput: '', kmInput: '', texto: '', ouvindo: false, itens: [] } }); },
+novaAbrir: function () { self.setState({ sistemaAberto: null, nova: { passo: 'foto', buscando: false, dadosVeiculo: null, marcados: {}, parcial: '', placaInput: '', placa: '', modelo: '', detalhe: '', cadastrado: false, cliente: '', kmAnterior: null, clienteInput: '', foneInput: '', kmInput: '', texto: '', ouvindo: false, itens: [], sisAtivo: 'fr', pick: {}, extraPick: {}, extraAbertoPick: false, extraTextoPick: '' } }); },
 novaVoltar: function () {
 var ordem = ['foto', 'dados', 'itens', 'lista'], i = ordem.indexOf(N.passo);
 self.soltar();
@@ -630,6 +695,32 @@ var tem = {}, prox = N.itens.reduce(function (mx, k) { return Math.max(mx, k.id)
 N.itens.forEach(function (k) { tem[k.base] = 1; });
 novos = novos.filter(function (k) { if (tem[k.base]) return false; tem[k.base] = 1; k.id = ++prox; return true; });
 setN({ passo: 'lista', itens: N.itens.concat(novos), marcados: {}, texto: '', parcial: '' });
+},
+abrirExtraPick: function () { setN({ extraAbertoPick: true }); },
+onExtraPick: function (e) {
+var t = (e.target.value || '').trim().toUpperCase(); if (!t) return;
+var at = self.state.nova, g = SIS_PECAS.filter(function (x) { return x.id === at.sisAtivo; })[0] || SIS_PECAS[0];
+if (listaPecas(g, at.extraPick).some(function (p) { return p.nome.toUpperCase() === t; })) { self.avisar('Essa peça já está na lista de ' + g.nome + '.'); setN({ extraTextoPick: '' }); return; }
+var ex = Object.assign({}, at.extraPick), pk2 = Object.assign({}, at.pick); ex[g.id] = (ex[g.id] || []).concat([t]); pk2[g.id + '|' + t] = { q: 1, pos: '' };
+setN({ extraPick: ex, pick: pk2, extraTextoPick: '' });
+},
+adicionarPick: function () {
+var at = self.state.nova, pk = at.pick || {}, novos = [], faltam = [], jaTinha = 0, tem = {}, prox = at.itens.reduce(function (mx, k) { return Math.max(mx, k.id); }, 0);
+at.itens.forEach(function (k) { tem[k.base] = 1; });
+SIS_PECAS.forEach(function (g) {
+listaPecas(g, at.extraPick).forEach(function (p) {
+var v = pk[g.id + '|' + p.nome]; if (!v) return;
+if (pedePosicao(p) && !v.pos) { faltam.push(p.nome); return; }
+var base = nomePeca(p, v);
+if (tem[base]) { jaTinha++; return; }
+tem[base] = 1;
+novos.push({ id: ++prox, disse: '', base: base, tipo: p.tipo === 'cont' ? 'Peça' : 'Serviço', conferir: false, qtd: p.tipo === 'cont' ? v.q : 1, pedePos: false, pos: '', pedeLado: false, lado: '' });
+});
+});
+if (!Object.keys(pk).length) { self.avisar('Marque uma ou mais peças.'); return; }
+if (faltam.length) { self.avisar('Escolha a posição de ' + faltam[0] + (faltam.length > 1 ? ' e mais ' + (faltam.length - 1) : '') + '.'); return; }
+setN({ itens: at.itens.concat(novos), pick: {} });
+self.avisar(novos.length ? novos.length + (novos.length === 1 ? ' item' : ' itens') + ' na lista.' + (jaTinha ? ' ' + jaTinha + ' já estava.' : '') : 'Esses itens já estavam na lista.');
 },
 verLista: function () { setN({ passo: 'lista' }); },
 corrigir: function () { setN({ passo: 'itens' }); },

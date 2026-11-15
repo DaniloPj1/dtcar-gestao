@@ -85,7 +85,7 @@ def miniatura(h):
     im = Image.open(orig)
     if im.mode in ('RGBA', 'LA', 'P'):
         im = im.convert('RGBA'); fundo = Image.new('RGB', im.size, (255, 255, 255)); fundo.paste(im, mask=im.split()[-1]); im = fundo
-    im = im.convert('RGB'); im.thumbnail((360, 360)); im.save(os.path.join(pasta, h + '.jpg'), 'JPEG', quality=72, optimize=True)
+    im = im.convert('RGB'); im.thumbnail((640, 640)); im.save(os.path.join(pasta, h + '.jpg'), 'JPEG', quality=76, optimize=True)
     if f['ext'] != 'jpg' and os.path.exists(orig): os.remove(orig)
 if pasta:
     for h in fotos: miniatura(h)

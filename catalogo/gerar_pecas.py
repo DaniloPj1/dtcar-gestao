@@ -2,7 +2,7 @@
 # Uso (na raiz do repositório): python3 catalogo/gerar_pecas.py catalogo/pecas js/pecasdados.js && python3 tools_sw.py <versão>
 # Formato de cada catalogo/pecas/<marca>.json (o mesmo para todos os leitores):
 #   { marca, edicao, fotos (pasta em catalogo/fotos), pecas: [ { codigo, grupo, linha, descricao, medidas, foto, oem: [códigos da montadora],
-#     conv: [[marca, código]], breve, apl: [ { montadora, modelo, de, ate, obs } ] } ] }        (de/ate = ano; 0 = sem limite)
+#     conv: [[marca, código]], breve, emb (embalagem: "2 peças"), apl: [ { montadora, modelo, de, ate, obs } ] } ] }        (de/ate = ano; 0 = sem limite)
 import json, sys, glob, os, re, datetime
 pasta, saida = sys.argv[1], sys.argv[2]
 cats, mont, grupos, pecas, apl = [], [], [], [], []
@@ -10,13 +10,32 @@ def idx(lista, v):
     if v not in lista: lista.append(v)
     return lista.index(v)
 limpo = lambda t: re.sub(r"\s+", " ", str(t or "")).strip()
+import unicodedata
+sem_acento = lambda t: "".join(c for c in unicodedata.normalize("NFD", str(t or "").upper()) if unicodedata.category(c) != "Mn")
+# Grupo da peça: o mesmo nome em todos os catálogos, tirado da descrição (cada marca chama o grupo de um jeito). A ordem importa.
+GRUPOS = [
+    (r"COIFA.*HOMOCINETICA", "Coifa da homocinética"), (r"COIFA.*(CAIXA|DIRECAO)", "Coifa da caixa de direção"),
+    (r"KIT.*AMORTECEDOR|BATENTE.*(COIFA|AMORTECEDOR)", "Kit e batente do amortecedor"),
+    (r"(COXIM|SUPORTE).*AMORTECEDOR", "Coxim do amortecedor"), (r"(COXIM|SUPORTE|CALCO).*(MOTOR|CAMBIO)", "Coxim do motor e câmbio"),
+    (r"^BATENTE", "Batente da suspensão"), (r"BUCHA.*BARRA ESTABILIZADORA", "Bucha da barra estabilizadora"), (r"^BUCHA", "Bucha"),
+    (r"BIELETA", "Bieleta"), (r"AXIAL", "Axial de direção"), (r"^TERMINAL", "Terminal de direção"),
+    (r"JUNTA DESLIZANTE", "Junta deslizante"), (r"HOMOCINETICA", "Homocinética"), (r"TULIPA", "Tulipa"), (r"TRIZETA", "Trizeta"), (r"SEMI-? ?EIXO", "Semieixo"),
+    (r"^(BANDEJA|BRACO)", "Bandeja e braço de suspensão"), (r"^PIVO", "Pivô"), (r"^CUBO", "Cubo de roda"), (r"CAIXA DE DIRECAO", "Caixa de direção"),
+    (r"CILINDRO MESTRE", "Cilindro mestre"), (r"CILINDRO DE RODA", "Cilindro de roda"), (r"PASTILHA", "Pastilha de freio"), (r"DISCO", "Disco de freio"),
+    (r"TAMBOR", "Tambor de freio"), (r"LONA|SAPATA", "Lona e sapata de freio"), (r"^AMORTECEDOR", "Amortecedor"), (r"PALHETA", "Palheta"), (r"^COXIM|^SUPORTE", "Coxim e suporte"),
+]
+def grupo_de(descricao, grupo_do_catalogo):
+    for fonte in (sem_acento(descricao), sem_acento(grupo_do_catalogo)):
+        for padrao, nome in GRUPOS:
+            if re.search(padrao, fonte): return nome
+    g = limpo(grupo_do_catalogo); return (g[:1].upper() + g[1:].lower()) if g else "Outros"
 for arq in sorted(glob.glob(os.path.join(pasta, "*.json"))):
     j = json.load(open(arq, encoding="utf-8")); c = len(cats); cats.append([j["marca"], j.get("edicao", ""), j.get("fotos", "")])
     for p in j["pecas"]:
         if not p.get("apl"): continue
         n = len(pecas)
-        pecas.append([c, p["codigo"], idx(grupos, limpo(p["grupo"])), limpo(p["descricao"]).upper(), limpo(p.get("medidas")), p.get("foto") or "",
-                      [limpo(x) for x in p.get("oem", []) if limpo(x)], [[limpo(a), limpo(b)] for a, b in p.get("conv", []) if limpo(b)], 1 if p.get("breve") else 0])
+        pecas.append([c, p["codigo"], idx(grupos, grupo_de(p["descricao"], p.get("grupo"))), limpo(p["descricao"]).upper(), limpo(p.get("medidas")), p.get("foto") or "",
+                      [limpo(x) for x in p.get("oem", []) if limpo(x)], [[limpo(a).upper() if len(limpo(a)) <= 3 else limpo(a), limpo(b)] for a, b in p.get("conv", []) if limpo(b)], 1 if p.get("breve") else 0, limpo(p.get("emb"))])
         for a in p["apl"]:
             apl.append([n, idx(mont, limpo(a["montadora"]).upper()), limpo(a["modelo"]).upper(), int(a.get("de") or 0), int(a.get("ate") or 0), limpo(a.get("obs")).upper()])
 d = {"versao": datetime.date.today().isoformat(), "catalogos": cats, "montadoras": mont, "grupos": grupos, "pecas": pecas, "apl": apl}

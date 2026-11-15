@@ -21,7 +21,7 @@ GRUPOS = [
     (r"BIELETA", "Bieleta"), (r"AXIAL", "Axial de direção"), (r"^TERMINAL", "Terminal de direção"),
     (r"JUNTA DESLIZANTE", "Junta deslizante"), (r"HOMOCINETICA", "Homocinética"), (r"TULIPA", "Tulipa"), (r"TRIZETA", "Trizeta"), (r"SEMI-? ?EIXO", "Semieixo"),
     (r"^(BANDEJA|BRACO)", "Bandeja e braço de suspensão"), (r"^PIVO", "Pivô"), (r"^CUBO", "Cubo de roda"), (r"CAIXA DE DIRECAO", "Caixa de direção"),
-    (r"CILINDRO MESTRE", "Cilindro mestre"), (r"CILINDRO DE RODA", "Cilindro de roda"), (r"PASTILHA", "Pastilha de freio"), (r"DISCO", "Disco de freio"),
+    (r"BARRA DE DIRECAO", "Barra de direção"), (r"CILINDRO MESTRE", "Cilindro mestre"), (r"CILINDRO DE RODA", "Cilindro de roda"), (r"PASTILHA", "Pastilha de freio"), (r"DISCO", "Disco de freio"),
     (r"TAMBOR", "Tambor de freio"), (r"LONA|SAPATA", "Lona e sapata de freio"), (r"^AMORTECEDOR", "Amortecedor"), (r"PALHETA", "Palheta"), (r"^COXIM|^SUPORTE", "Coxim e suporte"),
 ]
 def grupo_de(descricao, grupo_do_catalogo):

@@ -29,4 +29,8 @@ chk("conversão: montadora, Nakata e Cofap", cv[0].marca.startsWith("Montadora")
 chk("conversão vazia quando o catálogo não traz", conversaoDaPeca(q).length === 0);
 r = pecasDoVeiculo(cat, { marca: "CHEVROLET", modelo: "ONIX", ano: "2020" });
 chk("filtro de texto dentro do resultado", filtrarPecas(r.grupos, "cubo").every(g => g.itens.every(e => /CUBO/.test(e.peca.descricao))) && filtrarPecas(r.grupos, "cubo").length === 1 && filtrarPecas(r.grupos, "xyzw").length === 0);
+r = pecasDoVeiculo(cat, { marca: "GM", modelo: "S10 2.8 LTZ", ano: "2014" });
+chk("três catálogos juntos: S10 2014 traz Axios e Nakata", ["Axios", "Nakata"].every(m => r.grupos.some(g => g.itens.some(e => e.peca.marca === m))), r.grupos.map(g => g.grupo + ":" + g.itens.map(e => e.peca.marca).join("/")));
+r = pecasDoVeiculo(cat, { marca: "MITSUBISHI", modelo: "L200 TRITON 3.2", ano: "2010" });
+chk("L200 do documento casa com 'L 200' do catálogo", r.total > 5, r.total);
 console.log(ok + " ok" + (falhas ? ", " + falhas + " FALHAS" : "")); process.exit(falhas ? 1 : 0);

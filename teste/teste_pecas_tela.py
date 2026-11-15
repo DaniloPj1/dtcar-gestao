@@ -44,7 +44,7 @@ def rodar(b, nome, w, h):
   chk(T("Usar esta peça (na ampliada): vai para o item com descrição e medidas"), "CUBO DE RODA DIANTEIRO" in pg.input_value("#it-desc") and "4 FUROS" in pg.input_value("#it-desc"), pg.input_value("#it-desc"))
   pg.click("[role=dialog] button:has-text('Cancelar')"); pg.wait_for_timeout(300)
   pg.click(".grupo-itens:has-text('Peças') button:has-text('+ Incluir')"); pg.wait_for_timeout(300); pg.click("#cat-pecas-veic"); pg.wait_for_timeout(900)
-  pg.fill("#pv-busca", "cubo"); pg.wait_for_timeout(300)
+  pg.fill("#pv-busca", "cubo de roda"); pg.wait_for_timeout(300)
   chk(T("filtro de texto"), pg.locator("#pv .pv-item").count() >= 1 and all("CUBO" in t for t in pg.locator("#pv .pv-item strong").all_inner_texts()), pg.locator("#pv .pv-item strong").all_inner_texts())
   pg.fill("#pv-busca", ""); pg.select_option("#pv-grupo", "Bucha"); pg.wait_for_timeout(300)
   chk(T("filtro por grupo"), pg.locator("#pv .pv-grupo h4").all_inner_texts() == ["Bucha"], pg.locator("#pv .pv-grupo h4").all_inner_texts())

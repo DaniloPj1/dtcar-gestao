@@ -6,14 +6,33 @@ import { carregarPecas, pecasDoVeiculo, filtrarPecas, conversaoDaPeca, chaveDaPe
 const SITE = "https://gestao.dtcarcentroautomotivo.com.br/";
 // fotos: miniaturas em catalogo/fotos/<pasta>/ (não entram no pacote sem internet; sem rede a peça aparece sem foto)
 const urlFoto = (p, doSite) => (doSite ? SITE : new URL("../../", import.meta.url).href) + "catalogo/fotos/" + p.pasta + "/" + p.foto + ".jpg";
-function FotoPeca({ p }) {
+// onAbrir: a foto vira botão e abre a peça ampliada (pedido do Danilo: clicar na foto e ver grande, com as medidas)
+function FotoPeca({ p, grande = false, onAbrir = null }) {
   const [passo, setPasso] = useState(0); // 0 = endereço do próprio sistema; 1 = site; 2 = sem foto
-  if (!p.foto || passo > 1) return html`<span class="pv-foto pv-semfoto" aria-hidden="true">sem foto</span>`;
-  return html`<img class="pv-foto" loading="lazy" alt=${"Foto da peça " + p.codigo} src=${urlFoto(p, passo === 1)} onError=${() => setPasso(n => n + 1)} />`;
+  const cls = grande ? "pv-fotona" : "pv-foto";
+  if (!p.foto || passo > 1) return onAbrir ? html`<button type="button" class=${cls + " pv-semfoto pv-abre"} aria-label=${"Ver detalhes da peça " + p.codigo} onClick=${onAbrir}>sem foto</button>`
+    : html`<span class=${cls + " pv-semfoto"} aria-hidden="true">sem foto</span>`;
+  const img = html`<img class=${onAbrir ? "" : cls} loading=${grande ? "eager" : "lazy"} alt=${"Foto da peça " + p.codigo} src=${urlFoto(p, passo === 1)} onError=${() => setPasso(n => n + 1)} />`;
+  return onAbrir ? html`<button type="button" class=${cls + " pv-abre"} aria-label=${"Ampliar a foto da peça " + p.codigo} title="Ampliar a foto e ver as medidas" onClick=${onAbrir}>${img}</button>` : img;
+}
+// A peça ampliada: foto grande, medidas, todas as aplicações do carro e a conversão
+function PecaGrande({ e, onUsar, onFechar }) {
+  const p = e.peca, conv = conversaoDaPeca(p);
+  return html`<div class="pv-grande" id="pv-grande">
+    <${FotoPeca} p=${p} grande />
+    <div class="pv-meio"><span class="pv-cod">${p.grupo} · ${p.marca} ${p.codigo}${p.emb ? " · embalagem com " + p.emb : ""}${p.breve ? " · em breve no catálogo" : ""}</span>
+      <strong class="pv-titulo">${p.descricao}</strong>
+      <div class="pv-bloco"><h5>Medidas</h5>${p.medidas ? html`<span class="pv-med" id="pv-grande-med">${p.medidas}</span>` : html`<span class="dica" id="pv-grande-med">O catálogo não traz medidas separadas para esta peça${e.aplicacoes.some(a => /mm|dentes|furos|Ø/i.test(a)) ? ": veja nas aplicações abaixo" : ""}.</span>`}</div>
+      <div class="pv-bloco"><h5>Serve em</h5>${e.conferir ? html`<span class="c-warn"><b>Confira a versão do carro.</b></span>` : null}
+        <ul class="pv-aplis">${e.aplicacoes.map((a, n) => html`<li key=${n}>${a}</li>`)}</ul></div>
+      <div class="pv-bloco"><h5>Conversão</h5>${conv.length ? html`<div class="pv-conv">${conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)}</div>`
+        : html`<span class="dica">O catálogo ${p.marca} não traz conversão para esta peça.</span>`}</div>
+      <div class="acoes"><button type="button" class="btn" id="pv-grande-voltar" onClick=${onFechar}>Voltar à lista</button><span class="espaco"></span>
+        <button type="button" class="btn btn-pri" id="pv-grande-usar" onClick=${() => onUsar(p)}>Usar esta peça</button></div></div></div>`;
 }
 
 export function PecasVeiculo({ veiculo, onUsar, onVoltar }) {
-  const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [txt, setTxt] = useState(""), [grupo, setGrupo] = useState(""), [aberta, setAberta] = useState("");
+  const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [txt, setTxt] = useState(""), [grupo, setGrupo] = useState(""), [aberta, setAberta] = useState(""), [grande, setGrande] = useState(null);
   useEffect(() => { let vivo = true; carregarPecas().then(c => vivo && setCat(c)).catch(() => vivo && setErro("Não deu para abrir o catálogo de peças agora.")); return () => { vivo = false; }; }, []);
   const r = useMemo(() => cat ? pecasDoVeiculo(cat, veiculo) : null, [cat, veiculo]);
   const grupos = useMemo(() => r ? filtrarPecas(r.grupos, txt).filter(g => !grupo || g.grupo === grupo) : [], [r, txt, grupo]);
@@ -23,6 +42,7 @@ export function PecasVeiculo({ veiculo, onUsar, onVoltar }) {
   const nomeV = [veiculo.marca, veiculo.modelo, veiculo.ano_mod || veiculo.ano].filter(Boolean).join(" ");
   if (!r.total) return html`<div class="vazio" id="pv-vazio">Nenhuma peça de catálogo para ${nomeV || "este veículo"}${r.entendido ? " (entendido: " + r.entendido + ")" : ""}.
       Catálogos carregados: ${cat.catalogos.map(c => c.marca).join(", ")}.</div><div class="acoes">${voltar}</div>`;
+  if (grande) return html`<${PecaGrande} e=${grande} onUsar=${onUsar} onFechar=${() => setGrande(null)} />`;
   return html`<div class="pv" id="pv">
     <div class="info"><span><strong>${r.total} ${r.total === 1 ? "peça" : "peças"}</strong> para ${r.entendido}${r.ano ? "" : " (sem ano no cadastro: aparecem todos os anos)"}. Dado de catálogo (${cat.catalogos.map(c => c.marca).join(", ")}): confira a aplicação antes de comprar.</span></div>
     <div class="cat-topo"><input id="pv-busca" class="inp" type="search" autocomplete="off" aria-label="Filtrar as peças" placeholder="Filtrar: bandeja, cubo, código…" value=${txt} onInput=${e => setTxt(e.target.value)} />
@@ -31,11 +51,11 @@ export function PecasVeiculo({ veiculo, onUsar, onVoltar }) {
     <div class="pv-lista">${grupos.map(g => html`<div key=${g.grupo} class="pv-grupo"><h4>${g.grupo}</h4>
       ${g.itens.map(e => { const p = e.peca, conv = conversaoDaPeca(p), ab = aberta === p.codigo;
         return html`<div key=${p.codigo} class="pv-item" data-cod=${p.codigo}>
-          <${FotoPeca} p=${p} />
+          <${FotoPeca} p=${p} onAbrir=${() => setGrande(e)} />
           <div class="pv-meio"><strong>${p.descricao}</strong>
             ${p.medidas ? html`<span class="pv-med">${p.medidas}</span>` : null}
             <span class="pv-apl">${e.conferir ? html`<b class="c-warn">Confira a versão: </b>` : null}${e.aplicacoes.slice(0, 3).join(" · ")}${e.aplicacoes.length > 3 ? " · e mais " + (e.aplicacoes.length - 3) : ""}</span>
-            <span class="pv-cod">${p.oem.length ? "Cód. montadora " + chaveDaPeca(p) + " · " : ""}${p.marca} ${p.codigo}${p.breve ? " · em breve no catálogo" : ""}</span>
+            <span class="pv-cod">${p.oem.length ? "Cód. montadora " + chaveDaPeca(p) + " · " : ""}${p.marca} ${p.codigo}${p.emb ? " · embalagem com " + p.emb : ""}${p.breve ? " · em breve no catálogo" : ""}</span>
             ${ab ? html`<div class="pv-conv" id=${"pv-conv-" + p.codigo}>${conv.length ? conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)
               : html`<span class="dica">O catálogo ${p.marca} não traz conversão para esta peça.</span>`}</div>` : null}</div>
           <div class="pv-botoes"><button type="button" class="btn btn-sm btn-pri pv-usar" onClick=${() => onUsar(p)}>Usar</button>

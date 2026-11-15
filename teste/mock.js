@@ -31,7 +31,7 @@
   window.__API_MOCK = {
     tipo: "mock",
     auth: { sessao: async () => ({ user: { id: "p1", email: "d@x" } }), aoMudar: () => () => {}, sair: async () => {} },
-    meuPerfil: async () => { net(); return db.perfis[0]; }, perfis: async () => { net(); return db.perfis; },
+    meuPerfil: async () => { net(); return window.__PAPEL ? { ...db.perfis[0], papel: window.__PAPEL } : db.perfis[0]; }, perfis: async () => { net(); return db.perfis; },
     config: async () => { net(); return db.config; }, salvarConfig: async d => { db.config = d; },
     clientes: tab("clientes"), veiculos: tab("veiculos"), produtos: tab("produtos"), fornecedores: tab("fornecedores"),
     ordens: async () => { net(); return db.ordens; }, alterados: async (k, desde) => (db[k] || []).filter(r => r.atualizado_em && (!desde || r.atualizado_em > desde)), urlArquivo: async () => "",
@@ -150,6 +150,23 @@
         ...(body.acao === "completa" ? { chassi: "9BWZZZ377VT004251", renavam: "00123456789", motor_numero: "BAH123456" } : {}) };
       (db.placa_consultas = db.placa_consultas || []).push({ tipo: body.acao, valor_centavos: valor, saldo_centavos: P.saldo, em: now() });
       return { ok: true, encontrado: true, placa: body.placa, tipo: body.acao, dados, origem: "api", valor_centavos: valor, saldo_centavos: P.saldo }; },
+    // Consulta pelo CPF (função "cpf"): window.__CPF guarda as chamadas e deixa o teste mudar a resposta.
+    // Padrão: todo CPF novo é "MARIA APARECIDA DE SOUZA", nascida em 15/07/1985; 11144477735 não existe; "situacao" simula
+    // "desligada", "semresposta", "creditos" (CPF fora da base e sem crédito) e "limite".
+    cpf: async body => { const C = window.__CPF = window.__CPF || {}; C.chamadas = C.chamadas || []; C.chamadas.push(body);
+      if (C.demora && body.acao === "consultar") await new Promise(r => setTimeout(r, C.demora));   // resposta lenta (teste da troca de CPF no meio)
+      if (C.situacao === "desligada") return { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta a chave da API CPF." };
+      if (C.situacao === "semresposta") return { ok: false, semRede: true, erro: "Sem resposta da consulta de CPF." };
+      if (body.acao === "gravar_chave") { if (body.chave === "chave-vencida-0000000") return { ok: false, erro: "Esta chave está vencida. Renove no painel apicpf.com e cadastre a chave renovada." };
+        C.chaveEm = "2026-11-15T13:00:00Z"; C.situacao = ""; return { ok: true, ligada: true, gravada: true, conferida: true, origem: "ajustes", chave_em: C.chaveEm }; }
+      if (C.situacao === "vencida") return { ok: false, desligada: true, vencida: true, erro: "A chave da API CPF venceu. Renove no painel apicpf.com (sem custo no plano grátis) e cadastre a chave em Ajustes › Consulta do cliente pelo CPF." };
+      if (body.acao === "situacao") return C.semChave ? { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta cadastrar a chave da API CPF em Ajustes › Consulta do cliente pelo CPF." } : { ok: true, ligada: true, origem: C.chaveEm ? "ajustes" : "supabase", chave_em: C.chaveEm || null };
+      if (C.situacao === "limite") return { ok: false, limite: true, erro: "O limite de consultas de CPF de hoje acabou. Amanhã volta a funcionar." };
+      if (C.situacao === "creditos") return { ok: true, encontrado: false, sem_creditos: true, cpf: body.cpf };
+      if (body.cpf === "11144477735") return { ok: true, encontrado: false, cpf: body.cpf };
+      const cad = db.clientes.find(c => String(c.doc || "").replace(/\D/g, "") === body.cpf);
+      if (cad) return { ok: true, encontrado: true, cpf: body.cpf, origem: "cadastro", cliente_id: cad.id, dados: { nome: cad.nome, nascimento: cad.nascimento || "" } };
+      return { ok: true, encontrado: true, cpf: body.cpf, origem: "api", dados: C.dados || { nome: "MARIA APARECIDA DE SOUZA", nascimento: "1985-07-15" }, creditos: 5 }; },
     placaUso: async desde => (db.placa_consultas || []).filter(x => x.em >= desde),
     // API do Sicredi (função "sicredi"): respostas como as da documentação v3.9.1; window.__SICREDI guarda as chamadas e o que o "banco" sabe
     sicredi: async body => { const S = window.__SICREDI = window.__SICREDI || { chamadas: [], situacao: {}, seq: 0 }; S.chamadas.push(body);

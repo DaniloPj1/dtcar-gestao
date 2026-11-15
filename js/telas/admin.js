@@ -5,6 +5,7 @@ import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
 import { pode, PAPEIS, CONFIG_PADRAO, TERMO_ENTRADA, TERMO_ORCAMENTO, TERMO_GARANTIA } from "../regras.js";
 import { CartaoPlaca } from "../placa.js";
+import { CartaoCPF } from "../cpf.js";
 
 /* ---------------- Menu "Mais" ---------------- */
 export function Mais() {
@@ -133,6 +134,7 @@ export function Ajustes() {
         <div class="linha-add"><input class="inp" id="a-item" placeholder="Nome do item" value=${novoItem} onInput=${e => setNovoItem(e.target.value)} /><button type="button" class="btn" onClick=${() => { if (novoItem.trim()) { set({ itensExtras: c.itensExtras.concat([{ id: uuid().slice(0, 8), nome: novoItem.trim() }]) }); setNovoItem(""); } }}>Adicionar</button></div></div>
     </section>
     <${CartaoPlaca} auto=${c.placaAuto} onAuto=${v => set({ placaAuto: v })} />
+    <${CartaoCPF} auto=${c.cpfAuto} onAuto=${v => set({ cpfAuto: v })} />
     <section class="card"><h2>Termos dos documentos</h2><span class="dica">Revise com seu contador ou advogado antes de usar.</span>
       ${termo("termoEntrada", "Termo do checklist de entrada", TERMO_ENTRADA, "A frase da taxa de diagnóstico é acrescentada automaticamente quando houver taxa.")}
       ${termo("termoOrcamento", "Termo do orçamento", TERMO_ORCAMENTO)}

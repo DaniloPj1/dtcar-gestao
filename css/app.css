@@ -90,6 +90,13 @@ details.card summary h3::after{content:" ▾";font-size:12px}
 .placa-resultado{background:var(--brand-soft);border-radius:var(--r);padding:10px 12px;font-size:13.5px;line-height:1.5;overflow-wrap:anywhere}
 .placa-dif{margin-top:6px;color:var(--warn);font-weight:500}
 .placa-situacao{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;margin:10px 0 6px}
+/* consulta do cliente pelo CPF (15/11/2026): mesma linha de aviso da placa, dentro do campo */
+.cpf-linha{margin:4px 0 0}
+.cpf-chave{margin:12px 0 10px}
+.cpf-chave .linha-add .inp{flex:1 1 220px;min-width:0}
+.cpf-msg{font-weight:600}
+.cpf-msg-ok{color:var(--ok)}
+.cpf-msg-erro{color:var(--warn)}
 .placa-ok{background:var(--ok-soft);color:var(--ok);border-radius:999px;padding:2px 12px;font-weight:700;font-size:13px}
 .placa-uso{margin:6px 0 10px;font-size:14px}
 .vazio{color:var(--muted);text-align:center;padding:20px 8px;border:1px dashed var(--line);border-radius:var(--r)}

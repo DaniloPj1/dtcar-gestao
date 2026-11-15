@@ -70,6 +70,8 @@ const banco: Banco = {
     if (nome === "sicredi" && op.body?.acao === "baixar") return Promise.resolve({ data: { ok: true }, error: null });
     if (nome === "sicredi" && sicrediRecusa) return Promise.resolve({ data: { erro: sicrediRecusa === "rede" ? "O Sicredi não respondeu em 25 s." : "Pedido recusado pelo Sicredi: CEP inválido" }, error: null });
     if (nome === "sicredi") return Promise.resolve({ data: { nossoNumero: "260000011", linhaDigitavel: "74891", codigoBarras: "748", qrCode: "000201x", txid: "t" }, error: null });
+    if (nome === "cpf") return Promise.resolve(op.body?.cpf === "111.444.777-35" ? { data: null, error: { message: "erro", context: { json: () => Promise.resolve({ erro: "A consulta de CPF é só para o administrador." }) } } }
+      : { data: { ok: true, encontrado: true, cpf: "52998224725", origem: "api", dados: { nome: "João da Silva", nascimento: "1985-07-15" } }, error: null });
     if (nome === "placa" && op.body?.placa === "SEM0A00") return Promise.resolve({ data: null, error: { message: "erro", context: { json: () => Promise.resolve({ erro: "A consulta completa é só para administrador e consultor." }) } } });
     if (nome === "placa" && op.body?.acao === "saldo") return Promise.resolve({ data: { ok: true, saldo: { saldo_centavos: 950 } }, error: null });
     if (nome === "placa") return Promise.resolve({ data: op.body.placa === "FOR4A00" ? { ok: false, erro: "Acabou o saldo do API Placas." }
@@ -108,12 +110,14 @@ const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente
   "despesa_fixa", "ajustes", "equipe", "site", "rh_documento", "anexar_na_os", "backup_leitura",
   // v55: consulta do veículo pela placa (API Placas)
   "consultar_placa",
+  // 15/11/2026: consulta do cliente pelo CPF (API CPF)
+  "consultar_cpf",
   // etapa 4 (14/11/2026): óleo e filtros do veículo
   "oleo_filtros"].sort();
-confere("59 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+confere("60 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("21 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 21, String(leitura));
+confere("22 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; 15/11: consultar_cpf; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 22, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
@@ -486,6 +490,16 @@ confere("backup_leitura: enviar e situação pela função email", JSON.stringif
 c = await chama("alterar_os", { numero: 1904, dados: { tecnico: "João", desconto: 50 } });
 confere("alterar_os: técnico pelo nome e desconto vão para o banco (prévia)", c.args?.p_acao === "alterar_os" && ((c.args?.p as L).dados as L).tecnico === "João" && c.args?.p_gravar === false);
 confere("instruções v50: fora do conector e dinheiro com prévia", String(ini.corpo.result?.instructions || "").includes("ObjetivaWeb") && String(ini.corpo.result?.instructions || "").includes("desconto_os, venda_balcao"));
+
+// ---------- 15/11/2026: consultar_cpf
+acordadas.length = 0;
+let rc = await rpc("tools/call", { name: "consultar_cpf", arguments: { cpf: "529.982.247-25" } });
+const jc = JSON.parse(rc.corpo.result?.content?.[0]?.text || "{}");
+confere("consultar_cpf: chama a função cpf e devolve nome e nascimento", acordadas.length === 1 && acordadas[0][0] === "cpf" && (acordadas[0][1] as L).acao === "consultar" && (acordadas[0][1] as L).cpf === "529.982.247-25"
+  && jc.origem === "api" && jc.dados?.nome === "João da Silva" && jc.dados?.nascimento === "1985-07-15", JSON.stringify(acordadas));
+rc = await rpc("tools/call", { name: "consultar_cpf", arguments: { cpf: "111.444.777-35" } });
+confere("consultar_cpf: recusa da função com a mensagem dela", rc.corpo.result?.isError === true && /só para o administrador/.test(rc.corpo.result?.content?.[0]?.text || ""));
+confere("instruções: consultar_cpf nunca em lote nem por pedido de fora", /consultar_cpf/.test(String(ini.corpo.result?.instructions || "")) && /Nunca em lote/.test(String(ini.corpo.result?.instructions || "")));
 
 // ---------- v55: consultar_placa
 acordadas.length = 0;

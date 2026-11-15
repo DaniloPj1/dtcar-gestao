@@ -3,6 +3,7 @@ import { local, erroDeRede } from "./local.js";
 import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
 import { versaoOS, tocarOS } from "./fila.js";
 import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente, comTrava, podeAlterarSemInternet } from "./alteracoes.js";
+import { MAIUSC } from "./maiusculas.js";
 
 const LS_CONEXAO = "dtcar-conexao";
 export function conexao() {
@@ -135,8 +136,10 @@ function criarApiSupabase() {
     salvarPerfil: async (id, patch) => ok(await sb.from("perfis").update(patch).eq("id", id)),
     config: async () => { const r = ok(await sb.from("config").select("dados").eq("id", 1).maybeSingle()); return (r && r.dados) || {}; },
     salvarConfig: async dados => ok(await sb.from("config").upsert({ id: 1, dados, atualizado_em: new Date().toISOString() })),
-    clientes: tabela("clientes"), veiculos: tabela("veiculos"), servicos: tabela("servicos"),
-    produtos: { ...tabela("produtos"),
+    // cadastros em letras maiúsculas (regra do Danilo, 15/11/2026): nome do cliente e descrição de produtos e serviços, o que quer que a tela mande
+    clientes: { ...tabela("clientes"), salvar: async obj => tabela("clientes").salvar(typeof obj.nome === "string" ? { ...obj, nome: MAIUSC(obj.nome) } : obj) },
+    veiculos: tabela("veiculos"), servicos: tabela("servicos"),
+    produtos: { ...tabela("produtos"), salvar: async obj => tabela("produtos").salvar(typeof obj.descricao === "string" ? { ...obj, descricao: MAIUSC(obj.descricao) } : obj),
       // grupos de produtos: troca a categoria de vários produtos de uma vez (renomear/juntar grupos ou marcar itens na lista); uma instrução só
       trocarGrupo: async ({ ids, de, para }) => { const cat = String(para ?? "").trim(); let q = sb.from("produtos").update({ categoria: cat, atualizado_em: new Date().toISOString() });
         if (ids && ids.length) q = q.in("id", ids); else if (de && de.length) q = q.in("categoria", de); else return 0;

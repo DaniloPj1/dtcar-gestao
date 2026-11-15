@@ -7,6 +7,7 @@
 import { html, useState, useEffect, useRef } from "./lib.js";
 import { api } from "./api.js";
 import { soDig, validaCPF } from "./util.js";
+import { MAIUSC } from "./maiusculas.js";
 
 // o que já foi respondido com o programa aberto (o mesmo CPF não chama a função duas vezes)
 const vistos = new Map();
@@ -40,7 +41,7 @@ export async function consultarCPF(cpf, op = {}) {
 }
 
 /** Dados da consulta nos nomes do cadastro de clientes */
-export const paraCliente = d => ({ nome: (d && d.nome) || "", nascimento: (d && d.nascimento) || "" });
+export const paraCliente = d => ({ nome: MAIUSC(d && d.nome), nascimento: (d && d.nascimento) || "" });   // cadastro em maiúsculas (regra do Danilo)
 
 /**
  * A busca pelo CPF numa tela (cadastro de cliente e Nova O.S.).

@@ -12,6 +12,7 @@ import { norm, fmtData, fmtTel, fmtDataHora, hojeISO, somaDias, exPlaca, normPla
 import { pode } from "../regras.js";
 import { prepararNovaOSAgenda, LS_VINCULOS } from "./entrada.js";
 import { usePlaca, PlacaBusca, soVazios, tirarPreenchidos, paraResumo } from "../placa.js";
+import { ClienteDigitado, copiaClienteDig } from "../clientedig.js";
 
 /* ---------------- agenda da oficina (v54, pedido do Danilo em 12/11/2026) ----------------
  * Gravadas no banco: agendado, confirmado, chegou (virou O.S.), faltou, cancelado (com motivo). "Remarcado" não é situação:
@@ -247,7 +248,7 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
     try {
       const r = await api.agenda.salvar({ ...(novo ? {} : { id: a.id }), data: a.data, hora: a.hora || null, situacao: a.situacao || "agendado",
         cliente_id: a.cliente_id || null, veiculo_id: a.veiculo_id || null,
-        cliente: { nome: String(a.cliente.nome).trim(), telefone: a.cliente.telefone || "" }, veiculo: { ...a.veiculo, placa: normPlaca(a.veiculo.placa) },
+        cliente: a.cliente_id ? { nome: String(a.cliente.nome).trim(), telefone: a.cliente.telefone || "" } : copiaClienteDig(a.cliente), veiculo: { ...a.veiculo, placa: normPlaca(a.veiculo.placa) },
         servico: String(a.servico).trim(), obs: a.obs || "", motivo: a.motivo || "", ...mudancas });
       setSujo(false);
       if (msg !== false) onSalvo(r, msg || (novo ? "Agendado para " + fmtData(r.data) + (r.hora ? " às " + horaCurta(r.hora) : "") + "." : "Agendamento salvo."));
@@ -290,9 +291,7 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
     ${!trancado ? html`<${Seg} rotulo="Cliente" opcoes=${[["Do cadastro", "info"], ["Sem cadastro", "info"]]} valor=${semCad ? "Sem cadastro" : "Do cadastro"}
       onEscolha=${v => { const s = v === "Sem cadastro"; setSemCad(s); if (s && a.cliente_id) set({ cliente_id: "", veiculo_id: "" }); }} />` : null}
     ${!semCad && !trancado ? html`<div class="campo"><label for="ag-cli">Cliente</label><${BuscaCliente} id="ag-cli" valor=${a.cliente_id} onEscolha=${escolherCliente} /></div>` : null}
-    ${semCad || trancado ? html`<div class="grade">
-      <${Campo} id="ag-nome" rotulo="Nome do cliente" obrig><${Texto} id="ag-nome" valor=${a.cliente.nome} disabled=${trancado} onMuda=${v => set({ cliente: { ...a.cliente, nome: v } })} /></${Campo}>
-      <${Campo} id="ag-tel" rotulo="Telefone (WhatsApp)"><${Texto} id="ag-tel" inputmode="tel" valor=${trancado ? fmtTel(a.cliente.telefone) : a.cliente.telefone} disabled=${trancado} onMuda=${v => set({ cliente: { ...a.cliente, telefone: v } })} /></${Campo}></div>` : null}
+    ${semCad || trancado ? html`<${ClienteDigitado} p="ag" c=${a.cliente} disabled=${trancado || !!a.cliente_id} onMuda=${c => set({ cliente: c })} />` : null}
     ${!trancado && veiculosCli.length ? html`<div class="campo"><label for="ag-vei">Veículo do cadastro</label><select id="ag-vei" class="inp" value=${a.veiculo_id || ""} onChange=${e => escolherVeiculo(e.target.value)}>
       <option value="">Outro veículo (digitar)</option>${veiculosCli.map(v => html`<option value=${v.id}>${[exPlaca(v.placa), v.marca, v.modelo, v.ano].filter(Boolean).join(" ")}</option>`)}</select></div>` : null}
     <div class="grade ag-veic">

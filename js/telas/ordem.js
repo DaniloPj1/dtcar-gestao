@@ -16,6 +16,7 @@ import { LancarFicha } from "./lancarficha.js";
 import { guardarChegadaAgenda } from "./entrada.js";
 import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
 import { osQuitada } from "../osrecibo.js";
+import { MAIUSC } from "../maiusculas.js";
 
 /* ---------------- Mensagens de WhatsApp: textos em js/mensagens.js (os mesmos que o Claude manda pelo WhatsApp da oficina) ---------------- */
 export { MSG };
@@ -335,7 +336,7 @@ export function Ordem({ id, params = {} }) {
     let x = { ...it };
     if (x._cadastrar) {
       try {
-        const p = await api.produtos.salvar({ tipo: x.tipo === "servico" ? "servico" : "produto", descricao: x.descricao.trim(), referencia: x.codigo || "", unidade: x.tipo === "servico" ? "SERV" : "UN", custo: x.custo_unit || 0,
+        const p = await api.produtos.salvar({ tipo: x.tipo === "servico" ? "servico" : "produto", descricao: MAIUSC(x.descricao), referencia: x.codigo || "", unidade: x.tipo === "servico" ? "SERV" : "UN", custo: x.custo_unit || 0,
           preco_vista: x.valor_unit || 0, preco_prazo: x.valor_unit || 0, preco_atacado: x.valor_unit || 0, margem_vista: x.custo_unit > 0 ? arred((x.valor_unit / x.custo_unit - 1) * 100) : 0,
           cobranca: x.horas ? "hora" : "fixo", horas: x.horas || 0, controla_estoque: x.tipo === "peca", avisar_estoque_baixo: false, vender_sem_estoque: true });
         x.produto_id = p.id; avisar("Incluído no cadastro com o código " + p.codigo + "."); recarregar(["produtos"]);

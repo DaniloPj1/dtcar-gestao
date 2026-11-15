@@ -6,6 +6,7 @@ import { norm, reais, qtdFmt, fmtDataHora, parseValor, precoPelaMargem, margemDo
 import { pode, UNIDADES, TABELAS_PRECO, gruposDeProdutos, grupoCanonico, chaveGrupo } from "../regras.js";
 import { linkImagem } from "../nfe.js";
 import { BuscaFornecedor } from "./financeiro.js";
+import { MAIUSC } from "../maiusculas.js";
 
 export const estoqueBaixo = p => p.tipo === "produto" && p.ativo !== false && p.controla_estoque && p.avisar_estoque_baixo && Number(p.estoque_min) > 0 && Number(p.estoque_atual) <= Number(p.estoque_min);
 const pct = v => (Number(v) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -36,7 +37,7 @@ export function FormProduto({ inicial, onFechar, onSalvo }) {
     if (!servico && Number(p.custo) > 0 && ["vista", "prazo", "atacado"].some(t => Number(p["preco_" + t]) > 0 && Number(p["preco_" + t]) < Number(p.custo)))
       if (!await confirmar({ titulo: "Margem negativa", texto: "Algum preço de venda está abaixo do custo. Salvar mesmo assim?", botao: "Salvar" })) return;
     const { id, codigo, criado_em, atualizado_em, ...resto } = p;
-    const reg = { ...resto, descricao: p.descricao.trim(), unidade: (p.unidade || "UN").toUpperCase(), categoria: grupoCanonico(p.categoria, gruposDeProdutos(dados.produtos, cfg)), controla_estoque: produto && p.controla_estoque, avisar_estoque_baixo: produto && p.avisar_estoque_baixo, fornecedor_id: terceiro ? p.fornecedor_id || null : p.fornecedor_id || null,
+    const reg = { ...resto, descricao: MAIUSC(p.descricao), unidade: (p.unidade || "UN").toUpperCase(), categoria: grupoCanonico(p.categoria, gruposDeProdutos(dados.produtos, cfg)), controla_estoque: produto && p.controla_estoque, avisar_estoque_baixo: produto && p.avisar_estoque_baixo, fornecedor_id: terceiro ? p.fornecedor_id || null : p.fornecedor_id || null,
       preco_prazo: Number(p.preco_prazo) || Number(p.preco_vista) || 0, preco_atacado: Number(p.preco_atacado) || Number(p.preco_vista) || 0 };
     if (id) delete reg.estoque_atual; // saldo só muda por movimento de estoque
     try { const r = await api.produtos.salvar(id ? { id, ...reg } : reg); avisar(produto ? "Produto salvo." : "Serviço salvo."); await recarregar(["produtos"]); onSalvo ? onSalvo(r) : onFechar(); }
@@ -54,7 +55,7 @@ export function FormProduto({ inicial, onFechar, onSalvo }) {
         <${Campo} id="p-codigo" rotulo="Código"><input id="p-codigo" class="inp" disabled value=${p.id ? p.codigo : "automático"} /></${Campo}>
         <div class="campo"><label>Tipo</label><${Seg} rotulo="Tipo" opcoes=${Object.values(NOMES).map(t => [t, "info"])} valor=${NOMES[p.tipo]} onEscolha=${v => mudarTipo(Object.keys(NOMES).find(k => NOMES[k] === v))} /></div>
       </div>
-      <${Campo} id="p-desc" rotulo="Descrição" obrig><${Texto} id="p-desc" valor=${p.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
+      <${Campo} id="p-desc" rotulo="Descrição" obrig><${Texto} id="p-desc" class="inp maiusc" valor=${p.descricao} onMuda=${v => set({ descricao: v })} /></${Campo}>
       ${terceiro ? html`<div class="campo"><label for="p-prest">Prestador padrão</label><${BuscaFornecedor} id="p-prest" somentePrestador permitirTexto=${false} valor=${p.fornecedor_id} onEscolha=${f => set({ fornecedor_id: f ? f.id : null })} />
         <span class="dica">Quem executa o serviço (retífica, torno, guincho). Na O.S. dá para trocar.</span></div>` : null}
       ${produto && (p.referencia || p.descricao) ? html`<a class="btn-link" href=${linkImagem(p.referencia, p.marca, p.referencia ? "" : p.descricao)} target="_blank" rel="noopener">Ver imagem do produto no Google</a>` : null}

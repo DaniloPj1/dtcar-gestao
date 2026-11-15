@@ -88,7 +88,7 @@ try:
       # salvar grava o CEP formatado; reabrir não consulta
       pg.fill("#c-nome", "Cliente do CEP"); pg.fill("#c-telefone", "27988887777"); pg.fill("#c-cep", "29705390"); pg.wait_for_timeout(600)
       pg.click(".modal button:has-text('Salvar')"); pg.wait_for_timeout(900)
-      c = pg.evaluate("window.__DB.clientes.find(c => c.nome === 'Cliente do CEP')")
+      c = pg.evaluate("window.__DB.clientes.find(c => c.nome === 'CLIENTE DO CEP')")
       chk(T("salvou o CEP como 29705-390 e o endereço completo"), bool(c) and c["cep"] == "29705-390" and "CEP 29705-390" in (c.get("endereco") or ""), c)
       n = len(chamadas)
       pg.click("button:has-text('Editar cadastro')"); pg.wait_for_timeout(600)   # depois de salvar, o sistema abre a página do cliente

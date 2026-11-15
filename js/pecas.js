@@ -4,7 +4,7 @@
 // produto: o catálogo é uma base separada (js/pecasdados.js, arquivo gerado por catalogo/gerar_pecas.py, carregado só quando se abre a busca).
 //
 // Formato dos dados:
-//   catalogos: [marca, edição, pasta das fotos]
+//   catalogos: [marca, edição, pasta das fotos, ano de referência do catálogo]
 //   pecas:     [catálogo, código, grupo, descrição, medidas, foto, [códigos da montadora], [[marca, código]], emBreve, embalagem]
 //   apl:       [peça, montadora, modelo, anoDe, anoAte, observação]      (0 = sem limite)
 //
@@ -25,7 +25,7 @@ const palavras = s => norm(s).replace(/(\d),(\d)/g, "$1.$2").split(/[^a-z0-9.]+/
 const marcaTok = s => [...new Set(palavras(s).map(x => APELIDOS[x] || x).filter(x => x.length > 1 && x !== "motors"))];
 
 export function prepararPecas(d) {
-  const pecas = d.pecas.map((r, n) => ({ n, marca: d.catalogos[r[0]][0], edicao: d.catalogos[r[0]][1], pasta: d.catalogos[r[0]][2], codigo: r[1], grupo: d.grupos[r[2]], descricao: r[3], medidas: r[4],
+  const pecas = d.pecas.map((r, n) => ({ n, marca: d.catalogos[r[0]][0], edicao: d.catalogos[r[0]][1], pasta: d.catalogos[r[0]][2], anoCat: d.catalogos[r[0]][3] || 0, codigo: r[1], grupo: d.grupos[r[2]], descricao: r[3], medidas: r[4],
     foto: r[5], oem: r[6], conv: r[7], breve: !!r[8], emb: r[9] || "", apl: [] }));
   const apl = d.apl.map(r => { const a = { peca: pecas[r[0]], montadora: d.montadoras[r[1]], modelo: r[2], de: r[3], ate: r[4], obs: r[5], _m: marcaTok(d.montadoras[r[1]]), _t: palavras(r[2]) };
     a._cil = a._t.filter(x => /^\d\.\d$/.test(x)); a.peca.apl.push(a); return a; });
@@ -68,8 +68,10 @@ export function pecasDoVeiculo(cat, v, anoCampo) {
     // o que sobra no texto do catálogo além do nome do carro (versão, câmbio, motor): a pessoa confere
     const sobra = a._t.filter(x => !nome.includes(x) && !nome.some(n => n.startsWith(x) || n.endsWith(x)) && !NOVO.test(x) && x !== c.cil && !extras.has(x) && !/^(todos|os|modelos|e|de|da|do|com|sem)$/.test(x));
     const e = achados.get(a.peca.n) || { peca: a.peca, aplicacoes: [], conferir: true, pontos: 0 };
-    e.aplicacoes.push(textoAplicacao(a)); if (!sobra.length && !a.obs) e.conferir = false;
-    e.pontos = Math.max(e.pontos, (sobra.length ? 0 : 2) + a._t.filter(x => extras.has(x)).length);
+    // catálogo mais antigo que o carro e aplicação "de tal ano em diante": pode ser de uma geração anterior do modelo
+    const velho = !!(ano && a.de && !a.ate && a.peca.anoCat && ano > a.peca.anoCat);
+    e.aplicacoes.push(textoAplicacao(a) + (velho ? " (catálogo de " + a.peca.anoCat + ": confira se vale para " + ano + ")" : "")); if (!sobra.length && !a.obs && !velho) e.conferir = false;
+    e.pontos = Math.max(e.pontos, (velho ? -3 : 0) + (sobra.length ? 0 : 2) + a._t.filter(x => extras.has(x)).length);
     achados.set(a.peca.n, e);
   }
   const porGrupo = new Map();

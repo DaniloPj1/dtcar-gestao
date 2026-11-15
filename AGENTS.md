@@ -470,7 +470,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   cliente cadastrado é a cópia, e com o programa aberto o mesmo CPF não chama a função duas vezes (`vistos` em `js/cpf.js`). A função não grava nada.
   **Chave cadastrada pela tela (pedido do Danilo em 15/11/2026: a chave do plano grátis vence todo mês e ele mesmo troca):** Ajustes › Consulta do
   cliente pelo CPF tem o campo "Chave da API CPF" (tipo senha). A ação `gravar_chave` (só administrador) confere a chave na API SEM consultar ninguém
-  (pedido sem CPF: 400 = chave boa, 401 = recusada, 403 = vencida; sem resposta = grava e avisa) e guarda na tabela `segredos` (chave `api_cpf`), que
+  (pedido sem CPF: 400 = chave boa, 401 = recusada, 403 = vencida — a API olha a chave antes do CPF, conferido em 15/11/2026; sem resposta clara — fora do ar, 429 — NÃO grava e a chave que estava continua) e guarda na tabela `segredos` (chave `api_cpf`), que
   ninguém do sistema lê: só a função, com a chave de servidor (como a senha do certificado da SEFAZ). **A chave nunca volta para a tela, não entra no
   backup, no banco do PC nem no conector, e nunca vai para o repositório ou para o chat.** Vale 1º a chave de `segredos`; sem ela, o segredo opcional
   `API_CPF_TOKEN` da função. `situacao` devolve `origem` (ajustes | supabase) e `chave_em` (data). Chave vencida (`vencida: true`): a tela do cliente

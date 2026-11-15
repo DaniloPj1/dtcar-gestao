@@ -93,16 +93,21 @@ const SEM_CHAVE = { ok: false, desligada: true, erro: "A consulta de CPF ainda n
 /** A chave tem cara de chave? (sem espaço, de 16 a 200 letras, números e sinais comuns) */
 export const chaveValida = (c: string) => /^[A-Za-z0-9._\-+/=:|]{16,200}$/.test(c);
 
-/** Pergunta à API se a chave vale, SEM consultar ninguém (pedido sem CPF: chave boa → 400; ruim → 401; vencida → 403) */
-async function conferirChave(deps: Deps, chave: string): Promise<{ ok: boolean; erro?: string; conferida: boolean }> {
+/** Pergunta à API se a chave vale, SEM consultar ninguém (pedido sem CPF: chave boa → 400; ruim → 401; vencida → 403).
+ *  Conferido na API de verdade em 15/11/2026: ela olha a chave ANTES do CPF (chave errada sem CPF responde 401).
+ *  Só grava chave que a API aceitou: sem resposta clara (fora do ar, limite por minuto), nada é gravado e a chave que
+ *  estava continua valendo — uma chave mal copiada nunca fica no lugar da boa. */
+async function conferirChave(deps: Deps, chave: string): Promise<{ ok: boolean; erro?: string }> {
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), LIMITE_MS);
   try {
     const r = await deps.fetch(BASE + "/api/consulta", { headers: { "X-API-KEY": chave, accept: "application/json" }, signal: ac.signal });
     await r.body?.cancel().catch(() => {});
-    if (r.status === 401) return { ok: false, conferida: true, erro: "A API CPF não aceitou esta chave. Copie de novo em apicpf.com › Minhas Chaves API." };
-    if (r.status === 403) return { ok: false, conferida: true, erro: "Esta chave está vencida. Renove no painel apicpf.com e cadastre a chave renovada." };
-    return { ok: true, conferida: r.status === 400 || r.status === 200 };
-  } catch (_e) { return { ok: true, conferida: false }; }   // API sem resposta: grava e avisa que não deu para conferir
+    if (r.status === 401) return { ok: false, erro: "A API CPF não aceitou esta chave. Copie de novo em apicpf.com › Minhas Chaves API." };
+    if (r.status === 403) return { ok: false, erro: "Esta chave está vencida. Renove no painel apicpf.com e cadastre a chave renovada." };
+    if (r.status === 400 || r.status === 200) return { ok: true };
+    if (r.status === 429) return { ok: false, erro: "A API CPF está no limite de consultas agora e não deu para conferir a chave. Nada foi gravado: espere um minuto e grave de novo." };
+    return { ok: false, erro: "A API CPF está fora do ar agora e não deu para conferir a chave. Nada foi gravado: tente de novo daqui a pouco." };
+  } catch (_e) { return { ok: false, erro: "A API CPF não respondeu e não deu para conferir a chave. Nada foi gravado: tente de novo daqui a pouco." }; }
   finally { clearTimeout(t); }
 }
 
@@ -115,7 +120,7 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
     const c = await conferirChave(deps, nova);
     if (!c.ok) return { ok: false, erro: c.erro };
     await deps.gravarChave(nova);
-    return { ok: true, ligada: true, gravada: true, conferida: c.conferida, origem: "ajustes", chave_em: (deps.agora || (() => new Date()))().toISOString() };
+    return { ok: true, ligada: true, gravada: true, conferida: true, origem: "ajustes", chave_em: (deps.agora || (() => new Date()))().toISOString() };
   }
   const guardada = await deps.chave();
   const token = (guardada && guardada.valor.trim()) || deps.token;

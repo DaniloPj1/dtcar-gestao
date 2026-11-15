@@ -103,7 +103,11 @@ confere("chave vencida não é gravada (fica a anterior)", r.ok === false && /ve
 r = await executar({ acao: "gravar_chave", chave: CHAVE_ERRADA }, deps());
 confere("chave que a API não aceita não é gravada", r.ok === false && /não aceitou/.test(r.erro) && guardada!.valor === CHAVE_NOVA);
 r = await executar({ acao: "gravar_chave", chave: "chave-sem-resposta-00000" }, deps({ fetch: (() => Promise.reject(new Error("abort"))) as unknown as typeof fetch }));
-confere("API sem resposta: grava e avisa que não conferiu", r.ok === true && r.gravada === true && r.conferida === false && guardada!.valor === "chave-sem-resposta-00000");
+confere("API sem resposta: NÃO grava, a chave boa continua", r.ok === false && /Nada foi gravado/.test(r.erro) && guardada!.valor === CHAVE_NOVA);
+for (const st of [429, 500, 503]) {
+  r = await executar({ acao: "gravar_chave", chave: "chave-no-limite-000000000" }, deps({ fetch: (() => Promise.resolve(new Response("{}", { status: st }))) as unknown as typeof fetch }));
+  confere("API respondeu " + st + " na conferência: NÃO grava, a chave boa continua", r.ok === false && /Nada foi gravado/.test(r.erro) && guardada!.valor === CHAVE_NOVA);
+}
 guardada = { valor: CHAVE_VENCIDA, em: AGORA.toISOString() };
 r = await executar({ acao: "consultar", cpf: NOVO }, deps());
 confere("chave de Ajustes vencida: a consulta avisa que venceu", r.ok === false && r.vencida === true);

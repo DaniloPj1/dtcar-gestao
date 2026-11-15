@@ -132,7 +132,7 @@ export function CartaoCPF({ auto, onAuto }) {
     setGravando(false);
     if (r.ok) {
       setChave(""); pausa = { ate: 0, r: null }; setS(r);
-      setMsg({ t: r.conferida === false ? "Chave gravada. A API CPF não respondeu agora para conferir: faça uma consulta para testar." : "Chave gravada e aceita pela API CPF." });
+      setMsg({ t: "Chave gravada e aceita pela API CPF." });
     } else setMsg({ erro: true, t: r.semRede ? "Sem resposta do servidor. Confira a internet e se a função \"cpf\" já foi publicada no Supabase." : r.erro || "Não deu para gravar a chave." });
   };
   const naoPublicada = s && !s.ok && s.semRede;

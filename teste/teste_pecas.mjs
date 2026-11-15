@@ -41,4 +41,11 @@ const am = (r.grupos.find(g => g.grupo === "Amortecedor") || { itens: [] }).iten
 chk("Cofap: Gol 2015 traz amortecedor, e por ser catálogo de 2013 manda conferir", am.length > 0 && am.every(e => e.conferir && e.aplicacoes.some(a => /catálogo de 2013/.test(a))), am.map(e => e.aplicacoes));
 r = pecasDoVeiculo(cat, { marca: "VW", modelo: "GOL 1.0", ano: "2010" });
 chk("Cofap: Gol 2010 (dentro do catálogo) não leva o aviso de catálogo antigo", r.grupos.every(g => g.itens.every(e => e.peca.marca !== "Cofap" || !e.aplicacoes.some(a => /catálogo de 2013/.test(a)))));
+r = pecasDoVeiculo(cat, { marca: "VW", modelo: "GOL 1.0", ano: "2015" });
+const nk = r.grupos.flatMap(g => g.itens).filter(e => e.peca.marca === "Nakata");
+chk("Nakata completo: Gol 2015 traz peças Nakata com medidas, foto e conversão", nk.length > 20 && nk.some(e => e.peca.foto && e.peca.medidas && e.peca.conv.length), nk.length);
+r = pecasDoVeiculo(cat, { marca: "CHEVROLET", modelo: "MERIVA", ano: "2008" });
+chk("Nakata completo: Meriva (o PDF não traz montadora; ela vem dos outros catálogos) tem peças", r.grupos.flatMap(g => g.itens).some(e => e.peca.marca === "Nakata"), r.total);
+r = pecasDoVeiculo(cat, { marca: "FORD", modelo: "GOL", ano: "2015" });
+chk("Nakata completo: Gol não aparece para marca errada (Ford)", r.grupos.flatMap(g => g.itens).every(e => e.peca.marca !== "Nakata"), r.total);
 console.log(ok + " ok" + (falhas ? ", " + falhas + " FALHAS" : "")); process.exit(falhas ? 1 : 0);

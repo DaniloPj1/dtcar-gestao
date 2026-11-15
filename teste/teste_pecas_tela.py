@@ -1,3 +1,4 @@
+import re
 # Peças por veículo na O.S. e no orçamento (15/11/2026): botão "Peças deste veículo" no incluir peça, lista por grupo com foto, medidas,
 # aplicação e conversão; "Usar" leva a descrição e o código para o item, o valor é digitado; nada entra no estoque. PC e celular.
 # Uso: python3 teste/teste_pecas_tela.py [pasta das fotos]
@@ -52,17 +53,17 @@ def rodar(b, nome, w, h):
   com = pg.evaluate("""(async () => { const { carregarPecas } = await import('/js/pecas.js'); const c = await carregarPecas(); const na = [...document.querySelectorAll('#pv .pv-item')].map(x => x.dataset.cod);
     const p = na.map(k => c.pecas.find(x => x.codigo === k)); const a = p.find(x => x.oem.length || x.conv.length), s = p.find(x => !x.oem.length && !x.conv.length); return { com: a && a.codigo, oem: a && a.oem[0], marca: a && a.marca.toUpperCase(), sem: s && s.codigo }; })()""")
   if com["com"]:
-    pg.click(".pv-item[data-cod=" + com["com"] + "] .pv-conversao"); pg.wait_for_timeout(200)
-    chk(T("botão Conversão abre os códigos da montadora e das outras marcas"), pg.locator("#pv-conv-" + com["com"]).count() == 1 and (not com["oem"] or com["oem"] in pg.inner_text("#pv-conv-" + com["com"])), pg.inner_text(".pv-item[data-cod=" + com["com"] + "]"))
+    pg.click('.pv-item[data-cod="' + com["com"] + '"] .pv-conversao'); pg.wait_for_timeout(200)
+    chk(T("botão Conversão abre os códigos da montadora e das outras marcas"), pg.locator("#pv-conv-" + re.sub(r"[^A-Za-z0-9]+", "_", com["com"])).count() == 1 and (not com["oem"] or com["oem"] in pg.inner_text("#pv-conv-" + re.sub(r"[^A-Za-z0-9]+", "_", com["com"]))), pg.inner_text('.pv-item[data-cod="' + com["com"] + '"]'))
     pg.screenshot(path=os.path.join(TMP, "pecas_conversao_" + nome + ".png"))
-    pg.click(".pv-item[data-cod=" + com["com"] + "] .pv-conversao"); pg.wait_for_timeout(200)
-    chk(T("clicar de novo fecha a conversão"), pg.locator("#pv-conv-" + com["com"]).count() == 0)
+    pg.click('.pv-item[data-cod="' + com["com"] + '"] .pv-conversao'); pg.wait_for_timeout(200)
+    chk(T("clicar de novo fecha a conversão"), pg.locator("#pv-conv-" + re.sub(r"[^A-Za-z0-9]+", "_", com["com"])).count() == 0)
   else: chk(T("alguma peça do Onix tem conversão"), False, cod)
   if com["sem"]:
-    pg.click(".pv-item[data-cod=" + com["sem"] + "] .pv-conversao"); pg.wait_for_timeout(200)
-    chk(T("peça sem conversão: diz que o catálogo não traz"), "não traz conversão" in pg.inner_text("#pv-conv-" + com["sem"]))
+    pg.click('.pv-item[data-cod="' + com["sem"] + '"] .pv-conversao'); pg.wait_for_timeout(200)
+    chk(T("peça sem conversão: diz que o catálogo não traz"), "não traz conversão" in pg.inner_text("#pv-conv-" + re.sub(r"[^A-Za-z0-9]+", "_", com["sem"])))
   alvo = com["com"] or "CDRD0314"
-  pg.click(".pv-item[data-cod=" + alvo + "] .pv-usar"); pg.wait_for_timeout(400)
+  pg.click('.pv-item[data-cod="' + alvo + '"] .pv-usar'); pg.wait_for_timeout(400)
   desc = pg.input_value("#it-desc"); codigo = pg.input_value("#it-cod")
   chk(T("Usar: descrição em maiúsculas e código (montadora + marca) no item"), desc == desc.upper() and len(desc) > 5 and (com["marca"] or "PERFECT") + " " + alvo in codigo and (not com["oem"] or codigo.startswith(com["oem"])), [desc, codigo])
   chk(T("item fica só desta O.S. (não entra no cadastro nem no estoque)"), "não entra no cadastro" in pg.inner_text("[role=dialog]"))

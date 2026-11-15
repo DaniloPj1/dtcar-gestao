@@ -30,7 +30,11 @@ def grupo_de(descricao, grupo_do_catalogo):
             if re.search(padrao, fonte): return nome
     g = limpo(grupo_do_catalogo); return (g[:1].upper() + g[1:].lower()) if g else "Outros"
 for arq in sorted(glob.glob(os.path.join(pasta, "*.json"))):
-    j = json.load(open(arq, encoding="utf-8")); c = len(cats); cats.append([j["marca"], j.get("edicao", ""), j.get("fotos", "")])
+    j = json.load(open(arq, encoding="utf-8")); c = len(cats)
+    # ano de referência do catálogo: o da edição ou, se ela não diz, o ano mais novo que aparece nas aplicações. Serve para a tela avisar
+    # quando o carro é mais novo que o catálogo e a aplicação é "de tal ano em diante".
+    m = re.search(r"(?:19|20)\d\d", j.get("edicao", "")); ref = int(m.group(0)) if m else max((int(a.get("de") or 0) for p in j["pecas"] for a in p.get("apl", [])), default=0)
+    cats.append([j["marca"], j.get("edicao", ""), j.get("fotos", ""), ref])
     for p in j["pecas"]:
         if not p.get("apl"): continue
         n = len(pecas)
@@ -40,6 +44,6 @@ for arq in sorted(glob.glob(os.path.join(pasta, "*.json"))):
             apl.append([n, idx(mont, limpo(a["montadora"]).upper()), limpo(a["modelo"]).upper(), int(a.get("de") or 0), int(a.get("ate") or 0), limpo(a.get("obs")).upper()])
 d = {"versao": datetime.date.today().isoformat(), "catalogos": cats, "montadoras": mont, "grupos": grupos, "pecas": pecas, "apl": apl}
 cab = ("// Peças por veículo (pedido do Danilo em 15/11/2026). ARQUIVO GERADO por catalogo/gerar_pecas.py: não edite à mão.\n"
-       "// Catálogos: " + ", ".join(f"{m} {e}".strip() for m, e, _ in cats) + ". É dado de catálogo: a tela sempre manda conferir. Formato explicado em js/pecas.js.\n")
+       "// Catálogos: " + ", ".join(f"{c[0]} {c[1]}".strip() for c in cats) + ". É dado de catálogo: a tela sempre manda conferir. Formato explicado em js/pecas.js.\n")
 open(saida, "w", encoding="utf-8").write(cab + "export default " + json.dumps(d, ensure_ascii=False, separators=(",", ":")) + ";\n")
 print(len(pecas), "peças,", len(apl), "aplicações,", len(mont), "montadoras,", len(grupos), "grupos →", saida, os.path.getsize(saida) // 1024, "KB")

@@ -3,7 +3,11 @@
 //
 // Ações (POST com { acao, cpf }):
 //   consultar — nome e data de nascimento da pessoa. SÓ ADMINISTRADOR (decisão do Danilo em 15/11/2026).
-//   situacao  — diz se a chave está no lugar (não consulta ninguém). Só administrador.
+//   situacao  — diz se a chave está no lugar e desde quando (não consulta ninguém; nunca devolve a chave). Só administrador.
+//   gravar_chave — { chave }: cadastra a chave da API CPF pela tela Ajustes (pedido do Danilo em 15/11/2026: a chave do plano
+//               grátis vence todo mês e ele mesmo troca). Só administrador. A chave é conferida na API antes de gravar
+//               (sem consultar ninguém) e fica na tabela "segredos" (chave api_cpf), que ninguém do sistema lê: só esta função,
+//               com a chave de servidor. Fora do backup, do banco do PC e do conector. Ela nunca volta para a tela.
 //
 // REGRA DO DANILO (a mesma da placa): só vai à API quando o sistema ainda não tem os dados.
 //   1º o cadastro de clientes (CPF já cadastrado com nome → responde dele);
@@ -18,8 +22,8 @@
 // (aí eles buscam numa base de parceiros: 1 crédito por CPF achado). Sem crédito a API responde 402 só para esses CPFs.
 // A licença grátis vence a cada mês e é renovada no painel (sem custo): vencida, a API responde 403.
 //
-// Segredo (Supabase › Edge Functions › Secrets; nunca no repositório nem no chat):
-//   API_CPF_TOKEN   a chave do painel da API CPF (apicpf.com › Minhas Chaves API)
+// Onde fica a chave (nunca no repositório nem no chat): 1º a cadastrada em Ajustes (tabela segredos, chave api_cpf);
+// sem ela, o segredo API_CPF_TOKEN da função (Supabase › Edge Functions › Secrets), que é opcional.
 // Publicar com "Verify JWT" desligado (a função confere o login).
 import { withSupabase } from "npm:@supabase/server@1.9.2";
 
@@ -58,14 +62,14 @@ export function normalizar(r: Json | null | undefined, agora = new Date()): Dado
   return { nome: nomeDe(d.nome), nascimento: nascimentoDe(d.data_nascimento, agora) };
 }
 
-type Erro = { encontrado?: false; erro?: string; desligada?: true; sem_creditos?: true; limite?: true };
+type Erro = { encontrado?: false; erro?: string; desligada?: true; vencida?: true; sem_creditos?: true; limite?: true };
 /** Resposta de erro da API em português para a tela */
 export function erroDaApi(status: number, c: Json | null): Erro {
   const m = txt(c && c.message);
   if (status === 404) return { encontrado: false };
   if (status === 402) return { encontrado: false, sem_creditos: true, erro: "A API CPF não tem este CPF na base dela e acabaram os créditos da busca externa. Preencha o nome à mão." };
-  if (status === 401) return { desligada: true, erro: "A chave da API CPF não foi aceita. Confira o segredo API_CPF_TOKEN da função \"cpf\" no Supabase." };
-  if (status === 403) return { desligada: true, erro: "A licença da API CPF venceu. Renove (sem custo no plano grátis) no painel apicpf.com e a consulta volta a funcionar." };
+  if (status === 401) return { desligada: true, erro: "A chave da API CPF não foi aceita. Cadastre a chave certa em Ajustes › Consulta do cliente pelo CPF." };
+  if (status === 403) return { desligada: true, vencida: true, erro: "A chave da API CPF venceu. Renove no painel apicpf.com (sem custo no plano grátis) e cadastre a chave em Ajustes › Consulta do cliente pelo CPF." };
   if (status === 429) return { limite: true, erro: /minuto/i.test(m) ? "Muitas consultas de CPF em um minuto. Espere um pouco e tente de novo." : /repetid/i.test(m) ? "Este CPF já foi consultado várias vezes hoje. Tente amanhã ou preencha à mão." : "O limite de consultas de CPF de hoje acabou. Amanhã volta a funcionar." };
   if (status === 400) return { erro: "A API CPF não aceitou este CPF. Confira os números." };
   if (status >= 500) return { erro: "A consulta de CPF está fora do ar agora. Tente daqui a pouco." };
@@ -74,19 +78,48 @@ export function erroDaApi(status: number, c: Json | null): Erro {
 
 export type Deps = {
   admin: boolean;
+  /** a chave do segredo API_CPF_TOKEN da função (opcional; vale quando não há chave cadastrada em Ajustes) */
   token: string | undefined;
+  /** a chave cadastrada em Ajustes (tabela segredos) e quando foi gravada */
+  chave: () => Promise<{ valor: string; em: string | null } | null>;
+  gravarChave: (valor: string) => Promise<void>;
   /** o cliente no cadastro (tabela clientes) com este CPF, lido com o login de quem pediu */
   cadastro: (cpf: string) => Promise<Json | null>;
   fetch: typeof fetch;
   agora?: () => Date;
 };
 
-const SEM_CHAVE = { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta a chave da API CPF (segredo API_CPF_TOKEN da função \"cpf\" no Supabase)." };
+const SEM_CHAVE = { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta cadastrar a chave da API CPF em Ajustes › Consulta do cliente pelo CPF." };
+/** A chave tem cara de chave? (sem espaço, de 16 a 200 letras, números e sinais comuns) */
+export const chaveValida = (c: string) => /^[A-Za-z0-9._\-+/=:|]{16,200}$/.test(c);
+
+/** Pergunta à API se a chave vale, SEM consultar ninguém (pedido sem CPF: chave boa → 400; ruim → 401; vencida → 403) */
+async function conferirChave(deps: Deps, chave: string): Promise<{ ok: boolean; erro?: string; conferida: boolean }> {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), LIMITE_MS);
+  try {
+    const r = await deps.fetch(BASE + "/api/consulta", { headers: { "X-API-KEY": chave, accept: "application/json" }, signal: ac.signal });
+    await r.body?.cancel().catch(() => {});
+    if (r.status === 401) return { ok: false, conferida: true, erro: "A API CPF não aceitou esta chave. Copie de novo em apicpf.com › Minhas Chaves API." };
+    if (r.status === 403) return { ok: false, conferida: true, erro: "Esta chave está vencida. Renove no painel apicpf.com e cadastre a chave renovada." };
+    return { ok: true, conferida: r.status === 400 || r.status === 200 };
+  } catch (_e) { return { ok: true, conferida: false }; }   // API sem resposta: grava e avisa que não deu para conferir
+  finally { clearTimeout(t); }
+}
 
 export async function executar(corpo: Record<string, unknown>, deps: Deps): Promise<Record<string, unknown>> {
   const acao = String(corpo.acao || "");
   if (!deps.admin) throw new ErroUso("A consulta de CPF é só para o administrador.");
-  if (acao === "situacao") return deps.token ? { ok: true, ligada: true } : SEM_CHAVE;
+  if (acao === "gravar_chave") {
+    const nova = String(corpo.chave ?? "").trim();
+    if (!chaveValida(nova)) throw new ErroUso("Cole a chave inteira, como aparece em apicpf.com › Minhas Chaves API (sem espaços).");
+    const c = await conferirChave(deps, nova);
+    if (!c.ok) return { ok: false, erro: c.erro };
+    await deps.gravarChave(nova);
+    return { ok: true, ligada: true, gravada: true, conferida: c.conferida, origem: "ajustes", chave_em: (deps.agora || (() => new Date()))().toISOString() };
+  }
+  const guardada = await deps.chave();
+  const token = (guardada && guardada.valor.trim()) || deps.token;
+  if (acao === "situacao") return token ? { ok: true, ligada: true, origem: guardada && guardada.valor.trim() ? "ajustes" : "supabase", chave_em: (guardada && guardada.valor.trim() && guardada.em) || null } : SEM_CHAVE;
   if (acao !== "consultar") throw new ErroUso("Ação desconhecida: " + acao);
   const cpf = soDig(corpo.cpf);
   if (!cpfValido(cpf)) throw new ErroUso("CPF inválido. Confira os 11 números.");
@@ -100,12 +133,12 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
   }
 
   // 2º a API
-  if (!deps.token) return { ...SEM_CHAVE, cpf };
+  if (!token) return { ...SEM_CHAVE, cpf };
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), LIMITE_MS);
   let status = 0, resp: Json | null = null, creditos: number | null = null;
   try {
     // a chave vai no cabeçalho (nunca no endereço, que fica em registro de servidor)
-    const r = await deps.fetch(BASE + "/api/consulta?cpf=" + cpf, { headers: { "X-API-KEY": deps.token, accept: "application/json" }, signal: ac.signal });
+    const r = await deps.fetch(BASE + "/api/consulta?cpf=" + cpf, { headers: { "X-API-KEY": token, accept: "application/json" }, signal: ac.signal });
     status = r.status; resp = await r.json().catch(() => null);
     const cr = r.headers.get("x-credits-remaining"); if (cr !== null && /^\d+$/.test(cr.trim())) creditos = Number(cr.trim());
   } catch (_e) {
@@ -125,6 +158,15 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     const a = await ctx.supabase.rpc("e_admin");
     return json(await executar(corpo, {
       admin: a.data === true, token: (Deno.env.get("API_CPF_TOKEN") || "").trim() || undefined, fetch,
+      chave: async () => {
+        const { data, error } = await ctx.supabaseAdmin.from("segredos").select("valor,atualizado_em").eq("chave", "api_cpf").maybeSingle();
+        if (error) throw new Error("Falha ao ler a chave da API CPF.");
+        return data && data.valor ? { valor: String(data.valor), em: data.atualizado_em || null } : null;
+      },
+      gravarChave: async (valor) => {
+        const { error } = await ctx.supabaseAdmin.from("segredos").upsert({ chave: "api_cpf", valor, atualizado_em: new Date().toISOString() });
+        if (error) throw new Error("Não deu para gravar a chave. Tente de novo.");
+      },
       cadastro: async (cpf) => {
         const { data, error } = await ctx.supabase.from("clientes").select("id,codigo,nome,nascimento").eq("doc", cpf).limit(1);
         if (error) throw new Error("Falha ao ler o cadastro de clientes: " + error.message);

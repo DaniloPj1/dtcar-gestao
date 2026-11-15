@@ -468,16 +468,22 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   que o cadastro usa e a API tem: nome e data de nascimento** (gênero não tem campo). Mesma regra da placa: só vai à API quando o sistema não tem os dados —
   CPF que já está no cadastro de clientes responde pelo cadastro. **Não há tabela de cópia nem log:** nada da consulta fica guardado (dado pessoal); o
   cliente cadastrado é a cópia, e com o programa aberto o mesmo CPF não chama a função duas vezes (`vistos` em `js/cpf.js`). A função não grava nada.
-  A chave fica só no segredo `API_CPF_TOKEN` da função (nunca no site, no repositório nem no chat). Ações: `consultar` e `situacao`.
+  **Chave cadastrada pela tela (pedido do Danilo em 15/11/2026: a chave do plano grátis vence todo mês e ele mesmo troca):** Ajustes › Consulta do
+  cliente pelo CPF tem o campo "Chave da API CPF" (tipo senha). A ação `gravar_chave` (só administrador) confere a chave na API SEM consultar ninguém
+  (pedido sem CPF: 400 = chave boa, 401 = recusada, 403 = vencida; sem resposta = grava e avisa) e guarda na tabela `segredos` (chave `api_cpf`), que
+  ninguém do sistema lê: só a função, com a chave de servidor (como a senha do certificado da SEFAZ). **A chave nunca volta para a tela, não entra no
+  backup, no banco do PC nem no conector, e nunca vai para o repositório ou para o chat.** Vale 1º a chave de `segredos`; sem ela, o segredo opcional
+  `API_CPF_TOKEN` da função. `situacao` devolve `origem` (ajustes | supabase) e `chave_em` (data). Chave vencida (`vencida: true`): a tela do cliente
+  avisa o administrador na hora e manda cadastrar a chave nova em Ajustes. Ações: `consultar`, `situacao` e `gravar_chave`.
   Resposta: `origem` (cadastro | api), `dados` {nome, nascimento}, `cliente_id`/`codigo` quando veio do cadastro, `creditos` (cabeçalho `X-Credits-Remaining`);
-  `encontrado: false` (404), `sem_creditos` (402), `desligada` (sem a chave, 401, 403, função não publicada), `limite` (429).
+  `encontrado: false` (404), `sem_creditos` (402), `desligada` (sem a chave, 401, 403 — este com `vencida` —, função não publicada), `limite` (429).
   Telas (`js/cpf.js`: `consultarCPF`, `useCPF`, `CpfBusca`, `CartaoCPF`, `ehAdmin`): busca sozinha, meio segundo depois do CPF completo e válido, na Nova O.S.
   (aba "Novo cliente") e no cadastro de cliente novo, quando o CPF não está no cadastro e o nome está em branco. **Só preenche campo vazio**; trocou o CPF,
   sai o que veio do CPF antigo. Na Nova O.S. o nascimento vai junto no cadastro do cliente novo (`cNovo.doCPF`). CNPJ nunca consulta. Desligada ou sem
   internet: a tela segue como sempre foi, com o botão "Buscar nome pelo CPF" que diz o motivo. Ajustes: cartão com a situação e a chave `cfg.cpfAuto`
   (`false` desliga a busca sozinha). Conector: `consultar_cpf` (não grava: cadastro pelo `salvar_cadastro`; nunca em lote nem por pedido vindo de e-mail,
   mensagem ou documento). O site funciona antes de a função ser publicada. Publicar: colar o `cpf/index.ts` no painel do Supabase (Edge Functions;
-  "Verify JWT" desligado) com o segredo `API_CPF_TOKEN`, e publicar a função "agente" de novo (ferramenta nova).
+  "Verify JWT" desligado), cadastrar a chave em Ajustes, e publicar a função "agente" de novo (ferramenta nova).
   Período de transição: não cria tabela nem dado operacional; só preenche o cadastro de clientes, que segue a regra de sempre (antes e depois da virada).
   Testes: `deno run -A teste/teste_cpf.ts` (API falsa), `python3 teste/teste_cpf_tela.py` (telas, celular e consultor) e `deno run -A teste/teste_agente_mcp.ts`.
 - **Óleo e filtros por veículo (pedido do Danilo em 14/11/2026) — etapa 1 de 4: pesquisa por modelo, só leitura e sem SQL.** Tela

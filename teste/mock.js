@@ -156,7 +156,10 @@
     cpf: async body => { const C = window.__CPF = window.__CPF || {}; C.chamadas = C.chamadas || []; C.chamadas.push(body);
       if (C.situacao === "desligada") return { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta a chave da API CPF." };
       if (C.situacao === "semresposta") return { ok: false, semRede: true, erro: "Sem resposta da consulta de CPF." };
-      if (body.acao === "situacao") return { ok: true, ligada: true };
+      if (body.acao === "gravar_chave") { if (body.chave === "chave-vencida-0000000") return { ok: false, erro: "Esta chave está vencida. Renove no painel apicpf.com e cadastre a chave renovada." };
+        C.chaveEm = "2026-11-15T13:00:00Z"; C.situacao = ""; return { ok: true, ligada: true, gravada: true, conferida: true, origem: "ajustes", chave_em: C.chaveEm }; }
+      if (C.situacao === "vencida") return { ok: false, desligada: true, vencida: true, erro: "A chave da API CPF venceu. Renove no painel apicpf.com (sem custo no plano grátis) e cadastre a chave em Ajustes › Consulta do cliente pelo CPF." };
+      if (body.acao === "situacao") return C.semChave ? { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta cadastrar a chave da API CPF em Ajustes › Consulta do cliente pelo CPF." } : { ok: true, ligada: true, origem: C.chaveEm ? "ajustes" : "supabase", chave_em: C.chaveEm || null };
       if (C.situacao === "limite") return { ok: false, limite: true, erro: "O limite de consultas de CPF de hoje acabou. Amanhã volta a funcionar." };
       if (C.situacao === "creditos") return { ok: true, encontrado: false, sem_creditos: true, cpf: body.cpf };
       if (body.cpf === "11144477735") return { ok: true, encontrado: false, cpf: body.cpf };

@@ -62,7 +62,8 @@ export function useCPF(doc, { falta, pode, auto = true, onDados, onTrocou } = {}
     else if (r.ok && r.sem_creditos) setC({ estado: "creditos", msg: "", cpf: d });
     else if (r.ok) setC({ estado: "nao", msg: "", cpf: d });
     // sem internet ou consulta ainda não ligada: na busca sozinha a tela segue como sempre foi (sem aviso); pelo botão, diz o motivo
-    else if ((r.semRede || r.desligada) && !manual) setC({ estado: "quieto", msg: "", cpf: d });
+    // (chave vencida é diferente: só o administrador consulta e é ele quem troca a chave, então a tela avisa na hora)
+    else if ((r.semRede || (r.desligada && !r.vencida)) && !manual) setC({ estado: "quieto", msg: "", cpf: d });
     else setC({ estado: "erro", msg: r.erro || "", cpf: d });
   };
   useEffect(() => {   // o CPF mudou: o que veio do CPF antigo sai dos campos
@@ -106,24 +107,48 @@ export function CpfBusca({ c }) {
     ${aviso ? html`<span class="dica placa-aviso cpf-aviso" role="status">${aviso}</span>` : null}</div>`;
 }
 
-/* ---------------- Ajustes: situação da consulta pelo CPF (só administrador) ---------------- */
+/* ---------------- Ajustes: situação da consulta pelo CPF e cadastro da chave (só administrador) ---------------- */
+const dataBR = iso => { const d = iso ? new Date(iso) : null; return d && !isNaN(d) ? d.toLocaleDateString("pt-BR") : ""; };
+
+/** Cartão da tela Ajustes: ligada ou não, desde quando a chave está cadastrada, o campo para cadastrar a chave nova
+ *  (a do plano grátis vence todo mês) e a chave da busca sozinha. A chave digitada vai direto para a função "cpf",
+ *  que confere e guarda no servidor; ela nunca volta para a tela. */
 export function CartaoCPF({ auto, onAuto }) {
   const [s, setS] = useState(null), [lendo, setLendo] = useState(false);
-  const ler = async () => {
-    setLendo(true);
-    let r;
-    try { r = api.cpf ? await api.cpf({ acao: "situacao" }) : { ok: false, desligada: true, erro: "Consulta de CPF indisponível." }; }
-    catch (e) { r = { ok: false, erro: (e && e.message) || "Falha ao conferir." }; }
-    setS(r || { ok: false, erro: "Falha ao conferir." });
-    if (r && r.ok) pausa = { ate: 0, r: null };
-    setLendo(false);
+  const [chave, setChave] = useState(""), [gravando, setGravando] = useState(false), [msg, setMsg] = useState(null);
+  const chamar = async body => {
+    try { return (api.cpf ? await api.cpf(body) : null) || { ok: false, desligada: true, erro: "Consulta de CPF indisponível." }; }
+    catch (e) { return { ok: false, erro: (e && e.message) || "Falha ao falar com a consulta de CPF." }; }
   };
+  const ler = async () => { setLendo(true); const r = await chamar({ acao: "situacao" }); setS(r); if (r.ok) pausa = { ate: 0, r: null }; setLendo(false); };
   useEffect(() => { ler(); }, []);
+  const gravar = async () => {
+    const c = chave.trim();
+    if (c.length < 16 || /\s/.test(c)) { setMsg({ erro: true, t: "Cole a chave inteira, como aparece no painel da API CPF (sem espaços)." }); return; }
+    setGravando(true); setMsg(null);
+    const r = await chamar({ acao: "gravar_chave", chave: c });
+    setGravando(false);
+    if (r.ok) {
+      setChave(""); pausa = { ate: 0, r: null }; setS(r);
+      setMsg({ t: r.conferida === false ? "Chave gravada. A API CPF não respondeu agora para conferir: faça uma consulta para testar." : "Chave gravada e aceita pela API CPF." });
+    } else setMsg({ erro: true, t: r.semRede ? "Sem resposta do servidor. Confira a internet e se a função \"cpf\" já foi publicada no Supabase." : r.erro || "Não deu para gravar a chave." });
+  };
+  const naoPublicada = s && !s.ok && s.semRede;
   return html`<section class="card" id="cartao-cpf"><h2>Consulta do cliente pelo CPF</h2>
     <span class="sub">Busca o nome e a data de nascimento na API CPF quando o CPF ainda não está no cadastro. Só o administrador consulta. Nada da consulta fica guardado: só o que for salvo no cadastro do cliente.</span>
     ${!s ? html`<p class="dica">Conferindo…</p>`
-      : s.ok ? html`<div class="placa-situacao"><span class="placa-ok">Ligada</span><span>Plano grátis: 100 consultas por dia. A licença vence a cada mês e é renovada, sem custo, no painel.</span></div>`
+      : s.ok ? html`<div class="placa-situacao"><span class="placa-ok">Ligada</span>
+          <span id="cpf-chave-em">${s.origem === "ajustes" ? "Chave cadastrada" + (dataBR(s.chave_em) ? " em " + dataBR(s.chave_em) : "") + "." : "Usando a chave gravada no Supabase."} Plano grátis: 100 consultas por dia.</span></div>`
       : html`<div class=${s.desligada ? "aviso" : "erros"}><b>${s.desligada ? "Ainda não está ligada." : "Não deu para conferir."}</b> ${s.erro}</div>`}
+    <div class="campo cpf-chave">
+      <label for="cpf-chave">${s && s.ok ? "Trocar a chave da API CPF" : "Chave da API CPF"}</label>
+      <span class="dica">A chave do plano grátis vence todo mês. Quando vencer, renove no painel da API CPF, copie a chave em “Minhas Chaves API” e cole aqui. Ela fica guardada no servidor e não aparece de novo na tela.</span>
+      <div class="linha-add"><input id="cpf-chave" class="inp" type="password" autocomplete="off" spellcheck="false" placeholder="Cole a chave aqui" value=${chave} disabled=${gravando}
+          onInput=${e => { setChave(e.target.value); setMsg(null); }} onKeyDown=${e => { if (e.key === "Enter") { e.preventDefault(); gravar(); } }} />
+        <button type="button" class="btn" id="cpf-gravar-chave" disabled=${gravando || !chave.trim()} onClick=${gravar}>${gravando ? "Conferindo…" : "Gravar chave"}</button></div>
+      ${msg ? html`<span class=${msg.erro ? "dica cpf-msg cpf-msg-erro" : "dica cpf-msg cpf-msg-ok"} role="status">${msg.t}</span>` : null}
+      ${naoPublicada ? html`<span class="dica">Se a função “cpf” ainda não foi publicada no Supabase, a chave só pode ser gravada depois disso.</span>` : null}
+    </div>
     <label class="linha-check"><input type="checkbox" checked=${auto !== false} onChange=${e => onAuto(e.target.checked)} />
       <span>Buscar sozinho ao digitar um CPF que não está no cadastro, quando o nome está em branco</span></label>
     <div class="acoes"><button type="button" class="btn btn-sm" disabled=${lendo} onClick=${ler}>${lendo ? "Conferindo…" : "Conferir de novo"}</button>

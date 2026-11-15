@@ -85,7 +85,12 @@ export function Ajustes() {
   const termo = (k, rot, padrao, dica) => html`<${Campo} id=${"a-" + k} rotulo=${rot} dica=${dica}><${Area} id=${"a-" + k} style=${{ minHeight: "150px" }} valor=${c[k]} onMuda=${v => set({ [k]: v })} /></${Campo}>
     ${c[k] !== padrao ? html`<button type="button" class="btn-link" onClick=${() => set({ [k]: padrao })}>Restaurar texto padrão</button>` : null}`;
   return html`<div class="pagina">
-    <section class="card"><h2>App do mecânico</h2><span class="sub">Escolha os itens que o mecânico marca no celular ao receber um veículo (por sistema).</span><div class="acoes"><button type="button" class="btn" onClick=${() => ir("/app-mecanico")}>Editar itens da lista do app</button></div></section>
+    <section class="card"><h2>Mais do sistema</h2><span class="sub">Itens que saíram do menu lateral porque se usam pouco.</span>
+      <div class="lista">
+        <button type="button" class="linha" onClick=${() => ir("/equipe")}><span class="ic">${I.pessoas}</span><span class="meio"><strong>Equipe</strong><span>Liberar acessos e definir papéis</span></span></button>
+        <button type="button" class="linha" onClick=${() => ir("/backup")}><span class="ic">${I.nuvem}</span><span class="meio"><strong>Backup</strong><span>Baixar uma cópia de todos os dados ou restaurar</span></span></button>
+        <button type="button" class="linha" onClick=${() => ir("/importar")}><span class="ic">${I.painel}</span><span class="meio"><strong>Importar do OS Oficina 3.0</strong><span>Trazer cadastros, produtos e O.S. novas do sistema antigo</span></span></button>
+      </div></section>
     <section class="card"><h2>Dados da oficina</h2><span class="sub">Aparecem no cabeçalho dos documentos.</span>
       <div class="grade">
         <${Campo} id="a-nome" rotulo="Nome" obrig><${Texto} id="a-nome" valor=${c.nome} onMuda=${v => set({ nome: v })} /></${Campo}>

@@ -73,6 +73,15 @@ try:
     pg.click(".cpf-buscar"); pg.wait_for_timeout(600)
     chk("pelo botão, diz o motivo", "ainda não foi ligada" in pg.inner_text("body"))
     pg.reload(); pg.wait_for_timeout(2000)   # programa reaberto: acaba a pausa de 5 minutos da busca sozinha
+    # botão clicado com um CPF e o CPF trocado antes de a resposta chegar: o nome do primeiro não pode entrar no segundo
+    pg.evaluate("window.__CPF = { chamadas: [], situacao: 'semresposta' }"); nova_os(); pg.evaluate("window.__CPF = { chamadas: [], situacao: 'semresposta' }")
+    pg.fill("#c-doc", "135.792.468-28"); pg.wait_for_timeout(1300)
+    if pg.query_selector(".cpf-buscar"):
+      pg.evaluate("window.__CPF = { chamadas: [], demora: 1500 }"); pg.click(".cpf-buscar"); pg.wait_for_timeout(200)
+      pg.fill("#c-doc", "246.813.579-28"); pg.wait_for_timeout(2600)
+      chk("CPF trocado enquanto a resposta vinha: o nome do CPF antigo não entra", val("#c-nome") == "" and "Nome preenchido" not in pg.inner_text("body"), val("#c-nome"))
+    else: chk("botão de buscar apareceu para o teste da troca no meio", False)
+    pg.reload(); pg.wait_for_timeout(2000)
     # sem crédito
     nova_os(); pg.evaluate("window.__CPF = { chamadas: [], situacao: 'creditos' }")
     pg.fill("#c-doc", "862.883.667-57"); pg.wait_for_timeout(1500)

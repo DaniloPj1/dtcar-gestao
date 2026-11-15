@@ -57,6 +57,7 @@ export function useCPF(doc, { falta, pode, auto = true, onDados, onTrocou } = {}
   const feito = useRef(null), tentado = useRef(""), vivo = useRef(true);
   useEffect(() => () => { vivo.current = false; }, []);
   const d = soDig(doc), valido = d.length === 11 && validaCPF(d), ativo = !!(pode && falta && auto && valido);
+  const noCampo = useRef(d); noCampo.current = d;   // o CPF que está no campo agora (a resposta de um CPF antigo não vale)
   const aplicar = (r, manual) => {
     if (r.ok && r.encontrado) { feito.current = { cpf: d, dados: paraCliente(r.dados) }; fn.current.onDados && fn.current.onDados(paraCliente(r.dados), r); setC({ estado: "achou", msg: "", cpf: d }); }
     else if (r.ok && r.sem_creditos) setC({ estado: "creditos", msg: "", cpf: d });
@@ -84,7 +85,8 @@ export function useCPF(doc, { falta, pode, auto = true, onDados, onTrocou } = {}
     if (!valido || !pode) return;
     setC({ estado: "buscando", msg: "", cpf: d });
     const r = await consultarCPF(d, { manual: true });
-    if (vivo.current) { tentado.current = d; aplicar(r, true); }
+    // a pessoa trocou o CPF enquanto a resposta vinha: o nome de um CPF nunca entra no cadastro de outro
+    if (vivo.current && noCampo.current === d) { tentado.current = d; aplicar(r, true); }
   };
   let atual = c.cpf === d ? c : { estado: "", msg: "", cpf: d };
   if (atual.estado === "achou" && falta) atual = { ...atual, estado: "quieto" };   // preencheu e a pessoa apagou: sem aviso, com o botão

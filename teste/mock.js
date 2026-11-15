@@ -154,6 +154,7 @@
     // Padrão: todo CPF novo é "MARIA APARECIDA DE SOUZA", nascida em 15/07/1985; 11144477735 não existe; "situacao" simula
     // "desligada", "semresposta", "creditos" (CPF fora da base e sem crédito) e "limite".
     cpf: async body => { const C = window.__CPF = window.__CPF || {}; C.chamadas = C.chamadas || []; C.chamadas.push(body);
+      if (C.demora && body.acao === "consultar") await new Promise(r => setTimeout(r, C.demora));   // resposta lenta (teste da troca de CPF no meio)
       if (C.situacao === "desligada") return { ok: false, desligada: true, erro: "A consulta de CPF ainda não foi ligada: falta a chave da API CPF." };
       if (C.situacao === "semresposta") return { ok: false, semRede: true, erro: "Sem resposta da consulta de CPF." };
       if (body.acao === "gravar_chave") { if (body.chave === "chave-vencida-0000000") return { ok: false, erro: "Esta chave está vencida. Renove no painel apicpf.com e cadastre a chave renovada." };

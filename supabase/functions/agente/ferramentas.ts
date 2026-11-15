@@ -955,7 +955,7 @@ export function criarServidor(db: Banco): McpServer {
     description: "Litros e viscosidade do óleo do motor e filtros (óleo, ar, combustível, cabine) de um carro, SUV ou caminhonete — as mesmas regras da tela \"Óleo e filtros\" do sistema. " +
       "Informe a placa (ou veiculo_id) de um veículo do cadastro, ou marca + modelo + ano (+ motor, combustivel) à mão. Placa fora do cadastro: consulte antes com consultar_placa e passe marca/modelo/ano; esta ferramenta nunca paga a API. " +
       "Resposta: ficha (a gravada no veículo, com origem catalogo = confira ou oficina = confirmada), oleo (melhor resposta do catálogo para o ano + outras), " +
-      "filtros (por tipo: códigos do catálogo, o que há no ESTOQUE com saldo — código, descrição, saldo, preço — ou 'sem estoque' com Tecfil/Mahle/MANN) e produtos_para_lancar (óleo e filtros do estoque prontos para lancar_itens_os). " +
+      "versoes_possiveis (quando o cadastro não tem o motor: as outras versões do carro, para confirmar), filtros (por tipo: códigos do catálogo, o que há no ESTOQUE com saldo — código, descrição, saldo, preço — ou 'sem estoque' com Tecfil/Mahle/MANN) e produtos_para_lancar (óleo e filtros do estoque prontos para lancar_itens_os). " +
       "REGRA DO DANILO: se o filtro está no estoque, fale só dele; fora do estoque, só Tecfil, Mahle e MANN; óleo só litros, viscosidade e norma (a marca do óleo não importa). " +
       "É dado de catálogo: diga se veio do catálogo (conferir) ou da ficha confirmada. Não grava nada: para lançar na O.S. use lancar_itens_os; para gravar a ficha, só pela tela do veículo.",
     inputSchema: z.object({
@@ -1009,6 +1009,13 @@ export function criarServidor(db: Banco): McpServer {
             conversao: fm ? fm.conversao.slice(0, 8).map((c: { marca: string; codigos: string[]; original: boolean }) => ({ marca: c.marca, codigos: c.codigos, original: c.original })) : [] };
         });
         if (!ficha && app) out.aplicacao = [app.catalogo, app.modelo, app.versao, app.motor, periodoTexto(app)].filter(Boolean).join(" · ");
+        // cadastro sem o motor: a aplicação de cima é só a mais provável; mostra as outras versões para confirmar (a ficha do veículo resolve de vez)
+        if (!ficha && r && r.filtros.length > 1 && !String(v.motor || "").trim()) {
+          // deno-lint-ignore no-explicit-any
+          out.versoes_possiveis = r.filtros.slice(0, 6).map((a: any) => ({ versao: [a.versao, a.motor].filter(Boolean).join(" · ") || a.modelo, periodo: periodoTexto(a),
+            filtros: { oleo: a.oleo, ar: a.ar, combustivel: a.combustivel, cabine: a.cabine } }));
+          out.aviso_versao = "O cadastro do veículo não tem o motor: confirme a versão (motor e combustível) antes de comprar ou lançar filtro.";
+        }
       }
       // óleo do estoque para a viscosidade da melhor resposta (ou da ficha)
       const vis = ficha ? ficha.viscosidade : oleos[0]?.viscosidade;

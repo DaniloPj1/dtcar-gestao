@@ -15,6 +15,7 @@ PREP = """(() => { const db = window.__DB; const p = (id, d, o) => db.produtos.p
   p('o2', 'OLEO 5W30 LUBRAX TOP AUTO SQ SINT', { unidade: 'LTR', categoria: 'OLEO MOTOR', marca: 'LUBRAX', estoque_atual: 3, preco_vista: 56.88, custo: 31 });
   p('f1', 'FILTRO DE OLEO TOYOTA HILUX', { referencia: 'W 7283 MANN', marca: 'MANN', categoria: 'FILTROS LUB', estoque_atual: 3, preco_vista: 49.8, custo: 24.9 });
   db.produtos.push({ id: 's1', codigo: 990, tipo: 'servico', ativo: true, unidade: 'UNI', descricao: 'SUBST. DE OLEO E FILTRO', preco_vista: 80, preco_prazo: 80, cobranca: 'fixo', categoria: 'SERVICOS' });
+  db.produtos.push({ id: 's2', codigo: 991, tipo: 'servico', ativo: true, unidade: 'UNI', descricao: 'SUBST. OLEO E FILTRO LUB. CAMINHONETE', preco_vista: 130, preco_prazo: 130, cobranca: 'fixo', categoria: 'SERVICOS' });
   const v2 = db.veiculos.find(v => v.id === 'v2'); v2.combustivel = 'Diesel'; v2.ficha_oleo = { litros: '8', viscosidade: '5W30', norma: '', marca: 'Tecfil', filtros: { oleo: ['PSL916'], ar: ['ARL2219'], combustivel: [], cabine: [] }, origem: 'catalogo' };
   db.os_itens = db.os_itens || []; })();"""
 def abrir(b, w, h, os_id):
@@ -39,14 +40,14 @@ try:
     txt = " | ".join(linhas.all_inner_texts()).replace("\n", " ")
     chk("filtro de óleo: MANN W 7283 do estoque (3 un.)", "7283" in txt and "3 un." in txt, txt)
     chk("filtro de ar sem estoque: não marca e mostra o código para comprar", "sem estoque" in txt and "ARL2219" in txt, txt)
-    chk("mão de obra: serviço de troca de óleo do cadastro já marcado", pg.locator("#lf-mo-sel").is_checked() and "SUBST. DE OLEO E FILTRO" in pg.locator("#lf-mo-prod").inner_text())
-    chk("total = 8 L × 52,75 + filtro 49,80 + mão de obra 80 = R$ 551,80", pg.locator("#lf-total").inner_text().replace("\xa0", " ") == "R$ 551,80", pg.locator("#lf-total").inner_text())
+    chk("mão de obra: Hilux é caminhonete, vem marcado o serviço CAMINHONETE (e o comum fica na lista)", pg.locator("#lf-mo-sel").is_checked() and pg.input_value("#lf-mo-prod") == "s2" and pg.locator("#lf-mo-prod option").count() == 2, pg.locator("#lf-mo-prod option").all_inner_texts())
+    chk("total = 8 L × 52,75 + filtro 49,80 + mão de obra 130 = R$ 601,80", pg.locator("#lf-total").inner_text().replace("\xa0", " ") == "R$ 601,80", pg.locator("#lf-total").inner_text())
     chk("botão diz 'Lançar 3 itens'", pg.locator("#lf-lancar").inner_text() == "Lançar 3 itens")
     pg.screenshot(path=os.path.join(TMP, "lancar_ficha_pc.png"))
     pg.locator("#lf-lancar").click(); pg.wait_for_timeout(2000)
     it = pg.evaluate("() => (window.__DB.os_itens || []).filter(i => i.ordem_id === 'o2').map(i => ({ d: i.descricao, q: i.qtd, v: i.valor_unit, p: i.produto_id, t: i.tipo }))")
     novos = [x for x in it if x["p"]]
-    chk("gravou os 3 itens novos na O.S. (óleo 8 L, filtro 1 un. e a mão de obra), sem mexer nos 3 que já tinha, com preço e produto do estoque", len(it) == 6 and len(novos) == 3 and any(x["p"] == "s1" and x["t"] == "servico" and x["q"] == 1 and x["v"] == 80 for x in it) and any(x["p"] == "o1" and x["q"] == 8 and x["v"] == 52.75 for x in it) and any(x["p"] == "f1" and x["q"] == 1 and x["v"] == 49.8 for x in it), it)
+    chk("gravou os 3 itens novos na O.S. (óleo 8 L, filtro 1 un. e a mão de obra), sem mexer nos 3 que já tinha, com preço e produto do estoque", len(it) == 6 and len(novos) == 3 and any(x["p"] == "s2" and x["t"] == "servico" and x["q"] == 1 and x["v"] == 130 for x in it) and any(x["p"] == "o1" and x["q"] == 8 and x["v"] == 52.75 for x in it) and any(x["p"] == "f1" and x["q"] == 1 and x["v"] == 49.8 for x in it), it)
     chk("itens aparecem na lista de peças da O.S.", "SEMI-SINT MAX" in pg.locator("body").inner_text() and "TOYOTA HILUX" in pg.locator("body").inner_text())
     pg.locator("#os-ficha-oleo").click(); pg.wait_for_timeout(1200)
     chk("abrir de novo: o que já está na O.S. vem desmarcado e avisa", not pg.locator("#lf-oleo").is_checked() and "já na O.S." in pg.locator("#lf-oleo-prod").inner_text() and "já está na O.S." in " ".join(pg.locator(".lf-linha").all_inner_texts()), pg.locator("#lf-lancar").inner_text())
@@ -64,7 +65,7 @@ try:
     po.locator("#lf-lancar").click(); po.wait_for_timeout(800)
     chk("orçamento: sem erro de estoque e o modal fecha", po.locator(".erros", has_text="Estoque insuficiente").count() == 0 and po.locator("#lf-lancar").count() == 0, po.locator(".erros").all_inner_texts())
     corpo = po.locator("body").inner_text()
-    chk("orçamento: óleo, filtro e mão de obra entram na lista", "SEMI-SINT MAX" in corpo and "TOYOTA HILUX" in corpo and "SUBST. DE OLEO E FILTRO" in corpo, corpo[:300])
+    chk("orçamento: óleo, filtro e mão de obra entram na lista", "SEMI-SINT MAX" in corpo and "TOYOTA HILUX" in corpo and "SUBST. OLEO E FILTRO LUB. CAMINHONETE" in corpo, corpo[:300])
     po.locator("#orc-total").wait_for(); po.get_by_role("button", name="Salvar orçamento").click(); po.wait_for_timeout(1000)
     gr = po.evaluate("() => (window.__DB.orcamentos[0].itens || []).map(i => ({ t: i.tipo, q: i.qtd, p: i.produto_id }))")
     chk("orçamento: salvou os 3 itens (óleo 30 L, filtro, serviço)", len(gr) == 3 and any(x["p"] == "o1" and x["q"] == 30 for x in gr) and any(x["t"] == "servico" for x in gr), gr)

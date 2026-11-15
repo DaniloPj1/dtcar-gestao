@@ -130,6 +130,18 @@ chk("dois no estoque para o mesmo filtro: aparecem os dois", f.estoque.length ==
 // --- o arquivo de dados
 chk("dados: só os cinco catálogos de filtro (Mahle 2013 fora)", dados.catalogos.length === 5 && !dados.catalogos.some(c => /mahle/i.test(c)));
 chk("dados: sem moto, caminhão e trator nas montadoras", !dados.montadoras.some(m => /^(YAMAHA|SCANIA|KAWASAKI|MASSEY|VALTRA|JOHN DEERE|DAFRA)/.test(m)), dados.montadoras.filter(m => /^(YAMAHA|SCANIA|KAWASAKI|MASSEY|VALTRA|JOHN DEERE|DAFRA)/.test(m)));
+// cadastro escrito do jeito do documento do carro (14/11/2026: 67 veículos reais não casavam)
+{
+  const acha = v => { const x = pesquisarVeiculo(cat, v); return x.r && (x.r.oleo.length || x.r.filtros.length) ? x : null; };
+  chk("modelo com prefixo da marca (VW/GOL 1.0 GIV, marca com erro de digitação) acha o Gol", !!acha({ marca: "Wolkswagem", modelo: "VW/GOL 1.0 GIV", ano: "2009/2010" }) && chavesDoVeiculo({ marca: "Wolkswagem", modelo: "VW/GOL 1.0 GIV" }).nome[0] === "gol");
+  chk("CHEV/ONIX JOY/CHEV/ONIX JOY: repetição depois da segunda barra some", chavesDoVeiculo({ marca: "Chevrolet", modelo: "CHEV/ONIX JOY/CHEV/ONIX JOY" }).nome.join(" ") === "onix" && !!acha({ marca: "Chevrolet", modelo: "CHEV/ONIX JOY/CHEV/ONIX JOY", ano: "2020" }));
+  chk("marca de outra montadora escrita no modelo (TOYOTA HILUX na marca Ford) vira Hilux", chavesDoVeiculo({ marca: "Ford", modelo: "TOYOTA HILUX CD4X4 SRV" }).nome.join(" ") === "hilux");
+  chk("erros de digitação comuns: HILLUX, COROLA, ECOSPORTE, PARATTI, IDEIA, CROSFOX", ["HILLUX", "COROLA", "ECOSPORTE", "PARATTI", "IDEIA ELX FLEX", "CROSFOX"].every(m => !!acha({ marca: "X", modelo: m, ano: "2009" })));
+  chk("Sprinter escrita de vários jeitos (516 SPRINTER, M.BENZ313CDI/SPRINTERF, 311CDISTREETC)", ["516 SPRINTER", "M.BENZ313CDI/SPRINTERF", "M.BENZ/311CDISTREETC", "M.BENZ 312D SPRINTER M"].every(m => chavesDoVeiculo({ marca: "Mercedez Benz", modelo: m }).nome[0] === "sprinter"));
+  chk("DAILY4912 VAN1 e DAILY45S14 CS: o modelo é Daily", ["IVECOFIAT/DAILY4912 VAN1", "IVECO/DAILY45S14 CS"].every(m => chavesDoVeiculo({ marca: "Fiat", modelo: m }).nome[0] === "daily"));
+  chk("UP TAKE MA e UP CROSS: o modelo é UP (a versão só reordena)", ["UP TAKE MA", "UP CROSS MDV", "UP MOVE MA"].every(m => !!acha({ marca: "Wolkswagem", modelo: m, ano: "2016" })));
+  chk("modelo sem barra e já certo não muda (GOL 1.0, ONIX 10MT, i/Toyota Corolla)", chavesDoVeiculo({ marca: "VW", modelo: "GOL 1.0" }).nome[0] === "gol" && chavesDoVeiculo({ marca: "Chevrolet", modelo: "ONIX 10MT LT" }).cil === "1.0" && chavesDoVeiculo({ marca: "Toyota", modelo: "I/TOYOTA COROLLA XEI20FLEX" }).nome[0] === "corolla");
+}
 chk("dados: óleo sempre com litros ou viscosidade", dados.oleo.every(o => o[5] || o[6]));
 
 console.log(ok.length + " verificações passaram" + (falhas.length ? "; " + falhas.length + " FALHARAM:" : "."));

@@ -5,7 +5,7 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { useApp, Modal } from "../ui.js";
 import { uuid, reais, qtdFmt, precoTabela, exPlaca, norm } from "../util.js";
 import { carregarCatalogo, indiceEstoque } from "../catalogo.js";
-import { candidatosOleo, filtrosDaFicha, litrosDaFicha } from "../fichaos.js";
+import { candidatosOleo, filtrosDaFicha, litrosDaFicha, servicoPadrao } from "../fichaos.js";
 
 const num = t => Number(String(t).replace(",", ".")) || 0;
 
@@ -32,7 +32,7 @@ export function LancarFicha({ o, v, itens, tabela, onFechar, onLancar, orcamento
   useEffect(() => { setSel(s => { const n = { ...s }; for (const x of filtros) if (!(x.k in n)) n[x.k] = !!x.produto && !jaNaOS(x.produto.id); return n; }); }, [filtros]);
   const servicos = useMemo(() => (dados.produtos || []).filter(eTrocaOleo).sort((a, b) => a.descricao.localeCompare(b.descricao)), [dados.produtos]);
   const [servId, setServId] = useState(""), [servSel, setServSel] = useState(false);
-  useEffect(() => { if (servicos.length && !servId) { setServId(servicos[0].id); setServSel(!jaNaOS(servicos[0].id)); } }, [servicos]);
+  useEffect(() => { const p = servicoPadrao(servicos, v); if (p && !servId) { setServId(p.id); setServSel(!jaNaOS(p.id)); } }, [servicos]);
   const prodServ = servicos.find(p => p.id === servId) || null;
   const prodOleo = oleos.find(p => p.id === oleoId) || null;
   const linhas = [];   // o que vai para a O.S.

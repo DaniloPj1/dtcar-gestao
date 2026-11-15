@@ -2,7 +2,7 @@
 // Uso: node teste/teste_fichaos.mjs
 import dados from "../js/catalogodados.js";
 import { prepararCatalogo, indiceEstoque } from "../js/catalogo.js";
-import { viscosidades, litrosDaFicha, candidatosOleo, filtrosDaFicha } from "../js/fichaos.js";
+import { viscosidades, litrosDaFicha, candidatosOleo, filtrosDaFicha, ehCaminhonete, servicoPadrao } from "../js/fichaos.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 const cat = prepararCatalogo(dados);
@@ -44,6 +44,13 @@ if (tec) {
   chk("filtro do estoque: acha o produto (MANN OC90) pela conversão, com saldo", r[0].produto && r[0].produto.id === "f1", r[0]);
   chk("filtro de produto inativo (OC90 S/NF) nunca é escolhido", !r[0].produto || r[0].produto.id !== "f3");
   chk("filtro fora do estoque: sem produto e mostra o código para comprar", r[1].produto === null && /ZZZ9999|—|/.test(r[1].principais) && r[1].k === "ar", r[1]);
+}
+// serviço de troca de óleo que já vem marcado: o de caminhonete para caminhonete, o comum para os outros
+{
+  const sv = [{ id: "s49", descricao: "SUBST. DE ÓLEO E FILTRO LUBRIFICANTE" }, { id: "s53", descricao: "SUBST. OLEO E FILTRO LUB. CAMINHONETE" }];
+  chk("caminhonete (Hilux, S10, Ranger, Amarok, Strada) marca o serviço CAMINHONETE", ["TOYOTA/HILUX", "CHEV/S10 LTZ", "RANGER XLT", "VW AMAROK", "FIAT STRADA"].every(m => ehCaminhonete({ modelo: m }) && servicoPadrao(sv, { modelo: m }).id === "s53"));
+  chk("carro (Gol, Onix, Corolla, Spacefox) marca o serviço comum", ["GOL 1.0", "ONIX", "COROLLA", "SPACEFOX"].every(m => !ehCaminhonete({ modelo: m }) && servicoPadrao(sv, { modelo: m }).id === "s49"));
+  chk("só um serviço no cadastro: vem ele; nenhum: null", servicoPadrao([sv[0]], { modelo: "HILUX" }).id === "s49" && servicoPadrao([], { modelo: "GOL" }) === null);
 }
 console.log(falhas.length ? ok.length + " verificações passaram; " + falhas.length + " FALHARAM:\n  ✗ " + falhas.join("\n  ✗ ") : ok.length + " verificações passaram.");
 process.exit(falhas.length ? 1 : 0);

@@ -278,7 +278,8 @@ Object.assign(tabelasF, {
   whatsapp_conexao: [{ id: 1, situacao: "conectado", qr_svg: "<svg/>", motor_hash: "abc" }],
   segredos: [{ chave: "x", valor: "y" }],
   // etapa 4 (óleo e filtros): veículo do cadastro e estoque de óleo/filtro
-  veiculos: [{ id: "00000000-0000-4000-8000-000000000001", placa: "ABC1D23", marca: "TOYOTA", modelo: "HILUX CD 4X4 SRV", ano_fab: 2018, ano_mod: 2018, motor: "2.8", combustivel: "DIESEL", ficha_oleo: null }],
+  veiculos: [{ id: "00000000-0000-4000-8000-000000000001", placa: "ABC1D23", marca: "TOYOTA", modelo: "HILUX CD 4X4 SRV", ano_fab: 2018, ano_mod: 2018, motor: "2.8", combustivel: "DIESEL", ficha_oleo: null },
+    { id: "00000000-0000-4000-8000-000000000002", placa: "SEM1M00", marca: "Toyota", modelo: "HILUX", ano_fab: 2010, ano_mod: 2010, motor: "", combustivel: "", ficha_oleo: null }],
   produtos: [
     { id: "p1", codigo: 100, descricao: "FILTRO OLEO PSL127", referencia: "PSL127 TECFIL", marca: "TECFIL", categoria: "Filtros", unidade: "UN", tipo: "produto", ativo: true, estoque_atual: 3, preco_vista: 49.8, preco_prazo: 55 },
     { id: "p2", codigo: 200, descricao: "OLEO 5W30 SEMI-SINT MAX BPROAUTO 16 LTR", referencia: "", marca: "BPROAUTO", categoria: "OLEO MOTOR", unidade: "LTR", tipo: "produto", ativo: true, estoque_atual: 16, preco_vista: 52.75, preco_prazo: 55 },
@@ -359,6 +360,10 @@ confere("oleo_filtros: filtros por tipo, com o do estoque", Array.isArray(of1.fi
 confere("oleo_filtros: filtro de óleo do estoque entra para lançar", (of1.produtos_para_lancar || []).some((x: L) => x.codigo === 100 && x.tipo === "Óleo"), texto(c.r).slice(0, 900));
 confere("oleo_filtros: óleo do estoque com a viscosidade e a quantidade", (of1.produtos_para_lancar || []).some((x: L) => (x.codigo === 200 || x.codigo === 201) && Number(x.qtd_litros) > 0), texto(c.r).slice(0, 900));
 confere("oleo_filtros: avisa que é do catálogo", /catálogo/.test(String(of1.aviso || "")));
+c = await chama("oleo_filtros", { placa: "SEM1M00" });
+confere("oleo_filtros: cadastro sem motor mostra as versões possíveis e avisa", Array.isArray(json(c.r).versoes_possiveis) && json(c.r).versoes_possiveis.length > 1 && /não tem o motor/.test(String(json(c.r).aviso_versao || "")), texto(c.r).slice(0, 400));
+c = await chama("oleo_filtros", { placa: "ABC1D23" });
+confere("oleo_filtros: com motor no cadastro não manda versões", !("versoes_possiveis" in json(c.r)));
 c = await chama("oleo_filtros", { placa: "ZZZ9Z99" });
 confere("oleo_filtros: placa fora do cadastro manda usar consultar_placa", c.r?.isError === true && /consultar_placa/.test(texto(c.r)));
 c = await chama("oleo_filtros", { marca: "VOLKSWAGEN", modelo: "GOL 1.0", ano: 2012 });

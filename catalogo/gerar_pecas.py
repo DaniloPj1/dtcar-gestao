@@ -29,7 +29,32 @@ def grupo_de(descricao, grupo_do_catalogo):
         for padrao, nome in GRUPOS:
             if re.search(padrao, fonte): return nome
     g = limpo(grupo_do_catalogo); return (g[:1].upper() + g[1:].lower()) if g else "Outros"
-for arq in sorted(glob.glob(os.path.join(pasta, "*.json"))):
+# Catálogo sem montadora (o Nakata completo traz só o nome do carro): a montadora vem dos outros catálogos quando o nome do carro é quase sempre de uma só
+# (GOL → Volkswagen; 85% das aplicações). Nome dividido entre montadoras fica sem montadora: a tela então casa só pelo nome e pede conferência.
+ALIAS = {"GENERAL": "CHEVROLET", "GM": "CHEVROLET", "VW": "VOLKSWAGEN"}
+def chave_m(m):
+    w = sem_acento(m).split(); w = w[0] if w else ""
+    return ALIAS.get(w, w)
+def prefixos(modelo):
+    w = re.findall(r"[A-Z0-9]+", sem_acento(modelo)); return [" ".join(w[:2]), w[0]] if len(w) > 1 else w[:1]
+donos, bonito = {}, {}
+arquivos = sorted(glob.glob(os.path.join(pasta, "*.json")))
+for arq in arquivos:
+    for p in json.load(open(arq, encoding="utf-8"))["pecas"]:
+        for a in p.get("apl", []):
+            if not limpo(a["montadora"]): continue
+            k = chave_m(a["montadora"]); bonito.setdefault(k, limpo(a["montadora"]).upper())
+            for pre in prefixos(a["modelo"]): donos.setdefault(pre, {}); donos[pre][k] = donos[pre].get(k, 0) + 1
+def montadora_de(a):
+    if limpo(a["montadora"]): return limpo(a["montadora"]).upper()
+    for pre in prefixos(a["modelo"]):
+        v = donos.get(pre)
+        if v and len(pre) > 2:
+            k, n = max(v.items(), key=lambda kv: kv[1])
+            if n >= .85 * sum(v.values()): return bonito[k]
+    return ""
+inferidas = 0
+for arq in arquivos:
     j = json.load(open(arq, encoding="utf-8")); c = len(cats)
     # ano de referência do catálogo: o da edição ou, se ela não diz, o ano mais novo que aparece nas aplicações. Serve para a tela avisar
     # quando o carro é mais novo que o catálogo e a aplicação é "de tal ano em diante".
@@ -41,9 +66,11 @@ for arq in sorted(glob.glob(os.path.join(pasta, "*.json"))):
         pecas.append([c, p["codigo"], idx(grupos, grupo_de(p["descricao"], p.get("grupo"))), limpo(p["descricao"]).upper(), limpo(p.get("medidas")), p.get("foto") or "",
                       [limpo(x) for x in p.get("oem", []) if limpo(x)], [[limpo(a).upper() if len(limpo(a)) <= 3 else limpo(a), limpo(b)] for a, b in p.get("conv", []) if limpo(b)], 1 if p.get("breve") else 0, limpo(p.get("emb"))])
         for a in p["apl"]:
-            apl.append([n, idx(mont, limpo(a["montadora"]).upper()), limpo(a["modelo"]).upper(), int(a.get("de") or 0), int(a.get("ate") or 0), limpo(a.get("obs")).upper()])
+            mo = montadora_de(a); inferidas += (mo != "" and not limpo(a["montadora"]))
+            apl.append([n, idx(mont, mo), limpo(a["modelo"]).upper(), int(a.get("de") or 0), int(a.get("ate") or 0), limpo(a.get("obs")).upper()])
 d = {"versao": datetime.date.today().isoformat(), "catalogos": cats, "montadoras": mont, "grupos": grupos, "pecas": pecas, "apl": apl}
 cab = ("// Peças por veículo (pedido do Danilo em 15/11/2026). ARQUIVO GERADO por catalogo/gerar_pecas.py: não edite à mão.\n"
        "// Catálogos: " + ", ".join(f"{c[0]} {c[1]}".strip() for c in cats) + ". É dado de catálogo: a tela sempre manda conferir. Formato explicado em js/pecas.js.\n")
 open(saida, "w", encoding="utf-8").write(cab + "export default " + json.dumps(d, ensure_ascii=False, separators=(",", ":")) + ";\n")
+print(inferidas, "aplicações sem montadora receberam a dos outros catálogos")
 print(len(pecas), "peças,", len(apl), "aplicações,", len(mont), "montadoras,", len(grupos), "grupos →", saida, os.path.getsize(saida) // 1024, "KB")

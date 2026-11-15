@@ -56,7 +56,7 @@ export function PecasVeiculo({ veiculo, onUsar, onVoltar }) {
             ${p.medidas ? html`<span class="pv-med">${p.medidas}</span>` : null}
             <span class="pv-apl">${e.conferir ? html`<b class="c-warn">Confira a versão: </b>` : null}${e.aplicacoes.slice(0, 3).join(" · ")}${e.aplicacoes.length > 3 ? " · e mais " + (e.aplicacoes.length - 3) : ""}</span>
             <span class="pv-cod">${p.oem.length ? "Cód. montadora " + chaveDaPeca(p) + " · " : ""}${p.marca} ${p.codigo}${p.emb ? " · embalagem com " + p.emb : ""}${p.breve ? " · em breve no catálogo" : ""}</span>
-            ${ab ? html`<div class="pv-conv" id=${"pv-conv-" + p.codigo}>${conv.length ? conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)
+            ${ab ? html`<div class="pv-conv" id=${"pv-conv-" + p.codigo.replace(/[^A-Za-z0-9]+/g, "_")}>${conv.length ? conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)
               : html`<span class="dica">O catálogo ${p.marca} não traz conversão para esta peça.</span>`}</div>` : null}</div>
           <div class="pv-botoes"><button type="button" class="btn btn-sm btn-pri pv-usar" onClick=${() => onUsar(p)}>Usar</button>
             <button type="button" class="btn btn-sm pv-conversao" aria-expanded=${ab} onClick=${() => setAberta(ab ? "" : p.codigo)}>Conversão</button></div></div>`; })}</div>`)}

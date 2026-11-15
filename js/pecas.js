@@ -61,7 +61,7 @@ export function pecasDoVeiculo(cat, v, anoCampo) {
   const extras = new Set(c.extras);
   const achados = new Map();
   for (const a of cat.apl) {
-    if (c.marca.length && !a._m.some(x => c.marca.includes(x))) continue;
+    if (c.marca.length && a._m.length && !a._m.some(x => c.marca.includes(x))) continue;
     if (!nome.every(x => temPalavra(a._t, x))) continue;
     if (ano && ((a.de && ano < a.de) || (a.ate && ano > a.ate))) continue;
     if (c.cil && a._cil.length && !a._cil.includes(c.cil)) continue;

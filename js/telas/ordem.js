@@ -17,6 +17,8 @@ import { guardarChegadaAgenda } from "./entrada.js";
 import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
 import { osQuitada } from "../osrecibo.js";
 import { MAIUSC } from "../maiusculas.js";
+import { PecasVeiculo } from "./pecasveiculo.js";
+import { codigoParaItem } from "../pecas.js";
 
 /* ---------------- Mensagens de WhatsApp: textos em js/mensagens.js (os mesmos que o Claude manda pelo WhatsApp da oficina) ---------------- */
 export { MSG };
@@ -26,7 +28,7 @@ const primeiroNome = o => primeiroNomeCli(((o || {}).cliente || {}).nome);
 const NOME_TIPO = { servico: "serviço", peca: "produto / peça", terceiro: "serviço de terceiro" };
 // orcamento = true (orçamento separado da O.S., v52): não lança conta do prestador nem barra por falta de estoque
 // (orçamento não mexe em estoque nem em financeiro) e os textos falam "orçamento" em vez de "O.S.".
-export function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar, orcamento = false }) {
+export function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar, orcamento = false, veiculo = null }) {
   const { cfg, dados, perfil } = useApp();
   const [i, setI] = useState({ desconto: 0, ...item });
   const [busca, setBusca] = useState(""), [erroEst, setErroEst] = useState("");
@@ -52,6 +54,11 @@ export function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar, orcamen
     else set({ descricao: p.descricao, produto_id: p.id, codigo: p.referencia || String(p.codigo), valor_unit: precoTabela(p, tabela), custo_unit: Number(p.custo) || 0, qualidade: i.qualidade || "original" });
     setBusca(""); setEtapa("detalhe");
   };
+  // peça escolhida no catálogo de peças do veículo (js/pecas.js): não é produto do cadastro nem do estoque; o valor é digitado na O.S.
+  const usarDoCatalogo = p => { set({ produto_id: null, descricao: MAIUSC(p.descricao + (p.medidas ? " " + p.medidas : "")), codigo: codigoParaItem(p), qualidade: "paralela" }); setEtapa("detalhe"); };
+  const temVeiculo = i.tipo === "peca" && veiculo && String(veiculo.modelo || "").trim();
+  if (etapa === "pecasveic") return html`<${Modal} titulo="Peças que servem neste veículo" largo onFechar=${onFechar}>
+    <${PecasVeiculo} veiculo=${veiculo} onUsar=${usarDoCatalogo} onVoltar=${() => setEtapa("catalogo")} /></${Modal}>`;
   const porHora = i.tipo === "servico" && i.horas !== null && i.horas !== undefined;
   const bruto = (Number(i.qtd) || 0) * (Number(i.valor_unit) || 0);
   const erro = !i.descricao.trim() ? "Informe a descrição." : !(Number(i.qtd) > 0) ? "Quantidade deve ser maior que zero." : Number(i.desconto) > bruto + 0.001 ? "O desconto não pode ser maior que o valor do item." : "";
@@ -68,7 +75,8 @@ export function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar, orcamen
   if (etapa === "catalogo") return html`<${Modal} titulo=${"Incluir " + NOME_TIPO[i.tipo]} largo onFechar=${onFechar}>
     <div class="cat-topo"><input id="cat-busca" class="inp" type="search" autofocus autocomplete="off" aria-label=${"Buscar " + plural}
         placeholder=${i.tipo === "servico" ? "Buscar serviço: alinhamento, pastilha…" : i.tipo === "terceiro" ? "Buscar serviço de terceiro: retífica, torno, guincho…" : "Buscar por descrição, código, referência, marca ou aplicação"} value=${busca} onInput=${e => setBusca(e.target.value)} />
-      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim(), ...(i.tipo === "terceiro" && !i.valor_unit ? { custo_unit: 0, valor_unit: 0 } : {}) }); setEtapa("detalhe"); }}>+ Cadastrar só ${doc}</button></div>
+      <button type="button" class="btn" onClick=${() => { set({ produto_id: null, descricao: busca.trim(), ...(i.tipo === "terceiro" && !i.valor_unit ? { custo_unit: 0, valor_unit: 0 } : {}) }); setEtapa("detalhe"); }}>+ Cadastrar só ${doc}</button>
+      ${temVeiculo ? html`<button type="button" class="btn btn-pri" id="cat-pecas-veic" onClick=${() => setEtapa("pecasveic")}>Peças deste veículo</button>` : null}</div>
     <span class="dica">Tabela de preço: ${TABELAS_PRECO[tabela].toLowerCase()}. ${cat.length === 80 ? "Mostrando os 80 primeiros; refine a busca." : cat.length + " " + plural + " no cadastro."}</span>
     <div class="catalogo">${cat.map(p => { const est = p.tipo === "produto" && p.controla_estoque; const zerado = est && Number(p.estoque_atual) <= 0;
       return html`<button type="button" key=${p.id} class=${"cat-item" + (zerado ? " zerado" : "")} onClick=${() => usar(p)}>
@@ -542,6 +550,8 @@ export function Ordem({ id, params = {} }) {
 
   /* ===== aba Veículo ===== */
   const vCad = dados.veiculos.find(v => v.id === o.veiculo_id);
+  // para "Peças deste veículo": o cadastro (tem motor e combustível) completado pela cópia guardada na O.S.
+  const veiculoDaOS = { ...(o.veiculo || {}), ...(vCad || {}) };
   const kv = (rot, x) => x ? html`<div><span>${rot}</span><b>${x}</b></div>` : null;
   const abaVeiculo = html`<section class="card"><div class="secao-topo"><h3>Dados do veículo</h3>
       ${vCad ? html`<button type="button" class="btn btn-sm" onClick=${() => setModal({ tipo: "veiculo" })}>${pode(perfil, "cadastrar") ? "Editar ficha" : "Ver ficha"}</button><button type="button" class="btn btn-sm" onClick=${() => ir("/veiculo/" + vCad.id)}>Serviços executados</button>` : null}</div>
@@ -681,7 +691,7 @@ export function Ordem({ id, params = {} }) {
 
     ${modal && modal.tipo === "notas" ? html`<${NotasOSModal} o=${o} onFechar=${() => setModal(null)} onMudou=${setNNotas} />` : null}
     ${modal && modal.tipo === "ficha" && vCad ? html`<${LancarFicha} o=${o} v=${vCad} itens=${itens} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onLancar=${lancarFicha} />` : null}
-    ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
+    ${modal && modal.tipo === "item" ? html`<${ItemModal} item=${modal.item} veiculo=${veiculoDaOS} tabela=${campos.tabela_preco || "vista"} onFechar=${() => setModal(null)} onSalvar=${salvarItem} onExcluir=${() => excluirItem(modal.item)} />` : null}
     ${modal && modal.tipo === "aprovar" ? html`<${AprovacaoModal} o=${o} pendentes=${pendentes} onFechar=${() => setModal(null)} onConfirmar=${confirmarAprovacao} />` : null}
     ${modal && modal.tipo === "entrega" ? html`<${EntregaModal} o=${{ ...o, total: tAprov.total }} cfg=${cfg} saldo=${arred(Math.max(0, tAprov.total - recebido))} comPrazo=${comPrazo} onFechar=${() => setModal(null)} onConfirmar=${confirmarEntrega} />` : null}
     ${modal && modal.tipo === "encerrar" ? html`<${EncerrarModal} o=${o} onFechar=${() => setModal(null)} onFeito=${() => { setModal(null); carregar(); carregarRecibos(); carregarParcelas(); }}

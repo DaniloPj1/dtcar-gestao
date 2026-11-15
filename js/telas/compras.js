@@ -6,6 +6,7 @@ import { norm, soDig, docValido, reais, qtdFmt, fmtData, fmtDataHora, fmtDoc, fm
 import { pode, UNIDADES, gruposDeProdutos, grupoCanonico } from "../regras.js";
 import { lerNFe, reconhecer, linkImagem } from "../nfe.js";
 import { contasDaNota, somaMes } from "./financeiro.js";
+import { CampoCep, fmtCep } from "../cep.js";
 
 const COMO = { vinculo: ["Já vinculado a este fornecedor", "ok"], ean: ["Encontrado pelo código de barras", "ok"], referencia: ["Encontrado pela referência", "info"], parecido: ["Há produtos parecidos", "warn"], nenhum: ["Produto novo", "muted"] };
 
@@ -165,7 +166,7 @@ export function FormFornecedor({ inicial, onFechar, onSalvo }) {
     if (doc && dados.fornecedores.some(x => x.id !== f.id && soDig(x.cnpj) === doc)) return setErro("Já existe um fornecedor com este CNPJ/CPF.");
     const tel = soDig(f.telefone); if (tel && (tel.length < 10 || tel.length > 11)) return setErro("Informe o telefone com DDD.");
     const { id, criado_em, atualizado_em, ...resto } = f;
-    try { const r = await api.fornecedores.salvar({ ...(id ? { id } : {}), ...resto, razao: f.razao.trim(), cnpj: soDig(f.cnpj), telefone: soDig(f.telefone) }); avisar("Fornecedor salvo."); await recarregar(["fornecedores"]); onSalvo ? onSalvo(r) : onFechar(); }
+    try { const r = await api.fornecedores.salvar({ ...(id ? { id } : {}), ...resto, razao: f.razao.trim(), cnpj: soDig(f.cnpj), telefone: soDig(f.telefone), cep: fmtCep(f.cep) }); avisar("Fornecedor salvo."); await recarregar(["fornecedores"]); onSalvo ? onSalvo(r) : onFechar(); }
     catch (e) { setErro(/duplicate/.test(e.message) ? "Já existe um fornecedor com este CNPJ." : e.message); }
   };
   const excluir = async () => { if (!await confirmar({ titulo: "Excluir fornecedor", texto: "Os vínculos de códigos deste fornecedor com os seus produtos também serão apagados.", botao: "Excluir", perigo: true })) return;
@@ -178,7 +179,7 @@ export function FormFornecedor({ inicial, onFechar, onSalvo }) {
         ${T("ie", "Inscrição estadual")}</div>
       <div class="grade"><${Campo} id="fo-tel" rotulo="Telefone / WhatsApp"><input id="fo-tel" class="inp" inputmode="tel" value=${f.telefone} onBlur=${e => set({ telefone: fmtTel(e.target.value) })} onInput=${e => set({ telefone: e.target.value })} /></${Campo}>
         ${T("email", "E-mail", { type: "email" })}${T("contato", "Vendedor / contato")}</div>
-      <div class="grade">${T("endereco", "Endereço")}${T("bairro", "Bairro")}${T("cidade", "Cidade")}${T("uf", "UF", { maxlength: 2 })}${T("cep", "CEP")}</div>
+      <div class="grade">${T("endereco", "Endereço")}${T("bairro", "Bairro")}${T("cidade", "Cidade")}${T("uf", "UF", { maxlength: 2 })}<${CampoCep} id="fo-cep" valor=${f.cep} onMuda=${v => set({ cep: v })} atual=${f} chaves=${{ rua: "endereco" }} onAplica=${set} /></div>
       <div class="grade"><${Campo} id="fo-cat" rotulo="Categoria das contas" dica="Usada ao lançar boletos deste fornecedor."><${Texto} id="fo-cat" list="fo-cats" valor=${f.categoria_padrao} onMuda=${v => set({ categoria_padrao: v })} /><datalist id="fo-cats">${(cfg.categoriasDespesa || []).map(x => html`<option value=${x} />`)}</datalist></${Campo}></div>
       <label class="linha-check"><input type="checkbox" checked=${!!f.prestador} onChange=${e => set({ prestador: e.target.checked })} /><span>Presta serviços para a oficina (retífica, torno, guincho, funilaria…)</span></label>
       <${Campo} id="fo-obs" rotulo="Observações"><${Area} id="fo-obs" valor=${f.obs} onMuda=${v => set({ obs: v })} /></${Campo}>

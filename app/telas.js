@@ -1,9 +1,11 @@
 // Telas do app DTCar (celular), feitas a partir do protótipo aprovado pelo Danilo em 16/11/2026 (gen_proto.py / Design "App DTCar").
 // Cada tela usa as MESMAS regras do sistema (js/api.js, js/placa.js, js/cpf.js, js/cep.js, js/catalogo.js, js/pecas.js), só com o
 // desenho do app: cabeçalho azul, abas, título com ícone, cartões com faixa azul, campos grandes, rodapé com ação e Início/Ajuda.
-// Regra do Danilo: no app, O.S. que já existe só é alterada no login do administrador. Aqui o consultor abre O.S., orçamento e
-// agendamento e consulta tudo; a tela da O.S. do sistema (modo app) é só leitura para ele.
+// Regras do Danilo (16/11/2026): no app, O.S. que já existe só é alterada no login do administrador (a tela da O.S. do sistema, em modo app,
+// é só leitura para o consultor); o app NÃO abre O.S. (botão retirado); a placa digitada vale só na tela em que foi digitada (sair da tela
+// sem gravar limpa tudo); o botão Voltar do celular volta de tela em tela e só sai do app no Início.
 import { html, render, createContext, useState, useEffect, useRef, useMemo, useContext } from "../js/lib.js";
+import { useLayoutEffect } from "../vendor/preact-htm.js";
 import { api } from "../js/api.js";
 import { soDig, norm, normPlaca, placaValida, exPlaca, fmtTel, fmtData, fmtKm, hojeISO, somaDias, numOS, numORC, reais, validaCPF, docValido, fmtDoc, lsGet, lsSet, linkWhats, endCompleto } from "../js/util.js";
 import { consultarPlaca, paraFicha, anoFabMod } from "../js/placa.js";
@@ -12,7 +14,8 @@ import { consultarCep, fmtCep } from "../js/cep.js";
 import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conversaoDoItem, chaveDaPeca } from "../js/pecas.js";
 import { copiaClienteDig, erroClienteDig } from "../js/clientedig.js";
-import { pode, STATUS, situacaoOS, etapaOS, cfgCompleta } from "../js/regras.js";
+import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
+import { ICONE_D } from "../js/appmecanico.js";
 import { MAIUSC } from "../js/maiusculas.js";
 
 const SISTEMA = "../index.html?app=1";   // telas do sistema abertas de dentro do app (modo app: sem menu do PC, "‹ Início")
@@ -46,7 +49,6 @@ const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="
 const TELAS = [
   { r: "oleo", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
   { r: "orcamento", ic: "orc", barra: "+ ORÇAMENTO", aba: "+ Orçamento", titulo: "NOVO ORÇAMENTO" },
-  { r: "os", ic: "os", barra: "+ O.S.", aba: "+ O.S.", titulo: "NOVA O.S." },
   { r: "agendar", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
   { r: "peca", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
   { r: "historico", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
@@ -73,12 +75,16 @@ const Cartao = ({ titulo, children, id }) => html`<section class="cartao" id=${i
 const KV = ({ a, b, p }) => html`<div class="kv"><span>${a}:</span><i></i><b class=${p ? "p" : ""}>${b}</b></div>`;
 function Campo({ id, rotulo, children }) { return html`<div class="campo"><label for=${id}>${rotulo}</label>${children}</div>`; }
 function Rodape({ tela, acao }) {
-  return html`<div class="rodape">${acao || null}
+  const ref = useRef(null);
+  useEffect(() => { const el = ref.current; if (!el) return; const mede = () => document.documentElement.style.setProperty("--rodape-h", el.offsetHeight + "px"); mede();
+    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(mede) : null; if (ro) ro.observe(el); return () => { if (ro) ro.disconnect(); }; }, []);
+  return html`<div class="rodape" ref=${ref}>${acao || null}
     <nav class="nav" aria-label="Navegação"><a href="#/inicio" aria-current=${tela === "inicio" ? "page" : undefined}><${Ic} n="home" t=${22} sw=${1.9} />Início</a>
     <a href="#/ajuda" aria-current=${tela === "ajuda" ? "page" : undefined}><${Ic} n="help" t=${22} sw=${1.9} />Ajuda</a></nav></div>`;
 }
 function Quadro({ titulo, onFechar, children }) {
-  useEffect(() => { const k = e => e.key === "Escape" && onFechar(); document.addEventListener("keydown", k); return () => document.removeEventListener("keydown", k); }, []);
+  // registrado antes de a tela ser pintada: o botão Voltar do celular já encontra o quadro aberto
+  useLayoutEffect(() => { const k = e => e.key === "Escape" && onFechar(); document.addEventListener("keydown", k); quadros.push(onFechar); return () => { document.removeEventListener("keydown", k); const i = quadros.indexOf(onFechar); if (i >= 0) quadros.splice(i, 1); }; }, []);
   return html`<div class="fundo-quadro" onClick=${e => { if (e.target === e.currentTarget) onFechar(); }}><section class="quadro" role="dialog" aria-modal="true" aria-label=${titulo}><h2>${titulo}</h2>${children}</section></div>`;
 }
 /** nome do carro para as telas */
@@ -86,9 +92,10 @@ const nomeVeic = v => [v.marca, v.modelo].filter(Boolean).join(" ");
 
 /* ---------------- veículo: busca pela placa (um lugar só para todas as telas) ----------------
  * Regra do Danilo: placa do cadastro usa o cadastro (sem custo); placa nova consulta a função "placa" (básica), que guarda a cópia
- * no banco da DTCar. O veículo encontrado fica guardado no app: as outras telas já abrem com ele. */
+ * no banco da DTCar. A placa vale só na tela em que foi digitada: sair da tela limpa (pedido do Danilo, 16/11/2026). */
 function usarPlaca() {
-  const { placa, setPlaca, dados, perfil } = useApp();
+  const { dados } = useApp();
+  const [placa, setPlaca] = useState({ texto: "" });
   const buscar = async (texto) => {
     const p = normPlaca(texto);
     if (!placaValida(p)) { setPlaca({ texto, erro: "Digite a placa inteira (ABC1234 ou ABC1D23)." }); return null; }
@@ -109,10 +116,10 @@ function usarPlaca() {
     return null;
   };
   const limpar = () => setPlaca({ texto: "" });
-  return { placa, buscar, limpar };
+  return { placa, buscar, limpar, veic: placa.veic || null };
 }
-function BuscaPlaca({ id, titulo = "Buscar por placa" }) {
-  const { placa, buscar, limpar } = usarPlaca();
+function BuscaPlaca({ id, titulo = "Buscar por placa", pl }) {
+  const { placa, buscar, limpar } = pl;
   const [t, setT] = useState(placa.texto || "");
   useEffect(() => { setT(placa.texto || ""); }, [placa.texto]);
   const v = placa.veic;
@@ -127,8 +134,8 @@ function BuscaPlaca({ id, titulo = "Buscar por placa" }) {
       ${t ? html`<button type="button" class="btn-busca g" style="background:#fff;color:#6b727b;border:1px solid #d3d7dc" aria-label="Limpar a placa" onClick=${() => { setT(""); limpar(); }}><${Ic} n="trash" t=${20} /></button>` : null}</div></${Campo}>
     <div class="nota">Placa já gravada não gera nova consulta paga. Placa nova é consultada uma vez e fica salva.</div></${Cartao}>`;
 }
-function Veiculo() {
-  const { placa } = useApp(); const v = placa.veic; if (!v) return null;
+function Veiculo({ v }) {
+  if (!v) return null;
   return html`<div class="veic" id="veic"><div class="lado"><${Ic} n="car" t=${44} sw=${1.6} /><small>${v.marca || "—"}</small></div>
     <div class="dados"><div>Placa: <b>${exPlaca(v.placa)}</b></div><div>Marca: <b>${(v.marca || "—").toUpperCase()}</b></div><div>Modelo: <b>${(v.modelo || "—").toUpperCase()}</b></div><div>Ano: <b>${v.ano || "—"}</b></div>
       ${v.cliente ? html`<div>Dono: <b>${v.cliente.nome}</b></div>` : null}</div></div>`;
@@ -142,8 +149,8 @@ function ModeloAMao({ valor, onMuda }) {
 
 /* ---------------- INÍCIO ---------------- */
 function Inicio() {
-  const { perfil, placa } = useApp(); const { buscar, limpar } = usarPlaca();
-  const [t, setT] = useState(placa.texto || "");
+  const { perfil } = useApp(); const { placa, buscar, limpar } = usarPlaca();
+  const [t, setT] = useState("");
   const [ajuda, setAjuda] = useState(false);
   const papel = { admin: "Administrador", consultor: "Consultor" }[perfil.papel] || "";
   return html`<div class="app">
@@ -155,13 +162,13 @@ function Inicio() {
         <button type="button" class="ajuda" aria-label="Ajuda" onClick=${() => setAjuda(true)}><${Ic} n="help" t=${30} sw=${1.7} /></button></div>
       <div class="cab-texto">${placa.buscando ? "Consultando a placa…" : placa.erro || placa.motivo || "Digite a placa para consultar o veículo. Toda placa buscada fica gravada no banco da DTCar."}</div></header>
     <main class="folha inicio">
-      ${placa.veic ? html`<${Veiculo} />` : null}
+      ${placa.veic ? html`<${Veiculo} v=${placa.veic} />` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
       ${TELAS.map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span></button>`)}
     </main>
     <${Rodape} tela="inicio" />
     ${ajuda ? html`<${Quadro} titulo="Como usar o Início" onFechar=${() => setAjuda(false)}>
-      <p>Digite a placa e toque na lupa: o carro aparece aqui e já entra preenchido nas outras telas. Depois escolha o que fazer nos botões azuis.</p>
+      <p>Digite a placa e toque na lupa para consultar o carro. Depois escolha o que fazer nos botões azuis: cada tela tem a própria busca de placa.</p>
       <p class="nota">Placa que está no cadastro não custa nada. Placa nova é consultada uma vez e fica gravada no banco da DTCar.</p>
       <button type="button" class="btn-acao" onClick=${() => setAjuda(false)}>Entendi</button></${Quadro}>` : null}
   </div>`;
@@ -194,24 +201,21 @@ function BuscaClienteQuadro({ onEscolha, onFechar }) {
 /* ---------------- + ORÇAMENTO e + O.S. (mesmo formulário do protótipo: 1. Cliente, 2. Veículo) ---------------- */
 const MARCAS_2 = ["LAND ROVER", "MERCEDES BENZ", "MERCEDES-BENZ", "ALFA ROMEO", "GREAT WALL", "ASTON MARTIN", "ROLLS ROYCE"];
 const separarMarca = txt => { const t = String(txt || "").trim().toUpperCase(), m2 = MARCAS_2.find(m => t.startsWith(m + " ")); if (m2) return { marca: m2, modelo: t.slice(m2.length).trim() }; const i = t.indexOf(" "); return i < 0 ? { marca: t, modelo: "" } : { marca: t.slice(0, i), modelo: t.slice(i + 1) }; };
-const vazio = () => ({ clienteId: "", doc: "", nome: "", cep: "", cidade: "", uf: "", endereco: "", whats: "", nascimento: "", veiculoId: "", placa: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", km: "", motivo: "", daPlaca: null, doCPF: null });
+const vazio = () => ({ clienteId: "", doc: "", nome: "", cep: "", cidade: "", uf: "", endereco: "", whats: "", nascimento: "", veiculoId: "", placa: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", motivo: "", daPlaca: null, doCPF: null });
 // campos do veículo que a busca da placa (cadastro ou consulta) preenche; trocou a placa, eles saem
 const CAMPOS_VEIC = { veiculoId: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", daPlaca: null };
 
-function FormularioOS({ tipo }) {
-  const { dados, perfil, cfg, placa, setPlaca, avisar, recarregar } = useApp();
-  const ehOS = tipo === "os", LS = "dtcar-app-form-" + tipo;
-  const [f, setF] = useState(() => lsGet(LS) || vazio());
+function NovoOrcamento() {
+  const { dados, perfil, cfg, avisar } = useApp();
+  // o formulário começa em branco a cada abertura: sair da tela sem gravar não deixa nada (pedido do Danilo)
+  const [f, setF] = useState(vazio);
   const [cpf, setCpf] = useState(null), [cep, setCep] = useState(null), [erros, setErros] = useState([]), [busca, setBusca] = useState(false), [salvando, setSalvando] = useState(false), [feito, setFeito] = useState(null);
   const topo = useRef(null);
-  useEffect(() => { lsSet(LS, f); }, [f]);
   const set = p => setF(o => ({ ...o, ...p }));
-  // veículo achado no Início ou na busca desta tela entra no formulário (só nos campos em branco)
+  const pl = usarPlaca();
+  const clienteParaForm = c => ({ clienteId: c.id, doc: c.doc ? fmtDoc(c.doc) : "", nome: c.nome || "", cep: c.cep || "", cidade: c.cidade || "", uf: c.uf || "", endereco: [c.rua, c.bairro].filter(Boolean).join(" — ") || c.endereco || "", whats: c.telefone ? fmtTel(c.telefone) : "", nascimento: "", doCPF: null });
   const aplicarVeic = v => set({ veiculoId: v.id || "", placa: v.placa, marcaModelo: nomeVeic(v), marca: v.marca, modelo: v.modelo, ano: v.ano || "", cor: v.cor || "", daPlaca: v.id ? null : { ano_fab: v.ano_fab, ano_mod: v.ano_mod, chassi: v.chassi, renavam: v.renavam },
     ...(v.cliente && !f.clienteId && !f.nome ? clienteParaForm(v.cliente) : {}) });
-  // o carro buscado no Início entra só quando o formulário ainda não tem veículo (não troca o que a pessoa digitou aqui)
-  useEffect(() => { if (placa.veic && !f.placa && !f.marca) aplicarVeic(placa.veic); }, [placa.veic]);
-  const clienteParaForm = c => ({ clienteId: c.id, doc: c.doc ? fmtDoc(c.doc) : "", nome: c.nome || "", cep: c.cep || "", cidade: c.cidade || "", uf: c.uf || "", endereco: [c.rua, c.bairro].filter(Boolean).join(" — ") || c.endereco || "", whats: c.telefone ? fmtTel(c.telefone) : "", nascimento: "" });
   // CPF: 1º o cadastro (sem custo), 2º a consulta (só administrador), como na Nova O.S. do sistema
   const buscarCPF = async () => {
     const d = soDig(f.doc);
@@ -231,31 +235,27 @@ function FormularioOS({ tipo }) {
     if (r.ok && r.encontrado) { const d = r.dados; set({ cep: fmtCep(d.cep || f.cep), cidade: d.cidade || f.cidade, uf: d.uf || f.uf, endereco: f.endereco.trim() ? f.endereco : [d.rua, d.bairro].filter(Boolean).join(" — ") }); setCep({ ok: "Endereço encontrado" }); }
     else setCep({ erro: r.ok ? "CEP não encontrado: preencha o endereço." : r.erro });
   };
-  const { buscar } = usarPlaca();
-  const buscarPlacaAqui = async () => { const v = await buscar(f.placa); if (v) aplicarVeic(v); };
+  const buscarPlacaAqui = async () => { const v = await pl.buscar(f.placa); if (v) aplicarVeic(v); };
   const escolherCliente = c => { set(clienteParaForm(c)); setCpf({ ok: "Cadastro encontrado" }); setBusca(false); };
   const trocarMarcaModelo = txt => { const s = separarMarca(txt); set({ marcaModelo: txt, marca: s.marca, modelo: s.modelo, veiculoId: "" }); };
+  /** nascimento que veio da consulta do CPF que está no campo (nunca o de outro CPF) */
+  const nascDoCPF = () => { const p = f.doCPF; return p && p.cpf === soDig(f.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
 
   const validar = () => {
     const e = [], p = normPlaca(f.placa);
-    if (!placaValida(p)) e.push("Informe uma placa válida (ABC1234 ou ABC1D23).");
-    if (!f.veiculoId && placaValida(p)) { if (!f.marca) e.push("Informe a marca e o modelo do veículo."); const ano = +String(f.ano).slice(-4); if (ehOS && !(ano >= 1950 && ano <= new Date().getFullYear() + 1)) e.push("Informe o ano do veículo com 4 dígitos."); }
+    if (f.placa.trim() && !placaValida(p)) e.push("A placa está incompleta (ABC1234 ou ABC1D23). Confira ou deixe em branco.");
     if (!f.clienteId) {
       if (!f.nome.trim()) e.push("Informe o nome do cliente.");
-      const t = soDig(f.whats); if (ehOS && (t.length < 10 || t.length > 11)) e.push("Informe o WhatsApp do cliente com DDD.");
+      const t = soDig(f.whats);
+      if (t && (t.length < 10 || t.length > 11)) e.push("Informe o WhatsApp com DDD.");
       else if (t.length >= 10) { const dup = dados.clientes.find(c => soDig(c.telefone) === t); if (dup) e.push("Este telefone já é de " + dup.nome + ". Toque em “Buscar no cadastro” e escolha o cliente."); }
       if (f.doc.trim()) { if (!docValido(f.doc)) e.push("CPF/CNPJ inválido. Confira os números ou deixe em branco."); else { const dup = dados.clientes.find(c => soDig(c.doc) === soDig(f.doc)); if (dup) e.push("Já existe um cliente com este CPF/CNPJ: " + dup.nome + ". Toque na lupa do CPF."); } }
     } else { const cli = dados.clientes.find(c => c.id === f.clienteId); if (cli && cli.situacao === "bloqueado") e.push("Cliente bloqueado: " + (cli.restricao || "verifique o cadastro") + "."); }
-    if (ehOS) { const km = parseInt(soDig(f.km), 10); if (f.km === "" || !(km >= 0)) e.push("Informe o KM atual do painel.");
-      else { const vc = dados.veiculos.find(v => v.id === f.veiculoId); if (vc && vc.km_atual && km < vc.km_atual && !f.kmConfirmado) e.push("O KM informado é menor que o último registrado (" + fmtKm(vc.km_atual) + "). Confira o painel ou marque “O KM está certo”."); } if (!f.motivo.trim()) e.push("Descreva o motivo da visita ou o serviço pedido."); }
     return e;
   };
   const enderecoNovo = () => { const [rua = "", bairro = ""] = f.endereco.split(/\s+—\s+|\s+-\s+/); const c = soDig(f.cep).length === 8 ? fmtCep(f.cep) : "";
     const cidade = (c && f.cidade.trim()) || "Colatina", uf = (c && f.uf.trim()) || "ES";
-    return { rua: rua.trim(), bairro: bairro.trim(), cidade, uf, ...(c ? { cep: c } : {}), endereco: [rua.trim(), bairro.trim(), cidade + "/" + uf].filter(Boolean).join(", ") }; };
-  /** nascimento que veio da consulta do CPF que está no campo (nunca o de outro CPF) */
-  const nascDoCPF = () => { const p = f.doCPF; return p && p.cpf === soDig(f.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
-  const anos = () => { const mod = +String(f.ano).slice(-4) || null, p = f.daPlaca; const fab = p && +p.ano_fab && +p.ano_fab <= mod ? +p.ano_fab : mod; return { ano: anoFabMod(fab, mod), ano_fab: fab, ano_mod: mod, ...(p && p.chassi ? { chassi: p.chassi } : {}), ...(p && p.renavam ? { renavam: p.renavam } : {}) }; };
+    return { rua: rua.trim(), bairro: bairro.trim(), cidade, uf, ...(c ? { cep: c } : {}) }; };
 
   const trava = useRef(false);
   const gravar = async () => {
@@ -263,49 +263,30 @@ function FormularioOS({ tipo }) {
     const e = validar(); setErros(e); if (e.length) { topo.current && topo.current.scrollIntoView({ behavior: "smooth" }); return; }
     trava.current = true; setSalvando(true);
     try {
-      const p = normPlaca(f.placa), veiCad = dados.veiculos.find(v => v.id === f.veiculoId) || dados.veiculos.find(v => v.placa === p) || null;
-      let cli = dados.clientes.find(c => c.id === f.clienteId) || null;
-      if (ehOS) {
-        const abertaDoVeiculo = veiCad ? dados.ordens.find(o => o.veiculo_id === veiCad.id && ["diagnostico", "aguardando", "execucao", "pronto"].includes(o.status)) : null;
-        if (abertaDoVeiculo && !window.confirm("Este veículo já tem a " + numOS(abertaDoVeiculo.numero) + " em andamento. Abrir outra O.S. mesmo assim?")) return;
-        if (!cli) cli = await api.clientes.salvar({ nome: MAIUSC(f.nome), telefone: soDig(f.whats), doc: soDig(f.doc), ...enderecoNovo(), origem: "", ...nascDoCPF() });
-        const km = parseInt(soDig(f.km), 10);
-        let vei = veiCad;
-        if (!vei) vei = await api.veiculos.salvar({ placa: p, marca: f.marca, modelo: f.modelo, ...anos(), cor: f.cor.trim().toUpperCase(), motor: "", combustivel: "", cliente_id: cli.id, km_atual: km });
-        else vei = await api.veiculos.salvar({ id: vei.id, cliente_id: cli.id, km_atual: Math.max(km, vei.km_atual || 0) });
-        const cons = dados.perfis.find(x => x.id === perfil.id) || perfil;
-        const ordem = await api.criarOrdem({ status: "diagnostico", cliente_id: cli.id, veiculo_id: vei.id,
-          cliente: { nome: cli.nome, telefone: cli.telefone || "", doc: cli.doc || "", endereco: endCompleto(cli) },
-          veiculo: { placa: vei.placa, marca: vei.marca, modelo: vei.modelo, ano: vei.ano, cor: vei.cor || "", motor: vei.combustivel || vei.motor || "" },
-          km_entrada: km, reclamacao: f.motivo.trim(), box: "", contato: "", checkin: { feito: false, kmAnterior: veiCad ? veiCad.km_atual : null, kmDivergente: !!(veiCad && veiCad.km_atual && km < veiCad.km_atual), app: true },
-          consultor_id: perfil.id, consultor_nome: cons.nome || perfil.nome, garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "" });
-        await api.evento(ordem.id, "abertura", "O.S. aberta pelo app com " + fmtKm(km) + ".", perfil.nome).catch(() => {});
-        lsSet(LS, null); setF(vazio()); await recarregar();
-        // o carro buscado passa a ser o do cadastro (com dono): Agendar e as consultas já usam o cadastro
-        setPlaca({ texto: vei.placa, veic: { placa: vei.placa, id: vei.id, marca: vei.marca || "", modelo: vei.modelo || "", ano: vei.ano || "", cor: vei.cor || "", motor: vei.motor || "", combustivel: vei.combustivel || "", km_atual: vei.km_atual, cliente: cli, origem: "cadastro" } });
-        setFeito({ tipo: "os", id: ordem.id, numero: ordem.numero });
-      } else {
-        const clienteDig = cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: f.nome, telefone: soDig(f.whats), doc: f.doc, cep: f.cep, ...(() => { const e2 = enderecoNovo(); return { rua: e2.rua, bairro: e2.bairro, cidade: e2.cidade, uf: e2.uf }; })(), ...nascDoCPF() });
-        if (!cli && erroClienteDig({ doc: f.doc })) throw new Error(erroClienteDig({ doc: f.doc }));
-        const validade = cfg.validadeDias ? somaDias(hojeISO(), Number(cfg.validadeDias)) : "";
-        const r = await api.orcamentos.salvar({ cliente_id: cli ? cli.id : "", veiculo_id: veiCad ? veiCad.id : "", cliente: clienteDig,
-          veiculo: { placa: p, marca: f.marca, modelo: f.modelo, ano: String(f.ano || "") }, reclamacao: f.motivo.trim(), obs: "", obs_internas: "", tabela_preco: "vista",
-          condicoes_pagamento: cfg.condicoesPadrao || "", desconto: 0, validade, situacao: "elaboracao", motivo: "", itens: [] });
-        lsSet(LS, null); setF(vazio());
-        setFeito({ tipo: "orc", id: r.id, numero: r.numero });
-      }
-    } catch (x) { avisar((ehOS ? "Não foi possível abrir a O.S.: " : "Não foi possível criar o orçamento: ") + (x.message || x), true); }
+      const p = normPlaca(f.placa), veiCad = f.veiculoId ? dados.veiculos.find(v => v.id === f.veiculoId) : (p ? dados.veiculos.find(v => v.placa === p) : null);
+      const cli = dados.clientes.find(c => c.id === f.clienteId) || null;
+      // cliente só digitado: a cópia vai no orçamento (copiaClienteDig), como no orçamento do sistema; o cadastro acontece na aprovação
+      const clienteDig = cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: f.nome, telefone: soDig(f.whats), doc: f.doc, ...enderecoNovo(), ...nascDoCPF() });
+      if (!cli && erroClienteDig({ doc: f.doc })) throw new Error(erroClienteDig({ doc: f.doc }));
+      const validade = cfg.validadeDias ? somaDias(hojeISO(), Number(cfg.validadeDias)) : "";
+      const r = await api.orcamentos.salvar({ cliente_id: cli ? cli.id : "", veiculo_id: veiCad ? veiCad.id : "", cliente: clienteDig,
+        veiculo: { placa: p, marca: veiCad ? veiCad.marca || "" : f.marca, modelo: veiCad ? veiCad.modelo || "" : f.modelo, ano: String((veiCad ? veiCad.ano : f.ano) || "") }, reclamacao: f.motivo.trim(), obs: "", obs_internas: "", tabela_preco: "vista",
+        condicoes_pagamento: cfg.condicoesPadrao || "", desconto: 0, validade, situacao: "elaboracao", motivo: "", itens: [] });
+      setF(vazio()); setCpf(null); setCep(null); pl.limpar();
+      setFeito({ id: r.id, numero: r.numero });
+    } catch (x) { avisar("Não foi possível criar o orçamento: " + (x.message || x), true); }
     finally { trava.current = false; setSalvando(false); }
   };
 
   const auto = f.clienteId ? " auto" : "";
   const linhaCpf = cpf && cpf.buscando ? html`<div class="achou buscando">Consultando o CPF…</div>` : cpf && cpf.ok ? html`<div class="achou"><${Ic} n="check" t=${16} sw=${2.4} />${cpf.ok}</div>` : cpf && cpf.erro ? html`<div class="achou nao">${cpf.erro}</div>` : null;
+  const placa = pl.placa;
   const linhaPlaca = placa.buscando && placa.texto === normPlaca(f.placa) ? html`<div class="achou buscando">Consultando a placa…</div>`
     : f.veiculoId ? html`<div class="achou"><${Ic} n="check" t=${16} sw=${2.4} />Placa gravada no banco da DTCar</div>`
     : f.daPlaca ? html`<div class="achou"><${Ic} n="check" t=${16} sw=${2.4} />Placa nova: consultada e gravada</div>`
     : placa.naoAchou && placa.texto === normPlaca(f.placa) ? html`<div class="achou nao">${placa.motivo} Digite a marca e o modelo.</div>` : null;
-  const acao = html`<div class="acao"><button type="button" class="btn-acao" disabled=${salvando} onClick=${gravar}>${salvando ? "Gravando…" : ehOS ? "Abrir O.S." : "Criar orçamento"}</button></div>`;
-  return html`<${Tela} tela=${tipo} acao=${acao} ajuda=${ehOS ? "Preencha o cliente (toque na lupa do CPF para buscar no cadastro) e o veículo (lupa da placa). Com tudo certo, toque em Abrir O.S. A O.S. nasce em Orçamento; os itens são lançados pelo administrador." : "Preencha o cliente e o veículo e toque em Criar orçamento. Em seguida você inclui os serviços e as peças."}>
+  const acao = html`<div class="acao"><button type="button" class="btn-acao" disabled=${salvando} onClick=${gravar}>${salvando ? "Gravando…" : "Criar orçamento"}</button></div>`;
+  return html`<${Tela} tela="orcamento" acao=${acao} ajuda="Preencha o cliente (toque na lupa do CPF para buscar no cadastro) e o veículo (lupa da placa) e toque em Criar orçamento. Em seguida você inclui os serviços e as peças.">
     <div ref=${topo}></div>
     ${erros.length ? html`<div class="erro" role="alert">Corrija para continuar:<ul>${erros.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul></div>` : null}
     <${Cartao} titulo="1. Cliente" id="c-cliente">${linhaCpf}
@@ -325,15 +306,13 @@ function FormularioOS({ tipo }) {
       <div class="nota">Placa já gravada não gera nova consulta paga. Placa nova é consultada uma vez e fica salva.</div>
       <${Campo} id="f-mm" rotulo=${f.veiculoId || f.daPlaca ? "Marca e modelo (preenchido pela busca)" : "Marca e modelo"}><input id="f-mm" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="Ex.: VOLKSWAGEN GOL 1.0" value=${f.marcaModelo} onInput=${e => trocarMarcaModelo(e.target.value)} /></${Campo}>
       <div class="grade2"><${Campo} id="f-ano" rotulo="Ano"><input id="f-ano" class=${"inp livre" + (f.veiculoId || f.daPlaca ? " auto" : "")} inputmode="numeric" autocomplete="off" placeholder="2015" value=${f.ano} onInput=${e => set({ ano: e.target.value.replace(/[^\d/]/g, "").slice(0, 9) })} /></${Campo}>
-        <${Campo} id="f-cor" rotulo="Cor"><input id="f-cor" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="PRATA" value=${f.cor} onInput=${e => set({ cor: e.target.value })} /></${Campo}></div>
-      ${ehOS ? html`<${Campo} id="f-km" rotulo="KM atual"><input id="f-km" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="Digite o KM do painel" value=${f.km} onInput=${e => set({ km: e.target.value.replace(/\D/g, "").slice(0, 7), kmConfirmado: false })} /></${Campo}>
-        ${erros.some(x => x.includes("menor que o último")) ? html`<button type="button" class="marcar" aria-pressed=${f.kmConfirmado ? "true" : "false"} onClick=${() => set({ kmConfirmado: !f.kmConfirmado })}><span class="cx">${f.kmConfirmado ? html`<${Ic} n="check" t=${16} sw=${2.6} />` : null}</span>O KM está certo (o painel marca menos que o registrado)</button>` : null}` : null}</${Cartao}>
-    <${Cartao} titulo=${ehOS ? "3. Motivo da visita" : "3. Serviço pedido"} id="c-servico">
-      <${Campo} id="f-motivo" rotulo=${ehOS ? "O que o cliente pediu ou reclamou" : "O que o cliente quer orçar (opcional)"}><textarea id="f-motivo" class="area" placeholder=${ehOS ? "Ex.: barulho na suspensão dianteira" : "Ex.: troca de pastilhas e discos"} value=${f.motivo} onInput=${e => set({ motivo: e.target.value })}></textarea></${Campo}></${Cartao}>
+        <${Campo} id="f-cor" rotulo="Cor"><input id="f-cor" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="PRATA" value=${f.cor} onInput=${e => set({ cor: e.target.value })} /></${Campo}></div></${Cartao}>
+    <${Cartao} titulo="3. Serviço pedido" id="c-servico">
+      <${Campo} id="f-motivo" rotulo="O que o cliente quer orçar (opcional)"><textarea id="f-motivo" class="area" placeholder="Ex.: troca de pastilhas e discos" value=${f.motivo} onInput=${e => set({ motivo: e.target.value })}></textarea></${Campo}></${Cartao}>
     ${busca ? html`<${BuscaClienteQuadro} onEscolha=${escolherCliente} onFechar=${() => setBusca(false)} />` : null}
-    ${feito ? html`<${Quadro} titulo=${feito.tipo === "os" ? numOS(feito.numero) + " aberta" : numORC(feito.numero) + " criado"} onFechar=${() => setFeito(null)}>
-      <p>${feito.tipo === "os" ? "A O.S. está na etapa Orçamento. Os serviços e as peças são lançados pelo administrador no sistema." : "Agora inclua os serviços e as peças do orçamento."}</p>
-      ${feito.tipo === "os" ? html`<a class="btn-acao" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href=${SISTEMA + "#/os/" + feito.id}>Ver a O.S.</a>` : html`<a class="btn-acao" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href=${SISTEMA + "#/orcamento/" + feito.id}>Incluir os itens</a>`}
+    ${feito ? html`<${Quadro} titulo=${numORC(feito.numero) + " criado"} onFechar=${() => setFeito(null)}>
+      <p>Agora inclua os serviços e as peças do orçamento.</p>
+      <a class="btn-acao" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href=${SISTEMA + "#/orcamento/" + feito.id}>Incluir os itens</a>
       <button type="button" class="link" onClick=${() => { setFeito(null); ir("inicio"); }}>Voltar ao Início</button></${Quadro}>` : null}
   </${Tela}>`;
 }
@@ -342,51 +321,77 @@ function FormularioOS({ tipo }) {
 const SERVICOS = ["Revisão", "Troca de óleo", "Freios", "Suspensão", "Outro serviço"];
 const HORAS = ["07:30", "08:30", "09:30", "10:30", "13:00", "14:00", "15:00", "16:00"];
 const SEM = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"], SEM_EXT = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
-const semanaDe = iso => { const d = new Date(iso + "T12:00:00"); const seg = somaDias(iso, -((d.getDay() + 6) % 7)); return Array.from({ length: 6 }, (_, i) => somaDias(seg, i)); };
+const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const iso = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+/** Páscoa (algoritmo de Meeus) */
+function pascoa(ano) { const a = ano % 19, b = Math.floor(ano / 100), c = ano % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30, i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mes = Math.floor((h + l - 7 * m + 114) / 31), dia = ((h + l - 7 * m + 114) % 31) + 1; return new Date(ano, mes - 1, dia); }
+/** Feriados do ano: nacionais (lei), os móveis, o do Espírito Santo (N. Sra. da Penha) e o de Colatina (aniversário, 22/08). { "AAAA-MM-DD": nome } */
+export function feriadosDoAno(ano) {
+  const f = { [ano + "-01-01"]: "Confraternização Universal", [ano + "-04-21"]: "Tiradentes", [ano + "-05-01"]: "Dia do Trabalho", [ano + "-09-07"]: "Independência", [ano + "-10-12"]: "N. Sra. Aparecida",
+    [ano + "-11-02"]: "Finados", [ano + "-11-15"]: "Proclamação da República", [ano + "-11-20"]: "Consciência Negra", [ano + "-12-25"]: "Natal", [ano + "-08-22"]: "Aniversário de Colatina" };
+  const p = pascoa(ano), dd = n => { const x = new Date(p); x.setDate(p.getDate() + n); return iso(x); };
+  f[dd(-48)] = "Carnaval"; f[dd(-47)] = "Carnaval"; f[dd(-2)] = "Sexta-feira Santa"; f[dd(60)] = "Corpus Christi"; f[dd(8)] = "N. Sra. da Penha (ES)";
+  return f;
+}
 function Agendar() {
-  const { dados, placa, avisar } = useApp();
+  const { dados, avisar } = useApp();
+  const pl = usarPlaca();
   const hoje = hojeISO();
-  const [a, setA] = useState(() => ({ clienteId: "", nome: "", whats: "", servico: 0, outro: "", data: hoje, hora: "", horaOutra: "", aviso: true, inicio: hoje }));
-  const [busca, setBusca] = useState(false), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [feito, setFeito] = useState(null);
+  const [a, setA] = useState(() => ({ clienteId: "", nome: "", whats: "", servico: 0, outro: "", data: hoje, hora: "", horaOutra: "", aviso: true, mes: hoje.slice(0, 7) }));
+  const [busca, setBusca] = useState(false), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [feito, setFeito] = useState(null), [agenda, setAgenda] = useState({});
   const set = p => setA(o => ({ ...o, ...p }));
-  useEffect(() => { const v = placa.veic; if (v && v.cliente && !a.clienteId && !a.nome) set({ clienteId: v.cliente.id, nome: v.cliente.nome, whats: v.cliente.telefone ? fmtTel(v.cliente.telefone) : "" }); }, [placa.veic]);
-  const dias = semanaDe(a.inicio);
+  useEffect(() => { const v = pl.veic; if (v && v.cliente && !a.clienteId && !a.nome) set({ clienteId: v.cliente.id, nome: v.cliente.nome, whats: v.cliente.telefone ? fmtTel(v.cliente.telefone) : "" }); }, [pl.veic]);
+  // agendamentos do mês (só leitura): o dia mostra quantos já tem
+  const [ano, mes] = a.mes.split("-").map(Number);
+  useEffect(() => { let vivo = true; const de = a.mes + "-01", ate = iso(new Date(ano, mes, 0));
+    api.agenda.listar({ de, ate }).then(l => { if (!vivo) return; const m = {}; (l || []).filter(x => x.situacao !== "cancelado").forEach(x => { m[x.data] = (m[x.data] || 0) + 1; }); setAgenda(m); }).catch(() => {});
+    return () => { vivo = false; }; }, [a.mes]);
+  const feriados = useMemo(() => feriadosDoAno(ano), [ano]);
+  const primeiro = new Date(ano, mes - 1, 1), nDias = new Date(ano, mes, 0).getDate();
+  const celulas = [...Array(primeiro.getDay()).fill(null), ...Array.from({ length: nDias }, (_, i) => iso(new Date(ano, mes - 1, i + 1)))];
+  const mudarMes = n => { const d = new Date(ano, mes - 1 + n, 1); set({ mes: iso(d).slice(0, 7) }); };
   const servico = a.servico === SERVICOS.length - 1 ? a.outro.trim() : SERVICOS[a.servico];
   const hora = a.hora === "outra" ? a.horaOutra : a.hora;
   const dia = new Date(a.data + "T12:00:00");
-  const resumo = (servico || "Serviço") + " · " + SEM_EXT[dia.getDay()] + ", " + a.data.slice(8, 10) + "/" + a.data.slice(5, 7) + (hora ? " às " + hora : "");
+  const resumo = (servico || "Serviço") + " · " + SEM_EXT[dia.getDay()] + ", " + a.data.slice(8, 10) + "/" + a.data.slice(5, 7) + (hora ? " às " + hora : "") + (feriados[a.data] ? " (feriado: " + feriados[a.data] + ")" : "");
+  const trava = useRef(false);
   const gravar = async () => {
+    if (trava.current) return;
     if (!a.nome.trim()) return setErro("Informe o nome do cliente.");
     if (!servico) return setErro("Escreva o serviço combinado.");
     if (a.data < hoje) return setErro("O dia já passou.");
     if (a.hora === "outra" && !/^\d{2}:\d{2}$/.test(a.horaOutra)) return setErro("Digite o horário como 08:00.");
     const tel = soDig(a.whats); if (tel && (tel.length < 10 || tel.length > 11)) return setErro("O WhatsApp precisa ter DDD (10 ou 11 números).");
-    setErro(""); setSalvando(true);
+    setErro(""); trava.current = true; setSalvando(true);
     try {
-      const v = placa.veic, cli = dados.clientes.find(c => c.id === a.clienteId) || null;
+      const v = pl.veic, cli = dados.clientes.find(c => c.id === a.clienteId) || null;
       const r = await api.agenda.salvar({ data: a.data, hora: hora || null, situacao: "agendado", cliente_id: cli ? cli.id : null, veiculo_id: v && v.id ? v.id : null,
         cliente: cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: a.nome, telefone: tel }),
         veiculo: v ? { placa: v.placa, marca: v.marca || "", modelo: v.modelo || "", ano: v.ano || "" } : { placa: "", marca: "", modelo: "", ano: "" },
         servico, obs: "Agendado pelo app.", motivo: "" });
       const zap = a.aviso && tel ? linkWhats(tel, mensagemAgenda(a.nome, servico, a.data, hora, v)) : "";
+      setAgenda(m => ({ ...m, [a.data]: (m[a.data] || 0) + 1 }));
       setFeito({ r, zap });
-    } catch (x) { setErro(x.message || String(x)); } finally { setSalvando(false); }
+    } catch (x) { setErro(x.message || String(x)); } finally { trava.current = false; setSalvando(false); }
   };
   const acao = html`<div class="acao">
     <button type="button" class="marcar" aria-pressed=${a.aviso ? "true" : "false"} onClick=${() => set({ aviso: !a.aviso })}><span class="cx">${a.aviso ? html`<${Ic} n="check" t=${16} sw=${2.6} />` : null}</span>Avisar o cliente pelo WhatsApp</button>
     <div class="resumo">${resumo}</div>
     <button type="button" class="btn-acao" disabled=${salvando} onClick=${gravar}>${salvando ? "Gravando…" : a.aviso ? "Agendar e avisar o cliente" : "Agendar serviço"}</button></div>`;
-  return html`<${Tela} tela="agendar" acao=${acao} ajuda="Busque a placa (opcional), informe o cliente, escolha o serviço, o dia e o horário. Com “Avisar o cliente” marcado, a mensagem de confirmação abre pronta no WhatsApp para você enviar.">
+  return html`<${Tela} tela="agendar" acao=${acao} ajuda="Busque a placa (opcional), informe o cliente, escolha o serviço, o dia no calendário (feriados em laranja; o número no canto é quantos serviços já tem no dia) e o horário. Com “Avisar o cliente” marcado, a mensagem de confirmação abre pronta no WhatsApp para você enviar.">
     ${erro ? html`<div class="erro" role="alert">${erro}</div>` : null}
-    <${BuscaPlaca} id="ag-placa" titulo="Veículo" /><${Veiculo} />
+    <${BuscaPlaca} id="ag-placa" titulo="Veículo" pl=${pl} /><${Veiculo} v=${pl.veic} />
     <${Cartao} titulo="Cliente">
       <${Campo} id="ag-nome" rotulo="Nome do cliente"><div class="linha"><input id="ag-nome" class="inp" autocomplete="off" placeholder="Nome" value=${a.nome} onInput=${e => set({ nome: e.target.value, clienteId: "" })} />
         <button type="button" class="btn-busca g" aria-label="Buscar cliente" onClick=${() => setBusca(true)}><${Ic} n="search" t=${22} /></button></div></${Campo}>
       <${Campo} id="ag-whats" rotulo="Contato (WhatsApp)"><input id="ag-whats" class="inp livre" inputmode="tel" autocomplete="off" placeholder="(27) 90000-0000" value=${a.whats} onInput=${e => set({ whats: e.target.value })} onBlur=${() => { const t = soDig(a.whats); if (t.length >= 10) set({ whats: fmtTel(t) }); }} /></${Campo}></${Cartao}>
     <${Cartao} titulo="Serviço"><div class="chips" role="group" aria-label="Serviço">${SERVICOS.map((s, i) => html`<button type="button" key=${s} class="btn-chip" aria-pressed=${a.servico === i ? "true" : "false"} onClick=${() => set({ servico: i })}>${s}</button>`)}</div>
       ${a.servico === SERVICOS.length - 1 ? html`<input id="ag-outro" class="inp livre" autocomplete="off" placeholder="Qual serviço?" value=${a.outro} onInput=${e => set({ outro: e.target.value })} />` : null}</${Cartao}>
-    <${Cartao} titulo="Dia"><div class="dias-nav"><button type="button" aria-label="Semana anterior" disabled=${dias[0] <= hoje} onClick=${() => set({ inicio: somaDias(a.inicio, -7) })}>‹ Semana</button><span>${dias[0].slice(8, 10)}/${dias[0].slice(5, 7)} a ${dias[5].slice(8, 10)}/${dias[5].slice(5, 7)}</span><button type="button" aria-label="Próxima semana" onClick=${() => set({ inicio: somaDias(a.inicio, 7) })}>Semana ›</button></div>
-      <div class="dias" role="group" aria-label="Dia">${dias.map(d => { const x = new Date(d + "T12:00:00"); return html`<button type="button" key=${d} class="dia" disabled=${d < hoje} aria-pressed=${a.data === d ? "true" : "false"} aria-label=${SEM_EXT[x.getDay()] + " " + d.slice(8, 10)} onClick=${() => set({ data: d })}><span>${SEM[x.getDay()]}</span><span>${d.slice(8, 10)}</span></button>`; })}</div></${Cartao}>
+    <${Cartao} titulo="Dia" id="ag-dia"><div class="dias-nav"><button type="button" aria-label="Mês anterior" disabled=${a.mes <= hoje.slice(0, 7)} onClick=${() => mudarMes(-1)}>‹</button><span id="ag-mes">${MESES[mes - 1]} de ${ano}</span><button type="button" aria-label="Próximo mês" onClick=${() => mudarMes(1)}>›</button></div>
+      <div class="cal-sem" aria-hidden="true">${SEM.map(x => html`<span key=${x}>${x}</span>`)}</div>
+      <div class="cal" role="group" aria-label="Dia">${celulas.map((d, i) => d === null ? html`<span key=${"v" + i}></span>` : html`<button type="button" key=${d} class=${"cal-dia" + (feriados[d] ? " feriado" : "") + (new Date(d + "T12:00:00").getDay() === 0 ? " domingo" : "")} disabled=${d < hoje} aria-pressed=${a.data === d ? "true" : "false"} aria-label=${SEM_EXT[new Date(d + "T12:00:00").getDay()] + " " + d.slice(8, 10) + (feriados[d] ? ", feriado: " + feriados[d] : "") + (agenda[d] ? ", " + agenda[d] + " agendado(s)" : "")} onClick=${() => set({ data: d })}>${+d.slice(8, 10)}${agenda[d] ? html`<i>${agenda[d]}</i>` : null}</button>`)}</div>
+      <div class="cal-legenda"><span><b class="lg feriado"></b>Feriado</span><span><b class="lg sel"></b>Dia escolhido</span><span><i>2</i>serviços já agendados</span></div>
+      ${feriados[a.data] ? html`<div class="nota" id="ag-feriado"><span class="selo atencao">Feriado</span>${feriados[a.data]}. Dá para agendar mesmo assim.</div>` : null}</${Cartao}>
     <${Cartao} titulo="Horário"><div class="horas" role="group" aria-label="Horário">${HORAS.map(h => html`<button type="button" key=${h} class="hora" aria-pressed=${a.hora === h ? "true" : "false"} onClick=${() => set({ hora: h })}>${h}</button>`)}
         <button type="button" class="hora" aria-pressed=${a.hora === "outra" ? "true" : "false"} onClick=${() => set({ hora: "outra" })}>Outro</button>
         <button type="button" class="hora" aria-pressed=${a.hora === "" ? "true" : "false"} onClick=${() => set({ hora: "" })}>Sem hora</button></div>
@@ -395,7 +400,7 @@ function Agendar() {
     ${feito ? html`<${Quadro} titulo="Agendado" onFechar=${() => { setFeito(null); ir("inicio"); }}>
       <p>${resumo}.</p>
       ${feito.zap ? html`<a class="btn-acao" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href=${feito.zap} target="_blank" rel="noopener">Abrir a mensagem no WhatsApp</a><p class="nota">A mensagem abre pronta; quem envia é você.</p>` : null}
-      <button type="button" class="link" onClick=${() => { setFeito(null); setA(o => ({ ...o, clienteId: "", nome: "", whats: "", outro: "", hora: "", horaOutra: "" })); ir("inicio"); }}>Voltar ao Início</button></${Quadro}>` : null}
+      <button type="button" class="link" onClick=${() => { setFeito(null); ir("inicio"); }}>Voltar ao Início</button></${Quadro}>` : null}
   </${Tela}>`;
 }
 /** mensagem no padrão da DTCar (saudação, "senhor", tópicos, assinatura) */
@@ -407,17 +412,17 @@ function mensagemAgenda(nome, servico, data, hora, v) {
 
 /* ---------------- ÓLEO (APLICAÇÃO) ---------------- */
 function Oleo() {
-  const { dados, placa } = useApp();
+  const { dados } = useApp(); const pl = usarPlaca();
   const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [mao, setMao] = useState({ modelo: "", ano: "" }), [verFiltros, setVerFiltros] = useState(true), [detalhe, setDetalhe] = useState(false);
   useEffect(() => { carregarCatalogo().then(setCat).catch(() => setErro("Não deu para carregar o catálogo. Confira a internet e tente de novo.")); }, []);
   const estoque = useMemo(() => indiceEstoque(dados.produtos), [dados.produtos]);
-  const v = placa.veic;
+  const v = pl.veic;
   const r = useMemo(() => { if (!cat) return null; if (v) return pesquisarVeiculo(cat, { marca: v.marca, modelo: v.modelo, ano: v.ano, motor: v.motor, combustivel: v.combustivel }, "").r; if (mao.modelo.trim().length >= 2) return pesquisar(cat, mao.modelo, mao.ano); return null; }, [cat, v, mao]);
   const oleos = useMemo(() => r ? resumoOleo(r.oleo, r.ano) : [], [r]);
   const apl = r && r.filtros[0];
   const filtro = (k) => filtroParaMostrar(cat, estoque, apl.marca, apl[k]);
   return html`<${Tela} tela="oleo" ajuda="Busque a placa: o app mostra a quantidade e a viscosidade do óleo do motor e os filtros do carro, com o que há no estoque. É dado de catálogo: confira antes de aplicar.">
-    <${BuscaPlaca} id="ol-placa" /><${Veiculo} />
+    <${BuscaPlaca} id="ol-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${!v ? html`<${ModeloAMao} valor=${mao} onMuda=${setMao} />` : null}
     ${erro ? html`<div class="erro">${erro}</div>` : !cat ? html`<div class="carregando">Carregando o catálogo…</div>` : null}
     ${cat && r && !oleos.length && !r.filtros.length ? html`<div class="vazio">Nada no catálogo para ${v ? nomeVeic(v) : mao.modelo}. ${v ? "Tente digitar o modelo de outro jeito, sem a placa." : "Tente só o nome do modelo."}</div>` : null}
@@ -441,31 +446,48 @@ function Oleo() {
 
 /* ---------------- CONSULTAR PEÇA POR CATÁLOGO ---------------- */
 const LS_LISTA = "dtcar-app-lista-pecas";
+// Sistemas do carro (pedido do Danilo, 16/11/2026): o resultado só aparece depois de tocar no sistema. Cada grupo do catálogo cai num sistema.
+const SISTEMAS = [
+  { id: "fr", nome: "Freios", icone: "disco", re: /freio|pin[cç]a|cilindro mestre|cilindro de roda|servo|hidrov|hydrov|lona|sapata|tambor|disco|pastilha/i },
+  { id: "tr", nome: "Transmissão", icone: "engrenagem", re: /embreagem|homocin|junta fixa|tulipa|semieixo|tripe[cç]a|trizeta|junta deslizante|cardan|cruzeta|coroa|pinh[aã]o|c[aâ]mbio|diferencial|flange|luva|garfo|mancal central|planet|veloc[ií]metro|transmiss/i },
+  { id: "di", nome: "Direção", icone: "volante", re: /dire[cç][aã]o|terminal|axial|ponteira|barra de liga|barra central|barra lateral/i },
+  { id: "su", nome: "Suspensão", icone: "amortecedor", re: /amortecedor|mola|bandeja|bra[cç]o|piv[oô]|bieleta|bucha|batente|estabiliz|tirante|barra de rea|cubo|mancal do cubo|suspens|pino|apoio|prato/i },
+  { id: "mo", nome: "Motor", icone: "motor", re: /motor|junta|cabe[cç]ote|bomba d|bomba de [oó]leo|reservat|anel|mangueira|abra[cç]adeira|acelerador|correia|coxim|suporte|filtro|palheta|parafuso/i },
+];
+const OUTROS_RE = /mola a g[aá]s/i; // mola do capô e do porta-malas não é suspensão
+const sistemaDoGrupo = g => { if (OUTROS_RE.test(g || "")) return "ou"; const x = SISTEMAS.find(sis => sis.re.test(g || "")); return x ? x.id : "ou"; };
+const IcSis = ({ nome, t = 30 }) => html`<svg width=${t} height=${t} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${ICONE_D[nome] || ICONE_D.chave}></path></svg>`;
 function Peca() {
-  const { dados, placa, avisar } = useApp();
-  const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [mao, setMao] = useState({ modelo: "", ano: "" }), [txt, setTxt] = useState(""), [grupo, setGrupo] = useState(""), [lim, setLim] = useState(20), [lista, setLista] = useState(() => lsGet(LS_LISTA) || []), [verLista, setVerLista] = useState(false);
+  const { dados, avisar } = useApp(); const pl = usarPlaca();
+  const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [mao, setMao] = useState({ modelo: "", ano: "" }), [sis, setSis] = useState(""), [txt, setTxt] = useState(""), [lim, setLim] = useState(20), [lista, setLista] = useState(() => lsGet(LS_LISTA) || []), [verLista, setVerLista] = useState(false);
   useEffect(() => { carregarPecas().then(setCat).catch(() => setErro("Não deu para abrir o catálogo de peças. Confira a internet.")); }, []);
   useEffect(() => { lsSet(LS_LISTA, lista); }, [lista]);
-  const v = placa.veic;
+  const v = pl.veic;
   const veic = v ? { marca: v.marca, modelo: v.modelo, ano: v.ano_mod || v.ano } : mao.modelo.trim().length >= 2 ? { marca: "", modelo: mao.modelo.trim(), ano: mao.ano } : null;
+  useEffect(() => { setSis(""); setTxt(""); setLim(20); }, [v && v.placa, veic && veic.modelo]);
   const estoque = useMemo(() => dados.produtos.filter(p => p.ativo !== false && p.tipo === "produto" && p.referencia && Number(p.estoque_atual) > 0).map(p => ({ id: p.id, ref: p.referencia, descricao: p.descricao, qtd: Number(p.estoque_atual), preco: p.preco_vista })), [dados.produtos]);
   const r = useMemo(() => { if (!cat || !veic) return null; const x = pecasDoVeiculo(cat, veic); return { ...x, grupos: agruparEquivalentes(x.grupos, estoque) }; }, [cat, veic && veic.marca, veic && veic.modelo, veic && veic.ano, estoque]);
-  const grupos = useMemo(() => r ? filtrarPecas(r.grupos, txt).filter(g => !grupo || g.grupo === grupo) : [], [r, txt, grupo]);
+  const porSistema = useMemo(() => { const m = {}; (r ? r.grupos : []).forEach(g => { const k = sistemaDoGrupo(g.grupo); m[k] = (m[k] || 0) + g.itens.length; }); return m; }, [r]);
+  const grupos = useMemo(() => r && sis ? filtrarPecas(r.grupos.filter(g => sistemaDoGrupo(g.grupo) === sis), txt) : [], [r, sis, txt]);
   const itens = grupos.flatMap(g => g.itens.map(e => ({ ...e, grupo: g.grupo })));
   const precoRef = e => { const p = e.estoque ? dados.produtos.find(x => x.id === e.estoque.id) : null; return p && p.preco_vista ? reais(p.preco_vista) : "—"; };
   const adicionar = e => { const p = e.peca; if (lista.some(x => x.codigo === p.codigo && x.marca === p.marca)) return avisar("Já está na lista."); setLista(l => l.concat([{ marca: p.marca, codigo: p.codigo, oem: chaveDaPeca(p), descricao: p.descricao, placa: v ? v.placa : "", carro: veic ? [veic.marca, veic.modelo, veic.ano].filter(Boolean).join(" ") : "", estoque: e.estoque ? e.estoque.descricao + " (" + e.estoque.qtd + " un)" : "" }])); avisar("Item adicionado à lista."); };
   const textoLista = () => lista.map((x, i) => `${i + 1}. ${x.descricao} — ${x.marca} ${x.codigo}${x.oem !== x.codigo ? " (orig. " + x.oem + ")" : ""}${x.carro ? " · " + x.carro : ""}${x.placa ? " · " + exPlaca(x.placa) : ""}`).join("\n");
   const compartilhar = async () => { const t = "Lista de peças · DTCar\n" + textoLista(); try { if (navigator.share) await navigator.share({ title: "Lista de peças", text: t }); else { await navigator.clipboard.writeText(t); avisar("Lista copiada."); } } catch (e) { /* cancelou */ } };
-  return html`<${Tela} tela="peca" ajuda="Busque a placa (ou digite o modelo) e veja as peças de catálogo que servem no carro, com conversão de marcas e o que há no estoque. “Adicionar item” monta uma lista para cotar ou enviar.">
-    <${BuscaPlaca} id="pc-placa" /><${Veiculo} />
+  const sisAtual = SISTEMAS.find(x => x.id === sis);
+  return html`<${Tela} tela="peca" ajuda="Busque a placa (ou digite o modelo), toque no sistema do carro (freios, suspensão…) e veja as peças de catálogo que servem nele, com conversão de marcas e o que há no estoque. “Adicionar item” monta uma lista para cotar ou enviar.">
+    <${BuscaPlaca} id="pc-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${!v ? html`<${ModeloAMao} valor=${mao} onMuda=${setMao} />` : null}
-    ${veic ? html`<section class="cartao liso" id="pc-busca">
-      <div class="linha"><input id="pc-q" class="inp livre" type="search" autocomplete="off" placeholder="Pesquisar peça: bandeja, pastilha, código…" value=${txt} onInput=${e => { setTxt(e.target.value); setLim(20); }} /><span class="btn-busca g" aria-hidden="true"><${Ic} n="search" t=${22} /></span></div>
-      <select id="pc-grupo" class="inp livre" aria-label="Grupo de peças" value=${grupo} onChange=${e => { setGrupo(e.target.value); setLim(20); }}><option value="">Todos os grupos</option>${(r ? r.grupos : []).map(g => html`<option key=${g.grupo} value=${g.grupo}>${g.grupo} (${g.itens.length})</option>`)}</select>
-      ${r && r.entendido ? html`<div class="nota">Buscando por: <b>${r.entendido}</b>${r.ano ? "" : " (sem ano: aparecem todos os anos)"} · catálogos ${cat.catalogos.map(c => c.marca).join(", ")}</div>` : null}</section>` : null}
     ${erro ? html`<div class="erro">${erro}</div>` : veic && !cat ? html`<div class="carregando">Carregando o catálogo de peças…</div>` : null}
     ${r && !r.total ? html`<div class="vazio">Nenhuma peça de catálogo para ${r.entendido || nomeVeic(veic)}.</div>` : null}
-    ${itens.length ? html`<div class="res-titulo">RESULTADO DA PESQUISA (${itens.length})</div>
+    ${r && r.total && !sis ? html`<${Cartao} titulo="Escolha o sistema" id="pc-sistemas">
+      <div class="sistemas">${SISTEMAS.concat([{ id: "ou", nome: "Outros", icone: "chave" }]).map(x => html`<button type="button" key=${x.id} class="sistema" disabled=${!porSistema[x.id]} data-sistema=${x.id} onClick=${() => { setSis(x.id); setTxt(""); setLim(20); }}><${IcSis} nome=${x.icone} /><span>${x.nome}</span><small>${porSistema[x.id] || 0} ${porSistema[x.id] === 1 ? "peça" : "peças"}</small></button>`)}</div>
+      ${r.entendido ? html`<div class="nota">Buscando por: <b>${r.entendido}</b>${r.ano ? "" : " (sem ano: aparecem todos os anos)"}</div>` : null}</${Cartao}>` : null}
+    ${r && sis ? html`<section class="cartao liso" id="pc-busca">
+      <div class="linha"><button type="button" class="btn-busca g" aria-label="Voltar aos sistemas" style="background:#fff;color:#2f6fb5;border:1.5px solid #2f6fb5" onClick=${() => setSis("")}>‹</button>
+        <div class="res-titulo" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px"><${IcSis} nome=${sisAtual ? sisAtual.icone : "chave"} t=${22} />${sisAtual ? sisAtual.nome.toUpperCase() : "OUTROS"}</div></div>
+      <div class="linha"><input id="pc-q" class="inp livre" type="search" autocomplete="off" placeholder="Pesquisar peça: bandeja, pastilha, código…" value=${txt} onInput=${e => { setTxt(e.target.value); setLim(20); }} /><span class="btn-busca g" aria-hidden="true"><${Ic} n="search" t=${22} /></span></div></section>
+      ${itens.length ? html`<div class="res-titulo">RESULTADO DA PESQUISA (${itens.length})</div>
       ${itens.slice(0, lim).map(e => { const p = e.peca, conv = conversaoDoItem(e); return html`<section class="cartao liso" key=${p.marca + p.codigo}>
         <button type="button" class="btn-barra" style="justify-content:center" onClick=${() => adicionar(e)}>Adicionar item</button>
         <${KV} a="Marca" b=${p.marca} /><${KV} a="Descrição" b=${p.descricao} p /><${KV} a="Código" b=${p.codigo} />
@@ -476,7 +498,7 @@ function Peca() {
         ${e.estoque ? html`<div class="nota"><span class="selo">Tem no estoque</span>${e.estoque.descricao} (${e.estoque.qtd} un)</div>` : null}
         ${conv.length ? html`<div class="nota">Conversão: ${conv.slice(0, 4).map(c => c.marca.replace("Montadora (original)", "Montadora") + " " + c.codigos.slice(0, 2).join(" / ")).join(" · ")}${conv.length > 4 ? " · e mais " + (conv.length - 4) : ""}</div>` : null}
         ${e.conferir ? html`<div class="nota"><span class="selo atencao">Confira a versão</span>catálogo antigo para este ano</div>` : null}</section>`; })}
-      ${itens.length > lim ? html`<button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setLim(lim + 20)}>Ver mais (${itens.length - lim})</button>` : null}` : r && r.total ? html`<div class="vazio">Nada com esse filtro.</div>` : null}
+      ${itens.length > lim ? html`<button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setLim(lim + 20)}>Ver mais (${itens.length - lim})</button>` : null}` : html`<div class="vazio">Nada com esse filtro.</div>`}` : null}
     <div style="margin-top:auto;flex-shrink:0"><button type="button" class="btn-barra curto" onClick=${() => setVerLista(true)}><${Ic} n="share" t=${20} />Ver lista (${lista.length})</button></div>
     ${verLista ? html`<${Quadro} titulo=${"Lista de peças (" + lista.length + ")"} onFechar=${() => setVerLista(false)}>
       ${!lista.length ? html`<div class="vazio">A lista está vazia. Toque em “Adicionar item” nas peças.</div>` : html`<div class="lista-itens">${lista.map((x, i) => html`<div class="item-linha" key=${i}><span><b>${x.descricao}</b><br /><span class="nota">${x.marca} ${x.codigo}${x.carro ? " · " + x.carro : ""}${x.estoque ? " · estoque: " + x.estoque : ""}</span></span><button type="button" aria-label="Tirar da lista" onClick=${() => setLista(l => l.filter((_, j) => j !== i))}>Tirar</button></div>`)}</div>
@@ -489,8 +511,8 @@ function Peca() {
 /* ---------------- HISTÓRICO DE SERVIÇOS ---------------- */
 const ordensDoVeiculo = (dados, v) => dados.ordens.filter(o => !o._pendente && ((v.id && o.veiculo_id === v.id) || ((o.veiculo || {}).placa || "") === v.placa)).sort((a, b) => (b.criado_em || "").localeCompare(a.criado_em || ""));
 function Historico() {
-  const { dados, placa } = useApp();
-  const v = placa.veic;
+  const { dados } = useApp(); const pl = usarPlaca();
+  const v = pl.veic;
   const ordens = useMemo(() => v ? ordensDoVeiculo(dados, v) : [], [dados.ordens, v]);
   const [itens, setItens] = useState({}), [erro, setErro] = useState("");
   useEffect(() => { let vivo = true; setErro(""); const ids = ordens.map(o => o.id).filter(id => !itens[id]); if (!ids.length) return;
@@ -499,7 +521,7 @@ function Historico() {
     return () => { vivo = false; }; }, [ordens]);
   const servicos = o => { const l = (itens[o.id] || []).filter(i => i.tipo === "servico" && i.aprovado !== false).map(i => i.descricao); if (l.length) return l; return o.reclamacao ? [o.reclamacao] : []; };
   return html`<${Tela} tela="historico" ajuda="Busque a placa: aparecem todas as O.S. do carro, da mais nova para a mais antiga, com a data, o KM e os serviços feitos. Toque em uma O.S. para abrir.">
-    <${BuscaPlaca} id="hs-placa" /><${Veiculo} />
+    <${BuscaPlaca} id="hs-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${erro ? html`<div class="nota" style="padding:0 6px">${erro}</div>` : null}
     ${!v ? html`<div class="vazio">Digite a placa para ver o histórico de serviços.</div>` : !ordens.length ? html`<div class="vazio">Nenhuma O.S. deste veículo no sistema.</div>` : null}
     ${ordens.map(o => html`<${Cartao} key=${o.id} titulo=${fmtData((o.criado_em || "").slice(0, 10)) + (o.km_entrada ? " · " + fmtKm(o.km_entrada) : "")}>
@@ -511,14 +533,14 @@ function Historico() {
 
 /* ---------------- CONSULTAR O.S. ---------------- */
 function OSConsulta() {
-  const { dados, placa, perfil } = useApp();
-  const v = placa.veic, ver = pode(perfil, "verValores");
+  const { dados, perfil } = useApp(); const pl = usarPlaca();
+  const v = pl.veic, ver = pode(perfil, "verValores");
   const ordens = useMemo(() => v ? ordensDoVeiculo(dados, v) : [], [dados.ordens, v]);
   const [q, setQ] = useState("");
   const porNumero = useMemo(() => { const d = soDig(q); if (!d) return []; return dados.ordens.filter(o => String(o.numero) === String(+d)).slice(0, 3); }, [q, dados.ordens]);
   const lista = v ? ordens : porNumero;
   return html`<${Tela} tela="osconsulta" ajuda="Busque a placa (ou digite o número da O.S.) e veja as O.S. do carro com abertura, situação, serviços e total. “Abrir O.S.” mostra a O.S. completa.">
-    <${BuscaPlaca} id="oc-placa" /><${Veiculo} />
+    <${BuscaPlaca} id="oc-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${!v ? html`<${Cartao} titulo="Ou pelo número da O.S."><input id="oc-num" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="Ex.: 1927" value=${q} onInput=${e => setQ(e.target.value)} /></${Cartao}>` : null}
     ${!lista.length ? html`<div class="vazio">${v ? "Nenhuma O.S. deste veículo." : "Digite a placa ou o número da O.S."}</div>` : null}
     ${lista.map(o => html`<${Cartao} key=${o.id} titulo=${numOS(o.numero)}>
@@ -542,16 +564,16 @@ function Ajuda() {
     <${Cartao} titulo="Seu acesso"><div class="linha-valor"><span>Nome</span><b>${perfil.nome}</b></div><div class="linha-valor"><span>E-mail</span><b>${perfil.email || ""}</b></div><div class="linha-valor"><span>Acesso</span><b>${{ admin: "Administrador", consultor: "Consultor" }[perfil.papel] || perfil.papel}</b></div>
       ${disp ? html`<div class="chave" id="bloco-digital"><span>Entrar com a digital</span><button type="button" role="switch" aria-label="Entrar com a digital" aria-checked=${ligada ? "true" : "false"} data-acao="chave-digital" onClick=${alternar}></button></div>` : null}
       <div class="nota">Neste app, alterar uma O.S. que já existe só é possível no login do administrador.</div></${Cartao}>
-    <${Cartao} titulo="Como usar"><div class="nota">Digite a placa no Início: o carro entra preenchido em todas as telas. Óleo e Peças mostram o catálogo com o que há no estoque. + O.S., + Orçamento e Agendar gravam no sistema na hora.</div></${Cartao}>
+    <${Cartao} titulo="Como usar"><div class="nota">Cada tela tem a própria busca de placa (placa do cadastro não custa nada). Óleo e Peças mostram o catálogo com o que há no estoque. + Orçamento e Agendar gravam no sistema na hora. O botão Voltar do celular volta ao Início; no Início, sai do app.</div></${Cartao}>
     <${Cartao} titulo="Sobre o app"><div class="linha-valor"><span>Versão</span><b>${nativo.VERSAO}</b></div><div class="nota">DTCar Centro Automotivo. As telas chegam pelo site: não precisa instalar de novo quando algo muda.</div>
       <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${sair}>SAIR DO APP</button></${Cartao}>
   </main><${Rodape} tela="ajuda" /></div>`;
 }
 
 /* ---------------- raiz: dados, rota, aviso ---------------- */
-// componentes fixos por rota (fora do App, senão cada troca de estado remontaria a tela e perderia o que foi digitado)
-const NovoOrcamento = () => html`<${FormularioOS} tipo="orcamento" />`, NovaOS = () => html`<${FormularioOS} tipo="os" />`;
-const ROTAS = { inicio: Inicio, ajuda: Ajuda, oleo: Oleo, orcamento: NovoOrcamento, os: NovaOS, agendar: Agendar, peca: Peca, historico: Historico, osconsulta: OSConsulta };
+const ROTAS = { inicio: Inicio, ajuda: Ajuda, oleo: Oleo, orcamento: NovoOrcamento, agendar: Agendar, peca: Peca, historico: Historico, osconsulta: OSConsulta };
+// quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
+const quadros = [];
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], carregado: false, erro: "" });
@@ -567,7 +589,7 @@ function App({ usuario, nativo }) {
     } catch (e) { setDados(d => ({ ...d, carregado: true, erro: "Não deu para carregar os dados do sistema (" + (e.message || "sem internet") + "). As buscas podem ficar incompletas." })); }
   };
   useEffect(() => { carregar(); }, []);
-  const ctx = { perfil: usuario, dados, cfg, placa, setPlaca, avisar, recarregar: carregar, sair: nativo.sair, nativo };
+  const ctx = { perfil: usuario, dados, cfg, avisar, recarregar: carregar, sair: nativo.sair, nativo };
   const Tela = ROTAS[rota] || Inicio;
   return html`<${Ctx.Provider} value=${ctx}>
     ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}
@@ -577,8 +599,14 @@ function App({ usuario, nativo }) {
 
 /** chamado pelo app.js depois do login (e da digital) */
 export function montar(usuario, nativo) {
-  if (!/^#\/(inicio|ajuda|oleo|orcamento|os|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = "#/inicio";
+  if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = "#/inicio";
   const raiz = document.getElementById("raiz"); raiz.innerHTML = "";
   render(html`<${App} usuario=${usuario} nativo=${nativo} />`, raiz);
 }
 export function desmontar() { render(null, document.getElementById("raiz")); }
+/** botão Voltar do celular (app.js): fecha o quadro aberto; senão vai para o Início; no Início devolve false (o app sai) */
+export function voltar() {
+  if (quadros.length) { quadros[quadros.length - 1](); return true; }
+  if (rotaAtual() !== "inicio") { ir("inicio"); return true; }
+  return false;
+}

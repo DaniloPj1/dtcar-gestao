@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSAO = '1.2.0';
+  var VERSAO = '1.3.0';
   var SERVIDOR = 'br.com.dtcarcentroautomotivo.gestao'; // nome do "cofre" da digital no aparelho
   var CH_DIGITAL = 'dtcar-app-digital';   // "1" quando a entrada com a digital está ligada
   var CH_RECUSOU = 'dtcar-app-digital-recusada'; // "1" quando a pessoa disse "agora não"
@@ -110,7 +110,7 @@
       E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email };
       if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
-      if (!/^#\/(inicio|ajuda|oleo|orcamento|os|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
+      if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
       desenhar();
       if (origem === 'senha') oferecerDigital();
     }, function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });
@@ -229,6 +229,24 @@
   }
   function desmontarTelas() { if (montado && telas) telas.desmontar(); montado = false; }
 
+  // ---------- botão Voltar do celular (plugin App do Capacitor; fora do APK não existe) ----------
+  // Pedido do Danilo (16/11/2026): o Voltar não pode sair do app. Fecha o quadro aberto, volta ao Início e, só no Início, deixa o app de lado.
+  function pluginApp() {
+    var C = window.Capacitor; if (!C) return null;
+    if (C.Plugins && C.Plugins.App) return C.Plugins.App;
+    if (typeof C.registerPlugin === 'function') { try { return C.registerPlugin('App'); } catch (e) { /* sem plugin */ } }
+    return null;
+  }
+  function ligarVoltar() {
+    var A = pluginApp(); if (!A || typeof A.addListener !== 'function') return;
+    A.addListener('backButton', function () {
+      if (E.quadro === 'digital') { lsSet(CH_RECUSOU, '1'); E.quadro = ''; desenhar(); return; } // Voltar fecha o quadro da digital como "Agora não"
+      if (E.tela === 'app' && telas && telas.voltar()) return;
+      if (E.tela === 'app' && !telas) { location.hash = '#/inicio'; return; }
+      if (typeof A.minimizeApp === 'function') A.minimizeApp(); else if (typeof A.exitApp === 'function') A.exitApp();
+    });
+  }
+
   function desenhar() {
     var raiz = document.getElementById('raiz'), quadro = document.getElementById('quadro'); if (!raiz) return;
     if (E.tela === 'app' && E.usuario) {
@@ -302,5 +320,5 @@
       if (s) aposLogin(s.user, 'sessao'); else { E.tela = 'login'; desenhar(); }
     }, function () { E.tela = 'login'; desenhar(); });
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', iniciar); else iniciar();
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', function () { ligarVoltar(); iniciar(); }); else { ligarVoltar(); iniciar(); }
 })();

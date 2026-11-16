@@ -106,22 +106,37 @@ const eTabela = r => !/^(Conferido|Indicado)/.test(r.fonte);
 const turbo = r => /turbo|\btb\b|\btd\b|tgdi|tsi|thp|t-?jet|\bgse\b|diesel|tdi|crdi|ctdi|duratorq|multijet|\bhdi\b|\bdci\b|\bcdi\b/i.test(r.motor + " " + r.modelo);
 const litrosNum = l => Number(String(l).replace(",", ".")) || 0;
 const cruzam = (a, b) => (!a.de && !a.ate) || (!b.de && !b.ate) || ((a.de || 0) <= (b.ate || 9999) && (b.de || 0) <= (a.ate || 9999));
-// Outra fonte de tabela para o mesmo modelo, a mesma cilindrada e anos que se cruzam, com litros diferentes (>= 0,3 L).
+/** Viscosidades de uma linha ("5W30 ou 10W40" → ["5W30","10W40"]) */
+export const viscosidades = r => [...new Set(String(r.viscosidade || "").toUpperCase().split(/\s+OU\s+|\s*\/\s*|\s*,\s*/).map(x => x.replace(/\s|-/g, "")).filter(Boolean))];
+const mesmaViscosidade = (a, b) => { const va = viscosidades(a), vb = viscosidades(b); return !va.length || !vb.length || va.some(v => vb.includes(v)); };
+const mesmoMotor = (a, b) => eTabela(a) && eTabela(b) && turbo(a) === turbo(b) && familia(b.fonte) !== familia(a.fonte) && b.montadora === a.montadora && cilindradas(b) === cilindradas(a)
+  && (b._m === a._m || b._m.startsWith(a._m + " ") || a._m.startsWith(b._m + " ")) && cruzam(a, b);
+// Outra fonte de tabela para o mesmo modelo, a mesma cilindrada e anos que se cruzam, com litros diferentes (>= 0,3 L)
+// ou sem nenhuma viscosidade em comum (pedido do Danilo em 16/11/2026: "menos dúvidas no catálogo", Onix 5W30 x 0W20).
+// Devolve { linha, tipo: "litros" | "viscosidade" } ou null.
 const parceiraDivergente = (a, linhas) => {
-  const ca = cilindradas(a), la = litrosNum(a.litros); if (!ca || !la || !eTabela(a)) return null;
-  return linhas.find(b => b !== a && eTabela(b) && turbo(a) === turbo(b) && familia(b.fonte) !== familia(a.fonte) && b.montadora === a.montadora && cilindradas(b) === ca
-    && (b._m === a._m || b._m.startsWith(a._m + " ") || a._m.startsWith(b._m + " ")) && cruzam(a, b) && litrosNum(b.litros) && Math.abs(litrosNum(b.litros) - la) >= 0.3) || null;
+  const ca = cilindradas(a); if (!ca || !eTabela(a)) return null;
+  const la = litrosNum(a.litros);
+  for (const b of linhas) {
+    if (b === a || !mesmoMotor(a, b)) continue;
+    if (la && litrosNum(b.litros) && Math.abs(litrosNum(b.litros) - la) >= 0.3) return { linha: b, tipo: "litros" };
+    if (!mesmaViscosidade(a, b)) return { linha: b, tipo: "viscosidade" };
+  }
+  return null;
 };
-// Marca "divergente" a linha de óleo que tem outra fonte discordando.
+// Marca "divergente" a linha de óleo que tem outra fonte discordando (texto para a tela: "Texaco 2022 indica 0W20").
 export function marcarDivergencias(linhas) {
-  return linhas.map(a => { const outra = parceiraDivergente(a, linhas); return outra ? { ...a, divergente: outra.fonte + " indica " + outra.litros + " L" } : a; });
+  return linhas.map(a => { const d = parceiraDivergente(a, linhas); return d ? { ...a, divergente: d.linha.fonte + " indica " + (d.tipo === "litros" ? d.linha.litros + " L" : d.linha.viscosidade) } : a; });
 }
 
 // Pedido do Danilo em 14/11/2026: "temos que eliminar essa divergência, na dúvida exclua o mais duvidoso e o mais antigo".
 // Quando duas tabelas discordam, fica a mais recente e mais confiável; a outra é descartada. Ordem (da mais duvidosa para a melhor):
 // Petronas 2014 (a mais antiga) < Ipiranga/Maxon (mesma base, "sem data, até ~2017"; o 2022 do Maxon é só a data da publicação) < Omnicraft/Motorcraft 2019 < Texaco 2022.
 // Linha conferida pela oficina ou indicada por loja nunca é descartada. Só descarta quando existe a outra fonte para o mesmo modelo.
-const idadeFonte = f => /petronas/i.test(f) ? 0 : /ipiranga|maxon/i.test(f) ? 1 : /omnicraft|motorcraft/i.test(f) ? 2 : /texaco/i.test(f) ? 3 : 2;
+// Viscosidade (16/11/2026): a mesma regra, mas só quando as duas linhas falam do mesmo período (ou a mais antiga não tem período): período
+// diferente costuma ser outra versão do motor (Onix 1.0 5 marchas 5W30 x 6 marchas 0W20), e aí as duas ficam e a tela mostra o aviso.
+export const idadeFonte = f => /petronas/i.test(f) ? 0 : /ipiranga|maxon/i.test(f) ? 1 : /omnicraft|motorcraft/i.test(f) ? 2 : /texaco/i.test(f) ? 3 : 2;
+const mesmoPeriodo = (velha, nova) => (!velha.de && !velha.ate) || ((velha.de || 0) === (nova.de || 0) && (velha.ate || 0) === (nova.ate || 0));
 export function podarDivergencias(linhas) {
   const grupos = new Map();
   for (const r of linhas) { const k = r.montadora + "|" + cilindradas(r); (grupos.get(k) || grupos.set(k, []).get(k)).push(r); }
@@ -129,8 +144,9 @@ export function podarDivergencias(linhas) {
   for (const g of grupos.values()) {
     if (g.length < 2) continue;
     for (const a of g) for (const b of g) {
-      if (a === b || !eTabela(a) || !eTabela(b) || parceiraDivergente(a, [b]) === null) continue;
-      if (idadeFonte(a.fonte) < idadeFonte(b.fonte)) fora.add(a);
+      if (a === b || !eTabela(a) || !eTabela(b) || idadeFonte(a.fonte) >= idadeFonte(b.fonte)) continue;
+      const d = parceiraDivergente(a, [b]);
+      if (d && (d.tipo === "litros" || mesmoPeriodo(a, b))) fora.add(a);
     }
   }
   return linhas.filter(r => !fora.has(r));
@@ -144,7 +160,10 @@ export const linhaSuspeita = r => eTabela(r) && !!r.aviso;
 // cujo período está mais perto do ano (período curto e que contém o ano ganha de "em diante" e de linha sem ano); empate: a conferida pela
 // oficina, depois a fonte mais nova, depois a resposta em que mais fontes concordam.
 const distanciaAno = (r, ano) => !ano ? 0 : (!r.de && !r.ate) ? 1000 : ((r.ate || ano + 40) - (r.de || ano - 40));
-const melhorLinha = (a, b, ano) => (eTabela(a) - eTabela(b)) || distanciaAno(a, ano) - distanciaAno(b, ano) || idadeFonte(b.fonte) - idadeFonte(a.fonte);
+const contemAno = (r, ano) => !ano || (!r.de && !r.ate) ? 0 : ((r.de || 0) <= ano && ano <= (r.ate || 9999) ? 0 : 1);
+// 16/11/2026: linha cujo período contém o ano vem antes de linha que não contém; o período mais curto continua ganhando da fonte mais nova
+// (a tabela mais nova às vezes estica o período: a Texaco põe o Onix 3 cilindros "2015 a 2021", e ele só existe desde 2020).
+const melhorLinha = (a, b, ano) => (eTabela(a) - eTabela(b)) || contemAno(a, ano) - contemAno(b, ano) || distanciaAno(a, ano) - distanciaAno(b, ano) || idadeFonte(b.fonte) - idadeFonte(a.fonte);
 export function resumoOleo(linhas, ano) {
   const grupos = new Map();
   for (const r of linhas) {
@@ -156,6 +175,20 @@ export function resumoOleo(linhas, ano) {
   }
   return [...grupos.values()].map((g, i) => ({ litros: g.litros, viscosidade: g.viscosidade, linha: g.linha, fontes: g.familias.size, divergente: g.divergente, _i: i }))
     .sort((a, b) => melhorLinha(a.linha, b.linha, ano) || b.fontes - a.fontes || a._i - b._i).map(({ _i, ...g }) => g);
+}
+
+// Pedido do Danilo em 16/11/2026: "que apareça um sinal de atenção com a questão no sistema". Quando o resumo tem, para o mesmo motor
+// (mesma cilindrada; turbo e aspirado contam juntos), respostas sem nenhuma viscosidade em comum, devolve o texto do aviso (a resposta de cima é a do catálogo
+// mais atual; as outras são listadas com o motor/versão e a fonte, para a pessoa conferir no manual). Sem a questão, devolve "".
+export function avisoOleo(resumo) {
+  const top = resumo[0]; if (!top) return "";
+  const t = top.linha, ct = cilindradas(t);
+  const outras = resumo.slice(1).filter(g => { const l = g.linha; return (!ct || cilindradas(l) === ct) && cruzam(l, t) && !mesmaViscosidade(l, t); });   // turbo x aspirado entra de propósito: é a dúvida mais comum (Onix 1.0)
+  if (!outras.length) return "";
+  const desc = g => g.viscosidade + " (" + [g.linha.motor, periodoTexto(g.linha), g.linha.fonte].filter(Boolean).join(" · ") + ")";
+  const maisNova = outras.every(g => idadeFonte(g.linha.fonte) <= idadeFonte(t.fonte));
+  return "Atenção: o catálogo traz viscosidades diferentes para este modelo. A resposta de cima, " + top.viscosidade + ", é a que melhor casa com o ano" + (maisNova ? " e vem do catálogo mais atual" : "") + " ("
+    + [t.motor, periodoTexto(t), t.fonte].filter(Boolean).join(" · ") + "). Também aparece " + outras.map(desc).join(" e ") + ". Confira a versão do motor no manual ou na etiqueta do carro.";
 }
 
 // ---------- Busca pela placa: do veículo (cadastro ou consulta da placa) para a pesquisa, por PALAVRAS-CHAVE ----------

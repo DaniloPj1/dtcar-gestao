@@ -43,6 +43,11 @@ AVISOS_OLEO = [
     (lambda q: q["fonte"].startswith("Petronas") and q["modelo"].upper() == "ONIX" and q["litros"] == "4,5",
      "Provável erro da tabela (4,5 L): as outras fontes indicam 3,5 L."),
 ]
+# Correções de período conferidas (16/11/2026): o Onix/Onix Plus 1.0 de 3 cilindros (aspirado e turbo) só existe a partir do modelo 2020;
+# a tabela Texaco 2022 põe o aspirado "2015 a 2021", o que fazia o Onix 2015 (4 cilindros, 5W30) receber 0W20 no topo.
+CORRECOES_OLEO = [
+    (lambda q: q["fonte"].startswith("Texaco") and q["montadora"] == "CHEVROLET" and q["modelo"].upper() == "ONIX" and q["motor"].startswith("1.0 L3") and q["ano_de"] == "2015", {"ano_de": "2020"}),
+]
 EXTRAS_OLEO = [
     dict(fonte="Conferido no manual do proprietário", montadora="TOYOTA", modelo="HILUX / SW4", motor="2.8 diesel 1GD-FTV 177 cv",
          ano_de="2016", ano_ate="2021", litros="7,9", viscosidade="5W30 ou 10W30", norma="",
@@ -54,6 +59,8 @@ EXTRAS_OLEO = [
 mont, fontes, oleo = [], [], []
 idx = lambda lista, v: lista.index(v) if v in lista else (lista.append(v) or len(lista) - 1)
 for q in ler("oleo_aplicacoes.csv") + EXTRAS_OLEO:
+    for f, muda in CORRECOES_OLEO:
+        if f(q): q = {**q, **muda}
     q = {k: limpa(v) for k, v in q.items()}
     if not q["litros"] and not q["viscosidade"]: continue
     a4 = lambda v: int(v) if re.fullmatch(r"(19|20)\d\d", v or "") else 0

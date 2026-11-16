@@ -7,7 +7,7 @@ import { api } from "../api.js";
 import { useApp, Modal } from "../ui.js";
 import { fmtData } from "../util.js";
 import { pode } from "../regras.js";
-import { carregarCatalogo, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO } from "../catalogo.js";
+import { carregarCatalogo, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, avisoOleo, periodoTexto, TIPOS_FILTRO } from "../catalogo.js";
 import { LinhaFiltro, ConversaoModal } from "./oleofiltros.js";
 
 const lista = t => String(t || "").split(/\s*[\/,;]\s*/).map(x => x.trim()).filter(Boolean);
@@ -50,7 +50,8 @@ function FormFicha({ v, cat, onFechar }) {
       <b>${[a.versao, a.motor].filter(Boolean).join(" · ") || a.modelo}</b> <small>${[a.modelo, periodoTexto(a)].filter(Boolean).join(" · ")}</small>
       <small class="fo-cods">${TIPOS_FILTRO.map(([k, t]) => t + " " + (a[k].join("/") || "—")).join(" · ")}</small></${Op}>`)}</div>` : null}
     ${oleos.length ? html`<h4 class="sub-titulo">Óleo do motor</h4><div class="fo-ops" id="fo-oleos">${oleos.map((o, i) => html`<${Op} key=${i} nome="fo-oleo" i=${i} sel=${io === i} onEscolha=${escolheOleo}>
-      <b>${o.litros} L ${o.viscosidade || ""}</b> <small>${[o.linha.motor, periodoTexto(o.linha)].filter(Boolean).join(" · ")}</small></${Op}>`)}</div>` : null}
+      <b>${o.litros} L ${o.viscosidade || ""}</b> <small>${[o.linha.motor, periodoTexto(o.linha)].filter(Boolean).join(" · ")}</small></${Op}>`)}</div>
+      ${avisoOleo(oleos) ? html`<div class="of-atencao" id="fo-atencao" role="status">${avisoOleo(oleos)}</div>` : null}` : null}
     ${pv && !apps.length && !oleos.length ? html`<p class="sub">Este carro não está no catálogo. Preencha à mão abaixo.</p>` : null}
     <h4 class="sub-titulo">Ficha (dá para ajustar)</h4>
     <div class="grade fo-campos">

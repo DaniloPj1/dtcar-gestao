@@ -1479,6 +1479,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .of-selo{font-size:12.5px;font-weight:600;border-radius:6px;padding:2px 8px}
 .of-selo-div{background:var(--warn-soft);color:var(--warn)}
 .of-selo-aviso{background:var(--brand-soft);color:var(--brand-strong)}
+.of-atencao{margin:8px 0 2px;padding:8px 12px;border-left:4px solid var(--warn);background:var(--warn-soft);color:var(--warn);border-radius:6px;font-size:13px;font-weight:600;line-height:1.4}
 .of-mais,.of-outros{align-self:flex-start}
 .of-app{border:1px solid var(--line);border-radius:8px;overflow:hidden}
 .of-app header{background:var(--surface-2);padding:8px 12px;border-bottom:1px solid var(--line)}

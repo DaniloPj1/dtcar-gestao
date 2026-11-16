@@ -2,7 +2,7 @@
 // Confere a pesquisa por modelo e ano, o código comparável com o estoque, a prioridade do estoque e a conversão.
 // Uso: node teste/teste_catalogo.mjs
 import dados from "../js/catalogodados.js";
-import { marcarDivergencias, chavesDoVeiculo, pesquisarVeiculo, resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
+import { avisoOleo, podarDivergencias, marcarDivergencias, chavesDoVeiculo, pesquisarVeiculo, resumoOleo, prepararCatalogo, pesquisar, lerBusca, normCodigo, indiceEstoque, filtroParaMostrar, equivalentes, periodoTexto, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 const cat = prepararCatalogo(dados);
@@ -53,7 +53,15 @@ chk("resumo Onix: o 15W40 da Omnicraft (erro de impressão) não entra", !rs.som
 chk("resumo Hilux 2018: a linha conferida não leva o selo de divergente", rs[0] && !resumoOleo(pesquisar(cat, "hilux 2.8", 2018).oleo)[0].divergente);
 
 // --- divergência eliminada (pedido do Danilo em 14/11/2026): a fonte mais antiga e duvidosa sai quando duas tabelas discordam
-chk("divergência: o catálogo não tem mais nenhuma linha de óleo divergente", marcarDivergencias(cat.oleo).every(o => !o.divergente), marcarDivergencias(cat.oleo).filter(o => o.divergente).length);
+chk("divergência: o catálogo não tem mais nenhuma linha de óleo divergente nos LITROS", marcarDivergencias(cat.oleo).every(o => !/ L$/.test(o.divergente || "")), marcarDivergencias(cat.oleo).filter(o => / L$/.test(o.divergente || "")).length);
+// viscosidade (16/11/2026): entre fontes com o mesmo período fica só a mais nova; período diferente é outra versão e as duas ficam, com o aviso
+chk("divergência de viscosidade: a poda é completa (rodar de novo não tira mais nada)", podarDivergencias(cat.oleo).length === cat.oleo.length, [podarDivergencias(cat.oleo).length, cat.oleo.length]);
+chk("poda: Audi A5 3.2 sem período ficou só com a fonte mais nova (5W40)", cat.oleo.filter(o => o.montadora === "AUDI" && /^A5$/i.test(o.modelo) && /3\.2/.test(o.motor)).every(o => /5W40/.test(o.viscosidade)));
+const rOnix17 = resumoOleo(pesquisar(cat, "onix 1.0", 2017).oleo, 2017), rOnix21 = resumoOleo(pesquisar(cat, "onix 1.0", 2021).oleo, 2021);
+chk("Onix 1.0 2017: 5W30 (5 marchas, período 2017 a 2019) em cima e o aviso de atenção cita o 0W20 do 6 marchas", /5W30/.test(rOnix17[0].viscosidade) && /0W20/.test(avisoOleo(rOnix17)) && /Atenção/.test(avisoOleo(rOnix17)), [rOnix17[0].viscosidade, avisoOleo(rOnix17)]);
+chk("Onix 1.0 2021: o aviso cita o 5W30 do turbo e o 0W20 do aspirado", /5W30/.test(avisoOleo(rOnix21)) && /0W20/.test(avisoOleo(rOnix21)) && /TB|turbo/i.test(avisoOleo(rOnix21)), avisoOleo(rOnix21));
+chk("Onix 1.0 2015: 5W30 (4 cilindros) em cima — o 3 cilindros da Texaco só vale de 2020 em diante", /5W30/.test(resumoOleo(pesquisar(cat, "onix 1.0", 2015).oleo, 2015)[0].viscosidade) && cat.oleo.filter(o => o.modelo === "ONIX" && /^1\.0 L3/.test(o.motor)).every(o => o.de >= 2020));
+chk("Hilux 2.8 2018: sem aviso (uma viscosidade só)", avisoOleo(resumoOleo(pesquisar(cat, "hilux 2.8", 2018).oleo, 2018)) === "");
 chk("divergência: Honda City 1.5 não traz mais os 4,2 L da Petronas 2014", !pesquisar(cat, "honda city 1.5", 2014).oleo.some(o => /Petronas/.test(o.fonte)) && pesquisar(cat, "honda city 1.5", 2014).oleo.length > 0);
 chk("divergência: o que ficou foi a fonte mais nova (Omnicraft 2019 / Texaco 2022)", pesquisar(cat, "honda city 1.5", 2014).oleo.every(o => /Omnicraft|Texaco|Ipiranga|Maxon/.test(o.fonte)));
 chk("divergência: modelo que só a fonte antiga tem continua aparecendo", cat.oleo.some(o => /Petronas/.test(o.fonte)));

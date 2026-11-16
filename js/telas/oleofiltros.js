@@ -7,7 +7,7 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { useApp, Modal, Vazio } from "../ui.js";
 import { lsGet, lsSet, qtdFmt, normPlaca, placaValida, exPlaca, reais } from "../util.js";
 import { consultarPlaca, paraResumo } from "../placa.js";
-import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS, LIMITE_BUSCA } from "../catalogo.js";
+import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, avisoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS, LIMITE_BUSCA } from "../catalogo.js";
 
 const cods = l => l && l.length ? l.join(" / ") : "—";
 const OLEO_NO_RESUMO = 3;
@@ -76,6 +76,7 @@ export function OleoFiltros() {
   const pv = useMemo(() => cat && ePlaca && veiculo ? pesquisarVeiculo(cat, veiculo, ano) : null, [cat, ePlaca, veiculo, ano]);
   const r = useMemo(() => !cat ? null : ePlaca ? (pv && pv.r) : pesquisar(cat, q, ano), [cat, q, ano, ePlaca, pv]);
   const oleos = useMemo(() => r ? resumoOleo(r.oleo, r.ano) : [], [r]);
+  const atencaoOleo = useMemo(() => avisoOleo(oleos), [oleos]);
   // A prioridade é o estoque: aplicação de outro catálogo (MANN, Wega, Bosch, Vox) que tem filtro no estoque aparece sem precisar abrir
   // "outros catálogos" — só quando esse filtro do estoque ainda não apareceu na aplicação de cima.
   const outrosComEstoque = useMemo(() => {
@@ -128,6 +129,7 @@ export function OleoFiltros() {
           ${g.linha.aviso ? html`<span class="of-selo of-selo-aviso">${g.linha.aviso}</span>` : null}
         </div>`)}
         ${!oleos.length ? html`<p class="sub">As tabelas deste modelo têm erro conhecido. Veja os detalhes e confira no manual.</p>` : null}
+        ${atencaoOleo ? html`<div class="of-atencao" id="of-atencao" role="status">${atencaoOleo}</div>` : null}
       </div>` : html`<div class="of-oleos">${r.oleo.map((o, i) => html`<div class=${"of-oleo of-oleo-det" + (o.divergente ? " of-div" : "")} key=${i}>
         <b class="of-litros">${o.litros ? o.litros + " L" : "—"}</b><b class="of-visc">${o.viscosidade || "—"}</b>
         <span class="of-oleo-carro">${o.montadora} ${o.modelo} ${o.motor}${periodoTexto(o) ? " · " + periodoTexto(o) : ""}</span>

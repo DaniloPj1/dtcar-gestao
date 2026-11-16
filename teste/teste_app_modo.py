@@ -9,10 +9,11 @@ srv = subprocess.Popen([sys.executable, "-m", "http.server", "8769", "-d", RAIZ]
 time.sleep(1); ok = []; falhas = []; erros = []
 def chk(n, c, extra=''): (ok if c else falhas).append(n if c or not extra else n + ' :: ' + str(extra))
 BASE = "http://localhost:8769/"
-def abrir(b, papel, url, larg=390, alt=800):
+def abrir(b, papel, url, larg=390, alt=800, apk=True):
     ctx = b.new_context(viewport={"width": larg, "height": alt}, is_mobile=larg < 700, has_touch=larg < 700)
     pg = ctx.new_page(); pg.on("pageerror", lambda e: erros.append("PAGEERR " + str(e))); pg.on("dialog", lambda d: d.accept())
     pg.add_init_script("window.__PAPEL = %s;" % ("'" + papel + "'" if papel else "null"))
+    if apk: pg.add_init_script("window.Capacitor = window.Capacitor || {};")  # dentro do APK existe window.Capacitor
     pg.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
     pg.goto(url); pg.wait_for_timeout(2000)
     return ctx, pg
@@ -64,6 +65,17 @@ try:
     ctx, pg = abrir(b, "consultor", BASE + "?app=1#/orcamento/novo"); chk("consultor abre novo orçamento no app", pg.locator("input, textarea").count() > 2); ctx.close()
     ctx, pg = abrir(b, "consultor", BASE + "?app=1#/agenda"); chk("consultor abre a agenda no app", pg.is_visible("text=Agenda") or pg.locator(".card").count() > 0); ctx.close()
     ctx, pg = abrir(b, "consultor", BASE + "?app=1#/entrada"); chk("consultor abre Nova O.S. no app", pg.locator("input").count() > 2); ctx.close()
+    # link com ?app=1 aberto num navegador comum (sem o APK): não entra no modo app
+    ctx, pg = abrir(b, "consultor", BASE + "?app=1#/os/o3", apk=False)
+    chk("?app=1 fora do APK é ignorado", not pg.evaluate("document.body.classList.contains('modo-app')") and ("Receber e fechar" in pg.inner_text("body") or "Entregar e fechar" in pg.inner_text("body"))); ctx.close()
+    # O.S. em execução: consultor no app não troca o técnico nem põe foto; admin sim
+    ctx, pg = abrir(b, "consultor", BASE + "?app=1#/os/o2")
+    chk("consultor no app: técnico da O.S. em execução travado", pg.locator("#mec").is_disabled())
+    chk("consultor no app: sem + Foto na O.S. em execução", pg.locator("label[for=foto-exec]").count() == 0); ctx.close()
+    ctx, pg = abrir(b, None, BASE + "?app=1#/os/o2")
+    chk("admin no app: técnico liberado na O.S. em execução", not pg.locator("#mec").is_disabled()); ctx.close()
+    ctx, pg = abrir(b, "consultor", BASE + "#/os/o2", apk=False)
+    chk("consultor fora do app: técnico liberado como antes", not pg.locator("#mec").is_disabled()); ctx.close()
     # 4) fora do app (PC): tudo como antes
     ctx, pg = abrir(b, None, BASE + "#/painel", 1366, 768)
     chk("PC: sem a marca modo-app", not pg.evaluate("document.body.classList.contains('modo-app')"))

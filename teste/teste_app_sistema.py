@@ -126,6 +126,7 @@ try:
         # sair com a digital: só tranca
         pg.click('text=SAIR DO APP'); pg.wait_for_timeout(1500)
         t('verify' in pg.evaluate('window.__chamadas'), 'sair com a digital tranca: ao abrir de novo pede a digital')
+        t(any(p[1] == '/auth/v1/token' and 'refresh_token' in p[2] for p in f.pedidos[-6:]), 'depois de trancar, a sessão volta pelo cofre (não ficou no aparelho)')
         t(pg.evaluate("localStorage.getItem('dtcar-app-digital')") == '1' and pg.evaluate('window.__cofre') is not None, 'sair com a digital mantém o cofre')
         # digital cancelada: mostra o botão e avisa
         pg.evaluate("window.__ok = false; sessionStorage.removeItem('dtcar-app-aberto')"); pg.reload(); pg.wait_for_timeout(1200)

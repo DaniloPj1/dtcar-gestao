@@ -169,10 +169,19 @@
     });
   }
 
-  // sair: com a digital ligada só tranca (a próxima abertura pede a digital); sem ela, encerra a sessão (a do sistema também, é a mesma)
+  // a sessão que o Supabase guarda no aparelho (chave sb-...-auth-token): apagar sem encerrar no servidor
+  function apagarSessaoLocal() {
+    try { Object.keys(window.localStorage).filter(function (k) { return /^sb-.*-auth-token$/.test(k); }).forEach(function (k) { window.localStorage.removeItem(k); }); } catch (e) { /* nada */ }
+  }
+  // sair: com a digital ligada tranca — a chave de renovação vai para o cofre e some do aparelho (sem encerrar no servidor,
+  // senão a do cofre deixaria de valer); a próxima abertura pede a digital. Sem digital, encerra a sessão (a do sistema também, é a mesma)
   function sair() {
     try { window.sessionStorage.removeItem(CH_ABERTO); window.sessionStorage.removeItem(CH_MODO); } catch (e) { /* nada */ }
-    if (digitalLigada()) { location.hash = ''; location.reload(); return; }
+    if (digitalLigada()) {
+      sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; return se ? guardarToken(se.refresh_token) : null; })
+        .catch(function () { /* nada */ }).then(function () { apagarSessaoLocal(); location.hash = ''; location.reload(); });
+      return;
+    }
     sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
     E.usuario = null; E.tela = 'login'; E.erro = ''; location.hash = ''; desenhar();
   }

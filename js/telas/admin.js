@@ -57,18 +57,85 @@ function AcessoApp({ p, cfg, salvar }) {
   </div>`;
 }
 
+/** Senha sugerida: 10 caracteres com letras e números, sem os que se confundem (0/O, 1/l/I) */
+export function gerarSenha() {
+  const L = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz", N = "23456789", T = L + N, a = new Uint32Array(10); crypto.getRandomValues(a);
+  const s = Array.from(a, (x, i) => (i === 3 || i === 7 ? N : i === 0 ? L : T)[x % (i === 3 || i === 7 ? N : i === 0 ? L : T).length]);
+  return s.join("");
+}
+const senhaOk = s => s.length >= 8 && /[A-Za-z]/.test(s) && /\d/.test(s);
+/** Campo de senha com "Mostrar" e "Gerar" (a senha nunca fica guardada: só vai para o servidor ao salvar) */
+function CampoSenha({ id, valor, onMuda }) {
+  const [ver, setVer] = useState(true);
+  return html`<${Campo} id=${id} rotulo="Senha" obrig dica="8 ou mais caracteres, com letras e números. Anote para passar à pessoa: ela pode trocar depois.">
+    <div class="linha-add"><input id=${id} class="inp" type=${ver ? "text" : "password"} autocomplete="new-password" value=${valor} onInput=${e => onMuda(e.target.value)} />
+      <button type="button" class="btn" onClick=${() => setVer(!ver)}>${ver ? "Ocultar" : "Mostrar"}</button><button type="button" class="btn" id=${id + "-gerar"} onClick=${() => { onMuda(gerarSenha()); setVer(true); }}>Gerar</button></div></${Campo}>`;
+}
+/** Criar o login e a senha do colaborador pelo sistema (pedido do Danilo, 16/11/2026) — função "equipe" */
+function NovoAcessoModal({ onFechar, onFeito }) {
+  const { avisar } = useApp();
+  const [f, setF] = useState({ nome: "", email: "", senha: "", papel: "consultor" }), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const set = p => setF(o => ({ ...o, ...p }));
+  const salvar = async () => {
+    const nome = f.nome.trim(), email = f.email.trim().toLowerCase();
+    if (nome.length < 2) return setErro("Informe o nome do colaborador.");
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setErro("Informe um e-mail válido: é o login da pessoa.");
+    if (!senhaOk(f.senha)) return setErro("A senha precisa ter 8 ou mais caracteres, com letras e números.");
+    setErro(""); setSalvando(true);
+    try { const r = await api.equipe.criar({ nome, email, senha: f.senha, papel: f.papel }); onFeito(r, { nome, email, senha: f.senha }); }
+    catch (e) { setErro(e.message); } finally { setSalvando(false); }
+  };
+  return html`<${Modal} titulo="Criar acesso para um colaborador" onFechar=${onFechar}>
+    <p class="sub">A pessoa entra no sistema e no app do celular com este e-mail e esta senha. Não precisa confirmar e-mail.</p>
+    ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
+    <${Campo} id="na-nome" rotulo="Nome" obrig><${Texto} id="na-nome" valor=${f.nome} onMuda=${v => set({ nome: v })} /></${Campo}>
+    <${Campo} id="na-email" rotulo="E-mail (login)" obrig><input id="na-email" class="inp" type="email" inputmode="email" autocomplete="off" autocapitalize="none" value=${f.email} onInput=${e => set({ email: e.target.value })} /></${Campo}>
+    <${CampoSenha} id="na-senha" valor=${f.senha} onMuda=${v => set({ senha: v })} />
+    <${Campo} id="na-papel" rotulo="Papel" obrig><select id="na-papel" class="inp" value=${f.papel} onChange=${e => set({ papel: e.target.value })}>
+      ${Object.entries(PAPEIS).filter(([k]) => k !== "pendente").map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select></${Campo}>
+    <div class="acoes"><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><span class="espaco"></span><button type="button" class="btn btn-pri" id="na-salvar" disabled=${salvando} onClick=${salvar}>${salvando ? "Criando…" : "Criar acesso"}</button></div>
+  </${Modal}>`;
+}
+/** Trocar a senha de um colaborador que esqueceu (só administrador; a própria senha é pela tela de entrar) */
+function TrocarSenhaModal({ p, onFechar }) {
+  const { avisar } = useApp();
+  const [senha, setSenha] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const salvar = async () => {
+    if (!senhaOk(senha)) return setErro("A senha precisa ter 8 ou mais caracteres, com letras e números.");
+    setErro(""); setSalvando(true);
+    try { await api.equipe.senha({ id: p.id, senha }); avisar("Senha de " + p.nome + " trocada. Passe a nova senha para a pessoa."); onFechar(); }
+    catch (e) { setErro(e.message); } finally { setSalvando(false); }
+  };
+  return html`<${Modal} titulo=${"Trocar a senha de " + p.nome} onFechar=${onFechar}>
+    <p class="sub">${p.email}. A senha antiga deixa de valer na hora.</p>
+    ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
+    <${CampoSenha} id="ts-senha" valor=${senha} onMuda=${setSenha} />
+    <div class="acoes"><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><span class="espaco"></span><button type="button" class="btn btn-pri" id="ts-salvar" disabled=${salvando} onClick=${salvar}>${salvando ? "Trocando…" : "Trocar senha"}</button></div>
+  </${Modal}>`;
+}
+
 export function Equipe() {
   const { dados, perfil, cfg, avisar, recarregar } = useApp();
+  const [novo, setNovo] = useState(false), [senhaDe, setSenhaDe] = useState(null), [criado, setCriado] = useState(null);
   const salvarAcesso = async c => { try { await api.salvarConfig(c); await recarregar(["config"]); avisar("Acesso ao app atualizado. Vale na próxima vez que a pessoa abrir o app."); } catch (e) { avisar(e.message, true); } };
   const pendentes = dados.perfis.filter(p => p.papel === "pendente");
   const mudar = async (p, patch) => { try { await api.salvarPerfil(p.id, patch); avisar("Acesso atualizado."); recarregar(["perfis"]); } catch (e) { avisar(e.message, true); } };
   const linha = p => html`<div class="linha" key=${p.id}><span class="meio"><strong>${p.nome}${p.id === perfil.id ? " (você)" : ""}</strong><span>${p.email}${p.ativo === false ? " · desativado" : ""}</span></span>
     <select class="inp inp-curto" aria-label=${"Papel de " + p.nome} value=${p.papel} disabled=${p.id === perfil.id} onChange=${e => mudar(p, { papel: e.target.value })}>
       ${Object.entries(PAPEIS).map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
-    ${p.id !== perfil.id ? html`<button type="button" class="btn btn-sm" onClick=${() => mudar(p, { ativo: p.ativo === false })}>${p.ativo === false ? "Reativar" : "Desativar"}</button>` : null}
+    ${p.id !== perfil.id ? html`<button type="button" class="btn btn-sm" onClick=${() => setSenhaDe(p)}>Trocar senha</button><button type="button" class="btn btn-sm" onClick=${() => mudar(p, { ativo: p.ativo === false })}>${p.ativo === false ? "Reativar" : "Desativar"}</button>` : null}
     ${p.papel !== "pendente" && p.ativo !== false ? html`<${AcessoApp} p=${p} cfg=${cfg} salvar=${salvarAcesso} />` : null}</div>`;
   return html`<div class="pagina">
-    <div class="info">Para incluir alguém: peça para a pessoa abrir este site, tocar em “Criar acesso” e confirmar o e-mail. Ela aparece aqui como “Aguardando liberação”; escolha o papel para liberar.</div>
+    <section class="card"><h3>Novo colaborador</h3>
+      <p class="sub">Crie o login e a senha aqui mesmo e passe para a pessoa. Ela também pode criar o próprio acesso pelo site (“Criar acesso”): aí aparece como “Aguardando liberação” e você escolhe o papel.</p>
+      <div class="acoes"><button type="button" class="btn btn-pri" id="eq-novo" onClick=${() => setNovo(true)}>+ Criar acesso</button></div></section>
+    ${novo ? html`<${NovoAcessoModal} onFechar=${() => setNovo(false)} onFeito=${async (r, d) => { setNovo(false); setCriado(d); await recarregar(["perfis"]); }} />` : null}
+    ${senhaDe ? html`<${TrocarSenhaModal} p=${senhaDe} onFechar=${() => setSenhaDe(null)} />` : null}
+    ${criado ? html`<${Modal} titulo="Acesso criado" onFechar=${() => setCriado(null)}>
+      <p>Passe estes dados para <b>${criado.nome}</b>. A pessoa já pode entrar no sistema e no app do celular.</p>
+      <div class="lista"><div class="linha"><span class="meio"><strong>E-mail (login)</strong><span id="cr-email">${criado.email}</span></span></div><div class="linha"><span class="meio"><strong>Senha</strong><span id="cr-senha">${criado.senha}</span></span></div></div>
+      <p class="dica">Esta senha não fica guardada em lugar nenhum: se perder, use “Trocar senha” na pessoa. No bloco “App do celular” você escolhe o que ela vê no app.</p>
+      <div class="acoes"><span class="espaco"></span><button type="button" class="btn btn-pri" onClick=${() => setCriado(null)}>Entendi</button></div></${Modal}>` : null}
     ${pendentes.length ? html`<section class="card alerta"><h3>Aguardando liberação (${pendentes.length})</h3><div class="lista">${pendentes.map(linha)}</div></section>` : null}
     <section class="card"><h3>Equipe</h3><div class="lista">${dados.perfis.filter(p => p.papel !== "pendente").map(linha)}</div></section>
     <section class="card"><h3>O que cada papel faz</h3><ul class="res-lista">

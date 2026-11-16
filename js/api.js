@@ -226,6 +226,26 @@ function criarApiSupabase() {
       }
       return data || { ok: false, erro: "Sem resposta da consulta de placa." };
     },
+    /** Equipe (pedido do Danilo, 16/11/2026): o administrador cria o login e a senha do colaborador e troca senha pela função "equipe".
+     *  equipe.criar({ nome, email, senha, papel }) → { ok, id }; equipe.senha({ id, senha }) → { ok }. Lança erro com a mensagem em português. */
+    equipe: {
+      chamar: async body => {
+        let data, error;
+        try { ({ data, error } = await sb.functions.invoke("equipe", { body })); }
+        catch (e) { throw new Error("Sem resposta do servidor. Confira a internet e tente de novo."); }
+        if (error) {
+          const st = error.context && error.context.status; let m = error.message || "";
+          if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) throw new Error("Sem resposta do servidor. Confira a internet e tente de novo.");
+          try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
+          if (st === 404 || /not found/i.test(m)) throw new Error("Criar acesso pelo sistema ainda não foi ligado: falta publicar a função \"equipe\" no Supabase.");
+          throw new Error(m || "Falha ao falar com o servidor.");
+        }
+        if (!data || data.ok !== true) throw new Error((data && data.erro) || "Falha ao falar com o servidor.");
+        return data;
+      },
+      criar: async d => metodos.equipe.chamar({ acao: "criar", ...d }),
+      senha: async d => metodos.equipe.chamar({ acao: "senha", ...d }),
+    },
     /** Nome e nascimento do cliente pelo CPF, pela função "cpf" (API CPF; a chave fica no servidor; só administrador).
      *  Devolve { ok, encontrado, dados, origem } ou { ok: false, erro, desligada?, limite?, semRede? }. Não lança erro. */
     cpf: async body => {

@@ -611,16 +611,24 @@ function App({ usuario, nativo }) {
   const [toast, setToast] = useState(null);
   useEffect(() => { const f = () => { setRota(rotaAtual()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   const avisar = (msg, erro) => { setToast({ msg, erro }); clearTimeout(avisar.t); avisar.t = setTimeout(() => setToast(null), 4500); };
+  const desdeOS = useRef(null);   // última leitura das O.S. (a recarga de cada minuto só traz as alteradas desde então)
   const carregar = async () => {
     try {
       const [clientes, veiculos, produtos, ordens, perfis, c, orcamentos] = await Promise.all([api.clientes.listar(), api.veiculos.listar(), api.produtos.listar(), api.ordens(), api.perfis().catch(() => []), api.config().catch(() => null), api.orcamentos.listar().catch(() => [])]);
-      setDados({ clientes, veiculos, produtos, ordens, perfis, orcamentos, carregado: true, erro: "" }); if (c) { setCfg(cfgCompleta(c)); setCfgOk(true); }
+      setDados({ clientes, veiculos, produtos, ordens, perfis, orcamentos, carregado: true, erro: "" }); desdeOS.current = new Date(Date.now() - 60000).toISOString(); if (c) { setCfg(cfgCompleta(c)); setCfgOk(true); }
     } catch (e) { setDados(d => ({ ...d, carregado: true, erro: "Não deu para carregar os dados do sistema (" + (e.message || "sem internet") + "). As buscas podem ficar incompletas." })); }
   };
   useEffect(() => { carregar(); }, []);
   // orçamentos e O.S. de novo a cada minuto com o app aberto: é assim que o aviso de "aprovado" chega a quem pediu
   const [tick, setTick] = useState(0);
-  const recarregarOrcamentos = async () => { try { const [orcamentos, ordens] = await Promise.all([api.orcamentos.listar(), api.ordens()]); setDados(d => ({ ...d, orcamentos, ordens })); } catch (e) {} setTick(t => t + 1); };
+  // os orçamentos são poucos e vêm inteiros; as O.S. só as alteradas desde a última leitura (api.alterados), para não baixar tudo a cada minuto
+  const recarregarOrcamentos = async () => {
+    try {
+      const agora = new Date().toISOString();
+      const [orcamentos, mudadas] = await Promise.all([api.orcamentos.listar(), desdeOS.current ? api.alterados("ordens", desdeOS.current).catch(() => []) : Promise.resolve([])]);
+      desdeOS.current = agora;
+      setDados(d => { const porId = Object.fromEntries((mudadas || []).map(o => [o.id, o])); const ordens = mudadas && mudadas.length ? d.ordens.map(o => porId[o.id] || o).concat(mudadas.filter(o => !d.ordens.some(x => x.id === o.id))) : d.ordens; return { ...d, orcamentos, ordens }; });
+    } catch (e) {} setTick(t => t + 1); };
   useEffect(() => { const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) recarregarOrcamentos(); }, 60000); const vis = () => { if (!document.hidden) recarregarOrcamentos(); }; document.addEventListener("visibilitychange", vis); return () => { clearInterval(i); document.removeEventListener("visibilitychange", vis); }; }, []);
   const avisos = useMemo(() => avisosDe(dados.orcamentos, usuario), [dados.orcamentos, tick]);
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)

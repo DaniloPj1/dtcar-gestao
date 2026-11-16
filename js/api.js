@@ -247,8 +247,10 @@ function criarApiSupabase() {
       senha: async d => metodos.equipe.chamar({ acao: "senha", ...d }),
     },
     /** Avisos do app para o sistema (pedido do Danilo, 16/11/2026): pedidos de orçamento feitos pelo app (orçamento aberto com a marca
-     *  "Pedido pelo app" em obs_internas; o acréscimo muda atualizado_em) e "itens a orçar" escritos na O.S. pelo app (eventos a_orcar,
-     *  últimos 30 dias). Só leitura; devolve [] sem internet. */
+     *  "Pedido pelo app" em obs_internas) e "itens a orçar" escritos na O.S. pelo app (eventos a_orcar, últimos 30 dias). A chave do aviso
+     *  é o id + quantos acréscimos ("— Nome, data: ...") o pedido tem: salvar o orçamento no sistema muda atualizado_em, mas não gera
+     *  aviso novo (revisão de 16/11/2026). Só leitura; devolve [] sem internet. */
+    acrescimosDoPedido: texto => (String(texto || "").match(/\n— /g) || []).length,
     avisosApp: async () => {
       if (semRede) return [];
       const desde = new Date(Date.now() - 30 * 86400000).toISOString();
@@ -259,7 +261,7 @@ function criarApiSupabase() {
       const ids = [...new Set((evs || []).map(e => e.ordem_id))];
       const ordens = ids.length ? ok(await sb.from("ordens").select("id,numero,veiculo,status").in("id", ids)) : [];
       const porId = Object.fromEntries((ordens || []).map(o => [o.id, o]));
-      return [...(orcs || []).map(o => ({ chave: "orc:" + o.id + ":" + (o.atualizado_em || o.criado_em), tipo: "orcamento", id: o.id, numero: o.numero, veiculo: o.veiculo || {}, cliente: o.cliente || {}, texto: o.reclamacao || "", quem: o.consultor_nome || "", quando: o.atualizado_em || o.criado_em, acrescimo: !!(o.atualizado_em && o.criado_em && o.atualizado_em.slice(0, 16) !== o.criado_em.slice(0, 16)) })),
+      return [...(orcs || []).map(o => ({ chave: "orc:" + o.id + ":" + metodos.acrescimosDoPedido(o.reclamacao), tipo: "orcamento", id: o.id, numero: o.numero, veiculo: o.veiculo || {}, cliente: o.cliente || {}, texto: o.reclamacao || "", quem: o.consultor_nome || "", quando: o.atualizado_em || o.criado_em, acrescimo: metodos.acrescimosDoPedido(o.reclamacao) > 0 })),
         ...(evs || []).filter(e => porId[e.ordem_id]).map(e => ({ chave: "ev:" + e.id, tipo: "os", id: e.ordem_id, numero: porId[e.ordem_id].numero, veiculo: porId[e.ordem_id].veiculo || {}, cliente: {}, texto: e.texto || "", quem: e.usuario_nome || "", quando: e.criado_em, acrescimo: false }))]
         .sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
     },

@@ -81,7 +81,19 @@ function Situacao({ offline, pend, enviarFila }) {
 const LS_AVISOS = "dtcar-avisos-vistos";
 const vistosAvisos = () => { const l = lsGet(LS_AVISOS, []); return Array.isArray(l) ? l : []; };
 const ICON_SINO = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`;
+/** Só um Sino consultando por vez: o do cabeçalho do celular (< 900px) ou o da barra do PC (revisão de 16/11/2026) */
+function usarLargo() {
+  const mq = typeof matchMedia === "function" ? matchMedia("(min-width: 900px)") : null;
+  const [largo, setLargo] = useState(mq ? mq.matches : true);
+  useEffect(() => { if (!mq) return; const f = e => setLargo(e.matches); mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
+  return largo;
+}
 export function Sino({ classe }) {
+  const largo = usarLargo();
+  if (classe === "sino-cel" ? largo : !largo) return null;
+  return html`<${SinoVivo} classe=${classe} />`;
+}
+function SinoVivo({ classe }) {
   const { perfil, ir, avisar } = useApp();
   const [lista, setLista] = useState([]), [aberto, setAberto] = useState(false), [vistos, setVistos] = useState(vistosAvisos), [erro, setErro] = useState(false);
   const ref = useRef(null), ultimo = useRef(null);

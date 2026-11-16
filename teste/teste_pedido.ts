@@ -46,6 +46,11 @@ confere("acrescentar em orçamento aprovado é recusado", /USO:.*aprovado.*O\.S\
 const r2 = await executar({ acao: "acrescentar", id: "22222222-2222-4222-8222-222222222222", texto: "Verificar bateria" }, deps(true, "Ana"));
 confere("acrescentar devolve ok com o número", r2.ok === true && r2.numero === 7);
 confere("acrescentar junta ao pedido com nome e hora", banco[0].reclamacao === "Troca de pastilhas\n— Ana, 16/11/2026 15:30: Verificar bateria" && typeof banco[0].atualizado_em === "string");
+confere("acréscimo em orçamento nascido no sistema ganha a marca (cai no sino)", banco[0].obs_internas === MARCA_APP + " (acréscimo) — Ana, 16/11/2026 15:30");
+const r3 = await executar({ acao: "acrescentar", id: "22222222-2222-4222-8222-222222222222", texto: "E freio de mão" }, deps(true, "Ana"));
+confere("segundo acréscimo não repete a marca", r3.ok === true && banco[0].obs_internas === MARCA_APP + " (acréscimo) — Ana, 16/11/2026 15:30" && banco[0].reclamacao.endsWith("\n— Ana, 16/11/2026 15:30: E freio de mão"));
+const r4 = await executar({ acao: "novo", texto: "Barulho na roda", placa: "QXN1E49" }, deps(true, "Ana"));
+confere("pedido só com a placa grava o cliente como A INFORMAR", r4.ok === true && (inseridos[inseridos.length - 1].cliente as { nome: string }).nome === "A INFORMAR");
 
 console.log(ok.length + " OK, " + falhas.length + " falha(s)"); falhas.forEach((f) => console.log("FALHA: " + f));
 if (falhas.length) Deno.exit(1);

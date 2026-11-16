@@ -41,6 +41,13 @@ try:
         pg.reload(); pg.wait_for_timeout(1500); chk("vistos ficam guardados no aparelho (recarregar não traz de volta)", pg.locator(".barra-topo .sino-n").count() == 0)
         pg.wait_for_selector(".barra-topo .sino-btn"); pg.wait_for_timeout(300); pg.click(".barra-topo .sino-btn")
         pg.wait_for_selector(".sino-lista"); chk("a lista continua mostrando os avisos já vistos (sem destaque)", pg.locator(".sino-item").count() == 2 and pg.locator(".sino-item.novo").count() == 0)
+        pg.keyboard.press("Escape"); pg.mouse.click(600, 400); pg.wait_for_timeout(200)
+        # salvar o orçamento no sistema muda atualizado_em, mas NÃO é aviso novo; um acréscimo pelo app ("— Nome, data: ...") é
+        pg.add_init_script("(function(){const o=(window.__DB||{orcamentos:[]}).orcamentos.find(o => o.id === 'orc-app-1'); if (o) o.atualizado_em = '2026-11-16T19:00:00Z';})()"); pg.reload(); pg.wait_for_selector(".barra-topo .sino-btn"); pg.wait_for_timeout(1200)
+        chk("salvar o orçamento no sistema não vira aviso novo", pg.locator(".barra-topo .sino-n").count() == 0)
+        pg.add_init_script("(function(){const o=(window.__DB||{orcamentos:[]}).orcamentos.find(o => o.id === 'orc-app-1'); if (o) o.reclamacao += '\\n— Carlos Mecânico, 16/11/2026 16:00: Verificar bateria';})()"); pg.reload(); pg.wait_for_selector(".barra-topo .sino-btn"); pg.wait_for_timeout(1200)
+        chk("acréscimo pelo app vira aviso 'Mais itens no pedido'", pg.locator(".barra-topo .sino-n").inner_text() == "1")
+        pg.click(".barra-topo .sino-btn"); pg.wait_for_selector(".sino-lista"); chk("texto do aviso de acréscimo", pg.locator(".sino-item.novo").inner_text().startswith("Mais itens no pedido ORC-00041"), pg.locator(".sino-item.novo").inner_text())
         ctx.close()
         # celular: sino no cabeçalho azul, lista cabe na tela
         ctx, pg = abrir(b, 390)

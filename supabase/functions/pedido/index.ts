@@ -55,9 +55,10 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
     const cliente_id = uuid(corpo.cliente_id) ? String(corpo.cliente_id) : null, veiculo_id = uuid(corpo.veiculo_id) ? String(corpo.veiculo_id) : null;
     const nomeCli = campo(c.nome, 120), telCli = String(c.telefone || "").replace(/\D/g, "").slice(0, 13);
     if (!placa && !nomeCli) throw new ErroUso("Informe a placa ou o nome do cliente.");
+    // sem nome (placa sem dono no cadastro): o sistema exige um nome ao salvar o orçamento, então vai "A INFORMAR" para o Danilo trocar
     const r = await deps.inserir({
       situacao: "elaboracao", cliente_id, veiculo_id,
-      cliente: { nome: nomeCli, telefone: telCli },
+      cliente: { nome: nomeCli || "A INFORMAR", telefone: telCli },
       veiculo: { placa, marca: campo(v.marca, 60), modelo: campo(v.modelo, 80), ano: campo(v.ano, 9) },
       reclamacao: texto, obs: "", obs_internas: MARCA_APP + " — " + assinatura,
       tabela_preco: "vista", condicoes_pagamento: "", desconto: 0, total: 0, custo: 0, motivo: "",
@@ -72,7 +73,9 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
     if (o.situacao !== "elaboracao" && o.situacao !== "enviado") throw new ErroUso("Este orçamento já foi " + (o.situacao === "aprovado" ? "aprovado e virou O.S.: acrescente pela O.S." : "respondido e não aceita mais itens."));
     const reclamacao = (o.reclamacao || "").trim() + "\n— " + assinatura + ": " + texto;
     if (reclamacao.length > 6000) throw new ErroUso("O pedido deste orçamento já está muito comprido.");
-    await deps.gravar(o.id, { reclamacao, atualizado_em: new Date(deps.agora || Date.now()).toISOString() });
+    // orçamento que nasceu no sistema (sem a marca): ao receber acréscimo pelo app ganha a marca, para aparecer no sino do sistema
+    const marca = /^Pedido pelo app/.test(o.obs_internas || "") ? {} : { obs_internas: (MARCA_APP + " (acréscimo) — " + assinatura + "\n" + (o.obs_internas || "")).trim() };
+    await deps.gravar(o.id, { reclamacao, ...marca, atualizado_em: new Date(deps.agora || Date.now()).toISOString() });
     return { ok: true, id: o.id, numero: o.numero };
   }
   throw new ErroUso("Ação desconhecida: " + acao);
@@ -84,6 +87,7 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
   try {
     const quem = String((ctx.userClaims && ctx.userClaims.id) || "");
     const m = await ctx.supabase.rpc("e_membro");
+    if (m.error) throw new Error("Não deu para conferir o seu login (" + m.error.message + "). Tente de novo.");
     const p = quem ? await ctx.supabase.from("perfis").select("nome,ativo").eq("id", quem).maybeSingle() : { data: null };
     const admin = ctx.supabaseAdmin;
     return json(await executar(corpo, {
@@ -94,8 +98,9 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     }));
   } catch (e) {
     if (e instanceof ErroUso) return json({ ok: false, erro: e.message }, 400);
-    console.error("pedido", String((e as Error).message || e).slice(0, 200));
-    return json({ ok: false, erro: (e as Error).message || "Falha na função pedido." }, 200);
+    console.error("pedido", String((e as Error).message || e).slice(0, 200));   // o detalhe do banco fica só no log
+    const msg = String((e as Error).message || "");
+    return json({ ok: false, erro: /^(Não deu para|Acesso)/.test(msg) ? msg.replace(/:\s[\s\S]*$/, ".") : "Falha ao gravar o pedido. Tente de novo; se continuar, avise o administrador." }, 200);
   }
 });
 

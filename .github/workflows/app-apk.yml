@@ -1,0 +1,70 @@
+name: App DTCar (gerar APK)
+
+# Gera o APK do app do sistema (pasta app/) com o Android do próprio GitHub.
+# Como usar (só o Danilo): GitHub > Actions > "App DTCar (gerar APK)" > Run workflow.
+# O APK aparece no fim da execução, em "Artifacts" (DTCar-app-apk). Vale por 30 dias.
+# É um APK de teste (assinatura de depuração): instala no celular sem Play Store e se atualiza por cima do anterior.
+# Não usa nenhum segredo. Não cria release nem etiqueta.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Monta a pasta www (telas, fontes, logo)
+        run: python3 app/montar_www.py
+
+      - name: Instala o Capacitor (versões travadas no package-lock)
+        working-directory: app
+        run: npm ci
+
+      - name: Cria o projeto Android
+        working-directory: app
+        run: npx cap add android
+
+      - name: Ajusta ícone, versão e segurança
+        run: |
+          python3 -m pip install pillow
+          python3 app/preparar_android.py ${{ github.run_number }}
+
+      - name: Copia as telas para o Android
+        working-directory: app
+        run: npx cap sync android
+
+      - name: Gera o APK
+        working-directory: app/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Confere o APK
+        run: |
+          APK=app/android/app/build/outputs/apk/debug/app-debug.apk
+          ls -l "$APK"
+          unzip -l "$APK" | grep -E "assets/public/(index.html|app.js)"
+          unzip -p "$APK" assets/public/index.html | grep -q "app.js"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DTCar-app-apk
+          path: app/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

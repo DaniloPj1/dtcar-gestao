@@ -624,6 +624,15 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
 - Programa e telas são independentes: telas novas chegam pelo site; mudança em `desktop/` exige nova versão do programa
   (`desktop/package.json` + workflow). Telas novas precisam funcionar no programa antigo (testar `window.dtcarDesktop.banco` antes de usar).
 
+## App do sistema para celular / APK (`app/`)
+
+Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**. Versão 1: entrar (e-mail e senha do Supabase, depois a digital) e tela inicial com 7 botões; cada botão abre "Em preparação" até a tela ser feita.
+- `app/index.html`, `app.js`, `app.css`: tudo desenhado pelo `app.js` (Preact não é usado aqui). Papéis aceitos: `admin` e `consultor` ativos em `perfis`; qualquer outro é barrado e a sessão local é encerrada. Não grava nada no banco (para alterar O.S. só no login do administrador, por `sincronizar_alteracao_os`).
+- Digital: plugin `@capgo/capacitor-native-biometric` (Capacitor 6). Só a chave de renovação do Supabase vai para o cofre do aparelho (Keystore), nunca a senha; com a digital ligada a sessão fica só na memória.
+- O APK é gerado pelo workflow `.github/workflows/app-apk.yml` (Actions > "App DTCar (gerar APK)" > Run workflow). Usa `app/montar_www.py` (monta `app/www` com `js/config.js`, `vendor/supabase.js` e ícones) e `app/preparar_android.py` (ícone, versão, sem backup). É APK de teste (assinatura de depuração). `app/www`, `app/android` e `node_modules` não vão para o git.
+- Sem SQL novo e fora do `sw.js` (não é o site). Teste: `python3 teste/teste_app_sistema.py`.
+- Para subir a versão do app: `version` em `app/package.json` e `VERSAO` em `app/app.js`.
+
 ## Como trabalhar
 1. Crie uma branch (`codex/assunto` ou `claude/assunto`) e abra um Pull Request para a `main` explicando em português o que muda para a oficina.
    Não faça push direto na `main` sem o Danilo pedir.

@@ -1,0 +1,8 @@
+{
+  "appId": "br.com.dtcarcentroautomotivo.gestao",
+  "appName": "DTCar",
+  "webDir": "www",
+  "backgroundColor": "#2f6fb5",
+  "server": { "androidScheme": "https" },
+  "android": { "allowMixedContent": false }
+}

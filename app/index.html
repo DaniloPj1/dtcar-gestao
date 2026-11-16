@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#2f6fb5">
+<title>DTCar</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="../icons/favicon.png">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<!-- Tudo é desenhado pelo app.js dentro desta caixa. Sem JavaScript, mostra o aviso abaixo. -->
+<div id="raiz" aria-live="polite"><p class="sem-js">Carregando o DTCar…</p></div>
+<div id="aviso" class="aviso" role="status" aria-live="polite" hidden></div>
+<script src="../js/config.js"></script>
+<script src="../vendor/supabase.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

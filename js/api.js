@@ -304,6 +304,43 @@ function criarApiSupabase() {
       chegouPeloOrcamento: async (orcamentoId, ordem) => ok(await sb.from("agendamentos").update({ situacao: "chegou", ordem_id: ordem.id, os_numero: ordem.numero })
         .eq("orcamento_id", orcamentoId).in("situacao", ["agendado", "confirmado"]).select("id")),
     },
+    // Compras (v59): fornecedores conectados, preços por fornecedor, carrinho e pedidos (um por fornecedor). Sem o v59 no banco,
+    // toda chamada avisa para rodar o SQL (a tela mostra o aviso em vez de quebrar). A senha do fornecedor só vai pela
+    // compras_gravar_acesso (fica em segredos e nunca volta).
+    compras: (() => {
+      const v59 = async f => { try { return await f(); } catch (e) { const m = (e && e.message) || ""; if (/compras_/.test(m) && /does not exist|schema cache|Could not find/i.test(m)) throw new Error("Para usar Compras, rode o supabase/v59.sql no Supabase."); throw e; } };
+      const tab = nome => ({
+        listar: () => v59(() => todos(() => sb.from(nome).select("*").order("criado_em").order("id"))),
+        excluir: id => v59(async () => { ok(await sb.from(nome).delete().eq("id", id)); }),
+      });
+      return {
+        conexoes: { ...tab("compras_fornecedores"),
+          salvar: c => v59(async () => { const { id, criado_em, atualizado_em, situacao, detalhe, ...resto } = c;
+            return id ? ok(await sb.from("compras_fornecedores").update(resto).eq("id", id).select().single()) : ok(await sb.from("compras_fornecedores").insert(resto).select().single()); }) },
+        /** [{ id, gravado_em }] das conexões com senha guardada (nunca o valor) */
+        acessos: () => v59(async () => ok(await sb.rpc("compras_acessos")) || []),
+        /** grava (ou, com senha vazia, apaga) a senha/chave do fornecedor em segredos */
+        gravarAcesso: (conexaoId, senha) => v59(async () => ok(await sb.rpc("compras_gravar_acesso", { p_conexao: conexaoId, p_senha: senha || "" }))),
+        precos: { ...tab("compras_precos"),
+          /** o mesmo código no mesmo fornecedor atualiza o preço (o banco grava a data e a origem "manual") */
+          salvar: p => v59(async () => { const { id, criado_em, atualizado_em, consultado_em, criado_por_nome, origem, ...resto } = p;
+            return ok(await sb.from("compras_precos").upsert({ ...resto, codigo_norm: String(resto.codigo || "").toUpperCase().replace(/[^A-Z0-9]/g, "") }, { onConflict: "fornecedor_id,codigo_norm" }).select().single()); }) },
+        carrinho: { ...tab("compras_carrinho"),
+          incluir: i => v59(async () => ok(await sb.from("compras_carrinho").insert(i).select().single())),
+          atualizar: (id, patch) => v59(async () => ok(await sb.from("compras_carrinho").update(patch).eq("id", id).select().single())) },
+        pedidos: {
+          /** pedidos (os mais novos primeiro, até 300) com os itens */
+          listar: () => v59(async () => { const ps = ok(await sb.from("compras_pedidos").select("*").order("numero", { ascending: false }).limit(300));
+            // itens em lotes de 60 pedidos (como itensDasOrdens): a lista de ids vai na URL, que tem limite
+            const its = []; for (let i = 0; i < ps.length; i += 60) its.push(...await todos(() => sb.from("compras_pedido_itens").select("*").in("pedido_id", ps.slice(i, i + 60).map(p => p.id)).order("posicao").order("id")));
+            return ps.map(p => ({ ...p, itens: its.filter(i => i.pedido_id === p.id) })); }),
+          /** carrinho → um pedido por fornecedor (ids = itens escolhidos; vazio = o carrinho inteiro) */
+          gerar: ids => v59(async () => ok(await sb.rpc("compras_gerar_pedidos", { p_itens: ids && ids.length ? ids : null }))),
+          voltar: id => v59(async () => ok(await sb.rpc("compras_pedido_voltar", { p_pedido: id }))),
+          atualizar: (id, patch) => v59(async () => ok(await sb.from("compras_pedidos").update(patch).eq("id", id).select().single())),
+        },
+      };
+    })(),
     preNotas: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("pre_notas").select("*").neq("situacao", "cancelada"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return q.order("data").order("id"); }),
       /** em aberto de um fornecedor (pelo cadastro ou pelo nome sem cadastro), para conferir no pagamento */

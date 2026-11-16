@@ -20,9 +20,9 @@ import { calcularMes, eMecanicoDa, periodo, quintoDiaUtil, nomeMes } from "https
 // v58 (14/11/2026): oleo_filtros — litros/viscosidade do óleo e filtros do carro (catálogo + estoque), as mesmas regras da tela "Óleo e filtros".
 // Os módulos do site vêm do GitHub NUMA VERSÃO TRAVADA (commit). Mudou js/catalogo.js, js/fichaos.js, js/util.js ou catalogo/*.csv (catalogodados.js)?
 // Troque o commit abaixo (e em CATALOGO_URL) pelo da main com a mudança e publique a função "agente" de novo.
-import { prepararCatalogo, pesquisarVeiculo, resumoOleo, indiceEstoque, filtroParaMostrar, periodoTexto, TIPOS_FILTRO } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/1303565f069e436985e8f55386f951b6bf347d8b/js/catalogo.js";
-import { filtrosDaFicha, candidatosOleo, litrosDaFicha } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/1303565f069e436985e8f55386f951b6bf347d8b/js/fichaos.js";
-const CATALOGO_URL = "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/1303565f069e436985e8f55386f951b6bf347d8b/js/catalogodados.js";
+import { prepararCatalogo, pesquisarVeiculo, resumoOleo, avisoOleo, indiceEstoque, filtroParaMostrar, periodoTexto, TIPOS_FILTRO } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/62a6de7a05ce8ea8c726781ba5b45432facfae5d/js/catalogo.js";
+import { filtrosDaFicha, candidatosOleo, litrosDaFicha } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/62a6de7a05ce8ea8c726781ba5b45432facfae5d/js/fichaos.js";
+const CATALOGO_URL = "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/62a6de7a05ce8ea8c726781ba5b45432facfae5d/js/catalogodados.js";
 
 export const SITE = "https://gestao.dtcarcentroautomotivo.com.br";
 
@@ -984,7 +984,8 @@ export function criarServidor(db: Banco): McpServer {
       "Resposta: ficha (a gravada no veículo, com origem catalogo = confira ou oficina = confirmada), oleo (melhor resposta do catálogo para o ano + outras), " +
       "versoes_possiveis (quando o cadastro não tem o motor: as outras versões do carro, para confirmar), filtros (por tipo: códigos do catálogo, o que há no ESTOQUE com saldo — código, descrição, saldo, preço — ou 'sem estoque' com Tecfil/Mahle/MANN) e produtos_para_lancar (óleo e filtros do estoque prontos para lancar_itens_os). " +
       "REGRA DO DANILO: se o filtro está no estoque, fale só dele; fora do estoque, só Tecfil, Mahle e MANN; óleo só litros, viscosidade e norma (a marca do óleo não importa). " +
-      "É dado de catálogo: diga se veio do catálogo (conferir) ou da ficha confirmada. Não grava nada: para lançar na O.S. use lancar_itens_os; para gravar a ficha, só pela tela do veículo.",
+      "É dado de catálogo: diga se veio do catálogo (conferir) ou da ficha confirmada. oleo[0] (melhor) é sempre a resposta do catálogo mais atual e confiável: informe ela primeiro. " +
+      "Se vier oleo_atencao (viscosidades diferentes para o mesmo modelo, ex.: Onix 5W30 x 0W20), repita o aviso ao Danilo e diga qual versão do motor usa cada uma. Não grava nada: para lançar na O.S. use lancar_itens_os; para gravar a ficha, só pela tela do veículo.",
     inputSchema: z.object({
       placa: z.string().optional(), veiculo_id: z.string().uuid().optional(),
       marca: z.string().optional(), modelo: z.string().optional(), ano: z.union([z.number(), z.string()]).optional(),
@@ -1020,6 +1021,8 @@ export function criarServidor(db: Banco): McpServer {
       // óleo do catálogo: a resposta mais próxima do ano e mais confiável primeiro
       const oleos = r ? resumoOleo(r.oleo, r.ano).slice(0, r.ano ? 3 : 4) : [];
       out.oleo = oleos.map((o, i) => ({ litros: o.litros, viscosidade: o.viscosidade, norma: o.linha.norma, motor: o.linha.motor, periodo: periodoTexto(o.linha), fontes: o.fontes, conferido: !!o.linha.conferido, ...(i === 0 ? { melhor: true } : {}) }));
+      // Pedido do Danilo (16/11/2026): viscosidades diferentes para o mesmo modelo (Onix 5W30 x 0W20) → sinal de atenção; a de cima é a do catálogo mais atual
+      const atencao = avisoOleo(oleos); if (atencao) out.oleo_atencao = atencao;
       // filtros: da ficha (se tem) ou da melhor aplicação do catálogo
       const app = r && r.filtros[0];
       const base = ficha ? { filtros: ficha.filtros || {}, marca: ficha.marca || "Tecfil" } : app ? { filtros: Object.fromEntries(TIPOS_FILTRO.map((x: string[]) => [x[0], app[x[0]]])), marca: app.marca } : null;

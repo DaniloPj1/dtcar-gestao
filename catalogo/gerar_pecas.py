@@ -65,7 +65,10 @@ for arq in arquivos:
     m = re.search(r"(?:19|20)\d\d", j.get("edicao", "")); ref = int(m.group(0)) if m else max((int(a.get("de") or 0) for p in j["pecas"] for a in p.get("apl", [])), default=0)
     cats.append([j["marca"], j.get("edicao", ""), j.get("fotos", ""), ref])
     for p in j["pecas"]:
-        if not p.get("apl"): continue
+        # Só entra aplicação com intervalo de anos fechado (de X até Y). "De X em diante", "até X" e sem ano ficam de fora (decisão do Danilo, 16/11/2026):
+        # peça sem nenhuma aplicação certa não entra no acervo.
+        p = dict(p, apl=[a for a in p.get("apl", []) if int(a.get("de") or 0) and int(a.get("ate") or 0)])
+        if not p["apl"]: continue
         n = len(pecas)
         pecas.append([c, p["codigo"], idx(grupos, grupo_de(p["descricao"], p.get("grupo"))), limpo(p["descricao"]).upper(), limpo(p.get("medidas")), p.get("foto") or "",
                       [limpo(x) for x in p.get("oem", []) if limpo(x)], [[limpo(a).upper() if len(limpo(a)) <= 3 else limpo(a), limpo(b)] for a, b in p.get("conv", []) if limpo(b)], 1 if p.get("breve") else 0, limpo(p.get("emb"))])

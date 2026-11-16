@@ -17,6 +17,7 @@ import { guardarChegadaAgenda } from "./entrada.js";
 import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
 import { osQuitada } from "../osrecibo.js";
 import { MAIUSC } from "../maiusculas.js";
+import { perfilNoApp } from "../modoapp.js";
 import { PecasVeiculo } from "./pecasveiculo.js";
 import { codigoParaItem } from "../pecas.js";
 
@@ -239,7 +240,8 @@ function ImprimirModal({ o, verValores, onFechar }) {
 
 /* ---------------- Tela da O.S. ---------------- */
 export function Ordem({ id, params = {} }) {
-  const { cfg, perfil, dados, avisar, confirmar, ir, recarregar, pendentes: filaPend = [] } = useApp();
+  const { cfg, perfil: perfilReal, dados, avisar, confirmar, ir, recarregar, pendentes: filaPend = [] } = useApp();
+  const perfil = perfilNoApp(perfilReal); // no app do celular, só o administrador altera a O.S.
   const [o, setO] = useState(null);
   const [erroCarga, setErroCarga] = useState("");
   const [aba, setAba] = useState("principal");
@@ -529,7 +531,7 @@ export function Ordem({ id, params = {} }) {
         <${Campo} id="os-box" rotulo="Box / prisma">${editaInfo ? html`<${Texto} id="os-box" valor=${campos.box} onMuda=${v => setCampo({ box: v.slice(0, 10) })} />` : html`<b>${o.box || "—"}</b>`}</${Campo}>
         <${Campo} id="os-sit" rotulo="Situação">${editaInfo ? html`<select id="os-sit" class="inp" value=${campos.situacao} onChange=${e => setCampo({ situacao: e.target.value })}><option value="">—</option>${situacoes.map(x => html`<option value=${x}>${x}</option>`)}</select>` : html`<b>${o.situacao || "—"}</b>`}</${Campo}>
         <div class="campo"><label>Consultor</label><b>${o.consultor_nome || "—"}</b></div>
-        <${Campo} id="mec" rotulo="Técnico responsável"><select id="mec" class="inp" disabled=${!aberta || !(gestor || st === "execucao")} value=${valorTec} onChange=${e => salvarMecanico(e.target.value)}>
+        <${Campo} id="mec" rotulo="Técnico responsável"><select id="mec" class="inp" disabled=${!aberta || !(gestor || (st === "execucao" && pode(perfil, "executar")))} value=${valorTec} onChange=${e => salvarMecanico(e.target.value)}>
           <option value="">${o.mecanico_nome && !valorTec ? o.mecanico_nome : "Selecione"}</option>${tecFora ? html`<option value=${tecFora.v}>${tecFora.nome}</option>` : null}${listaTec.map(m => html`<option key=${m.v} value=${m.v}>${m.nome}</option>`)}</select></${Campo}>
       </div>
       ${verValores ? html`<div class="campo"><label>Tabela de preços</label>${editavelOrc ? html`<${Seg} rotulo="Tabela de preços" opcoes=${Object.values(TABELAS_PRECO).map(t => [t, "info"])} valor=${TABELAS_PRECO[campos.tabela_preco]} onEscolha=${t => setCampo({ tabela_preco: Object.keys(TABELAS_PRECO).find(k => TABELAS_PRECO[k] === t) })} />
@@ -614,7 +616,7 @@ export function Ordem({ id, params = {} }) {
     ${gestor ? html`<section class="card"><h3>Observações internas</h3><span class="dica">Não saem na impressão.</span>
       ${editaInfo ? html`<${Area} id="obs-int" valor=${campos.obs_internas} onMuda=${v => setCampo({ obs_internas: v })} />` : html`<p class="texto-pre">${o.obs_internas || "—"}</p>`}</section>` : null}
     ${execOn ? html`<section class="card"><div class="secao-topo"><h3>Fotos do serviço</h3>
-      ${st === "execucao" ? html`<label class="btn btn-sm" for="foto-exec">${ocupado === "foto" ? "Enviando…" : "+ Foto"}</label><input id="foto-exec" class="vh" type="file" accept="image/*" capture="environment" onChange=${e => { const a = e.target.files[0]; e.target.value = ""; if (a) enviarFotoExec(a); }} />` : null}</div>
+      ${st === "execucao" && pode(perfil, "executar") ? html`<label class="btn btn-sm" for="foto-exec">${ocupado === "foto" ? "Enviando…" : "+ Foto"}</label><input id="foto-exec" class="vh" type="file" accept="image/*" capture="environment" onChange=${e => { const a = e.target.files[0]; e.target.value = ""; if (a) enviarFotoExec(a); }} />` : null}</div>
       ${(o.fotos || []).filter(f => f.etapa !== "entrada").length ? html`<div class="fotos">${o.fotos.filter(f => f.etapa !== "entrada").map(f => html`<button type="button" class="foto" key=${f.id} onClick=${() => setModal({ tipo: "foto", f })}><div class="img"><${Foto} caminho=${f.caminho} alt=${f.rotulo} /></div><div class="rot">${f.rotulo}</div></button>`)}</div>`
         : html`<span class="dica">Fotos de peças substituídas e do serviço feito ajudam a justificar o orçamento e a garantia.</span>`}</section>` : null}
     ${st === "entregue" ? html`<section class="card"><h3>Entrega</h3><div class="kv"><div><span>Entregue em</span><b>${fmtDataHora(o.entregue_em)}</b></div><div><span>KM saída</span><b>${fmtKm(o.km_saida)}</b></div>

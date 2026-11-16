@@ -122,7 +122,7 @@ export const PAPEIS = { admin: "Administrador", consultor: "Consultor", mecanico
 export const pode = (perfil, acao) => {
   const p = perfil && perfil.ativo !== false ? perfil.papel : "";
   const regras = {
-    verValores: ["admin", "consultor"],
+    verValores: ["admin", "consultor", "leitura"], // "leitura": consultor dentro do app (só consulta O.S.), ver js/modoapp.js
     orcar: ["admin", "consultor"],
     aprovar: ["admin", "consultor"],
     entregar: ["admin", "consultor"],

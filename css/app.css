@@ -1547,3 +1547,14 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .am-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;max-height:210px;overflow-y:auto;padding:2px}
 .am-grade button{display:grid;place-items:center;height:46px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
 .am-grade button[aria-pressed=true]{border:2px solid var(--brand);background:var(--surface-2)}
+
+/* modo app (APK do celular): sem menu do computador nem barra de baixo; barra azul com "‹ Início" */
+.modo-app .lateral,.modo-app .nav{display:none !important}
+.modo-app .topo{display:block !important}
+.modo-app main{margin-left:0 !important;padding:16px max(16px,env(safe-area-inset-left,0px)) calc(96px + env(safe-area-inset-bottom,0px)) !important}
+.modo-app .rodape-acoes{left:0 !important}
+.modo-app .toast{left:50% !important}
+.app-voltar{background:none;border:0;color:#fff;font-weight:700;font-size:17px;min-height:44px;padding:0 10px 0 0;letter-spacing:.01em}
+.hs-linha{display:flex;align-items:center;justify-content:space-between;gap:10px;text-align:left}
+.hs-linha .meio span{display:block;font-size:13px;color:var(--muted)}
+.hs-dir{display:flex;flex-direction:column;align-items:flex-end;gap:4px}

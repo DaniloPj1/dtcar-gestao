@@ -29,7 +29,7 @@ export function Mais() {
       ${pode(perfil, "financeiro") ? it("/funcionarios", "Funcionários", "Cadastro, horário, folha de ponto, vales, comissão e custo da equipe", I.pessoas) : null}
       ${pode(perfil, "verValores") ? it("/relatorios", "Relatórios", "Histórico de serviços, faturamento, caixa, contas, estoque e mais", I.grafico) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}
-      ${pode(perfil, "ajustes") ? it("/app-mecanico", "App do mecânico", "Itens que o mecânico marca ao receber o veículo", I.carro) : null}
+      ${pode(perfil, "ajustes") ? it("/app-mecanico", "App do mecânico", "Itens do mecânico e download do app do sistema (APK)", I.carro) : null}
       ${pode(perfil, "ajustes") ? it("/ajustes", "Ajustes da oficina", "Dados, valor-hora, margens, garantia, termos e impressão", I.ajuste) : null}
       ${it("/dados-locais", "Dados neste computador", "Pasta de dados no PC, cópia para trabalhar sem internet e O.S. aguardando envio", I.caixa)}
       ${pode(perfil, "ajustes") ? it("/backup", "Backup", "Baixar uma cópia de todos os dados ou restaurar", I.nuvem) : null}

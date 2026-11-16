@@ -23,6 +23,8 @@ try:
     chk("em Equipe, o menu marca Ajustes", pg.locator(".lateral button[aria-current=page]:has-text('Ajustes')").count() == 1)
     pg.goto("http://localhost:8768/#/app-mecanico"); pg.wait_for_timeout(800)
     chk("App do mecânico tem item no menu e aparece marcado", pg.locator(".lateral button[aria-current=page]:has-text('App do mecânico')").count() == 1)
+    chk("aba tem o botão de baixar o APK do app do sistema", pg.locator("#baixar-app a[download][href='app/download/DTCar-app.apk']").count() == 1)
+    chk("o arquivo do APK está publicado e é um APK", pg.evaluate("fetch('app/download/DTCar-app.apk').then(async r => { const b = new Uint8Array(await r.arrayBuffer()); return r.ok && b.length > 1000000 && b[0] === 0x50 && b[1] === 0x4b; })"))
     chk("tela abre com os 6 sistemas", pg.locator(".seg button").count() >= 6 and pg.locator(".am-linha").count() == 8, pg.locator(".am-linha").count())
     pg.goto("http://localhost:8768/#/painel"); pg.wait_for_timeout(600)
     chk("menu lateral cabe sem rolar (1366x768)", pg.evaluate("(() => { const l = document.querySelector('.lateral'); return l.scrollHeight <= l.clientHeight + 1; })()"))

@@ -48,4 +48,10 @@ r = pecasDoVeiculo(cat, { marca: "CHEVROLET", modelo: "MERIVA", ano: "2008" });
 chk("Nakata completo: Meriva (o PDF não traz montadora; ela vem dos outros catálogos) tem peças", r.grupos.flatMap(g => g.itens).some(e => e.peca.marca === "Nakata"), r.total);
 r = pecasDoVeiculo(cat, { marca: "FORD", modelo: "GOL", ano: "2015" });
 chk("Nakata completo: Gol não aparece para marca errada (Ford)", r.grupos.flatMap(g => g.itens).every(e => e.peca.marca !== "Nakata"), r.total);
+// Fotos (auditoria de 15/11/2026): arquivo existe e nenhuma imagem é repetida em 3 ou mais códigos do mesmo catálogo
+import { existsSync } from "node:fs";
+const porFoto = {}; let semArquivo = 0;
+for (const p of dados.pecas) { if (!p[5]) continue; const pasta = dados.catalogos[p[0]][2]; if (!existsSync(new URL("../catalogo/fotos/" + pasta + "/" + p[5] + ".jpg", import.meta.url))) semArquivo++; (porFoto[pasta + "/" + p[5]] ||= []).push(p[1]); }
+chk("fotos: todo arquivo de foto existe", semArquivo === 0, semArquivo);
+chk("fotos: nenhuma imagem repetida em 3 ou mais códigos", Object.values(porFoto).every(v => v.length < 3), Object.values(porFoto).filter(v => v.length >= 3).slice(0, 3));
 console.log(ok + " ok" + (falhas ? ", " + falhas + " FALHAS" : "")); process.exit(falhas ? 1 : 0);

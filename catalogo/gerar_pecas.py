@@ -5,7 +5,11 @@
 #     conv: [[marca, código]], breve, emb (embalagem: "2 peças"), apl: [ { montadora, modelo, de, ate, obs } ] } ] }        (de/ate = ano; 0 = sem limite)
 import json, sys, glob, os, re, datetime
 pasta, saida = sys.argv[1], sys.argv[2]
-cats, mont, grupos, pecas, apl = [], [], [], [], []
+cats, mont, grupos, pecas, apl, modelos, obss = [], [], [], [], [], [""], [""]
+mod_i, obs_i = {"": 0}, {"": 0}
+def dic(lista, tab, v):
+    if v not in tab: tab[v] = len(lista); lista.append(v)
+    return tab[v]
 def idx(lista, v):
     if v not in lista: lista.append(v)
     return lista.index(v)
@@ -67,8 +71,8 @@ for arq in arquivos:
                       [limpo(x) for x in p.get("oem", []) if limpo(x)], [[limpo(a).upper() if len(limpo(a)) <= 3 else limpo(a), limpo(b)] for a, b in p.get("conv", []) if limpo(b)], 1 if p.get("breve") else 0, limpo(p.get("emb"))])
         for a in p["apl"]:
             mo = montadora_de(a); inferidas += (mo != "" and not limpo(a["montadora"]))
-            apl.append([n, idx(mont, mo), limpo(a["modelo"]).upper(), int(a.get("de") or 0), int(a.get("ate") or 0), limpo(a.get("obs")).upper()])
-d = {"versao": datetime.date.today().isoformat(), "catalogos": cats, "montadoras": mont, "grupos": grupos, "pecas": pecas, "apl": apl}
+            apl.append([n, idx(mont, mo), dic(modelos, mod_i, limpo(a["modelo"]).upper()), int(a.get("de") or 0), int(a.get("ate") or 0), dic(obss, obs_i, limpo(a.get("obs")).upper())])
+d = {"versao": datetime.date.today().isoformat(), "catalogos": cats, "montadoras": mont, "grupos": grupos, "pecas": pecas, "modelos": modelos, "obs": obss, "apl": apl}
 cab = ("// Peças por veículo (pedido do Danilo em 15/11/2026). ARQUIVO GERADO por catalogo/gerar_pecas.py: não edite à mão.\n"
        "// Catálogos: " + ", ".join(f"{c[0]} {c[1]}".strip() for c in cats) + ". É dado de catálogo: a tela sempre manda conferir. Formato explicado em js/pecas.js.\n")
 open(saida, "w", encoding="utf-8").write(cab + "export default " + json.dumps(d, ensure_ascii=False, separators=(",", ":")) + ";\n")

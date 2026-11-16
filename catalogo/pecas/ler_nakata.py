@@ -1,11 +1,13 @@
-# Leitor do catálogo NAKATA completo (PDF de ~8.300 páginas) → catalogo/pecas/nakata.json + fotos em catalogo/fotos/nakata
-# Uso: python3 -I catalogo/pecas/ler_nakata.py <nakata.pdf> catalogo/pecas/nakata.json catalogo/fotos/nakata
+# Leitor dos catálogos completos no formato "Gerado em" (Nakata, Fremax, Lonaflex, Fras-le, Controil: mesmo sistema, mesmo layout) → catalogo/pecas/<marca>.json + fotos
+# Uso: python3 -I catalogo/pecas/ler_nakata.py <catalogo.pdf> catalogo/pecas/nakata.json catalogo/fotos/nakata [Marca]   (Marca padrão: Nakata)
 # Partes do PDF: aplicações (tabela Veículo/Modelo/Motor/Ano/Grupo/Produto/Obs, células mescladas), referências cruzadas
 # (seções por marca: código da outra marca → código Nakata), imagens (8 por página, legenda = código) e especificações (embalagem etc.).
 import sys, re, json, os, hashlib, io
 import pymupdf as fitz
 from PIL import Image
 pdf, saida, pasta_fotos = sys.argv[1], sys.argv[2], sys.argv[3]
+MARCA = sys.argv[4] if len(sys.argv) > 4 else 'Nakata'
+PASTA = os.path.basename(pasta_fotos.rstrip('/'))
 d = fitz.open(pdf)
 limpo = lambda t: re.sub(r'\s+', ' ', str(t or '')).strip()
 cod = lambda t: re.sub(r'\s+', ' ', t).strip()
@@ -15,11 +17,13 @@ def secoes():
         t = d[i].get_text()[:80]
         if ap is None and t.startswith('Veículo'): ap = i
         if ref is None and t.startswith('Código Equivalente'): ref = i
-        if esp is None and ref and 'Partnumber' in t and 'Especifica' in t: esp = i
+        if esp is None and ref and ('Partnumber' in t or 'Código do Produto' in t) and 'Especifica' in t: esp = i
     return ap, ref, esp
 AP, REF, ESP = secoes()
 # imagens: primeira página depois das referências cuja página tem fotos
-IMG = next(i for i in range(REF, len(d)) if not d[i].get_text().startswith('Código Equivalente'))
+IMG = next((i for i in range(REF, len(d)) if not d[i].get_text().startswith('Código Equivalente')), len(d))
+if ESP is None: ESP = len(d)
+IMG = min(IMG, ESP)
 print('aplicações', AP, 'refs', REF, 'imagens', IMG, 'specs', ESP, flush=True)
 
 # ---------- aplicações ----------
@@ -106,6 +110,10 @@ print(len(pecas), 'peças com aplicação', flush=True)
 # ---------- referências cruzadas ----------
 # seção "MARCA" → linhas (código equivalente | NAKATA | código Nakata). "X ORIGINAL" = código da montadora (oem).
 brev_ok = bad = 0
+MP = 'NAKATA'
+_t0 = [limpo(x) for x in d[REF].get_text().split('\n') if limpo(x)]
+if 'Código' in _t0 and _t0.index('Código') + 2 < len(_t0): MP = _t0[_t0.index('Código') + 2]
+print('marca nas referências:', MP, flush=True)
 for i in range(REF, IMG):
     t = [limpo(x) for x in d[i].get_text().split('\n')]
     t = [x for x in t if x]
@@ -114,7 +122,7 @@ for i in range(REF, IMG):
         if k + 2 < len(t) and t[k + 1] == 'Marca' and t[k + 2] == 'Código':
             marca = t[k]; k += 3; continue
         if t[k] in ('Código Equivalente', 'Referência'): k += 1; continue
-        if marca and k + 2 < len(t) and t[k + 1] == 'NAKATA':
+        if marca and k + 2 < len(t) and t[k + 1] == MP:
             eq, nk = t[k], t[k + 2]; k += 3
             j = pecas.get(nk)
             if j is None: bad += 1; continue
@@ -132,11 +140,10 @@ print('referências', brev_ok, 'sem peça:', bad, flush=True)
 os.makedirs(pasta_fotos, exist_ok=True)
 vistos = {}
 def miniatura(xref):
-    pm = fitz.Pixmap(d, xref)
-    if pm.n - pm.alpha >= 4: pm = fitz.Pixmap(fitz.csRGB, pm)
-    im = Image.frombytes('RGB' if not pm.alpha else 'RGBA', (pm.width, pm.height), pm.samples)
-    if im.mode == 'RGBA':
-        fundo = Image.new('RGB', im.size, 'white'); fundo.paste(im, mask=im.split()[3]); im = fundo
+    ex = d.extract_image(xref); im = Image.open(io.BytesIO(ex['image']))
+    if im.mode in ('RGBA', 'LA', 'P'):
+        im = im.convert('RGBA'); fundo = Image.new('RGB', im.size, 'white'); fundo.paste(im, mask=im.split()[3]); im = fundo
+    else: im = im.convert('RGB')
     from PIL import ImageChops
     caixa = ImageChops.difference(im, Image.new('RGB', im.size, (255, 255, 255))).point(lambda v: 255 if v > 18 else 0).getbbox()
     if caixa:
@@ -208,14 +215,14 @@ def ler_spec(p):
 specs = {}; atual = ''
 for i in range(ESP, len(d)):
     for part, chave, valor in ler_spec(d[i]):
-        if part and part != 'Partnumber': atual = cod(part)
+        if part and part not in ('Partnumber', 'Código do Produto'): atual = cod(part)
         if not chave or chave in ('Especificação',) or not atual: continue
         specs.setdefault(atual, []).append((chave, valor))
     if (i - ESP) % 500 == 0: print('specs pág', i, len(specs), flush=True)
 print(len(specs), 'peças com especificação', flush=True)
 json.dump({k: v for k, v in specs.items()}, open(saida + '.specs.json', 'w', encoding='utf-8'), ensure_ascii=False)
 CH = {c.lower(): c for c in ['Altura da embalagem', 'Largura da embalagem', 'Comprimento da embalagem']}
-PULA = ('posição', 'lado', 'código de barras', 'ncm', 'quantidade de peças por embalagem', 'altura da embalagem', 'largura da embalagem', 'comprimento da embalagem')
+PULA = ('posição', 'lado', 'composição', 'código de barras', 'ncm', 'quantidade de peças por embalagem', 'altura da embalagem', 'largura da embalagem', 'comprimento da embalagem')
 num = lambda t: re.sub(r'\s*mm$', '', t.replace(',0 ', ' ')).strip()
 for cd, ls in specs.items():
     j = pecas.get(cd)
@@ -241,5 +248,5 @@ for cd, ls in specs.items():
     j['descricao'] = limpo(j['descricao'] + ' ' + pos + ' ' + lado + (' - ' + info.capitalize() if info and len(info) <= 45 and info.upper() not in j['descricao'].upper() else ''))
 
 lista = sorted((j for j in pecas.values() if j['apl']), key=lambda x: x['codigo'])
-json.dump(dict(marca='Nakata', edicao='catálogo completo (nov/2026)', fotos='nakata', pecas=lista), open(saida, 'w', encoding='utf-8'), ensure_ascii=False, indent=0)
+json.dump(dict(marca=MARCA, edicao='catálogo completo (nov/2026)', fotos=PASTA if any(x['foto'] for x in lista) else '', pecas=lista), open(saida, 'w', encoding='utf-8'), ensure_ascii=False, indent=0)
 print(len(lista), 'peças;', sum(len(x['apl']) for x in lista), 'aplicações;', sum(1 for x in lista if x['foto']), 'com foto;', sum(1 for x in lista if x['conv']), 'com conversão;', sum(1 for x in lista if x['oem']), 'com código da montadora;', sum(1 for x in lista if x['medidas']), 'com medidas')

@@ -1,0 +1,3985 @@
+{
+"marca": "Fras-le",
+"edicao": "manual técnico linha leve (peças que só estão nele)",
+"fotos": "frasle_linhaleve",
+"pecas": [
+{
+"codigo": "CB/39",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-490"
+]
+],
+"apl": [
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "OPALA",
+"de": 1969,
+"ate": 1973,
+"obs": "Dianteira - 4 e 6 Cil."
+}
+]
+},
+{
+"codigo": "FD/61-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.0",
+"de": 1998,
+"ate": 2002,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.3",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.4 16V",
+"de": 1998,
+"ate": 1999,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.6",
+"de": 1999,
+"ate": 2002,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "KA 1.0",
+"de": 1998,
+"ate": 2009,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "KA 1.6",
+"de": 2001,
+"ate": 2007,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "KA 1.0 / 1.6",
+"de": 2009,
+"ate": 2013,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "CELTA 1.0",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "CELTA 1.0 / 1.4",
+"de": 2000,
+"ate": 2009,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "CELTA 1.4",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "PRISMA 1.4 8V",
+"de": 2007,
+"ate": 2009,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "PRISMA 1.4 8V",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Varga"
+}
+]
+},
+{
+"codigo": "FD/63-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.6",
+"de": 1993,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.6 / 1.8",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8",
+"de": 1993,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8 16V",
+"de": 1997,
+"ate": 0,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8 16V SW",
+"de": 1997,
+"ate": 0,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "VERONA 1.6 / 1.8",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "VERONA 1.8",
+"de": 1993,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "VERONA 2.0",
+"de": 1993,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "LOGUS 1.6",
+"de": 1993,
+"ate": 1997,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "LOGUS 1.8",
+"de": 1993,
+"ate": 1997,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "POINTER 1.8 / 2.0",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "POINTER GLi 2.0",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira - sistema Varga"
+}
+]
+},
+{
+"codigo": "FD/64-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "EDGE 3.5L V6",
+"de": 2008,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.6 / 1.8",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8 XR3",
+"de": 1984,
+"ate": 1992,
+"obs": "Traseira"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 2.0i XR3",
+"de": 1993,
+"ate": 1995,
+"obs": "Traseira"
+},
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.0",
+"de": 1996,
+"ate": 1997,
+"obs": "Traseira - sistema Varga - Importado"
+},
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.3",
+"de": 1995,
+"ate": 1997,
+"obs": "Traseira - sistema Varga - Importado"
+},
+{
+"montadora": "FORD",
+"modelo": "FIESTA 1.4 16V",
+"de": 1996,
+"ate": 1997,
+"obs": "Traseira - sistema Varga - Importado"
+},
+{
+"montadora": "FORD",
+"modelo": "KA 1.0 i",
+"de": 1997,
+"ate": 1999,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "KA 1.3 i",
+"de": 1997,
+"ate": 1999,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "KA 1.6",
+"de": 2009,
+"ate": 2013,
+"obs": "Traseira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "TRANSIT VAN 3550 2.4",
+"de": 2006,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "AMAROK TRENDLINE CD 2.0 16V",
+"de": 2010,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "FD/79",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "F-7000",
+"de": 1979,
+"ate": 1980,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "F-12000",
+"de": 1981,
+"ate": 1982,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "F-19000",
+"de": 1981,
+"ate": 1982,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "FORD",
+"modelo": "FT-7000",
+"de": 1979,
+"ate": 1980,
+"obs": "Dianteira - sistema Varga"
+}
+]
+},
+{
+"codigo": "FD/81",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-637"
+]
+],
+"apl": [
+{
+"montadora": "CHARGER",
+"modelo": "CARRETA",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "FI/115",
+"grupo": "",
+"descricao": "LONA DE FREIO",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FIAT",
+"modelo": "FIAT-130",
+"de": 1976,
+"ate": 1979,
+"obs": "Dianteira"
+},
+{
+"montadora": "FIAT",
+"modelo": "FIAT-130",
+"de": 1976,
+"ate": 1979,
+"obs": "Traseira"
+},
+{
+"montadora": "FIAT",
+"modelo": "FIAT-140",
+"de": 1979,
+"ate": 1979,
+"obs": "Dianteira"
+},
+{
+"montadora": "FIAT",
+"modelo": "FIAT-140",
+"de": 1979,
+"ate": 1979,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "FI/118",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "D-1400",
+"de": 1983,
+"ate": 1985,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 11.130",
+"de": 1981,
+"ate": 1986,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 11.140",
+"de": 1987,
+"ate": 1989,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 11.160",
+"de": 1985,
+"ate": 1986,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 12.140",
+"de": 1987,
+"ate": 1989,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 13.130",
+"de": 1981,
+"ate": 1986,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 14.140",
+"de": 1987,
+"ate": 1989,
+"obs": "Dianteira - sistema Master"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 22.140",
+"de": 1988,
+"ate": 1989,
+"obs": "Dianteira - sistema Master - FI/117 L-226"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 22.160",
+"de": 1985,
+"ate": 1987,
+"obs": "Dianteira - sistema Master - FI/117 L-226"
+}
+]
+},
+{
+"codigo": "FI/135-CP",
+"grupo": "",
+"descricao": "SAPATA DE FREIO COM LONA TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FIAT",
+"modelo": "TIPO 1.6",
+"de": 1993,
+"ate": 1997,
+"obs": "Traseira - sistema Bendix"
+}
+]
+},
+{
+"codigo": "FI/91-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FIAT",
+"modelo": "BARCHETTA 1.8 16V CABRIO",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "BRAVA ELX 1.6 16V",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "BRAVA HGT 1.8 16V",
+"de": 1996,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "FIORINO",
+"de": 1987,
+"ate": 1993,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "FIORINO 750 kg",
+"de": 1992,
+"ate": 2010,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "IDEA 1.4",
+"de": 2005,
+"ate": 2009,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "IDEA 1.4",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "IDEA 1.8",
+"de": 2005,
+"ate": 2009,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "IDEA 1.8",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "IDEA 1.8 ADVENTURE",
+"de": 2005,
+"ate": 2010,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "IDEA 1.8 ADVENTURE",
+"de": 2010,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "LINEA ESSENCE 1.8 16V",
+"de": 2015,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "MAREA HLX 2.4 20V",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "MAREA WEEKEND HLX 2.4 20V",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "1.6 16V",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND 1.0",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND 1.5",
+"de": 1997,
+"ate": 1997,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND 1.5",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND 1.6 16V",
+"de": 1998,
+"ate": 1999,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND 1.6 16V",
+"de": 2011,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND 1.8",
+"de": 2003,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND ADVENTURE 1.6",
+"de": 1999,
+"ate": 2003,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "LOCKER 1.8",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND CITY 1.5",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND ELX 1.4",
+"de": 2006,
+"ate": 2009,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND ELX 1.4",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND ELX 1.5",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND ELX FIRE 1.0",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "16V",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "16V",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND EX 1.5",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND HLX 1.8",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "PALIO WEEKEND SPORT 1.6 16V",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "STILO 1.8 8V",
+"de": 2003,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "STRADA",
+"de": 1998,
+"ate": 2009,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "STRADA 1.4 / 1.8",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "TEMPRA 16V",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "TEMPRA 8V",
+"de": 1992,
+"ate": 1994,
+"obs": "Traseira - sistema Bosch"
+},
+{
+"montadora": "FIAT",
+"modelo": "UNO Turbo",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira - sistema Bosch"
+}
+]
+},
+{
+"codigo": "FI/96-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FIAT",
+"modelo": "TEMPRA Turbo",
+"de": 1994,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+}
+]
+},
+{
+"codigo": "FN/116",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "FIAT",
+"modelo": "FIAT-180",
+"de": 1976,
+"ate": 1979,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "HO/173",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "HONDA",
+"modelo": "CIVIC LX 1.6 16V",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "CIVIC LXB 1.6 16V",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "CIVIC EX 1.6 16V",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "CIVIC EX 1.7 16V",
+"de": 2001,
+"ate": 2006,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "CIVIC LX 1.7 16V",
+"de": 2001,
+"ate": 2006,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "CIVIC LXB 1.7 16V",
+"de": 2001,
+"ate": 2006,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "HO/197",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "HONDA",
+"modelo": "FIT EX 1.5 16V",
+"de": 2003,
+"ate": 2008,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "FIT LX 1.4 8V",
+"de": 2003,
+"ate": 2008,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "FIT LXL 1.4 8V",
+"de": 2003,
+"ate": 2008,
+"obs": "Traseira"
+},
+{
+"montadora": "HONDA",
+"modelo": "FIT LX 1.4 16V",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "HO/334",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "HONDA",
+"modelo": "CITY LX 1.5 16V",
+"de": 2009,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+},
+{
+"montadora": "HONDA",
+"modelo": "CIVIC EX 1.6 16V",
+"de": 1999,
+"ate": 2000,
+"obs": "Traseira - Freio traseiro"
+},
+{
+"montadora": "HONDA",
+"modelo": "FIT LXL 1.4 8V",
+"de": 2003,
+"ate": 2008,
+"obs": "Traseira - Freio traseiro"
+}
+]
+},
+{
+"codigo": "LD/123-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "LADA",
+"modelo": "LAIKA",
+"de": 1990,
+"ate": 1995,
+"obs": "Traseira"
+},
+{
+"montadora": "LADA",
+"modelo": "NIVA",
+"de": 1990,
+"ate": 1995,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "MB/155",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "L-312",
+"de": 0,
+"ate": 0,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "MB/156-S/F",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "MB-180 D",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "MB/161",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "L-312",
+"de": 0,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "LP-321",
+"de": 0,
+"ate": 1964,
+"obs": "Traseira"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-321",
+"de": 0,
+"ate": 1964,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "MB/164",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "LP-321",
+"de": 0,
+"ate": 1964,
+"obs": "Dianteira"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-321",
+"de": 0,
+"ate": 1964,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "MB/169",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "CLASSE A 160",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "CLASSE A 190",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+}
+]
+},
+{
+"codigo": "PD/1000",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-1000",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1175"
+]
+],
+"apl": [
+{
+"montadora": "CITROEN",
+"modelo": "C4 1.6 THP / 2.0 HDI",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "C4 GRAN PICASSO 2.0 HDi",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "C4 GRAN PICASSO 2.0i 16V /",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "C4 LOUNGE EXCLUSIVE 1.6",
+"de": 2013,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "C4 LOUNGE TENDENCE 1.6",
+"de": 2013,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "C4 PICASSO 2.0 HDi",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "C4 PICASSO 2.0 i 16V / 2.0 Hdi",
+"de": 2007,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "DS4 1.6 TURBO 16V",
+"de": 2013,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "CITROEN",
+"modelo": "DS5 1.6 THP 2.0HDi / 2.0 HDi",
+"de": 2011,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CITROEN",
+"modelo": "DS5 1.6 TURBO 16V",
+"de": 2013,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "LAND ROVER",
+"modelo": "FREELANDER 3.2 V6",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "LAND ROVER",
+"modelo": "FREELANDER TD4 2.2",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "308 CC 1.6 16V",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "308 CC 1.6 HDI",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "308 CC 2.0 HDI",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "3008 1.6 THP 16V",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "3008 2.0 16V",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "RCZ 1.6 16V",
+"de": 2010,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "RCZ 2.0 HDI",
+"de": 2010,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+}
+]
+},
+{
+"codigo": "PD/1072",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO TRASEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-1072",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "NISSAN",
+"modelo": "FRONTIER SEL",
+"de": 2008,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "NISSAN",
+"modelo": "XTERRA",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "PD/116-K",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO",
+"medidas": "Na caixa: 4 pastilhas iguais + 1 kit de reparos para os freios",
+"foto": "pd-116-k",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"P-116"
+],
+[
+"Cobreq",
+"N-716"
+],
+[
+"Bendix",
+"JURID-2138"
+],
+[
+"Bosch",
+"PB 104"
+]
+],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1215-C",
+"de": 1999,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1215-C",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1726-E",
+"de": 2008,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1726-E",
+"de": 2008,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1938-S",
+"de": 1999,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr - Eletrônico"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1938-S",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - sistema Knorr - Eletrônico"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1944-S",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "1944-S",
+"de": 2003,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "ACTROS",
+"de": 0,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "ACTROS",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 1933",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 1933",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2035",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2035",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2040",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2040",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2533 6x2",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2533 6x2",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2540 6x2",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2540 6x2",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2544 6x2",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2544 6x2",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2640 6x4",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2640 6x4",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2644 6x4",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "AXOR 2644 6x4",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "LS-1634",
+"de": 2002,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "LS-1634",
+"de": 2002,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "LS-1938",
+"de": 1998,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr - Eletrônico"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "LS-1938",
+"de": 1998,
+"ate": 0,
+"obs": "Traseira - sistema Knorr - Eletrônico"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-500-U",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-500-U",
+"de": 2006,
+"ate": 0,
+"obs": "Traseira - sistema Knorr"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-500-U (Articulado)",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Knorr - 3º eixo 3º eixo P-116"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-500-U (Articulado)",
+"de": 2006,
+"ate": 0,
+"obs": "Traseira - sistema Knorr - 3º eixo 3º eixo P-116"
+}
+]
+},
+{
+"codigo": "PD/125",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-125",
+"oem": [],
+"conv": [
+[
+"Bosch",
+"PB 0381"
+]
+],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-340",
+"de": 1992,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-340",
+"de": 1992,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-350",
+"de": 1992,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-350",
+"de": 1992,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-404",
+"de": 1991,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-404",
+"de": 1991,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "O-500",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "AE - Series / MAGNUM",
+"de": 1993,
+"ate": 1995,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "AE - Series / MAGNUM",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "PREMIUM",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "R 380.17",
+"de": 1993,
+"ate": 1996,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "R 380.19",
+"de": 1993,
+"ate": 1996,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "R 385 TL",
+"de": 1993,
+"ate": 1996,
+"obs": "Dianteira - sistema Meritor"
+}
+]
+},
+{
+"codigo": "PD/129",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-129",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1504"
+]
+],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "AE - Series / MAGNUM",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "ILIADE",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "ILIADE",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MAGNUM E-TECH",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MAGNUM E-TECH",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "PREMIUM",
+"de": 1996,
+"ate": 2000,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "PREMIUM",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "RENAULT",
+"modelo": "PREMIUM",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-9 - Series",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-9 - Series (Articulado)",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Meritor - 3° eixo"
+}
+]
+},
+{
+"codigo": "PD/131",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-131",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"P-131"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "VM-17 4x2",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-17 4x2 ( Lixo )",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-23 6x2",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco - 3° eixo 3° eixo L-224"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-210 4x2 17-ton.",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-210 6x2 23-ton.",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco - 3° eixo 3° eixo L-224"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-240",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco - 3° eixo 3° eixo L-224"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-260 4x2 17-ton.",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-260 6x2 23-ton.",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira - sistema Wabco - 3° eixo 3° eixo L-224"
+}
+]
+},
+{
+"codigo": "PD/134",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "CHRYSLER",
+"modelo": "STRATUS",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "STRATUS CONVERSÍVEL",
+"de": 2002,
+"ate": 2002,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/1358",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-1358",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "TOYOTA",
+"modelo": "HIACE IV 2.4 D",
+"de": 2007,
+"ate": 0,
+"obs": "Dianteira - sistema Akebono"
+}
+]
+},
+{
+"codigo": "PD/1364",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-1364",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SPARK (M300) 1.0 / 1.2",
+"de": 2010,
+"ate": 0,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/1369",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO TRASEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-1369",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "AUDI",
+"modelo": "A4 1.8 TFSi",
+"de": 2015,
+"ate": 0,
+"obs": "Traseira - sistema Lucas"
+},
+{
+"montadora": "PORSCHE",
+"modelo": "MACAN 3.0 S",
+"de": 2014,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "PD/1373",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "SUZUKI",
+"modelo": "SWIFT III 1.3 / 1.5 / 1.6",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "PD/1454",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas externas + 2 pastilhas internas com mola",
+"foto": "pd-1454",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1736"
+]
+],
+"apl": [
+{
+"montadora": "AUDI",
+"modelo": "A4 2.7 V6 24V TDI",
+"de": 2007,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "AUDI",
+"modelo": "A4 3.2I V6 24V FSI",
+"de": 2007,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "AUDI",
+"modelo": "A4 QUATTRO 3.0 V6 24V TDI",
+"de": 2008,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "AUDI",
+"modelo": "A4 QUATTRO 3.2 I V6 24 FSI",
+"de": 2008,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "AUDI",
+"modelo": "A4 QUATTRO S4 3.0 V6 TFSI",
+"de": 2008,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "AUDI",
+"modelo": "A5 3.0",
+"de": 2008,
+"ate": 0,
+"obs": "Dianteira - sistema Lucas"
+},
+{
+"montadora": "AUDI",
+"modelo": "A5 3.2 FSI V6",
+"de": 2008,
+"ate": 0,
+"obs": "Dianteira - sistema Lucas"
+},
+{
+"montadora": "AUDI",
+"modelo": "Q5 2.0 TFSI QUATTRO",
+"de": 2009,
+"ate": 0,
+"obs": "Dianteira - sistema Lucas"
+},
+{
+"montadora": "AUDI",
+"modelo": "Q5 3.0 TFSI QUATTRO",
+"de": 2012,
+"ate": 0,
+"obs": "Dianteira - sistema Lucas"
+},
+{
+"montadora": "AUDI",
+"modelo": "Q5 3.2 FSI QUATTRO",
+"de": 2008,
+"ate": 2012,
+"obs": "Dianteira - sistema Lucas"
+},
+{
+"montadora": "AUDI",
+"modelo": "Q5 SQ5 TFSI QUATTRO",
+"de": 2014,
+"ate": 0,
+"obs": "Dianteira - sistema Lucas"
+}
+]
+},
+{
+"codigo": "PD/1457",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "CITROEN",
+"modelo": "C4 II 2.0 16V",
+"de": 2010,
+"ate": 0,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/195",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "FH-12",
+"de": 2011,
+"ate": 0,
+"obs": "Traseira - 3° eixo em"
+}
+]
+},
+{
+"codigo": "PD/196",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-196",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1502"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "B-7 R",
+"de": 0,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-7 R",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-9 R",
+"de": 0,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-9 R",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12 M",
+"de": 0,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12 M",
+"de": 0,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12-R 6x2",
+"de": 2010,
+"ate": 0,
+"obs": "Dianteira - sistema Volvo - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12-R 6x2",
+"de": 2010,
+"ate": 0,
+"obs": "Traseira - sistema Volvo - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12-R 8x2",
+"de": 2010,
+"ate": 0,
+"obs": "Dianteira - sistema Volvo - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12-R 8x2",
+"de": 2010,
+"ate": 0,
+"obs": "Traseira - sistema Volvo - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-290 R",
+"de": 2012,
+"ate": 0,
+"obs": "Dianteira - sistema Volvo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-290 R",
+"de": 2012,
+"ate": 0,
+"obs": "Traseira - sistema Volvo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-12 - Series",
+"de": 2009,
+"ate": 2010,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-12 - Series",
+"de": 2009,
+"ate": 2010,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-13",
+"de": 2012,
+"ate": 0,
+"obs": "Dianteira - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-13",
+"de": 2012,
+"ate": 0,
+"obs": "Traseira - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FM-12 370",
+"de": 2011,
+"ate": 0,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/24-A",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas sem mola + 2 pastilhas com mola e com sensor elétrico",
+"foto": "pd-24-a",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"P-24-A"
+],
+[
+"Cobreq",
+"N-117"
+],
+[
+"Bendix",
+"HQ-2167A"
+],
+[
+"Bosch",
+"PB 03 A/2"
+]
+],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.6",
+"de": 1983,
+"ate": 1992,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8",
+"de": 1984,
+"ate": 1992,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8 XR3",
+"de": 1984,
+"ate": 1992,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT HOBBY",
+"de": 1993,
+"ate": 1996,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "FORD",
+"modelo": "VERONA",
+"de": 1989,
+"ate": 1993,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "APOLLO",
+"de": 1990,
+"ate": 1992,
+"obs": "Dianteira - sistema Teves"
+}
+]
+},
+{
+"codigo": "PD/24-B",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas sem mola. + 1 pastilha com mola + 1 pastilha com mola e com sensor elétrico",
+"foto": "pd-24-b",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"P-24-B"
+],
+[
+"Cobreq",
+"N-116"
+],
+[
+"Bendix",
+"HQ-2002A"
+],
+[
+"Bosch",
+"PB 03 A/1"
+]
+],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.6",
+"de": 1983,
+"ate": 1992,
+"obs": "Dianteira"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8",
+"de": 1984,
+"ate": 1992,
+"obs": "Dianteira"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT 1.8 XR3",
+"de": 1984,
+"ate": 1992,
+"obs": "Dianteira"
+},
+{
+"montadora": "FORD",
+"modelo": "ESCORT HOBBY",
+"de": 1993,
+"ate": 1996,
+"obs": "Dianteira"
+},
+{
+"montadora": "FORD",
+"modelo": "VERONA",
+"de": 1989,
+"ate": 1993,
+"obs": "Dianteira"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "APOLLO",
+"de": 1990,
+"ate": 1992,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/390",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas sem mola + 2 pastilhas com mola",
+"foto": "pd-390",
+"oem": [],
+"conv": [
+[
+"Bosch",
+"PB 134"
+]
+],
+"apl": [
+{
+"montadora": "KIA MOTORS",
+"modelo": "SEPHIA 1.5",
+"de": 1994,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "KIA MOTORS",
+"modelo": "SEPHIA 1.5 16V",
+"de": 1996,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "KIA MOTORS",
+"modelo": "SEPHIA 1.6",
+"de": 1993,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+},
+{
+"montadora": "KIA MOTORS",
+"modelo": "SEPHIA 1.8",
+"de": 1994,
+"ate": 0,
+"obs": "Dianteira - sistema Teves"
+}
+]
+},
+{
+"codigo": "PD/410",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO TRASEIRA",
+"medidas": "Na caixa: 2 pastilhas internas com mola e com sensor + 2 pastilhas externas com mola",
+"foto": "pd-410",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-174"
+],
+[
+"Bosch",
+"PB 0250"
+]
+],
+"apl": [
+{
+"montadora": "FORD",
+"modelo": "EXPLORER",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Bendix - Freio de mão"
+}
+]
+},
+{
+"codigo": "PD/414-E",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 4 pastilhas com sensor elétrico",
+"foto": "pd-414-e",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1113"
+],
+[
+"Bendix",
+"HQ-2128A"
+],
+[
+"Bosch",
+"PB 0157"
+]
+],
+"apl": [
+{
+"montadora": "PEUGEOT",
+"modelo": "406 2.0",
+"de": 1998,
+"ate": 0,
+"obs": "Dianteira - sistema Girling - Aro 14”"
+}
+]
+},
+{
+"codigo": "PD/424",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "DAEWOO",
+"modelo": "ESPERO 1.5",
+"de": 1990,
+"ate": 1994,
+"obs": "Dianteira - sistema GM"
+},
+{
+"montadora": "DAEWOO",
+"modelo": "ESPERO 2.0",
+"de": 1990,
+"ate": 1994,
+"obs": "Dianteira - sistema GM - Freio traseiro"
+},
+{
+"montadora": "DAEWOO",
+"modelo": "NEXIA 1.5 GL",
+"de": 1995,
+"ate": 1997,
+"obs": "Dianteira - sistema GM"
+},
+{
+"montadora": "DAEWOO",
+"modelo": "NEXIA 1.5i 16V GLX",
+"de": 1995,
+"ate": 1997,
+"obs": "Dianteira - sistema GM"
+},
+{
+"montadora": "DAEWOO",
+"modelo": "NEXIA 1.5i 16V GTX",
+"de": 1995,
+"ate": 1997,
+"obs": "Dianteira - sistema GM"
+},
+{
+"montadora": "DAEWOO",
+"modelo": "RACER GTi",
+"de": 1990,
+"ate": 1994,
+"obs": "Dianteira - sistema GM"
+}
+]
+},
+{
+"codigo": "PD/471-A",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas externas com mola + 2 pastilhas internas com mola e sensor elétrico",
+"foto": "pd-471-a",
+"oem": [],
+"conv": [
+[
+"Bosch",
+"PB 0319 A/2"
+]
+],
+"apl": [
+{
+"montadora": "SSANGYONG",
+"modelo": "KORANDO 2.3 / 2.9 TD",
+"de": 1996,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "SSANGYONG",
+"modelo": "MUSSO 2.0 / 2.3 TD",
+"de": 1996,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "SSANGYONG",
+"modelo": "MUSSO 2.9 TDI",
+"de": 1996,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+}
+]
+},
+{
+"codigo": "PD/487",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "EUROVAN 2.4",
+"de": 1993,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "TRANSPORTER 1.9 D",
+"de": 1990,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "TRANSPORTER 1.9 TD",
+"de": 1990,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "TRANSPORTER 2.0 / 2.5",
+"de": 1990,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "TRANSPORTER 2.4",
+"de": 1996,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "TRANSPORTER 2.5 SYNCRO",
+"de": 1996,
+"ate": 0,
+"obs": "Dianteira - sistema Girling"
+}
+]
+},
+{
+"codigo": "PD/502",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "CADILLAC",
+"modelo": "ESCALADE",
+"de": 1999,
+"ate": 2006,
+"obs": "Dianteira - sistema Bendix"
+},
+{
+"montadora": "CADILLAC",
+"modelo": "FLEETWOOD",
+"de": 1990,
+"ate": 1993,
+"obs": "Dianteira - sistema Bendix - HD Brakes"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "DODGE RAM 1500",
+"de": 1994,
+"ate": 1997,
+"obs": "Dianteira - sistema Bendix"
+}
+]
+},
+{
+"codigo": "PD/529",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-529",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1503"
+],
+[
+"Bosch",
+"PB 0520"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "B-7 - Series",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-7 - Series",
+"de": 2005,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-9 - Series",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-9 - Series (Articulado)",
+"de": 2005,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor - 3° eixo"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "B-12 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-12 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-12 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-16 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-16 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FL-618",
+"de": 2000,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FL-618",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FM-9 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FM-9 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FM-12 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FM-12 - Series",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-310T 4x2 43-ton.",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Meritor"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-310T 4x2 43-ton.",
+"de": 2006,
+"ate": 0,
+"obs": "Traseira - sistema Meritor"
+}
+]
+},
+{
+"codigo": "PD/562",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas sem sensor + 1 pastilha esquerda com sensor acústico + 1 pastilha direita com sensor acústico",
+"foto": "pd-562",
+"oem": [],
+"conv": [
+[
+"Bosch",
+"PB 0564"
+]
+],
+"apl": [
+{
+"montadora": "INFINITI",
+"modelo": "Q 45",
+"de": 1999,
+"ate": 2001,
+"obs": "Dianteira"
+},
+{
+"montadora": "INFINITI",
+"modelo": "QX 4",
+"de": 2002,
+"ate": 2003,
+"obs": "Dianteira"
+},
+{
+"montadora": "NISSAN",
+"modelo": "PATHFINDER",
+"de": 2001,
+"ate": 2004,
+"obs": "Dianteira - Freio traseiro"
+},
+{
+"montadora": "NISSAN",
+"modelo": "QUEST",
+"de": 2004,
+"ate": 0,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/563",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas sem sensor + 1 pastilha esquerda com sensor acústico + 1 pastilha direita com sensor acústico",
+"foto": "pd-563",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "HONDA",
+"modelo": "CIVIC",
+"de": 1996,
+"ate": 2005,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/572",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "AM GENERAL",
+"modelo": "HUMMER H2",
+"de": 2003,
+"ate": 2004,
+"obs": "Traseira"
+},
+{
+"montadora": "CADILLAC",
+"modelo": "ESCALADE",
+"de": 2002,
+"ate": 2002,
+"obs": "Dianteira"
+},
+{
+"montadora": "CADILLAC",
+"modelo": "ESCALADE 4WD",
+"de": 2003,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "CADILLAC",
+"modelo": "ESCALADE RWD",
+"de": 2003,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "AVALANCHE 2500",
+"de": 2002,
+"ate": 2006,
+"obs": "Traseira"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "EXPRESS 1500",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "EXPRESS 2500",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 1500",
+"de": 1999,
+"ate": 2007,
+"obs": "Dianteira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 1500",
+"de": 2000,
+"ate": 2001,
+"obs": "Dianteira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 1500",
+"de": 2000,
+"ate": 2001,
+"obs": "Traseira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 1500 HD",
+"de": 2001,
+"ate": 2007,
+"obs": "Traseira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 2500",
+"de": 1999,
+"ate": 2004,
+"obs": "Traseira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 2500 HD",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO 3500",
+"de": 2004,
+"ate": 0,
+"obs": "Traseira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SILVERADO SS",
+"de": 2003,
+"ate": 2006,
+"obs": "Dianteira - Americana"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SUBURBAN 1500",
+"de": 2000,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "SUBURBAN 2500",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "TAHOE",
+"de": 2000,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SAFARI",
+"de": 2003,
+"ate": 2005,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SAVANA 1500",
+"de": 2003,
+"ate": 0,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SAVANA 2500",
+"de": 2003,
+"ate": 2005,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 1500",
+"de": 1999,
+"ate": 2007,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 1500",
+"de": 2000,
+"ate": 2003,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 1500 HD",
+"de": 2001,
+"ate": 2007,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 2500",
+"de": 1999,
+"ate": 2004,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 2500 HD",
+"de": 2001,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 2500 HD",
+"de": 2001,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 2500 HD",
+"de": 2001,
+"ate": 2006,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 3500",
+"de": 2004,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 3500",
+"de": 2005,
+"ate": 2007,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA 3500 HD",
+"de": 2007,
+"ate": 0,
+"obs": "Traseira - PBT 9900"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA C3",
+"de": 2001,
+"ate": 2001,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA DENALI",
+"de": 2002,
+"ate": 2003,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA DENALI",
+"de": 2004,
+"ate": 2005,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA DENALI",
+"de": 2004,
+"ate": 2005,
+"obs": "Traseira"
+},
+{
+"montadora": "GMC",
+"modelo": "SIERRA DENALI",
+"de": 2006,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "YUKON",
+"de": 2000,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "YUKON XL 1500",
+"de": 2000,
+"ate": 2006,
+"obs": "Dianteira"
+},
+{
+"montadora": "GMC",
+"modelo": "YUKON XL 2500",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "HUMMER",
+"modelo": "H2",
+"de": 2003,
+"ate": 2006,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "PD/657-A",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO TRASEIRA",
+"medidas": "Na caixa: 2 pastilhas com sensor elétrico + 2 pastilhas sem sensor",
+"foto": "pd-657-a",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-1334"
+]
+],
+"apl": [
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "V-CLASS V230-TD / V230",
+"de": 1996,
+"ate": 0,
+"obs": "Traseira - sistema Teves"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "VITO 110 TD 2.3",
+"de": 1996,
+"ate": 2003,
+"obs": "Traseira - sistema Teves"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "VITO 113 2.0",
+"de": 1996,
+"ate": 2003,
+"obs": "Traseira - sistema Teves"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "VITO 114 2.3",
+"de": 1996,
+"ate": 2003,
+"obs": "Traseira - sistema Teves"
+},
+{
+"montadora": "MERCEDES-BENZ",
+"modelo": "VITO BUS 108 D2.3",
+"de": 1996,
+"ate": 2003,
+"obs": "Traseira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "406 2.0 HDI",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Teves"
+},
+{
+"montadora": "PEUGEOT",
+"modelo": "605 2.0i",
+"de": 1989,
+"ate": 1999,
+"obs": "Traseira - sistema Teves"
+}
+]
+},
+{
+"codigo": "PD/717",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "HONDA",
+"modelo": "ACCORD",
+"de": 1999,
+"ate": 2002,
+"obs": "Dianteira"
+},
+{
+"montadora": "HONDA",
+"modelo": "ACCORD COUPÉ",
+"de": 1993,
+"ate": 1998,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/782",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 2 pastilhas externas + 1 pastilha interna com sensor direito + 1 pastilha interna com sensor esquerdo",
+"foto": "pd-782",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "ACURA",
+"modelo": "INTEGRA",
+"de": 1994,
+"ate": 2001,
+"obs": "Dianteira"
+}
+]
+},
+{
+"codigo": "PD/9",
+"grupo": "",
+"descricao": "PASTILHA DE FREIO DIANTEIRA",
+"medidas": "Na caixa: 4 pastilhas iguais",
+"foto": "pd-9",
+"oem": [],
+"conv": [
+[
+"Cobreq",
+"N-401"
+]
+],
+"apl": [
+{
+"montadora": "ALFA ROMEO",
+"modelo": "2150",
+"de": 1970,
+"ate": 1973,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "DODGE CHARGER",
+"de": 1972,
+"ate": 1975,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "DODGE DART",
+"de": 1972,
+"ate": 1981,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "DODGE LE BARON",
+"de": 1979,
+"ate": 1981,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "DODGE MAGNUM",
+"de": 1979,
+"ate": 1981,
+"obs": "Dianteira - sistema Varga"
+},
+{
+"montadora": "CHRYSLER",
+"modelo": "DODGE RT",
+"de": 1972,
+"ate": 1981,
+"obs": "Dianteira - sistema Varga"
+}
+]
+},
+{
+"codigo": "RN/131",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RL 1.0",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RN 1.0",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RN 1.6 16V",
+"de": 2001,
+"ate": 2001,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RT 1.6 16V",
+"de": 2001,
+"ate": 2001,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO SEDAN RN 1.6 16V",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO SEDAN RT 1.6 16V",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "TWINGO",
+"de": 1993,
+"ate": 1998,
+"obs": "Traseira - sistema Girling"
+}
+]
+},
+{
+"codigo": "RN/171",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "LAGUNA 1.8 / 2.0",
+"de": 1993,
+"ate": 2001,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "LAGUNA GRANDTOUR 2.0",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "LAGUNA GRANDTOUR 2.2 D",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "LAGUNA GRANDTOUR 3.0 V6",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "SCENIC 1.6",
+"de": 1998,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+},
+{
+"montadora": "RENAULT",
+"modelo": "SCENIC 1.9 / 2.0",
+"de": 1996,
+"ate": 0,
+"obs": "Traseira - sistema Girling"
+}
+]
+},
+{
+"codigo": "RN/212",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RL 1.6",
+"de": 1996,
+"ate": 2000,
+"obs": "Traseira - sistema TRW"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RN 1.6",
+"de": 1996,
+"ate": 2000,
+"obs": "Traseira - sistema TRW"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RN 1.6",
+"de": 1996,
+"ate": 1998,
+"obs": "Traseira - sistema TRW - Importado"
+},
+{
+"montadora": "RENAULT",
+"modelo": "CLIO RT 1.6",
+"de": 1996,
+"ate": 2000,
+"obs": "Traseira - sistema TRW"
+},
+{
+"montadora": "RENAULT",
+"modelo": "R-19 RN",
+"de": 1996,
+"ate": 0,
+"obs": "Traseira - sistema TRW"
+},
+{
+"montadora": "RENAULT",
+"modelo": "R-19 RT",
+"de": 1996,
+"ate": 0,
+"obs": "Traseira - sistema TRW"
+}
+]
+},
+{
+"codigo": "RN/213-CP",
+"grupo": "",
+"descricao": "SAPATA DE FREIO COM LONA TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH 1.6",
+"de": 1997,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH 2.0",
+"de": 1997,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH RN 1.6",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH RT 1.6",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH RT 1.6 16V",
+"de": 1998,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH RXE 1.6 16V",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE HATCH RXE 2.0",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE SEDAN 2.0",
+"de": 1997,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE SEDAN RT 16V",
+"de": 2000,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE SEDAN RT 2.0",
+"de": 1998,
+"ate": 2000,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "MEGANE SEDAN RXE 2.0",
+"de": 1998,
+"ate": 0,
+"obs": "Traseira - sistema Bosch - Freio traseiro"
+}
+]
+},
+{
+"codigo": "RN/324",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "LOGAN 1.0 / 1.6",
+"de": 2008,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "RENAULT",
+"modelo": "SANDERO 1.0 / 1.6",
+"de": 2008,
+"ate": 2014,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "RN/325",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "LOGAN 1.6 8V / 16V",
+"de": 2008,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+},
+{
+"montadora": "RENAULT",
+"modelo": "SANDERO",
+"de": 2007,
+"ate": 2014,
+"obs": "Traseira - Freio traseiro"
+}
+]
+},
+{
+"codigo": "RN/326",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "TRAFIC",
+"de": 1991,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "RN/329",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "RENAULT",
+"modelo": "DUSTER 1.6 16V",
+"de": 2011,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "RENAULT",
+"modelo": "DUSTER DYNAMIQUE 1.6 16V",
+"de": 2011,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "RENAULT",
+"modelo": "DUSTER EXPRESSION 1.6 16V",
+"de": 2011,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "RENAULT",
+"modelo": "DUSTER DYNAMIQUE 2.0 16V",
+"de": 2012,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "TY/251",
+"grupo": "",
+"descricao": "LONA DE FREIO",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "TOYOTA",
+"modelo": "JEEP",
+"de": 1959,
+"ate": 1966,
+"obs": "Dianteira"
+},
+{
+"montadora": "TOYOTA",
+"modelo": "JEEP",
+"de": 1959,
+"ate": 1966,
+"obs": "Traseira"
+},
+{
+"montadora": "TOYOTA",
+"modelo": "PERUA",
+"de": 1959,
+"ate": 1966,
+"obs": "Dianteira"
+},
+{
+"montadora": "TOYOTA",
+"modelo": "PERUA",
+"de": 1959,
+"ate": 1966,
+"obs": "Traseira"
+},
+{
+"montadora": "TOYOTA",
+"modelo": "PICK-UP",
+"de": 1959,
+"ate": 1966,
+"obs": "Dianteira"
+},
+{
+"montadora": "TOYOTA",
+"modelo": "PICK-UP",
+"de": 1959,
+"ate": 1966,
+"obs": "Traseira"
+}
+]
+},
+{
+"codigo": "VV/298",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-710"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "FH-12/380 GLOBETROTTER",
+"de": 1993,
+"ate": 1998,
+"obs": "Dianteira - sistema Volvo"
+}
+]
+},
+{
+"codigo": "VV/299",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-711"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "B-12 ( Importado )",
+"de": 1994,
+"ate": 1996,
+"obs": "Dianteira - sistema Volvo - 3° eixo 3º eixo L-709"
+}
+]
+},
+{
+"codigo": "VV/300",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-712"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "B-12 ( Importado )",
+"de": 1994,
+"ate": 1996,
+"obs": "Traseira - sistema Volvo - 3° eixo 3º eixo L-709"
+},
+{
+"montadora": "VOLVO",
+"modelo": "FH-12/380 GLOBETROTTER",
+"de": 1993,
+"ate": 1998,
+"obs": "Traseira - sistema Volvo"
+}
+]
+},
+{
+"codigo": "VV/308",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-223"
+]
+],
+"apl": [
+{
+"montadora": "VOLVO",
+"modelo": "VM-260 6x4 23-ton.",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Master - 3° eixo 3° eixo L-224"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-310R 6x4 23-ton.",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Master - 3° eixo 3° eixo L-224"
+},
+{
+"montadora": "VOLVO",
+"modelo": "VM-310T 4x2 43-ton.",
+"de": 2006,
+"ate": 0,
+"obs": "Dianteira - sistema Master"
+}
+]
+},
+{
+"codigo": "VW/256",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [
+[
+"Lonaflex",
+"L-540"
+]
+],
+"apl": [
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "A-60",
+"de": 1981,
+"ate": 1985,
+"obs": "Dianteira - sistema Bendix - Est. 2095"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "C-60",
+"de": 1981,
+"ate": 1985,
+"obs": "Dianteira - sistema Bendix - Est. 2095"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "D-60",
+"de": 1981,
+"ate": 1985,
+"obs": "Dianteira - sistema Bendix - Est. 2095"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "D-11.000",
+"de": 1985,
+"ate": 1987,
+"obs": "Dianteira - sistema Bendix"
+},
+{
+"montadora": "GENERAL MOTORS",
+"modelo": "D-12.000",
+"de": 1987,
+"ate": 1996,
+"obs": "Dianteira - sistema Bendix"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VW 11.130",
+"de": 1981,
+"ate": 1981,
+"obs": "Dianteira - sistema Bendix"
+}
+]
+},
+{
+"codigo": "VW/266",
+"grupo": "",
+"descricao": "LONA DE FREIO DIANTEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "KOMBI 1200",
+"de": 1957,
+"ate": 1966,
+"obs": "Dianteira - sistema VW"
+}
+]
+},
+{
+"codigo": "VW/267",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "KOMBI 1200",
+"de": 1957,
+"ate": 1966,
+"obs": "Traseira - sistema VW"
+}
+]
+},
+{
+"codigo": "VW/279",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "KOMBI FURGÃO",
+"de": 1982,
+"ate": 0,
+"obs": "Traseira - sistema VW - Ø"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "KOMBI PICK-UP",
+"de": 1982,
+"ate": 0,
+"obs": "Traseira - sistema VW - Ø"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "KOMBI PICK-UP",
+"de": 1982,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+}
+]
+},
+{
+"codigo": "VW/280",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "SEAT",
+"modelo": "INCA",
+"de": 1995,
+"ate": 0,
+"obs": "Traseira - sistema Ate - Freio traseiro"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "SAVEIRO CROSS 1.6",
+"de": 2012,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "VAN",
+"de": 1999,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+}
+]
+},
+{
+"codigo": "VW/281",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "GOL GTi 2.0",
+"de": 1994,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "QUANTUM 1.8 / 2.0",
+"de": 1994,
+"ate": 0,
+"obs": "Traseira - Freio traseiro"
+}
+]
+},
+{
+"codigo": "VW/282",
+"grupo": "",
+"descricao": "LONA DE FREIO TRASEIRA",
+"medidas": "",
+"foto": "",
+"oem": [],
+"conv": [],
+"apl": [
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "AMAROK HIGHLINE CD 2.0 16V",
+"de": 2010,
+"ate": 0,
+"obs": "Traseira"
+},
+{
+"montadora": "VOLKSWAGEN",
+"modelo": "AMAROK TRENDLINE CD 2.0 16V",
+"de": 2010,
+"ate": 0,
+"obs": "Traseira"
+}
+]
+}
+]
+}

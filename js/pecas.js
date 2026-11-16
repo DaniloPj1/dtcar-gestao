@@ -27,7 +27,9 @@ const marcaTok = s => [...new Set(palavras(s).map(x => APELIDOS[x] || x).filter(
 export function prepararPecas(d) {
   const pecas = d.pecas.map((r, n) => ({ n, marca: d.catalogos[r[0]][0], edicao: d.catalogos[r[0]][1], pasta: d.catalogos[r[0]][2], anoCat: d.catalogos[r[0]][3] || 0, codigo: r[1], grupo: d.grupos[r[2]], descricao: r[3], medidas: r[4],
     foto: r[5], oem: r[6], conv: r[7], breve: !!r[8], emb: r[9] || "", apl: [] }));
-  const apl = d.apl.map(r => { const a = { peca: pecas[r[0]], montadora: d.montadoras[r[1]], modelo: r[2], de: r[3], ate: r[4], obs: r[5], _m: marcaTok(d.montadoras[r[1]]), _t: palavras(r[2]) };
+  const palMod = new Map(); // o mesmo nome de modelo aparece em milhares de aplicações: separa as palavras uma vez só
+  const apl = d.apl.map(r => { const modelo = d.modelos[r[2]]; let t = palMod.get(r[2]); if (!t) palMod.set(r[2], t = palavras(modelo));
+    const a = { peca: pecas[r[0]], montadora: d.montadoras[r[1]], modelo, de: r[3], ate: r[4], obs: d.obs[r[5]], _m: marcaTok(d.montadoras[r[1]]), _t: t };
     a._cil = a._t.filter(x => /^\d\.\d$/.test(x)); a.peca.apl.push(a); return a; });
   return { versao: d.versao, catalogos: d.catalogos.map(c => ({ marca: c[0], edicao: c[1] })), grupos: d.grupos, pecas, apl };
 }

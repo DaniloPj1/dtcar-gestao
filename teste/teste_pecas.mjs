@@ -35,7 +35,7 @@ r = pecasDoVeiculo(cat, { marca: "MITSUBISHI", modelo: "L200 TRITON 3.2", ano: "
 chk("L200 do documento casa com 'L 200' do catálogo", r.total > 5, r.total);
 r = pecasDoVeiculo(cat, { marca: "HONDA", modelo: "CIVIC LXS 1.8", ano: "2010" });
 const disco = r.grupos.find(g => g.grupo === "Disco de freio");
-chk("freios: Civic 2010 traz disco (Hipper, com medidas) e pastilha (Fras-le)", !!disco && disco.itens.every(e => /Ø externo [0-9]+/.test(e.peca.medidas)) && r.grupos.some(g => g.grupo === "Pastilha de freio"), r.grupos.map(g => g.grupo));
+chk("freios: Civic 2010 traz disco (Hipper, com medidas) e pastilha (Fras-le)", !!disco && disco.itens.every(e => /(Ø|Diâmetro) externo[: ]+[0-9]+/.test(e.peca.medidas)) && r.grupos.some(g => g.grupo === "Pastilha de freio"), r.grupos.map(g => g.grupo));
 r = pecasDoVeiculo(cat, { marca: "VW", modelo: "GOL 1.0", ano: "2015" });
 const am = (r.grupos.find(g => g.grupo === "Amortecedor") || { itens: [] }).itens.filter(e => e.peca.marca === "Cofap");
 chk("Cofap: Gol 2015 traz amortecedor, e por ser catálogo de 2013 manda conferir", am.length > 0 && am.every(e => e.conferir && e.aplicacoes.some(a => /catálogo de 2013/.test(a))), am.map(e => e.aplicacoes));

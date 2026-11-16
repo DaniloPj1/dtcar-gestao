@@ -225,7 +225,7 @@
         VERSAO: VERSAO, sair: sair,
         digital: { disponivel: digitalDisponivel, ligada: digitalLigada, ativar: ativarDigital, desligar: function () { desligarDigital(); avisar('Digital desligada. Na próxima vez, entre com a senha.'); } }
       });
-    }, function () { montado = false; raiz.innerHTML = '<main class="tela"><p class="sem-js">Não deu para abrir as telas. Confira a internet e abra o app de novo.</p></main>'; });
+    }, function () { montado = false; raiz.innerHTML = '<main class="tela"><p class="sem-js">Não deu para abrir as telas. Confira a internet.</p><p style="text-align:center"><button type="button" class="botao" onclick="location.reload()">TENTAR DE NOVO</button></p></main>'; });
   }
   function desmontarTelas() { if (montado && telas) telas.desmontar(); montado = false; }
 

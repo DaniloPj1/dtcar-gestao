@@ -194,10 +194,12 @@ function BuscaClienteQuadro({ onEscolha, onFechar }) {
 /* ---------------- + ORÇAMENTO e + O.S. (mesmo formulário do protótipo: 1. Cliente, 2. Veículo) ---------------- */
 const MARCAS_2 = ["LAND ROVER", "MERCEDES BENZ", "MERCEDES-BENZ", "ALFA ROMEO", "GREAT WALL", "ASTON MARTIN", "ROLLS ROYCE"];
 const separarMarca = txt => { const t = String(txt || "").trim().toUpperCase(), m2 = MARCAS_2.find(m => t.startsWith(m + " ")); if (m2) return { marca: m2, modelo: t.slice(m2.length).trim() }; const i = t.indexOf(" "); return i < 0 ? { marca: t, modelo: "" } : { marca: t.slice(0, i), modelo: t.slice(i + 1) }; };
-const vazio = () => ({ clienteId: "", doc: "", nome: "", cep: "", cidade: "", uf: "", endereco: "", whats: "", nascimento: "", veiculoId: "", placa: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", km: "", motivo: "", daPlaca: null });
+const vazio = () => ({ clienteId: "", doc: "", nome: "", cep: "", cidade: "", uf: "", endereco: "", whats: "", nascimento: "", veiculoId: "", placa: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", km: "", motivo: "", daPlaca: null, doCPF: null });
+// campos do veículo que a busca da placa (cadastro ou consulta) preenche; trocou a placa, eles saem
+const CAMPOS_VEIC = { veiculoId: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", daPlaca: null };
 
 function FormularioOS({ tipo }) {
-  const { dados, perfil, cfg, placa, avisar, recarregar } = useApp();
+  const { dados, perfil, cfg, placa, setPlaca, avisar, recarregar } = useApp();
   const ehOS = tipo === "os", LS = "dtcar-app-form-" + tipo;
   const [f, setF] = useState(() => lsGet(LS) || vazio());
   const [cpf, setCpf] = useState(null), [cep, setCep] = useState(null), [erros, setErros] = useState([]), [busca, setBusca] = useState(false), [salvando, setSalvando] = useState(false), [feito, setFeito] = useState(null);
@@ -207,7 +209,8 @@ function FormularioOS({ tipo }) {
   // veículo achado no Início ou na busca desta tela entra no formulário (só nos campos em branco)
   const aplicarVeic = v => set({ veiculoId: v.id || "", placa: v.placa, marcaModelo: nomeVeic(v), marca: v.marca, modelo: v.modelo, ano: v.ano || "", cor: v.cor || "", daPlaca: v.id ? null : { ano_fab: v.ano_fab, ano_mod: v.ano_mod, chassi: v.chassi, renavam: v.renavam },
     ...(v.cliente && !f.clienteId && !f.nome ? clienteParaForm(v.cliente) : {}) });
-  useEffect(() => { if (placa.veic && placa.veic.placa !== f.placa) aplicarVeic(placa.veic); }, [placa.veic]);
+  // o carro buscado no Início entra só quando o formulário ainda não tem veículo (não troca o que a pessoa digitou aqui)
+  useEffect(() => { if (placa.veic && !f.placa && !f.marca) aplicarVeic(placa.veic); }, [placa.veic]);
   const clienteParaForm = c => ({ clienteId: c.id, doc: c.doc ? fmtDoc(c.doc) : "", nome: c.nome || "", cep: c.cep || "", cidade: c.cidade || "", uf: c.uf || "", endereco: [c.rua, c.bairro].filter(Boolean).join(" — ") || c.endereco || "", whats: c.telefone ? fmtTel(c.telefone) : "", nascimento: "" });
   // CPF: 1º o cadastro (sem custo), 2º a consulta (só administrador), como na Nova O.S. do sistema
   const buscarCPF = async () => {
@@ -219,7 +222,7 @@ function FormularioOS({ tipo }) {
     if (!ehAdmin(perfil)) { setCpf({ erro: "CPF fora do cadastro. A consulta pelo CPF é só do administrador: preencha o nome." }); return; }
     setCpf({ buscando: true });
     const r = await consultarCPF(d, { manual: true });
-    if (r.ok && r.encontrado && r.dados) { set({ clienteId: "", nome: f.nome.trim() ? f.nome : MAIUSC(r.dados.nome || ""), nascimento: r.dados.nascimento || "" }); setCpf({ ok: "Nome encontrado pelo CPF" }); }
+    if (r.ok && r.encontrado && r.dados) { const nome = f.nome.trim() ? f.nome : MAIUSC(r.dados.nome || ""); set({ clienteId: "", nome, nascimento: r.dados.nascimento || "", doCPF: { cpf: d, nome: f.nome.trim() ? "" : nome, nascimento: r.dados.nascimento || "" } }); setCpf({ ok: "Nome encontrado pelo CPF" }); }
     else setCpf({ erro: r.ok ? (r.sem_creditos ? "CPF fora da base e sem créditos na consulta: preencha o nome." : "CPF não encontrado: preencha o nome.") : (r.vencida ? "A chave da consulta de CPF venceu: cadastre a nova em Ajustes do sistema." : r.erro || "A consulta não respondeu: preencha o nome.") });
   };
   const buscarCEP = async () => {
@@ -243,24 +246,29 @@ function FormularioOS({ tipo }) {
       else if (t.length >= 10) { const dup = dados.clientes.find(c => soDig(c.telefone) === t); if (dup) e.push("Este telefone já é de " + dup.nome + ". Toque em “Buscar no cadastro” e escolha o cliente."); }
       if (f.doc.trim()) { if (!docValido(f.doc)) e.push("CPF/CNPJ inválido. Confira os números ou deixe em branco."); else { const dup = dados.clientes.find(c => soDig(c.doc) === soDig(f.doc)); if (dup) e.push("Já existe um cliente com este CPF/CNPJ: " + dup.nome + ". Toque na lupa do CPF."); } }
     } else { const cli = dados.clientes.find(c => c.id === f.clienteId); if (cli && cli.situacao === "bloqueado") e.push("Cliente bloqueado: " + (cli.restricao || "verifique o cadastro") + "."); }
-    if (ehOS) { const km = parseInt(soDig(f.km), 10); if (f.km === "" || !(km >= 0)) e.push("Informe o KM atual do painel."); if (!f.motivo.trim()) e.push("Descreva o motivo da visita ou o serviço pedido."); }
+    if (ehOS) { const km = parseInt(soDig(f.km), 10); if (f.km === "" || !(km >= 0)) e.push("Informe o KM atual do painel.");
+      else { const vc = dados.veiculos.find(v => v.id === f.veiculoId); if (vc && vc.km_atual && km < vc.km_atual && !f.kmConfirmado) e.push("O KM informado é menor que o último registrado (" + fmtKm(vc.km_atual) + "). Confira o painel ou marque “O KM está certo”."); } if (!f.motivo.trim()) e.push("Descreva o motivo da visita ou o serviço pedido."); }
     return e;
   };
   const enderecoNovo = () => { const [rua = "", bairro = ""] = f.endereco.split(/\s+—\s+|\s+-\s+/); const c = soDig(f.cep).length === 8 ? fmtCep(f.cep) : "";
     const cidade = (c && f.cidade.trim()) || "Colatina", uf = (c && f.uf.trim()) || "ES";
     return { rua: rua.trim(), bairro: bairro.trim(), cidade, uf, ...(c ? { cep: c } : {}), endereco: [rua.trim(), bairro.trim(), cidade + "/" + uf].filter(Boolean).join(", ") }; };
+  /** nascimento que veio da consulta do CPF que está no campo (nunca o de outro CPF) */
+  const nascDoCPF = () => { const p = f.doCPF; return p && p.cpf === soDig(f.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
   const anos = () => { const mod = +String(f.ano).slice(-4) || null, p = f.daPlaca; const fab = p && +p.ano_fab && +p.ano_fab <= mod ? +p.ano_fab : mod; return { ano: anoFabMod(fab, mod), ano_fab: fab, ano_mod: mod, ...(p && p.chassi ? { chassi: p.chassi } : {}), ...(p && p.renavam ? { renavam: p.renavam } : {}) }; };
 
+  const trava = useRef(false);
   const gravar = async () => {
+    if (trava.current) return; // dois toques seguidos não gravam duas vezes
     const e = validar(); setErros(e); if (e.length) { topo.current && topo.current.scrollIntoView({ behavior: "smooth" }); return; }
-    setSalvando(true);
+    trava.current = true; setSalvando(true);
     try {
       const p = normPlaca(f.placa), veiCad = dados.veiculos.find(v => v.id === f.veiculoId) || dados.veiculos.find(v => v.placa === p) || null;
       let cli = dados.clientes.find(c => c.id === f.clienteId) || null;
       if (ehOS) {
         const abertaDoVeiculo = veiCad ? dados.ordens.find(o => o.veiculo_id === veiCad.id && ["diagnostico", "aguardando", "execucao", "pronto"].includes(o.status)) : null;
-        if (abertaDoVeiculo && !window.confirm("Este veículo já tem a " + numOS(abertaDoVeiculo.numero) + " em andamento. Abrir outra O.S. mesmo assim?")) { setSalvando(false); return; }
-        if (!cli) cli = await api.clientes.salvar({ nome: MAIUSC(f.nome), telefone: soDig(f.whats), doc: soDig(f.doc), ...enderecoNovo(), origem: "", ...(f.nascimento ? { nascimento: f.nascimento } : {}) });
+        if (abertaDoVeiculo && !window.confirm("Este veículo já tem a " + numOS(abertaDoVeiculo.numero) + " em andamento. Abrir outra O.S. mesmo assim?")) return;
+        if (!cli) cli = await api.clientes.salvar({ nome: MAIUSC(f.nome), telefone: soDig(f.whats), doc: soDig(f.doc), ...enderecoNovo(), origem: "", ...nascDoCPF() });
         const km = parseInt(soDig(f.km), 10);
         let vei = veiCad;
         if (!vei) vei = await api.veiculos.salvar({ placa: p, marca: f.marca, modelo: f.modelo, ...anos(), cor: f.cor.trim().toUpperCase(), motor: "", combustivel: "", cliente_id: cli.id, km_atual: km });
@@ -273,9 +281,11 @@ function FormularioOS({ tipo }) {
           consultor_id: perfil.id, consultor_nome: cons.nome || perfil.nome, garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "" });
         await api.evento(ordem.id, "abertura", "O.S. aberta pelo app com " + fmtKm(km) + ".", perfil.nome).catch(() => {});
         lsSet(LS, null); setF(vazio()); await recarregar();
+        // o carro buscado passa a ser o do cadastro (com dono): Agendar e as consultas já usam o cadastro
+        setPlaca({ texto: vei.placa, veic: { placa: vei.placa, id: vei.id, marca: vei.marca || "", modelo: vei.modelo || "", ano: vei.ano || "", cor: vei.cor || "", motor: vei.motor || "", combustivel: vei.combustivel || "", km_atual: vei.km_atual, cliente: cli, origem: "cadastro" } });
         setFeito({ tipo: "os", id: ordem.id, numero: ordem.numero });
       } else {
-        const clienteDig = cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: f.nome, telefone: soDig(f.whats), doc: f.doc, cep: f.cep, ...(() => { const e2 = enderecoNovo(); return { rua: e2.rua, bairro: e2.bairro, cidade: e2.cidade, uf: e2.uf }; })(), nascimento: f.nascimento });
+        const clienteDig = cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: f.nome, telefone: soDig(f.whats), doc: f.doc, cep: f.cep, ...(() => { const e2 = enderecoNovo(); return { rua: e2.rua, bairro: e2.bairro, cidade: e2.cidade, uf: e2.uf }; })(), ...nascDoCPF() });
         if (!cli && erroClienteDig({ doc: f.doc })) throw new Error(erroClienteDig({ doc: f.doc }));
         const validade = cfg.validadeDias ? somaDias(hojeISO(), Number(cfg.validadeDias)) : "";
         const r = await api.orcamentos.salvar({ cliente_id: cli ? cli.id : "", veiculo_id: veiCad ? veiCad.id : "", cliente: clienteDig,
@@ -285,7 +295,7 @@ function FormularioOS({ tipo }) {
         setFeito({ tipo: "orc", id: r.id, numero: r.numero });
       }
     } catch (x) { avisar((ehOS ? "Não foi possível abrir a O.S.: " : "Não foi possível criar o orçamento: ") + (x.message || x), true); }
-    finally { setSalvando(false); }
+    finally { trava.current = false; setSalvando(false); }
   };
 
   const auto = f.clienteId ? " auto" : "";
@@ -299,7 +309,7 @@ function FormularioOS({ tipo }) {
     <div ref=${topo}></div>
     ${erros.length ? html`<div class="erro" role="alert">Corrija para continuar:<ul>${erros.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul></div>` : null}
     <${Cartao} titulo="1. Cliente" id="c-cliente">${linhaCpf}
-      <${Campo} id="f-cpf" rotulo="CPF ou CNPJ"><div class="linha"><input id="f-cpf" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" value=${f.doc} onInput=${e => { set({ doc: e.target.value, clienteId: "" }); setCpf(null); }} onBlur=${() => { if ([11, 14].includes(soDig(f.doc).length) && !f.clienteId) buscarCPF(); }} />
+      <${Campo} id="f-cpf" rotulo="CPF ou CNPJ"><div class="linha"><input id="f-cpf" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" value=${f.doc} onInput=${e => { const v = e.target.value, p = f.doCPF; const tira = p && p.cpf !== soDig(v) ? { nascimento: "", nome: p.nome && f.nome === p.nome ? "" : f.nome, doCPF: null } : {}; set({ doc: v, clienteId: "", ...tira }); setCpf(null); }} onBlur=${() => { if ([11, 14].includes(soDig(f.doc).length) && !f.clienteId && !f.nome.trim()) buscarCPF(); }} />
         <button type="button" class="btn-busca g" aria-label="Buscar pelo CPF" onClick=${buscarCPF}><${Ic} n="search" t=${22} /></button></div></${Campo}>
       <${Campo} id="f-nome" rotulo=${f.clienteId ? "Nome (do cadastro)" : "Nome"}><input id="f-nome" class=${"inp" + auto} autocomplete="off" placeholder="Nome do cliente" value=${f.nome} onInput=${e => set({ nome: e.target.value, clienteId: "" })} /></${Campo}>
       <button type="button" class="link" style="align-self:flex-start;background:none;border:0;color:#2f6fb5;font-weight:600;font-size:13px;min-height:36px;padding:0" onClick=${() => setBusca(true)}>Buscar no cadastro pelo nome, telefone ou placa</button>
@@ -310,13 +320,14 @@ function FormularioOS({ tipo }) {
       <${Campo} id="f-end" rotulo="Endereço"><input id="f-end" class="inp" autocomplete="off" placeholder="Rua, número — bairro" value=${f.endereco} onInput=${e => set({ endereco: e.target.value })} /></${Campo}>
       <${Campo} id="f-whats" rotulo="WhatsApp"><input id="f-whats" class="inp livre" inputmode="tel" autocomplete="off" placeholder="(27) 90000-0000" value=${f.whats} onInput=${e => set({ whats: e.target.value })} onBlur=${() => { const t = soDig(f.whats); if (t.length >= 10) set({ whats: fmtTel(t) }); }} /></${Campo}></${Cartao}>
     <${Cartao} titulo="2. Veículo" id="c-veiculo">${linhaPlaca}
-      <${Campo} id="f-placa" rotulo="Placa"><div class="linha"><input id="f-placa" class="inp placa" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="ABC1D23" value=${f.placa} onInput=${e => set({ placa: e.target.value, veiculoId: "", daPlaca: null })} onBlur=${() => { if (normPlaca(f.placa).length === 7 && !f.veiculoId && !f.marca) buscarPlacaAqui(); }} />
+      <${Campo} id="f-placa" rotulo="Placa"><div class="linha"><input id="f-placa" class="inp placa" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="ABC1D23" value=${f.placa} onInput=${e => set({ ...CAMPOS_VEIC, placa: e.target.value })} onBlur=${() => { if (normPlaca(f.placa).length === 7 && !f.veiculoId && !f.marca) buscarPlacaAqui(); }} />
         <button type="button" class="btn-busca g" aria-label="Buscar pela placa" onClick=${buscarPlacaAqui}><${Ic} n="search" t=${22} /></button></div></${Campo}>
       <div class="nota">Placa já gravada não gera nova consulta paga. Placa nova é consultada uma vez e fica salva.</div>
       <${Campo} id="f-mm" rotulo=${f.veiculoId || f.daPlaca ? "Marca e modelo (preenchido pela busca)" : "Marca e modelo"}><input id="f-mm" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="Ex.: VOLKSWAGEN GOL 1.0" value=${f.marcaModelo} onInput=${e => trocarMarcaModelo(e.target.value)} /></${Campo}>
       <div class="grade2"><${Campo} id="f-ano" rotulo="Ano"><input id="f-ano" class=${"inp livre" + (f.veiculoId || f.daPlaca ? " auto" : "")} inputmode="numeric" autocomplete="off" placeholder="2015" value=${f.ano} onInput=${e => set({ ano: e.target.value.replace(/[^\d/]/g, "").slice(0, 9) })} /></${Campo}>
         <${Campo} id="f-cor" rotulo="Cor"><input id="f-cor" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="PRATA" value=${f.cor} onInput=${e => set({ cor: e.target.value })} /></${Campo}></div>
-      ${ehOS ? html`<${Campo} id="f-km" rotulo="KM atual"><input id="f-km" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="Digite o KM do painel" value=${f.km} onInput=${e => set({ km: e.target.value.replace(/\D/g, "").slice(0, 7) })} /></${Campo}>` : null}</${Cartao}>
+      ${ehOS ? html`<${Campo} id="f-km" rotulo="KM atual"><input id="f-km" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="Digite o KM do painel" value=${f.km} onInput=${e => set({ km: e.target.value.replace(/\D/g, "").slice(0, 7), kmConfirmado: false })} /></${Campo}>
+        ${erros.some(x => x.includes("menor que o último")) ? html`<button type="button" class="marcar" aria-pressed=${f.kmConfirmado ? "true" : "false"} onClick=${() => set({ kmConfirmado: !f.kmConfirmado })}><span class="cx">${f.kmConfirmado ? html`<${Ic} n="check" t=${16} sw=${2.6} />` : null}</span>O KM está certo (o painel marca menos que o registrado)</button>` : null}` : null}</${Cartao}>
     <${Cartao} titulo=${ehOS ? "3. Motivo da visita" : "3. Serviço pedido"} id="c-servico">
       <${Campo} id="f-motivo" rotulo=${ehOS ? "O que o cliente pediu ou reclamou" : "O que o cliente quer orçar (opcional)"}><textarea id="f-motivo" class="area" placeholder=${ehOS ? "Ex.: barulho na suspensão dianteira" : "Ex.: troca de pastilhas e discos"} value=${f.motivo} onInput=${e => set({ motivo: e.target.value })}></textarea></${Campo}></${Cartao}>
     ${busca ? html`<${BuscaClienteQuadro} onEscolha=${escolherCliente} onFechar=${() => setBusca(false)} />` : null}

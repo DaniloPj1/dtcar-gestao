@@ -34,6 +34,9 @@
     auth: { sessao: async () => ({ user: { id: "p1", email: "d@x" } }), aoMudar: () => () => {}, sair: async () => {} },
     meuPerfil: async () => { net(); return window.__PAPEL ? { ...db.perfis[0], papel: window.__PAPEL } : db.perfis[0]; }, perfis: async () => { net(); return db.perfis; },
     config: async () => { net(); return db.config; }, salvarConfig: async d => { db.config = d; },
+    // função "equipe" de mentira: cria o acesso (como o gatilho + a função) e troca senha; window.__EQUIPE guarda o que foi pedido
+    equipe: { criar: async d => { net(); window.__EQUIPE = (window.__EQUIPE || []).concat([{ acao: "criar", ...d }]); if (db.perfis.some(p => p.email === d.email)) throw new Error("Este e-mail já tem acesso. Use “Trocar senha” na pessoa, ou outro e-mail."); const id = "p" + (db.perfis.length + 1); db.perfis.push({ id, nome: d.nome, email: d.email, papel: d.papel, ativo: true }); return { ok: true, id, email: d.email }; },
+      senha: async d => { net(); window.__EQUIPE = (window.__EQUIPE || []).concat([{ acao: "senha", ...d }]); return { ok: true, id: d.id }; } },
     clientes: tab("clientes"), veiculos: tab("veiculos"), produtos: tab("produtos"), fornecedores: tab("fornecedores"),
     ordens: async () => { net(); return db.ordens; }, alterados: async (k, desde) => (db[k] || []).filter(r => r.atualizado_em && (!desde || r.atualizado_em > desde)), urlArquivo: async () => "",
     itensDasOrdens: async ids => { net(); return db.os_itens.filter(i => ids.includes(i.ordem_id)); },

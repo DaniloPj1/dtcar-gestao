@@ -1547,3 +1547,41 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .am-grade{display:grid;grid-template-columns:repeat(auto-fill,minmax(46px,1fr));gap:6px;max-height:210px;overflow-y:auto;padding:2px}
 .am-grade button{display:grid;place-items:center;height:46px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink)}
 .am-grade button[aria-pressed=true]{border:2px solid var(--brand);background:var(--surface-2)}
+/* Compras (v59): pesquisa pela placa, preço por fornecedor, carrinho e pedidos */
+.cp-pagina .abas{margin-bottom:4px}
+.cp-campos{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap}
+.cp-campo{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--muted)}
+.cp-campo-placa{flex:0 0 170px}.cp-campo-placa .inp{font-size:20px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-variant-numeric:tabular-nums}
+.cp-campo-txt{flex:1 1 260px}.cp-limpar{align-self:flex-end}
+.cp-res-topo{display:flex;gap:12px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.cp-lista{border:1px solid var(--line);border-radius:10px;background:var(--surface);max-height:62vh;overflow:auto}
+.cp-item{grid-template-columns:84px minmax(0,1fr) auto}
+.cp-precos{grid-column:1 / -1}
+.cp-ofertas{display:flex;flex-direction:column;gap:4px}
+.cp-oferta{display:grid;grid-template-columns:minmax(120px,1.2fr) minmax(90px,1fr) 110px minmax(120px,1.2fr) minmax(150px,1.6fr) auto;gap:4px 12px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);font-size:13.5px}
+.cp-oferta.cp-menor{border-color:#174f94;background:var(--brand-soft)}
+.cp-oferta.cp-velho .cp-of-preco b{color:var(--muted)}
+.cp-of-preco b{font-size:17px;font-variant-numeric:tabular-nums}
+.cp-of-origem{display:flex;flex-direction:column;color:var(--muted);font-size:12.5px}.cp-of-origem small{font-size:12px}
+.cp-of-cod,.cp-of-est{color:var(--muted);overflow-wrap:anywhere}
+.cp-of-acao{text-align:right}.cp-add span{margin-left:4px}
+.cp-sem-preco{display:block;padding:4px 0}
+.cp-resumo-add{display:flex;flex-direction:column;gap:4px;margin-bottom:10px}
+.cp-forn-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.cp-forn-topo h3{margin:0;color:var(--ink)}
+.cp-forn-total{font-size:18px;font-variant-numeric:tabular-nums}
+.cp-itens{display:flex;flex-direction:column;gap:6px}
+.cp-item-car{display:grid;grid-template-columns:minmax(0,1fr) 90px 150px 110px auto;gap:8px 12px;align-items:center;padding:8px 10px;border:1px solid var(--line);border-radius:8px}
+.cp-item-car label{display:flex;flex-direction:column;gap:2px;font-size:12px;color:var(--muted)}
+.cp-ic-desc{display:flex;flex-direction:column;gap:2px;min-width:0}.cp-ic-desc b{overflow-wrap:anywhere}
+.cp-ic-total{text-align:right;font-variant-numeric:tabular-nums}
+.cp-item-ped{display:flex;justify-content:space-between;gap:12px;padding:6px 0;border-bottom:1px solid var(--line)}.cp-item-ped:last-child{border-bottom:0}
+.cp-ip-val{white-space:nowrap;font-variant-numeric:tabular-nums}
+.cp-ped-acoes{flex-wrap:wrap}.cp-texto span{margin-left:4px}
+.cp-texto-area{min-height:260px;font-family:inherit;white-space:pre-wrap}
+.cp-pedidos{display:flex;flex-direction:column;gap:12px}.cp-carrinho{display:flex;flex-direction:column;gap:12px}
+@media (max-width:640px){
+  .cp-campo-placa{flex:1 1 100%}.cp-limpar{flex:1 1 100%}
+  .cp-item{grid-template-columns:64px minmax(0,1fr)}.cp-item .pv-botoes{grid-column:1 / -1;flex-direction:row}.cp-item .pv-botoes .btn{flex:1}
+  .cp-oferta{grid-template-columns:minmax(0,1fr) auto}.cp-of-cod,.cp-of-est,.cp-of-origem{grid-column:1 / -1}.cp-of-acao{grid-column:1 / -1;text-align:left}.cp-of-acao .btn{width:100%}
+  .cp-item-car{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cp-ic-desc{grid-column:1 / -1}.cp-ic-total,.cp-tirar{grid-column:auto}
+}

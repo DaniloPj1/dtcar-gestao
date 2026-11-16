@@ -8,7 +8,8 @@
       { id: "k4", descricao: "Peças NF 555", fornecedor_id: "f1", categoria: "Fornecedores de peças", documento: "555-1", valor: 1200, vencimento: "2026-11-10", status: "aberta", origem: "nfe", parcela: 1, parcelas: 2 }],
     perfis: [{ id: "p1", nome: "Danilo", email: "d@x", papel: "admin", ativo: true }, { id: "p2", nome: "Carlos Mecânico", email: "c@x", papel: "mecanico", ativo: true }],
     produtos: [{ id: "pr1", codigo: 101, tipo: "produto", descricao: "AMORTECEDOR DIANT TOYOTA HILUX", referencia: "KYB-334", unidade: "UN", preco_vista: 890, preco_prazo: 940, controla_estoque: true, estoque_atual: 4, ativo: true, categoria: "SUSPENSAO", marca: "KAYABA" },{ id: "pr2", codigo: 102, tipo: "produto", descricao: "PASTILHA DE FREIO DIANT", referencia: "PST-11", unidade: "JG", preco_vista: 260, controla_estoque: true, estoque_atual: 0, ativo: true },{ id: "pr3", codigo: 103, tipo: "produto", descricao: "FILTRO DE OLEO", unidade: "UN", preco_vista: 45, controla_estoque: true, estoque_atual: 1, estoque_min: 3, avisar_estoque_baixo: true, ativo: true },{ id: "pr4", codigo: 104, tipo: "servico", descricao: "ALINHAMENTO", unidade: "SERV", preco_vista: 120, ativo: true }],
-    clientes: [{ id: "c1", nome: "Cliente Teste", telefone: "27999990000", situacao: "liberado" }], veiculos: [{ id: "v1", placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015", cliente_id: "c1", km_atual: 1000, motor: "", ficha_oleo: null }, { id: "v2", placa: "QXN1E49", marca: "Toyota", modelo: "Hilux", ano: "2022", cliente_id: "c1", km_atual: 50000, motor: "", ficha_oleo: null }], fornecedores: [{ id: "f1", razao: "AUTO PECAS COLATINA LTDA", fantasia: "AutoPeças", cnpj: "", telefone: "", cidade: "Colatina", uf: "ES" }],
+    clientes: [{ id: "c1", nome: "Cliente Teste", telefone: "27999990000", situacao: "liberado" }], veiculos: [{ id: "v1", placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015", cliente_id: "c1", km_atual: 1000, motor: "", ficha_oleo: null }, { id: "v2", placa: "QXN1E49", marca: "Toyota", modelo: "Hilux", ano: "2022", cliente_id: "c1", km_atual: 50000, motor: "", ficha_oleo: null }], fornecedores: [{ id: "f1", razao: "AUTO PECAS COLATINA LTDA", fantasia: "AutoPeças", cnpj: "", telefone: "27988887777", contato: "Joao", cidade: "Colatina", uf: "ES" }, { id: "f2", razao: "DPK DISTRIBUIDORA", fantasia: "", cnpj: "", telefone: "", cidade: "Vitoria", uf: "ES" }],
+    produto_fornecedor: [{ id: "pf1", produto_id: "pr1", fornecedor_id: "f2", codigo: "KYB-334", fator: 1, ultimo_custo: 610, ultima_compra: "2026-10-01" }],
     ordens: [{ id: "o2", numero: 1898, recebido: 0, status: "execucao", cliente_id: "c1", veiculo_id: "v2", mecanico_nome: "Carlos", criado_em: "2026-10-29T07:15:00-03:00", atualizado_em: "2026-10-29T07:15:00-03:00", cliente: { nome: "Ministério Vale do Rio Doce", telefone: "27999990000" }, veiculo: { placa: "QXN1E49", marca: "Toyota", modelo: "Hilux", ano: "2022" }, km_entrada: 51000, total: 2650, checkin: { feito: true }, box: "3", situacao: "", tabela_preco: "vista", condicoes_pagamento: "Pagamento na retirada do veículo." },
       { id: "o3", numero: 1897, status: "pronto", cliente_id: "c1", veiculo_id: "v1", mecanico_nome: "Carlos", criado_em: "2026-10-29T07:10:00-03:00", cliente: { nome: "Cliente Teste", telefone: "27999990000" }, veiculo: { placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015" }, km_entrada: 1200, total: 300, recebido: 0, checkin: { feito: true }, tabela_preco: "vista" },
       { id: "o4", numero: 1896, status: "aguardando", cliente_id: "c1", veiculo_id: "v1", criado_em: "2026-10-28T10:00:00-03:00", cliente: { nome: "Cliente Teste", telefone: "27999990000" }, veiculo: { placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015" }, km_entrada: 1100, total: 500, recebido: 0, checkin: { feito: true }, tabela_preco: "vista" },
@@ -253,7 +254,47 @@
       chegouPeloOrcamento: async (orcId, o) => { net(); const l = (db.agendamentos || []).filter(a => a.orcamento_id === orcId && ["agendado", "confirmado"].includes(a.situacao));
         l.forEach(a => Object.assign(a, { situacao: "chegou", ordem_id: o.id, os_numero: o.numero })); return l.map(a => ({ id: a.id })); } },
     produtos: { ...tab("produtos"), trocarGrupo: async ({ ids, de, para }) => { let n = 0; for (const p of window.__DB.produtos) if ((ids && ids.includes(p.id)) || (!ids && de && de.includes(p.categoria))) { p.categoria = String(para || "").trim(); p.atualizado_em = new Date().toISOString(); n++; } return n; } },
-    vinculos: { doProduto: async () => [], listar: async () => [] },
+    vinculos: { doProduto: async () => [], listar: async () => (db.produto_fornecedor || []).slice() },
+    // Compras (v59): fornecedores conectados, preços, carrinho e pedidos. window.__SEM_V59 simula o banco sem o SQL.
+    compras: (() => {
+      const v59 = () => { net(); if (window.__SEM_V59) throw new Error("Could not find the table 'public.compras_precos' in the schema cache"); };
+      const nm = t => String(t || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const fornNome = fid => { const f = db.fornecedores.find(x => x.id === fid); return f ? (f.fantasia || f.razao) : ""; };
+      db.compras_fornecedores = db.compras_fornecedores || []; db.compras_precos = db.compras_precos || []; db.compras_carrinho = db.compras_carrinho || [];
+      db.compras_pedidos = db.compras_pedidos || []; db.compras_pedido_itens = db.compras_pedido_itens || []; window.__SEGREDOS = window.__SEGREDOS || {};
+      return {
+        conexoes: { listar: async () => { v59(); return db.compras_fornecedores.slice(); },
+          salvar: async c => { v59(); if (c.id) { const o = db.compras_fornecedores.find(x => x.id === c.id); Object.assign(o, c, { atualizado_em: now() }); return o; }
+            if (db.compras_fornecedores.some(x => x.fornecedor_id === c.fornecedor_id)) throw new Error("duplicate key value violates unique constraint");
+            const { id: _, ...resto } = c; const x = { id: uid(), situacao: "aguardando", detalhe: "", criado_em: now(), atualizado_em: now(), ...resto }; db.compras_fornecedores.push(x); return x; },
+          excluir: async id => { v59(); db.compras_fornecedores = db.compras_fornecedores.filter(x => x.id !== id); delete window.__SEGREDOS["compras_acesso:" + id]; } },
+        acessos: async () => { v59(); return Object.keys(window.__SEGREDOS).filter(k => k.startsWith("compras_acesso:")).map(k => ({ id: k.slice(15), gravado_em: now() })); },
+        gravarAcesso: async (id, senha) => { v59(); if (!senha) { delete window.__SEGREDOS["compras_acesso:" + id]; return { gravado: false }; } window.__SEGREDOS["compras_acesso:" + id] = senha; return { gravado: true, gravado_em: now() }; },
+        precos: { listar: async () => { v59(); return db.compras_precos.slice(); },
+          salvar: async p => { v59(); const k = nm(p.codigo); let o = db.compras_precos.find(x => x.fornecedor_id === p.fornecedor_id && x.codigo_norm === k);
+            if (o) Object.assign(o, p, { codigo_norm: k, origem: "manual", consultado_em: now(), atualizado_em: now() });
+            else { o = { id: uid(), criado_em: now(), atualizado_em: now(), consultado_em: now(), criado_por_nome: "Danilo", ...p, codigo_norm: k, origem: "manual", marca: String(p.marca || "").toUpperCase(), descricao: String(p.descricao || "").toUpperCase() }; db.compras_precos.push(o); } return o; },
+          excluir: async id => { v59(); db.compras_precos = db.compras_precos.filter(x => x.id !== id); } },
+        carrinho: { listar: async () => { v59(); return db.compras_carrinho.slice(); },
+          incluir: async i => { v59(); const x = { id: uid(), criado_em: now(), atualizado_em: now(), criado_por_nome: "Danilo", ...i, descricao: String(i.descricao).toUpperCase() }; db.compras_carrinho.push(x); return x; },
+          atualizar: async (id, patch) => { v59(); const o = db.compras_carrinho.find(x => x.id === id); if (patch.preco !== undefined && patch.preco !== o.preco) Object.assign(o, { origem_preco: "manual", preco_em: now() }); Object.assign(o, patch); return o; },
+          excluir: async id => { v59(); db.compras_carrinho = db.compras_carrinho.filter(x => x.id !== id); } },
+        pedidos: { listar: async () => { v59(); return db.compras_pedidos.slice().sort((a, b) => b.numero - a.numero).map(p => ({ ...p, itens: db.compras_pedido_itens.filter(i => i.pedido_id === p.id) })); },
+          gerar: async ids => { v59(); const its = db.compras_carrinho.filter(c => !ids || !ids.length || ids.includes(c.id)); if (!its.length) throw new Error("O carrinho está vazio."); const out = [];
+            for (const fid of [...new Set(its.map(i => i.fornecedor_id))]) { const mine = its.filter(i => i.fornecedor_id === fid); window.__PED_SEQ = (window.__PED_SEQ || 0) + 1;
+              const p = { id: uid(), numero: window.__PED_SEQ, fornecedor_id: fid, fornecedor_nome: fornNome(fid), situacao: "a_finalizar", total: Math.round(mine.reduce((s, i) => s + i.qtd * i.preco, 0) * 100) / 100, documento: "", motivo: "", obs: "", criado_por_nome: "Danilo", criado_em: now(), atualizado_em: now() };
+              db.compras_pedidos.push(p); mine.forEach((i, n) => db.compras_pedido_itens.push({ id: uid(), pedido_id: p.id, posicao: n, codigo: i.codigo, marca: i.marca, descricao: i.descricao, qtd: i.qtd, preco: i.preco, origem_preco: i.origem_preco, preco_em: i.preco_em, os_numero: i.os_numero, placa: i.placa, obs: i.obs || "" }));
+              out.push({ id: p.id, numero: p.numero, fornecedor: p.fornecedor_nome, total: p.total, itens: mine.length }); }
+            db.compras_carrinho = db.compras_carrinho.filter(c => !its.includes(c)); return out; },
+          voltar: async id => { v59(); const p = db.compras_pedidos.find(x => x.id === id); if (p.situacao !== "a_finalizar") throw new Error("Só volta para o carrinho o pedido que ainda não foi finalizado nem cancelado.");
+            const its = db.compras_pedido_itens.filter(i => i.pedido_id === id); its.forEach(i => db.compras_carrinho.push({ id: uid(), fornecedor_id: p.fornecedor_id, codigo: i.codigo, marca: i.marca, descricao: i.descricao, qtd: i.qtd, preco: i.preco, origem_preco: i.origem_preco, preco_em: i.preco_em, os_numero: i.os_numero, placa: i.placa, obs: i.obs, criado_por_nome: "Danilo", criado_em: now(), atualizado_em: now() }));
+            Object.assign(p, { situacao: "cancelado", motivo: "Voltou para o carrinho" }); return { pedido: p.numero, itens: its.length }; },
+          atualizar: async (id, patch) => { v59(); const p = db.compras_pedidos.find(x => x.id === id); if (p.situacao === "cancelado" && patch.situacao && patch.situacao !== "cancelado") throw new Error("Pedido cancelado não volta. Gere outro pelo carrinho.");
+            if (patch.situacao === "cancelado" && !String(patch.motivo || "").trim()) throw new Error("check constraint compras_pedidos_motivo");
+            if (patch.situacao === "finalizado" && p.situacao !== "finalizado") Object.assign(p, { finalizado_em: now(), finalizado_por_nome: "Danilo" }); if (patch.situacao && patch.situacao !== "finalizado") Object.assign(p, { finalizado_em: null, finalizado_por_nome: "" });
+            Object.assign(p, patch, { atualizado_em: now() }); return p; } },
+      };
+    })(),
     notas: { listar: async () => [] },
     estoque: { movimentos: async () => [], movimentar: async (id, tipo, q) => { const p = db.produtos.find(x => x.id === id); p.estoque_atual = tipo === "entrada" ? +p.estoque_atual + q : tipo === "saida" ? +p.estoque_atual - q : q; return p.estoque_atual; } },
     contas: { abertas: async () => db.contas.filter(c => c.status === "aberta"),

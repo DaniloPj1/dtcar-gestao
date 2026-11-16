@@ -6,6 +6,7 @@ import { BotaoTema, BotaoInstalar } from "./topo.js";
 import { pode, PAPEIS, CONFIG_PADRAO, TERMO_ENTRADA, TERMO_ORCAMENTO, TERMO_GARANTIA } from "../regras.js";
 import { CartaoPlaca } from "../placa.js";
 import { CartaoCPF } from "../cpf.js";
+import { CartaoFornecedoresConectados } from "./compraspecas.js";
 
 /* ---------------- Menu "Mais" ---------------- */
 export function Mais() {
@@ -17,6 +18,7 @@ export function Mais() {
       ${it("/agenda", "Agenda", "Serviços agendados da semana", I.calendario)}
       ${it("/cadastros?aba=produtos", "Produtos e serviços", "Peças, serviços, preços por tabela e estoque", I.caixa)}
       ${it("/oleo-filtros", "Óleo e filtros", "Litros, viscosidade e filtros pelo modelo do carro", I.gota)}
+      ${pode(perfil, "verValores") ? it("/compras", "Compras", "Preço de cada fornecedor pela placa, carrinho e pedidos por fornecedor", I.carrinho) : null}
       ${it("/cadastros?aba=fornecedores", "Fornecedores", "Cadastro e notas de entrada", I.fabrica)}
       ${pode(perfil, "verValores") ? it("/balcao", "Venda de balcão", "Vender peças e serviços sem O.S.", I.carrinho) : null}
       ${pode(perfil, "cadastrar") ? it("/sefaz", "Notas da SEFAZ", "Notas de compra emitidas para o CNPJ da oficina", I.nuvem) : null}
@@ -135,6 +137,7 @@ export function Ajustes() {
     </section>
     <${CartaoPlaca} auto=${c.placaAuto} onAuto=${v => set({ placaAuto: v })} />
     <${CartaoCPF} auto=${c.cpfAuto} onAuto=${v => set({ cpfAuto: v })} />
+    <${CartaoFornecedoresConectados} />
     <section class="card"><h2>Termos dos documentos</h2><span class="dica">Revise com seu contador ou advogado antes de usar.</span>
       ${termo("termoEntrada", "Termo do checklist de entrada", TERMO_ENTRADA, "A frase da taxa de diagnóstico é acrescentada automaticamente quando houver taxa.")}
       ${termo("termoOrcamento", "Termo do orçamento", TERMO_ORCAMENTO)}

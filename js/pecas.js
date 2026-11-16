@@ -94,14 +94,16 @@ export function filtrarPecas(grupos, txt) {
  * mesmo código da montadora) e não mudam posição (dianteira/traseira, lado, superior/inferior). Nunca junta duas peças da mesma marca: isso é modelo
  * diferente, não só marca diferente. A linha mostra a peça que está no estoque; sem estoque, a mais completa (código da montadora, foto, medidas).
  * As outras viram conversão. estoque = [{ ref, descricao, qtd }] (produtos ativos com saldo; ref = código/referência cadastrado). */
-const nc = t => String(t || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+/** código só com letras e números, em maiúsculas (o mesmo "codigo_norm" do banco nas Compras, v59) */
+export const nc = t => String(t || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 const nm = t => { const m = String(t || "").toLowerCase().replace(/[^a-z0-9]/g, ""); return m.startsWith("hipper") ? "hipper" : m; };
 const mesmaMarca = (a, b) => { a = nm(a); b = nm(b); return a === b || (a.length > 3 && b.startsWith(a)) || (b.length > 3 && a.startsWith(b)); };
 const posicao = d => { const t = String(d || "").toUpperCase(); return { eixo: /DIANTEIR/.test(t) ? "D" : /TRASEIR/.test(t) ? "T" : "", nivel: /SUPERIOR/.test(t) ? "S" : /INFERIOR/.test(t) ? "I" : "", lado: /\bLD\/LE\b|\bLE\/LD\b|AMBOS/.test(t) ? "" : /\bLD\b|DIREIT/.test(t) ? "LD" : /\bLE\b|ESQUERD/.test(t) ? "LE" : "" }; };
 const compativel = (a, b) => ["eixo", "nivel", "lado"].every(k => !a[k] || !b[k] || a[k] === b[k]);
 const ORDEM_MARCA = ["Nakata", "Fremax", "Fras-le", "Controil", "Lonaflex", "Axios", "Perfect", "Hipper Freios", "Cofap"];
 const completa = p => (p.oem.length ? 4 : 0) + (p.foto ? 2 : 0) + (p.medidas ? 1 : 0) + (p.conv.length ? 1 : 0) - ORDEM_MARCA.indexOf(p.marca) / 20;
-const codigosDe = p => [p.codigo, ...p.oem, ...p.conv.map(c => c[1])].map(nc).filter(x => x.length >= 4);
+/** todos os códigos de uma peça (da marca, da montadora e da conversão), normalizados; usados também nas Compras */
+export const codigosDe = p => [p.codigo, ...p.oem, ...p.conv.map(c => c[1])].map(nc).filter(x => x.length >= 4);
 export function agruparEquivalentes(grupos, estoque = []) {
   const emEstoque = new Map(); for (const x of estoque) { const k = nc(x.ref); if (k.length >= 4 && !emEstoque.has(k)) emEstoque.set(k, x); }
   return grupos.map(g => {

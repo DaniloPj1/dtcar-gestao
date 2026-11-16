@@ -7,7 +7,7 @@ const SITE = "https://gestao.dtcarcentroautomotivo.com.br/";
 // fotos: miniaturas em catalogo/fotos/<pasta>/ (não entram no pacote sem internet; sem rede a peça aparece sem foto)
 const urlFoto = (p, doSite) => (doSite ? SITE : new URL("../../", import.meta.url).href) + "catalogo/fotos/" + p.pasta + "/" + p.foto + ".jpg";
 // onAbrir: a foto vira botão e abre a peça ampliada (pedido do Danilo: clicar na foto e ver grande, com as medidas)
-function FotoPeca({ p, grande = false, onAbrir = null }) {
+export function FotoPeca({ p, grande = false, onAbrir = null }) {
   const [passo, setPasso] = useState(0); // 0 = endereço do próprio sistema; 1 = site; 2 = sem foto
   const cls = grande ? "pv-fotona" : "pv-foto";
   if (!p.foto || passo > 1) return onAbrir ? html`<button type="button" class=${cls + " pv-semfoto pv-abre"} aria-label=${"Ver detalhes da peça " + p.codigo} onClick=${onAbrir}>sem foto</button>`

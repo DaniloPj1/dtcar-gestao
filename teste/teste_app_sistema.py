@@ -254,6 +254,12 @@ try:
         while 'dezembro' not in pg.locator('#ag-mes').inner_text(): pg.click('button[aria-label="Próximo mês"]'); pg.wait_for_timeout(150)
         natal = pg.locator('.cal-dia.feriado', has_text='25'); t(natal.count() == 1 and 'Natal' in natal.get_attribute('aria-label') and pg.evaluate("getComputedStyle(document.querySelector('.cal-dia.feriado')).backgroundColor") == 'rgb(255, 241, 220)', 'feriado em cor diferente com o nome: %s' % (natal.count() and natal.get_attribute('aria-label')))
         natal.click(); pg.wait_for_timeout(200); t('Natal' in pg.inner_text('#ag-feriado') and 'feriado: Natal' in pg.inner_text('.acao .resumo'), 'escolher o feriado avisa e deixa agendar')
+        # virada de ano e feriados móveis (Páscoa 2025/2026/2027), conferidos pelo próprio módulo
+        pg.click('button[aria-label="Próximo mês"]'); pg.wait_for_timeout(200); t('janeiro de %d' % (int(HOJE[:4]) + 1) in pg.locator('#ag-mes').inner_text() and pg.locator('.cal-dia.feriado', has_text='1').first.get_attribute('aria-label').endswith('Confraternização Universal'), 'calendário vira o ano e marca o Ano-Novo')
+        fer = pg.evaluate("""async () => { const m = await import('./telas.js'); const f26 = m.feriadosDoAno(2026), f27 = m.feriadosDoAno(2027), f25 = m.feriadosDoAno(2025);
+          return [f26['2026-04-03'], f26['2026-02-16'], f26['2026-02-17'], f26['2026-06-04'], f26['2026-04-13'], f27['2027-03-26'], f25['2025-04-18'], f26['2026-08-22'], f26['2026-11-20']]; }""")
+        t(fer == ['Sexta-feira Santa', 'Carnaval', 'Carnaval', 'Corpus Christi', 'N. Sra. da Penha (ES)', 'Sexta-feira Santa', 'Sexta-feira Santa', 'Aniversário de Colatina', 'Consciência Negra'], 'feriados móveis e locais certos: %s' % fer)
+        while 'dezembro' not in pg.locator('#ag-mes').inner_text(): pg.click('button[aria-label="Mês anterior"]'); pg.wait_for_timeout(150)
         while 'dezembro' in pg.locator('#ag-mes').inner_text(): pg.click('button[aria-label="Mês anterior"]'); pg.wait_for_timeout(150)
         t(pg.locator('button[aria-label="Mês anterior"]').is_disabled(), 'não volta para antes do mês atual')
         pg.click('.btn-chip:has-text("Freios")'); pg.click('.hora:has-text("09:30")'); pg.locator('.cal-dia:not([disabled])').last.click(); pg.wait_for_timeout(200)
@@ -265,8 +271,9 @@ try:
         pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
         t(not er, 'sem erro de script nas telas: %s' % er); ctx.close()
         # botão Voltar do celular (plugin App de mentira): fecha o quadro, volta ao Início e só no Início deixa o app de lado
-        f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg); pg.click('text=Agora não'); pg.wait_for_timeout(200)
+        f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg); t(pg.is_visible('.quadro'), 'quadro da digital aberto')
         t(pg.evaluate('typeof window.__voltar') == 'function', 'o app registra o botão Voltar do celular')
+        pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.locator('.quadro').count() == 0 and pg.evaluate('window.__app') == [], 'Voltar fecha o quadro da digital sem sair do app')
         tela(pg, 'peca'); pg.click('button:has-text("Ver lista")'); pg.wait_for_selector('.quadro')
         pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.locator('.quadro').count() == 0 and pg.url.endswith('#/peca'), 'Voltar fecha o quadro e fica na tela')
         pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.url.endswith('#/inicio') and pg.evaluate('window.__app') == [], 'Voltar numa tela vai ao Início sem sair do app')

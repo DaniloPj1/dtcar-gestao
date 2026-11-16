@@ -110,7 +110,7 @@
       E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email };
       if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
-      if (!/^#\/(inicio|ajuda|oleo|orcamento|os|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
+      if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
       desenhar();
       if (origem === 'senha') oferecerDigital();
     }, function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });
@@ -240,6 +240,7 @@
   function ligarVoltar() {
     var A = pluginApp(); if (!A || typeof A.addListener !== 'function') return;
     A.addListener('backButton', function () {
+      if (E.quadro === 'digital') { lsSet(CH_RECUSOU, '1'); E.quadro = ''; desenhar(); return; } // Voltar fecha o quadro da digital como "Agora não"
       if (E.tela === 'app' && telas && telas.voltar()) return;
       if (E.tela === 'app' && !telas) { location.hash = '#/inicio'; return; }
       if (typeof A.minimizeApp === 'function') A.minimizeApp(); else if (typeof A.exitApp === 'function') A.exitApp();

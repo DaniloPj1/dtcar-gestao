@@ -449,12 +449,13 @@ const LS_LISTA = "dtcar-app-lista-pecas";
 // Sistemas do carro (pedido do Danilo, 16/11/2026): o resultado só aparece depois de tocar no sistema. Cada grupo do catálogo cai num sistema.
 const SISTEMAS = [
   { id: "fr", nome: "Freios", icone: "disco", re: /freio|pin[cç]a|cilindro mestre|cilindro de roda|servo|hidrov|hydrov|lona|sapata|tambor|disco|pastilha/i },
-  { id: "tr", nome: "Transmissão", icone: "engrenagem", re: /embreagem|homocin|tulipa|semieixo|tripe[cç]a|trizeta|junta deslizante|cardan|cruzeta|coroa|pinh[aã]o|c[aâ]mbio|diferencial|flange|luva|garfo|mancal central|planet|veloc[ií]metro|transmiss/i },
+  { id: "tr", nome: "Transmissão", icone: "engrenagem", re: /embreagem|homocin|junta fixa|tulipa|semieixo|tripe[cç]a|trizeta|junta deslizante|cardan|cruzeta|coroa|pinh[aã]o|c[aâ]mbio|diferencial|flange|luva|garfo|mancal central|planet|veloc[ií]metro|transmiss/i },
   { id: "di", nome: "Direção", icone: "volante", re: /dire[cç][aã]o|terminal|axial|ponteira|barra de liga|barra central|barra lateral/i },
   { id: "su", nome: "Suspensão", icone: "amortecedor", re: /amortecedor|mola|bandeja|bra[cç]o|piv[oô]|bieleta|bucha|batente|estabiliz|tirante|barra de rea|cubo|mancal do cubo|suspens|pino|apoio|prato/i },
   { id: "mo", nome: "Motor", icone: "motor", re: /motor|junta|cabe[cç]ote|bomba d|bomba de [oó]leo|reservat|anel|mangueira|abra[cç]adeira|acelerador|correia|coxim|suporte|filtro|palheta|parafuso/i },
 ];
-const sistemaDoGrupo = g => { const x = SISTEMAS.find(sis => sis.re.test(g || "")); return x ? x.id : "ou"; };
+const OUTROS_RE = /mola a g[aá]s/i; // mola do capô e do porta-malas não é suspensão
+const sistemaDoGrupo = g => { if (OUTROS_RE.test(g || "")) return "ou"; const x = SISTEMAS.find(sis => sis.re.test(g || "")); return x ? x.id : "ou"; };
 const IcSis = ({ nome, t = 30 }) => html`<svg width=${t} height=${t} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${ICONE_D[nome] || ICONE_D.chave}></path></svg>`;
 function Peca() {
   const { dados, avisar } = useApp(); const pl = usarPlaca();

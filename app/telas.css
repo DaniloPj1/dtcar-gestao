@@ -148,7 +148,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .quadro{width:100%;max-width:520px;max-height:85vh;overflow-y:auto;background:#fff;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0));display:flex;flex-direction:column;gap:10px}
 .quadro h2{margin:0;font-size:17px;color:var(--azul)}
 .quadro .link{background:none;border:0;color:var(--azul);font-weight:600;font-size:14px;min-height:44px}
-.toast{position:fixed;left:50%;bottom:calc(var(--rodape-h,74px) + 10px + env(safe-area-inset-bottom,0));transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:600;max-width:92vw;text-align:center;z-index:50;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+.toast{position:fixed;left:50%;bottom:calc(var(--rodape-h,74px) + 10px);transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:600;max-width:92vw;text-align:center;z-index:50;box-shadow:0 3px 10px rgba(0,0,0,.25)}
 .toast.erro{background:#8a2d2d}
 
 /* ajuda */

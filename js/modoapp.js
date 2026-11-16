@@ -19,9 +19,15 @@ export const perfilNoApp = p => modo && p && p.papel !== "admin" ? { ...p, papel
 export const voltarAoApp = () => { location.href = "app/index.html"; };
 // Botão Voltar do celular dentro do sistema aberto pelo app: volta uma página; sem página atrás, volta aos botões do app.
 // (Sem o plugin App do Capacitor o Android fecharia o app: pedido do Danilo em 16/11/2026.)
+// Conta as páginas do sistema navegadas nesta abertura (history.length conta a aba inteira, inclusive o app, e não serve sozinho).
 if (modo) {
   try {
+    const K = "dtcar-modo-app-paginas";
+    const ler = () => Number(sessionStorage.getItem(K) || 0), gravar = n => sessionStorage.setItem(K, String(Math.max(0, n)));
+    if (/[?&]app=1(&|$)/.test(location.search)) gravar(0); // entrou pelos botões do app: nenhuma página do sistema atrás
+    window.addEventListener("hashchange", () => gravar(ler() + 1));
+    window.addEventListener("popstate", () => gravar(ler() - 1));
     const C = window.Capacitor, A = (C.Plugins && C.Plugins.App) || (typeof C.registerPlugin === "function" ? C.registerPlugin("App") : null);
-    if (A && typeof A.addListener === "function") A.addListener("backButton", () => { if (window.history.length > 1) window.history.back(); else voltarAoApp(); });
+    if (A && typeof A.addListener === "function") A.addListener("backButton", () => { if (ler() > 0 && window.history.length > 1) { gravar(ler() - 2); window.history.back(); } else voltarAoApp(); });
   } catch (e) { /* sem plugin */ }
 }

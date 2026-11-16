@@ -13,14 +13,15 @@ def t(c, m):
     global ok
     assert c, m; ok += 1
 UID = '22222222-2222-2222-2222-222222222222'
-ROTULOS = ['ÓLEO (APLICAÇÃO)', '+ ORÇAMENTO', '+ O.S.', 'AGENDAR', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
+import datetime; HOJE = datetime.date.today().isoformat()
+ROTULOS = ['ÓLEO (APLICAÇÃO)', '+ ORÇAMENTO', 'AGENDAR', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
 # plugin da digital de mentira: o "cofre" (window.__cofre) sobrevive a recarregar a página; __ok controla se a leitura passa
 PLUGIN = """
 ['__cofre', '__ok'].forEach(function (k) { Object.defineProperty(window, k, { configurable: true,
   get: function () { var v = sessionStorage.getItem(k); return v === null ? (k === '__ok' ? true : null) : JSON.parse(v); },
   set: function (v) { sessionStorage.setItem(k, JSON.stringify(v)); } }); });
-window.__chamadas = [];
-window.Capacitor = { Plugins: { NativeBiometric: {
+window.__chamadas = []; window.__voltar = null; window.__app = [];
+window.Capacitor = { Plugins: { App: { addListener: (ev, fn) => { if (ev === 'backButton') window.__voltar = fn; return Promise.resolve({ remove: () => {} }); }, minimizeApp: () => { window.__app.push('minimize'); return Promise.resolve(); }, exitApp: () => { window.__app.push('exit'); return Promise.resolve(); } }, NativeBiometric: {
   isAvailable: () => Promise.resolve({ isAvailable: window.__disp !== false }),
   verifyIdentity: (o) => { window.__chamadas.push('verify'); return window.__ok ? Promise.resolve() : Promise.reject(new Error('cancelado')); },
   setCredentials: (o) => { window.__chamadas.push('set'); window.__cofre = o; return Promise.resolve(); },
@@ -55,6 +56,7 @@ class Fake:
                 if d.get('password') != 'certa': return resp(route, {'error': 'invalid_grant', 'error_description': 'Invalid login credentials', 'msg': 'Invalid login credentials'}, 400)
                 return resp(route, sessao(d.get('email')))
             if '/auth/v1/logout' in u: return route.fulfill(status=204, headers={'access-control-allow-origin': '*'})
+            if '/rest/v1/agendamentos' in u and rq.method == 'GET': return resp(route, [{'id': 'ag1', 'data': HOJE, 'hora': '08:00', 'situacao': 'agendado'}, {'id': 'ag2', 'data': HOJE, 'hora': '09:00', 'situacao': 'cancelado'}])
             if '/rest/v1/perfis' in u:
                 pf = {'id': UID, 'nome': 'Fulano de Teste', 'papel': s.papel, 'ativo': s.ativo}; return resp(route, pf if 'id=eq.' in u else [pf])
             if rq.method == 'POST' and '/rest/v1/' in u:
@@ -106,19 +108,21 @@ try:
         pg.click('.ver'); t(pg.get_attribute('#lg-senha', 'type') == 'text', 'botão Mostrar revela a senha')
         # 2) login certo como administrador, sem plugin (navegador): sem oferta de digital
         entrar(pg); t('Olá, Fulano' in textos(pg) and 'Administrador' in textos(pg), 'entra como administrador')
-        barras = pg.locator('.barra').all_inner_texts(); t([b.strip() for b in barras] == ROTULOS, 'sete botões na ordem do protótipo: %s' % barras)
+        barras = pg.locator('.barra').all_inner_texts(); t([b.strip() for b in barras] == ROTULOS, 'seis botões na ordem do protótipo, sem + O.S.: %s' % barras)
         t(pg.locator('.quadro').count() == 0, 'sem plugin não oferece a digital')
         t(not f.escritas(), 'não grava nada no banco: %s' % f.escritas())
         # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
         # cada botão abre a tela do app correspondente (desenho do protótipo), sem sair do app
-        TITULOS = ['ÓLEO (APLICAÇÃO)', 'NOVO ORÇAMENTO', 'NOVA O.S.', 'AGENDAR SERVIÇO', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
-        ROTAS = ['oleo', 'orcamento', 'os', 'agendar', 'peca', 'historico', 'osconsulta']
+        TITULOS = ['ÓLEO (APLICAÇÃO)', 'NOVO ORÇAMENTO', 'AGENDAR SERVIÇO', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
+        ROTAS = ['oleo', 'orcamento', 'agendar', 'peca', 'historico', 'osconsulta']
         for i, rota in enumerate(ROTAS):
             pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i); pg.wait_for_selector('.titulo b', timeout=10000)
             t(pg.url.endswith('#/' + rota) and pg.inner_text('.titulo b') == TITULOS[i], 'botão %d abre %s: %s / %s' % (i + 1, rota, pg.url, pg.inner_text('.titulo b')))
             t(pg.locator('.abas a[aria-current=page]').count() == 1 and pg.locator('.cab img').count() == 1, 'tela %s tem as abas e o cabeçalho azul' % rota)
             t(pg.evaluate('document.documentElement.scrollWidth') <= 390, 'tela %s sem rolagem lateral' % rota)
-        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.2.0' in textos(pg), 'ajuda mostra o acesso e a versão')
+            t(pg.evaluate("getComputedStyle(document.querySelector('.rodape')).position") == 'fixed' and pg.evaluate("getComputedStyle(document.querySelector('.rodape')).borderTopColor") == 'rgb(47, 111, 181)', 'tela %s: rodapé fixo com a linha azul' % rota)
+            t(pg.locator('#os').count() == 0 and '+ O.S.' not in pg.locator('.abas').inner_text(), 'tela %s sem a aba + O.S.' % rota)
+        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.3.0' in textos(pg), 'ajuda mostra o acesso e a versão')
         t(pg.locator('#bloco-digital').count() == 0, 'sem plugin o interruptor da digital não aparece')
         # recarregar mantém a sessão (sem digital)
         pg.reload(); pg.wait_for_selector('.nav', timeout=10000); pg.wait_for_timeout(300); t('AJUDA' in textos(pg), 'recarregar mantém a sessão e a rota')
@@ -128,7 +132,7 @@ try:
         t(not er, 'sem erro de script: %s' % er); ctx.close()
         # 3) consultor entra; mecânico, pendente e inativo não
         f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 7, 'consultor entra'); ctx.close()
+        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 6, 'consultor entra'); ctx.close()
         for papel, ativo in (('mecanico', True), ('pendente', True), ('admin', False)):
             f = Fake(papel, ativo); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
             t('Este app é para o administrador e o consultor' in textos(pg) and pg.locator('.barra').count() == 0, 'recusa %s ativo=%s' % (papel, ativo))
@@ -179,93 +183,99 @@ try:
         f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         t(pg.evaluate("getComputedStyle(document.querySelector('.barra')).backgroundColor") == 'rgb(47, 111, 181)', 'botões na cor azul da DTCar')
         t(pg.locator('.barra').first.bounding_box()['height'] >= 44, 'botão com altura de toque')
-        # Início: placa do cadastro → carro aparece, sem consulta paga
+        # Início: placa do cadastro → carro aparece, sem consulta paga; a placa NÃO passa para as outras telas
         buscar_placa(pg); t('GOL 1.0' in textos(pg) and 'JOÃO DA SILVA' in textos(pg), 'placa do cadastro mostra o carro e o dono no Início')
         t(not any('/functions/v1/placa' in p[2] for p in f.pedidos), 'placa do cadastro não chama a consulta paga')
+        tela(pg, 'oleo'); t(pg.input_value('#ol-placa') == '' and pg.locator('#veic').count() == 0, 'a placa do Início não vai para a tela de óleo')
+        def placa_na_tela(id_):
+            pg.fill('#' + id_, 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=5000)
         # Óleo: litragem, viscosidade e filtros, com o estoque na frente
-        tela(pg, 'oleo'); pg.wait_for_selector('#ol-oleo', timeout=20000); tx = textos(pg)
+        placa_na_tela('ol-placa'); pg.wait_for_selector('#ol-oleo', timeout=20000); tx = textos(pg)
         t('Litragem' in tx and ' L' in tx and 'Viscosidade' in tx, 'óleo mostra litragem e viscosidade pela placa')
-        t('Filtro de óleo' in tx and 'Em estoque' in tx and 'PSL560' in tx, 'filtro de óleo do estoque aparece em primeiro: %s' % ('PSL560' in tx))
+        t('Filtro de óleo' in tx and 'Em estoque' in tx and 'PSL560' in tx, 'filtro de óleo do estoque aparece em primeiro')
         pg.click('text=Ocultar filtros'); pg.wait_for_timeout(200); t(pg.locator('#ol-filtros').count() == 0 and pg.is_visible('text=Ver filtros'), 'botão esconde os filtros')
-        # Peça por catálogo: resultado, adicionar à lista, ver lista
-        tela(pg, 'peca'); pg.wait_for_selector('.res-titulo', timeout=30000)
-        t('RESULTADO DA PESQUISA' in textos(pg) and pg.locator('text=Adicionar item').count() > 0, 'peças do catálogo aparecem pela placa')
-        pg.fill('#pc-q', 'amortecedor'); pg.wait_for_timeout(400); n1 = pg.locator('text=Adicionar item').count(); t(n1 > 0 and 'AMORTECEDOR' in textos(pg).upper(), 'filtro por texto funciona')
+        # sair da tela e voltar: a placa foi embora
+        tela(pg, 'peca'); tela(pg, 'oleo'); t(pg.input_value('#ol-placa') == '' and pg.locator('#veic').count() == 0, 'sair da tela sem gravar limpa a placa')
+        # Peça por catálogo: sistemas primeiro, resultado só depois de tocar no sistema
+        tela(pg, 'peca'); placa_na_tela('pc-placa'); pg.wait_for_selector('#pc-sistemas', timeout=30000)
+        t(pg.locator('.res-titulo').count() == 0 and pg.locator('text=Adicionar item').count() == 0, 'antes de escolher o sistema não aparece resultado')
+        nomes = pg.locator('.sistema span').all_inner_texts(); t(nomes == ['Freios', 'Transmissão', 'Direção', 'Suspensão', 'Motor', 'Outros'], 'sistemas com ícone: %s' % nomes)
+        t(not pg.locator('.sistema[data-sistema=fr]').is_disabled() and 'peças' in pg.locator('.sistema[data-sistema=fr]').inner_text(), 'Freios mostra a quantidade de peças')
+        pg.click('.sistema[data-sistema=fr]'); pg.wait_for_selector('.res-titulo', timeout=10000); tx = textos(pg).upper()
+        t('RESULTADO DA PESQUISA' in tx and 'FREIO' in tx and 'AMORTECEDOR' not in tx, 'só peças de freio no resultado de Freios')
+        pg.click('button[aria-label="Voltar aos sistemas"]'); pg.wait_for_selector('#pc-sistemas'); pg.click('.sistema[data-sistema=su]'); pg.wait_for_selector('.res-titulo', timeout=10000)
+        t('AMORTECEDOR' in textos(pg).upper(), 'Suspensão mostra amortecedores')
+        pg.fill('#pc-q', 'amortecedor'); pg.wait_for_timeout(400); n1 = pg.locator('text=Adicionar item').count(); t(n1 > 0, 'filtro por texto dentro do sistema')
         pg.locator('text=Adicionar item').first.click(); pg.wait_for_timeout(300); t('Ver lista (1)' in textos(pg), 'adicionar item põe na lista')
-        pg.click('button:has-text("Ver lista (1)")'); pg.wait_for_selector('.quadro', timeout=5000); t(pg.locator('.quadro .item-linha').count() == 1, 'quadro da lista mostra o item: %s' % pg.evaluate("document.querySelector('.quadro').innerHTML.slice(0,600)"))
-        pg.click('.quadro >> text=Tirar'); pg.wait_for_timeout(200); t('Ver lista (0)' in textos(pg) or 'A lista está vazia' in textos(pg), 'tirar da lista'); pg.click('.quadro >> text=Fechar'); pg.wait_for_timeout(200)
+        pg.click('button:has-text("Ver lista (1)")'); pg.wait_for_selector('.quadro', timeout=5000); t(pg.locator('.quadro .item-linha').count() == 1, 'quadro da lista mostra o item')
+        pg.click('.quadro >> text=Tirar'); pg.wait_for_timeout(200); t('A lista está vazia' in textos(pg), 'tirar da lista'); pg.click('.quadro >> text=Fechar'); pg.wait_for_timeout(200)
         # Histórico: O.S. do carro, da mais nova para a mais antiga, com os serviços
-        tela(pg, 'historico'); pg.wait_for_selector('text=REVISÃO COMPLETA', timeout=10000); tx = textos(pg)
+        tela(pg, 'historico'); placa_na_tela('hs-placa'); pg.wait_for_selector('text=REVISÃO COMPLETA', timeout=10000); tx = textos(pg)
         t(tx.index('10/11/2026') < tx.index('02/09/2026') and 'PASTILHAS DE FREIO DIANTEIRAS' in tx and 'SUBST. DE ÓLEO E FILTROS' in tx, 'histórico lista as O.S. com os serviços, da mais nova para a mais antiga')
         t('80.000 km' in tx and 'OS 01920' in tx, 'histórico mostra KM e número da O.S.')
         # Consultar O.S.: abertura, situação, serviços, total e link para a O.S. no modo app
-        tela(pg, 'osconsulta'); tx = textos(pg)
+        tela(pg, 'osconsulta'); placa_na_tela('oc-placa'); tx = textos(pg)
         t('OS 01920' in tx and 'Aprovado · em execução' in tx and 'R$\xa0900,00' in tx and 'Fechada' in tx, 'consulta de O.S. mostra situação escrita e total')
         t(pg.locator('a:has-text("Abrir O.S.")').first.get_attribute('href') == '../index.html?app=1#/os/o2', 'Abrir O.S. abre a O.S. do sistema no modo app')
         t('Somente leitura' not in tx, 'administrador não vê o aviso de somente leitura')
-        # + O.S.: cliente e veículo preenchidos pela placa, grava cliente/veículo/O.S. como a Nova O.S. do sistema
-        tela(pg, 'os'); pg.wait_for_timeout(300)
-        t(pg.input_value('#f-placa') == 'ABC1D23' and pg.input_value('#f-mm') == 'Volkswagen GOL 1.0' and pg.input_value('#f-nome') == 'JOÃO DA SILVA', 'Nova O.S. entra com o carro e o dono da placa buscada')
-        pg.click('text=Abrir O.S.'); pg.wait_for_timeout(400); t('Informe o KM atual' in textos(pg) and 'Descreva o motivo' in textos(pg), 'Nova O.S. exige KM e motivo')
-        pg.fill('#f-km', '81000'); pg.fill('#f-motivo', 'Barulho na suspensão'); pg.click('text=Abrir O.S.'); pg.wait_for_timeout(3000); print('DBG', [p[:2] for p in f.pedidos[-6:]], er, pg.locator('.toast').all_inner_texts(), pg.locator('.erro').all_inner_texts()); pg.wait_for_selector('.quadro', timeout=10000)
-        t('OS 01921 aberta' in textos(pg), 'O.S. aberta com o número do servidor')
-        o = f.tabela('ordens'); t(len(o) == 1 and o[0]['km_entrada'] == 81000 and o[0]['reclamacao'] == 'Barulho na suspensão' and o[0]['status'] == 'diagnostico' and o[0]['cliente_id'] == 'c1' and o[0]['veiculo_id'] == 'v1' and o[0]['consultor_id'] == UID, 'O.S. gravada como a Nova O.S. do sistema: %s' % (o and o[0]))
-        t(f.tabela('veiculos') and f.tabela('veiculos')[0].get('km_atual') == 81000, 'KM do veículo atualizado')
-        t(not f.tabela('clientes'), 'cliente do cadastro não é cadastrado de novo')
-        t(pg.locator('.quadro a:has-text("Ver a O.S.")').get_attribute('href') == '../index.html?app=1#/os/o-novo', 'quadro leva à O.S. no sistema')
-        pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra', timeout=5000)
-        # + O.S. com cliente e carro novos: cadastra os dois antes da O.S.
-        f.gravados.clear(); pg.evaluate("localStorage.removeItem('dtcar-app-form-os')")
-        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra'); pg.click('button[aria-label=Limpar]'); tela(pg, 'os'); pg.wait_for_timeout(300)
-        pg.fill('#f-nome', 'Maria Nova'); pg.fill('#f-whats', '27988887777'); pg.fill('#f-placa', 'XYZ9A88'); pg.fill('#f-mm', 'CHEVROLET ONIX 1.0'); pg.fill('#f-ano', '2020'); pg.fill('#f-cor', 'branco'); pg.fill('#f-km', '50000'); pg.fill('#f-motivo', 'Revisão')
-        pg.click('text=Abrir O.S.'); pg.wait_for_selector('.quadro', timeout=10000)
-        c = f.tabela('clientes'); v = f.tabela('veiculos'); o = f.tabela('ordens')
-        t(len(c) == 1 and c[0]['nome'] == 'MARIA NOVA' and c[0]['telefone'] == '27988887777' and c[0]['cidade'] == 'Colatina', 'cliente novo cadastrado em maiúsculas com Colatina/ES: %s' % (c and c[0]))
-        t(len(v) == 1 and v[0]['placa'] == 'XYZ9A88' and v[0]['marca'] == 'CHEVROLET' and v[0]['modelo'] == 'ONIX 1.0' and v[0]['ano_mod'] == 2020 and v[0]['cor'] == 'BRANCO' and v[0]['cliente_id'] == 'c-novo', 'veículo novo cadastrado: %s' % (v and v[0]))
-        t(len(o) == 1 and o[0]['cliente_id'] == 'c-novo' and o[0]['veiculo_id'] == 'v-novo', 'O.S. ligada ao cliente e ao veículo novos')
+        # + Orçamento: placa do cadastro preenche carro e dono; grava pelo orcamento_salvar com itens vazios
+        tela(pg, 'orcamento'); pg.fill('#f-placa', 'abc1d23'); pg.locator('#f-placa').blur(); pg.wait_for_timeout(500)
+        t(pg.input_value('#f-placa') == 'ABC1D23' and pg.input_value('#f-mm') == 'Volkswagen GOL 1.0' and pg.input_value('#f-nome') == 'JOÃO DA SILVA', 'orçamento entra com o carro e o dono da placa buscada')
+        pg.fill('#f-motivo', 'Pastilhas'); pg.click('text=Criar orçamento'); pg.wait_for_selector('.quadro', timeout=10000)
+        orc = f.tabela('rpc/orcamento_salvar'); t(len(orc) == 1 and orc[0]['p']['cliente_id'] == 'c1' and orc[0]['p']['veiculo_id'] == 'v1' and orc[0]['p']['veiculo']['placa'] == 'ABC1D23' and orc[0]['p']['itens'] == [] and orc[0]['p']['situacao'] == 'elaboracao' and orc[0]['p']['reclamacao'] == 'Pastilhas', 'orçamento criado pela mesma função do sistema: %s' % (orc and orc[0]['p']))
+        t('ORC-00012 criado' in textos(pg) and pg.locator('.quadro a:has-text("Incluir os itens")').get_attribute('href') == '../index.html?app=1#/orcamento/orc-novo', 'quadro leva aos itens do orçamento')
         pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
-        # achados da revisão: trocar a placa tira o carro anterior; trocar o CPF tira nome/nascimento da consulta; KM menor pede confirmação; toque duplo não grava em dobro
-        f.gravados.clear(); pg.evaluate("localStorage.removeItem('dtcar-app-form-os')"); buscar_placa(pg); tela(pg, 'os'); pg.wait_for_timeout(300)
-        t(pg.input_value('#f-mm') == 'Volkswagen GOL 1.0', 'carro do Início entra no formulário')
+        # orçamento com cliente só digitado (vai na cópia, cadastro só na aprovação, como no sistema)
+        f.gravados.clear(); tela(pg, 'orcamento'); pg.fill('#f-nome', 'Maria Nova'); pg.fill('#f-whats', '27988887777'); pg.fill('#f-placa', 'XYZ9A88'); pg.fill('#f-mm', 'CHEVROLET ONIX 1.0'); pg.fill('#f-ano', '2020')
+        pg.click('text=Criar orçamento'); pg.wait_for_selector('.quadro', timeout=10000); orc = f.tabela('rpc/orcamento_salvar')[0]['p']
+        t(orc['cliente_id'] == '' and orc['cliente']['nome'] == 'MARIA NOVA' and orc['cliente']['telefone'] == '27988887777' and orc['veiculo'] == {'placa': 'XYZ9A88', 'marca': 'CHEVROLET', 'modelo': 'ONIX 1.0', 'ano': '2020'} and not f.tabela('clientes') and not f.tabela('veiculos'), 'cliente e carro só digitados vão na cópia do orçamento, sem cadastrar: %s' % orc)
+        pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
+        # achados da revisão: trocar a placa tira o carro anterior; trocar o CPF tira nome/nascimento da consulta; toque duplo não grava em dobro
+        tela(pg, 'orcamento'); pg.fill('#f-placa', 'abc1d23'); pg.locator('#f-placa').blur(); pg.wait_for_timeout(500); t(pg.input_value('#f-mm') == 'Volkswagen GOL 1.0', 'placa do cadastro preenche')
         pg.fill('#f-placa', 'XYZ9A88'); pg.wait_for_timeout(200); t(pg.input_value('#f-mm') == '' and pg.input_value('#f-ano') == '' and pg.input_value('#f-cor') == '', 'trocar a placa tira marca, modelo, ano e cor do carro anterior')
-        pg.goto(URL + '#/ajuda'); pg.wait_for_selector('.nav'); tela(pg, 'os'); pg.wait_for_timeout(300); t(pg.input_value('#f-placa') == 'XYZ9A88' and pg.input_value('#f-mm') == '', 'ir à Ajuda e voltar não devolve o carro do Início por cima do digitado')
-        pg.fill('#f-placa', 'ABC1D23'); pg.locator('#f-placa').blur(); pg.wait_for_timeout(400); t(pg.input_value('#f-mm') == 'Volkswagen GOL 1.0', 'placa do cadastro preenche de novo')
-        pg.fill('#f-km', '70000'); pg.fill('#f-motivo', 'Teste'); pg.click('.acao .btn-acao'); pg.wait_for_timeout(400)
-        t('menor que o último registrado' in textos(pg) and not f.tabela('ordens'), 'KM menor que o registrado não abre a O.S. sem confirmar')
-        pg.click('.marcar:has-text("O KM está certo")'); pg.wait_for_timeout(200); pg.click('.acao .btn-acao'); pg.wait_for_selector('.quadro', timeout=10000); t(len(f.tabela('ordens')) == 1 and f.tabela('ordens')[0]['checkin']['kmDivergente'] is True, 'com a confirmação abre e marca o KM divergente')
-        pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
-        # CPF consultado (administrador) → nome e nascimento; mudou um dígito → saem
-        f.gravados.clear(); pg.evaluate("localStorage.removeItem('dtcar-app-form-os')"); pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra'); pg.click('button[aria-label=Limpar]'); tela(pg, 'os'); pg.wait_for_timeout(300)
+        pg.goto(URL + '#/ajuda'); pg.wait_for_selector('.nav'); tela(pg, 'orcamento'); t(pg.input_value('#f-placa') == '' and pg.input_value('#f-nome') == '', 'sair do orçamento sem gravar limpa o formulário')
         pg.route('**/functions/v1/cpf', lambda r: r.fulfill(status=200, content_type='application/json', body=json.dumps({'ok': True, 'encontrado': True, 'origem': 'api', 'dados': {'nome': 'Carlos Consultado', 'nascimento': '1980-05-10'}}), headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*'}))
         pg.fill('#f-cpf', '52998224725'); pg.click('button[aria-label="Buscar pelo CPF"]'); pg.wait_for_timeout(600); t(pg.input_value('#f-nome') == 'CARLOS CONSULTADO', 'administrador: CPF fora do cadastro preenche o nome pela consulta')
         pg.fill('#f-cpf', '52998224726'); pg.wait_for_timeout(200); t(pg.input_value('#f-nome') == '', 'trocar o CPF tira o nome que veio da consulta')
-        pg.fill('#f-cpf', ''); pg.fill('#f-nome', 'Outra Pessoa'); pg.fill('#f-whats', '27977776666'); pg.fill('#f-placa', 'QQQ1A11'); pg.fill('#f-mm', 'FIAT UNO'); pg.fill('#f-ano', '2012'); pg.fill('#f-km', '10'); pg.fill('#f-motivo', 'x')
-        pg.click('.acao .btn-acao'); pg.wait_for_selector('.quadro', timeout=10000); t('nascimento' not in f.tabela('clientes')[0], 'nascimento do CPF trocado não vai para o cadastro de outra pessoa: %s' % f.tabela('clientes')[0])
+        f.gravados.clear(); pg.fill('#f-cpf', ''); pg.fill('#f-nome', 'Outra Pessoa'); pg.fill('#f-whats', '27977776666')
+        pg.click('.acao .btn-acao'); pg.wait_for_selector('.quadro', timeout=10000); t('nascimento' not in f.tabela('rpc/orcamento_salvar')[0]['p']['cliente'], 'nascimento do CPF trocado não vai para outra pessoa')
         pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
-        # toque duplo: uma O.S. só
-        f.gravados.clear(); pg.evaluate("localStorage.removeItem('dtcar-app-form-os')"); buscar_placa(pg); tela(pg, 'os'); pg.wait_for_timeout(300); pg.fill('#f-km', '90000'); pg.fill('#f-motivo', 'Dois toques')
+        f.gravados.clear(); tela(pg, 'orcamento'); pg.fill('#f-nome', 'Dois Toques'); pg.fill('#f-whats', '27966665555')
         pg.evaluate("(() => { const b = document.querySelector('.acao .btn-acao'); b.click(); b.click(); })()"); pg.wait_for_selector('.quadro', timeout=10000); pg.wait_for_timeout(500)
-        t(len(f.tabela('ordens')) == 1, 'dois toques seguidos abrem uma O.S. só: %d' % len(f.tabela('ordens')))
+        t(len(f.tabela('rpc/orcamento_salvar')) == 1, 'dois toques seguidos criam um orçamento só')
         pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
-        # + Orçamento: cria pelo orcamento_salvar com itens vazios e manda incluir os itens no sistema
-        f.gravados.clear(); buscar_placa(pg); tela(pg, 'orcamento'); pg.wait_for_timeout(300); pg.fill('#f-motivo', 'Pastilhas'); pg.click('text=Criar orçamento'); pg.wait_for_selector('.quadro', timeout=10000)
-        orc = f.tabela('rpc/orcamento_salvar'); t(len(orc) == 1 and orc[0]['p']['cliente_id'] == 'c1' and orc[0]['p']['veiculo_id'] == 'v1' and orc[0]['p']['veiculo']['placa'] == 'ABC1D23' and orc[0]['p']['itens'] == [] and orc[0]['p']['situacao'] == 'elaboracao', 'orçamento criado pela mesma função do sistema: %s' % (orc and orc[0]['p']))
-        t('ORC-00012 criado' in textos(pg) and pg.locator('.quadro a:has-text("Incluir os itens")').get_attribute('href') == '../index.html?app=1#/orcamento/orc-novo', 'quadro leva aos itens do orçamento')
-        pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
-        # Agendar: serviço, dia e horário; grava na agenda e abre a mensagem do WhatsApp pronta
-        f.gravados.clear(); tela(pg, 'agendar'); pg.wait_for_timeout(300)
+        # Agendar: calendário do mês inteiro com feriados; grava na agenda e abre a mensagem do WhatsApp pronta
+        f.gravados.clear(); tela(pg, 'agendar'); placa_na_tela('ag-placa'); pg.wait_for_timeout(300)
         t(pg.input_value('#ag-nome') == 'JOÃO DA SILVA' and pg.input_value('#ag-whats') == '(27) 99999-0000', 'agendar entra com o dono do carro')
-        pg.click('.btn-chip:has-text("Freios")'); pg.click('.hora:has-text("09:30")'); dia = pg.locator('.dia:not([disabled])').last; dia.click(); pg.wait_for_timeout(200)
+        t(pg.locator('.cal-dia').count() >= 28 and pg.locator('.cal-sem span').count() == 7, 'calendário do mês inteiro')
+        t(pg.locator('.cal-dia[aria-pressed=true]').inner_text().startswith(str(int(HOJE[8:10]))) and str(int(HOJE[8:10])) in pg.locator('.cal-dia[aria-pressed=true]').inner_text(), 'hoje vem marcado')
+        t(pg.locator('.cal-dia[aria-pressed=true] i').inner_text() == '1', 'o dia mostra quantos serviços já tem (cancelado não conta)')
+        # vai até dezembro: Natal em laranja (feriado), com o nome ao escolher
+        while 'dezembro' not in pg.locator('#ag-mes').inner_text(): pg.click('button[aria-label="Próximo mês"]'); pg.wait_for_timeout(150)
+        natal = pg.locator('.cal-dia.feriado', has_text='25'); t(natal.count() == 1 and 'Natal' in natal.get_attribute('aria-label') and pg.evaluate("getComputedStyle(document.querySelector('.cal-dia.feriado')).backgroundColor") == 'rgb(255, 241, 220)', 'feriado em cor diferente com o nome: %s' % (natal.count() and natal.get_attribute('aria-label')))
+        natal.click(); pg.wait_for_timeout(200); t('Natal' in pg.inner_text('#ag-feriado') and 'feriado: Natal' in pg.inner_text('.acao .resumo'), 'escolher o feriado avisa e deixa agendar')
+        while 'dezembro' in pg.locator('#ag-mes').inner_text(): pg.click('button[aria-label="Mês anterior"]'); pg.wait_for_timeout(150)
+        t(pg.locator('button[aria-label="Mês anterior"]').is_disabled(), 'não volta para antes do mês atual')
+        pg.click('.btn-chip:has-text("Freios")'); pg.click('.hora:has-text("09:30")'); pg.locator('.cal-dia:not([disabled])').last.click(); pg.wait_for_timeout(200)
+        dia_escolhido = pg.locator('.cal-dia[aria-pressed=true]').get_attribute('aria-label')
         t('Freios' in pg.inner_text('.acao .resumo') and '09:30' in pg.inner_text('.acao .resumo'), 'resumo mostra serviço, dia e horário')
         pg.click('text=Agendar e avisar o cliente'); pg.wait_for_selector('.quadro', timeout=10000)
-        ag = f.tabela('agendamentos'); t(len(ag) == 1 and ag[0]['servico'] == 'Freios' and ag[0]['hora'] == '09:30' and ag[0]['cliente_id'] == 'c1' and ag[0]['veiculo_id'] == 'v1' and ag[0]['situacao'] == 'agendado', 'agendamento gravado: %s' % (ag and ag[0]))
-        zap = pg.locator('.quadro a:has-text("WhatsApp")').get_attribute('href'); t(zap.startswith('https://wa.me/5527999990000') and 'Freios' in __import__('urllib.parse').parse.unquote(zap) and 'Mensagem%20gerada%20pelo%20sistema' in zap.replace('+', '%20'), 'mensagem do WhatsApp pronta no padrão da DTCar: %s' % zap[:80])
+        ag = f.tabela('agendamentos'); t(len(ag) == 1 and ag[0]['servico'] == 'Freios' and ag[0]['hora'] == '09:30' and ag[0]['cliente_id'] == 'c1' and ag[0]['veiculo_id'] == 'v1' and ag[0]['situacao'] == 'agendado' and ag[0]['data'][:7] == HOJE[:7], 'agendamento gravado: %s' % (ag and ag[0]))
+        zap = pg.locator('.quadro a:has-text("WhatsApp")').get_attribute('href'); t(zap.startswith('https://wa.me/5527999990000') and 'Freios' in __import__('urllib.parse').parse.unquote(zap) and 'Mensagem%20gerada%20pelo%20sistema' in zap.replace('+', '%20'), 'mensagem do WhatsApp pronta no padrão da DTCar')
+        pg.click('.quadro >> text=Voltar ao Início'); pg.wait_for_selector('.barra')
         t(not er, 'sem erro de script nas telas: %s' % er); ctx.close()
+        # botão Voltar do celular (plugin App de mentira): fecha o quadro, volta ao Início e só no Início deixa o app de lado
+        f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg); pg.click('text=Agora não'); pg.wait_for_timeout(200)
+        t(pg.evaluate('typeof window.__voltar') == 'function', 'o app registra o botão Voltar do celular')
+        tela(pg, 'peca'); pg.click('button:has-text("Ver lista")'); pg.wait_for_selector('.quadro')
+        pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.locator('.quadro').count() == 0 and pg.url.endswith('#/peca'), 'Voltar fecha o quadro e fica na tela')
+        pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.url.endswith('#/inicio') and pg.evaluate('window.__app') == [], 'Voltar numa tela vai ao Início sem sair do app')
+        pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.evaluate('window.__app') == ['minimize'], 'Voltar no Início deixa o app de lado (não encerra)'); ctx.close()
         # consultor: vê os valores e o aviso de somente leitura na consulta de O.S.
-        f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); buscar_placa(pg); tela(pg, 'osconsulta'); tx = textos(pg)
+        f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'osconsulta'); placa_na_tela('oc-placa'); tx = textos(pg)
         t('R$\xa0900,00' in tx and 'Somente leitura' in tx, 'consultor vê valores e o aviso de que só o administrador altera O.S.')
         # consultor não consulta CPF fora do cadastro (regra: só o administrador)
-        tela(pg, 'os'); pg.fill('#f-cpf', '52998224725'); pg.click('button[aria-label="Buscar pelo CPF"]'); pg.wait_for_timeout(400)
+        tela(pg, 'orcamento'); pg.fill('#f-cpf', '52998224725'); pg.click('button[aria-label="Buscar pelo CPF"]'); pg.wait_for_timeout(400)
         t('só do administrador' in textos(pg) and not any('/functions/v1/cpf' in p[2] for p in f.pedidos), 'consultor não dispara a consulta paga de CPF'); ctx.close()
         # 9) a tela "Sem internet" que vai dentro do APK (app/www): abre sozinha, com a logo, e tem o botão de tentar de novo
         f = Fake(); ctx, pg, er = abrir(br, f, 'http://localhost:8766/app/www/index.html', plugin=False)
@@ -275,6 +285,7 @@ try:
         # 10) configuração do Capacitor: abre o app direto do site
         cfg = json.load(open(os.path.join(raiz, 'app', 'capacitor.config.json')))
         t(cfg['server']['url'] == 'https://gestao.dtcarcentroautomotivo.com.br/app/' and cfg['server']['errorPath'] == 'index.html', 'Capacitor abre o app do site e usa a tela offline em caso de erro')
+        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.3.0', 'plugin App (botão Voltar) no APK e versão 1.3.0')
         br.close()
     print('OK: %d conferências' % ok)
 finally:

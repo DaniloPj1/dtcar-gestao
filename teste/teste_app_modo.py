@@ -13,7 +13,7 @@ def abrir(b, papel, url, larg=390, alt=800, apk=True):
     ctx = b.new_context(viewport={"width": larg, "height": alt}, is_mobile=larg < 700, has_touch=larg < 700)
     pg = ctx.new_page(); pg.on("pageerror", lambda e: erros.append("PAGEERR " + str(e))); pg.on("dialog", lambda d: d.accept())
     pg.add_init_script("window.__PAPEL = %s;" % ("'" + papel + "'" if papel else "null"))
-    if apk: pg.add_init_script("window.Capacitor = window.Capacitor || {};")  # dentro do APK existe window.Capacitor
+    if apk: pg.add_init_script("window.__voltar = null; window.__hist = []; window.Capacitor = { Plugins: { App: { addListener: (ev, fn) => { if (ev === 'backButton') window.__voltar = fn; return Promise.resolve({ remove(){} }); } } } };")  # dentro do APK existe window.Capacitor (plugin App de mentira)
     pg.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
     pg.goto(url); pg.wait_for_timeout(2000)
     return ctx, pg
@@ -76,6 +76,18 @@ try:
     chk("admin no app: técnico liberado na O.S. em execução", not pg.locator("#mec").is_disabled()); ctx.close()
     ctx, pg = abrir(b, "consultor", BASE + "#/os/o2", apk=False)
     chk("consultor fora do app: técnico liberado como antes", not pg.locator("#mec").is_disabled()); ctx.close()
+    # botão Voltar do celular dentro do sistema aberto pelo app: volta uma página; sem página atrás, volta aos botões do app
+    ctx, pg = abrir(b, None, BASE + "?app=1#/oleo-filtros")
+    chk("modo app registra o botão Voltar", pg.evaluate("typeof window.__voltar") == "function")
+    pg.goto(BASE + "#/pecas"); pg.wait_for_selector("#pc-placa", timeout=15000)
+    pg.evaluate("window.__voltar()"); pg.wait_for_timeout(700)
+    chk("Voltar com página atrás volta uma página (óleo)", "#/oleo-filtros" in pg.url, pg.url)
+    ctx.close()
+    ctx2 = b.new_context(viewport={"width": 390, "height": 800}, is_mobile=True, has_touch=True); pg2 = ctx2.new_page()
+    pg2.add_init_script("window.__PAPEL = null;"); pg2.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    pg2.add_init_script("window.__voltar = null; window.Capacitor = { Plugins: { App: { addListener: (ev, fn) => { if (ev === 'backButton') window.__voltar = fn; return Promise.resolve({ remove(){} }); } } } }; Object.defineProperty(window.history, 'length', { get: () => 1 });")
+    pg2.goto(BASE + "?app=1#/oleo-filtros"); pg2.wait_for_timeout(2000); pg2.evaluate("window.__voltar()"); pg2.wait_for_timeout(700)
+    chk("Voltar sem página atrás volta aos botões do app", pg2.url.endswith("/app/index.html"), pg2.url); ctx2.close()
     # 4) fora do app (PC): tudo como antes
     ctx, pg = abrir(b, None, BASE + "#/painel", 1366, 768)
     chk("PC: sem a marca modo-app", not pg.evaluate("document.body.classList.contains('modo-app')"))

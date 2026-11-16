@@ -17,3 +17,11 @@ export const modoApp = () => modo;
 export const perfilNoApp = p => modo && p && p.papel !== "admin" ? { ...p, papel: "leitura" } : p;
 /** Volta para a tela de botões do app */
 export const voltarAoApp = () => { location.href = "app/index.html"; };
+// Botão Voltar do celular dentro do sistema aberto pelo app: volta uma página; sem página atrás, volta aos botões do app.
+// (Sem o plugin App do Capacitor o Android fecharia o app: pedido do Danilo em 16/11/2026.)
+if (modo) {
+  try {
+    const C = window.Capacitor, A = (C.Plugins && C.Plugins.App) || (typeof C.registerPlugin === "function" ? C.registerPlugin("App") : null);
+    if (A && typeof A.addListener === "function") A.addListener("backButton", () => { if (window.history.length > 1) window.history.back(); else voltarAoApp(); });
+  } catch (e) { /* sem plugin */ }
+}

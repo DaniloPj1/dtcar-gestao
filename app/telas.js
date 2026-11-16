@@ -1,25 +1,28 @@
 // Telas do app DTCar (celular), feitas a partir do protótipo aprovado pelo Danilo em 16/11/2026 (gen_proto.py / Design "App DTCar").
 // Cada tela usa as MESMAS regras do sistema (js/api.js, js/placa.js, js/cpf.js, js/cep.js, js/catalogo.js, js/pecas.js), só com o
 // desenho do app: cabeçalho azul, abas, título com ícone, cartões com faixa azul, campos grandes, rodapé com ação e Início/Ajuda.
-// Regras do Danilo (16/11/2026): no app, O.S. que já existe só é alterada no login do administrador (a tela da O.S. do sistema, em modo app,
-// é só leitura para o consultor); o app NÃO abre O.S. (botão retirado); a placa digitada vale só na tela em que foi digitada (sair da tela
-// sem gravar limpa tudo); o botão Voltar do celular volta de tela em tela e só sai do app no Início.
+// Regras do Danilo (16/11/2026): o app NÃO abre O.S. e NÃO lança item nem preço; o orçamento pelo app é um PEDIDO (o mecânico escreve o que é
+// para orçar e envia; o Danilo monta o orçamento no sistema; a O.S. e o orçamento abertos aceitam "mais coisas a orçar"); a placa digitada vale
+// só na tela em que foi digitada (sair da tela sem gravar limpa tudo); o botão Voltar do celular volta de tela em tela e só sai do app no Início;
+// NENHUMA tela do sistema abre dentro do app: tudo (O.S., histórico, orçamento) é desenhado aqui, no leiaute do app, e sem preço para o mecânico.
 import { html, render, createContext, useState, useEffect, useRef, useMemo, useContext } from "../js/lib.js";
 import { useLayoutEffect } from "../vendor/preact-htm.js";
 import { api } from "../js/api.js";
-import { soDig, norm, normPlaca, placaValida, exPlaca, fmtTel, fmtData, fmtKm, hojeISO, somaDias, numOS, numORC, reais, validaCPF, docValido, fmtDoc, lsGet, lsSet, linkWhats, endCompleto } from "../js/util.js";
+import { soDig, norm, normPlaca, placaValida, exPlaca, fmtTel, fmtData, fmtKm, hojeISO, numOS, numORC, reais, fmtDoc, lsGet, lsSet, linkWhats } from "../js/util.js";
 import { consultarPlaca, paraFicha, anoFabMod } from "../js/placa.js";
-import { consultarCPF, ehAdmin } from "../js/cpf.js";
-import { consultarCep, fmtCep } from "../js/cep.js";
 import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conversaoDoItem, chaveDaPeca } from "../js/pecas.js";
-import { copiaClienteDig, erroClienteDig } from "../js/clientedig.js";
+import { copiaClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D } from "../js/appmecanico.js";
 import { acessoApp } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
 
-const SISTEMA = "../index.html?app=1";   // telas do sistema abertas de dentro do app (modo app: sem menu do PC, "‹ Início")
+const LS_VISTOS = "dtcar-app-avisos-vistos";   // ids dos orçamentos aprovados/recusados que a pessoa já viu (avisos do app)
+const ABERTA = o => !["entregue", "cancelado", "recusado"].includes(o.status);   // O.S. em andamento (orçamento, execução ou aguardando pagamento)
+const ORC_ABERTO = o => o.situacao === "elaboracao" || o.situacao === "enviado";
+const etapaTexto = o => (situacaoOS(o) || STATUS[o.status] || {}).t || o.status;
+const SIT_ORC = { elaboracao: "Em elaboração no sistema", enviado: "Enviado ao cliente", aprovado: "Aprovado · virou O.S.", recusado: "Recusado" };
 const Ctx = createContext(null);
 const useApp = () => useContext(Ctx);
 
@@ -49,7 +52,7 @@ const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="
 /* ---------------- botões do Início e abas (ordem aprovada pelo Danilo) ---------------- */
 const TELAS = [
   { r: "oleo", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
-  { r: "orcamento", ic: "orc", barra: "+ ORÇAMENTO", aba: "+ Orçamento", titulo: "NOVO ORÇAMENTO" },
+  { r: "orcamento", ic: "orc", barra: "ORÇAMENTOS", aba: "Orçamentos", titulo: "ORÇAMENTOS" },
   { r: "agendar", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
   { r: "peca", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
   { r: "historico", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
@@ -66,7 +69,8 @@ function Cabecalho() {
 }
 function Abas({ ativa }) {
   const { telas } = useApp();
-  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span></a>`)}</nav>`;
+  const { avisos } = useApp();
+  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : null}</a>`)}</nav>`;
 }
 function Titulo({ tela, ajuda }) {
   const t = TELAS.find(x => x.r === tela);
@@ -151,9 +155,14 @@ function ModeloAMao({ valor, onMuda }) {
 
 /* ---------------- INÍCIO ---------------- */
 function Inicio() {
-  const { perfil, telas } = useApp(); const { placa, buscar, limpar } = usarPlaca();
+  const { perfil, telas, dados, avisos } = useApp(); const { placa, buscar, limpar } = usarPlaca();
   const [t, setT] = useState("");
-  const [ajuda, setAjuda] = useState(false);
+  const [ajuda, setAjuda] = useState(false), [osAberta, setOsAberta] = useState(null);
+  const v = placa.veic;
+  // consulta rápida da placa (pedido do Danilo, 16/11/2026): O.S. e orçamentos em aberto do carro e o histórico, tudo sem preço
+  const ordens = useMemo(() => v ? ordensDoVeiculo(dados, v) : [], [dados.ordens, v]);
+  const abertas = ordens.filter(ABERTA), fechadas = ordens.filter(o => !ABERTA(o));
+  const orcs = useMemo(() => v ? (dados.orcamentos || []).filter(o => ORC_ABERTO(o) && (o.veiculo_id && o.veiculo_id === v.id || normPlaca((o.veiculo || {}).placa) === v.placa)) : [], [dados.orcamentos, v]);
   const papel = { admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel] || "";
   return html`<div class="app">
     <header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /><${SairBotao} /></div>
@@ -164,14 +173,21 @@ function Inicio() {
         <button type="button" class="ajuda" aria-label="Ajuda" onClick=${() => setAjuda(true)}><${Ic} n="help" t=${30} sw=${1.7} /></button></div>
       <div class="cab-texto">${placa.buscando ? "Consultando a placa…" : placa.erro || placa.motivo || "Digite a placa para consultar o veículo. Toda placa buscada fica gravada no banco da DTCar."}</div></header>
     <main class="folha inicio">
-      ${placa.veic ? html`<${Veiculo} v=${placa.veic} />` : null}
+      ${v ? html`<${Veiculo} v=${v} />
+        <${Cartao} titulo="Situação do carro" id="ini-situacao">
+          ${!abertas.length && !orcs.length ? html`<div class="nota">Nenhuma O.S. nem orçamento em aberto para esta placa.</div>` : null}
+          ${abertas.map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => setOsAberta(o)}><span><b>${numOS(o.numero)}</b> · ${etapaTexto(o)}<br /><span class="nota">${fmtData((o.criado_em || "").slice(0, 10))}${o.mecanico_nome ? " · " + o.mecanico_nome : ""}${o.reclamacao ? " · " + String(o.reclamacao).slice(0, 60) : ""}</span></span><${Ic} n="down" t=${18} /></button>`)}
+          ${orcs.map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => ir("orcamento")}><span><b>${numORC(o.numero)}</b> · ${SIT_ORC[o.situacao] || o.situacao}<br /><span class="nota">${fmtData((o.criado_em || "").slice(0, 10))} · ${String(o.reclamacao || "").split("\n")[0].slice(0, 60)}</span></span><${Ic} n="down" t=${18} /></button>`)}
+          ${fechadas.length ? html`<div class="sec"><h3>Histórico de serviços</h3>${fechadas.slice(0, 5).map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => setOsAberta(o)}><span><b>${fmtData((o.criado_em || "").slice(0, 10))}</b>${o.km_entrada ? " · " + fmtKm(o.km_entrada) : ""}<br /><span class="nota">${numOS(o.numero)} · ${o.reclamacao ? String(o.reclamacao).slice(0, 70) : etapaTexto(o)}</span></span><${Ic} n="down" t=${18} /></button>`)}
+            ${fechadas.length > 5 ? html`<button type="button" class="link" onClick=${() => ir("historico")}>Ver todo o histórico</button>` : null}</div>` : null}</${Cartao}>` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
-      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span></button>`)}
+      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : null}</button>`)}
+      ${osAberta ? html`<${OSDetalhe} o=${osAberta} onFechar=${() => setOsAberta(null)} />` : null}
       ${!telas.length ? html`<div class="vazio">Nenhuma tela liberada para o seu login. Peça ao administrador (Sistema › Equipe).</div>` : null}
     </main>
     <${Rodape} tela="inicio" />
     ${ajuda ? html`<${Quadro} titulo="Como usar o Início" onFechar=${() => setAjuda(false)}>
-      <p>Digite a placa e toque na lupa para consultar o carro. Depois escolha o que fazer nos botões azuis: cada tela tem a própria busca de placa.</p>
+      <p>Digite a placa e toque na lupa: aparecem as O.S. e os orçamentos em aberto do carro e o histórico de serviços (sem preço). Toque em uma O.S. para ver. Depois escolha o que fazer nos botões azuis: cada tela tem a própria busca de placa.</p>
       <p class="nota">Placa que está no cadastro não custa nada. Placa nova é consultada uma vez e fica gravada no banco da DTCar.</p>
       <button type="button" class="btn-acao" onClick=${() => setAjuda(false)}>Entendi</button></${Quadro}>` : null}
   </div>`;
@@ -201,123 +217,131 @@ function BuscaClienteQuadro({ onEscolha, onFechar }) {
     <button type="button" class="link" onClick=${onFechar}>Fechar</button></${Quadro}>`;
 }
 
-/* ---------------- + ORÇAMENTO e + O.S. (mesmo formulário do protótipo: 1. Cliente, 2. Veículo) ---------------- */
-const MARCAS_2 = ["LAND ROVER", "MERCEDES BENZ", "MERCEDES-BENZ", "ALFA ROMEO", "GREAT WALL", "ASTON MARTIN", "ROLLS ROYCE"];
-const separarMarca = txt => { const t = String(txt || "").trim().toUpperCase(), m2 = MARCAS_2.find(m => t.startsWith(m + " ")); if (m2) return { marca: m2, modelo: t.slice(m2.length).trim() }; const i = t.indexOf(" "); return i < 0 ? { marca: t, modelo: "" } : { marca: t.slice(0, i), modelo: t.slice(i + 1) }; };
-const vazio = () => ({ clienteId: "", doc: "", nome: "", cep: "", cidade: "", uf: "", endereco: "", whats: "", nascimento: "", veiculoId: "", placa: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", motivo: "", daPlaca: null, doCPF: null });
-// campos do veículo que a busca da placa (cadastro ou consulta) preenche; trocou a placa, eles saem
-const CAMPOS_VEIC = { veiculoId: "", marcaModelo: "", marca: "", modelo: "", ano: "", cor: "", daPlaca: null };
+/* ---------------- ORÇAMENTOS: pedido pelo app, abertos e avisos (regras do Danilo, 16/11/2026) ----------------
+ * No app ninguém lança item nem preço. "+ Pedido de orçamento" = placa (ou nome do cliente) + o texto do que é para orçar → função "pedido" →
+ * aparece no sistema como orçamento em elaboração, com aviso de novo pedido. Enquanto aberto, fica aqui em "Orçamentos abertos" e qualquer um da
+ * equipe acrescenta mais coisas. Aprovado no sistema: quem pediu recebe o aviso aqui ("virou a O.S. nnnn"). */
+const vistos = () => { const l = lsGet(LS_VISTOS, []); return Array.isArray(l) ? l : []; };
+/** avisos de quem pediu: orçamentos respondidos (aprovado/recusado) que a pessoa ainda não viu */
+function avisosDe(orcamentos, perfil) {
+  const v = vistos();
+  return (orcamentos || []).filter(o => (o.situacao === "aprovado" || o.situacao === "recusado") && o.consultor_id === perfil.id && !v.includes(o.id))
+    .sort((a, b) => String(b.respondido_em || b.atualizado_em || "").localeCompare(String(a.respondido_em || a.atualizado_em || "")));
+}
+const marcarVisto = id => lsSet(LS_VISTOS, vistos().concat([id]).slice(-200));
+/** o pedido do orçamento com as linhas acrescentadas ("— Nome, data: texto") */
+const Pedido = ({ texto }) => html`<div class="pedido">${String(texto || "").split("\n").filter(Boolean).map((l, i) => html`<div key=${i} class=${l.startsWith("— ") ? "acrescimo" : ""}>${l}</div>`)}</div>`;
 
-function NovoOrcamento() {
-  const { dados, perfil, cfg, avisar } = useApp();
-  // o formulário começa em branco a cada abertura: sair da tela sem gravar não deixa nada (pedido do Danilo)
-  const [f, setF] = useState(vazio);
-  const [cpf, setCpf] = useState(null), [cep, setCep] = useState(null), [erros, setErros] = useState([]), [busca, setBusca] = useState(false), [salvando, setSalvando] = useState(false), [feito, setFeito] = useState(null);
-  const topo = useRef(null);
-  const set = p => setF(o => ({ ...o, ...p }));
-  const pl = usarPlaca();
-  const clienteParaForm = c => ({ clienteId: c.id, doc: c.doc ? fmtDoc(c.doc) : "", nome: c.nome || "", cep: c.cep || "", cidade: c.cidade || "", uf: c.uf || "", endereco: [c.rua, c.bairro].filter(Boolean).join(" — ") || c.endereco || "", whats: c.telefone ? fmtTel(c.telefone) : "", nascimento: "", doCPF: null });
-  const aplicarVeic = v => set({ veiculoId: v.id || "", placa: v.placa, marcaModelo: nomeVeic(v), marca: v.marca, modelo: v.modelo, ano: v.ano || "", cor: v.cor || "", daPlaca: v.id ? null : { ano_fab: v.ano_fab, ano_mod: v.ano_mod, chassi: v.chassi, renavam: v.renavam },
-    ...(v.cliente && !f.clienteId && !f.nome ? clienteParaForm(v.cliente) : {}) });
-  // CPF: 1º o cadastro (sem custo), 2º a consulta (só administrador), como na Nova O.S. do sistema
-  const buscarCPF = async () => {
-    const d = soDig(f.doc);
-    const cad = dados.clientes.find(c => soDig(c.doc) && soDig(c.doc) === d);
-    if (cad) { set(clienteParaForm(cad)); setCpf({ ok: "Cadastro encontrado" }); return; }
-    if (d.length === 14) { setCpf({ erro: docValido(d) ? "CNPJ fora do cadastro: preencha os dados da empresa." : "CNPJ inválido." }); return; }
-    if (!validaCPF(d)) { setCpf({ erro: "CPF inválido. Confira os 11 números." }); return; }
-    if (!ehAdmin(perfil)) { setCpf({ erro: "CPF fora do cadastro. A consulta pelo CPF é só do administrador: preencha o nome." }); return; }
-    setCpf({ buscando: true });
-    const r = await consultarCPF(d, { manual: true });
-    if (r.ok && r.encontrado && r.dados) { const nome = f.nome.trim() ? f.nome : MAIUSC(r.dados.nome || ""); set({ clienteId: "", nome, nascimento: r.dados.nascimento || "", doCPF: { cpf: d, nome: f.nome.trim() ? "" : nome, nascimento: r.dados.nascimento || "" } }); setCpf({ ok: "Nome encontrado pelo CPF" }); }
-    else setCpf({ erro: r.ok ? (r.sem_creditos ? "CPF fora da base e sem créditos na consulta: preencha o nome." : "CPF não encontrado: preencha o nome.") : (r.vencida ? "A chave da consulta de CPF venceu: cadastre a nova em Ajustes do sistema." : r.erro || "A consulta não respondeu: preencha o nome.") });
-  };
-  const buscarCEP = async () => {
-    setCep({ buscando: true });
-    const r = await consultarCep(f.cep);
-    if (r.ok && r.encontrado) { const d = r.dados; set({ cep: fmtCep(d.cep || f.cep), cidade: d.cidade || f.cidade, uf: d.uf || f.uf, endereco: f.endereco.trim() ? f.endereco : [d.rua, d.bairro].filter(Boolean).join(" — ") }); setCep({ ok: "Endereço encontrado" }); }
-    else setCep({ erro: r.ok ? "CEP não encontrado: preencha o endereço." : r.erro });
-  };
-  const buscarPlacaAqui = async () => { const v = await pl.buscar(f.placa); if (v) aplicarVeic(v); };
-  const escolherCliente = c => { set(clienteParaForm(c)); setCpf({ ok: "Cadastro encontrado" }); setBusca(false); };
-  const trocarMarcaModelo = txt => { const s = separarMarca(txt); set({ marcaModelo: txt, marca: s.marca, modelo: s.modelo, veiculoId: "" }); };
-  /** nascimento que veio da consulta do CPF que está no campo (nunca o de outro CPF) */
-  const nascDoCPF = () => { const p = f.doCPF; return p && p.cpf === soDig(f.doc) && p.nascimento ? { nascimento: p.nascimento } : {}; };
-
-  const validar = () => {
-    const e = [], p = normPlaca(f.placa);
-    if (f.placa.trim() && !placaValida(p)) e.push("A placa está incompleta (ABC1234 ou ABC1D23). Confira ou deixe em branco.");
-    if (!f.clienteId) {
-      if (!f.nome.trim()) e.push("Informe o nome do cliente.");
-      const t = soDig(f.whats);
-      if (t && (t.length < 10 || t.length > 11)) e.push("Informe o WhatsApp com DDD.");
-      else if (t.length >= 10) { const dup = dados.clientes.find(c => soDig(c.telefone) === t); if (dup) e.push("Este telefone já é de " + dup.nome + ". Toque em “Buscar no cadastro” e escolha o cliente."); }
-      if (f.doc.trim()) { if (!docValido(f.doc)) e.push("CPF/CNPJ inválido. Confira os números ou deixe em branco."); else { const dup = dados.clientes.find(c => soDig(c.doc) === soDig(f.doc)); if (dup) e.push("Já existe um cliente com este CPF/CNPJ: " + dup.nome + ". Toque na lupa do CPF."); } }
-    } else { const cli = dados.clientes.find(c => c.id === f.clienteId); if (cli && cli.situacao === "bloqueado") e.push("Cliente bloqueado: " + (cli.restricao || "verifique o cadastro") + "."); }
-    return e;
-  };
-  const enderecoNovo = () => { const [rua = "", bairro = ""] = f.endereco.split(/\s+—\s+|\s+-\s+/); const c = soDig(f.cep).length === 8 ? fmtCep(f.cep) : "";
-    const cidade = (c && f.cidade.trim()) || "Colatina", uf = (c && f.uf.trim()) || "ES";
-    return { rua: rua.trim(), bairro: bairro.trim(), cidade, uf, ...(c ? { cep: c } : {}) }; };
-
-  const trava = useRef(false);
-  const gravar = async () => {
-    if (trava.current) return; // dois toques seguidos não gravam duas vezes
-    const e = validar(); setErros(e); if (e.length) { topo.current && topo.current.scrollIntoView({ behavior: "smooth" }); return; }
-    trava.current = true; setSalvando(true);
+function PedidoNovo({ onFeito, onCancelar }) {
+  const { avisar } = useApp(); const pl = usarPlaca();
+  const [mao, setMao] = useState({ modelo: "", ano: "" }), [nome, setNome] = useState(""), [whats, setWhats] = useState(""), [texto, setTexto] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const v = pl.veic, trava = useRef(false);
+  const enviar = async () => {
+    if (trava.current) return;
+    const t = texto.trim();
+    if (!v && !normPlaca(pl.placa.texto) && !nome.trim()) return setErro("Busque a placa ou informe o nome do cliente.");
+    if (t.length < 3) return setErro("Escreva o que é para orçar.");
+    const tel = soDig(whats); if (tel && (tel.length < 10 || tel.length > 11)) return setErro("Informe o WhatsApp com DDD.");
+    setErro(""); trava.current = true; setSalvando(true);
     try {
-      const p = normPlaca(f.placa), veiCad = f.veiculoId ? dados.veiculos.find(v => v.id === f.veiculoId) : (p ? dados.veiculos.find(v => v.placa === p) : null);
-      const cli = dados.clientes.find(c => c.id === f.clienteId) || null;
-      // cliente só digitado: a cópia vai no orçamento (copiaClienteDig), como no orçamento do sistema; o cadastro acontece na aprovação
-      const clienteDig = cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: f.nome, telefone: soDig(f.whats), doc: f.doc, ...enderecoNovo(), ...nascDoCPF() });
-      if (!cli && erroClienteDig({ doc: f.doc })) throw new Error(erroClienteDig({ doc: f.doc }));
-      const validade = cfg.validadeDias ? somaDias(hojeISO(), Number(cfg.validadeDias)) : "";
-      const r = await api.orcamentos.salvar({ cliente_id: cli ? cli.id : "", veiculo_id: veiCad ? veiCad.id : "", cliente: clienteDig,
-        veiculo: { placa: p, marca: veiCad ? veiCad.marca || "" : f.marca, modelo: veiCad ? veiCad.modelo || "" : f.modelo, ano: String((veiCad ? veiCad.ano : f.ano) || "") }, reclamacao: f.motivo.trim(), obs: "", obs_internas: "", tabela_preco: "vista",
-        condicoes_pagamento: cfg.condicoesPadrao || "", desconto: 0, validade, situacao: "elaboracao", motivo: "", itens: [] });
-      setF(vazio()); setCpf(null); setCep(null); pl.limpar();
-      setFeito({ id: r.id, numero: r.numero });
-    } catch (x) { avisar("Não foi possível criar o orçamento: " + (x.message || x), true); }
+      const cli = v && v.cliente ? v.cliente : null;
+      const r = await api.pedido.novo({ texto: t, placa: v ? v.placa : normPlaca(pl.placa.texto), veiculo_id: v && v.id ? v.id : "", cliente_id: cli ? cli.id : "",
+        veiculo: v ? { marca: v.marca || "", modelo: v.modelo || "", ano: String(v.ano || "") } : { marca: "", modelo: mao.modelo.trim().toUpperCase(), ano: mao.ano },
+        cliente: cli ? { nome: cli.nome, telefone: cli.telefone || "" } : { nome: MAIUSC(nome.trim()), telefone: tel } });
+      onFeito(r);
+    } catch (x) { avisar("Não foi possível enviar o pedido: " + (x.message || x), true); }
     finally { trava.current = false; setSalvando(false); }
   };
-
-  const auto = f.clienteId ? " auto" : "";
-  const linhaCpf = cpf && cpf.buscando ? html`<div class="achou buscando">Consultando o CPF…</div>` : cpf && cpf.ok ? html`<div class="achou"><${Ic} n="check" t=${16} sw=${2.4} />${cpf.ok}</div>` : cpf && cpf.erro ? html`<div class="achou nao">${cpf.erro}</div>` : null;
-  const placa = pl.placa;
-  const linhaPlaca = placa.buscando && placa.texto === normPlaca(f.placa) ? html`<div class="achou buscando">Consultando a placa…</div>`
-    : f.veiculoId ? html`<div class="achou"><${Ic} n="check" t=${16} sw=${2.4} />Placa gravada no banco da DTCar</div>`
-    : f.daPlaca ? html`<div class="achou"><${Ic} n="check" t=${16} sw=${2.4} />Placa nova: consultada e gravada</div>`
-    : placa.naoAchou && placa.texto === normPlaca(f.placa) ? html`<div class="achou nao">${placa.motivo} Digite a marca e o modelo.</div>` : null;
-  const acao = html`<div class="acao"><button type="button" class="btn-acao" disabled=${salvando} onClick=${gravar}>${salvando ? "Gravando…" : "Criar orçamento"}</button></div>`;
-  return html`<${Tela} tela="orcamento" acao=${acao} ajuda="Preencha o cliente (toque na lupa do CPF para buscar no cadastro) e o veículo (lupa da placa) e toque em Criar orçamento. Em seguida você inclui os serviços e as peças.">
-    <div ref=${topo}></div>
-    ${erros.length ? html`<div class="erro" role="alert">Corrija para continuar:<ul>${erros.map((x, i) => html`<li key=${i}>${x}</li>`)}</ul></div>` : null}
-    <${Cartao} titulo="1. Cliente" id="c-cliente">${linhaCpf}
-      <${Campo} id="f-cpf" rotulo="CPF ou CNPJ"><div class="linha"><input id="f-cpf" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="000.000.000-00" value=${f.doc} onInput=${e => { const v = e.target.value, p = f.doCPF; const tira = p && p.cpf !== soDig(v) ? { nascimento: "", nome: p.nome && f.nome === p.nome ? "" : f.nome, doCPF: null } : {}; set({ doc: v, clienteId: "", ...tira }); setCpf(null); }} onBlur=${() => { if ([11, 14].includes(soDig(f.doc).length) && !f.clienteId && !f.nome.trim()) buscarCPF(); }} />
-        <button type="button" class="btn-busca g" aria-label="Buscar pelo CPF" onClick=${buscarCPF}><${Ic} n="search" t=${22} /></button></div></${Campo}>
-      <${Campo} id="f-nome" rotulo=${f.clienteId ? "Nome (do cadastro)" : "Nome"}><input id="f-nome" class=${"inp" + auto} autocomplete="off" placeholder="Nome do cliente" value=${f.nome} onInput=${e => set({ nome: e.target.value, clienteId: "" })} /></${Campo}>
-      <button type="button" class="link" style="align-self:flex-start;background:none;border:0;color:#2f6fb5;font-weight:600;font-size:13px;min-height:36px;padding:0" onClick=${() => setBusca(true)}>Buscar no cadastro pelo nome, telefone ou placa</button>
-      <div class="grade-cep"><${Campo} id="f-cep" rotulo="CEP"><div class="linha"><input id="f-cep" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="29700-000" value=${f.cep} onInput=${e => { set({ cep: e.target.value }); setCep(null); }} onBlur=${() => { if (soDig(f.cep).length === 8 && !f.cidade) buscarCEP(); }} />
-          <button type="button" class="btn-busca g" aria-label="Buscar pelo CEP" onClick=${buscarCEP}><${Ic} n="search" t=${22} /></button></div></${Campo}>
-        <${Campo} id="f-cidade" rotulo="Cidade / UF"><input id="f-cidade" class="inp auto" autocomplete="off" placeholder="Colatina / ES" value=${[f.cidade, f.uf].filter(Boolean).join(" / ")} onInput=${e => { const [c = "", u = ""] = e.target.value.split("/"); set({ cidade: c.trim(), uf: u.trim().toUpperCase().slice(0, 2) }); }} /></${Campo}></div>
-      ${cep && cep.erro ? html`<div class="achou nao">${cep.erro}</div>` : cep && cep.buscando ? html`<div class="achou buscando">Buscando o CEP…</div>` : null}
-      <${Campo} id="f-end" rotulo="Endereço"><input id="f-end" class="inp" autocomplete="off" placeholder="Rua, número — bairro" value=${f.endereco} onInput=${e => set({ endereco: e.target.value })} /></${Campo}>
-      <${Campo} id="f-whats" rotulo="WhatsApp"><input id="f-whats" class="inp livre" inputmode="tel" autocomplete="off" placeholder="(27) 90000-0000" value=${f.whats} onInput=${e => set({ whats: e.target.value })} onBlur=${() => { const t = soDig(f.whats); if (t.length >= 10) set({ whats: fmtTel(t) }); }} /></${Campo}></${Cartao}>
-    <${Cartao} titulo="2. Veículo" id="c-veiculo">${linhaPlaca}
-      <${Campo} id="f-placa" rotulo="Placa"><div class="linha"><input id="f-placa" class="inp placa" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="ABC1D23" value=${f.placa} onInput=${e => set({ ...CAMPOS_VEIC, placa: e.target.value })} onBlur=${() => { if (normPlaca(f.placa).length === 7 && !f.veiculoId && !f.marca) buscarPlacaAqui(); }} />
-        <button type="button" class="btn-busca g" aria-label="Buscar pela placa" onClick=${buscarPlacaAqui}><${Ic} n="search" t=${22} /></button></div></${Campo}>
-      <div class="nota">Placa já gravada não gera nova consulta paga. Placa nova é consultada uma vez e fica salva.</div>
-      <${Campo} id="f-mm" rotulo=${f.veiculoId || f.daPlaca ? "Marca e modelo (preenchido pela busca)" : "Marca e modelo"}><input id="f-mm" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="Ex.: VOLKSWAGEN GOL 1.0" value=${f.marcaModelo} onInput=${e => trocarMarcaModelo(e.target.value)} /></${Campo}>
-      <div class="grade2"><${Campo} id="f-ano" rotulo="Ano"><input id="f-ano" class=${"inp livre" + (f.veiculoId || f.daPlaca ? " auto" : "")} inputmode="numeric" autocomplete="off" placeholder="2015" value=${f.ano} onInput=${e => set({ ano: e.target.value.replace(/[^\d/]/g, "").slice(0, 9) })} /></${Campo}>
-        <${Campo} id="f-cor" rotulo="Cor"><input id="f-cor" class=${"inp" + (f.veiculoId || f.daPlaca ? " auto" : "")} autocomplete="off" placeholder="PRATA" value=${f.cor} onInput=${e => set({ cor: e.target.value })} /></${Campo}></div></${Cartao}>
-    <${Cartao} titulo="3. Serviço pedido" id="c-servico">
-      <${Campo} id="f-motivo" rotulo="O que o cliente quer orçar (opcional)"><textarea id="f-motivo" class="area" placeholder="Ex.: troca de pastilhas e discos" value=${f.motivo} onInput=${e => set({ motivo: e.target.value })}></textarea></${Campo}></${Cartao}>
-    ${busca ? html`<${BuscaClienteQuadro} onEscolha=${escolherCliente} onFechar=${() => setBusca(false)} />` : null}
-    ${feito ? html`<${Quadro} titulo=${numORC(feito.numero) + " criado"} onFechar=${() => setFeito(null)}>
-      <p>Agora inclua os serviços e as peças do orçamento.</p>
-      <a class="btn-acao" style="display:flex;align-items:center;justify-content:center;text-decoration:none" href=${SISTEMA + "#/orcamento/" + feito.id}>Incluir os itens</a>
-      <button type="button" class="link" onClick=${() => { setFeito(null); ir("inicio"); }}>Voltar ao Início</button></${Quadro}>` : null}
+  const acao = html`<div class="acao"><button type="button" class="btn-acao" id="pd-enviar" disabled=${salvando} onClick=${enviar}>${salvando ? "Enviando…" : "Enviar para o sistema"}</button></div>`;
+  return html`<${Tela} tela="orcamento" acao=${acao} ajuda="Busque a placa (ou escreva o nome do cliente), escreva embaixo o que é para orçar e toque em Enviar. O pedido chega ao sistema com aviso; lá o orçamento é montado com os preços. Enquanto estiver aberto, você pode acrescentar mais coisas aqui em Orçamentos.">
+    ${erro ? html`<div class="erro" role="alert">${erro}</div>` : null}
+    <${BuscaPlaca} id="pd-placa" pl=${pl} /><${Veiculo} v=${v} />
+    ${!v ? html`<${ModeloAMao} valor=${mao} onMuda=${setMao} />` : null}
+    ${!(v && v.cliente) ? html`<${Cartao} titulo="Cliente (se souber)">
+      <${Campo} id="pd-nome" rotulo="Nome"><input id="pd-nome" class="inp" autocomplete="off" placeholder="Nome do cliente" value=${nome} onInput=${e => setNome(e.target.value)} /></${Campo}>
+      <${Campo} id="pd-whats" rotulo="WhatsApp"><input id="pd-whats" class="inp livre" inputmode="tel" autocomplete="off" placeholder="(27) 90000-0000" value=${whats} onInput=${e => setWhats(e.target.value)} onBlur=${() => { const d = soDig(whats); if (d.length >= 10) setWhats(fmtTel(d)); }} /></${Campo}></${Cartao}>` : null}
+    <${Cartao} titulo="O que é para orçar" id="pd-texto">
+      <textarea id="pd-area" class="area" rows="6" placeholder="Ex.: pastilhas e discos dianteiros, barulho na suspensão traseira, troca de óleo e filtros" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+      <div class="nota">Sem preço e sem item: quem monta o orçamento é o sistema. Escreva tudo o que o cliente pediu e o que você viu no carro.</div></${Cartao}>
+    <button type="button" class="link" onClick=${onCancelar}>Cancelar e voltar aos orçamentos</button>
   </${Tela}>`;
+}
+
+function Orcamentos() {
+  const { dados, avisos, avisar, recarregarOrcamentos } = useApp();
+  const [novo, setNovo] = useState(false), [feito, setFeito] = useState(null), [acrescentar, setAcrescentar] = useState(null), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [q, setQ] = useState("");
+  const abertos = useMemo(() => (dados.orcamentos || []).filter(ORC_ABERTO).filter(o => { const n = norm(q), p = normPlaca(q); return !q.trim() || norm((o.cliente || {}).nome).includes(n) || (p.length >= 3 && normPlaca((o.veiculo || {}).placa).includes(p)) || String(o.numero) === soDig(q) || norm(o.reclamacao).includes(n); }).sort((a, b) => b.numero - a.numero), [dados.orcamentos, q]);
+  const gravarAcrescimo = async () => {
+    const t = texto.trim(); if (t.length < 3) return avisar("Escreva o que é para acrescentar.", true);
+    setSalvando(true);
+    try { await api.pedido.acrescentar(acrescentar.id, t); avisar("Acrescentado ao " + numORC(acrescentar.numero) + ". O sistema foi avisado."); setAcrescentar(null); setTexto(""); await recarregarOrcamentos(); }
+    catch (x) { avisar("Não foi possível acrescentar: " + (x.message || x), true); } finally { setSalvando(false); }
+  };
+  if (novo) return html`<${PedidoNovo} onCancelar=${() => setNovo(false)} onFeito=${async r => { setNovo(false); setFeito(r); await recarregarOrcamentos(); }} />`;
+  const veicTxt = o => [exPlaca((o.veiculo || {}).placa), (o.veiculo || {}).marca, (o.veiculo || {}).modelo].filter(Boolean).join(" ");
+  const acao = html`<div class="acao"><button type="button" class="btn-acao" id="orc-novo" onClick=${() => setNovo(true)}>+ Pedido de orçamento</button></div>`;
+  return html`<${Tela} tela="orcamento" acao=${acao} ajuda="“+ Pedido de orçamento”: escreva o que é para orçar e envie; o sistema monta o orçamento com os preços. Os orçamentos abertos ficam aqui até serem aprovados ou recusados, e você pode acrescentar mais coisas. Quando o orçamento que você pediu for aprovado, o aviso aparece aqui com o número da O.S.">
+    ${avisos.length ? html`<${Cartao} titulo="Avisos" id="orc-avisos">${avisos.map(o => html`<div class="aviso-orc" key=${o.id}>
+      <div><b>${numORC(o.numero)} ${o.situacao === "aprovado" ? "aprovado" : "recusado"}</b>${o.situacao === "aprovado" && o.os_numero ? html` · virou a <b>${numOS(o.os_numero)}</b>` : null}<br /><span class="nota">${veicTxt(o)}${(o.cliente || {}).nome ? " · " + o.cliente.nome : ""}${o.situacao === "recusado" && o.motivo ? " · motivo: " + o.motivo : ""}</span></div>
+      <button type="button" class="btn-barra curto claro" data-visto=${o.id} onClick=${() => { marcarVisto(o.id); recarregarOrcamentos(); }}>OK</button></div>`)}</${Cartao}>` : null}
+    <${Cartao} titulo="Orçamentos abertos" id="orc-abertos">
+      <input id="orc-busca" class="inp livre" autocomplete="off" placeholder="Buscar por placa, cliente ou número" value=${q} onInput=${e => setQ(e.target.value)} />
+      ${!abertos.length ? html`<div class="vazio">${q ? "Nenhum orçamento aberto com esse texto." : "Nenhum orçamento em aberto. Toque em “+ Pedido de orçamento” para pedir um."}</div>` : null}</${Cartao}>
+    ${abertos.map(o => html`<${Cartao} key=${o.id} titulo=${numORC(o.numero) + " · " + (SIT_ORC[o.situacao] || o.situacao)}>
+      <${KV} a="Veículo" b=${veicTxt(o) || "—"} p />${(o.cliente || {}).nome ? html`<${KV} a="Cliente" b=${o.cliente.nome} p />` : null}
+      <${KV} a="Pedido em" b=${fmtData((o.criado_em || "").slice(0, 10)) + (o.consultor_nome ? " · " + o.consultor_nome : "")} p />
+      <${Pedido} texto=${o.reclamacao} />
+      ${o.validade ? html`<div class="nota">Válido até ${fmtData(o.validade)}.</div>` : null}
+      <button type="button" class="btn-barra claro" data-acrescentar=${o.id} onClick=${() => { setAcrescentar(o); setTexto(""); }}><${Ic} n="orc" t=${20} />Acrescentar ao pedido</button></${Cartao}>`)}
+    ${acrescentar ? html`<${Quadro} titulo=${"Acrescentar ao " + numORC(acrescentar.numero)} onFechar=${() => setAcrescentar(null)}>
+      <p class="nota">${veicTxt(acrescentar)}. O que mais é para orçar neste carro?</p>
+      <textarea id="ac-area" class="area" rows="4" placeholder="Ex.: palhetas e óleo do câmbio" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+      <button type="button" class="btn-acao" id="ac-gravar" disabled=${salvando} onClick=${gravarAcrescimo}>${salvando ? "Gravando…" : "Acrescentar"}</button>
+      <button type="button" class="link" onClick=${() => setAcrescentar(null)}>Cancelar</button></${Quadro}>` : null}
+    ${feito ? html`<${Quadro} titulo=${numORC(feito.numero) + " enviado"} onFechar=${() => setFeito(null)}>
+      <p>O pedido chegou ao sistema com o aviso de novo orçamento. Quando for aprovado, o aviso aparece aqui em Orçamentos.</p>
+      <button type="button" class="btn-acao" id="pd-entendi" onClick=${() => setFeito(null)}>Entendi</button></${Quadro}>` : null}
+  </${Tela}>`;
+}
+
+/* ---------------- O.S. no leiaute do app (nada do sistema abre dentro do app — regra do Danilo, 16/11/2026) ----------------
+ * Só leitura, sem preço para quem não vê valores. Enquanto a O.S. está em andamento, o mecânico responsável (e administrador/consultor)
+ * acrescenta "itens a orçar": vai para o histórico da O.S. (evento "a_orcar") e o sistema avisa. */
+function OSDetalhe({ o, onFechar }) {
+  const { perfil, avisar } = useApp();
+  const ver = pode(perfil, "verValores");
+  const [det, setDet] = useState(null), [erro, setErro] = useState(""), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [escrevendo, setEscrevendo] = useState(false);
+  const carregar = () => api.ordem(o.id).then(d => { setDet(d); setErro(""); }).catch(() => setErro("Não deu para carregar os itens da O.S. (sem internet?)."));
+  useEffect(() => { let vivo = true; api.ordem(o.id).then(d => vivo && setDet(d)).catch(() => vivo && setErro("Não deu para carregar os itens da O.S. (sem internet?).")); return () => { vivo = false; }; }, [o.id]);
+  const responsavel = perfil.papel === "admin" || perfil.papel === "consultor" || (o.mecanico_id && o.mecanico_id === perfil.id);
+  const podeOrcar = ABERTA(o) && responsavel;
+  const itens = (det && det.itens || []).filter(i => i.aprovado !== false), serv = itens.filter(i => i.tipo === "servico"), pecas = itens.filter(i => i.tipo !== "servico");
+  const aOrcar = (det && det.eventos || []).filter(e => e.tipo === "a_orcar");
+  const gravar = async () => {
+    const t = texto.trim(); if (t.length < 3) return avisar("Escreva o que é para orçar.", true);
+    setSalvando(true);
+    try { await api.evento(o.id, "a_orcar", t, perfil.nome); avisar("Itens a orçar enviados ao sistema para a " + numOS(o.numero) + "."); setTexto(""); setEscrevendo(false); await carregar(); }
+    catch (x) { avisar("Não foi possível enviar: " + (x.message || x), true); } finally { setSalvando(false); }
+  };
+  const veic = o.veiculo || {};
+  return html`<${Quadro} titulo=${numOS(o.numero)} onFechar=${onFechar}>
+    <div class="os-cab"><span class="etapa">${etapaTexto(o)}</span>${o.mecanico_nome ? html`<span class="nota">Responsável: ${o.mecanico_nome}</span>` : null}</div>
+    <${KV} a="Abertura" b=${fmtData((o.criado_em || "").slice(0, 10)) + (o.km_entrada ? " · " + fmtKm(o.km_entrada) : "")} />
+    <${KV} a="Veículo" b=${[exPlaca(veic.placa), veic.marca, veic.modelo].filter(Boolean).join(" ") || "—"} p />
+    ${(o.cliente || {}).nome ? html`<${KV} a="Cliente" b=${o.cliente.nome} p />` : null}
+    ${o.reclamacao ? html`<div class="sec"><h3>O que o cliente pediu</h3><${Pedido} texto=${o.reclamacao} /></div>` : null}
+    ${erro ? html`<div class="nota">${erro}</div>` : !det ? html`<div class="nota">Carregando os itens…</div>` : html`
+      <div class="sec"><h3>Serviços</h3>${serv.length ? serv.map(i => html`<div class="check" key=${i.id}><${Ic} n="check" t=${16} sw=${2.4} />${i.descricao}${i.executado ? html` <span class="selo">Feito</span>` : null}</div>`) : html`<div class="nota">Nenhum serviço lançado.</div>`}</div>
+      <div class="sec"><h3>Peças</h3>${pecas.length ? pecas.map(i => html`<div class="check" key=${i.id}><${Ic} n="peca" t=${16} sw=${2.2} />${Number(i.quantidade) > 1 ? i.quantidade + "× " : ""}${i.descricao}</div>`) : html`<div class="nota">Nenhuma peça lançada.</div>`}</div>
+      ${ver ? html`<${KV} a="Total" b=${reais(o.total)} />` : null}`}
+    ${aOrcar.length ? html`<div class="sec"><h3>Itens a orçar (pedidos pelo app)</h3>${aOrcar.map(e => html`<div class="acrescimo" key=${e.id}>— ${e.usuario_nome || "App"}, ${fmtData((e.criado_em || "").slice(0, 10))}: ${e.texto}</div>`)}</div>` : null}
+    ${podeOrcar ? (escrevendo ? html`<div class="sec"><h3>Mais itens a orçar nesta O.S.</h3>
+        <textarea id="os-area" class="area" rows="4" placeholder="Ex.: vi a bucha da bandeja rasgada; orçar também o terminal" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+        <button type="button" class="btn-acao" id="os-orcar-gravar" disabled=${salvando} onClick=${gravar}>${salvando ? "Enviando…" : "Enviar para o sistema"}</button>
+        <button type="button" class="link" onClick=${() => setEscrevendo(false)}>Cancelar</button></div>`
+      : html`<button type="button" class="btn-barra claro" id="os-orcar" onClick=${() => setEscrevendo(true)}><${Ic} n="orc" t=${20} />Acrescentar itens a orçar</button>`) : null}
+    ${!podeOrcar && ABERTA(o) ? html`<div class="nota">Só o mecânico responsável por esta O.S. (ou o administrador/consultor) acrescenta itens a orçar.</div>` : null}
+    <button type="button" class="link" onClick=${onFechar}>Fechar</button></${Quadro}>`;
 }
 
 /* ---------------- AGENDAR ---------------- */
@@ -416,7 +440,7 @@ function mensagemAgenda(nome, servico, data, hora, v) {
 /* ---------------- ÓLEO (APLICAÇÃO) ---------------- */
 function Oleo() {
   const { dados } = useApp(); const pl = usarPlaca();
-  const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [mao, setMao] = useState({ modelo: "", ano: "" }), [verFiltros, setVerFiltros] = useState(true), [detalhe, setDetalhe] = useState(false);
+  const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [mao, setMao] = useState({ modelo: "", ano: "" }), [verFiltros, setVerFiltros] = useState(true);
   useEffect(() => { carregarCatalogo().then(setCat).catch(() => setErro("Não deu para carregar o catálogo. Confira a internet e tente de novo.")); }, []);
   const estoque = useMemo(() => indiceEstoque(dados.produtos), [dados.produtos]);
   const v = pl.veic;
@@ -430,11 +454,11 @@ function Oleo() {
     ${erro ? html`<div class="erro">${erro}</div>` : !cat ? html`<div class="carregando">Carregando o catálogo…</div>` : null}
     ${cat && r && !oleos.length && !r.filtros.length ? html`<div class="vazio">Nada no catálogo para ${v ? nomeVeic(v) : mao.modelo}. ${v ? "Tente digitar o modelo de outro jeito, sem a placa." : "Tente só o nome do modelo."}</div>` : null}
     ${cat && oleos.length ? html`<${Cartao} titulo="Óleo do motor" id="ol-oleo">
-      ${oleos.slice(0, detalhe ? 3 : 1).map((g, i) => html`<div key=${i}><${KV} a="Litragem" b=${g.litros ? g.litros + " L" : "—"} /><${KV} a="Viscosidade" b=${g.viscosidade || "—"} />
-        ${detalhe ? html`<${KV} a="Carro" b=${g.linha.modelo + " " + (g.linha.motor || "") + (periodoTexto(g.linha) ? " · " + periodoTexto(g.linha) : "")} p /><${KV} a="Norma" b=${g.linha.norma || "—"} p /><${KV} a="Fonte" b=${g.linha.fonte || "catálogo"} p />` : null}
+      ${oleos.map((g, i) => html`<div key=${i} class=${"oleo-linha" + (i ? " outra" : "")}>${i ? html`<div class="nota">Outra resposta do catálogo:</div>` : null}
+        <div class="visc">${g.viscosidade || "—"}</div><${KV} a="Litragem" b=${g.litros ? g.litros + " L" : "—"} /><${KV} a="Viscosidade" b=${g.viscosidade || "—"} />
+        <${KV} a="Carro" b=${g.linha.modelo + " " + (g.linha.motor || "") + (periodoTexto(g.linha) ? " · " + periodoTexto(g.linha) : "")} p /><${KV} a="Norma" b=${g.linha.norma || "—"} p /><${KV} a="Fonte" b=${g.linha.fonte || "catálogo"} p />
         ${g.linha.aviso ? html`<div class="nota"><span class="selo atencao">Atenção</span>${g.linha.aviso}</div>` : null}</div>`)}
-      <div class="nota">Dado de catálogo: confira no manual antes de aplicar.</div>
-      <button type="button" class="btn-barra claro" onClick=${() => setDetalhe(!detalhe)}>${detalhe ? "Voltar ao resumo" : "Ver detalhes (norma e fontes)"}</button></${Cartao}>` : null}
+      <div class="nota">Dado de catálogo: confira no manual antes de aplicar.</div></${Cartao}>` : null}
     ${cat && apl ? html`<button type="button" class="btn-barra" aria-expanded=${verFiltros ? "true" : "false"} onClick=${() => setVerFiltros(!verFiltros)}><${Ic} n="sliders" t=${22} />${verFiltros ? "Ocultar filtros" : "Ver filtros"}</button>
       ${verFiltros ? html`<${Cartao} titulo="Filtros" id="ol-filtros"><div class="nota" style="margin-bottom:2px">${apl.montadora} ${apl.modelo} ${[apl.versao, apl.motor, periodoTexto(apl)].filter(Boolean).join(" · ")} · catálogo ${apl.catalogo}</div>
         ${TIPOS_FILTRO.map(([k, t]) => { const f = filtro(k); return html`<div class="sec" key=${k}><h3>Filtro de ${t.toLowerCase() === "óleo" ? "óleo" : t.toLowerCase() === "ar" ? "ar do motor" : t.toLowerCase() === "cabine" ? "ar-condicionado" : t.toLowerCase()}</h3>
@@ -517,20 +541,21 @@ function Historico() {
   const { dados } = useApp(); const pl = usarPlaca();
   const v = pl.veic;
   const ordens = useMemo(() => v ? ordensDoVeiculo(dados, v) : [], [dados.ordens, v]);
-  const [itens, setItens] = useState({}), [erro, setErro] = useState("");
+  const [itens, setItens] = useState({}), [erro, setErro] = useState(""), [aberta, setAberta] = useState(null);
   useEffect(() => { let vivo = true; setErro(""); const ids = ordens.map(o => o.id).filter(id => !itens[id]); if (!ids.length) return;
     api.itensDasOrdens(ids.slice(0, 60)).then(l => { if (!vivo) return; const m = {}; ids.forEach(id => { m[id] = []; }); l.forEach(i => { (m[i.ordem_id] = m[i.ordem_id] || []).push(i); }); setItens(x => ({ ...x, ...m })); })
       .catch(() => vivo && setErro("Não deu para carregar os serviços de cada O.S. (sem internet?). Mostrando só o que o cliente pediu."));
     return () => { vivo = false; }; }, [ordens]);
   const servicos = o => { const l = (itens[o.id] || []).filter(i => i.tipo === "servico" && i.aprovado !== false).map(i => i.descricao); if (l.length) return l; return o.reclamacao ? [o.reclamacao] : []; };
-  return html`<${Tela} tela="historico" ajuda="Busque a placa: aparecem todas as O.S. do carro, da mais nova para a mais antiga, com a data, o KM e os serviços feitos. Toque em uma O.S. para abrir.">
+  return html`<${Tela} tela="historico" ajuda="Busque a placa: aparecem todas as O.S. do carro, da mais nova para a mais antiga, com a data, o KM e os serviços feitos. Toque em uma O.S. para ver os detalhes (sem preço).">
     <${BuscaPlaca} id="hs-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${erro ? html`<div class="nota" style="padding:0 6px">${erro}</div>` : null}
     ${!v ? html`<div class="vazio">Digite a placa para ver o histórico de serviços.</div>` : !ordens.length ? html`<div class="vazio">Nenhuma O.S. deste veículo no sistema.</div>` : null}
     ${ordens.map(o => html`<${Cartao} key=${o.id} titulo=${fmtData((o.criado_em || "").slice(0, 10)) + (o.km_entrada ? " · " + fmtKm(o.km_entrada) : "")}>
       ${servicos(o).length ? servicos(o).map((s, i) => html`<div class="check" key=${i}><${Ic} n="check" t=${16} sw=${2.4} />${s}</div>`) : html`<div class="nota">${itens[o.id] ? "Sem serviço lançado." : "Carregando…"}</div>`}
       <div class="nota">${numOS(o.numero)} · ${(situacaoOS(o) || STATUS[o.status] || {}).t || o.status}${o.mecanico_nome ? " · " + o.mecanico_nome : ""}</div>
-      <a class="btn-barra" style="text-decoration:none;justify-content:center" href=${SISTEMA + "#/os/" + o.id}><${Ic} n="os" t=${22} />Abrir ${numOS(o.numero)}</a></${Cartao}>`)}
+      <button type="button" class="btn-barra" style="justify-content:center" data-os=${o.id} onClick=${() => setAberta(o)}><${Ic} n="os" t=${22} />Ver ${numOS(o.numero)}</button></${Cartao}>`)}
+    ${aberta ? html`<${OSDetalhe} o=${aberta} onFechar=${() => setAberta(null)} />` : null}
   </${Tela}>`;
 }
 
@@ -539,10 +564,10 @@ function OSConsulta() {
   const { dados, perfil } = useApp(); const pl = usarPlaca();
   const v = pl.veic, ver = pode(perfil, "verValores");
   const ordens = useMemo(() => v ? ordensDoVeiculo(dados, v) : [], [dados.ordens, v]);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(""), [aberta, setAberta] = useState(null);
   const porNumero = useMemo(() => { const d = soDig(q); if (!d) return []; return dados.ordens.filter(o => String(o.numero) === String(+d)).slice(0, 3); }, [q, dados.ordens]);
   const lista = v ? ordens : porNumero;
-  return html`<${Tela} tela="osconsulta" ajuda="Busque a placa (ou digite o número da O.S.) e veja as O.S. do carro com abertura, situação, serviços e total. “Abrir O.S.” mostra a O.S. completa.">
+  return html`<${Tela} tela="osconsulta" ajuda="Busque a placa (ou digite o número da O.S.) e veja as O.S. do carro com abertura, situação e serviços. “Ver O.S.” mostra os serviços e as peças; na O.S. em andamento, o responsável acrescenta itens a orçar.">
     <${BuscaPlaca} id="oc-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${!v ? html`<${Cartao} titulo="Ou pelo número da O.S."><input id="oc-num" class="inp livre" inputmode="numeric" autocomplete="off" placeholder="Ex.: 1927" value=${q} onInput=${e => setQ(e.target.value)} /></${Cartao}>` : null}
     ${!lista.length ? html`<div class="vazio">${v ? "Nenhuma O.S. deste veículo." : "Digite a placa ou o número da O.S."}</div>` : null}
@@ -551,8 +576,8 @@ function OSConsulta() {
       <${KV} a="Serviços" b=${o.reclamacao ? String(o.reclamacao).slice(0, 80) : "—"} p />
       ${ver ? html`<${KV} a="Total" b=${reais(o.total)} />` : null}
       ${!v && (o.veiculo || {}).placa ? html`<${KV} a="Veículo" b=${[(o.veiculo || {}).modelo, exPlaca(o.veiculo.placa)].filter(Boolean).join(" · ")} p />` : null}
-      <a class="btn-barra" style="text-decoration:none" href=${SISTEMA + "#/os/" + o.id}><${Ic} n="os" t=${22} />Abrir O.S.</a></${Cartao}>`)}
-    ${lista.length && perfil.papel !== "admin" ? html`<div class="info"><b>Somente leitura.</b> Alterar uma O.S. existente só é possível no login do administrador.</div>` : null}
+      <button type="button" class="btn-barra" data-os=${o.id} onClick=${() => setAberta(o)}><${Ic} n="os" t=${22} />Ver O.S.</button></${Cartao}>`)}
+    ${aberta ? html`<${OSDetalhe} o=${aberta} onFechar=${() => setAberta(null)} />` : null}
   </${Tela}>`;
 }
 
@@ -567,35 +592,48 @@ function Ajuda() {
     <${Cartao} titulo="Seu acesso"><div class="linha-valor"><span>Nome</span><b>${perfil.nome}</b></div><div class="linha-valor"><span>E-mail</span><b>${perfil.email || ""}</b></div><div class="linha-valor"><span>Acesso</span><b>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel] || perfil.papel}</b></div>
       <div class="linha-valor"><span>Telas liberadas</span><b>${telas.length ? TELAS.filter(t => telas.includes(t.r)).map(t => t.aba).join(", ") : "nenhuma"}</b></div>
       ${disp ? html`<div class="chave" id="bloco-digital"><span>Entrar com a digital</span><button type="button" role="switch" aria-label="Entrar com a digital" aria-checked=${ligada ? "true" : "false"} data-acao="chave-digital" onClick=${alternar}></button></div>` : null}
-      <div class="nota">Neste app, alterar uma O.S. que já existe só é possível no login do administrador.</div></${Cartao}>
-    <${Cartao} titulo="Como usar"><div class="nota">Cada tela tem a própria busca de placa (placa do cadastro não custa nada). Óleo e Peças mostram o catálogo com o que há no estoque. + Orçamento e Agendar gravam no sistema na hora. O botão Voltar do celular volta ao Início; no Início, sai do app.</div></${Cartao}>
+      <div class="nota">Neste app ninguém altera O.S. nem lança preço: o orçamento é um pedido que o sistema monta. Na O.S. em andamento, o responsável acrescenta itens a orçar.</div></${Cartao}>
+    <${Cartao} titulo="Como usar"><div class="nota">Cada tela tem a própria busca de placa (placa do cadastro não custa nada). Óleo e Peças mostram o catálogo com o que há no estoque. Orçamentos manda o pedido para o sistema e mostra os abertos e os aprovados; Agendar grava na hora. O botão Voltar do celular volta ao Início; no Início, sai do app.</div></${Cartao}>
     <${Cartao} titulo="Sobre o app"><div class="linha-valor"><span>Versão</span><b>${nativo.VERSAO}</b></div><div class="nota">DTCar Centro Automotivo. As telas chegam pelo site: não precisa instalar de novo quando algo muda.</div>
       <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${sair}>SAIR DO APP</button></${Cartao}>
   </main><${Rodape} tela="ajuda" /></div>`;
 }
 
 /* ---------------- raiz: dados, rota, aviso ---------------- */
-const ROTAS = { inicio: Inicio, ajuda: Ajuda, oleo: Oleo, orcamento: NovoOrcamento, agendar: Agendar, peca: Peca, historico: Historico, osconsulta: OSConsulta };
+const ROTAS = { inicio: Inicio, ajuda: Ajuda, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, peca: Peca, historico: Historico, osconsulta: OSConsulta };
 // quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
 const quadros = [];
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
-  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], carregado: false, erro: "" });
+  const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], orcamentos: [], carregado: false, erro: "" });
   const [cfg, setCfg] = useState(cfgCompleta({})), [cfgOk, setCfgOk] = useState(false);
   const [placa, setPlaca] = useState({ texto: "" });
   const [toast, setToast] = useState(null);
   useEffect(() => { const f = () => { setRota(rotaAtual()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   const avisar = (msg, erro) => { setToast({ msg, erro }); clearTimeout(avisar.t); avisar.t = setTimeout(() => setToast(null), 4500); };
+  const desdeOS = useRef(null);   // última leitura das O.S. (a recarga de cada minuto só traz as alteradas desde então)
   const carregar = async () => {
     try {
-      const [clientes, veiculos, produtos, ordens, perfis, c] = await Promise.all([api.clientes.listar(), api.veiculos.listar(), api.produtos.listar(), api.ordens(), api.perfis().catch(() => []), api.config().catch(() => null)]);
-      setDados({ clientes, veiculos, produtos, ordens, perfis, carregado: true, erro: "" }); if (c) { setCfg(cfgCompleta(c)); setCfgOk(true); }
+      const [clientes, veiculos, produtos, ordens, perfis, c, orcamentos] = await Promise.all([api.clientes.listar(), api.veiculos.listar(), api.produtos.listar(), api.ordens(), api.perfis().catch(() => []), api.config().catch(() => null), api.orcamentos.listar().catch(() => [])]);
+      setDados({ clientes, veiculos, produtos, ordens, perfis, orcamentos, carregado: true, erro: "" }); desdeOS.current = new Date(Date.now() - 60000).toISOString(); if (c) { setCfg(cfgCompleta(c)); setCfgOk(true); }
     } catch (e) { setDados(d => ({ ...d, carregado: true, erro: "Não deu para carregar os dados do sistema (" + (e.message || "sem internet") + "). As buscas podem ficar incompletas." })); }
   };
   useEffect(() => { carregar(); }, []);
+  // orçamentos e O.S. de novo a cada minuto com o app aberto: é assim que o aviso de "aprovado" chega a quem pediu
+  const [tick, setTick] = useState(0);
+  // os orçamentos são poucos e vêm inteiros; as O.S. só as alteradas desde a última leitura (api.alterados), para não baixar tudo a cada minuto
+  const recarregarOrcamentos = async () => {
+    try {
+      const agora = new Date().toISOString();
+      const [orcamentos, mudadas] = await Promise.all([api.orcamentos.listar(), desdeOS.current ? api.alterados("ordens", desdeOS.current).catch(() => []) : Promise.resolve([])]);
+      desdeOS.current = agora;
+      setDados(d => { const porId = Object.fromEntries((mudadas || []).map(o => [o.id, o])); const ordens = mudadas && mudadas.length ? d.ordens.map(o => porId[o.id] || o).concat(mudadas.filter(o => !d.ordens.some(x => x.id === o.id))) : d.ordens; return { ...d, orcamentos, ordens }; });
+    } catch (e) {} setTick(t => t + 1); };
+  useEffect(() => { const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) recarregarOrcamentos(); }, 60000); const vis = () => { if (!document.hidden) recarregarOrcamentos(); }; document.addEventListener("visibilitychange", vis); return () => { clearInterval(i); document.removeEventListener("visibilitychange", vis); }; }, []);
+  const avisos = useMemo(() => avisosDe(dados.orcamentos, usuario), [dados.orcamentos, tick]);
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
   const telas = cfgOk ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
-  const ctx = { perfil: usuario, dados, cfg, telas, avisar, recarregar: carregar, sair: nativo.sair, nativo };
+  const ctx = { perfil: usuario, dados, cfg, telas, avisos, avisar, recarregar: carregar, recarregarOrcamentos, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
     ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}

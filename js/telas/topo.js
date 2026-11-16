@@ -2,7 +2,8 @@
 // botão Nova O.S. e troca de tema. Atalhos: F2 nova O.S., F3 busca, F4 O.S. em aberto, F6 produtos.
 import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { useApp, I, Modal } from "../ui.js";
-import { norm, soDig, normPlaca, exPlaca, fmtTel, fmtDataHora, numOS } from "../util.js";
+import { norm, soDig, normPlaca, exPlaca, fmtTel, fmtDataHora, numOS, numORC, lsGet, lsSet } from "../util.js";
+import { api } from "../api.js";
 import { pode, STATUS, situacaoOS } from "../regras.js";
 import { temaEfetivo, temaEscolhido, aplicarTema } from "../tema.js";
 
@@ -74,6 +75,53 @@ function Situacao({ offline, pend, enviarFila }) {
   return html`<button type="button" class=${"situacao s-" + cls} title=${dica} onClick=${() => pend.length && !offline ? enviarFila() : ir("/dados-locais")}><i></i><span>${txt}</span></button>`;
 }
 
+/* ---------------- Sino: avisos que chegam do app do celular (pedido do Danilo, 16/11/2026) ----------------
+ * Novo pedido de orçamento pelo app (e acréscimo a um pedido aberto) e "itens a orçar" escritos numa O.S. pelo app. Lidos a cada minuto
+ * (api.avisosApp, só leitura); o que já foi visto fica guardado neste aparelho (dtcar-avisos-vistos). Só para quem orça (administrador e consultor). */
+const LS_AVISOS = "dtcar-avisos-vistos";
+const vistosAvisos = () => { const l = lsGet(LS_AVISOS, []); return Array.isArray(l) ? l : []; };
+const ICON_SINO = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`;
+/** Só um Sino consultando por vez: o do cabeçalho do celular (< 900px) ou o da barra do PC (revisão de 16/11/2026) */
+function usarLargo() {
+  const mq = typeof matchMedia === "function" ? matchMedia("(min-width: 900px)") : null;
+  const [largo, setLargo] = useState(mq ? mq.matches : true);
+  useEffect(() => { if (!mq) return; const f = e => setLargo(e.matches); mq.addEventListener("change", f); return () => mq.removeEventListener("change", f); }, []);
+  return largo;
+}
+export function Sino({ classe }) {
+  const largo = usarLargo();
+  if (classe === "sino-cel" ? largo : !largo) return null;
+  return html`<${SinoVivo} classe=${classe} />`;
+}
+function SinoVivo({ classe }) {
+  const { perfil, ir, avisar } = useApp();
+  const [lista, setLista] = useState([]), [aberto, setAberto] = useState(false), [vistos, setVistos] = useState(vistosAvisos), [erro, setErro] = useState(false);
+  const ref = useRef(null), ultimo = useRef(null);
+  const ler = async () => { try { const l = await api.avisosApp(); setLista(l); setErro(false);
+      // chegou pedido novo com o sistema aberto: aviso na tela
+      const novos = l.filter(x => !vistosAvisos().includes(x.chave)).map(x => x.chave);
+      if (ultimo.current && novos.some(k => !ultimo.current.includes(k))) avisar(l.find(x => x.chave === novos.find(k => !ultimo.current.includes(k))).tipo === "orcamento" ? "Novo pedido de orçamento pelo app do celular." : "Itens a orçar numa O.S., pelo app do celular.");
+      ultimo.current = novos; } catch (e) { setErro(true); } };
+  useEffect(() => { if (!pode(perfil, "orcar")) return; ler(); const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) ler(); }, 60000); return () => clearInterval(i); }, [perfil && perfil.id]);
+  useEffect(() => { if (!aberto) return; const f = e => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); }; document.addEventListener("mousedown", f); return () => document.removeEventListener("mousedown", f); }, [aberto]);
+  if (!pode(perfil, "orcar")) return null;
+  const novos = lista.filter(x => !vistos.includes(x.chave));
+  const marcar = chaves => { const v = [...new Set(vistosAvisos().concat(chaves))].slice(-300); lsSet(LS_AVISOS, v); setVistos(v); };
+  const abrir = x => { marcar([x.chave]); setAberto(false); ir(x.tipo === "orcamento" ? "/orcamento/" + x.id : "/os/" + x.id); };
+  const veic = x => [exPlaca(x.veiculo.placa), x.veiculo.marca, x.veiculo.modelo].filter(Boolean).join(" ");
+  return html`<div class=${"sino" + (classe ? " " + classe : "")} ref=${ref}>
+    <button type="button" class=${"btn-icone sino-btn" + (novos.length ? " tem" : "")} title=${novos.length ? novos.length + " aviso(s) do app do celular" : "Avisos do app do celular"} aria-label=${"Avisos do app: " + novos.length + " novo(s)"} aria-expanded=${aberto ? "true" : "false"} onClick=${() => setAberto(!aberto)}>${ICON_SINO}${novos.length ? html`<span class="sino-n">${novos.length}</span>` : null}</button>
+    ${aberto ? html`<div class="sino-lista" role="dialog" aria-label="Avisos do app do celular">
+      <div class="sino-cab"><b>Avisos do app do celular</b>${novos.length ? html`<button type="button" class="btn btn-sm" onClick=${() => marcar(novos.map(x => x.chave))}>Marcar todos como vistos</button>` : null}</div>
+      ${erro ? html`<div class="sub" style="padding:8px 12px">Não deu para ler os avisos (sem internet?).</div>` : null}
+      ${!lista.length && !erro ? html`<div class="sub" style="padding:10px 12px">Nenhum pedido pelo app por enquanto.</div>` : null}
+      ${lista.slice(0, 30).map(x => html`<button type="button" key=${x.chave} class=${"sino-item" + (vistos.includes(x.chave) ? "" : " novo")} onClick=${() => abrir(x)}>
+        <strong>${x.tipo === "orcamento" ? (x.acrescimo ? "Mais itens no pedido " : "Novo pedido de orçamento ") + numORC(x.numero) : "Itens a orçar na " + numOS(x.numero)}</strong>
+        <span>${[veic(x), x.cliente.nome, x.quem ? "por " + x.quem : "", fmtDataHora(x.quando)].filter(Boolean).join(" · ")}</span>
+        <span class="sino-texto">${String(x.texto).split("\n").slice(-1)[0].slice(0, 120)}</span></button>`)}
+    </div>` : null}</div>`;
+}
+
 export function BarraTopo({ titulo, offline, pend, enviarFila }) {
   const { perfil, ir } = useApp();
   useEffect(() => {
@@ -90,6 +138,7 @@ export function BarraTopo({ titulo, offline, pend, enviarFila }) {
     <div class="bt-dir">
       <${BotaoInstalar} />
       <${Situacao} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
+      <${Sino} />
       <${BotaoTema} classe="btn-icone" />
       <button type="button" class="btn btn-sm bt-oleo" title="Óleo e filtros pelo modelo do carro" aria-label="Óleo e filtros" onClick=${() => ir("/oleo-filtros")}>${I.gota}<span>Óleo e filtros</span></button>
       ${pode(perfil, "orcar") ? html`<button type="button" class="btn btn-sm bt-novo-orc" title="Novo orçamento, sem abrir O.S." onClick=${() => ir("/orcamento/novo")}>${I.mais}<span>Novo orçamento</span></button>` : null}

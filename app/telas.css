@@ -186,3 +186,16 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .sistema span{font-size:13px;font-weight:700;color:var(--tinta)}
 .sistema small{font-size:11px;color:var(--cinza-nota)}
 .sistema:disabled{opacity:.4}
+
+/* ---- orçamentos como pedido, O.S. no leiaute do app e avisos (16/11/2026) ---- */
+.bolinha{margin-left:auto;min-width:22px;height:22px;padding:0 6px;border-radius:11px;background:#e08a00;color:#fff;font-size:12px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0}
+.abas a .bolinha{margin-left:2px}
+.pedido{border:1px solid #d3d7dc;border-radius:8px;padding:8px 10px;font-size:14.5px;line-height:1.35;color:var(--tinta);display:flex;flex-direction:column;gap:4px;white-space:pre-wrap;word-break:break-word}
+.pedido .acrescimo,.sec .acrescimo{color:#174f94;font-weight:500;font-size:13.5px;border-left:3px solid var(--azul);padding-left:8px}
+.aviso-orc{display:flex;align-items:center;justify-content:space-between;gap:10px;border:1.5px solid #e08a00;background:#fff1dc;border-radius:8px;padding:8px 10px;font-size:14px;color:var(--tinta)}
+.item-linha.toque{text-align:left;background:none;border:0;border-bottom:1px solid #d3d7dc;color:var(--tinta);font-weight:500;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:8px;width:100%;padding:6px 2px;font-size:14px}
+.item-linha.toque:last-child{border-bottom:0}
+.os-cab{display:flex;flex-direction:column;gap:4px;margin-bottom:6px}
+.os-cab .etapa{align-self:flex-start;background:var(--azul);color:#fff;border-radius:6px;padding:3px 8px;font-size:13px;font-weight:700}
+.oleo-linha .visc{font-size:26px;font-weight:700;color:var(--azul);letter-spacing:.02em;line-height:1.1;margin:2px 0 4px}
+.oleo-linha.outra{border-top:1px dashed #d3d7dc;padding-top:8px;margin-top:4px}

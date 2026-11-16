@@ -3,12 +3,13 @@
 // Sem nada gravado vale o padrão: administrador e consultor entram com todas as telas; mecânico e pendente não entram.
 // Usado pelo app (app/app.js e app/telas.js) e pela tela Equipe (js/telas/admin.js). Sem window/document.
 export const TELAS_APP = [
-  ["oleo", "Óleo (aplicação)"], ["orcamento", "+ Orçamento"], ["agendar", "Agendar"],
+  ["oleo", "Óleo (aplicação)"], ["orcamento", "Orçamentos (pedido)"], ["agendar", "Agendar"],
   ["peca", "Consultar peça por catálogo"], ["historico", "Histórico de serviços"], ["osconsulta", "Consultar O.S."],
 ];
 const TODAS = TELAS_APP.map(t => t[0]);
-/** Telas que o papel pode usar: orçamento é só de quem orça (administrador e consultor); o resto, qualquer papel liberado */
-export const telasDoPapel = papel => papel === "admin" || papel === "consultor" ? TODAS.slice() : TODAS.filter(t => t !== "orcamento");
+/** Telas que o papel pode usar. Desde 16/11/2026 (à tarde) o orçamento no app é só um PEDIDO (sem item e sem preço), então o mecânico
+ *  liberado também pode pedir orçamento e acrescentar ao orçamento aberto; o sistema monta e aprova. */
+export const telasDoPapel = () => TODAS.slice();
 
 /** { entra, telas: [ids], padrao: true quando nada foi gravado para a pessoa } */
 export function acessoApp(cfg, perfil) {

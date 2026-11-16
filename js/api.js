@@ -246,6 +246,45 @@ function criarApiSupabase() {
       criar: async d => metodos.equipe.chamar({ acao: "criar", ...d }),
       senha: async d => metodos.equipe.chamar({ acao: "senha", ...d }),
     },
+    /** Avisos do app para o sistema (pedido do Danilo, 16/11/2026): pedidos de orçamento feitos pelo app (orçamento aberto com a marca
+     *  "Pedido pelo app" em obs_internas) e "itens a orçar" escritos na O.S. pelo app (eventos a_orcar, últimos 30 dias). A chave do aviso
+     *  é o id + quantos acréscimos ("— Nome, data: ...") o pedido tem: salvar o orçamento no sistema muda atualizado_em, mas não gera
+     *  aviso novo (revisão de 16/11/2026). Só leitura; devolve [] sem internet. */
+    acrescimosDoPedido: texto => (String(texto || "").match(/\n— /g) || []).length,
+    avisosApp: async () => {
+      if (semRede) return [];
+      const desde = new Date(Date.now() - 30 * 86400000).toISOString();
+      const [orcs, evs] = await Promise.all([
+        ok(await sb.from("orcamentos").select("id,numero,situacao,veiculo,cliente,reclamacao,obs_internas,consultor_nome,criado_em,atualizado_em").in("situacao", ["elaboracao", "enviado"]).like("obs_internas", "Pedido pelo app%").order("atualizado_em", { ascending: false }).limit(100)),
+        ok(await sb.from("eventos").select("id,ordem_id,texto,usuario_nome,criado_em").eq("tipo", "a_orcar").gt("criado_em", desde).order("criado_em", { ascending: false }).limit(100)),
+      ]);
+      const ids = [...new Set((evs || []).map(e => e.ordem_id))];
+      const ordens = ids.length ? ok(await sb.from("ordens").select("id,numero,veiculo,status").in("id", ids)) : [];
+      const porId = Object.fromEntries((ordens || []).map(o => [o.id, o]));
+      return [...(orcs || []).map(o => ({ chave: "orc:" + o.id + ":" + metodos.acrescimosDoPedido(o.reclamacao), tipo: "orcamento", id: o.id, numero: o.numero, veiculo: o.veiculo || {}, cliente: o.cliente || {}, texto: o.reclamacao || "", quem: o.consultor_nome || "", quando: o.atualizado_em || o.criado_em, acrescimo: metodos.acrescimosDoPedido(o.reclamacao) > 0 })),
+        ...(evs || []).filter(e => porId[e.ordem_id]).map(e => ({ chave: "ev:" + e.id, tipo: "os", id: e.ordem_id, numero: porId[e.ordem_id].numero, veiculo: porId[e.ordem_id].veiculo || {}, cliente: {}, texto: e.texto || "", quem: e.usuario_nome || "", quando: e.criado_em, acrescimo: false }))]
+        .sort((a, b) => String(b.quando).localeCompare(String(a.quando)));
+    },
+    /** Pedido de orçamento pelo app do celular (função "pedido": qualquer pessoa da equipe escreve o que é para orçar; o Danilo
+     *  monta o orçamento no sistema). `novo` cria o orçamento em elaboração; `acrescentar` junta mais coisas a um orçamento aberto. */
+    pedido: {
+      chamar: async body => {
+        let data, error;
+        try { ({ data, error } = await sb.functions.invoke("pedido", { body })); }
+        catch (e) { throw new Error("Sem resposta do servidor. Confira a internet e tente de novo."); }
+        if (error) {
+          const st = error.context && error.context.status; let m = error.message || "";
+          if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) throw new Error("Sem resposta do servidor. Confira a internet e tente de novo.");
+          try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
+          if (st === 404 || /not found/i.test(m)) throw new Error("O pedido de orçamento pelo app ainda não foi ligado: falta publicar a função \"pedido\" no Supabase.");
+          throw new Error(m || "Falha ao falar com o servidor.");
+        }
+        if (!data || data.ok !== true) throw new Error((data && data.erro) || "Falha ao falar com o servidor.");
+        return data;
+      },
+      novo: async d => metodos.pedido.chamar({ acao: "novo", ...d }),
+      acrescentar: async (id, texto) => metodos.pedido.chamar({ acao: "acrescentar", id, texto }),
+    },
     /** Nome e nascimento do cliente pelo CPF, pela função "cpf" (API CPF; a chave fica no servidor; só administrador).
      *  Devolve { ok, encontrado, dados, origem } ou { ok: false, erro, desligada?, limite?, semRede? }. Não lança erro. */
     cpf: async body => {
@@ -675,6 +714,7 @@ function comBancoDoPC(a) {
     meuPerfil: ler(a.meuPerfil, perfilDoPC), perfis: ler(a.perfis, L.perfis), config: ler(a.config, L.config),
     clientes: t("clientes"), veiculos: t("veiculos"), produtos: t("produtos"), fornecedores: t("fornecedores"),
     ordens: ler(a.ordens, L.ordens), alterados: ler(a.alterados, L.alterados), itensDasOrdens: ler(a.itensDasOrdens, L.itensDasOrdens),
+    avisosApp: async () => { if (semRede) return []; return a.avisosApp(); },
     // O.S.: banco do PC primeiro quando sem rede; a cópia da O.S. aberta (local.js) continua valendo como reserva
     // O.S.: no programa, sem rede vem do banco do PC; a cópia da O.S. aberta (local.js) é só reserva
     ordem: async id => {

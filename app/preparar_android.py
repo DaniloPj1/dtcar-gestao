@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Ajusta o projeto Android que o Capacitor acabou de criar (roda no GitHub Actions, depois de "npx cap add android").
- - ícone do aplicativo = ícone da DTCar (icons/icon-512.png)
+ - ícone do aplicativo = a logo branca da DTCar sobre o azul do app #2f6fb5 (app/icone.png; pedido do Danilo em 16/11/2026)
  - versão do aplicativo (nome = app/package.json, código = número da execução)
  - sem cópia de segurança automática do Android (o app guarda um acesso no cofre do aparelho)
 Uso: python3 app/preparar_android.py <numero_da_execucao>"""
@@ -16,7 +16,7 @@ TAMANHOS = {'mdpi': 48, 'hdpi': 72, 'xhdpi': 96, 'xxhdpi': 144, 'xxxhdpi': 192}
 
 
 def icones():
-    base = Image.open(os.path.join(RAIZ, 'icons', 'icon-512.png')).convert('RGBA')
+    base = Image.open(os.path.join(AQUI, 'icone.png')).convert('RGBA')
     # o ícone adaptativo do modelo é trocado por ícones comuns com o desenho da DTCar
     adaptativo = os.path.join(RES, 'mipmap-anydpi-v26')
     if os.path.isdir(adaptativo):

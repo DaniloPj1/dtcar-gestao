@@ -56,9 +56,11 @@ export function ItemModal({ item, tabela, onSalvar, onExcluir, onFechar, orcamen
   };
   // peça escolhida no catálogo de peças do veículo (js/pecas.js): não é produto do cadastro nem do estoque; o valor é digitado na O.S.
   const usarDoCatalogo = p => { set({ produto_id: null, descricao: MAIUSC(p.descricao + (p.medidas ? " " + p.medidas : "")), codigo: codigoParaItem(p), qualidade: "paralela" }); setEtapa("detalhe"); };
+  // produtos ativos com saldo e referência: a busca de peças do veículo mostra primeiro a peça que está no estoque
+  const estoquePecas = useMemo(() => dados.produtos.filter(p => p.ativo !== false && p.tipo === "produto" && p.referencia && Number(p.estoque_atual) > 0).map(p => ({ id: p.id, ref: p.referencia, descricao: p.descricao, qtd: Number(p.estoque_atual) })), [dados.produtos]);
   const temVeiculo = i.tipo === "peca" && veiculo && String(veiculo.modelo || "").trim();
   if (etapa === "pecasveic") return html`<${Modal} titulo="Peças que servem neste veículo" largo onFechar=${onFechar}>
-    <${PecasVeiculo} veiculo=${veiculo} onUsar=${usarDoCatalogo} onVoltar=${() => setEtapa("catalogo")} /></${Modal}>`;
+    <${PecasVeiculo} veiculo=${veiculo} onUsar=${usarDoCatalogo} onVoltar=${() => setEtapa("catalogo")} estoque=${estoquePecas} onUsarProduto=${id => { const p = dados.produtos.find(x => x.id === id); if (p) usar(p); }} /></${Modal}>`;
   const porHora = i.tipo === "servico" && i.horas !== null && i.horas !== undefined;
   const bruto = (Number(i.qtd) || 0) * (Number(i.valor_unit) || 0);
   const erro = !i.descricao.trim() ? "Informe a descrição." : !(Number(i.qtd) > 0) ? "Quantidade deve ser maior que zero." : Number(i.desconto) > bruto + 0.001 ? "O desconto não pode ser maior que o valor do item." : "";

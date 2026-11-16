@@ -61,6 +61,9 @@ try:
     chk("consultor no app: menu da O.S. na lista sem Cancelar nem avanço, só consulta", "Cancelar O.S." not in m_con and "Abrir O.S." in m_con and "Imprimir O.S." in m_con, m_con)
     m_fora = menu_lista("consultor", BASE + "#/ordens?filtro=todas")
     chk("consultor FORA do app: menu da lista como antes (Cancelar O.S.)", "Cancelar O.S." in m_fora, m_fora)
+    # mecânico liberado em Equipe que abre uma O.S. pelo app: só consulta e NÃO vê valores (papel leitura_sem_valores)
+    mec = acoes_os("mecanico", BASE + "?app=1#/os/o3")
+    chk("mecânico no app abre a O.S. sem valores e sem ações", "OS 01897" in mec and "R$" not in mec and not any(t in mec for t in ["Receber e fechar", "Entregar e fechar", "Serviço concluído", "Aprovar"]), mec[:300])
     # 3) orçamento e agenda continuam disponíveis para o consultor no app
     ctx, pg = abrir(b, "consultor", BASE + "?app=1#/orcamento/novo"); chk("consultor abre novo orçamento no app", pg.locator("input, textarea").count() > 2); ctx.close()
     ctx, pg = abrir(b, "consultor", BASE + "?app=1#/agenda"); chk("consultor abre a agenda no app", pg.is_visible("text=Agenda") or pg.locator(".card").count() > 0); ctx.close()

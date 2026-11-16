@@ -37,7 +37,7 @@ ITENS = [{'id': 'i1', 'ordem_id': 'o1', 'tipo': 'servico', 'descricao': 'SUBST. 
          {'id': 'i2', 'ordem_id': 'o2', 'tipo': 'servico', 'descricao': 'REVISÃO COMPLETA', 'aprovado': True, 'qtd': 1, 'valor_unit': 300, 'desconto': 0, 'posicao': 0},
          {'id': 'i3', 'ordem_id': 'o2', 'tipo': 'servico', 'descricao': 'PASTILHAS DE FREIO DIANTEIRAS', 'aprovado': True, 'qtd': 1, 'valor_unit': 200, 'desconto': 0, 'posicao': 1}]
 class Fake:
-    def __init__(s, papel='admin', ativo=True): s.papel, s.ativo, s.pedidos, s.refresh, s.n = papel, ativo, [], 'r0', 0; s.gravados = []
+    def __init__(s, papel='admin', ativo=True, acessos=None): s.papel, s.ativo, s.pedidos, s.refresh, s.n = papel, ativo, [], 'r0', 0; s.gravados = []; s.acessos = acessos
     def instalar(s, pg):
         def resp(route, corpo, st=200): route.fulfill(status=st, content_type='application/json', body=json.dumps(corpo), headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*'})
         def sessao(email='teste@dtcar.com'):
@@ -74,7 +74,9 @@ class Fake:
             if '/rest/v1/produtos' in u: return resp(route, PROD)
             if '/rest/v1/ordens' in u: return resp(route, ORD)
             if '/rest/v1/os_itens' in u: return resp(route, ITENS)
-            if '/rest/v1/config' in u: return resp(route, {'dados': {'validadeDias': 7, 'garantiaDias': 90}})
+            if '/rest/v1/config' in u:
+                if getattr(s, 'config_erro', False): return resp(route, {'message': 'fora do ar'}, 500)
+                return resp(route, {'dados': {'validadeDias': 7, 'garantiaDias': 90, **({'appAcessos': s.acessos} if s.acessos else {})}})
             return resp(route, [])
         pg.route('**/*.supabase.co/**', h)
     def escritas(s): return [p for p in s.pedidos if p[0] in ('POST', 'PATCH', 'PUT', 'DELETE') and '/auth/v1/' not in p[1]]
@@ -135,8 +137,23 @@ try:
         t('Consultor' in textos(pg) and pg.locator('.barra').count() == 6, 'consultor entra'); ctx.close()
         for papel, ativo in (('mecanico', True), ('pendente', True), ('admin', False)):
             f = Fake(papel, ativo); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-            t('Este app é para o administrador e o consultor' in textos(pg) and pg.locator('.barra').count() == 0, 'recusa %s ativo=%s' % (papel, ativo))
+            t(('não está liberado' in textos(pg) or 'acesso liberado pelo administrador' in textos(pg)) and pg.locator('.barra').count() == 0, 'recusa %s ativo=%s (padrão do papel)' % (papel, ativo))
             pg.reload(); pg.wait_for_timeout(500); t(pg.is_visible('#f-login'), 'recusado não fica logado após recarregar (%s)' % papel); ctx.close()
+        # 3b) acessos definidos pelo administrador em Sistema › Equipe (config.appAcessos)
+        f = Fake('consultor', True, {UID: {'entra': False, 'telas': []}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        t('não está liberado para o seu login' in textos(pg) and pg.locator('.barra').count() == 0, 'consultor desligado em Equipe não entra'); ctx.close()
+        f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['oleo', 'historico']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        barras = [b.strip() for b in pg.locator('.barra').all_inner_texts()]; t(barras == ['ÓLEO (APLICAÇÃO)', 'HISTÓRICO DE SERVIÇOS'] and 'Mecânico' in textos(pg), 'mecânico liberado vê só as telas marcadas: %s' % barras)
+        tela(pg, 'oleo'); t(pg.locator('.abas a').count() == 2, 'abas só das telas liberadas')
+        pg.goto(URL + '#/agendar'); pg.wait_for_timeout(600); t(pg.locator('.barra').count() == 2 and pg.locator('#ag-nome').count() == 0, 'tela não liberada cai no Início')
+        pg.goto(URL + '#/ajuda'); pg.wait_for_timeout(500); t('Óleo (aplicação), Histórico de serviços' in textos(pg), 'Ajuda mostra as telas liberadas'); ctx.close()
+        f = Fake('admin', True, {UID: {'entra': True, 'telas': []}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        t(pg.locator('.barra').count() == 0 and 'Nenhuma tela liberada' in textos(pg), 'liberado sem tela: entra e vê o aviso'); ctx.close()
+        f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['oleo', 'orcamento']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        t([b.strip() for b in pg.locator('.barra').all_inner_texts()] == ['ÓLEO (APLICAÇÃO)'], 'mecânico nunca ganha + Orçamento, mesmo marcado'); ctx.close()
+        # Ajustes fora do ar no login: não entra (nem libera por padrão)
+        f = Fake('consultor', True, {UID: {'entra': False, 'telas': []}}); f.config_erro = True; ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        t('Confira a internet' in textos(pg) and pg.locator('.barra').count() == 0, 'sem os Ajustes no login, o app não libera ninguém'); ctx.close()
         # 4) digital: oferta depois do primeiro login, "agora não", e ligar
         f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg)
         t(pg.is_visible('.quadro') and 'Entrar com a digital?' in textos(pg), 'oferece a digital após o primeiro login')

@@ -366,6 +366,10 @@ confere("oleo_filtros: óleo do estoque com a viscosidade e a quantidade", (of1.
 confere("oleo_filtros: avisa que é do catálogo", /catálogo/.test(String(of1.aviso || "")));
 c = await chama("oleo_filtros", { placa: "SEM1M00" });
 confere("oleo_filtros: cadastro sem motor mostra as versões possíveis e avisa", Array.isArray(json(c.r).versoes_possiveis) && json(c.r).versoes_possiveis.length > 1 && /não tem o motor/.test(String(json(c.r).aviso_versao || "")), texto(c.r).slice(0, 400));
+c = await chama("oleo_filtros", { marca: "Chevrolet", modelo: "ONIX", ano: 2021, motor: "1.0" });
+confere("oleo_filtros: Onix 1.0 2021 vem com oleo_atencao (5W30 x 0W20) e a melhor resposta é a do catálogo mais atual", /Atenção/.test(String(json(c.r).oleo_atencao || "")) && /0W20/.test(String(json(c.r).oleo_atencao)) && json(c.r).oleo[0].melhor === true, texto(c.r).slice(0, 700));
+c = await chama("oleo_filtros", { marca: "Toyota", modelo: "HILUX", ano: 2018, motor: "2.8" });
+confere("oleo_filtros: Hilux 2.8 sem oleo_atencao", !json(c.r).oleo_atencao, texto(c.r).slice(0, 300));
 c = await chama("oleo_filtros", { placa: "ABC1D23" });
 confere("oleo_filtros: com motor no cadastro não manda versões", !("versoes_possiveis" in json(c.r)));
 c = await chama("oleo_filtros", { placa: "ZZZ9Z99" });

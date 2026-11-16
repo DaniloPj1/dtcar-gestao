@@ -3,6 +3,15 @@
   "appName": "DTCar",
   "webDir": "www",
   "backgroundColor": "#2f6fb5",
-  "server": { "androidScheme": "https" },
-  "android": { "allowMixedContent": false }
+  "server": {
+    "url": "https://gestao.dtcarcentroautomotivo.com.br/app/",
+    "errorPath": "index.html",
+    "allowNavigation": [
+      "gestao.dtcarcentroautomotivo.com.br"
+    ],
+    "androidScheme": "https"
+  },
+  "android": {
+    "allowMixedContent": false
+  }
 }

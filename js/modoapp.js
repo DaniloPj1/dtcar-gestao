@@ -1,0 +1,33 @@
+// "Modo app": o sistema aberto de dentro do app DTCar do celular (APK), vindo da tela de botões em /app/ com ?app=1.
+// Nesse modo o menu do computador e a barra de baixo somem, aparece "‹ Início" para voltar aos botões, e só o administrador
+// altera O.S. que já existe (regra do Danilo, 16/11/2026). Fora do app (navegador, computador) nada muda.
+// Só vale dentro do APK (window.Capacitor existe): um link com ?app=1 aberto num navegador comum não muda nada.
+let modo = false;
+const noApk = typeof window !== "undefined" && !!window.Capacitor;
+try {
+  if (noApk && /[?&]app=1(&|$)/.test(location.search)) sessionStorage.setItem("dtcar-modo-app", "1");
+  modo = noApk && sessionStorage.getItem("dtcar-modo-app") === "1";
+} catch (e) { modo = noApk && /[?&]app=1(&|$)/.test(location.search); }
+if (modo && typeof document !== "undefined") {
+  const marca = () => document.body && document.body.classList.add("modo-app");
+  if (document.body) marca(); else document.addEventListener("DOMContentLoaded", marca);
+}
+export const modoApp = () => modo;
+/** Perfil que a tela da O.S. usa: no app, quem não é administrador só consulta (papel "leitura", que só vê valores) */
+export const perfilNoApp = p => modo && p && p.papel !== "admin" ? { ...p, papel: "leitura" } : p;
+/** Volta para a tela de botões do app */
+export const voltarAoApp = () => { location.href = "app/index.html"; };
+// Botão Voltar do celular dentro do sistema aberto pelo app: volta uma página; sem página atrás, volta aos botões do app.
+// (Sem o plugin App do Capacitor o Android fecharia o app: pedido do Danilo em 16/11/2026.)
+// Conta as páginas do sistema navegadas nesta abertura (history.length conta a aba inteira, inclusive o app, e não serve sozinho).
+if (modo) {
+  try {
+    const K = "dtcar-modo-app-paginas";
+    const ler = () => Number(sessionStorage.getItem(K) || 0), gravar = n => sessionStorage.setItem(K, String(Math.max(0, n)));
+    if (/[?&]app=1(&|$)/.test(location.search)) gravar(0); // entrou pelos botões do app: nenhuma página do sistema atrás
+    window.addEventListener("hashchange", () => gravar(ler() + 1));
+    window.addEventListener("popstate", () => gravar(ler() - 1));
+    const C = window.Capacitor, A = (C.Plugins && C.Plugins.App) || (typeof C.registerPlugin === "function" ? C.registerPlugin("App") : null);
+    if (A && typeof A.addListener === "function") A.addListener("backButton", () => { if (ler() > 0 && window.history.length > 1) { gravar(ler() - 2); window.history.back(); } else voltarAoApp(); });
+  } catch (e) { /* sem plugin */ }
+}

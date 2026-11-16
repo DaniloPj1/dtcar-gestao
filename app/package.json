@@ -1,12 +1,13 @@
 {
   "name": "dtcar-app",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "App do sistema da DTCar Centro Automotivo (APK). As telas ficam em app/; o APK é gerado pelo GitHub Actions (app-apk.yml).",
   "dependencies": {
     "@capacitor/android": "6.2.1",
     "@capacitor/core": "6.2.1",
-    "@capgo/capacitor-native-biometric": "6.0.4"
+    "@capgo/capacitor-native-biometric": "6.0.4",
+    "@capacitor/app": "6.0.2"
   },
   "devDependencies": {
     "@capacitor/cli": "6.2.1"

@@ -41,6 +41,9 @@ import { BarraTopo } from "./telas/topo.js";
 import { DadosLocais } from "./telas/dadoslocais.js";
 import { OleoFiltros } from "./telas/oleofiltros.js";
 import { Compras } from "./telas/compraspecas.js";
+import { PecasCatalogo } from "./telas/pecascatalogo.js";
+import { Historico } from "./telas/historico.js";
+import { modoApp, voltarAoApp } from "./modoapp.js";
 
 try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo balcão" foi substituído pela interface única
 
@@ -48,7 +51,7 @@ try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo ba
 // Pedido do Danilo em 12/11/2026: a virada foi em 02/11 e a faixa ainda piscava a cada abertura (antes de os Ajustes carregarem)
 // e ficava na tela quando os Ajustes não podiam ser lidos. Sem a informação, não mostra.
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { compras: "Compras", "app-mecanico": "App do mecânico", "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
+const TITULOS = { compras: "Compras", pecas: "Peças por catálogo", historico: "Histórico de serviços", "app-mecanico": "App do mecânico", "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 // no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
@@ -414,6 +417,7 @@ function App() {
   if (!api) return html`<${Conexao} />`;
   if (sessao === undefined || (sessao && perfil === undefined)) return html`<div class="carregando">Carregando…</div>`;
   if (modoSenha && sessao) return html`<${Login} modo="nova" />`;
+  if (!sessao && modoApp()) { voltarAoApp(); return html`<div class="carregando">Abrindo o app…</div>`; } // no app, quem entra é a tela de botões
   if (!sessao) return html`<${Login} />`;
   if (!membro) return html`<${Pendente} perfil=${perfil} sair=${sairAgora} semInternet=${estaSemRede() || !navigator.onLine} />`;
 
@@ -451,7 +455,7 @@ function App() {
     os: () => pendOS.some(op => op.id === param) ? html`<${OSPendente} o=${dadosVis.ordens.find(o => o.id === param)} op=${pendOS.find(op => op.id === param)} key=${param} />` : sub === "checklist" ? (pode(perfil, "entrada") ? html`<${ChecklistOS} id=${param} key=${param} />` : html`<div class="pagina"><div class="aviso">Seu papel não pode fazer checklist.</div></div>`) : html`<${Ordem} id=${param} params=${params} key=${param} />`,
     cliente: () => html`<${ClienteTela} id=${param} key=${param} />`, veiculo: () => html`<${VeiculoTela} id=${param} key=${param} />`,
     cadastros: () => html`<${Cadastros} params=${params} key=${qs || ""} />`, catalogo: () => html`<${Cadastros} params=${{ aba: "produtos" }} />`,
-    "dados-locais": () => html`<${DadosLocais} />`, "oleo-filtros": () => html`<${OleoFiltros} />`, compras: () => html`<${Compras} params=${params} key=${qs || ""} />`,
+    "dados-locais": () => html`<${DadosLocais} />`, "oleo-filtros": () => html`<${OleoFiltros} />`, pecas: () => html`<${PecasCatalogo} />`, historico: () => html`<${Historico} />`, compras: () => html`<${Compras} params=${params} key=${qs || ""} />`,
     mais: () => html`<${Mais} />`, equipe: () => html`<${Equipe} />`, ajustes: () => html`<${Ajustes} />`, "app-mecanico": () => html`<${AppMecanico} />`,
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, email: () => html`<${Email} params=${params} key=${qs || ""} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
@@ -482,9 +486,9 @@ function App() {
           return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class=${"lat-badge" + (pg && !pg.vencidas ? " lat-badge-aviso" : "")} title=${dica} aria-label=${dica}>${nb}</em>` : null}</button>`; })}</nav>`; })}
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
     </aside>
-    <header class="topo"><div class="topo-in"><button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>
+    <header class="topo"><div class="topo-in">${modoApp() ? html`<button type="button" class="app-voltar" onClick=${voltarAoApp} aria-label="Voltar ao início do app">‹ Início</button>` : html`<button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>`}
       <div class="titulo">${TITULOS[base] || ""}</div></div></header>
-    <${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
+    ${modoApp() ? null : html`<${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />`}
     <main>${cfg.espelhoLegado === true ? html`<div class=${"faixa-transicao" + (transAberta ? " aberta" : "")} role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}<button type="button" class="faixa-trans-mais" aria-expanded=${transAberta ? "true" : "false"} onClick=${() => setTransAberta(!transAberta)}>${transAberta ? "Recolher" : "Ver detalhes"}</button></div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pendOS.length ? html`<div class="faixa-offline" role="status"><b>${pendOS.length} O.S. aberta(s) sem internet aguardando envio</b> (${pendOS.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}${!offline && pendAlt.length ? html`<div class="faixa-offline" role="status">${conflitos.length
       ? html`<b>${conflitos.length} alteração(ões) feita(s) sem internet com conflito</b>: alguém mudou a mesma O.S. no online. <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`
       : html`<b>${pendAlt.length} alteração(ões) feita(s) sem internet aguardando envio.</b> <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button>`}</div>` : null}

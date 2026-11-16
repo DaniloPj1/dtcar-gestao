@@ -1,0 +1,188 @@
+/* Telas do app DTCar (celular), desenhadas a partir do protótipo aprovado em 16/11/2026.
+   Medidas, cores e raios são os do protótipo (gen_proto.py): azul #2f6fb5, azul médio #4a8dd0, tinta #16191d. */
+:root{--azul:#2f6fb5;--azul-medio:#4a8dd0;--azul-suave:#9db8d9;--tinta:#16191d;--cinza-texto:#3d444c;--cinza-nota:#4a515a;--cinza-linha:#d3d7dc;--cinza-fundo:#eceef0}
+.app{min-height:100vh;display:flex;flex-direction:column;background:#fff;font-family:'Barlow',system-ui,sans-serif;color:var(--tinta);padding-bottom:calc(var(--rodape-h,74px) + 8px)}
+.app *{box-sizing:border-box}
+.app button,.app input,.app select,.app textarea{font-family:inherit}
+.app button{cursor:pointer}
+.app input:focus-visible,.app button:focus-visible,.app select:focus-visible,.app a:focus-visible{outline:3px solid var(--tinta);outline-offset:2px}
+
+/* cabeçalho azul: logo e Sair */
+.cab{background:var(--azul);flex-shrink:0;padding-top:env(safe-area-inset-top,0)}
+.cab-linha{height:64px;padding:0 18px;display:flex;align-items:center;justify-content:space-between}
+.cab-linha img{height:48px;width:auto;display:block}
+.cab .sair{display:flex;align-items:center;gap:6px;color:#fff;font-size:16px;font-weight:600;background:none;border:0;padding:8px 0 8px 8px}
+.cab .sair svg{flex-shrink:0}
+
+/* busca de placa no cabeçalho do Início */
+.cab-busca{display:flex;align-items:center;gap:8px;padding:0 12px}
+.cab-busca .rotulo{width:76px;height:44px;border-radius:8px;background:#fff;color:var(--tinta);display:flex;align-items:center;justify-content:space-between;padding:0 8px 0 12px;font-size:14px;font-weight:700;flex-shrink:0}
+.cab-busca .caixa{flex:1;min-width:0;height:44px;border-radius:8px;background:#fff;display:flex;align-items:center;gap:6px;padding:0 4px 0 10px}
+.cab-busca .caixa input{flex:1;min-width:0;border:0;outline:0;background:transparent;font-size:14px;font-weight:500;color:var(--tinta);text-transform:uppercase;height:40px}
+.cab-busca .caixa input::placeholder{color:#5b626b;text-transform:none}
+.cab-busca .limpar{color:#6b727b;display:flex;background:none;border:0;padding:4px}
+.cab-busca .ajuda{color:#fff;display:flex;background:none;border:0;padding:0}
+.cab-texto{text-align:center;color:#fff;font-size:12px;font-weight:500;padding:8px 24px 14px;line-height:1.3}
+.btn-busca{width:36px;height:36px;flex-shrink:0;border:0;border-radius:8px;background:var(--azul);color:#fff;display:flex;align-items:center;justify-content:center}
+.btn-busca.g{width:44px;height:44px}
+
+/* corpo rolável */
+.folha{flex:1;padding:12px 6px;display:flex;flex-direction:column;gap:10px;background:#fff}
+.folha.inicio{gap:8px}
+
+/* barras do Início */
+.barra{height:52px;padding:0 10px;border-radius:10px;background:var(--azul);color:#fff;text-decoration:none;display:flex;align-items:center;gap:12px;flex-shrink:0;border:0;width:100%;text-align:left}
+.barra .bola{width:36px;height:36px;border-radius:50%;background:#fff;color:var(--tinta);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.barra span:last-child{font-size:15px;font-weight:700;letter-spacing:.02em}
+
+/* abas horizontais das telas */
+.abas{display:flex;gap:8px;overflow-x:auto;margin:0 -6px;padding:0 6px;flex-shrink:0;scrollbar-width:none}
+.abas::-webkit-scrollbar{display:none}
+.abas a{flex-shrink:0;min-width:86px;height:54px;padding:0 9px;border-radius:14px;background:var(--azul-medio);color:#fff;text-decoration:none;display:flex;align-items:center;gap:6px;font-size:12px;font-weight:700;line-height:1.1}
+.abas a[aria-current=page]{background:var(--tinta)}
+
+/* título da tela */
+.titulo{display:flex;align-items:center;gap:8px;flex-shrink:0;min-height:44px}
+.titulo .meio{flex:1;display:flex;align-items:center;justify-content:center;gap:8px;color:var(--azul)}
+.titulo .meio b{font-size:16px;font-weight:700}
+.titulo .ajuda{width:40px;height:40px;border-radius:10px;background:var(--azul-medio);color:#fff;display:flex;align-items:center;justify-content:center;border:0}
+
+/* cartões */
+.cartao{border:1.5px solid var(--azul);border-radius:10px;overflow:hidden;background:#fff;flex-shrink:0}
+.cartao>h2{margin:0;background:var(--azul);color:#fff;height:34px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700}
+.cartao>h2+div{padding:11px 12px 12px;display:flex;flex-direction:column;gap:8px}
+.cartao.liso{padding:12px;display:flex;flex-direction:column;gap:10px}
+.cartao.liso .linha{display:flex;gap:8px;align-items:center}
+
+/* campos */
+.campo{display:flex;flex-direction:column;gap:3px;min-width:0}
+.campo label{font-size:12px;font-weight:600;color:var(--cinza-texto)}
+.campo .linha{display:flex;gap:8px}
+.inp{height:44px;width:100%;border:1px solid var(--azul);border-radius:12px;padding:0 12px;font-size:14.5px;font-weight:500;color:var(--tinta);background:#fff;min-width:0;text-transform:uppercase}
+.inp::placeholder{color:#5b626b;text-transform:none;font-weight:400}
+.inp.livre{text-transform:none}
+.inp.auto{background:#eef3f9;border-color:var(--azul-suave)}
+.inp.placa{font-size:16px;font-weight:700;letter-spacing:.08em}
+.inp:disabled{color:var(--cinza-texto)}
+select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f6fb5' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M6 9l6 6 6-6'/></svg>");background-repeat:no-repeat;background-position:right 12px center;background-size:18px;padding-right:38px}
+.area{min-height:88px;width:100%;border:1px solid var(--azul);border-radius:12px;padding:10px 12px;font-size:14.5px;font-weight:500;color:var(--tinta);background:#fff;resize:vertical}
+.grade2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.grade-cep{display:grid;grid-template-columns:150px minmax(0,1fr);gap:8px}
+.achou{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:700;color:var(--azul)}
+.achou.nao{color:#8a2d2d}
+.achou.buscando{color:var(--cinza-nota)}
+.nota{font-size:12px;color:var(--cinza-nota);line-height:1.3}
+.erro{border:1.5px solid #a12a2a;border-radius:8px;padding:10px 12px;font-size:13.5px;color:#7a1f1f;background:#fff5f5;line-height:1.35}
+.erro ul{margin:6px 0 0;padding-left:18px}
+.info{border:1.5px solid var(--azul);border-radius:8px;padding:10px 12px;font-size:13.5px;color:var(--tinta);line-height:1.35}
+
+/* veículo encontrado */
+.veic{display:grid;grid-template-columns:1fr 1fr;align-items:center;padding:4px 6px;flex-shrink:0}
+.veic .lado{display:flex;flex-direction:column;align-items:center;gap:4px;color:var(--azul)}
+.veic .lado small{font-size:12px;font-weight:700;letter-spacing:.08em;color:var(--cinza-texto);text-transform:uppercase;text-align:center}
+.veic .dados{display:flex;flex-direction:column;gap:2px}
+.veic .dados div{font-size:15px;color:var(--tinta)}
+.veic .dados b{font-size:13px;font-weight:700}
+
+/* linha chave: valor */
+.kv{display:flex;align-items:baseline;gap:8px;color:var(--cinza-texto);font-size:14px}
+.kv i{flex:1;border-bottom:1px dotted #8b929a;transform:translateY(-3px)}
+.kv b{font-weight:700;color:var(--tinta);font-size:15px;text-align:right;max-width:72%;overflow-wrap:anywhere}
+.kv b.p{font-size:13px}
+
+/* botões */
+.btn-barra{height:44px;border:0;border-radius:10px;background:var(--azul);color:#fff;display:flex;align-items:center;gap:10px;padding:0 14px;font-size:14px;font-weight:600;flex-shrink:0;width:100%}
+.btn-barra.curto{width:auto;display:inline-flex}
+.btn-barra.claro{background:#fff;color:var(--azul);border:1.5px solid var(--azul)}
+.btn-barra:disabled{opacity:.55}
+.btn-chip{height:40px;padding:0 14px;border:1px solid var(--azul-suave);border-radius:20px;background:#fff;color:var(--tinta);font-size:14px;font-weight:500}
+.btn-chip[aria-pressed=true]{border-color:var(--azul);background:var(--azul);color:#fff;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:8px}
+.dias{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px}
+.dia{height:56px;border:1px solid var(--azul-suave);border-radius:10px;background:#fff;color:var(--tinta);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;padding:0}
+.dia span:first-child{font-size:12px;font-weight:500;color:var(--cinza-nota)}
+.dia span:last-child{font-size:20px;font-weight:600;line-height:1}
+.dia[aria-pressed=true]{border-color:var(--azul);background:var(--azul);color:#fff}
+.dia[aria-pressed=true] span{color:#fff;font-weight:700}
+.dias-nav{display:flex;justify-content:space-between;align-items:center;font-size:13px;font-weight:600;color:var(--cinza-texto)}
+.dias-nav button{background:none;border:0;color:var(--azul);font-weight:700;font-size:14px;min-height:36px;padding:0 8px}
+.horas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.hora{height:44px;border:1px solid var(--azul-suave);border-radius:10px;background:#fff;color:var(--tinta);font-size:15px;font-weight:500;padding:0}
+.hora[aria-pressed=true]{border-color:var(--azul);background:var(--azul);color:#fff;font-weight:700}
+.marcar{min-height:44px;display:flex;align-items:center;gap:10px;border:0;background:transparent;padding:0;font-size:14px;font-weight:600;color:var(--tinta);text-align:left}
+.marcar .cx{width:22px;height:22px;border-radius:6px;border:1.5px solid var(--azul);display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#fff}
+.marcar[aria-pressed=true] .cx{background:var(--azul)}
+
+/* seções (filtros) */
+.sec{display:flex;flex-direction:column;gap:6px;border-top:1px solid var(--cinza-linha);padding-top:10px}
+.sec:first-child{border-top:0;padding-top:0}
+.sec h3{margin:0;font-size:14px;font-weight:700;color:var(--azul)}
+.sec .cab2{display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--azul)}
+.selo{display:inline-block;font-size:11px;font-weight:700;color:#fff;background:#1f7a3a;border-radius:6px;padding:2px 6px;margin-right:6px;vertical-align:middle}
+.selo.atencao{background:#a16b00}
+
+/* resultado da pesquisa de peças */
+.res-titulo{text-align:center;color:var(--azul);font-size:16px;font-weight:700;flex-shrink:0}
+.lista-itens{display:flex;flex-direction:column;gap:8px}
+.item-linha{display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid var(--cinza-linha);padding:8px 0;font-size:14px}
+.item-linha:last-child{border-bottom:0}
+.item-linha b{font-size:13px}
+.item-linha button{background:none;border:0;color:#8a2d2d;font-weight:600;font-size:13px;min-height:36px}
+.check{display:flex;align-items:center;gap:8px;font-size:14.5px;color:var(--tinta)}
+.vazio{text-align:center;color:var(--cinza-nota);font-size:14px;padding:18px 10px;line-height:1.4}
+.carregando{text-align:center;color:var(--cinza-nota);font-size:14px;padding:30px 10px}
+
+/* rodapé: ação e navegação */
+/* rodapé fixo (pedido do Danilo): fica sempre à vista, com uma linha azul fina em cima */
+.rodape{position:fixed;left:50%;bottom:0;transform:translateX(-50%);width:100%;max-width:520px;z-index:30;background:#fff;border-top:2px solid var(--azul);padding-bottom:env(safe-area-inset-bottom,0)}
+.acao{padding:10px 16px 0;display:flex;flex-direction:column;gap:6px}
+.acao .resumo{font-size:14px;font-weight:600;color:var(--tinta);text-align:center}
+.btn-acao{width:100%;height:48px;border:0;border-radius:10px;background:var(--azul);color:#fff;font-size:16px;font-weight:700}
+.btn-acao:disabled{opacity:.6}
+.nav{display:flex;justify-content:space-evenly;padding:4px 0 6px}
+.nav a{width:64px;min-height:44px;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;color:var(--azul);text-decoration:none;font-size:12px;font-weight:600;background:transparent}
+.nav a[aria-current=page]{background:var(--cinza-fundo)}
+
+/* quadro (lista de peças, confirmação) */
+.fundo-quadro{position:fixed;inset:0;background:rgba(22,25,29,.45);display:flex;align-items:flex-end;justify-content:center;z-index:40}
+.quadro{width:100%;max-width:520px;max-height:85vh;overflow-y:auto;background:#fff;border-radius:16px 16px 0 0;padding:16px 16px calc(16px + env(safe-area-inset-bottom,0));display:flex;flex-direction:column;gap:10px}
+.quadro h2{margin:0;font-size:17px;color:var(--azul)}
+.quadro .link{background:none;border:0;color:var(--azul);font-weight:600;font-size:14px;min-height:44px}
+.toast{position:fixed;left:50%;bottom:calc(var(--rodape-h,74px) + 10px);transform:translateX(-50%);background:var(--tinta);color:#fff;padding:10px 14px;border-radius:10px;font-size:14px;font-weight:600;max-width:92vw;text-align:center;z-index:50;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+.toast.erro{background:#8a2d2d}
+
+/* ajuda */
+.linha-valor{display:flex;justify-content:space-between;gap:12px;font-size:14px;color:var(--cinza-texto);padding:4px 0}
+.linha-valor b{color:var(--tinta);text-align:right;word-break:break-all}
+.chave{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:14px;font-weight:600;color:var(--tinta);min-height:44px}
+.chave button{width:52px;height:30px;border-radius:15px;border:0;background:#c6ccd3;position:relative;flex-shrink:0}
+.chave button::after{content:"";position:absolute;top:3px;left:3px;width:24px;height:24px;border-radius:50%;background:#fff;transition:left .15s}
+.chave button[aria-checked=true]{background:var(--azul)}
+.chave button[aria-checked=true]::after{left:25px}
+
+@media (min-width:640px){.app{max-width:520px;margin:0 auto;box-shadow:0 0 0 1px var(--cinza-linha)}}
+
+/* calendário do mês (Agendar): feriados em laranja, dia escolhido em azul, número de serviços já agendados no canto */
+.dias-nav button{min-width:44px;font-size:22px}
+.cal-sem{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;font-size:11px;font-weight:700;color:var(--cinza-nota);text-align:center}
+.cal{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px}
+.cal-dia{position:relative;height:46px;border:1px solid var(--azul-suave);border-radius:10px;background:#fff;color:var(--tinta);font-size:16px;font-weight:600;padding:0}
+.cal-dia.domingo{color:var(--cinza-nota);background:#f3f4f6;border-color:var(--cinza-linha)}
+.cal-dia.feriado{background:#fff1dc;border-color:#e08a00;color:#8a4d00}
+.cal-dia:disabled{opacity:.35}
+.cal-dia[aria-pressed=true]{background:var(--azul);border-color:var(--azul);color:#fff;font-weight:700}
+.cal-dia[aria-pressed=true].feriado{background:#d97400;border-color:#d97400}
+.cal-dia i{position:absolute;top:2px;right:3px;font-style:normal;font-size:10px;font-weight:700;min-width:15px;height:15px;border-radius:8px;background:var(--tinta);color:#fff;display:flex;align-items:center;justify-content:center;padding:0 3px}
+.cal-dia[aria-pressed=true] i{background:#fff;color:var(--tinta)}
+.cal-legenda{display:flex;flex-wrap:wrap;gap:10px;font-size:12px;color:var(--cinza-nota);align-items:center}
+.cal-legenda span{display:inline-flex;align-items:center;gap:5px}
+.cal-legenda .lg{width:14px;height:14px;border-radius:4px;display:inline-block;border:1px solid var(--azul-suave)}
+.cal-legenda .lg.feriado{background:#fff1dc;border-color:#e08a00}
+.cal-legenda .lg.sel{background:var(--azul);border-color:var(--azul)}
+.cal-legenda i{font-style:normal;font-size:10px;font-weight:700;min-width:15px;height:15px;border-radius:8px;background:var(--tinta);color:#fff;display:inline-flex;align-items:center;justify-content:center;padding:0 3px}
+/* sistemas do carro (Peças): o resultado só aparece depois de tocar num sistema */
+.sistemas{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.sistema{min-height:92px;border:1.5px solid var(--azul);border-radius:12px;background:#fff;color:var(--azul);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:8px 4px}
+.sistema span{font-size:13px;font-weight:700;color:var(--tinta)}
+.sistema small{font-size:11px;color:var(--cinza-nota)}
+.sistema:disabled{opacity:.4}

@@ -13,8 +13,9 @@ if (modo && typeof document !== "undefined") {
   if (document.body) marca(); else document.addEventListener("DOMContentLoaded", marca);
 }
 export const modoApp = () => modo;
-/** Perfil que a tela da O.S. usa: no app, quem não é administrador só consulta (papel "leitura", que só vê valores) */
-export const perfilNoApp = p => modo && p && p.papel !== "admin" ? { ...p, papel: "leitura" } : p;
+/** Perfil que a tela da O.S. usa: no app, quem não é administrador só consulta. Consultor → papel "leitura" (vê valores);
+ *  qualquer outro (mecânico liberado em Equipe) → "leitura_sem_valores" (não está em regra nenhuma: nem altera nem vê valores) */
+export const perfilNoApp = p => !modo || !p || p.papel === "admin" ? p : { ...p, papel: p.papel === "consultor" ? "leitura" : "leitura_sem_valores" };
 /** Volta para a tela de botões do app */
 export const voltarAoApp = () => { location.href = "app/index.html"; };
 // Botão Voltar do celular dentro do sistema aberto pelo app: volta uma página; sem página atrás, volta aos botões do app.

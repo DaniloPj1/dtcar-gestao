@@ -581,20 +581,20 @@ const quadros = [];
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], carregado: false, erro: "" });
-  const [cfg, setCfg] = useState(cfgCompleta({}));
+  const [cfg, setCfg] = useState(cfgCompleta({})), [cfgOk, setCfgOk] = useState(false);
   const [placa, setPlaca] = useState({ texto: "" });
   const [toast, setToast] = useState(null);
   useEffect(() => { const f = () => { setRota(rotaAtual()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   const avisar = (msg, erro) => { setToast({ msg, erro }); clearTimeout(avisar.t); avisar.t = setTimeout(() => setToast(null), 4500); };
   const carregar = async () => {
     try {
-      const [clientes, veiculos, produtos, ordens, perfis, c] = await Promise.all([api.clientes.listar(), api.veiculos.listar(), api.produtos.listar(), api.ordens(), api.perfis().catch(() => []), api.config().catch(() => ({}))]);
-      setDados({ clientes, veiculos, produtos, ordens, perfis, carregado: true, erro: "" }); setCfg(cfgCompleta(c));
+      const [clientes, veiculos, produtos, ordens, perfis, c] = await Promise.all([api.clientes.listar(), api.veiculos.listar(), api.produtos.listar(), api.ordens(), api.perfis().catch(() => []), api.config().catch(() => null)]);
+      setDados({ clientes, veiculos, produtos, ordens, perfis, carregado: true, erro: "" }); if (c) { setCfg(cfgCompleta(c)); setCfgOk(true); }
     } catch (e) { setDados(d => ({ ...d, carregado: true, erro: "Não deu para carregar os dados do sistema (" + (e.message || "sem internet") + "). As buscas podem ficar incompletas." })); }
   };
   useEffect(() => { carregar(); }, []);
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
-  const telas = dados.carregado && !dados.erro ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
+  const telas = cfgOk ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
   const ctx = { perfil: usuario, dados, cfg, telas, avisar, recarregar: carregar, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>

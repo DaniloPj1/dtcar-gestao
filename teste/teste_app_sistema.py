@@ -74,7 +74,9 @@ class Fake:
             if '/rest/v1/produtos' in u: return resp(route, PROD)
             if '/rest/v1/ordens' in u: return resp(route, ORD)
             if '/rest/v1/os_itens' in u: return resp(route, ITENS)
-            if '/rest/v1/config' in u: return resp(route, {'dados': {'validadeDias': 7, 'garantiaDias': 90, **({'appAcessos': s.acessos} if s.acessos else {})}})
+            if '/rest/v1/config' in u:
+                if getattr(s, 'config_erro', False): return resp(route, {'message': 'fora do ar'}, 500)
+                return resp(route, {'dados': {'validadeDias': 7, 'garantiaDias': 90, **({'appAcessos': s.acessos} if s.acessos else {})}})
             return resp(route, [])
         pg.route('**/*.supabase.co/**', h)
     def escritas(s): return [p for p in s.pedidos if p[0] in ('POST', 'PATCH', 'PUT', 'DELETE') and '/auth/v1/' not in p[1]]
@@ -147,6 +149,11 @@ try:
         pg.goto(URL + '#/ajuda'); pg.wait_for_timeout(500); t('Óleo (aplicação), Histórico de serviços' in textos(pg), 'Ajuda mostra as telas liberadas'); ctx.close()
         f = Fake('admin', True, {UID: {'entra': True, 'telas': []}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         t(pg.locator('.barra').count() == 0 and 'Nenhuma tela liberada' in textos(pg), 'liberado sem tela: entra e vê o aviso'); ctx.close()
+        f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['oleo', 'orcamento']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        t([b.strip() for b in pg.locator('.barra').all_inner_texts()] == ['ÓLEO (APLICAÇÃO)'], 'mecânico nunca ganha + Orçamento, mesmo marcado'); ctx.close()
+        # Ajustes fora do ar no login: não entra (nem libera por padrão)
+        f = Fake('consultor', True, {UID: {'entra': False, 'telas': []}}); f.config_erro = True; ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
+        t('Confira a internet' in textos(pg) and pg.locator('.barra').count() == 0, 'sem os Ajustes no login, o app não libera ninguém'); ctx.close()
         # 4) digital: oferta depois do primeiro login, "agora não", e ligar
         f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg)
         t(pg.is_visible('.quadro') and 'Entrar com a digital?' in textos(pg), 'oferece a digital após o primeiro login')

@@ -102,7 +102,7 @@
       import('../js/appacesso.js')
     ]).then(function (rs) {
       var r = rs[0], cfg = (rs[1] && rs[1].data && rs[1].data.dados) || {}, acesso = rs[2].acessoApp(cfg, r.data);
-      if (r.error) { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); return; }
+      if (r.error || (rs[1] && rs[1].error)) { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); return; }
       var pf = r.data;
       if (!pf || pf.ativo === false || !acesso.entra) {
         sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
@@ -118,7 +118,7 @@
       if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
       desenhar();
       if (origem === 'senha') oferecerDigital();
-    }, function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });
+    }).catch(function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });
   }
 
   function oferecerDigital() {

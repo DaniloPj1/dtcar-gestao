@@ -1,6 +1,6 @@
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
-import { acessoApp, TELAS_APP } from "../appacesso.js";
+import { acessoApp, TELAS_APP, telasDoPapel } from "../appacesso.js";
 import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
@@ -52,7 +52,7 @@ function AcessoApp({ p, cfg, salvar }) {
   return html`<div class="app-acesso" data-acesso=${p.id}>
     <div class="chave-linha"><span><b>App do celular</b>${a.padrao ? html`<span class="sub"> · padrão do papel</span>` : null}</span>
       <button type="button" role="switch" aria-checked=${ligado ? "true" : "false"} aria-label=${"Entra no app: " + p.nome} class=${"chave" + (ligado ? " on" : "")} onClick=${() => gravar(!ligado, ligado ? a.telas : TELAS_APP.map(t => t[0]))}><i></i></button></div>
-    ${ligado ? html`<div class="chips">${TELAS_APP.map(([id, nome]) => html`<button type="button" key=${id} class="chip-btn" aria-pressed=${a.telas.includes(id) ? "true" : "false"} onClick=${() => alternarTela(id)}>${nome}</button>`)}</div>
+    ${ligado ? html`<div class="chips">${TELAS_APP.map(([id, nome]) => html`<button type="button" key=${id} class="chip-btn" disabled=${!telasDoPapel(p.papel).includes(id)} title=${telasDoPapel(p.papel).includes(id) ? "" : "Só administrador e consultor fazem orçamento"} aria-pressed=${a.telas.includes(id) ? "true" : "false"} onClick=${() => alternarTela(id)}>${nome}</button>`)}</div>
       ${!a.telas.length ? html`<span class="dica">Nenhuma tela marcada: a pessoa entra e vê só o Início e a Ajuda.</span>` : null}` : html`<span class="dica">Não entra no app do celular.</span>`}
   </div>`;
 }
@@ -75,7 +75,7 @@ export function Equipe() {
       <li><b>Administrador</b>: tudo, inclusive ajustes, catálogo, equipe e exclusões.</li>
       <li><b>Consultor</b>: entrada, orçamento, aprovação, entrega, cadastros e valores.</li>
       <li><b>Mecânico</b>: entrada e execução (marca serviços feitos, fotos e observações). Não vê valores na tela.</li></ul>
-      <p class="dica"><b>App do celular:</b> em cada pessoa, ligue “App do celular” e marque as telas que ela vê. Sem mexer, administrador e consultor entram com todas as telas e o mecânico não entra. No app, O.S. que já existe só é alterada no login do administrador.</p></section>
+      <p class="dica"><b>App do celular:</b> em cada pessoa, ligue “App do celular” e marque as telas que ela vê. Sem mexer, administrador e consultor entram com todas as telas e o mecânico não entra. Mecânico liberado consulta sem ver valores e não faz orçamento. No app, O.S. que já existe só é alterada no login do administrador.</p></section>
   </div>`;
 }
 

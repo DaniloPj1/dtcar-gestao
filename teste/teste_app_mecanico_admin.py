@@ -28,10 +28,12 @@ try:
     mec.locator("[role=switch]").click(); pg.wait_for_timeout(500)
     cfg = lambda: pg.evaluate("window.__DB.config")
     chk("ligar o app para o mecânico grava em config.appAcessos com todas as telas", cfg()["appAcessos"]["p2"]["entra"] is True and len(cfg()["appAcessos"]["p2"]["telas"]) == 6 and cfg().get("espelhoLegado") is True, cfg())
+    chk("mecânico liberado vê 5 telas marcadas (orçamento não)", pg.locator(".app-acesso[data-acesso=p2] .chip-btn[aria-pressed=true]").count() == 5)
     mec = pg.locator(".app-acesso[data-acesso=p2]")
-    for nome in ["+ Orçamento", "Agendar", "Consultar peça por catálogo", "Histórico de serviços", "Consultar O.S."]:
+    for nome in ["Agendar", "Consultar peça por catálogo", "Histórico de serviços", "Consultar O.S."]:
         mec.locator(".chip-btn", has_text=nome).click(); pg.wait_for_timeout(350); mec = pg.locator(".app-acesso[data-acesso=p2]")
     chk("desmarcar telas deixa só Óleo para o mecânico", cfg()["appAcessos"]["p2"]["telas"] == ["oleo"], cfg()["appAcessos"]["p2"])
+    chk("+ Orçamento fica desligado para o mecânico (só quem orça)", mec.locator(".chip-btn", has_text="+ Orçamento").is_disabled())
     pg.locator(".app-acesso[data-acesso=p1] [role=switch]").click(); pg.wait_for_timeout(400)
     chk("desligar o app do administrador grava entra=false", cfg()["appAcessos"]["p1"]["entra"] is False)
     pg.locator(".app-acesso[data-acesso=p1] [role=switch]").click(); pg.wait_for_timeout(400)

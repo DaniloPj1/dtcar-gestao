@@ -56,7 +56,7 @@ export function Orcamentos() {
         : html`<div class="lista">${vis.map(o => { const v = o.veiculo || {};
           return html`<button type="button" key=${o.id} class="linha linha-orc" onClick=${() => ir("/orcamento/" + o.id)}>
             <span class="cod">${numORC(o.numero)}</span>
-            <span class="meio"><strong>${(o.cliente || {}).nome || "Sem nome"}</strong><span>${[[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" "), o.reclamacao, o.validade ? "válido até " + fmtData(o.validade) : "", o.os_numero ? "virou O.S. " + o.os_numero : "", o.situacao === "recusado" && o.motivo ? "motivo: " + o.motivo : ""].filter(Boolean).join(" · ")}</span></span>
+            <span class="meio"><strong>${(o.cliente || {}).nome || "Sem nome"}${/^Pedido pelo app/.test(o.obs_internas || "") ? html` <span class="pill pill-app">Pedido pelo app</span>` : null}</strong><span>${[[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" "), o.reclamacao, o.validade ? "válido até " + fmtData(o.validade) : "", o.os_numero ? "virou O.S. " + o.os_numero : "", o.situacao === "recusado" && o.motivo ? "motivo: " + o.motivo : ""].filter(Boolean).join(" · ")}</span></span>
             <span class="dir"><b>${reais(o.total)}</b><${Pill} o=${o} /></span></button>`; })}</div>`}
     </section></div>`;
 }
@@ -139,7 +139,7 @@ export function Orcamento({ id }) {
   return html`<div class="pagina orcamento">
     <div class="painel-topo"><div><button type="button" class="btn-link" onClick=${() => ir("/orcamentos")}>‹ Orçamentos</button>
         <h1>${novo ? "Novo orçamento" : "Orçamento " + numORC(o.numero)}</h1>
-        <span class="sub">${novo ? "Não abre O.S. e não mexe no estoque." : html`<${Pill} o=${o} /> ${o.consultor_nome ? " · " + o.consultor_nome : ""} · criado em ${fmtDataHora(o.criado_em)}${o.enviado_em ? " · enviado em " + fmtDataHora(o.enviado_em) : ""}`}</span></div>
+        <span class="sub">${novo ? "Não abre O.S. e não mexe no estoque." : html`<${Pill} o=${o} />${/^Pedido pelo app/.test(o.obs_internas || "") ? html` <span class="pill pill-app" title="Pedido escrito no app do celular: monte o orçamento e envie ao cliente">Pedido pelo app</span>` : null} ${o.consultor_nome ? " · " + o.consultor_nome : ""} · criado em ${fmtDataHora(o.criado_em)}${o.enviado_em ? " · enviado em " + fmtDataHora(o.enviado_em) : ""}`}</span></div>
       <div class="acoes">${!novo ? html`<button type="button" class="btn" onClick=${pdf}>PDF / imprimir</button>` : null}
         ${!novo && gestor ? html`<button type="button" class="btn" onClick=${whats}>WhatsApp</button>` : null}</div></div>
     ${o._local ? html`<div class="aviso">Sem internet: o orçamento está só para consulta.</div>` : null}

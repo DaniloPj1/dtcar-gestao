@@ -37,7 +37,7 @@ import { WhatsApp } from "./telas/whatsapp.js";
 import { Email } from "./telas/email.js";
 import { Funcionarios, FuncionarioTela } from "./telas/funcionarios.js";
 import { DocumentosRH } from "./telas/rh.js";
-import { BarraTopo } from "./telas/topo.js";
+import { BarraTopo, Sino } from "./telas/topo.js";
 import { DadosLocais } from "./telas/dadoslocais.js";
 import { OleoFiltros } from "./telas/oleofiltros.js";
 import { Compras } from "./telas/compraspecas.js";
@@ -487,7 +487,7 @@ function App() {
       <div class="lateral-pe"><span class="lateral-user"><b>${perfil.nome}</b><small>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel]}</small></span><button type="button" class="btn-link" onClick=${sair}>Sair</button></div>
     </aside>
     <header class="topo"><div class="topo-in">${modoApp() ? html`<button type="button" class="app-voltar" onClick=${voltarAoApp} aria-label="Voltar ao início do app">‹ Início</button>` : html`<button type="button" class="marca marca-logo" onClick=${() => ir("/painel")} aria-label="DTCar Centro Automotivo · Painel"><img src="icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /></button>`}
-      <div class="titulo">${TITULOS[base] || ""}</div></div></header>
+      <div class="titulo">${TITULOS[base] || ""}</div>${modoApp() ? null : html`<${Sino} classe="sino-cel" />`}</div></header>
     ${modoApp() ? null : html`<${BarraTopo} titulo=${TITULOS[base] || "Painel"} offline=${offline} pend=${pend} enviarFila=${enviarFila} />`}
     <main>${cfg.espelhoLegado === true ? html`<div class=${"faixa-transicao" + (transAberta ? " aberta" : "")} role="note"><b>Período de transição: o sistema oficial ainda é o OS Oficina.</b> Lance O.S., recibos e cadastros reais no OS Oficina; aqui é consulta e treino. A próxima carga substitui clientes, veículos, produtos, O.S., recibos, vendas, estoque e contas a receber. Contas a pagar, fornecedores e funcionários <b>não</b> são limpos: não lance testes nessas áreas.${pode(perfil, "ajustes") ? html` <button type="button" class="btn-link" onClick=${() => ir("/importar")}>Carga e virada</button>` : null}<button type="button" class="faixa-trans-mais" aria-expanded=${transAberta ? "true" : "false"} onClick=${() => setTransAberta(!transAberta)}>${transAberta ? "Recolher" : "Ver detalhes"}</button></div>` : null}${novaVersao ? html`<div class="faixa-versao" role="status"><b>Nova versão do DTCar Gestão disponível.</b> Salve o que estiver fazendo e clique em atualizar. <button type="button" class="btn btn-sm btn-pri" onClick=${() => location.reload()}>Atualizar agora</button></div>` : null}${!offline && pendOS.length ? html`<div class="faixa-offline" role="status"><b>${pendOS.length} O.S. aberta(s) sem internet aguardando envio</b> (${pendOS.map(x => x.provisorio).join(", ")}). <button type="button" class="btn-link" onClick=${enviarFila}>Enviar agora</button></div>` : null}${!offline && pendAlt.length ? html`<div class="faixa-offline" role="status">${conflitos.length
       ? html`<b>${conflitos.length} alteração(ões) feita(s) sem internet com conflito</b>: alguém mudou a mesma O.S. no online. <button type="button" class="btn-link" onClick=${() => ir("/dados-locais")}>Resolver</button>`

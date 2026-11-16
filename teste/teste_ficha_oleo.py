@@ -11,6 +11,7 @@ def chk(n, c, extra=""): (ok if c else falhas).append(n if c or not extra else n
 U = "http://localhost:8772/"; TMP = sys.argv[1] if len(sys.argv) > 1 else tempfile.mkdtemp()
 PREP = """(() => { const db = window.__DB; db.produtos.push({ id: 'f1', codigo: 901, tipo: 'produto', ativo: true, unidade: 'UN', controla_estoque: true, descricao: 'FILTRO OLEO', referencia: 'OC259 MANN', marca: 'MANN', estoque_atual: 5, categoria: 'FILTROS LUB', preco_vista: 40 });
   db.veiculos.push({ id: 'v3', placa: 'XYZ9A87', marca: 'Marca Inventada', modelo: 'Carro Que Nao Existe', ano: '2015', cliente_id: 'c1', km_atual: 10, motor: '', ficha_oleo: null });
+  db.veiculos.push({ id: 'v5', placa: 'ONX2A21', marca: 'Chevrolet', modelo: 'ONIX', ano: '2021', cliente_id: 'c1', km_atual: 10, motor: '1.0', ficha_oleo: null });
   db.veiculos.push({ id: 'v4', placa: 'OLD1A11', marca: 'Fiat', modelo: 'Palio', ano: '2012', cliente_id: 'c1', km_atual: 10, motor: '' }); })();"""   # v4: sem a coluna (SQL v57 ainda não rodou)
 def abrir(b, w, h, rota):
   pg = b.new_context(viewport={"width": w, "height": h}).new_page()
@@ -65,6 +66,11 @@ try:
     pg.fill("#fo-litros", "4,2"); pg.fill("#fo-visc", "5W30"); pg.fill("#fo-oleo", "XYZ1 / XYZ2"); pg.locator("#fo-salvar").click(); pg.wait_for_timeout(1000)
     db = pg.evaluate("() => window.__DB.veiculos.find(v => v.id === 'v3')")
     chk("fora do catálogo: ficha manual gravada, motor continua vazio", db["ficha_oleo"]["litros"] == "4,2" and db["ficha_oleo"]["filtros"]["oleo"] == ["XYZ1", "XYZ2"] and db["motor"] == "", db)
+    # Onix 1.0 2021: o quadro de preencher mostra o sinal de atenção (5W30 turbo x 0W20 aspirado)
+    pg.goto(U + "#/veiculo/v5"); pg.wait_for_timeout(1200)
+    pg.locator("#fo-abrir").click(); pg.wait_for_timeout(1500)
+    chk("Onix 2021: sinal de atenção no quadro da ficha, com 5W30 e 0W20", pg.locator("#fo-atencao").count() == 1 and "5W30" in pg.locator("#fo-atencao").inner_text() and "0W20" in pg.locator("#fo-atencao").inner_text(), pg.locator("#fo-atencao").inner_text() if pg.locator("#fo-atencao").count() else "")
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(300)
     # antes do SQL v57: o veículo não tem a coluna → card escondido
     pg.goto(U + "#/veiculo/v4"); pg.wait_for_timeout(1200)
     chk("antes do v57 (sem a coluna): o card não aparece", pg.locator("#ficha-oleo").count() == 0 and pg.locator(".det-cab").count() == 1)

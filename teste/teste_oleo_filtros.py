@@ -87,6 +87,10 @@ try:
     chk("Onix: no máximo três linhas de óleo no resumo", pg.locator("#of-oleo .of-oleo").count() <= 3)
     chk("Onix: nova busca volta ao resumo (versões recolhidas)", pg.locator("#of-filtros .of-app").count() == 1 and pg.locator("button.of-outros").count() == 0)
     chk("Onix: filtros sem estoque mostram as três marcas", pg.locator("#of-filtros .of-app").first.locator(".of-filtro").nth(0).locator(".of-marca").count() == 3)
+    chk("Onix 2015: sem sinal de atenção (as fontes concordam no 5W30)", pg.locator("#of-atencao").count() == 0)
+    buscar(pg, "onix 1.0", "2021")
+    chk("Onix 1.0 2021: sinal de atenção escrito, com o 5W30 do turbo e o 0W20 do aspirado", pg.locator("#of-atencao").count() == 1 and "Atenção" in pg.locator("#of-atencao").inner_text() and "5W30" in pg.locator("#of-atencao").inner_text() and "0W20" in pg.locator("#of-atencao").inner_text(), pg.locator("#of-atencao").inner_text() if pg.locator("#of-atencao").count() else "")
+    pg.screenshot(path=os.path.join(TMP, "pc_onix_2021.png"), full_page=True)
     pg.screenshot(path=os.path.join(TMP, "pc_onix.png"), full_page=True)
     # ---------- busca pela placa ----------
     cham = lambda: pg.evaluate("((window.__PLACA || {}).chamadas || []).filter(c => c.acao !== 'saldo')")

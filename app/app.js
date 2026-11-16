@@ -1,18 +1,19 @@
 // App do sistema DTCar (celular / APK). Versão 1: entrar (e-mail e senha, depois a digital) e tela inicial de botões.
 // Mesmo login do DTCar Gestão (Supabase Auth). Só administrador e consultor entram.
-// Cada botão abre a tela real do sistema (../index.html?app=1#/rota) com a MESMA sessão: o app e o sistema usam o mesmo armazenamento do Supabase.
-// Nada é gravado no banco por este arquivo.
+// Depois de entrar, as telas (Início com os 7 botões, Óleo, Orçamento, O.S., Agendar, Peças, Histórico, Consultar O.S., Ajuda) são as de
+// telas.js, desenhadas a partir do protótipo aprovado. O app e o sistema usam a mesma sessão do Supabase (mesmo armazenamento).
+// Este arquivo não grava nada no banco: só entra, cuida da digital e chama as telas.
 (function () {
   'use strict';
 
-  var VERSAO = '1.1.0';
+  var VERSAO = '1.2.0';
   var SERVIDOR = 'br.com.dtcarcentroautomotivo.gestao'; // nome do "cofre" da digital no aparelho
   var CH_DIGITAL = 'dtcar-app-digital';   // "1" quando a entrada com a digital está ligada
   var CH_RECUSOU = 'dtcar-app-digital-recusada'; // "1" quando a pessoa disse "agora não"
   var CH_EMAIL = 'dtcar-app-email';
   var CH_NOME = 'dtcar-app-nome';
   var CH_ABERTO = 'dtcar-app-aberto';     // sessionStorage: a digital já foi lida desde que o app foi aberto
-  var CH_MODO = 'dtcar-modo-app';         // sessionStorage: o sistema está aberto de dentro do app (js/modoapp.js)
+  var CH_MODO = 'dtcar-modo-app';         // sessionStorage: o sistema está aberto de dentro do app (js/modoapp.js); as telas marcam ao abrir uma O.S.
   var PAPEIS_OK = { admin: 'Administrador', consultor: 'Consultor' };
 
   var sb = null;
@@ -35,17 +36,6 @@
   function svg(nome, tam, traco) {
     return '<svg width="' + tam + '" height="' + tam + '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="' + (traco || 1.9) + '" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0">' + IC[nome] + '</svg>';
   }
-
-  // ---------- botões da tela inicial (a ordem é a do protótipo aprovado) ----------
-  var BOTOES = [
-    { id: 'oleo', ic: 'oleo', rotulo: 'ÓLEO (APLICAÇÃO)', titulo: 'Óleo (aplicação)', rota: '#/oleo-filtros' },
-    { id: 'orcamento', ic: 'orc', rotulo: '+ ORÇAMENTO', titulo: 'Novo orçamento', rota: '#/orcamento/novo' },
-    { id: 'os', ic: 'os', rotulo: '+ O.S.', titulo: 'Nova O.S.', rota: '#/entrada' },
-    { id: 'agendar', ic: 'ag', rotulo: 'AGENDAR', titulo: 'Agendar serviço', rota: '#/agenda' },
-    { id: 'peca', ic: 'peca', rotulo: 'CONSULTAR PEÇA POR CATÁLOGO', titulo: 'Consultar peça por catálogo', rota: '#/pecas' },
-    { id: 'historico', ic: 'hist', rotulo: 'HISTÓRICO DE SERVIÇOS', titulo: 'Histórico de serviços', rota: '#/historico' },
-    { id: 'osconsulta', ic: 'clip', rotulo: 'CONSULTAR O.S.', titulo: 'Consultar O.S.', rota: '#/ordens?filtro=todas' }
-  ];
 
   // ---------- guardados simples (nunca guardam senha) ----------
   function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
@@ -120,7 +110,7 @@
       E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email };
       if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
-      if (!/^#\/(inicio|ajuda)/.test(location.hash)) location.hash = '#/inicio';
+      if (!/^#\/(inicio|ajuda|oleo|orcamento|os|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
       desenhar();
       if (origem === 'senha') oferecerDigital();
     }, function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });
@@ -195,54 +185,25 @@
   }
 
   // ---------- desenho das telas ----------
-  function topo(saudacao) {
-    return '<header class="topo"><div class="topo-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo">' +
-      '<button type="button" class="sair" data-acao="sair">' + svg('exit', 22, 2) + ' Sair</button></div>' + (saudacao || '') + '</header>';
-  }
-  function menu(ativo) {
-    function it(id, ic, rot) { return '<button type="button" data-acao="ir" data-destino="' + id + '"' + (ativo === id ? ' aria-current="page"' : '') + '>' + svg(ic, 22) + rot + '</button>'; }
-    return '<nav class="menu" aria-label="Menu">' + it('inicio', 'home', 'Início') + it('ajuda', 'help', 'Ajuda') + '</nav>';
-  }
   function telaLogin() {
     var email = lsGet(CH_EMAIL) || '', nome = lsGet(CH_NOME);
     return '<main class="tela login"><div class="topo"><div class="topo-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo"></div></div>' +
-      '<form class="folha" id="f-login" novalidate><h1>' + (nome ? 'Olá, ' + esc(nome) : 'Entrar') + '</h1>' +
-      '<p class="nota">Use o mesmo e-mail e a mesma senha do DTCar Gestão. Este app é para o administrador e o consultor.</p>' +
-      '<div class="campo"><label for="lg-email">E-mail</label><input id="lg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="none" value="' + esc(email) + '"></div>' +
-      '<div class="campo"><label for="lg-senha">Senha</label><div class="senha-linha"><input id="lg-senha" type="password" autocomplete="current-password">' +
+      '<form class="folha-login" id="f-login" novalidate><h1>' + (nome ? 'Olá, ' + esc(nome) : 'Entrar') + '</h1>' +
+      '<p class="nota-login">Use o mesmo e-mail e a mesma senha do DTCar Gestão. Este app é para o administrador e o consultor.</p>' +
+      '<div class="campo-login"><label for="lg-email">E-mail</label><input id="lg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="none" value="' + esc(email) + '"></div>' +
+      '<div class="campo-login"><label for="lg-senha">Senha</label><div class="senha-linha"><input id="lg-senha" type="password" autocomplete="current-password">' +
       '<button type="button" class="ver" data-acao="ver" aria-label="Mostrar a senha">Mostrar</button></div></div>' +
-      (E.erro ? '<p class="nota" role="alert" style="color:#a12a2a;font-weight:600">' + esc(E.erro) + '</p>' : '') +
+      (E.erro ? '<p class="nota-login" role="alert" style="color:#a12a2a;font-weight:600">' + esc(E.erro) + '</p>' : '') +
       '<button type="submit" class="botao"' + (E.ocupado ? ' disabled' : '') + '>' + (E.ocupado ? 'ENTRANDO…' : 'ENTRAR') + '</button></form></main>';
   }
   function telaDigital() {
     var nome = lsGet(CH_NOME);
     return '<main class="tela login"><div class="topo"><div class="topo-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo"></div></div>' +
-      '<section class="folha"><h1>' + (nome ? 'Olá, ' + esc(nome) : 'Entrar') + '</h1><div class="digital-icone">' + svg('digital', 48, 1.6) + '</div>' +
-      '<p class="nota" style="text-align:center">Toque no botão e use a sua digital para entrar.</p>' +
-      (E.erro ? '<p class="nota" role="alert" style="color:#a12a2a;font-weight:600;text-align:center">' + esc(E.erro) + '</p>' : '') +
+      '<section class="folha-login"><h1>' + (nome ? 'Olá, ' + esc(nome) : 'Entrar') + '</h1><div class="digital-icone">' + svg('digital', 48, 1.6) + '</div>' +
+      '<p class="nota-login" style="text-align:center">Toque no botão e use a sua digital para entrar.</p>' +
+      (E.erro ? '<p class="nota-login" role="alert" style="color:#a12a2a;font-weight:600;text-align:center">' + esc(E.erro) + '</p>' : '') +
       '<button type="button" class="botao" data-acao="digital"' + (E.ocupado ? ' disabled' : '') + '>' + svg('digital', 22, 2) + (E.ocupado ? 'ENTRANDO…' : 'ENTRAR COM A DIGITAL') + '</button>' +
       '<button type="button" class="link" data-acao="usar-senha">Entrar com e-mail e senha</button></section></main>';
-  }
-  function telaInicio() {
-    var u = E.usuario;
-    var saud = '<div class="saudacao">Olá, <b>' + esc(u.primeiro) + '</b> · ' + esc(PAPEIS_OK[u.papel]) + '</div>';
-    var barras = BOTOES.map(function (b) {
-      return '<button type="button" class="barra" data-acao="abrir" data-tela="' + b.id + '"><span class="bola">' + svg(b.ic, 20) + '</span><span>' + esc(b.rotulo) + '</span></button>';
-    }).join('');
-    return '<main class="tela">' + topo(saud) + '<div class="corpo">' + barras + '</div>' + menu('inicio') + '</main>';
-  }
-  function telaAjuda() {
-    var u = E.usuario, ligada = digitalLigada();
-    var chave = '<div class="chave" id="bloco-digital" hidden><span>Entrar com a digital</span><button type="button" role="switch" aria-label="Entrar com a digital" aria-checked="' + (ligada ? 'true' : 'false') + '" data-acao="chave-digital"></button></div>';
-    return '<main class="tela">' + topo('') + '<div class="corpo"><div class="titulo">' + svg('help', 22) + 'AJUDA</div>' +
-      '<section class="cartao"><h2>Seu acesso</h2><div>' +
-      '<div class="linha-valor"><span>Nome</span><b>' + esc(u.nome) + '</b></div>' +
-      '<div class="linha-valor"><span>E-mail</span><b>' + esc(u.email) + '</b></div>' +
-      '<div class="linha-valor"><span>Acesso</span><b>' + esc(PAPEIS_OK[u.papel]) + '</b></div>' + chave +
-      '<p class="nota">Neste app, alterar uma O.S. que já existe só é possível no login do administrador.</p></div></section>' +
-      '<section class="cartao"><h2>Sobre o app</h2><div><div class="linha-valor"><span>Versão</span><b>' + VERSAO + '</b></div>' +
-      '<p class="nota">DTCar Centro Automotivo. Cada botão abre a tela do sistema, com o seu mesmo login.</p>' +
-      '<button type="button" class="botao claro" data-acao="sair">SAIR DO APP</button></div></section></div>' + menu('ajuda') + '</main>';
   }
   function quadroDigital() {
     return '<div class="fundo-quadro"><section class="quadro" role="dialog" aria-modal="true" aria-labelledby="q-t"><h2 id="q-t">Entrar com a digital?</h2>' +
@@ -251,22 +212,36 @@
       '<button type="button" class="link" data-acao="digital-nao">Agora não</button></section></div>';
   }
 
-  function rotaAtual() {
-    var h = location.hash || '';
-    if (/^#\/ajuda/.test(h)) return { t: 'ajuda' };
-    return { t: 'inicio' };
+  // as telas de dentro do app (telas.js) são montadas uma vez, depois do login; o quadro da digital fica por cima
+  var telas = null, montado = false;
+  function montarTelas() {
+    if (montado) return;
+    montado = true;
+    var raiz = document.getElementById('raiz');
+    raiz.innerHTML = '<main class="tela"><p class="sem-js">Abrindo o DTCar…</p></main>';
+    (telas ? Promise.resolve(telas) : import('./telas.js').then(function (m) { telas = m; return m; })).then(function (m) {
+      if (E.tela !== 'app' || !E.usuario) return;
+      m.montar(E.usuario, {
+        VERSAO: VERSAO, sair: sair,
+        digital: { disponivel: digitalDisponivel, ligada: digitalLigada, ativar: ativarDigital, desligar: function () { desligarDigital(); avisar('Digital desligada. Na próxima vez, entre com a senha.'); } }
+      });
+    }, function () { montado = false; raiz.innerHTML = '<main class="tela"><p class="sem-js">Não deu para abrir as telas. Confira a internet e abra o app de novo.</p></main>'; });
   }
+  function desmontarTelas() { if (montado && telas) telas.desmontar(); montado = false; }
 
   function desenhar() {
-    var raiz = document.getElementById('raiz'); if (!raiz) return;
+    var raiz = document.getElementById('raiz'), quadro = document.getElementById('quadro'); if (!raiz) return;
+    if (E.tela === 'app' && E.usuario) {
+      montarTelas();
+      if (quadro) quadro.innerHTML = E.quadro === 'digital' ? quadroDigital() : '';
+      return;
+    }
+    desmontarTelas();
+    if (quadro) quadro.innerHTML = '';
     var html;
     if (E.tela === 'login') html = telaLogin();
     else if (E.tela === 'digital') html = telaDigital();
-    else if (E.tela === 'app' && E.usuario) {
-      var r = rotaAtual();
-      html = r.t === 'ajuda' ? telaAjuda() : telaInicio();
-      if (E.quadro === 'digital') html += quadroDigital();
-    } else html = '<main class="tela"><p class="sem-js">Carregando o DTCar…</p></main>';
+    else html = '<main class="tela"><p class="sem-js">Carregando o DTCar…</p></main>';
     // guarda o que foi digitado quando só o aviso de erro muda
     var campos = { e: (document.getElementById('lg-email') || {}).value, s: (document.getElementById('lg-senha') || {}).value };
     raiz.innerHTML = html;
@@ -275,16 +250,6 @@
       if (campos.e) ie.value = campos.e; if (campos.s) is.value = campos.s;
       if (E.erro && is) is.focus();
     }
-    if (E.tela === 'app' && rotaAtual().t === 'ajuda') {
-      digitalDisponivel().then(function (ok) { var b = document.getElementById('bloco-digital'); if (b && ok) b.hidden = false; });
-    }
-  }
-
-  // abre a tela real do sistema, no modo app, com a mesma sessão
-  function abrirTela(id) {
-    var b = BOTOES.filter(function (x) { return x.id === id; })[0]; if (!b) return;
-    ssSet(CH_MODO, '1');
-    location.href = '../index.html?app=1' + b.rota;
   }
 
   // ---------- toques e envio do formulário ----------
@@ -292,8 +257,6 @@
     var el = ev.target.closest && ev.target.closest('[data-acao]'); if (!el) return;
     var a = el.getAttribute('data-acao');
     if (a === 'sair') sair();
-    else if (a === 'ir') location.hash = '#/' + el.getAttribute('data-destino');
-    else if (a === 'abrir') abrirTela(el.getAttribute('data-tela'));
     else if (a === 'digital') desbloquear();
     else if (a === 'usar-senha') usarSenha();
     else if (a === 'ver') {
@@ -303,10 +266,6 @@
     }
     else if (a === 'digital-sim') { E.quadro = ''; desenhar(); ativarDigital(); }
     else if (a === 'digital-nao') { lsSet(CH_RECUSOU, '1'); E.quadro = ''; desenhar(); avisar('Tudo bem. Você pode ligar depois, na Ajuda.'); }
-    else if (a === 'chave-digital') {
-      if (digitalLigada()) { desligarDigital(); avisar('Digital desligada. Na próxima vez, entre com a senha.'); desenhar(); }
-      else ativarDigital().then(function () { desenhar(); });
-    }
   });
   document.addEventListener('submit', function (ev) {
     if (ev.target.id !== 'f-login') return;
@@ -317,7 +276,6 @@
     if (!senha) { E.erro = 'Digite a sua senha.'; desenhar(); return; }
     E.erro = ''; entrarComSenha(email, senha);
   });
-  window.addEventListener('hashchange', function () { if (E.tela === 'app') desenhar(); });
 
   // ---------- partida ----------
   function iniciar() {

@@ -1,16 +1,18 @@
 // App do sistema DTCar (celular / APK). Versão 1: entrar (e-mail e senha, depois a digital) e tela inicial de botões.
-// Mesmo login do DTCar Gestão (Supabase Auth). Por enquanto só administrador e consultor entram.
-// Os botões abrem as telas nas próximas versões; nada é gravado no banco por este arquivo.
+// Mesmo login do DTCar Gestão (Supabase Auth). Só administrador e consultor entram.
+// Cada botão abre a tela real do sistema (../index.html?app=1#/rota) com a MESMA sessão: o app e o sistema usam o mesmo armazenamento do Supabase.
+// Nada é gravado no banco por este arquivo.
 (function () {
   'use strict';
 
-  var VERSAO = '1.0.0';
+  var VERSAO = '1.1.0';
   var SERVIDOR = 'br.com.dtcarcentroautomotivo.gestao'; // nome do "cofre" da digital no aparelho
   var CH_DIGITAL = 'dtcar-app-digital';   // "1" quando a entrada com a digital está ligada
   var CH_RECUSOU = 'dtcar-app-digital-recusada'; // "1" quando a pessoa disse "agora não"
   var CH_EMAIL = 'dtcar-app-email';
   var CH_NOME = 'dtcar-app-nome';
-  var CH_AUTH = 'dtcar-app-auth';         // onde o Supabase guarda a sessão (só sem a digital)
+  var CH_ABERTO = 'dtcar-app-aberto';     // sessionStorage: a digital já foi lida desde que o app foi aberto
+  var CH_MODO = 'dtcar-modo-app';         // sessionStorage: o sistema está aberto de dentro do app (js/modoapp.js)
   var PAPEIS_OK = { admin: 'Administrador', consultor: 'Consultor' };
 
   var sb = null;
@@ -36,19 +38,21 @@
 
   // ---------- botões da tela inicial (a ordem é a do protótipo aprovado) ----------
   var BOTOES = [
-    { id: 'oleo', ic: 'oleo', rotulo: 'ÓLEO (APLICAÇÃO)', titulo: 'Óleo (aplicação)' },
-    { id: 'orcamento', ic: 'orc', rotulo: '+ ORÇAMENTO', titulo: 'Novo orçamento' },
-    { id: 'os', ic: 'os', rotulo: '+ O.S.', titulo: 'Nova O.S.' },
-    { id: 'agendar', ic: 'ag', rotulo: 'AGENDAR', titulo: 'Agendar serviço' },
-    { id: 'peca', ic: 'peca', rotulo: 'CONSULTAR PEÇA POR CATÁLOGO', titulo: 'Consultar peça por catálogo' },
-    { id: 'historico', ic: 'hist', rotulo: 'HISTÓRICO DE SERVIÇOS', titulo: 'Histórico de serviços' },
-    { id: 'osconsulta', ic: 'clip', rotulo: 'CONSULTAR O.S.', titulo: 'Consultar O.S.' }
+    { id: 'oleo', ic: 'oleo', rotulo: 'ÓLEO (APLICAÇÃO)', titulo: 'Óleo (aplicação)', rota: '#/oleo-filtros' },
+    { id: 'orcamento', ic: 'orc', rotulo: '+ ORÇAMENTO', titulo: 'Novo orçamento', rota: '#/orcamento/novo' },
+    { id: 'os', ic: 'os', rotulo: '+ O.S.', titulo: 'Nova O.S.', rota: '#/entrada' },
+    { id: 'agendar', ic: 'ag', rotulo: 'AGENDAR', titulo: 'Agendar serviço', rota: '#/agenda' },
+    { id: 'peca', ic: 'peca', rotulo: 'CONSULTAR PEÇA POR CATÁLOGO', titulo: 'Consultar peça por catálogo', rota: '#/pecas' },
+    { id: 'historico', ic: 'hist', rotulo: 'HISTÓRICO DE SERVIÇOS', titulo: 'Histórico de serviços', rota: '#/historico' },
+    { id: 'osconsulta', ic: 'clip', rotulo: 'CONSULTAR O.S.', titulo: 'Consultar O.S.', rota: '#/ordens?filtro=todas' }
   ];
 
   // ---------- guardados simples (nunca guardam senha) ----------
   function lsGet(k) { try { return window.localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { window.localStorage.setItem(k, v); } catch (e) { /* sem espaço: segue sem guardar */ } }
   function lsDel(k) { try { window.localStorage.removeItem(k); } catch (e) { /* nada */ } }
+  function ssSet(k, v) { try { window.sessionStorage.setItem(k, v); } catch (e) { /* nada */ } }
+  function ssGet(k) { try { return window.sessionStorage.getItem(k); } catch (e) { return null; } }
   function digitalLigada() { return lsGet(CH_DIGITAL) === '1'; }
 
   function esc(t) { return String(t == null ? '' : t).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -107,15 +111,16 @@
       var pf = r.data;
       if (!pf || pf.ativo === false || !PAPEIS_OK[pf.papel]) {
         sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
-        desligarDigital(); lsDel(CH_AUTH);
+        desligarDigital(); try { window.sessionStorage.removeItem(CH_ABERTO); } catch (e) { /* nada */ }
         E.ocupado = false; E.tela = 'login'; E.usuario = null;
         E.erro = 'Este app é para o administrador e o consultor.'; desenhar(); return;
       }
       var nome = pf.nome || user.email, primeiro = String(nome).split(' ')[0];
       lsSet(CH_EMAIL, user.email); lsSet(CH_NOME, primeiro);
       E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email };
+      if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
-      if (!/^#\/(inicio|ajuda|tela\/)/.test(location.hash)) location.hash = '#/inicio';
+      if (!/^#\/(inicio|ajuda)/.test(location.hash)) location.hash = '#/inicio';
       desenhar();
       if (origem === 'senha') oferecerDigital();
     }, function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });
@@ -133,7 +138,7 @@
       var s = r && r.data && r.data.session; if (!s) throw new Error('sem sessão');
       return plugin().setCredentials({ username: E.usuario.email, password: s.refresh_token, server: SERVIDOR });
     }).then(function () {
-      lsSet(CH_DIGITAL, '1'); lsDel(CH_RECUSOU); lsDel(CH_AUTH); // a sessão não fica guardada em texto no aparelho
+      lsSet(CH_DIGITAL, '1'); lsDel(CH_RECUSOU); ssSet(CH_ABERTO, '1');
       avisar('Pronto: nas próximas vezes, entre com a digital.'); return true;
     }, function () { avisar('Não deu para ligar a digital. Tente de novo.'); return false; });
   }
@@ -144,9 +149,14 @@
     var P = plugin(); if (!P) { E.tela = 'login'; desenhar(); return; }
     E.ocupado = true; desenhar();
     pedirDigital('Entrar no app').then(function () {
-      return P.getCredentials({ server: SERVIDOR }).then(function (c) {
-        return sb.auth.refreshSession({ refresh_token: c.password });
-      }, function () { return { error: { name: 'SemCofre', message: 'sem acesso guardado' } }; });
+      // a sessão do sistema continua no aparelho: usa ela; só se sumiu é que renova pela chave guardada no cofre
+      return sb.auth.getSession().then(function (g) {
+        var se = g && g.data && g.data.session;
+        if (se) return { data: { session: se, user: se.user } };
+        return P.getCredentials({ server: SERVIDOR }).then(function (c) {
+          return sb.auth.refreshSession({ refresh_token: c.password });
+        }, function () { return { error: { name: 'SemCofre', message: 'sem acesso guardado' } }; });
+      });
     }, function () { return { cancelou: true }; }).then(function (r) {
       if (r.cancelou) { E.ocupado = false; desenhar(); avisar('Não deu para ler a digital. Tente de novo ou use a senha.'); return; }
       if (r.error || !r.data || !r.data.session) {
@@ -154,20 +164,22 @@
         if (ehFalhaDeRede(r.error)) { desenhar(); avisar('Sem internet. Tente de novo quando voltar.'); return; }
         desligarDigital(); E.tela = 'login'; E.erro = 'Entre com a senha de novo.'; desenhar(); return;
       }
+      ssSet(CH_ABERTO, '1');
       return guardarToken(r.data.session.refresh_token).then(function () { return aposLogin(r.data.user || r.data.session.user, 'digital'); });
     });
   }
 
-  // sair: com a digital ligada só tranca (o acesso continua no cofre); sem ela, encerra a sessão
+  // sair: com a digital ligada só tranca (a próxima abertura pede a digital); sem ela, encerra a sessão (a do sistema também, é a mesma)
   function sair() {
-    if (digitalLigada()) { lsDel(CH_AUTH); location.hash = ''; location.reload(); return; }
+    try { window.sessionStorage.removeItem(CH_ABERTO); window.sessionStorage.removeItem(CH_MODO); } catch (e) { /* nada */ }
+    if (digitalLigada()) { location.hash = ''; location.reload(); return; }
     sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
-    lsDel(CH_AUTH); E.usuario = null; E.tela = 'login'; E.erro = ''; location.hash = ''; desenhar();
+    E.usuario = null; E.tela = 'login'; E.erro = ''; location.hash = ''; desenhar();
   }
   // na tela da digital: quer entrar com outro e-mail. Encerra aquela sessão e apaga o cofre
   function usarSenha() {
     var P = plugin();
-    var fim = function () { desligarDigital(); lsDel(CH_AUTH); E.tela = 'login'; E.erro = ''; E.ocupado = false; desenhar(); };
+    var fim = function () { desligarDigital(); try { window.sessionStorage.removeItem(CH_ABERTO); } catch (e) { /* nada */ } E.tela = 'login'; E.erro = ''; E.ocupado = false; desenhar(); };
     if (!P) { fim(); return; }
     P.getCredentials({ server: SERVIDOR }).then(function (c) { return sb.auth.refreshSession({ refresh_token: c.password }); })
       .then(function () { return sb.auth.signOut({ scope: 'local' }); }).catch(function () { /* melhor esforço */ }).then(fim);
@@ -210,13 +222,6 @@
     }).join('');
     return '<main class="tela">' + topo(saud) + '<div class="corpo">' + barras + '</div>' + menu('inicio') + '</main>';
   }
-  function telaEmBreve(id) {
-    var b = BOTOES.filter(function (x) { return x.id === id; })[0];
-    if (!b) return telaInicio();
-    return '<main class="tela">' + topo('') + '<div class="corpo"><div class="titulo">' + svg(b.ic, 22) + esc(b.titulo.toUpperCase()) + '</div>' +
-      '<section class="cartao"><h2>Em preparação</h2><div><p style="margin:0">Esta tela entra na próxima versão do app. Por enquanto, use o DTCar Gestão no computador.</p>' +
-      '<button type="button" class="botao" data-acao="ir" data-destino="inicio">VOLTAR AO INÍCIO</button></div></section></div>' + menu('') + '</main>';
-  }
   function telaAjuda() {
     var u = E.usuario, ligada = digitalLigada();
     var chave = '<div class="chave" id="bloco-digital" hidden><span>Entrar com a digital</span><button type="button" role="switch" aria-label="Entrar com a digital" aria-checked="' + (ligada ? 'true' : 'false') + '" data-acao="chave-digital"></button></div>';
@@ -225,9 +230,9 @@
       '<div class="linha-valor"><span>Nome</span><b>' + esc(u.nome) + '</b></div>' +
       '<div class="linha-valor"><span>E-mail</span><b>' + esc(u.email) + '</b></div>' +
       '<div class="linha-valor"><span>Acesso</span><b>' + esc(PAPEIS_OK[u.papel]) + '</b></div>' + chave +
-      '<p class="nota">Alterar uma O.S. que já existe só é possível no login do administrador.</p></div></section>' +
+      '<p class="nota">Neste app, alterar uma O.S. que já existe só é possível no login do administrador.</p></div></section>' +
       '<section class="cartao"><h2>Sobre o app</h2><div><div class="linha-valor"><span>Versão</span><b>' + VERSAO + '</b></div>' +
-      '<p class="nota">DTCar Centro Automotivo. Os botões da tela inicial vão ganhando função a cada versão.</p>' +
+      '<p class="nota">DTCar Centro Automotivo. Cada botão abre a tela do sistema, com o seu mesmo login.</p>' +
       '<button type="button" class="botao claro" data-acao="sair">SAIR DO APP</button></div></section></div>' + menu('ajuda') + '</main>';
   }
   function quadroDigital() {
@@ -240,7 +245,6 @@
   function rotaAtual() {
     var h = location.hash || '';
     if (/^#\/ajuda/.test(h)) return { t: 'ajuda' };
-    var m = /^#\/tela\/([a-z]+)/.exec(h); if (m) return { t: 'tela', id: m[1] };
     return { t: 'inicio' };
   }
 
@@ -251,7 +255,7 @@
     else if (E.tela === 'digital') html = telaDigital();
     else if (E.tela === 'app' && E.usuario) {
       var r = rotaAtual();
-      html = r.t === 'ajuda' ? telaAjuda() : r.t === 'tela' ? telaEmBreve(r.id) : telaInicio();
+      html = r.t === 'ajuda' ? telaAjuda() : telaInicio();
       if (E.quadro === 'digital') html += quadroDigital();
     } else html = '<main class="tela"><p class="sem-js">Carregando o DTCar…</p></main>';
     // guarda o que foi digitado quando só o aviso de erro muda
@@ -267,13 +271,20 @@
     }
   }
 
+  // abre a tela real do sistema, no modo app, com a mesma sessão
+  function abrirTela(id) {
+    var b = BOTOES.filter(function (x) { return x.id === id; })[0]; if (!b) return;
+    ssSet(CH_MODO, '1');
+    location.href = '../index.html?app=1' + b.rota;
+  }
+
   // ---------- toques e envio do formulário ----------
   document.addEventListener('click', function (ev) {
     var el = ev.target.closest && ev.target.closest('[data-acao]'); if (!el) return;
     var a = el.getAttribute('data-acao');
     if (a === 'sair') sair();
     else if (a === 'ir') location.hash = '#/' + el.getAttribute('data-destino');
-    else if (a === 'abrir') location.hash = '#/tela/' + el.getAttribute('data-tela');
+    else if (a === 'abrir') abrirTela(el.getAttribute('data-tela'));
     else if (a === 'digital') desbloquear();
     else if (a === 'usar-senha') usarSenha();
     else if (a === 'ver') {
@@ -306,14 +317,13 @@
       document.getElementById('raiz').innerHTML = '<main class="tela"><p class="sem-js">Sem conexão com o sistema. Abra o app de novo com internet.</p></main>'; return;
     }
     var digital = digitalLigada();
-    // com a digital ligada a sessão fica só na memória: o acesso vive no cofre do aparelho
-    sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { storageKey: CH_AUTH, persistSession: !digital, autoRefreshToken: true, detectSessionInUrl: false } });
-    if (digital) lsDel(CH_AUTH);
+    // a sessão é a mesma do sistema (mesmo armazenamento do Supabase); com a digital ligada o app pede a digital a cada vez que é aberto
+    sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
     // o Supabase troca a chave de renovação de tempos em tempos: o cofre acompanha
     sb.auth.onAuthStateChange(function (evento, sessao) {
       if (evento === 'TOKEN_REFRESHED' && sessao) setTimeout(function () { guardarToken(sessao.refresh_token); }, 0);
     });
-    if (digital) {
+    if (digital && ssGet(CH_ABERTO) !== '1') {
       digitalDisponivel().then(function (ok) {
         if (ok) { E.tela = 'digital'; desenhar(); setTimeout(desbloquear, 300); }
         else { desligarDigital(); E.tela = 'login'; desenhar(); }

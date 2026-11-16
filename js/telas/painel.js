@@ -1,4 +1,5 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
+import { perfilNoApp } from "../modoapp.js";
 import { api } from "../api.js";
 import { erroDeRede } from "../local.js";
 import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js";
@@ -378,7 +379,8 @@ const doMes = o => { const d = o.finalizada_em || o.entregue_em; return d && d.s
 const dataHoraCurta = iso => { const d = new Date(iso); return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
 
 export function Ordens({ params = {} }) {
-  const { dados, perfil, ir, cfg, avisar, recarregar } = useApp();
+  const { dados, perfil: perfilReal, ir, cfg, avisar, recarregar } = useApp();
+  const perfil = perfilNoApp(perfilReal); // no app do celular, só o administrador avança, recebe ou cancela O.S.
   const ver = pode(perfil, "verValores");
   const [q, setQ] = useState(""), [filtro, setFiltro] = useState(params.filtro === "receber" ? "pagamento" : params.filtro || "abertas"), [lim, setLim] = useState(60);
   const [ordem, setOrdem] = useState(() => lsGet("dtcar-os-ordem") || "recentes");

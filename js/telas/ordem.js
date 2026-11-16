@@ -17,6 +17,7 @@ import { guardarChegadaAgenda } from "./entrada.js";
 import { MSG, itensDaMensagem, primeiroNome as primeiroNomeCli } from "../mensagens.js";
 import { osQuitada } from "../osrecibo.js";
 import { MAIUSC } from "../maiusculas.js";
+import { perfilNoApp } from "../modoapp.js";
 import { PecasVeiculo } from "./pecasveiculo.js";
 import { codigoParaItem } from "../pecas.js";
 
@@ -239,7 +240,8 @@ function ImprimirModal({ o, verValores, onFechar }) {
 
 /* ---------------- Tela da O.S. ---------------- */
 export function Ordem({ id, params = {} }) {
-  const { cfg, perfil, dados, avisar, confirmar, ir, recarregar, pendentes: filaPend = [] } = useApp();
+  const { cfg, perfil: perfilReal, dados, avisar, confirmar, ir, recarregar, pendentes: filaPend = [] } = useApp();
+  const perfil = perfilNoApp(perfilReal); // no app do celular, só o administrador altera a O.S.
   const [o, setO] = useState(null);
   const [erroCarga, setErroCarga] = useState("");
   const [aba, setAba] = useState("principal");

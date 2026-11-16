@@ -3,7 +3,9 @@ name: App DTCar (gerar APK)
 # Gera o APK do app do sistema (pasta app/) com o Android do próprio GitHub.
 # Como usar (só o Danilo): GitHub > Actions > "App DTCar (gerar APK)" > Run workflow.
 # O APK aparece no fim da execução, em "Artifacts" (DTCar-app-apk). Vale por 30 dias.
-# É um APK de teste (assinatura de depuração): instala no celular sem Play Store e se atualiza por cima do anterior.
+# É um APK de teste (assinatura de depuração): instala no celular sem Play Store. Cada geração usa uma chave nova,
+# então uma versão nova do APK exige desinstalar a anterior. As telas, porém, NÃO dependem do APK: ele abre o app direto
+# do site (server.url), então só precisa de APK novo quando mudar algo nativo (ícone, digital, permissões).
 # Não usa nenhum segredo. Não cria release nem etiqueta.
 on:
   workflow_dispatch:
@@ -35,7 +37,7 @@ jobs:
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
           "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Monta a pasta www (telas, fontes, logo)
+      - name: Monta a pasta www (tela de sem internet e logo)
         run: python3 app/montar_www.py
 
       - name: Instala o Capacitor (versões travadas no package-lock)
@@ -63,8 +65,8 @@ jobs:
         run: |
           APK=app/android/app/build/outputs/apk/debug/app-debug.apk
           ls -l "$APK"
-          unzip -l "$APK" | grep -E "assets/public/(index.html|app.js)"
-          unzip -p "$APK" assets/public/index.html | grep -q "app.js"
+          unzip -p "$APK" assets/capacitor.config.json | grep -q "gestao.dtcarcentroautomotivo.com.br/app/"
+          unzip -p "$APK" assets/public/index.html | grep -q "Sem internet"
 
       - uses: actions/upload-artifact@v4
         with:

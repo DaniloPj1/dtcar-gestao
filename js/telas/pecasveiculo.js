@@ -31,12 +31,12 @@ function PecaGrande({ e, onUsar, onFechar }) {
         <button type="button" class="btn btn-pri" id="pv-grande-usar" onClick=${() => onUsar(p)}>Usar esta peça</button></div></div></div>`;
 }
 
-export function PecasVeiculo({ veiculo, onUsar, onVoltar, estoque = [], onUsarProduto = null }) {
+export function PecasVeiculo({ veiculo, onUsar, onVoltar, estoque = [], onUsarProduto = null, rotuloVoltar = "Voltar ao cadastro de produtos" }) {
   const [cat, setCat] = useState(null), [erro, setErro] = useState(""), [txt, setTxt] = useState(""), [grupo, setGrupo] = useState(""), [aberta, setAberta] = useState(""), [grande, setGrande] = useState(null);
   useEffect(() => { let vivo = true; carregarPecas().then(c => vivo && setCat(c)).catch(() => vivo && setErro("Não deu para abrir o catálogo de peças agora.")); return () => { vivo = false; }; }, []);
   const r = useMemo(() => { if (!cat) return null; const x = pecasDoVeiculo(cat, veiculo); return { ...x, grupos: agruparEquivalentes(x.grupos, estoque.map(e => ({ ref: e.ref, descricao: e.descricao, qtd: e.qtd, id: e.id }))) }; }, [cat, veiculo, estoque]);
   const grupos = useMemo(() => r ? filtrarPecas(r.grupos, txt).filter(g => !grupo || g.grupo === grupo) : [], [r, txt, grupo]);
-  const voltar = html`<button type="button" class="btn" id="pv-voltar" onClick=${onVoltar}>Voltar ao cadastro de produtos</button>`;
+  const voltar = html`<button type="button" class="btn" id="pv-voltar" onClick=${onVoltar}>${rotuloVoltar}</button>`;
   if (erro) return html`<div class="erros">${erro}</div><div class="acoes">${voltar}</div>`;
   if (!r) return html`<span class="dica">Carregando o catálogo de peças…</span>`;
   const nomeV = [veiculo.marca, veiculo.modelo, veiculo.ano_mod || veiculo.ano].filter(Boolean).join(" ");

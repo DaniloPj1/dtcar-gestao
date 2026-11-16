@@ -1,6 +1,6 @@
-# Teste do app do sistema (pasta app/, o que vira o APK): entrar, só administrador/consultor, digital, tela inicial.
+# Teste do app do sistema (pasta app/, o que vira o APK): entrar, só administrador/consultor, digital, tela inicial e a abertura das telas reais.
 # O Supabase e o plugin da digital são de mentira (montados aqui). Confere também que nada é gravado no banco
-# e que a pasta app/www (montada para o APK) funciona sem nenhum caminho "../".
+# e que a pasta app/www (a tela "Sem internet" que vai dentro do APK) está certa.
 # Uso: python3 teste/teste_app_sistema.py   (precisa de: pip install playwright pillow && playwright install chromium)
 import sys, subprocess, time, os, json
 from playwright.sync_api import sync_playwright
@@ -79,10 +79,15 @@ try:
         barras = pg.locator('.barra').all_inner_texts(); t([b.strip() for b in barras] == ROTULOS, 'sete botões na ordem do protótipo: %s' % barras)
         t(pg.locator('.quadro').count() == 0, 'sem plugin não oferece a digital')
         t(not f.escritas(), 'não grava nada no banco: %s' % f.escritas())
-        # botão abre a tela "Em preparação" e volta
-        pg.click('.barra >> nth=2'); pg.wait_for_timeout(300); t('EM PREPARAÇÃO' in textos(pg).upper() and 'NOVA O.S.' in textos(pg).upper(), 'botão abre a tela em preparação')
-        pg.click('text=VOLTAR AO INÍCIO'); pg.wait_for_timeout(300); t(pg.locator('.barra').count() == 7, 'volta ao início')
-        pg.click('.menu >> text=Ajuda'); pg.wait_for_timeout(300); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.0.0' in textos(pg), 'ajuda mostra o acesso e a versão')
+        # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
+        ROTAS = ['oleo-filtros', 'orcamento/novo', 'entrada', 'agenda', 'pecas', 'historico', 'ordens?filtro=todas']
+        for i, rota in enumerate(ROTAS):
+            ctx2, pg2, _ = abrir(br, f, URL, plugin=False); entrar(pg2)
+            with pg2.expect_navigation():
+                pg2.click('.barra >> nth=%d' % i)
+            t(pg2.url == 'http://localhost:8766/index.html?app=1#/' + rota, 'botão %d abre o sistema em %s: %s' % (i + 1, rota, pg2.url))
+            t(pg2.evaluate("sessionStorage.getItem('dtcar-modo-app')") == '1', 'botão %d marca o modo app' % (i + 1)); ctx2.close()
+        pg.click('.menu >> text=Ajuda'); pg.wait_for_timeout(300); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.1.0' in textos(pg), 'ajuda mostra o acesso e a versão')
         t(pg.is_hidden('#bloco-digital'), 'sem plugin o interruptor da digital fica escondido')
         # recarregar mantém a sessão (sem digital)
         pg.reload(); pg.wait_for_timeout(600); t(pg.locator('.menu').count() == 1 and 'AJUDA' in textos(pg), 'recarregar mantém a sessão e a rota')
@@ -110,18 +115,20 @@ try:
         t(cofre['password'] != 'certa', 'a senha nunca vai para o cofre')
         t(pg.get_attribute('[data-acao=chave-digital]', 'aria-checked') == 'true', 'chave fica ligada')
         t(pg.evaluate("localStorage.getItem('dtcar-app-digital')") == '1', 'marca a digital como ligada')
-        t(pg.evaluate("localStorage.getItem('dtcar-app-auth')") is None, 'sessão não fica guardada em texto no aparelho')
-        # 5) reabrir: tela da digital entra sozinha, a chave gira
-        antes = f.refresh
-        pg.reload(); pg.wait_for_timeout(1500)
+        # 5) app aberto de novo (a leitura da digital vale só até fechar o app): pede a digital e usa a sessão do aparelho
+        pg.evaluate("sessionStorage.removeItem('dtcar-app-aberto')"); pg.evaluate('window.__chamadas = []'); pg.reload(); pg.wait_for_timeout(1500)
         t('Fulano' in textos(pg) and pg.locator('.menu').count() == 1, 'reabrir com a digital entra no app')
-        t(pg.evaluate('window.__cofre')['password'] == f.refresh and f.refresh != antes, 'cofre acompanha a nova chave de renovação')
-        t(pg.evaluate("localStorage.getItem('dtcar-app-auth')") is None, 'continua sem sessão em texto')
+        t(pg.evaluate("sessionStorage.getItem('dtcar-app-aberto')") == '1', 'marca que a digital já foi lida nesta abertura')
+        # voltando do sistema para a tela de botões (mesma abertura): não pede a digital de novo
+        pg.reload(); pg.wait_for_timeout(1200)  # a lista de chamadas do plugin recomeça a cada carga da página
+        t(pg.locator('.menu').count() == 1 and pg.evaluate('window.__chamadas.filter(x => x === "verify").length') == 0, 'voltar do sistema não pede a digital de novo')
+        t(pg.evaluate('window.__cofre')['password'] == f.refresh, 'cofre acompanha a chave da sessão atual')
         # sair com a digital: só tranca
         pg.click('text=SAIR DO APP'); pg.wait_for_timeout(1500)
+        t('verify' in pg.evaluate('window.__chamadas'), 'sair com a digital tranca: ao abrir de novo pede a digital')
         t(pg.evaluate("localStorage.getItem('dtcar-app-digital')") == '1' and pg.evaluate('window.__cofre') is not None, 'sair com a digital mantém o cofre')
         # digital cancelada: mostra o botão e avisa
-        pg.evaluate('window.__ok = false'); pg.reload(); pg.wait_for_timeout(1200)
+        pg.evaluate("window.__ok = false; sessionStorage.removeItem('dtcar-app-aberto')"); pg.reload(); pg.wait_for_timeout(1200)
         t(pg.is_visible('text=ENTRAR COM A DIGITAL'), 'tela da digital aparece'); t('Não deu para ler a digital' in textos(pg) or pg.is_visible('#aviso'), 'avisa quando a leitura falha')
         # usar senha: apaga o cofre
         pg.click('text=Entrar com e-mail e senha'); pg.wait_for_timeout(600)
@@ -129,23 +136,26 @@ try:
         t(not f.escritas(), 'nenhuma gravação no banco'); t(not er, 'sem erro de script: %s' % er); ctx.close()
         # 6) chave de renovação inválida no cofre: volta para a senha e apaga o cofre
         f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg); pg.click('text=LIGAR A DIGITAL'); pg.wait_for_timeout(500)
-        f.refresh = 'outra'; pg.reload(); pg.wait_for_timeout(1500)
+        f.refresh = 'outra'; pg.evaluate("Object.keys(localStorage).filter(k => k.indexOf('auth-token') > 0).forEach(k => localStorage.removeItem(k)); sessionStorage.removeItem('dtcar-app-aberto')"); pg.reload(); pg.wait_for_timeout(1500)
         t(pg.is_visible('#f-login') and 'Entre com a senha de novo' in textos(pg), 'cofre vencido pede a senha')
         t(pg.evaluate('window.__cofre') is None, 'cofre vencido é apagado'); ctx.close()
         # 7) perfil não permitido na digital: recusa e apaga o cofre
         f = Fake(); ctx, pg, er = abrir(br, f, URL); entrar(pg); pg.click('text=LIGAR A DIGITAL'); pg.wait_for_timeout(500)
-        f.papel = 'mecanico'; pg.reload(); pg.wait_for_timeout(1500)
+        f.papel = 'mecanico'; pg.evaluate("sessionStorage.removeItem('dtcar-app-aberto')"); pg.reload(); pg.wait_for_timeout(1500)
         t('Este app é para o administrador e o consultor' in textos(pg) and pg.evaluate('window.__cofre') is None, 'papel mudado para mecânico é barrado na digital'); ctx.close()
         # 8) celular 390px sem rolagem lateral e a barra de baixo fica à vista
         f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         t(pg.evaluate('document.documentElement.scrollWidth') <= 390, 'sem rolagem lateral em 390px')
         t(pg.evaluate("getComputedStyle(document.querySelector('.barra')).backgroundColor") == 'rgb(47, 111, 181)', 'botões na cor azul da DTCar')
         t(pg.locator('.barra').first.bounding_box()['height'] >= 44, 'botão com altura de toque'); ctx.close()
-        # 9) a pasta montada para o APK (app/www) funciona sozinha, sem "../"
-        f = Fake(); ctx, pg, er = abrir(br, f, 'http://localhost:8766/app/www/index.html', plugin=False); entrar(pg)
-        t(pg.locator('.barra').count() == 7, 'app/www funciona')
-        t(pg.evaluate("document.querySelector('.topo img').naturalWidth") > 0, 'logo carrega em app/www')
-        t(pg.evaluate("document.fonts.check('600 16px Barlow')"), 'fonte Barlow disponível em app/www'); ctx.close()
+        # 9) a tela "Sem internet" que vai dentro do APK (app/www): abre sozinha, com a logo, e tem o botão de tentar de novo
+        f = Fake(); ctx, pg, er = abrir(br, f, 'http://localhost:8766/app/www/index.html', plugin=False)
+        t('Sem internet' in textos(pg) and pg.is_visible('text=Tentar de novo'), 'app/www mostra a tela Sem internet')
+        t(pg.evaluate("document.querySelector('img').naturalWidth") > 0, 'logo carrega em app/www')
+        t(sorted(os.listdir(os.path.join(raiz, 'app', 'www'))) == ['icons', 'index.html'], 'app/www leva só a tela offline e a logo'); ctx.close()
+        # 10) configuração do Capacitor: abre o app direto do site
+        cfg = json.load(open(os.path.join(raiz, 'app', 'capacitor.config.json')))
+        t(cfg['server']['url'] == 'https://gestao.dtcarcentroautomotivo.com.br/app/' and cfg['server']['errorPath'] == 'index.html', 'Capacitor abre o app do site e usa a tela offline em caso de erro')
         br.close()
     print('OK: %d conferências' % ok)
 finally:

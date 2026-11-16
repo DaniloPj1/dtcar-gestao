@@ -42,7 +42,7 @@ export function Compras({ params = {} }) {
   if (!d) return html`<div class="pagina"><${Vazio}>Carregando as compras…</${Vazio}></div>`;
   const aFinalizar = d.pedidos.filter(p => p.situacao === "a_finalizar").length;
   return html`<div class="pagina cp-pagina">
-    <${Abas} abas=${[["pesquisar", "Pesquisar peça"], ["carrinho", "Carrinho" + (d.carrinho.length ? " (" + d.carrinho.length + ")" : "")], ["pedidos", "Pedidos" + (aFinalizar ? " (" + aFinalizar + " a finalizar)" : "")]]} ativa=${aba} onTroca=${trocar} />
+    <${Abas} abas=${[["pesquisar", "Pesquisar peça"], ["carrinho", "Carrinho" + (d.carrinho.length ? " (" + d.carrinho.length + ")" : "")], ["pedidos", "Pedidos aos fornecedores" + (aFinalizar ? " (" + aFinalizar + " a finalizar)" : "")]]} ativa=${aba} onTroca=${trocar} />
     ${aba === "pesquisar" ? html`<${Pesquisa} d=${d} recarregar=${carregar} irCarrinho=${() => trocar("carrinho")} />`
       : aba === "carrinho" ? html`<${Carrinho} d=${d} recarregar=${carregar} irPedidos=${() => trocar("pedidos")} irPesquisa=${() => trocar("pesquisar")} />`
       : html`<${Pedidos} d=${d} recarregar=${carregar} />`}

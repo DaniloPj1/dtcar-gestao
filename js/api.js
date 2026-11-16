@@ -331,7 +331,8 @@ function criarApiSupabase() {
         pedidos: {
           /** pedidos (os mais novos primeiro, até 300) com os itens */
           listar: () => v59(async () => { const ps = ok(await sb.from("compras_pedidos").select("*").order("numero", { ascending: false }).limit(300));
-            const its = ps.length ? await todos(() => sb.from("compras_pedido_itens").select("*").in("pedido_id", ps.map(p => p.id)).order("posicao").order("id")) : [];
+            // itens em lotes de 60 pedidos (como itensDasOrdens): a lista de ids vai na URL, que tem limite
+            const its = []; for (let i = 0; i < ps.length; i += 60) its.push(...await todos(() => sb.from("compras_pedido_itens").select("*").in("pedido_id", ps.slice(i, i + 60).map(p => p.id)).order("posicao").order("id")));
             return ps.map(p => ({ ...p, itens: its.filter(i => i.pedido_id === p.id) })); }),
           /** carrinho → um pedido por fornecedor (ids = itens escolhidos; vazio = o carrinho inteiro) */
           gerar: ids => v59(async () => ok(await sb.rpc("compras_gerar_pedidos", { p_itens: ids && ids.length ? ids : null }))),

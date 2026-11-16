@@ -67,6 +67,11 @@ do $$ declare p public.compras_precos; n int; begin
     on conflict (fornecedor_id, codigo_norm) do update set preco = excluded.preco returning * into p;
   select count(*) into n from public.compras_precos where codigo_norm = 'N1234';
   if n <> 1 or p.preco <> 279.90 then raise exception 'FALHOU 4b: upsert (% linhas, preço %)', n, p.preco; end if;
+  -- confirmar o mesmo preço renova a data (achado da revisão independente)
+  update public.compras_precos set consultado_em = '2020-01-01' where codigo_norm = 'N1234';
+  insert into public.compras_precos (fornecedor_id, codigo, preco) values ('00000000-0000-0000-0000-0000000000f1', 'N1234', 279.90)
+    on conflict (fornecedor_id, codigo_norm) do update set preco = excluded.preco returning * into p;
+  if p.consultado_em < now() - interval '1 minute' then raise exception 'FALHOU 4e: mesmo preço não renovou a data (%)', p.consultado_em; end if;
   insert into public.compras_precos (fornecedor_id, codigo, preco) values ('00000000-0000-0000-0000-0000000000f2', 'N1234', 301.00);
   begin insert into public.compras_precos (fornecedor_id, codigo, preco) values ('00000000-0000-0000-0000-0000000000f2', '--', 10); raise exception 'FALHOU 4c: aceitou código vazio';
   exception when check_violation then null; end;

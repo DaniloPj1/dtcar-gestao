@@ -97,11 +97,9 @@ begin
   new.prazo := btrim(coalesce(new.prazo, '')); new.obs := btrim(coalesce(new.obs, ''));
   if current_user = 'authenticated' then
     -- preço digitado na tela é sempre "manual", com a data de agora; "ao vivo" só o servidor grava (webservice do fornecedor)
-    new.origem := 'manual';
-    if tg_op = 'INSERT' or (new.preco, new.estoque, new.prazo) is distinct from (old.preco, old.estoque, old.prazo) or old.origem <> 'manual' then
-      new.consultado_em := now();
-      new.criado_por_nome := coalesce((select nome from public.perfis where id = auth.uid()), '');
-    else new.consultado_em := old.consultado_em; new.criado_por_nome := old.criado_por_nome; end if;
+    -- (a tela só grava quando a pessoa clica "Guardar preço": confirmar o MESMO preço hoje também renova a data)
+    new.origem := 'manual'; new.consultado_em := now();
+    new.criado_por_nome := coalesce((select nome from public.perfis where id = auth.uid()), '');
   end if;
   if tg_op = 'UPDATE' then new.criado_em := old.criado_em; end if;
   return new;

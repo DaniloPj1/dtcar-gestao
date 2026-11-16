@@ -29,7 +29,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - uses: android-actions/setup-android@v3
+      # O Android SDK já vem instalado no GitHub (ANDROID_HOME). Só aceita as licenças e garante a plataforma 34.
+      - name: Prepara o Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Monta a pasta www (telas, fontes, logo)
         run: python3 app/montar_www.py

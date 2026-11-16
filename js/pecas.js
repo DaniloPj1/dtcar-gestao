@@ -88,3 +88,61 @@ export function filtrarPecas(grupos, txt) {
   const serve = e => { const t = norm([e.peca.descricao, e.peca.codigo, e.peca.medidas, e.peca.grupo, e.peca.oem.join(" "), e.peca.conv.map(x => x.join(" ")).join(" ")].join(" ")); return q.every(x => t.includes(x)); };
   return grupos.map(g => ({ grupo: g.grupo, itens: g.itens.filter(serve) })).filter(g => g.itens.length);
 }
+
+/* ---------- A mesma peça de marcas diferentes numa linha só (pedido do Danilo em 15/11/2026) ----------
+ * Duas peças do mesmo grupo viram uma linha quando o catálogo diz que são equivalentes (uma cita o código da outra na conversão, ou as duas têm o
+ * mesmo código da montadora) e não mudam posição (dianteira/traseira, lado, superior/inferior). Nunca junta duas peças da mesma marca: isso é modelo
+ * diferente, não só marca diferente. A linha mostra a peça que está no estoque; sem estoque, a mais completa (código da montadora, foto, medidas).
+ * As outras viram conversão. estoque = [{ ref, descricao, qtd }] (produtos ativos com saldo; ref = código/referência cadastrado). */
+const nc = t => String(t || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+const nm = t => { const m = String(t || "").toLowerCase().replace(/[^a-z0-9]/g, ""); return m.startsWith("hipper") ? "hipper" : m; };
+const mesmaMarca = (a, b) => { a = nm(a); b = nm(b); return a === b || (a.length > 3 && b.startsWith(a)) || (b.length > 3 && a.startsWith(b)); };
+const posicao = d => { const t = String(d || "").toUpperCase(); return { eixo: /DIANTEIR/.test(t) ? "D" : /TRASEIR/.test(t) ? "T" : "", nivel: /SUPERIOR/.test(t) ? "S" : /INFERIOR/.test(t) ? "I" : "", lado: /\bLD\/LE\b|\bLE\/LD\b|AMBOS/.test(t) ? "" : /\bLD\b|DIREIT/.test(t) ? "LD" : /\bLE\b|ESQUERD/.test(t) ? "LE" : "" }; };
+const compativel = (a, b) => ["eixo", "nivel", "lado"].every(k => !a[k] || !b[k] || a[k] === b[k]);
+const ORDEM_MARCA = ["Nakata", "Fremax", "Fras-le", "Controil", "Lonaflex", "Axios", "Perfect", "Hipper Freios", "Cofap"];
+const completa = p => (p.oem.length ? 4 : 0) + (p.foto ? 2 : 0) + (p.medidas ? 1 : 0) + (p.conv.length ? 1 : 0) - ORDEM_MARCA.indexOf(p.marca) / 20;
+const codigosDe = p => [p.codigo, ...p.oem, ...p.conv.map(c => c[1])].map(nc).filter(x => x.length >= 4);
+export function agruparEquivalentes(grupos, estoque = []) {
+  const emEstoque = new Map(); for (const x of estoque) { const k = nc(x.ref); if (k.length >= 4 && !emEstoque.has(k)) emEstoque.set(k, x); }
+  return grupos.map(g => {
+    const its = g.itens, pos = its.map(e => posicao(e.peca.descricao)), pai = its.map((_, i) => i);
+    const raiz = i => { while (pai[i] !== i) { pai[i] = pai[pai[i]]; i = pai[i]; } return i; };
+    const membrosDe = r => its.map((_, i) => i).filter(i => raiz(i) === r);
+    // via = a peça que cita as duas como conversão: ela pode ter mais de uma peça da mesma marca como conversão (ex.: dois códigos Cofap para o mesmo amortecedor Nakata)
+    const citados = new Map();
+    const ligar = (i, j, via = null) => {
+      const a = raiz(i), b = raiz(j); if (a === b) return;
+      const ma = membrosDe(a), mb = membrosDe(b);
+      const daVia = k => via !== null && (k === via || (citados.get(via) || new Set()).has(k));
+      for (const x of ma) for (const y of mb) if (mesmaMarca(its[x].peca.marca, its[y].peca.marca) && !(daVia(x) && daVia(y))) return;
+      pai[b] = a;
+    };
+    const porCodigo = new Map(); its.forEach((e, i) => { const k = nc(e.peca.codigo); if (!porCodigo.has(k)) porCodigo.set(k, []); porCodigo.get(k).push(i); });
+    // 1) a conversão de uma cita o código da outra
+    its.forEach((e, i) => { for (const [marca, cod] of e.peca.conv) for (const j of porCodigo.get(nc(cod)) || []) if (j !== i && mesmaMarca(marca, its[j].peca.marca) && compativel(pos[i], pos[j])) { if (!citados.has(i)) citados.set(i, new Set()); citados.get(i).add(j); } });
+    for (const [i, js] of citados) for (const j of js) ligar(i, j, i);
+    // 2) o mesmo código da montadora (só com posição conhecida nas duas)
+    const porOem = new Map(); its.forEach((e, i) => e.peca.oem.forEach(o => { const k = nc(o); if (k.length >= 5) { if (!porOem.has(k)) porOem.set(k, []); porOem.get(k).push(i); } }));
+    for (const ix of porOem.values()) for (let a = 0; a < ix.length; a++) for (let b = a + 1; b < ix.length; b++) if (pos[ix[a]].eixo && pos[ix[b]].eixo && compativel(pos[ix[a]], pos[ix[b]])) ligar(ix[a], ix[b]);
+    const grupo = new Map(); its.forEach((e, i) => { const r = raiz(i); if (!grupo.has(r)) grupo.set(r, []); grupo.get(r).push(e); });
+    const itens = [...grupo.values()].map(membros => {
+      const casa = m => codigosDe(m.peca).map(k => emEstoque.get(k)).find(Boolean);
+      const noEstoque = membros.find(m => emEstoque.has(nc(m.peca.codigo))) || membros.find(m => m.peca.oem.some(o => emEstoque.has(nc(o)))) || membros.find(casa);
+      const escolhida = noEstoque || [...membros].sort((a, b) => completa(b.peca) - completa(a.peca))[0];
+      const outros = membros.filter(m => m !== escolhida).map(m => m.peca);
+      const aplicacoes = [...new Set(membros.flatMap(m => m.aplicacoes))];
+      // estoque: qualquer código da linha (da peça escolhida ou das equivalentes) que exista no cadastro
+      const est = membros.map(casa).find(Boolean) || null;
+      return { ...escolhida, aplicacoes, alternativas: outros, estoque: est, pontos: Math.max(...membros.map(m => m.pontos)) };
+    });
+    itens.sort((a, b) => (b.estoque ? 1 : 0) - (a.estoque ? 1 : 0) || b.pontos - a.pontos || a.peca.descricao.localeCompare(b.peca.descricao, "pt-BR") || a.peca.codigo.localeCompare(b.peca.codigo));
+    return { grupo: g.grupo, itens };
+  });
+}
+/** Conversão da linha: a da peça escolhida mais as equivalentes (marca e código delas) */
+export function conversaoDoItem(e) {
+  const out = conversaoDaPeca(e.peca), acha = marca => { let x = out.find(o => mesmaMarca(o.marca, marca) || o.marca === marca); if (!x) { x = { marca, codigos: [] }; out.push(x); } return x; };
+  const add = (marca, cod) => { if (!cod || mesmaMarca(marca, e.peca.marca)) return; const x = acha(marca); if (!x.codigos.includes(cod)) x.codigos.push(cod); };
+  for (const a of e.alternativas || []) { add(a.marca, a.codigo); for (const o of a.oem) add("Montadora (original)", o); for (const [m, c] of a.conv) add(m, c); }
+  return out;
+}

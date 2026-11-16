@@ -48,6 +48,23 @@ r = pecasDoVeiculo(cat, { marca: "CHEVROLET", modelo: "MERIVA", ano: "2008" });
 chk("Nakata completo: Meriva (o PDF não traz montadora; ela vem dos outros catálogos) tem peças", r.grupos.flatMap(g => g.itens).some(e => e.peca.marca === "Nakata"), r.total);
 r = pecasDoVeiculo(cat, { marca: "FORD", modelo: "GOL", ano: "2015" });
 chk("Nakata completo: Gol não aparece para marca errada (Ford)", r.grupos.flatMap(g => g.itens).every(e => e.peca.marca !== "Nakata"), r.total);
+// ---- mesma peça de marcas diferentes numa linha só ----
+import { agruparEquivalentes, conversaoDoItem } from "../js/pecas.js";
+const uno = { marca: "FIAT", modelo: "UNO MILLE FIRE FLEX", ano: "2006", motor: "1.0" };
+r = pecasDoVeiculo(cat, uno); const antes = r.grupos.find(g => g.grupo === "Amortecedor").itens;
+let gr = agruparEquivalentes(r.grupos); const dep = gr.find(g => g.grupo === "Amortecedor").itens;
+const todos = dep.flatMap(e => [e.peca, ...e.alternativas]);
+chk("agrupar: o Uno tem menos linhas de amortecedor e nenhuma peça some", dep.length < antes.length && todos.length === antes.length, antes.length + " -> " + dep.length);
+const l31160 = dep.find(e => [e.peca, ...e.alternativas].some(p => p.codigo === "SE 31160"));
+chk("agrupar: Cofap MP27536 entra na linha do Nakata SE 31160 e o Monroe 38295 aparece na conversão", l31160 && [l31160.peca, ...l31160.alternativas].some(p => p.codigo === "MP27536") && conversaoDoItem(l31160).some(c => c.codigos.includes("38295")), l31160 && l31160.peca.codigo);
+const l31142 = dep.find(e => [e.peca, ...e.alternativas].some(p => p.codigo === "SE 31142"));
+chk("agrupar: SE 31142 e SE 31160 (os dois Nakata, modelos diferentes) continuam em linhas separadas", l31142 && l31142 !== l31160);
+chk("agrupar: a linha nunca traz duas peças da marca da escolhida (isso seria modelo diferente)", dep.every(e => e.alternativas.every(p => p.marca !== e.peca.marca)));
+chk("agrupar: dianteiro e traseiro não se misturam", dep.every(e => { const t = [e.peca, ...e.alternativas].map(p => /TRASEIR/.test(p.descricao) ? "T" : /DIANTEIR/.test(p.descricao) ? "D" : ""); return new Set(t.filter(Boolean)).size <= 1; }));
+gr = agruparEquivalentes(r.grupos, [{ id: "p1", ref: "MP27536", descricao: "AMORTECEDOR DIANT. COFAP", qtd: 2 }]);
+const es = gr.find(g => g.grupo === "Amortecedor").itens;
+chk("estoque: a linha com a peça do estoque vai para o topo, mostra o estoque e a escolhida é a do estoque", es[0].estoque && es[0].estoque.id === "p1" && es[0].peca.codigo === "MP27536" && es[0].alternativas.some(p => p.codigo === "SE 31160"), es[0].peca.codigo);
+chk("estoque: sem cadastro nenhuma linha traz estoque", dep.every(e => !e.estoque));
 // Fotos (auditoria de 15/11/2026): arquivo existe e nenhuma imagem é repetida em 3 ou mais códigos do mesmo catálogo
 import { existsSync } from "node:fs";
 const porFoto = {}; let semArquivo = 0;

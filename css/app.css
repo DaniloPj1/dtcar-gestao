@@ -684,7 +684,7 @@ body{font-size:15px}
 @media (max-width:640px){.pv-grande{grid-template-columns:minmax(0,1fr)}.pv-fotona{max-height:38vh}}
 .pv-semfoto{display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;background:var(--surface-2)}
 .pv-meio{display:flex;flex-direction:column;gap:2px;min-width:0}.pv-meio strong{overflow-wrap:anywhere}
-.pv-med{font-weight:600;font-size:13.5px}.pv-apl,.pv-cod{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
+.pv-resumo{font-size:13px;color:#16191d;overflow-wrap:anywhere}.pv-resumo b{color:#174f94}.pv-estoque{font-size:13px;font-weight:600;color:#174f94;border-left:3px solid #174f94;padding-left:6px}.pv-med{font-weight:600;font-size:13.5px}.pv-apl,.pv-cod{color:var(--muted);font-size:13px;overflow-wrap:anywhere}
 .pv-botoes{display:flex;flex-direction:column;gap:6px}
 .pv-conv{margin-top:6px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);padding:6px 10px;display:flex;flex-direction:column;gap:3px;font-size:13.5px}
 .pv-conv div{display:flex;justify-content:space-between;gap:12px}.pv-conv b{text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}

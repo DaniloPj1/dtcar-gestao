@@ -14,7 +14,7 @@
   var CH_NOME = 'dtcar-app-nome';
   var CH_ABERTO = 'dtcar-app-aberto';     // sessionStorage: a digital já foi lida desde que o app foi aberto
   var CH_MODO = 'dtcar-modo-app';         // sessionStorage: o sistema está aberto de dentro do app (js/modoapp.js); as telas marcam ao abrir uma O.S.
-  var PAPEIS_OK = { admin: 'Administrador', consultor: 'Consultor' };
+  var PAPEIS_OK = { admin: 'Administrador', consultor: 'Consultor', mecanico: 'Mecânico' };
 
   var sb = null;
   var E = { usuario: null, tela: 'iniciando', erro: '', ocupado: false, quadro: '' };
@@ -94,20 +94,25 @@
     }, function () { E.ocupado = false; E.erro = 'Não consegui entrar. Confira a internet.'; desenhar(); });
   }
 
-  // confere o papel no cadastro de acessos; só administrador e consultor ativos ficam
+  // confere o acesso: cadastro de acessos (perfis) + o que o administrador liberou para o app em Sistema › Equipe (config.appAcessos, js/appacesso.js)
   function aposLogin(user, origem) {
-    return sb.from('perfis').select('id,nome,papel,ativo').eq('id', user.id).maybeSingle().then(function (r) {
+    return Promise.all([
+      sb.from('perfis').select('id,nome,papel,ativo').eq('id', user.id).maybeSingle(),
+      sb.from('config').select('dados').eq('id', 1).maybeSingle(),
+      import('../js/appacesso.js')
+    ]).then(function (rs) {
+      var r = rs[0], cfg = (rs[1] && rs[1].data && rs[1].data.dados) || {}, acesso = rs[2].acessoApp(cfg, r.data);
       if (r.error) { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); return; }
       var pf = r.data;
-      if (!pf || pf.ativo === false || !PAPEIS_OK[pf.papel]) {
+      if (!pf || pf.ativo === false || !acesso.entra) {
         sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
         desligarDigital(); try { window.sessionStorage.removeItem(CH_ABERTO); } catch (e) { /* nada */ }
         E.ocupado = false; E.tela = 'login'; E.usuario = null;
-        E.erro = 'Este app é para o administrador e o consultor.'; desenhar(); return;
+        E.erro = pf && pf.ativo !== false && pf.papel !== 'pendente' ? 'Este app não está liberado para o seu login. Peça ao administrador (Sistema › Equipe).' : 'Este app é para a equipe da DTCar com acesso liberado pelo administrador.'; desenhar(); return;
       }
       var nome = pf.nome || user.email, primeiro = String(nome).split(' ')[0];
       lsSet(CH_EMAIL, user.email); lsSet(CH_NOME, primeiro);
-      E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email };
+      E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email, telas: acesso.telas };
       if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
       if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';

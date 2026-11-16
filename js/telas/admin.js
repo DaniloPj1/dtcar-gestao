@@ -1,5 +1,6 @@
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
+import { acessoApp, TELAS_APP } from "../appacesso.js";
 import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
@@ -43,14 +44,29 @@ export function Mais() {
 }
 
 /* ---------------- Equipe ---------------- */
+/** App do celular por pessoa (cfg.appAcessos): entra ou não e quais telas vê. Grava na hora na tabela config. */
+function AcessoApp({ p, cfg, salvar }) {
+  const a = acessoApp(cfg, p), ligado = a.entra;
+  const gravar = (entra, telas) => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { entra, telas } } });
+  const alternarTela = id => gravar(true, a.telas.includes(id) ? a.telas.filter(x => x !== id) : TELAS_APP.map(t => t[0]).filter(x => x === id || a.telas.includes(x)));
+  return html`<div class="app-acesso" data-acesso=${p.id}>
+    <div class="chave-linha"><span><b>App do celular</b>${a.padrao ? html`<span class="sub"> · padrão do papel</span>` : null}</span>
+      <button type="button" role="switch" aria-checked=${ligado ? "true" : "false"} aria-label=${"Entra no app: " + p.nome} class=${"chave" + (ligado ? " on" : "")} onClick=${() => gravar(!ligado, ligado ? a.telas : TELAS_APP.map(t => t[0]))}><i></i></button></div>
+    ${ligado ? html`<div class="chips">${TELAS_APP.map(([id, nome]) => html`<button type="button" key=${id} class="chip-btn" aria-pressed=${a.telas.includes(id) ? "true" : "false"} onClick=${() => alternarTela(id)}>${nome}</button>`)}</div>
+      ${!a.telas.length ? html`<span class="dica">Nenhuma tela marcada: a pessoa entra e vê só o Início e a Ajuda.</span>` : null}` : html`<span class="dica">Não entra no app do celular.</span>`}
+  </div>`;
+}
+
 export function Equipe() {
-  const { dados, perfil, avisar, recarregar } = useApp();
+  const { dados, perfil, cfg, avisar, recarregar } = useApp();
+  const salvarAcesso = async c => { try { await api.salvarConfig(c); await recarregar(["config"]); avisar("Acesso ao app atualizado. Vale na próxima vez que a pessoa abrir o app."); } catch (e) { avisar(e.message, true); } };
   const pendentes = dados.perfis.filter(p => p.papel === "pendente");
   const mudar = async (p, patch) => { try { await api.salvarPerfil(p.id, patch); avisar("Acesso atualizado."); recarregar(["perfis"]); } catch (e) { avisar(e.message, true); } };
   const linha = p => html`<div class="linha" key=${p.id}><span class="meio"><strong>${p.nome}${p.id === perfil.id ? " (você)" : ""}</strong><span>${p.email}${p.ativo === false ? " · desativado" : ""}</span></span>
     <select class="inp inp-curto" aria-label=${"Papel de " + p.nome} value=${p.papel} disabled=${p.id === perfil.id} onChange=${e => mudar(p, { papel: e.target.value })}>
       ${Object.entries(PAPEIS).map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
-    ${p.id !== perfil.id ? html`<button type="button" class="btn btn-sm" onClick=${() => mudar(p, { ativo: p.ativo === false })}>${p.ativo === false ? "Reativar" : "Desativar"}</button>` : null}</div>`;
+    ${p.id !== perfil.id ? html`<button type="button" class="btn btn-sm" onClick=${() => mudar(p, { ativo: p.ativo === false })}>${p.ativo === false ? "Reativar" : "Desativar"}</button>` : null}
+    ${p.papel !== "pendente" && p.ativo !== false ? html`<${AcessoApp} p=${p} cfg=${cfg} salvar=${salvarAcesso} />` : null}</div>`;
   return html`<div class="pagina">
     <div class="info">Para incluir alguém: peça para a pessoa abrir este site, tocar em “Criar acesso” e confirmar o e-mail. Ela aparece aqui como “Aguardando liberação”; escolha o papel para liberar.</div>
     ${pendentes.length ? html`<section class="card alerta"><h3>Aguardando liberação (${pendentes.length})</h3><div class="lista">${pendentes.map(linha)}</div></section>` : null}
@@ -58,7 +74,8 @@ export function Equipe() {
     <section class="card"><h3>O que cada papel faz</h3><ul class="res-lista">
       <li><b>Administrador</b>: tudo, inclusive ajustes, catálogo, equipe e exclusões.</li>
       <li><b>Consultor</b>: entrada, orçamento, aprovação, entrega, cadastros e valores.</li>
-      <li><b>Mecânico</b>: entrada e execução (marca serviços feitos, fotos e observações). Não vê valores na tela.</li></ul></section>
+      <li><b>Mecânico</b>: entrada e execução (marca serviços feitos, fotos e observações). Não vê valores na tela.</li></ul>
+      <p class="dica"><b>App do celular:</b> em cada pessoa, ligue “App do celular” e marque as telas que ela vê. Sem mexer, administrador e consultor entram com todas as telas e o mecânico não entra. No app, O.S. que já existe só é alterada no login do administrador.</p></section>
   </div>`;
 }
 

@@ -16,6 +16,7 @@ import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conve
 import { copiaClienteDig, erroClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D } from "../js/appmecanico.js";
+import { acessoApp } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
 
 const SISTEMA = "../index.html?app=1";   // telas do sistema abertas de dentro do app (modo app: sem menu do PC, "‹ Início")
@@ -64,7 +65,8 @@ function Cabecalho() {
     <button type="button" class="sair" onClick=${sair}><${Ic} n="exit" t=${22} /> Sair</button></div></header>`;
 }
 function Abas({ ativa }) {
-  return html`<nav class="abas" aria-label="Telas">${TELAS.map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span></a>`)}</nav>`;
+  const { telas } = useApp();
+  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span></a>`)}</nav>`;
 }
 function Titulo({ tela, ajuda }) {
   const t = TELAS.find(x => x.r === tela);
@@ -149,10 +151,10 @@ function ModeloAMao({ valor, onMuda }) {
 
 /* ---------------- INÍCIO ---------------- */
 function Inicio() {
-  const { perfil } = useApp(); const { placa, buscar, limpar } = usarPlaca();
+  const { perfil, telas } = useApp(); const { placa, buscar, limpar } = usarPlaca();
   const [t, setT] = useState("");
   const [ajuda, setAjuda] = useState(false);
-  const papel = { admin: "Administrador", consultor: "Consultor" }[perfil.papel] || "";
+  const papel = { admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel] || "";
   return html`<div class="app">
     <header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /><${SairBotao} /></div>
       <div class="cab-busca"><div class="rotulo">Placa<${Ic} n="down" t=${16} /></div>
@@ -164,7 +166,8 @@ function Inicio() {
     <main class="folha inicio">
       ${placa.veic ? html`<${Veiculo} v=${placa.veic} />` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
-      ${TELAS.map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span></button>`)}
+      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span></button>`)}
+      ${!telas.length ? html`<div class="vazio">Nenhuma tela liberada para o seu login. Peça ao administrador (Sistema › Equipe).</div>` : null}
     </main>
     <${Rodape} tela="inicio" />
     ${ajuda ? html`<${Quadro} titulo="Como usar o Início" onFechar=${() => setAjuda(false)}>
@@ -555,13 +558,14 @@ function OSConsulta() {
 
 /* ---------------- AJUDA (acesso, digital, versão, sair) ---------------- */
 function Ajuda() {
-  const { perfil, sair, nativo } = useApp();
+  const { perfil, sair, nativo, telas } = useApp();
   const [disp, setDisp] = useState(false), [ligada, setLigada] = useState(nativo.digital.ligada());
   useEffect(() => { nativo.digital.disponivel().then(setDisp); }, []);
   const alternar = async () => { if (ligada) { nativo.digital.desligar(); setLigada(false); } else { const ok = await nativo.digital.ativar(); setLigada(!!ok); } };
   return html`<div class="app"><${Cabecalho} /><main class="folha">
     <div class="titulo"><div class="meio"><${Ic} n="help" t=${22} sw=${1.9} /><b>AJUDA</b></div></div>
-    <${Cartao} titulo="Seu acesso"><div class="linha-valor"><span>Nome</span><b>${perfil.nome}</b></div><div class="linha-valor"><span>E-mail</span><b>${perfil.email || ""}</b></div><div class="linha-valor"><span>Acesso</span><b>${{ admin: "Administrador", consultor: "Consultor" }[perfil.papel] || perfil.papel}</b></div>
+    <${Cartao} titulo="Seu acesso"><div class="linha-valor"><span>Nome</span><b>${perfil.nome}</b></div><div class="linha-valor"><span>E-mail</span><b>${perfil.email || ""}</b></div><div class="linha-valor"><span>Acesso</span><b>${{ admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel] || perfil.papel}</b></div>
+      <div class="linha-valor"><span>Telas liberadas</span><b>${telas.length ? TELAS.filter(t => telas.includes(t.r)).map(t => t.aba).join(", ") : "nenhuma"}</b></div>
       ${disp ? html`<div class="chave" id="bloco-digital"><span>Entrar com a digital</span><button type="button" role="switch" aria-label="Entrar com a digital" aria-checked=${ligada ? "true" : "false"} data-acao="chave-digital" onClick=${alternar}></button></div>` : null}
       <div class="nota">Neste app, alterar uma O.S. que já existe só é possível no login do administrador.</div></${Cartao}>
     <${Cartao} titulo="Como usar"><div class="nota">Cada tela tem a própria busca de placa (placa do cadastro não custa nada). Óleo e Peças mostram o catálogo com o que há no estoque. + Orçamento e Agendar gravam no sistema na hora. O botão Voltar do celular volta ao Início; no Início, sai do app.</div></${Cartao}>
@@ -589,8 +593,10 @@ function App({ usuario, nativo }) {
     } catch (e) { setDados(d => ({ ...d, carregado: true, erro: "Não deu para carregar os dados do sistema (" + (e.message || "sem internet") + "). As buscas podem ficar incompletas." })); }
   };
   useEffect(() => { carregar(); }, []);
-  const ctx = { perfil: usuario, dados, cfg, avisar, recarregar: carregar, sair: nativo.sair, nativo };
-  const Tela = ROTAS[rota] || Inicio;
+  // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
+  const telas = dados.carregado && !dados.erro ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
+  const ctx = { perfil: usuario, dados, cfg, telas, avisar, recarregar: carregar, sair: nativo.sair, nativo };
+  const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
     ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}
     <${Tela} key=${rota} />

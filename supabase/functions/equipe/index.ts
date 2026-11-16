@@ -32,6 +32,7 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
   const acao = String(corpo.acao || "");
   if (acao === "criar") {
     const nome = String(corpo.nome ?? "").trim().replace(/\s+/g, " "), email = String(corpo.email ?? "").trim().toLowerCase(), senha = String(corpo.senha ?? ""), papel = String(corpo.papel ?? "");
+    if (nome.length > 80) throw new ErroUso("O nome pode ter no máximo 80 caracteres.");
     if (nome.length < 2) throw new ErroUso("Informe o nome do colaborador.");
     if (!emailValido(email)) throw new ErroUso("Informe um e-mail válido (é o login da pessoa).");
     if (!senhaValida(senha)) throw new ErroUso("A senha precisa ter 8 ou mais caracteres, com letras e números.");
@@ -71,8 +72,10 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
         return error ? { erro: error.message } : { id: data.user?.id };
       },
       ajustarPerfil: async (id, nome, papel, email) => {
-        // o gatilho ao_criar_usuario já criou a linha como "pendente"; se por acaso não criou, cria aqui
-        const r = await admin.from("perfis").update({ nome, papel, ativo: true }).eq("id", id).select("id");
+        // o gatilho ao_criar_usuario já criou a linha como "pendente"; se por acaso não criou, cria aqui.
+        // O update vai com o login do administrador (ctx.supabase), não com a chave de servidor: o gatilho
+        // protege_papel só deixa trocar o papel quando e_admin() é verdadeiro, e isso depende do JWT de quem chama.
+        const r = await ctx.supabase.from("perfis").update({ nome, papel, ativo: true }).eq("id", id).select("id");
         if (r.error) throw new Error("Acesso criado, mas não deu para gravar o papel: " + r.error.message);
         if (!r.data || !r.data.length) { const r2 = await admin.from("perfis").insert({ id, nome, email, papel, ativo: true }); if (r2.error) throw new Error("Acesso criado, mas não deu para gravar o perfil: " + r2.error.message); }
       },

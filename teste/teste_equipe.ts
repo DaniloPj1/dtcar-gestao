@@ -29,6 +29,7 @@ const erro = async (p: Promise<unknown>) => { try { await p; return ""; } catch 
 
 confere("não administrador é barrado", /USO:.*administrador/.test(await erro(executar({ acao: "criar", nome: "X", email: "x@x.com", senha: "abc12345", papel: "mecanico" }, deps(false)))));
 confere("nome em branco", /USO:.*nome/.test(await erro(executar({ acao: "criar", nome: " ", email: "x@x.com", senha: "abc12345", papel: "mecanico" }, deps(true)))));
+confere("nome comprido demais (81) é recusado", /USO:.*80/.test(await erro(executar({ acao: "criar", nome: "A".repeat(81), email: "x@x.com", senha: "abc12345", papel: "mecanico" }, deps(true)))));
 confere("e-mail inválido", /USO:.*e-mail/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "carlos", senha: "abc12345", papel: "mecanico" }, deps(true)))));
 confere("senha fraca", /USO:.*8 ou mais/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "c@x.com", senha: "123", papel: "mecanico" }, deps(true)))));
 confere("papel fora da lista", /USO:.*papel/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "c@x.com", senha: "abc12345", papel: "dono" }, deps(true)))));

@@ -152,7 +152,18 @@ def miniatura(xref):
     im.thumbnail((340, 340), Image.LANCZOS)
     b = io.BytesIO(); im.save(b, 'JPEG', quality=58, optimize=True, progressive=True)
     return b.getvalue()
-com_foto = 0
+com_foto = 0; descartadas = 0
+def formato_ok(j, xref):
+    # relação altura/largura da parte não branca: disco plano ≤ 0,72; tambor 0,78 a 0,85; fora disso é dúvida (não entra)
+    import numpy as np
+    im = Image.open(io.BytesIO(d.extract_image(xref)['image'])).convert('L').resize((200, 200))
+    ys, xs = np.where(np.array(im) < 235)
+    if not len(ys): return False
+    a = (ys.max() - ys.min() + 1) / (xs.max() - xs.min() + 1)
+    t = j['descricao'].lower()
+    if t.startswith('disco'): return a <= 0.72
+    if t.startswith('tambor'): return 0.78 <= a <= 0.85
+    return False
 for i in range(IMG, ESP):
     p = d[i]
     legendas = []
@@ -161,20 +172,27 @@ for i in range(IMG, ESP):
         for l in b['lines']:
             t = cod(''.join(s['text'] for s in l['spans']))
             if t and l['bbox'][1] > 90 and l['bbox'][1] < 800 and not re.fullmatch(r'\d{4}', t): legendas.append((t, l['bbox'][0], l['bbox'][1]))
+    # Pareamento foto x legenda: no PDF as legendas às vezes não batem com as imagens (Fremax BD9680 saía com foto de disco).
+    # Só entra foto de página "limpa": legenda sem repetição e, nos freios, o formato da imagem combina com o tipo da peça.
+    pares = []
     for im in p.get_image_info(xrefs=True):
         x0, y0, x1, y1 = im['bbox']
         if y1 - y0 > 200 or x1 - x0 > 300 or not im['xref']: continue
         cand = [(y - y1, t) for t, x, y in legendas if y >= y1 - 2 and abs(x - x0) < 40 and t in pecas]
         if not cand: continue
-        t = min(cand)[1]
+        pares.append((min(cand)[1], im['xref']))
+    codigos = [t for t, _ in pares]
+    if len(set(codigos)) != len(codigos): descartadas += len(pares); continue
+    if MARCA == 'Fremax' and not all(formato_ok(pecas[t], x) for t, x in pares): descartadas += len(pares); continue
+    for t, xref in pares:
         j = pecas[t]
         if j['foto']: continue
-        dados = miniatura(im['xref']); h = hashlib.sha1(dados).hexdigest()[:16]
+        dados = miniatura(xref); h = hashlib.sha1(dados).hexdigest()[:16]
         if h not in vistos:
             open(os.path.join(pasta_fotos, h + '.jpg'), 'wb').write(dados); vistos[h] = 1
         j['foto'] = h; com_foto += 1
     if (i - IMG) % 100 == 0: print('fotos pág', i, com_foto, flush=True)
-print(com_foto, 'peças com foto;', len(vistos), 'arquivos', flush=True)
+print(descartadas, 'fotos descartadas por legenda duvidosa;', com_foto, 'peças com foto;', len(vistos), 'arquivos', flush=True)
 
 # ---------- especificações ----------
 SCOLS = [54.0, 171.0, 360.0, 541.0]

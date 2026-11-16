@@ -65,4 +65,10 @@ gr = agruparEquivalentes(r.grupos, [{ id: "p1", ref: "MP27536", descricao: "AMOR
 const es = gr.find(g => g.grupo === "Amortecedor").itens;
 chk("estoque: a linha com a peça do estoque vai para o topo, mostra o estoque e a escolhida é a do estoque", es[0].estoque && es[0].estoque.id === "p1" && es[0].peca.codigo === "MP27536" && es[0].alternativas.some(p => p.codigo === "SE 31160"), es[0].peca.codigo);
 chk("estoque: sem cadastro nenhuma linha traz estoque", dep.every(e => !e.estoque));
+// Fotos (auditoria de 15/11/2026): arquivo existe e nenhuma imagem é repetida em 3 ou mais códigos do mesmo catálogo
+import { existsSync } from "node:fs";
+const porFoto = {}; let semArquivo = 0;
+for (const p of dados.pecas) { if (!p[5]) continue; const pasta = dados.catalogos[p[0]][2]; if (!existsSync(new URL("../catalogo/fotos/" + pasta + "/" + p[5] + ".jpg", import.meta.url))) semArquivo++; (porFoto[pasta + "/" + p[5]] ||= []).push(p[1]); }
+chk("fotos: todo arquivo de foto existe", semArquivo === 0, semArquivo);
+chk("fotos: nenhuma imagem repetida em 3 ou mais códigos", Object.values(porFoto).every(v => v.length < 3), Object.values(porFoto).filter(v => v.length >= 3).slice(0, 3));
 console.log(ok + " ok" + (falhas ? ", " + falhas + " FALHAS" : "")); process.exit(falhas ? 1 : 0);

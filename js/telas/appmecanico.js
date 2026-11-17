@@ -7,7 +7,7 @@ import { useApp, Campo, Texto, Seg, Modal } from "../ui.js";
 import { SISTEMAS_PADRAO, ICONES, ICONE_D, TIPOS, pecasDoSistema, novoId } from "../appmecanico.js";
 
 const Icone = ({ nome, tam = 28 }) => html`<svg aria-hidden="true" width=${tam} height=${tam} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d=${ICONE_D[nome] || ICONE_D.chave}></path></svg>`;
-const ARQUIVO_APP = "app/download/DTCar-app.apk", VERSAO_APP = "1.3.0"; // troque junto com o arquivo quando sair uma versão nova
+const ARQUIVO_APP = "app/download/DTCar-app.apk", VERSAO_APP = "1.4.0"; // troque junto com o arquivo quando sair uma versão nova
 const POS = [["Nenhuma", "none"], ["Diant. | Tras. | Os 2", "chips"], ["Minhas opções", "opcoes"]];
 const lista = t => String(t || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
 const descPos = p => p.pm === "chips" ? "Diant. | Tras. | Os 2" : p.pm === "chips2" ? "Dianteira | Traseira | As 2" : Array.isArray(p.pm) ? p.pm.join(" | ") + " (pode marcar mais de uma)" : "";

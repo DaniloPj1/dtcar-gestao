@@ -1585,17 +1585,39 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cot-principal{display:flex;flex-direction:column;gap:14px;min-width:0}
 .cot-busca{display:flex;flex-direction:column;gap:10px}
 .cot-busca .cp-campos{align-items:flex-end}.cot-consultar{height:42px;white-space:nowrap}
-.cot-tabela{padding:0;overflow:hidden}
-.cot-cab,.cot-linha{display:grid;grid-template-columns:minmax(140px,1.4fr) minmax(100px,1fr) 100px 90px 70px minmax(130px,1.2fr) 108px;gap:8px 10px;align-items:center;padding:12px 14px}
-.cot-cab{background:#f5f6f8;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
-.cot-linha{border-top:1px solid var(--line);font-size:15px}
-.cot-menor{background:#f3f7fc}
-.cot-forn{display:flex;flex-direction:column;gap:2px}.cot-forn small{color:var(--muted);font-size:12px}.cot-forn .pill{align-self:flex-start}
-.cot-preco b{font-size:18px}.cot-ori{font-size:13px;color:var(--muted)}.cot-acao{text-align:right}
-.cot-sem .cot-resto{grid-column:2 / -1;color:var(--muted);font-size:14px}
-.cot-rodape{padding:8px 16px 12px;margin:0}
+.cot-resultado{padding:0;overflow:hidden}
+.cot-topo{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px;background:#f5f6f8;border-bottom:1px solid var(--line)}
+.cot-filtros{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.cot-filtros .inp{height:38px;padding:0 10px;font-size:14px;width:auto;max-width:230px}
+.cot-visao button{padding:6px 14px}
+/* cards: faixa e nome na cor do fornecedor, foto, peça, preço, estoque e Adicionar */
+.cot-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:14px;padding:14px 16px}
+.cot-cards.cot-t-p{grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}.cot-t-p .cot-card-foto{height:90px}.cot-t-p .cot-card-corpo strong{font-size:13px}.cot-t-p .cot-card-preco{font-size:17px}
+.cot-cards.cot-t-g{grid-template-columns:repeat(auto-fill,minmax(300px,1fr))}.cot-t-g .cot-card-foto{height:170px}.cot-t-g .cot-card-corpo strong{font-size:16px}
+.cot-card-est{color:#1e8e3e;font-weight:500;font-size:13px}
+.cot-card{display:flex;flex-direction:column;gap:8px;border:1px solid var(--line);border-top:4px solid var(--forn,#174f94);border-radius:8px;padding:12px;background:#fff;min-width:0}
+.cot-card.cot-menor{box-shadow:0 0 0 2px var(--forn,#174f94) inset;border-top-width:4px}
+.cot-card-forn{display:flex;justify-content:space-between;align-items:center;gap:6px;color:var(--forn,#174f94);font-size:13px;text-transform:uppercase;letter-spacing:.3px}
+.cot-card-foto{position:relative;height:120px;border-radius:6px;background:#f3f4f6;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.cot-card-foto img{max-width:100%;max-height:100%;object-fit:contain}.cot-card-foto .cot-sem-foto{display:none;color:var(--muted);font-size:12px}
+.cot-card-foto:not(:has(img)) .cot-sem-foto,.cot-card-foto.sem .cot-sem-foto{display:block}.cot-card-foto.sem img{display:none}
+.cot-card-corpo{display:flex;flex-direction:column;gap:3px;min-width:0}.cot-card-corpo strong{font-size:15px;line-height:1.25;overflow-wrap:anywhere}
+.cot-card-cod{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.cot-card-preco{font-size:20px;margin-top:2px}
+.cot-card-ori{color:var(--muted);font-size:12px}
+.cot-card .btn{margin-top:auto;justify-content:center}
+/* lista: foto pequena, peça, preço e Adicionar; nada corta — o que não cabe quebra linha */
+.cot-lista{display:flex;flex-direction:column}
+.cot-linha{display:grid;grid-template-columns:56px minmax(0,1fr) auto auto;gap:6px 12px;align-items:center;padding:10px 16px;border-top:1px solid var(--line);border-left:4px solid var(--forn,#174f94)}
+.cot-linha:first-child{border-top:0}.cot-menor.cot-linha{background:#f3f7fc}
+.cot-l-foto{width:56px;height:44px;display:flex;align-items:center;justify-content:center;background:#f3f4f6;border-radius:4px;overflow:hidden}.cot-l-foto img{max-width:100%;max-height:100%;object-fit:contain}
+.cot-l-peca{display:flex;flex-direction:column;align-items:flex-start;min-width:0}.cot-l-forn{color:var(--forn,#174f94);font-size:12px;text-transform:uppercase;letter-spacing:.3px}
+.cot-l-peca strong{font-size:15px;overflow-wrap:anywhere}.cot-l-peca small{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.cot-l-preco{display:flex;flex-direction:column;align-items:flex-end;white-space:nowrap}.cot-l-preco b{font-size:18px}.cot-l-preco small{font-size:12px;color:var(--muted)}
+.cot-sem-lista{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.cot-sem{display:flex;gap:10px;flex-wrap:wrap;padding:8px 16px;border-left:4px solid var(--forn,#9aa3b0);font-size:14px;color:var(--muted);border-top:1px solid var(--line)}.cot-sem b{color:var(--forn,#16191d)}
+/* fichinhas: logado/erro por fornecedor, com a cor dele na borda */
 .cot-situacoes{display:flex;flex-wrap:wrap;gap:8px}
-.cot-sit{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:4px;background:#eceef0;font-size:13px;color:#16191d}
+.cot-sit{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:4px;background:#eceef0;font-size:13px;color:#16191d;border-left:3px solid var(--forn,#9aa3b0)}
 .cot-sit i{width:9px;height:9px;border-radius:50%;background:#9aa3b0;flex-shrink:0}
 .cot-sit-ok i{background:#1e8e3e}.cot-sit-erro i{background:#c62828}.cot-sit-erro{background:#fdecea}.cot-sit-pc i{background:#174f94}
 .cot-sit small{color:var(--muted)}
@@ -1615,8 +1637,9 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (max-width:640px){
   .cp-campo-placa{flex:1 1 100%}.cp-limpar{flex:1 1 100%}
   .cp-conexao-botoes{flex-direction:column;align-items:stretch}
-  .cot-cab{display:none}.cot-linha{grid-template-columns:minmax(0,1fr) auto}.cot-forn{grid-column:1 / -1}.cot-cod,.cot-est,.cot-prazo,.cot-ori{grid-column:auto;font-size:13px}
-  .cot-ori{grid-column:1 / -1}.cot-acao{grid-column:1 / -1;text-align:left}.cot-acao .btn{width:100%}.cot-consultar{flex:1 1 100%}
+  .cot-cards{grid-template-columns:1fr 1fr;gap:10px;padding:10px}.cot-card{padding:10px}.cot-card-foto{height:96px}
+  .cot-linha{grid-template-columns:48px minmax(0,1fr)}.cot-l-foto{width:48px;height:40px}.cot-l-preco{grid-column:2;align-items:flex-start}.cot-l-acao{grid-column:1 / -1}.cot-l-acao .btn{width:100%}
+  .cot-consultar{flex:1 1 100%}.cot-topo{padding:10px}
   .cp-item{grid-template-columns:64px minmax(0,1fr)}.cp-item .pv-botoes{grid-column:1 / -1;flex-direction:row}.cp-item .pv-botoes .btn{flex:1}
   .cp-oferta{grid-template-columns:minmax(0,1fr) auto}.cp-of-cod,.cp-of-est,.cp-of-origem{grid-column:1 / -1}.cp-of-acao{grid-column:1 / -1;text-align:left}.cp-of-acao .btn{width:100%}
   .cp-item-car{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cp-ic-desc{grid-column:1 / -1}.cp-ic-total,.cp-tirar{grid-column:auto}

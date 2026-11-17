@@ -32,7 +32,9 @@ export class ErroUso extends Error {}
 export class ErroAcesso extends Error {}
 
 export type Robo = "dpk" | "rolemar" | "pellegrino" | "toli";
-export type Oferta = { codigo: string; marca: string; descricao: string; preco: number; estoque: number | null; prazo: string; aplicacao: string; ref?: string };
+export type Oferta = { codigo: string; marca: string; descricao: string; preco: number; estoque: number | null; prazo: string; aplicacao: string; ref?: string; foto?: string; extra?: Json };
+/** endereço de foto que o portal devolveu: só https e só se parecer um endereço (nada de data: ou javascript:) */
+const fotoOk = (u: unknown) => { const t = txt(u); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ""; };
 export type Conexao = { id: string; fornecedor_id: string; tipo: string; endereco: string; usuario: string; ativo: boolean; situacao: string; detalhe: string };
 export type Sessao = Json;   // o que cada robô precisa guardar entre consultas (token, cookies, filial…)
 export type Deps = {
@@ -47,6 +49,8 @@ export type Deps = {
   limparSessoes?: (idsVivos: string[]) => Promise<void>;
   fetch: typeof fetch;
   agora?: () => Date;
+  /** só no "testar" com amostra=true (administrador): recebe um trecho da página de resultado, para afinar o leitor do portal */
+  amostra?: (trecho: string) => void;
 };
 
 const json = (corpo: unknown, status = 200) => Response.json(corpo, { status });
@@ -69,11 +73,17 @@ export function roboDe(c: { endereco?: string }): Robo | null {
   const t = String(c.endereco || "").toLowerCase();
   if (/dpk\.com\.br/.test(t)) return "dpk";
   if (/rolemarmaster\.com|rolemar\./.test(t)) return "rolemar";
-  if (/pellegrino\.com\.br/.test(t)) return "pellegrino";
+  // plataforma "Compre Online" (Pellegrino, Sama e outras distribuidoras usam o mesmo sistema): qualquer compreonline.<loja>.com.br
+  if (/^https?:\/\/compreonline\.[a-z0-9-]+(\.[a-z0-9-]+)*\.com\.br(\/|$)/.test(t) || /pellegrino\.com\.br/.test(t)) return "pellegrino";
   if (/tolidistribuidora\.com\.br/.test(t)) return "toli";
   return null;
 }
-export const NOME_ROBO: Record<Robo, string> = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Pellegrino Compre Online", toli: "Portal Toli" };
+export const NOME_ROBO: Record<Robo, string> = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Compre Online", toli: "Portal Toli" };
+/** endereço-base do portal Compre Online da conexão (só o esquema e o host, lidos do endereço cadastrado; nada de caminho) */
+export function siteCompreOnline(c: { endereco?: string }): string {
+  const m = /^https?:\/\/(compreonline\.[a-z0-9-]+(?:\.[a-z0-9-]+)*\.com\.br)/i.exec(String(c.endereco || "").trim());
+  return m ? "https://" + m[1].toLowerCase() : PELLEGRINO.site;
+}
 
 /** fetch com tempo-limite e User-Agent de navegador */
 async function pedir(deps: Deps, url: string, init: RequestInit = {}, limite = LIMITE_MS): Promise<Response> {
@@ -104,24 +114,28 @@ const cookieHeader = (c: Record<string, string>) => Object.entries(c).map(([k, v
  *   preço:   GET dpk-price/api/price/dpk?StoreCode=21&Item=83545&Item=…  → [{ id, status, stock, price, unitePrice, minimumBuy }]
  *   cabeçalhos: x-portal: DPK, x-api-key (chave pública embutida no JS do site: a função lê do site e guarda na sessão), Authorization Bearer.
  * ====================================================================================================================== */
-export const DPK = { site: "https://www.dpk.com.br", api: "https://api.dpk.com.br", store: 21 };
+export const DPK = { site: "https://www.dpk.com.br", api: "https://api.dpk.com.br", cdn: "https://cdn-superk.azureedge.net", store: 21 };
 
 async function dpkChaveDoSite(deps: Deps): Promise<string> {
   const idx = await (await pedir(deps, DPK.site + "/", { redirect: "follow" })).text();
   const m = /src="(main\.[a-f0-9]+\.js)"/.exec(idx);
   if (!m) throw new Error("DPK: não achei o programa do portal para ler a chave pública.");
-  const js = await (await pedir(deps, DPK.site + "/" + m[1], { redirect: "follow" })).text();
+  // o programa do portal tem uns 5 MB: tempo maior, e a chave fica guardada na sessão para não baixar de novo a cada login
+  const js = await (await pedir(deps, DPK.site + "/" + m[1], { redirect: "follow" }, 40000)).text();
   const k = /xApiKey:"([A-Za-z0-9]{20,})"/.exec(js);
   if (!k) throw new Error("DPK: a chave pública do portal mudou de lugar; o robô precisa de ajuste.");
   return k[1];
 }
 const dpkHeaders = (s: Sessao) => ({ accept: "application/json", "x-portal": "DPK", "x-api-key": String(s.apiKey || ""), ...(s.token ? { authorization: "Bearer " + s.token } : {}) });
 
-async function dpkLogin(deps: Deps, c: Conexao, senha: string, cnpjOficina: string): Promise<Sessao> {
-  const apiKey = await dpkChaveDoSite(deps);
+async function dpkLogin(deps: Deps, c: Conexao, senha: string, cnpjOficina: string, chaveGuardada = ""): Promise<Sessao> {
+  let apiKey = chaveGuardada || await dpkChaveDoSite(deps);
   const s: Sessao = { apiKey };
-  const r = await pedir(deps, DPK.api + "/api-auth/api/connect/token", { method: "POST", headers: { ...dpkHeaders(s), "content-type": "application/json" },
+  const entrar = () => pedir(deps, DPK.api + "/api-auth/api/connect/token", { method: "POST", headers: { ...dpkHeaders(s), "content-type": "application/json" },
     body: JSON.stringify({ userPrincipalName: c.usuario, password: senha }) });
+  let r = await entrar();
+  // chave pública guardada não vale mais (o portal trocou): lê a nova do site e tenta uma vez
+  if (chaveGuardada && (r.status === 401 || r.status === 403)) { apiKey = await dpkChaveDoSite(deps); s.apiKey = apiKey; r = await entrar(); }
   const corpo = await r.json().catch(() => null) as Json | null;
   if (r.status === 401 || r.status === 400) throw new ErroAcesso("DPK recusou o login: confira o e-mail e a senha em Ajustes.");
   if (!r.ok || !corpo || !corpo.accessToken) throw new Error("DPK: o login não respondeu como esperado (HTTP " + r.status + ").");
@@ -137,9 +151,12 @@ async function dpkLogin(deps: Deps, c: Conexao, senha: string, cnpjOficina: stri
   s.em = new Date().toISOString();
   return s;
 }
-export function dpkLerBusca(corpo: Json | null): { id: string; codigo: string; descricao: string; marca: string }[] {
+export function dpkLerBusca(corpo: Json | null): { id: string; codigo: string; descricao: string; marca: string; foto: string; extra: Json }[] {
   const l = corpo && Array.isArray(corpo.products) ? corpo.products : [];
-  return l.map((p: Json) => ({ id: String(p.sapCode ?? p.id ?? ""), codigo: txt(p.code), descricao: txt(p.description), marca: txt(p.manufacturer) })).filter((p: Json) => p.id && p.codigo);
+  // foto: o portal devolve só o nome do arquivo (MANN_WK84213.jpg); as imagens ficam no CDN do SuperK
+  const foto = (p: Json) => { const v = txt(p.image || p.imageUrl || ""); return /^https:/.test(v) ? fotoOk(v) : /^[\w.-]+\.(jpe?g|png|webp)$/i.test(v) ? DPK.cdn + "/img/" + v : ""; };
+  return l.map((p: Json) => ({ id: String(p.sapCode ?? p.id ?? ""), codigo: txt(p.code), descricao: txt(p.description), marca: txt(p.manufacturer), foto: foto(p),
+    extra: { productId: Number(p.id) || 0, sapCode: String(p.sapCode ?? ""), minimo: Number(p.minimumQuantity) || 0 } })).filter((p: Json) => p.id && p.codigo);
 }
 export function dpkLerPrecos(corpo: Json | null): Map<string, { preco: number; estoque: number | null; status: string }> {
   const m = new Map<string, { preco: number; estoque: number | null; status: string }>();
@@ -158,7 +175,42 @@ async function dpkBuscar(deps: Deps, s: Sessao, termo: string): Promise<Oferta[]
   if (rp.status === 401) throw new ErroAcesso("sessão vencida");
   const precos = rp.ok ? dpkLerPrecos(await rp.json().catch(() => null)) : new Map();
   return prods.map((p) => { const pr = precos.get(p.id); if (!pr || !(pr.preco > 0)) return null;
-    return { codigo: p.codigo, marca: p.marca, descricao: p.descricao, preco: pr.preco, estoque: pr.estoque, prazo: "", aplicacao: "", ref: p.id } as Oferta; }).filter((x): x is Oferta => !!x);
+    return { codigo: p.codigo, marca: p.marca, descricao: p.descricao, preco: pr.preco, estoque: pr.estoque, prazo: "", aplicacao: "", ref: p.id, foto: p.foto, extra: p.extra } as Oferta; }).filter((x): x is Oferta => !!x);
+}
+/** Modelo do carro pela placa, GRÁTIS pelo portal da DPK (mapeado em 16/11/2026): GET api-product/api/productSearch/plate?plate=ABC1D23 → "FIAT TORO 2.0 ..." */
+async function dpkPlaca(deps: Deps, s: Sessao, placa: string): Promise<string> {
+  const r = await pedir(deps, DPK.api + "/api-product/api/productSearch/plate?plate=" + encodeURIComponent(placa), { headers: dpkHeaders(s) });
+  if (r.status === 401) throw new ErroAcesso("sessão vencida");
+  if (!r.ok) return "";
+  const corpo = await r.json().catch(async () => txt(await r.text().catch(() => "")));
+  return txt(typeof corpo === "string" ? corpo : corpo && (corpo.model || corpo.description || "")).slice(0, 120);
+}
+/* carrinho do portal da DPK (mapeado em 17/11/2026 no navegador):
+ *   GET  dpk-order/api/cart/getByFilter → [{ id, retailerId, hubId, cartItems: [{ id, productId, productRetailerId, quantity, position, code, description, manufacturer }] }]
+ *   POST dpk-order/api/cart { hubId, retailerId, cartItems: [{ productId, productRetailerId, quantity, position, code, description, manufacturer, total }] } → o carrinho
+ *   DELETE dpk-order/api/cart/{cartId}/{itemId} → true  (não usado: o sistema só põe; tirar é no portal) */
+export type ItemPortal = { codigo: string; descricao: string; marca: string; qtd: number; preco: number; extra?: Json };
+async function dpkCarrinho(deps: Deps, s: Sessao, item: ItemPortal): Promise<{ ok: boolean; detalhe: string }> {
+  const store = Number(s.store) || DPK.store;
+  const productId = Number(item.extra && item.extra.productId) || 0, sap = Number(item.extra && item.extra.sapCode) || 0;
+  if (!productId || !sap) return { ok: false, detalhe: "DPK: este preço veio sem o código interno do portal; consulte de novo e adicione pelo resultado ao vivo." };
+  const rg = await pedir(deps, DPK.api + "/dpk-order/api/cart/getByFilter", { headers: dpkHeaders(s) });
+  if (rg.status === 401) throw new ErroAcesso("sessão vencida");
+  const lista = (await rg.json().catch(() => null)) as Json[] | null;
+  const atual = Array.isArray(lista) && lista.length ? lista.find((c) => c && c.closed === false) || lista[0] : null;
+  const retailerId = Number(atual && atual.retailerId) || Number(s.retailerId) || 2;
+  const existentes: Json[] = atual && Array.isArray(atual.cartItems) ? atual.cartItems : [];
+  const ja = existentes.find((i) => Number(i.productRetailerId) === sap);
+  const qtd = Math.max(1, Math.round(item.qtd || 1)) + (ja ? Number(ja.quantity) || 0 : 0);
+  const corpo = { ...(atual && atual.id ? { id: atual.id } : {}), hubId: store, retailerId, cartItems: [
+    ...existentes.filter((i) => Number(i.productRetailerId) !== sap).map((i) => ({ productId: i.productId, productRetailerId: i.productRetailerId, quantity: i.quantity, position: i.position, code: i.code, description: i.description, manufacturer: i.manufacturer, total: i.total || 0 })),
+    { productId, productRetailerId: sap, quantity: qtd, position: existentes.length + 1, code: item.codigo, description: item.descricao, manufacturer: item.marca, total: Math.round((item.preco || 0) * qtd * 100) / 100 }] };
+  const r = await pedir(deps, DPK.api + "/dpk-order/api/cart", { method: "POST", headers: { ...dpkHeaders(s), "content-type": "application/json" }, body: JSON.stringify(corpo) });
+  if (r.status === 401) throw new ErroAcesso("sessão vencida");
+  const resp = (await r.json().catch(() => null)) as Json | null;
+  const itens: Json[] = resp && Array.isArray(resp.cartItems) ? resp.cartItems : [];
+  if (!r.ok || !itens.some((i) => Number(i.productRetailerId) === sap)) return { ok: false, detalhe: "DPK: o portal não confirmou o item no carrinho (HTTP " + r.status + ")." };
+  return { ok: true, detalhe: "No carrinho da DPK: " + qtd + " x " + item.codigo + (ja ? " (quantidade somada ao que já estava)" : "") + "." };
 }
 
 /* ======================================================================================================================
@@ -194,8 +246,19 @@ async function rolemarLogin(deps: Deps, c: Conexao, senha: string): Promise<Sess
 export function rolemarLerBusca(corpo: Json | null): Oferta[] {
   const l = corpo && Array.isArray(corpo.data) ? corpo.data : [];
   return l.map((p: Json) => ({ codigo: txt(p.codigo_fabricante), marca: txt(p.fabricante), descricao: txt(p.item), preco: numero(p.valor_final || p.preco),
-    estoque: p.estoque === undefined || p.estoque === null || p.estoque === "" ? null : numero(p.estoque), prazo: "", aplicacao: txt(p.texto).slice(0, 300), ref: txt(p.id) }))
+    estoque: p.estoque === undefined || p.estoque === null || p.estoque === "" ? null : numero(p.estoque), prazo: "", aplicacao: txt(p.texto).slice(0, 300), ref: txt(p.id),
+    foto: fotoOk(Array.isArray(p.imagens) ? (p.imagens[0] && (p.imagens[0].url || p.imagens[0].imagem || p.imagens[0].src || p.imagens[0])) : (p.imagem || p.foto || "")) }))
     .filter((o: Oferta) => o.codigo && o.preco > 0);
+}
+/** Modelo do carro pela placa pelo portal da Rolemar (mapeado em 16/11/2026): POST /ajax-busca-placa placa=… → dados do carro (brand, model, madeYear, engine) */
+async function rolemarPlaca(deps: Deps, s: Sessao, placa: string): Promise<string> {
+  const r = await pedir(deps, ROLEMAR.site + "/ajax-busca-placa", { method: "POST", headers: rolemarHeaders(s), body: form({ placa }) });
+  if (r.status === 401 || r.status === 302) throw new ErroAcesso("sessão vencida");
+  if (!r.ok) return "";
+  const c = await r.json().catch(() => null) as Json | null;
+  const d = (c && (c.data || c.veiculo || c)) as Json | null;
+  if (!d || typeof d !== "object") return "";
+  return [txt(d.brand || d.marca), txt(d.model || d.modelo), txt(d.version || d.versao), txt(d.madeYear || d.ano || d.anoModelo), txt(d.engine || d.motor)].filter(Boolean).join(" ").slice(0, 120);
 }
 async function rolemarBuscar(deps: Deps, s: Sessao, termo: string): Promise<Oferta[]> {
   const r = await pedir(deps, ROLEMAR.site + "/ajax-busca", { method: "POST", headers: rolemarHeaders(s),
@@ -217,26 +280,28 @@ async function rolemarBuscar(deps: Deps, s: Sessao, termo: string): Promise<Ofer
  *   estoque: o portal não dá quantidade; "Me avise quando estiver disponível" na linha = sem estoque.
  * ====================================================================================================================== */
 export const PELLEGRINO = { site: "https://compreonline.pellegrino.com.br" };
+const pellSite = (c: { endereco?: string }) => siteCompreOnline(c);
 const pellHeaders = (s: Sessao, extra: Record<string, string> = {}) => ({ accept: "application/json, text/html", "x-requested-with": "XMLHttpRequest", ...(s.cookies ? { cookie: cookieHeader(s.cookies) } : {}), ...extra });
 
 async function pellegrinoLogin(deps: Deps, c: Conexao, senha: string): Promise<Sessao> {
   let cookies: Record<string, string> = {};
-  const r0 = await pedir(deps, PELLEGRINO.site + "/Account/Login/?ReturnUrl=%2F", { headers: { accept: "text/html" }, redirect: "follow" });
+  const site = pellSite(c);
+  const r0 = await pedir(deps, site + "/Account/Login/?ReturnUrl=%2F", { headers: { accept: "text/html" }, redirect: "follow" });
   cookies = juntarCookies(cookies, r0);
-  const r = await pedir(deps, PELLEGRINO.site + "/account/login", { method: "POST", headers: pellHeaders({ cookies }, { "content-type": "application/json; charset=utf-8" }),
+  const r = await pedir(deps, site + "/account/login", { method: "POST", headers: pellHeaders({ cookies }, { "content-type": "application/json; charset=utf-8" }),
     body: JSON.stringify({ Email: c.usuario, Password: senha, ReturnUrl: "/" }) });
   cookies = juntarCookies(cookies, r);
   const corpo = await r.json().catch(() => null) as Json | null;
   const res = corpo && (corpo.result || corpo);
   if (r.status === 403) throw new Error("Pellegrino: o portal bloqueou o acesso automático. Tente de novo mais tarde.");
   if (!res || res.success !== true) throw new ErroAcesso("Pellegrino recusou o login: " + (txt(res && (res.message || res.erro || res.error)) || "e-mail ou senha") + ". Confira o e-mail e a senha em Ajustes.");
-  return { cookies, em: new Date().toISOString() };
+  return { cookies, site, em: new Date().toISOString() };
 }
 const desHtml = (s: string) => s.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, "\"").replace(/&#39;/g, "'").replace(/&nbsp;/g, " ");
 const semTags = (s: string) => desHtml(s.replace(/<[^>]+>/g, " ")).replace(/\s+/g, " ").trim();
 /** Lê as linhas de produto da página do catálogo. Devolve { id, descricao, marca, codigo, semEstoque } por linha. */
-export function pellegrinoLerPagina(html: string): { id: string; descricao: string; marca: string; codigo: string; semEstoque: boolean }[] {
-  const out: { id: string; descricao: string; marca: string; codigo: string; semEstoque: boolean }[] = [];
+export function pellegrinoLerPagina(html: string): { id: string; descricao: string; marca: string; codigo: string; semEstoque: boolean; foto: string }[] {
+  const out: { id: string; descricao: string; marca: string; codigo: string; semEstoque: boolean; foto: string }[] = [];
   const re = /<tr[^>]*data-objectid="([^"]+)"[^>]*>([\s\S]*?)<\/tr>/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(html))) {
@@ -245,7 +310,8 @@ export function pellegrinoLerPagina(html: string): { id: string; descricao: stri
     const descricao = (/font-weight-bold[^>]*>([^<]{3,120})</.exec(tr) || [])[1] || "";
     const marca = (/<span class="d-none">([^<]{2,40})<\/span>\s*<img/.exec(tr) || [])[1] || "";
     const semEstoque = /avise quando estiver dispon/i.test(tr);
-    if (id && (codigo || descricao)) out.push({ id, descricao: txt(descricao), marca: txt(marca), codigo: txt(desHtml(codigo)), semEstoque });
+    const foto = fotoOk(desHtml((/<img[^>]+(?:data-src|src)="(https:\/\/[^"]+\.(?:jpe?g|png|webp)[^"]*)"/i.exec(tr) || [])[1] || ""));
+    if (id && (codigo || descricao)) out.push({ id, descricao: txt(descricao), marca: txt(marca), codigo: txt(desHtml(codigo)), semEstoque, foto });
   }
   return out;
 }
@@ -255,17 +321,26 @@ export function pellegrinoLerPrecos(corpo: Json | null): Map<string, number> {
   return m;
 }
 async function pellegrinoBuscar(deps: Deps, s: Sessao, termo: string): Promise<Oferta[]> {
-  const r = await pedir(deps, PELLEGRINO.site + "/catalogo/ais?q=" + encodeURIComponent(termo), { headers: pellHeaders(s, { accept: "text/html" }) });
+  const site = String(s.site || PELLEGRINO.site);
+  const r = await pedir(deps, site + "/catalogo/ais?q=" + encodeURIComponent(termo), { headers: pellHeaders(s, { accept: "text/html" }) });
   if (r.status === 302 || r.status === 301 || r.status === 401) throw new ErroAcesso("sessão vencida");
   if (!r.ok) throw new Error("Pellegrino: a busca falhou (HTTP " + r.status + ").");
   const html = await r.text();
   if (/Account\/Login|id="kt_login_signin_submit"/.test(html)) throw new ErroAcesso("sessão vencida");
+  if (deps.amostra) deps.amostra(amostraHtml(html));
   const linhas = pellegrinoLerPagina(html).slice(0, 25);
   if (!linhas.length) return [];
-  const rp = await pedir(deps, PELLEGRINO.site + "/api/progress/b2b/produtos/precos?ids=" + encodeURIComponent(linhas.map((l) => l.id).join(",")), { headers: pellHeaders(s) });
+  const rp = await pedir(deps, site + "/api/progress/b2b/produtos/precos?ids=" + encodeURIComponent(linhas.map((l) => l.id).join(",")), { headers: pellHeaders(s) });
   const precos = rp.ok ? pellegrinoLerPrecos(await rp.json().catch(() => null)) : new Map<string, number>();
   return linhas.map((l) => { const p = precos.get(l.id); if (!(p && p > 0)) return null;
-    return { codigo: l.codigo || l.id, marca: l.marca, descricao: l.descricao, preco: p, estoque: l.semEstoque ? 0 : null, prazo: "", aplicacao: "", ref: l.id } as Oferta; }).filter((x): x is Oferta => !!x);
+    return { codigo: l.codigo || l.id, marca: l.marca, descricao: l.descricao, preco: p, estoque: l.semEstoque ? 0 : null, prazo: "", aplicacao: "", ref: l.id, foto: l.foto } as Oferta; }).filter((x): x is Oferta => !!x);
+}
+
+/** Trecho da página de resultado (só a tabela de produtos, até 6 KB) para o administrador afinar o leitor quando o portal mudar */
+export function amostraHtml(html: string): string {
+  const i = html.indexOf("data-objectid"); const j = html.search(/<table|<tbody|class="[^"]*(produto|product|catalogo)[^"]*"/i);
+  const ini = i >= 0 ? Math.max(0, i - 400) : j >= 0 ? j : 0;
+  return html.slice(ini, ini + 6000).replace(/\s+/g, " ");
 }
 
 /* ======================================================================================================================
@@ -277,8 +352,9 @@ async function comSessao(deps: Deps, c: Conexao, robo: Robo, cnpjOficina: string
   const senha = await deps.senha(c.id);
   if (!senha) throw new ErroAcesso("Sem senha guardada: cadastre a senha em Ajustes › Fornecedores conectados.");
   if (!c.usuario) throw new ErroAcesso("Sem usuário: informe o login do fornecedor em Ajustes.");
-  const login = () => robo === "dpk" ? dpkLogin(deps, c, senha, cnpjOficina) : robo === "rolemar" ? rolemarLogin(deps, c, senha) : pellegrinoLogin(deps, c, senha);
-  let s = await deps.lerSessao(c.id), nova = false;
+  const anterior = await deps.lerSessao(c.id);
+  const login = () => robo === "dpk" ? dpkLogin(deps, c, senha, cnpjOficina, String((anterior && anterior.apiKey) || "")) : robo === "rolemar" ? rolemarLogin(deps, c, senha) : pellegrinoLogin(deps, c, senha);
+  let s = anterior && anterior.token || anterior && anterior.cookies ? anterior : null, nova = false;
   if (!s) { s = await login(); await deps.gravarSessao(c.id, s); nova = true; }
   try { return await usar(s); }
   catch (e) {
@@ -305,13 +381,53 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     if (!robo) { await deps.situacao(c.id, "erro", "Portal não reconhecido pelo endereço: use o endereço do site do fornecedor (DPK, Rolemar, Pellegrino ou Toli)."); return { ok: false, erro: "Portal não reconhecido pelo endereço.", robo: null }; }
     if (robo === "toli") { await deps.situacao(c.id, "aguardando", "Portal Toli: a consulta roda pelo programa do PC da oficina (em preparação)."); return { ok: true, robo, no_pc: true, nome: NOME_ROBO[robo] }; }
     try {
-      await deps.gravarSessao(c.id, null);   // teste = login novo de verdade
-      const ofertas = await comSessao(deps, c, robo, cnpjOficina, (s) => buscar(deps, robo, s, String(corpo.termo || "WK84213")));
+      const velha = await deps.lerSessao(c.id);
+      await deps.gravarSessao(c.id, velha && velha.apiKey ? { apiKey: velha.apiKey } : null);   // teste = login novo de verdade (a chave pública da DPK pode ficar)
+      let amostra = "";
+      const d2: Deps = corpo.amostra === true ? { ...deps, amostra: (t) => { amostra = t; } } : deps;
+      const ofertas = await comSessao(d2, c, robo, cnpjOficina, (s) => buscar(d2, robo, s, String(corpo.termo || "WK84213")));
       await deps.situacao(c.id, "ok", "Conectado em " + horaBR(agora) + " (teste: " + ofertas.length + " preço(s)).");
-      return { ok: true, robo, nome: NOME_ROBO[robo], ofertas: ofertas.slice(0, 10) };
+      return { ok: true, robo, nome: NOME_ROBO[robo], ofertas: ofertas.slice(0, 10), ...(amostra ? { amostra } : {}) };
     } catch (e) {
       const msg = (e as Error).message || "falha";
       await deps.situacao(c.id, "erro", msg); await deps.gravarSessao(c.id, null);
+      return { ok: false, robo, nome: NOME_ROBO[robo], erro: msg };
+    }
+  }
+  if (acao === "placa") {
+    // modelo do carro pela placa, pelos portais com login (DPK e Rolemar: consulta grátis), para a aba Compras não gastar a consulta paga
+    const placa = txt(corpo.placa).toUpperCase().replace(/[^A-Z0-9]/g, "");
+    if (!/^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placa)) throw new ErroUso("Placa inválida. Use o formato ABC1234 ou ABC1D23.");
+    const cxs = (await deps.conexoes(null)).filter((c) => c.ativo !== false);
+    for (const robo of ["dpk", "rolemar"] as Robo[]) {
+      const c = cxs.find((x) => roboDe(x) === robo);
+      if (!c) continue;
+      try {
+        let modelo = "";
+        await comSessao(deps, c, robo, cnpjOficina, async (s) => { modelo = robo === "dpk" ? await dpkPlaca(deps, s, placa) : await rolemarPlaca(deps, s, placa); return []; });
+        if (modelo) return { ok: true, encontrado: true, placa, modelo, fornecedor: NOME_ROBO[robo] };
+      } catch (_e) { /* tenta o próximo portal; sem portal, a tela usa a consulta de placa de sempre */ }
+    }
+    return { ok: true, encontrado: false, placa };
+  }
+  if (acao === "carrinho_portal") {
+    // põe o item TAMBÉM no carrinho do portal do fornecedor (pedido do Danilo em 17/11/2026: ao clicar "Adicionar", a peça aparece no site dele)
+    const idc = String(corpo.conexao || "");
+    if (!/^[\w-]{1,64}$/.test(idc)) throw new ErroUso("Fornecedor conectado não encontrado.");
+    const [c] = await deps.conexoes([idc]);
+    if (!c) throw new ErroUso("Fornecedor conectado não encontrado.");
+    const robo = roboDe(c);
+    const it = (corpo.item || {}) as Json;
+    const item: ItemPortal = { codigo: txt(it.codigo).slice(0, 60), descricao: txt(it.descricao).slice(0, 200), marca: txt(it.marca).slice(0, 60), qtd: Number(it.qtd) || 1, preco: Number(it.preco) || 0, extra: it.extra && typeof it.extra === "object" ? it.extra : undefined };
+    if (!item.codigo) throw new ErroUso("Informe o código da peça.");
+    if (robo !== "dpk") return { ok: false, robo, nome: robo ? NOME_ROBO[robo] : "", erro: (robo ? NOME_ROBO[robo] : "Este portal") + ": pôr no carrinho do portal ainda não está pronto; o item ficou só no carrinho do sistema." };
+    try {
+      let res = { ok: false, detalhe: "" };
+      await comSessao(deps, c, robo, cnpjOficina, async (s) => { res = await dpkCarrinho(deps, s, item); return []; });
+      return { ok: res.ok, robo, nome: NOME_ROBO[robo], detalhe: res.detalhe, erro: res.ok ? undefined : res.detalhe };
+    } catch (e) {
+      const msg = (e as Error).message || "falha";
+      if (e instanceof ErroAcesso) { await deps.situacao(c.id, "erro", msg); const v = await deps.lerSessao(c.id); await deps.gravarSessao(c.id, v && v.apiKey ? { apiKey: v.apiKey } : null); }
       return { ok: false, robo, nome: NOME_ROBO[robo], erro: msg };
     }
   }
@@ -340,7 +456,7 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     } catch (e) {
       const msg = (e as Error).message || "falha";
       await deps.situacao(c.id, "erro", msg);
-      if (e instanceof ErroAcesso) await deps.gravarSessao(c.id, null);
+      if (e instanceof ErroAcesso) { const v = await deps.lerSessao(c.id); await deps.gravarSessao(c.id, v && v.apiKey ? { apiKey: v.apiKey } : null); }
       return { ...base, ok: false, ofertas: [], erro: msg };
     }
   }));

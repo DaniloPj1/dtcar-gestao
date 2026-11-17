@@ -35,6 +35,7 @@ confere("Pellegrino: leitura dos preços", F.pellegrinoLerPrecos({ precos: [{ id
 // ---------- portais de mentira
 const chamadas: string[] = [];
 let dpkLogins = 0, rolemarLogins = 0, pellLogins = 0, dpkTokenValido = "tok1", recusarSenha = false, bloquear403 = false;
+let dpkCart: L | null = null; const dpkPosts: L[] = [];
 const j = (b: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json", ...headers } });
 async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): Promise<Response> {
   const u = String(url); chamadas.push(u);
@@ -42,13 +43,16 @@ async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): P
   const texto = async () => typeof body === "string" ? body : body instanceof FormData ? Object.fromEntries([...body.entries()].map(([k, v]) => [k, String(v)])) : "";
   if (bloquear403) return new Response("blocked", { status: 403 });
   // DPK
+  if (u.startsWith(F.DPK.api + "/api-product/api/productSearch/plate?")) { const h2 = new Headers(init.headers || {}); if (h2.get("authorization") !== "Bearer " + dpkTokenValido) return j({}, 401); return new URL(u).searchParams.get("plate") === "QXN1E49" ? j("FIAT TORO 2.0 TURBO DIESEL RANCH 2020") : j(""); }
+  if (u === F.DPK.api + "/dpk-order/api/cart/getByFilter") return j(dpkCart ? [dpkCart] : []);
+  if (u === F.DPK.api + "/dpk-order/api/cart" && init.method === "POST") { const b = JSON.parse(String(await texto())); dpkPosts.push(b); dpkCart = { id: "cart-1", retailerId: b.retailerId, hubId: b.hubId, closed: false, cartItems: b.cartItems.map((i: L, n: number) => ({ id: "it" + n, ...i })) }; return j(dpkCart); }
   if (u === F.DPK.site + "/") return new Response('<html><script src="main.abc123.js"></script></html>');
   if (u === F.DPK.site + "/main.abc123.js") return new Response('var x={portal:"DPK",xApiKey:"CHAVEPUBLICA1234567890ABCDEFGHIJKLMN"};');
   if (u.startsWith(F.DPK.api)) {
     if (h.get("x-api-key") !== "CHAVEPUBLICA1234567890ABCDEFGHIJKLMN" || h.get("x-portal") !== "DPK") return j({ erro: "sem chave" }, 401);
     if (u.endsWith("/api-auth/api/connect/token")) { dpkLogins++; const b = JSON.parse(String(await texto())); if (b.password === "senha-dpk" && b.userPrincipalName === "danilo@dtcar.com" && !recusarSenha) return j({ accessToken: dpkTokenValido, refreshToken: "r", document: "49016409000195", documents: ["49016409000195"] }); return j({ error: "invalid_grant" }, 400); }
     if (h.get("authorization") !== "Bearer " + dpkTokenValido) return j({}, 401);
-    if (u.includes("/productSearch?")) { const q = new URL(u).searchParams; return q.get("StoreCode") === "21" && q.get("Query") === "WK84213" ? j({ totalCount: 1, products: [{ id: 1, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545" }] }) : j({ totalCount: 0, products: [] }); }
+    if (u.includes("/productSearch?")) { const q = new URL(u).searchParams; return q.get("StoreCode") === "21" && q.get("Query") === "WK84213" ? j({ totalCount: 1, products: [{ id: 2905056, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545", image: "MANN_WK84213.jpg", minimumQuantity: 0 }] }) : j({ totalCount: 0, products: [] }); }
     if (u.includes("/dpk-price/api/price/dpk?")) return j([{ id: 83545, status: "02 - Disponível", stock: 12, price: 63.24, unitePrice: 63.24 }]);
   }
   // Rolemar
@@ -56,6 +60,7 @@ async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): P
   if (u === F.ROLEMAR.site + "/ajax-login") { rolemarLogins++; const f = await texto() as L; if (h.get("x-requested-with") !== "XMLHttpRequest") return j({ status: "erro" }, 400);
     return f.usuario === "49016409000195" && f.senha === "senha-rol" && !recusarSenha ? j({ data: { idusuario_lojista: 7, nome: "DTCAR", cod_erp: "66333" } }, 200, { "set-cookie": "logado=1; Path=/" }) : j({ status: "erro", mensagem: "Usuário ou senha inválidos" }); }
   if (u === F.ROLEMAR.site + "/ajax-lista-filiais") return h.get("cookie")?.includes("logado=1") ? j({ cod_emp: "16", filiais: [{ CODPARC: "66333", CODEMP: "16", EMPRESA: "ROLEMAR-CARIACICA" }] }) : j({ status: "erro", mensagem: "Faça login" });
+  if (u === F.ROLEMAR.site + "/ajax-busca-placa") { if (!h.get("cookie")?.includes("logado=1")) return j({ status: "erro" }); const f = await texto() as L; return f.placa === "QXN1E49" ? j({ data: { brand: "FIAT", model: "TORO", madeYear: "2020", engine: "2.0" } }) : j({ data: null }); }
   if (u === F.ROLEMAR.site + "/ajax-busca") { if (!h.get("cookie")?.includes("logado=1")) return j({ status: "erro", mensagem: "Sessão expirada, faça login" }); const f = await texto() as L;
     return f.cod_emp === "16" && f.busca === "WK84213" ? j({ data: [{ id: 9, fabricante: "WEGA", codigo_fabricante: "FCD2158/1", item: "FILTRO COMBUSTIVEL", estoque: "5", preco: "70,00", valor_final: "63,24", multiplo: 1, texto: "TORO 2.0" }], ultima_pagina: 1 }) : j({ data: [] }); }
   // Pellegrino
@@ -95,6 +100,28 @@ confere("consulta: resposta geral", r.ok === true && r.termos[0] === "WK84213" &
 confere("DPK: logou, buscou e precificou", porConexao("c-dpk").ok && porConexao("c-dpk").ofertas[0].codigo === "WK84213" && porConexao("c-dpk").ofertas[0].preco === 63.24 && porConexao("c-dpk").ofertas[0].estoque === 12 && dpkLogins === 1,
   JSON.stringify(porConexao("c-dpk")));
 confere("DPK: chave pública lida do site e guardada na sessão", sessoes["c-dpk"]?.apiKey === "CHAVEPUBLICA1234567890ABCDEFGHIJKLMN" && sessoes["c-dpk"]?.token === "tok1");
+confere("DPK: foto pelo CDN e códigos internos para o carrinho do portal", porConexao("c-dpk").ofertas[0].foto === "https://cdn-superk.azureedge.net/img/MANN_WK84213.jpg" && porConexao("c-dpk").ofertas[0].extra.productId === 2905056 && porConexao("c-dpk").ofertas[0].extra.sapCode === "83545", JSON.stringify(porConexao("c-dpk").ofertas[0]));
+// carrinho do portal (DPK)
+let rc: L;
+rc = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "WK84213", descricao: "FILTRO COMBUSTIVEL", marca: "MANN", qtd: 2, preco: 63.24, extra: { productId: 2905056, sapCode: "83545" } } }, deps(), "49016409000195") as L;
+confere("carrinho do portal DPK: cria o carrinho com o item", rc.ok === true && dpkPosts.length === 1 && dpkPosts[0].hubId === 21 && dpkPosts[0].retailerId === 2 && dpkPosts[0].cartItems[0].productId === 2905056 && dpkPosts[0].cartItems[0].productRetailerId === 83545 && dpkPosts[0].cartItems[0].quantity === 2 && /No carrinho da DPK: 2 x WK84213/.test(rc.detalhe), JSON.stringify(rc));
+rc = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "WK84213", descricao: "FILTRO COMBUSTIVEL", marca: "MANN", qtd: 1, preco: 63.24, extra: { productId: 2905056, sapCode: "83545" } } }, deps(), "49016409000195") as L;
+confere("carrinho do portal DPK: item repetido soma a quantidade no carrinho que já existe", rc.ok === true && dpkPosts.length === 2 && dpkPosts[1].id === "cart-1" && dpkPosts[1].cartItems.length === 1 && dpkPosts[1].cartItems[0].quantity === 3 && /somada/.test(rc.detalhe), JSON.stringify(dpkPosts[1]));
+rc = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "X1", descricao: "x", marca: "m", qtd: 1, preco: 1 } }, deps()) as L;
+confere("carrinho do portal DPK: sem código interno, recusa com orientação", rc.ok === false && /consulte de novo/.test(rc.erro));
+rc = await F.executar({ acao: "carrinho_portal", conexao: "c-rol", item: { codigo: "FCD2158/1", descricao: "x", marca: "WEGA", qtd: 1, preco: 1 } }, deps()) as L;
+confere("carrinho do portal Rolemar: ainda não pronto, aviso claro", rc.ok === false && /ainda não está pronto/.test(rc.erro));
+try { await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "WK84213" } }, deps({ gestor: false, admin: false })); confere("carrinho do portal: mecânico não", false); } catch (e) { confere("carrinho do portal: mecânico não", e instanceof F.ErroUso); }
+
+// ---------- placa pelo portal (grátis)
+rc = await F.executar({ acao: "placa", placa: "qxn-1e49" }, deps(), "49016409000195") as L;
+confere("placa pelo portal: DPK responde o modelo de graça", rc.ok === true && rc.encontrado === true && /FIAT TORO/.test(rc.modelo) && rc.fornecedor === "DPK", JSON.stringify(rc));
+{ const semDpk = { ...deps(), conexoes: async (ids: string[] | null) => conexoes.filter((c) => c.id !== "c-dpk" && (!ids || ids.includes(c.id))) };
+  rc = await F.executar({ acao: "placa", placa: "QXN1E49" }, semDpk) as L;
+  confere("placa pelo portal: sem a DPK, a Rolemar responde", rc.ok === true && rc.encontrado === true && /FIAT TORO 2020 2.0|FIAT TORO/.test(rc.modelo) && rc.fornecedor === "Rolemar Master", JSON.stringify(rc)); }
+rc = await F.executar({ acao: "placa", placa: "AAA1A11" }, deps()) as L;
+confere("placa que os portais não conhecem: encontrado false (a tela cai na consulta de sempre)", rc.ok === true && rc.encontrado === false);
+try { await F.executar({ acao: "placa", placa: "ZZZ" }, deps()); confere("placa inválida: recusa", false); } catch (e) { confere("placa inválida: recusa", e instanceof F.ErroUso); }
 confere("Rolemar: logou com o CNPJ só em números, achou a filial e buscou", porConexao("c-rol").ok && porConexao("c-rol").ofertas[0].codigo === "FCD2158/1" && porConexao("c-rol").ofertas[0].preco === 63.24 && sessoes["c-rol"]?.cod_emp === "16" && rolemarLogins === 1,
   JSON.stringify(porConexao("c-rol")));
 confere("Pellegrino: logou, leu a página e os preços; sem estoque = 0", porConexao("c-pel").ok && porConexao("c-pel").ofertas.length === 2 && porConexao("c-pel").ofertas[0].preco === 88.81 && porConexao("c-pel").ofertas[0].estoque === null

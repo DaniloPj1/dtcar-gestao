@@ -29,6 +29,7 @@ export async function trocarSenha(senha) {
   return r;
 }
 import { Campo, Texto, Modal } from "../ui.js";
+import { emailDoLogin } from "../appacesso.js";
 
 function Moldura({ children }) {
   return html`<div class="tela-login"><div class="login-caixa">
@@ -62,13 +63,15 @@ export function Login({ modo: modoInicial }) {
   const enviar = async e => {
     e.preventDefault(); setMsg(null); setOcupado(true);
     try {
-      if (modo === "entrar") await entrarComOuSemInternet(email.trim(), senha);
+      if (modo === "entrar") await entrarComOuSemInternet(emailDoLogin(email), senha);   // usuário sem e-mail ("joao") vira o e-mail interno
       else if (modo === "criar") {
         if (!nome.trim()) throw new Error("Informe seu nome.");
         const r = await api.auth.cadastrar(nome.trim(), email.trim(), senha);
         setMsg({ ok: true, t: r && r.session ? "Acesso criado." : "Enviamos um link de confirmação para " + email.trim() + ". Confirme e depois entre com sua senha." });
         if (!(r && r.session)) setModo("entrar");
-      } else if (modo === "recuperar") { await api.auth.recuperar(email.trim()); setMsg({ ok: true, t: "Se o e-mail estiver cadastrado, você receberá um link para criar nova senha." }); }
+      } else if (modo === "recuperar") {
+        if (!email.includes("@")) throw new Error("Login por usuário não tem e-mail: peça ao administrador para trocar a sua senha (Sistema › Equipe › Trocar senha).");
+        await api.auth.recuperar(email.trim()); setMsg({ ok: true, t: "Se o e-mail estiver cadastrado, você receberá um link para criar nova senha." }); }
       else if (modo === "nova") {
         await trocarSenha(senha); setMsg({ ok: true, t: "Senha alterada." }); location.hash = "#/painel"; location.reload(); }
     } catch (x) { setMsg({ ok: false, t: x.message }); } finally { setOcupado(false); }
@@ -80,7 +83,7 @@ export function Login({ modo: modoInicial }) {
     ${modo === "entrar" && semNet ? html`<p class="sub">Sem internet: entre com a sua senha; este computador confere (se você já entrou aqui com internet antes).</p>` : null}
     <form onSubmit=${enviar} class="form-login">
       ${modo === "criar" ? html`<${Campo} id="lg-nome" rotulo="Seu nome"><${Texto} id="lg-nome" autocomplete="name" valor=${nome} onMuda=${setNome} /></${Campo}>` : null}
-      ${modo !== "nova" ? html`<${Campo} id="lg-email" rotulo="E-mail"><${Texto} id="lg-email" type="email" autocomplete="email" valor=${email} onMuda=${setEmail} /></${Campo}>` : null}
+      ${modo !== "nova" ? html`<${Campo} id="lg-email" rotulo=${modo === "entrar" ? "Usuário ou e-mail" : modo === "recuperar" ? "E-mail (usuário sem e-mail: peça ao administrador)" : "E-mail"}><${Texto} id="lg-email" type=${modo === "entrar" || modo === "recuperar" ? "text" : "email"} autocomplete=${modo === "entrar" ? "username" : "email"} valor=${email} onMuda=${setEmail} /></${Campo}>` : null}
       ${modo !== "recuperar" ? html`<${Campo} id="lg-senha" rotulo=${modo === "nova" ? "Nova senha" : "Senha"} dica=${modo === "entrar" ? "" : "Mínimo de 6 caracteres."}><${Texto} id="lg-senha" type="password" autocomplete=${modo === "entrar" ? "current-password" : "new-password"} valor=${senha} onMuda=${setSenha} /></${Campo}>` : null}
       ${msg ? html`<div class=${msg.ok ? "info" : "erros"} role="status">${msg.t}</div>` : null}
       <button type="submit" class="btn btn-pri btn-bloco" disabled=${ocupado}>${ocupado ? "Aguarde…" : titulos[modo]}</button>

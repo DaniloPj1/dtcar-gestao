@@ -27,23 +27,33 @@ export type Deps = {
   perfil: (id: string) => Promise<{ id: string; nome: string } | null>;
 };
 
+/** Login sem e-mail (pedido do Danilo, 16/11/2026 à noite): o usuário "joao" vira o e-mail interno joao@app.dtcarcentroautomotivo.com.br
+ *  (o Supabase exige e-mail; este domínio é da oficina e nunca recebe mensagem). O mesmo que js/appacesso.js faz na tela de entrar. */
+export const DOMINIO_USUARIO = "app.dtcarcentroautomotivo.com.br";
+export const usuarioValido = (u: string) => /^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$/.test(u) && !/[._-]{2}/.test(u);
+
 export async function executar(corpo: Record<string, unknown>, deps: Deps): Promise<Record<string, unknown>> {
   if (!deps.admin) throw new ErroUso("Só o administrador cria acessos e troca senhas da equipe.");
   const acao = String(corpo.acao || "");
   if (acao === "criar") {
-    const nome = String(corpo.nome ?? "").trim().replace(/\s+/g, " "), email = String(corpo.email ?? "").trim().toLowerCase(), senha = String(corpo.senha ?? ""), papel = String(corpo.papel ?? "");
+    const nome = String(corpo.nome ?? "").trim().replace(/\s+/g, " "), senha = String(corpo.senha ?? ""), papel = String(corpo.papel ?? "");
+    // login: "usuario" (sem e-mail) OU "email"; o que vier em "login" decide pelo @
+    const login = String(corpo.login ?? corpo.email ?? corpo.usuario ?? "").trim().toLowerCase();
+    const email = login.includes("@") ? login : login + "@" + DOMINIO_USUARIO;
     if (nome.length > 80) throw new ErroUso("O nome pode ter no máximo 80 caracteres.");
     if (nome.length < 2) throw new ErroUso("Informe o nome do colaborador.");
-    if (!emailValido(email)) throw new ErroUso("Informe um e-mail válido (é o login da pessoa).");
+    if (!login) throw new ErroUso("Informe o usuário (ou o e-mail) da pessoa: é o login dela.");
+    if (!login.includes("@") && !usuarioValido(login)) throw new ErroUso("O usuário precisa ter de 3 a 30 letras minúsculas, números, ponto, traço ou sublinhado, sem espaço, sem começar nem terminar com ponto/traço e sem dois seguidos (ex.: joao.silva).");
+    if (login.includes("@") && !emailValido(email)) throw new ErroUso("Informe um e-mail válido (é o login da pessoa).");
     if (!senhaValida(senha)) throw new ErroUso("A senha precisa ter 8 ou mais caracteres, com letras e números.");
     if (!PAPEIS.includes(papel)) throw new ErroUso("Escolha o papel: administrador, consultor ou mecânico.");
     const u = await deps.criarUsuario(email, senha, nome);
     if (!u.id) {
-      if (/already|registered|exists|duplicate/i.test(u.erro || "")) throw new ErroUso("Este e-mail já tem acesso. Use “Trocar senha” na pessoa, ou outro e-mail.");
+      if (/already|registered|exists|duplicate/i.test(u.erro || "")) throw new ErroUso((login.includes("@") ? "Este e-mail" : "Este usuário") + " já tem acesso. Use “Trocar senha” na pessoa, ou escolha outro.");
       throw new Error(u.erro || "Não deu para criar o acesso.");
     }
     await deps.ajustarPerfil(u.id, nome, papel, email);   // o gatilho do banco cria o perfil como "pendente"; aqui entram o nome e o papel escolhidos
-    return { ok: true, id: u.id, email };
+    return { ok: true, id: u.id, email, usuario: login.includes("@") ? "" : login };
   }
   if (acao === "senha") {
     const id = String(corpo.id ?? ""), senha = String(corpo.senha ?? "");

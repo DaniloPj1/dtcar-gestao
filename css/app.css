@@ -1600,6 +1600,9 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 
 /* Equipe › App do celular por pessoa (cfg.appAcessos): chave liga/desliga e as telas que a pessoa vê */
 .linha:has(.app-acesso){flex-wrap:wrap}
+.horario-uso{display:flex;flex-direction:column;gap:6px;padding-top:6px;border-top:1px dashed var(--line)}
+.horario-linha{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.horario-linha label{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.inp-hora{width:auto;min-height:32px;padding:2px 6px}
 .app-acesso{flex-basis:100%;display:flex;flex-direction:column;gap:8px;padding:8px 0 2px;font-size:14px}
 .app-acesso .chave-linha{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .app-acesso .chave{width:48px;height:28px;border-radius:14px;border:0;background:var(--line);position:relative;padding:0;flex-shrink:0;cursor:pointer}

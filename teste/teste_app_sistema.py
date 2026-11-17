@@ -59,6 +59,8 @@ class Fake:
                 if d.get('password') != 'certa': return resp(route, {'error': 'invalid_grant', 'error_description': 'Invalid login credentials', 'msg': 'Invalid login credentials'}, 400)
                 return resp(route, sessao(d.get('email')))
             if '/auth/v1/logout' in u: return route.fulfill(status=204, headers={'access-control-allow-origin': '*'})
+            if '/auth/v1/health' in u: return resp(route, {'name': 'GoTrue'})
+            if '/functions/v1/pedido' in u and getattr(s, 'sem_funcao', False): return route.fulfill(status=404, content_type='application/json', body='{"code":"NOT_FOUND"}')  # sem CORS: o navegador vê erro de rede
             if '/functions/v1/pedido' in u:
                 d = json.loads(rq.post_data or '{}'); s.funcao_pedido.append(d)
                 if d.get('acao') == 'novo':
@@ -264,7 +266,10 @@ try:
         t('ORC-00005' in tx and 'Barulho na suspensão' in tx and 'Enviado ao cliente' in tx and 'ORC-00006' not in tx.split('Orçamentos abertos')[1], 'lista só os orçamentos abertos, com o pedido escrito')
         t(pg.locator('.bolinha').count() >= 1 and pg.locator('.abas .bolinha').inner_text() == '1', 'a aba Orçamentos mostra 1 aviso')
         pg.click('button[data-visto="orc2"]'); pg.wait_for_timeout(500); t('ORC-00006 aprovado' not in textos(pg) and pg.locator('.bolinha').count() == 0, 'OK no aviso tira o aviso (fica guardado no aparelho)')
-        pg.click('button[data-acrescentar="orc1"]'); pg.fill('#ac-area', 'Palhetas'); pg.click('#ac-gravar'); pg.wait_for_timeout(800)
+        # função ainda não publicada no Supabase (404 sem CORS): a mensagem diz a causa certa, não "sem internet" (bug visto pelo Danilo em 16/11 às 21h)
+        f.sem_funcao = True; pg.click('button[data-acrescentar="orc1"]'); pg.fill('#ac-area', 'Palhetas'); pg.click('#ac-gravar'); pg.wait_for_timeout(1500)
+        t('falta publicar a função "pedido"' in textos(pg) and 'Confira a internet' not in textos(pg), 'função não publicada: avisa que falta publicar, não culpa a internet: %s' % textos(pg)[-300:])
+        f.sem_funcao = False; pg.click('#ac-gravar'); pg.wait_for_timeout(800)
         t(f.funcao_pedido[-1] == {'acao': 'acrescentar', 'id': 'orc1', 'texto': 'Palhetas'} and '— Fulano de Teste, 16/11/2026 15:31: Palhetas' in textos(pg), 'acrescentar manda o texto para a função pedido e mostra a linha no pedido')
         pg.click('#orc-novo'); pg.wait_for_selector('#pd-area'); pg.click('#pd-enviar'); pg.wait_for_timeout(300); t('Busque a placa ou informe o nome' in textos(pg), 'pedido novo exige placa ou cliente')
         pg.fill('#pd-placa', 'abc1d23'); pg.locator('#pd-placa').blur(); pg.wait_for_selector('#veic', timeout=5000); t('JOÃO DA SILVA' in textos(pg) and pg.locator('#pd-nome').count() == 0, 'placa do cadastro traz carro e dono; não pede o nome')

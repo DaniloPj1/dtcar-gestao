@@ -228,21 +228,31 @@ function criarApiSupabase() {
     },
     /** Equipe (pedido do Danilo, 16/11/2026): o administrador cria o login e a senha do colaborador e troca senha pela função "equipe".
      *  equipe.criar({ nome, email, senha, papel }) → { ok, id }; equipe.senha({ id, senha }) → { ok }. Lança erro com a mensagem em português. */
+    /** Chama uma função do Supabase publicada pelo painel (equipe, pedido). Função que ainda NÃO foi publicada responde 404 sem cabeçalho
+     *  de CORS, e o navegador não deixa ler a resposta: cai como erro de rede. Por isso, quando a chamada falha "sem resposta", confere se
+     *  o servidor está no ar (o /auth/v1/health responde sempre): no ar → a função não foi publicada; fora do ar → sem internet mesmo. */
+    chamarFuncao: async (nome, body, oQueFaz) => {
+      const semFuncao = () => new Error(oQueFaz + " ainda não foi ligado no servidor: falta publicar a função \"" + nome + "\" no Supabase. Avise o administrador.");
+      const semRede = async () => {
+        let noAr = false;
+        try { const r = await fetch(cx.url + "/auth/v1/health", { method: "GET", cache: "no-store", signal: AbortSignal.timeout ? AbortSignal.timeout(6000) : undefined }); noAr = r.ok; } catch (e) {}
+        return noAr ? semFuncao() : new Error("Sem resposta do servidor. Confira a internet e tente de novo.");
+      };
+      let data, error;
+      try { ({ data, error } = await sb.functions.invoke(nome, { body })); }
+      catch (e) { throw await semRede(); }
+      if (error) {
+        const st = error.context && error.context.status; let m = error.message || "";
+        if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) throw await semRede();
+        try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
+        if (st === 404 || /not found/i.test(m)) throw semFuncao();
+        throw new Error(m || "Falha ao falar com o servidor.");
+      }
+      if (!data || data.ok !== true) throw new Error((data && data.erro) || "Falha ao falar com o servidor.");
+      return data;
+    },
     equipe: {
-      chamar: async body => {
-        let data, error;
-        try { ({ data, error } = await sb.functions.invoke("equipe", { body })); }
-        catch (e) { throw new Error("Sem resposta do servidor. Confira a internet e tente de novo."); }
-        if (error) {
-          const st = error.context && error.context.status; let m = error.message || "";
-          if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) throw new Error("Sem resposta do servidor. Confira a internet e tente de novo.");
-          try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
-          if (st === 404 || /not found/i.test(m)) throw new Error("Criar acesso pelo sistema ainda não foi ligado: falta publicar a função \"equipe\" no Supabase.");
-          throw new Error(m || "Falha ao falar com o servidor.");
-        }
-        if (!data || data.ok !== true) throw new Error((data && data.erro) || "Falha ao falar com o servidor.");
-        return data;
-      },
+      chamar: async body => metodos.chamarFuncao("equipe", body, "Criar acesso pelo sistema"),
       criar: async d => metodos.equipe.chamar({ acao: "criar", ...d }),
       senha: async d => metodos.equipe.chamar({ acao: "senha", ...d }),
     },
@@ -268,20 +278,7 @@ function criarApiSupabase() {
     /** Pedido de orçamento pelo app do celular (função "pedido": qualquer pessoa da equipe escreve o que é para orçar; o Danilo
      *  monta o orçamento no sistema). `novo` cria o orçamento em elaboração; `acrescentar` junta mais coisas a um orçamento aberto. */
     pedido: {
-      chamar: async body => {
-        let data, error;
-        try { ({ data, error } = await sb.functions.invoke("pedido", { body })); }
-        catch (e) { throw new Error("Sem resposta do servidor. Confira a internet e tente de novo."); }
-        if (error) {
-          const st = error.context && error.context.status; let m = error.message || "";
-          if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) throw new Error("Sem resposta do servidor. Confira a internet e tente de novo.");
-          try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
-          if (st === 404 || /not found/i.test(m)) throw new Error("O pedido de orçamento pelo app ainda não foi ligado: falta publicar a função \"pedido\" no Supabase.");
-          throw new Error(m || "Falha ao falar com o servidor.");
-        }
-        if (!data || data.ok !== true) throw new Error((data && data.erro) || "Falha ao falar com o servidor.");
-        return data;
-      },
+      chamar: async body => metodos.chamarFuncao("pedido", body, "O pedido de orçamento pelo app"),
       novo: async d => metodos.pedido.chamar({ acao: "novo", ...d }),
       acrescentar: async (id, texto) => metodos.pedido.chamar({ acao: "acrescentar", id, texto }),
     },

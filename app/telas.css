@@ -208,3 +208,10 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .foto-peca{width:72px;height:56px;object-fit:contain;background:#fff;border:1px solid #d3d7dc;border-radius:8px;display:block}
 .foto-peca.grande{width:100%;height:auto;max-height:52vh;aspect-ratio:1/1;border-radius:10px}
 .foto-peca-btn{padding:0;border:0;background:none;align-self:flex-start;cursor:zoom-in}
+
+/* agenda (lista) e meus serviços: linha com a hora/dia à esquerda */
+.ag-item{display:flex;gap:12px;padding:8px 0;border-bottom:1px solid #e6e8eb}.ag-item:last-child{border-bottom:0}
+.ag-hora{flex:0 0 64px;font-weight:700;color:var(--azul);font-size:15px;padding-top:2px}
+.ag-meio{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:14px}.ag-meio b{font-size:15px;color:var(--tinta)}.ag-meio span{color:var(--cinza-texto)}
+/* finalizar o serviço: item + responsável */
+.fim-item{display:flex;flex-direction:column;gap:4px;padding:6px 0;border-bottom:1px dashed #d3d7dc}.fim-item .marcar input{width:22px;height:22px;accent-color:var(--azul)}

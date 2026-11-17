@@ -14,7 +14,7 @@ def t(c, m):
     assert c, m; ok += 1
 UID = '22222222-2222-2222-2222-222222222222'
 import datetime; HOJE = datetime.date.today().isoformat()
-ROTULOS = ['ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
+ROTULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
 # plugin da digital de mentira: o "cofre" (window.__cofre) sobrevive a recarregar a página; __ok controla se a leitura passa
 PLUGIN = """
 ['__cofre', '__ok'].forEach(function (k) { Object.defineProperty(window, k, { configurable: true,
@@ -40,7 +40,7 @@ ORCS = [{'id': 'orc1', 'numero': 5, 'situacao': 'enviado', 'cliente_id': 'c1', '
         {'id': 'orc2', 'numero': 6, 'situacao': 'aprovado', 'cliente_id': 'c1', 'veiculo_id': 'v1', 'cliente': {'nome': 'JOÃO DA SILVA'}, 'veiculo': {'placa': 'ABC1D23', 'marca': 'Volkswagen', 'modelo': 'GOL 1.0', 'ano': '2014/2015'}, 'reclamacao': 'Troca de óleo', 'obs_internas': 'Pedido pelo app — Fulano de Teste, 14/11/2026 09:00', 'consultor_id': UID, 'consultor_nome': 'Fulano de Teste', 'criado_em': '2026-11-14T12:00:00Z', 'atualizado_em': '2026-11-15T12:00:00Z', 'respondido_em': '2026-11-15T12:00:00Z', 'ordem_id': 'o2', 'os_numero': 1920, 'total': 300},
         {'id': 'orc3', 'numero': 7, 'situacao': 'aprovado', 'cliente': {'nome': 'OUTRO'}, 'veiculo': {'placa': 'QQQ1Q11'}, 'reclamacao': 'x', 'obs_internas': '', 'consultor_id': 'outra-pessoa', 'consultor_nome': 'Outra', 'criado_em': '2026-11-14T12:00:00Z', 'atualizado_em': '2026-11-15T12:00:00Z', 'ordem_id': 'o9', 'os_numero': 1999, 'total': 1}]
 class Fake:
-    def __init__(s, papel='admin', ativo=True, acessos=None): s.papel, s.ativo, s.pedidos, s.refresh, s.n = papel, ativo, [], 'r0', 0; s.gravados = []; s.acessos = acessos; s.eventos = []; s.orcs = json.loads(json.dumps(ORCS)); s.funcao_pedido = []
+    def __init__(s, papel='admin', ativo=True, acessos=None): s.papel, s.ativo, s.pedidos, s.refresh, s.n = papel, ativo, [], 'r0', 0; s.gravados = []; s.acessos = acessos; s.eventos = []; s.apont = []; s.vistos = []; s.orcs = json.loads(json.dumps(ORCS)); s.funcao_pedido = []
     def instalar(s, pg):
         def resp(route, corpo, st=200): route.fulfill(status=st, content_type='application/json', body=json.dumps(corpo), headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*'})
         def sessao(email='teste@dtcar.com'):
@@ -71,9 +71,29 @@ class Fake:
                 if not o: return resp(route, {'ok': False, 'erro': 'Este orçamento não existe mais.'}, 400)
                 o['reclamacao'] = o['reclamacao'] + '\n— Fulano de Teste, 16/11/2026 15:31: ' + d['texto']; o['atualizado_em'] = '2026-11-16T18:31:00Z'
                 return resp(route, {'ok': True, 'id': o['id'], 'numero': o['numero']})
-            if '/rest/v1/agendamentos' in u and rq.method == 'GET': return resp(route, [{'id': 'ag1', 'data': HOJE, 'hora': '08:00', 'situacao': 'agendado'}, {'id': 'ag2', 'data': HOJE, 'hora': '09:00', 'situacao': 'cancelado'}])
+            if '/rest/v1/agendamentos' in u and rq.method == 'GET': return resp(route, [{'id': 'ag1', 'data': HOJE, 'hora': '08:00', 'situacao': 'agendado', 'cliente': {'nome': 'JOÃO DA SILVA'}, 'veiculo': {'placa': 'ABC1D23', 'marca': 'Volkswagen', 'modelo': 'GOL 1.0'}, 'servico': 'Revisão', 'mecanico_id': UID, 'mecanico_nome': 'Fulano de Teste'},
+                {'id': 'ag2', 'data': HOJE, 'hora': '09:00', 'situacao': 'cancelado', 'cliente': {'nome': 'X'}, 'veiculo': {}, 'servico': 'Óleo'}, {'id': 'ag3', 'data': HOJE, 'hora': '10:00', 'situacao': 'agendado', 'cliente': {'nome': 'MARIA'}, 'veiculo': {'placa': 'QXN1E49', 'modelo': 'ONIX'}, 'servico': 'Freios', 'mecanico_id': 'outra-pessoa', 'mecanico_nome': 'Beto'}])
+            if '/rest/v1/rpc/apontamento_visto' in u:
+                d = json.loads(rq.post_data or '{}'); s.vistos.append(d.get('p_id'))
+                for a in s.apont:
+                    if a['id'] == d.get('p_id'): a['indicacoes'] = [{**i, 'visto_em': '2026-11-16T19:00:00Z'} if i.get('para_id') == UID else i for i in a.get('indicacoes') or []]
+                return resp(route, None)
+            if '/rest/v1/servico_apontamentos' in u:
+                if rq.method == 'POST':
+                    d = json.loads(rq.post_data or '{}'); s.gravados.append(('servico_apontamentos', d))
+                    if any(a['perfil_id'] == d['perfil_id'] and a['ordem_id'] == d['ordem_id'] and a['situacao'] != 'finalizado' for a in s.apont): return resp(route, {'code': '23505', 'message': 'duplicate key value violates unique constraint "servico_apontamentos_aberto"'}, 409)
+                    a = {'id': 'ap%d' % (len(s.apont) + 1), 'inicio': '2026-11-16T18:50:00Z', 'fim': None, 'motivo_pausa': '', 'pausas': [], 'itens_executados': [], 'indicacoes': [], 'obs': '', **d}; s.apont.append(a); return resp(route, a)
+                if rq.method == 'PATCH':
+                    d = json.loads(rq.post_data or '{}'); s.gravados.append(('servico_apontamentos', d)); i = u.split('id=eq.')[1].split('&')[0]
+                    for a in s.apont:
+                        if a['id'] == i: a.update(d); return resp(route, a)
+                    return resp(route, {'message': 'not found'}, 404)
+                l = s.apont
+                if 'perfil_id=eq.' in u: l = [a for a in l if ('perfil_id=eq.' + a['perfil_id']) in u]
+                if 'situacao=neq.finalizado' in u: l = [a for a in l if a['situacao'] != 'finalizado']
+                return resp(route, l)
             if '/rest/v1/perfis' in u:
-                pf = {'id': UID, 'nome': 'Fulano de Teste', 'papel': s.papel, 'ativo': s.ativo}; return resp(route, pf if 'id=eq.' in u else [pf])
+                pf = {'id': UID, 'nome': 'Fulano de Teste', 'papel': s.papel, 'ativo': s.ativo}; return resp(route, pf if 'id=eq.' in u else [pf, {'id': 'outra-pessoa', 'nome': 'Beto Mecânico', 'papel': 'mecanico', 'ativo': True}])
             if rq.method == 'POST' and '/rest/v1/' in u:
                 corpo = json.loads(rq.post_data or '{}'); tab = u.split('/rest/v1/')[1].split('?')[0]; s.gravados.append((tab, corpo))
                 if tab == 'clientes': return resp(route, {**corpo, 'id': 'c-novo'})
@@ -128,13 +148,13 @@ try:
         pg.click('.ver'); t(pg.get_attribute('#lg-senha', 'type') == 'text', 'botão Mostrar revela a senha')
         # 2) login certo como administrador, sem plugin (navegador): sem oferta de digital
         entrar(pg); t('Olá, Fulano' in textos(pg) and 'Administrador' in textos(pg), 'entra como administrador')
-        barras = rotulos(pg); t(barras == ROTULOS, 'seis botões na ordem do protótipo, sem + O.S.: %s' % barras)
+        barras = rotulos(pg); t(barras == ROTULOS, 'nove botões na ordem combinada, sem + O.S.: %s' % barras)
         t(pg.locator('.quadro').count() == 0, 'sem plugin não oferece a digital')
         t(not f.escritas(), 'não grava nada no banco: %s' % f.escritas())
         # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
         # cada botão abre a tela do app correspondente (desenho do protótipo), sem sair do app
-        TITULOS = ['ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
-        ROTAS = ['oleo', 'orcamento', 'agendar', 'peca', 'historico', 'osconsulta']
+        TITULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
+        ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta']
         for i, rota in enumerate(ROTAS):
             pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i); pg.wait_for_selector('.titulo b', timeout=10000)
             t(pg.url.endswith('#/' + rota) and pg.inner_text('.titulo b') == TITULOS[i], 'botão %d abre %s: %s / %s' % (i + 1, rota, pg.url, pg.inner_text('.titulo b')))
@@ -152,7 +172,7 @@ try:
         t(not er, 'sem erro de script: %s' % er); ctx.close()
         # 3) consultor entra; mecânico, pendente e inativo não
         f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 6, 'consultor entra'); ctx.close()
+        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 9, 'consultor entra'); ctx.close()
         for papel, ativo in (('mecanico', True), ('pendente', True), ('admin', False)):
             f = Fake(papel, ativo); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
             t(('não está liberado' in textos(pg) or 'acesso liberado pelo administrador' in textos(pg)) and pg.locator('.barra').count() == 0, 'recusa %s ativo=%s (padrão do papel)' % (papel, ativo))
@@ -310,7 +330,7 @@ try:
         t(pg.input_value('#ag-nome') == 'JOÃO DA SILVA' and pg.input_value('#ag-whats') == '(27) 99999-0000', 'agendar entra com o dono do carro')
         t(pg.locator('.cal-dia').count() >= 28 and pg.locator('.cal-sem span').count() == 7, 'calendário do mês inteiro')
         t(pg.locator('.cal-dia[aria-pressed=true]').inner_text().startswith(str(int(HOJE[8:10]))) and str(int(HOJE[8:10])) in pg.locator('.cal-dia[aria-pressed=true]').inner_text(), 'hoje vem marcado')
-        t(pg.locator('.cal-dia[aria-pressed=true] i').inner_text() == '1', 'o dia mostra quantos serviços já tem (cancelado não conta)')
+        t(pg.locator('.cal-dia[aria-pressed=true] i').inner_text() == '2', 'o dia mostra quantos serviços já tem (cancelado não conta)')
         # vai até dezembro: Natal em laranja (feriado), com o nome ao escolher
         while 'dezembro' not in pg.locator('#ag-mes').inner_text(): pg.click('button[aria-label="Próximo mês"]'); pg.wait_for_timeout(150)
         natal = pg.locator('.cal-dia.feriado', has_text='25'); t(natal.count() == 1 and 'Natal' in natal.get_attribute('aria-label') and pg.evaluate("getComputedStyle(document.querySelector('.cal-dia.feriado')).backgroundColor") == 'rgb(255, 241, 220)', 'feriado em cor diferente com o nome: %s' % (natal.count() and natal.get_attribute('aria-label')))
@@ -355,6 +375,43 @@ try:
         t(pg.locator('#veic').count() == 1 and pg.input_value('#ini-placa') == 'ABC1D23', 'a placa buscada no Início continua lá depois de sair e voltar')
         pg.click('button[aria-label="Limpar"]'); pg.wait_for_timeout(200); tela(pg, 'oleo'); pg.goto(URL + '#/inicio'); pg.wait_for_selector('#ini-placa'); pg.wait_for_timeout(300)
         t(pg.locator('#veic').count() == 0 and pg.input_value('#ini-placa') == '', 'limpar tira a placa guardada'); ctx.close()
+        # Iniciar serviço (v60): O.S. pela placa → iniciar; um por vez; pausar com motivo; retomar; finalizar marcando o feito e indicando responsável
+        f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'servico')
+        t('Qual carro vai mexer' in textos(pg) and pg.locator('[data-iniciar]').count() == 0, 'sem placa: pede o carro')
+        pg.fill('#sv-placa', 'abc1d23'); pg.keyboard.press('Enter'); pg.wait_for_selector('[data-iniciar="o2"]', timeout=8000); pg.wait_for_timeout(600); tx = textos(pg)
+        t('OS 01920' in tx and 'Revisão e freios' in tx and 'REVISÃO COMPLETA' in tx and 'R$' not in tx and pg.locator('[data-iniciar]').count() == 1, 'placa com O.S. aberta mostra o que fazer, sem preço, só a O.S. aberta (a fechada não)')
+        pg.click('[data-iniciar="o2"]'); pg.wait_for_selector('[data-pausar]', timeout=8000); pg.wait_for_timeout(400)
+        t(f.apont and f.apont[-1]['ordem_id'] == 'o2' and f.apont[-1]['perfil_id'] == UID and f.apont[-1]['situacao'] == 'andamento', 'Iniciar grava o apontamento em andamento: %s' % (f.apont[-1:] or None))
+        t('Em andamento · OS 01920' in textos(pg) and pg.locator('#sv-placa').count() == 1, 'o serviço em andamento aparece no topo e ainda dá para buscar outro carro')
+        # outro carro com O.S. aberta não inicia enquanto há um em andamento
+        f_ord = ORD[1]; pg.fill('#sv-placa', 'abc1d23'); pg.keyboard.press('Enter'); pg.wait_for_timeout(800)
+        t(pg.locator('[data-iniciar]').count() == 0, 'a O.S. que já está em andamento não aparece de novo para iniciar')
+        pg.click('[data-pausar]'); pg.wait_for_selector('.quadro'); pg.click('.btn-chip:has-text("Aguardando peças")'); pg.click('#sv-pausar-ok'); pg.wait_for_timeout(600)
+        t(f.apont[-1]['situacao'] == 'pausado' and f.apont[-1]['motivo_pausa'] == 'Aguardando peças' and len(f.apont[-1]['pausas']) == 1 and 'Pausado · OS 01920' in textos(pg), 'pausar grava o motivo e a hora: %s' % f.apont[-1])
+        pg.click('[data-retomar]'); pg.wait_for_timeout(600)
+        t(f.apont[-1]['situacao'] == 'andamento' and f.apont[-1]['pausas'][0].get('retomado_em'), 'retomar fecha a pausa')
+        pg.click('[data-finalizar]'); pg.wait_for_selector('#sv-fim-ok'); pg.check('[data-feito="i2"]'); pg.select_option('[data-resp="i3"]', 'outra-pessoa'); pg.click('#sv-fim-ok'); pg.wait_for_timeout(800)
+        ap = f.apont[-1]; t(ap['situacao'] == 'finalizado' and ap['fim'] and ap['itens_executados'] == ['i2'] and ap['indicacoes'][0]['para_id'] == 'outra-pessoa' and ap['indicacoes'][0]['descricao'] == 'PASTILHAS DE FREIO DIANTEIRAS', 'finalizar grava itens executados e a indicação do responsável: %s' % ap)
+        t(any(tb == 'os_itens' and any(x.get('executado') is True and x.get('id') == 'i2' for x in (c if isinstance(c, list) else [c])) for tb, c in f.gravados), 'o item feito fica marcado como executado na O.S.')
+        t(pg.locator('[data-pausar]').count() == 0 and pg.locator('[data-finalizar]').count() == 0, 'depois de finalizar não há serviço aberto')
+        # carro sem O.S. aberta: vai para o pedido de orçamento com a placa já buscada (contato opcional)
+        pg.fill('#sv-placa', 'qxn1e49'); pg.keyboard.press('Enter'); pg.wait_for_selector('#sv-pedir', timeout=8000); pg.click('#sv-pedir'); pg.wait_for_selector('#pd-area', timeout=8000); pg.wait_for_timeout(800)
+        t(pg.url.endswith('#/orcamento') and pg.input_value('#pd-placa') == 'QXN1E49', 'sem O.S.: abre o pedido de orçamento com a placa: %s' % pg.input_value('#pd-placa'))
+        # indicação recebida: aviso com OK (marca como visto)
+        f.apont.append({'id': 'ap-x', 'ordem_id': 'o2', 'os_numero': 1920, 'perfil_id': 'outra-pessoa', 'perfil_nome': 'Beto Mecânico', 'situacao': 'finalizado', 'inicio': '2026-11-16T12:00:00Z', 'fim': '2026-11-16T13:00:00Z', 'motivo_pausa': '', 'pausas': [], 'itens_executados': [], 'indicacoes': [{'item_id': 'i3', 'descricao': 'ALINHAMENTO', 'para_id': UID, 'para_nome': 'Fulano de Teste', 'em': '2026-11-16T13:00:00Z', 'visto_em': None}]})
+        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra'); pg.wait_for_timeout(1500)
+        t(pg.locator('.barra:has-text("INICIAR SERVIÇO") .bolinha').inner_text() == '1', 'indicação para mim aparece na bolinha de Iniciar serviço')
+        tela(pg, 'servico'); pg.wait_for_selector('[data-indicacao="ap-x"]'); t('Beto Mecânico' in textos(pg) and 'ALINHAMENTO' in textos(pg), 'o aviso diz quem indicou e o quê')
+        pg.click('[data-indicacao="ap-x"]'); pg.wait_for_timeout(800); t(f.vistos == ['ap-x'] and pg.locator('[data-indicacao]').count() == 0, 'OK marca a indicação como vista')
+        # Agenda (lista): administrador vê todos com o mecânico; Meus serviços: por quinzena
+        tela(pg, 'agenda'); pg.wait_for_timeout(800); tx = textos(pg)
+        t('JOÃO DA SILVA' in tx and 'MARIA' in tx and 'Beto' in tx and 'Revisão' in tx and pg.locator('.ag-item').count() == 2, 'administrador vê todos os agendamentos (cancelado não) com o mecânico')
+        tela(pg, 'meus'); pg.wait_for_timeout(800); tx = textos(pg)
+        t('1 carro(s)' in tx and 'OS 01920' in tx and ('1 a 15' in tx or '16 a' in tx) and 'Beto' not in tx.split('MEUS SERVIÇOS')[1], 'Meus serviços agrupa por quinzena e mostra só os meus')
+        t(not er, 'sem erro de script no serviço: %s' % er); ctx.close()
+        # mecânico: na agenda só os dele
+        f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['agenda', 'servico']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'agenda'); pg.wait_for_timeout(800); tx = textos(pg)
+        t('JOÃO DA SILVA' in tx and 'MARIA' not in tx and pg.locator('.ag-item').count() == 1, 'mecânico vê só os agendamentos em que é o mecânico'); ctx.close()
         # consultor: vê os valores e o aviso de somente leitura na consulta de O.S.
         f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'osconsulta'); placa_na_tela('oc-placa'); tx = textos(pg)
         t('R$\xa0900,00' in tx and 'Somente leitura' not in tx, 'consultor vê valores'); ctx.close()

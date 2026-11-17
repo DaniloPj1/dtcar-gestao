@@ -245,6 +245,10 @@
         (window.__EV = window.__EV || []).push("abertura: O.S. aberta a partir do orçamento " + ref);
         return { ...resumo, pode_aprovar: true, gravado: true, ordem_id: os.id, os_numero: os.numero }; } },
     // agenda da oficina (v54): mesmas regras do gatilho agendamentos_regras (remarcação, motivo só no cancelado)
+    // apontamentos de serviço pelo app (v60) de mentira: só leitura para o relatório
+    apontamentos: { listar: async ({ perfil_id } = {}) => { net(); return (db.apontamentos = db.apontamentos || [{ id: "ap1", ordem_id: (db.ordens[0] || {}).id, os_numero: (db.ordens[0] || {}).numero, perfil_id: "p2", perfil_nome: "Carlos Mecânico", situacao: "finalizado", inicio: new Date(Date.now() - 3 * 3600000).toISOString(), fim: new Date(Date.now() - 3600000).toISOString(), motivo_pausa: "", pausas: [{ em: new Date(Date.now() - 2 * 3600000).toISOString(), motivo: "Aguardando peças", retomado_em: new Date(Date.now() - 1.5 * 3600000).toISOString() }], itens_executados: ["i1"], indicacoes: [{ item_id: "i2", descricao: "ALINHAMENTO", para_id: "p1", para_nome: "Danilo", em: new Date().toISOString(), visto_em: null }] }]).filter(a => !perfil_id || a.perfil_id === perfil_id); },
+      abrir: async () => { throw new Error("só no app"); }, atualizar: async () => { throw new Error("só no app"); }, visto: async () => {}, indicadasPara: async () => [] },
+    semV60: () => false,
     agenda: { listar: async ({ de, ate } = {}) => { net(); if (window.__SEM_V54) throw new Error("Could not find the table 'public.agendamentos' in the schema cache");
         return (db.agendamentos = db.agendamentos || []).filter(a => (!de || a.data >= de) && (!ate || a.data <= ate)).map(a => ({ ...a })); },
       um: async id => { net(); const a = (db.agendamentos || []).find(x => x.id === id); return a ? { ...a } : null; },

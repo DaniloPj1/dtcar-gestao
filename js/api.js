@@ -36,7 +36,7 @@ export function traduzErro(e) {
 
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero,legado_receber:checkin->legado->a_receber";
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
-let temV11 = true, temReceber = true, temV18 = null, temBoletos = null;
+let temV11 = true, temReceber = true, temV18 = null, temBoletos = null, semV60 = false;   // semV60: v60 (mecânico no agendamento, serviço pelo app) ainda não rodado, descoberto na 1ª gravação
 let temFixas = null, fixasGeradasEm = 0; // despesa fixa (supabase/v43.sql)
 /** grava sem a coluna nova da v18 (conta de origem/destino) se o banco ainda não tiver o supabase/v18.sql */
 async function semColunaV18(linha, coluna, gravar) {
@@ -211,6 +211,7 @@ function criarApiSupabase() {
       },
     },
     temBoletos: () => temBoletos,
+    semV60: () => semV60,
     /** Dados do veículo pela placa, pela função "placa" (API Placas; a chave fica no servidor; v55).
      *  Devolve { ok, encontrado, dados, origem } ou { ok: false, erro, desligada?, sem_saldo?, semRede? }. Não lança erro. */
     placa: async body => {
@@ -349,12 +350,37 @@ function criarApiSupabase() {
       excluir: async id => { ok(await sb.from("orcamentos").delete().eq("id", id)); },
     },
     // agenda da oficina (v54). A tela grava direto na tabela (regras de acesso e gatilho do v54 decidem remarcação e quem criou)
+    /** Serviço pelo mecânico no app (v60, pedido do Danilo em 16/11/2026 à noite): apontamentos de início, pausa, fim, itens executados e
+     *  indicações de responsável. Só online. Sem o v60 no banco, "listar" devolve [] (a tela avisa) e as gravações explicam. */
+    apontamentos: {
+      listar: async ({ perfil_id, ordem_id, abertos, desde, ate } = {}) => {
+        let q = sb.from("servico_apontamentos").select("*");
+        if (perfil_id) q = q.eq("perfil_id", perfil_id); if (ordem_id) q = q.eq("ordem_id", ordem_id); if (abertos) q = q.neq("situacao", "finalizado");
+        if (desde) q = q.gte("inicio", desde); if (ate) q = q.lte("inicio", ate);
+        const r = await q.order("inicio", { ascending: false }).limit(2000);
+        if (r.error && /servico_apontamentos|schema cache|PGRST205/i.test(r.error.message || "")) return [];
+        return ok(r);
+      },
+      abrir: async d => { const r = await sb.from("servico_apontamentos").insert({ ordem_id: d.ordem_id, os_numero: d.os_numero || null, perfil_id: d.perfil_id, perfil_nome: d.perfil_nome || "", situacao: "andamento" }).select().single();
+        if (r.error && /servico_apontamentos|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("Iniciar serviço pelo app ainda não foi ligado: falta rodar o supabase/v60.sql no banco.");
+        if (r.error && /duplicate|unique|servico_apontamentos_aberto/i.test(r.error.message || "")) throw new Error("Você já tem este serviço aberto.");
+        return ok(r); },
+      atualizar: async (id, patch) => ok(await sb.from("servico_apontamentos").update(patch).eq("id", id).select().single()),
+      visto: async id => { ok(await sb.rpc("apontamento_visto", { p_id: id })); },
+      /** indicações feitas PARA esta pessoa ainda não vistas (aviso no app) */
+      indicadasPara: async perfil_id => { const l = await metodos.apontamentos.listar({ desde: new Date(Date.now() - 60 * 86400000).toISOString() });
+        return l.flatMap(s => (Array.isArray(s.indicacoes) ? s.indicacoes : []).filter(i => i.para_id === perfil_id && !i.visto_em).map(i => ({ ...i, apontamento_id: s.id, ordem_id: s.ordem_id, os_numero: s.os_numero, de_nome: s.perfil_nome }))); },
+    },
     agenda: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("agendamentos").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate);
         return q.order("data").order("hora", { nullsFirst: false }).order("id"); }),
       um: async id => ok(await sb.from("agendamentos").select("*").eq("id", id).maybeSingle()),
       salvar: async a => { const { id, criado_em, atualizado_em, criado_por, criado_por_nome, remarcacoes, data_anterior, hora_anterior, ...resto } = a;
-        return id ? ok(await sb.from("agendamentos").update(resto).eq("id", id).select().single()) : ok(await sb.from("agendamentos").insert(resto).select().single()); },
+        const grava = d => id ? sb.from("agendamentos").update(d).eq("id", id).select().single() : sb.from("agendamentos").insert(d).select().single();
+        let r = await grava(resto);
+        // banco ainda sem o v60 (mecânico do agendamento): grava sem a coluna e avisa a tela (api.semV60)
+        if (r.error && /mecanico_(id|nome)/.test(r.error.message || "") && /column|schema cache|PGRST204/i.test(r.error.message || "")) { semV60 = true; const { mecanico_id, mecanico_nome, ...semMec } = resto; r = await grava(semMec); }
+        return ok(r); },
       excluir: async id => { ok(await sb.from("agendamentos").delete().eq("id", id)); },
       /** chegada registrada na O.S. que veio de um orçamento aprovado: o agendamento desse orçamento fica "Chegou" com a O.S. */
       chegouPeloOrcamento: async (orcamentoId, ordem) => ok(await sb.from("agendamentos").update({ situacao: "chegou", ordem_id: ordem.id, os_numero: ordem.numero })
@@ -745,6 +771,8 @@ function comBancoDoPC(a) {
       aprovar: soOnline(a.orcamentos.aprovar, "Sem conexão com a internet: aprovar o orçamento cria a O.S. no servidor e precisa de internet."),
       excluir: soOnline(a.orcamentos.excluir, "Sem conexão com a internet: o orçamento só pode ser excluído com internet.") },
     // agenda: sem internet, só consulta (do banco do PC); gravar precisa de internet
+    apontamentos: { ...a.apontamentos, abrir: soOnline(a.apontamentos.abrir, "Sem conexão com a internet: o serviço só pode ser iniciado com internet."),
+      atualizar: soOnline(a.apontamentos.atualizar, "Sem conexão com a internet: tente de novo quando a internet voltar."), visto: soOnline(a.apontamentos.visto, "Sem conexão com a internet.") },
     agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),
       salvar: soOnline(a.agenda.salvar, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),
       excluir: soOnline(a.agenda.excluir, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),

@@ -123,7 +123,7 @@
       E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email, telas: acesso.telas, horario: acesso.horario };
       if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
-      if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
+      if (!/^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
       desenhar();
       if (origem === 'senha') oferecerDigital();
     }).catch(function () { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); });

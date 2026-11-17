@@ -3,8 +3,8 @@
 // Sem nada gravado vale o padrão: administrador e consultor entram com todas as telas; mecânico e pendente não entram.
 // Usado pelo app (app/app.js e app/telas.js) e pela tela Equipe (js/telas/admin.js). Sem window/document.
 export const TELAS_APP = [
-  ["oleo", "Óleo (aplicação)"], ["orcamento", "Orçamentos (pedido)"], ["agendar", "Agendar"],
-  ["peca", "Consultar peça por catálogo"], ["historico", "Histórico de serviços"], ["osconsulta", "Consultar O.S."],
+  ["servico", "Iniciar serviço"], ["oleo", "Óleo (aplicação)"], ["orcamento", "Orçamentos (pedido)"], ["agendar", "Agendar"], ["agenda", "Agenda (lista)"],
+  ["peca", "Consultar peça por catálogo"], ["historico", "Histórico de serviços"], ["meus", "Meus serviços (quinzena)"], ["osconsulta", "Consultar O.S."],
 ];
 const TODAS = TELAS_APP.map(t => t[0]);
 /** Telas que o papel pode usar. Desde 16/11/2026 (à tarde) o orçamento no app é só um PEDIDO (sem item e sem preço), então o mecânico

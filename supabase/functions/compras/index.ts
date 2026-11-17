@@ -332,7 +332,12 @@ export function pellegrinoLerPagina(html: string): { id: string; descricao: stri
     const descricao = (/font-weight-bold[^>]*>([^<]{3,120})</.exec(tr) || [])[1] || "";
     const marca = (/<span class="d-none">([^<]{2,40})<\/span>\s*<img/.exec(tr) || [])[1] || "";
     const semEstoque = /avise quando estiver dispon/i.test(tr);
-    const foto = desHtml((/<img[^>]+(?:data-src|src)="([^"]+\.(?:jpe?g|png|webp)[^"]*)"/i.exec(tr) || [])[1] || "");
+    // foto da peça: a 1ª imagem da linha que NÃO é o logotipo do fabricante (o logotipo vem logo depois do nome da marca escondido,
+    // <span class="d-none">MANN</span><img …>, ou tem logo/marca/fabricante no endereço ou no alt). Revisão do Codex, 17/11/2026.
+    const logo = (/<span class="d-none">[^<]{2,40}<\/span>\s*(<img[^>]*>)/.exec(tr) || [])[1] || "";
+    const foto = desHtml([...tr.matchAll(/<img[^>]*>/gi)].map((m) => m[0])
+      .filter((tag) => tag !== logo && !/logo|marca|fabricante|brand|manufacturer/i.test(tag))
+      .map((tag) => (/(?:data-src|src)="([^"]+\.(?:jpe?g|png|webp)[^"]*)"/i.exec(tag) || [])[1] || "").find(Boolean) || "");
     if (id && (codigo || descricao)) out.push({ id, descricao: txt(descricao), marca: txt(marca), codigo: txt(desHtml(codigo)), semEstoque, foto });
   }
   return out;

@@ -286,6 +286,21 @@
           excluir: async id => { v59(); db.compras_fornecedores = db.compras_fornecedores.filter(x => x.id !== id); delete window.__SEGREDOS["compras_acesso:" + id]; } },
         acessos: async () => { v59(); return Object.keys(window.__SEGREDOS).filter(k => k.startsWith("compras_acesso:")).map(k => ({ id: k.slice(15), gravado_em: now() })); },
         gravarAcesso: async (id, senha) => { v59(); if (!senha) { delete window.__SEGREDOS["compras_acesso:" + id]; return { gravado: false }; } window.__SEGREDOS["compras_acesso:" + id] = senha; return { gravado: true, gravado_em: now() }; },
+        // função "compras" de mentira (consulta ao vivo): registra a chamada e, para cada conexão com portal reconhecido e senha, "acha" um preço por código
+        aoVivo: async body => { net(); window.__AOVIVO = window.__AOVIVO || []; window.__AOVIVO.push(body); if (window.__AOVIVO_RESPOSTA) return window.__AOVIVO_RESPOSTA;
+          const robo = c => /dpk/.test(c.endereco || "") ? "dpk" : /rolemar/.test(c.endereco || "") ? "rolemar" : /pellegrino/.test(c.endereco || "") ? "pellegrino" : /toli/.test(c.endereco || "") ? "toli" : null;
+          const cxs = db.compras_fornecedores.filter(c => c.ativo !== false && (!body.conexoes || body.conexoes.includes(c.id)) && (body.acao !== "testar" || c.id === body.conexao));
+          const consultar = c => { const r = robo(c); if (!r) return { conexao: c.id, fornecedor_id: c.fornecedor_id, robo: null, ok: false, ofertas: [], erro: "Portal não reconhecido pelo endereço." };
+            if (r === "toli") return { conexao: c.id, fornecedor_id: c.fornecedor_id, robo: r, ok: false, ofertas: [], no_pc: true, erro: "Portal Toli: consulta pelo programa do PC (em preparação)." };
+            if (!window.__SEGREDOS["compras_acesso:" + c.id]) { Object.assign(c, { situacao: "erro", detalhe: "Sem senha guardada: cadastre a senha em Ajustes › Fornecedores conectados." }); return { conexao: c.id, fornecedor_id: c.fornecedor_id, robo: r, ok: false, ofertas: [], erro: c.detalhe }; }
+            const ofertas = (body.termos || ["WK84213"]).map(t => ({ codigo: t, marca: "MANN", descricao: "PEÇA DO PORTAL " + t, preco: 63.24, estoque: 12, prazo: "" }));
+            Object.assign(c, { situacao: "ok", detalhe: (body.acao === "testar" ? "Conectado em " : "Última consulta ") + now() + " (" + ofertas.length + " preço(s))." });
+            if (body.acao !== "testar") for (const o of ofertas) { const k = nm(o.codigo); let x = db.compras_precos.find(p => p.fornecedor_id === c.fornecedor_id && p.codigo_norm === k);
+              if (!x) { x = { id: uid(), fornecedor_id: c.fornecedor_id, codigo: o.codigo, codigo_norm: k, criado_em: now(), criado_por_nome: "robô", obs: "", prazo: "" }; db.compras_precos.push(x); }
+              Object.assign(x, { marca: o.marca, descricao: o.descricao, preco: o.preco, estoque: o.estoque, origem: "ao_vivo", consultado_em: now(), atualizado_em: now() }); }
+            return { conexao: c.id, fornecedor_id: c.fornecedor_id, robo: r, ok: true, ofertas, gravadas: ofertas.length, em: now() }; };
+          if (body.acao === "testar") { const c = cxs[0]; if (!c) return { ok: false, erro: "Fornecedor conectado não encontrado." }; const x = consultar(c); return x.no_pc ? { ok: true, robo: "toli", no_pc: true } : x.ok ? { ok: true, robo: x.robo, ofertas: x.ofertas } : { ok: false, robo: x.robo, erro: x.erro }; }
+          return { ok: true, termos: body.termos, em: now(), resultados: cxs.map(consultar) }; },
         precos: { listar: async () => { v59(); return db.compras_precos.slice(); },
           salvar: async p => { v59(); const k = nm(p.codigo); let o = db.compras_precos.find(x => x.fornecedor_id === p.fornecedor_id && x.codigo_norm === k);
             if (o) Object.assign(o, p, { codigo_norm: k, origem: "manual", consultado_em: now(), atualizado_em: now() });

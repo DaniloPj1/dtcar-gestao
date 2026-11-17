@@ -686,6 +686,27 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   pelo telefone do cadastro do fornecedor — quem envia é o Danilo.
 - Testes: `bash teste/teste_v59.sh` (banco inteiro) e `python3 teste/teste_compras.py` (PC 1366 e 1280, celular; sem o v59; mecânico).
   Menu lateral: em 1280x720 já não cabia antes (731 px); a regra continua 1366x768.
+- **Etapa 2 — consulta AO VIVO nos portais (`supabase/functions/compras`, v177, pedido do Danilo em 16/11/2026: "automatizar a entrada no sistema de
+  forma que o sistema faça a pesquisa e me dê o resultado usando o meu login", sem pedir API a ninguém). Sem SQL novo.** Os fornecedores do 1º lote
+  (Rolemar Master, DPK, Toli, Pellegrino) usam o mesmo sistema de portal B2B e não têm webservice; os quatro foram **mapeados em 16/11/2026 com o
+  login do Danilo no navegador** (rotas no topo do `compras/index.ts` e no documento "Compras — fornecedores"). **O robô é reconhecido pelo
+  ENDEREÇO cadastrado em Ajustes** (`roboDaConexao` em `js/compraspecas.js` = `roboDe` na função): `dpk` (API JSON do portal: login por e-mail/senha
+  → token; a chave pública `x-api-key` é lida do JS do próprio site a cada login), `rolemar` (formulário `/ajax-login` com usuário = CNPJ, sessão em
+  cookie, filial `cod_emp`), `pellegrino` (login JSON, busca em HTML + JSON de preços; sem quantidade: "Me avise" = sem estoque) e `toli` (Oracle
+  APEX com SMS no 1º acesso: fica para o robô do **programa do PC**, ainda não feito; o campo do código SMS entra junto). A senha vem de `segredos`
+  (`compras_acesso:<id>`, v59) e a **sessão aberta** (token/cookies) fica em `segredos` (`compras_sessao:<id>`), só a função lê, com a chave de
+  servidor; sessão vencida → entra de novo UMA vez; senha recusada → conexão "erro" com orientação e sessão apagada (nunca fica tentando); sessão
+  de conexão apagada é removida na consulta seguinte (`limparSessoes`). **Ritmo de gente:** uma consulta por clique, no máximo `MAX_TERMOS` = 6
+  códigos, nunca varredura. O que volta é gravado em `compras_precos` com origem `ao_vivo` e `consultado_em` (a tela mostra "Ao vivo · data e
+  hora"; o gatilho do v59 não interfere porque a função grava com a chave de servidor) e a situação da conexão é atualizada (`ok`/`erro` + detalhe).
+  Ações: `consultar { termos, conexoes? }` (administrador e consultor) e `testar { conexao }` (só administrador; login novo + busca de teste, sem
+  gravar preço). Tela: botão **"Consultar fornecedores"** em cada peça (`.cp-consultar`, manda `termosDaLinha`: código da peça, equivalentes e
+  montadora) e, sem placa, `#cp-consultar-livre` com o texto digitado; o resumo (`resumoAoVivo`) aparece na peça. Ajustes: robô reconhecido ao
+  digitar o endereço (`#cp-cx-robo`), linha da conexão com o robô e **"Testar conexão"** (`.cp-testar`). Sem fornecedor com portal reconhecido, o
+  botão não aparece. Publicar: colar o `compras/index.ts` no painel do Supabase ("Verify JWT" desligado; sem segredo próprio). **Os portais de
+  verdade não são alcançáveis do ambiente de desenvolvimento** (DPK e Pellegrino respondem 403 ao proxy): a primeira consulta real é feita em
+  produção com o login do Danilo em Ajustes — conferir contra `teste/teste_compras_funcao.ts` (portais de mentira no formato mapeado).
+  Testes: `deno run -A teste/teste_compras_funcao.ts` (50) e `python3 teste/teste_compras.py` (função de mentira no `mock.js`, PC e celular).
 
 ### Quadro "Óleo e filtros" recolhido na página do veículo (15/11/2026, v138)
 - Com ficha gravada, o card começa recolhido: só a linha de cima (litros, viscosidade, selo) e o botão "Mostrar/Ocultar" (`#fo-alternar`). O corpo (`#fo-corpo`) com filtros, "Refazer ou editar" e "Confirmar" só existe aberto. Sem ficha, o card continua como antes. Vale para PC e celular (é o mesmo componente).

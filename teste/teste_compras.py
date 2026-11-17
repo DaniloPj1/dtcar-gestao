@@ -2,7 +2,7 @@
 # pedidos por fornecedor (finalizar, voltar ao carrinho, cancelar, texto do pedido), Ajustes › Fornecedores conectados (senha nunca
 # volta), banco sem o v59 (aviso, não quebra), mecânico sem acesso. PC e celular.
 # Uso: python3 teste/teste_compras.py [pasta das fotos]
-import subprocess, time, sys, os, tempfile
+import subprocess, time, sys, os, tempfile, re
 from playwright.sync_api import sync_playwright
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 srv = subprocess.Popen([sys.executable, "-m", "http.server", "8793", "-d", RAIZ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -107,8 +107,44 @@ def rodar(b, nome, w, h):
   chk(T("editar: campo da senha vem vazio e diz quando foi guardada"), pg.input_value("#cp-cx-senha") == "" and "Guardada em" in pg.inner_text("[role=dialog]") and pg.locator("#cp-cx-apagar").count() == 1)
   pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
   pg.goto(U + "#/compras"); pg.wait_for_timeout(800)
-  chk(T("Compras avisa quais fornecedores estão conectados"), "Fornecedores conectados: AutoPeças" in pg.inner_text("#cp-origem"))
+  chk(T("Compras avisa quais fornecedores estão conectados (sem portal reconhecido: sem botão de consulta ao vivo)"), "Fornecedores conectados: AutoPeças" in pg.inner_text("#cp-origem") and "portal reconhecido" in pg.inner_text("#cp-origem") and pg.locator(".cp-consultar").count() == 0, pg.inner_text("#cp-origem"))
   pg.screenshot(path=os.path.join(TMP, "compras_conexoes_" + nome + ".png"))
+  # 6b. etapa 2: consulta AO VIVO pela função "compras" (de mentira): portal reconhecido pelo endereço, Testar conexão, botão por peça, preço "Ao vivo"
+  pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1000)
+  pg.click("#cp-conectar"); pg.wait_for_timeout(300); pg.select_option("#cp-cx-forn", "f2"); pg.click("button:has-text('Portal (site)')"); pg.fill("#cp-cx-end", "https://www.dpk.com.br/#/"); pg.wait_for_timeout(200)
+  chk(T("Ajustes: robô reconhecido pelo endereço ao digitar"), "Robô reconhecido: DPK" in pg.inner_text("#cp-cx-robo"), pg.inner_text("[role=dialog]")[:300])
+  pg.fill("#cp-cx-usu", "danilo@dtcar.com"); pg.fill("#cp-cx-senha", "S3nh@dpk"); pg.click("#cp-cx-salvar"); pg.wait_for_timeout(600)
+  dpk = pg.locator('.cp-conexao[data-robo="dpk"]')
+  chk(T("conexão DPK: robô, consulta pelo servidor e botão Testar conexão; AutoPeças sem robô e sem o botão"), dpk.count() == 1 and "Robô: DPK" in dpk.inner_text() and "pelo servidor" in dpk.inner_text() and dpk.locator(".cp-testar").count() == 1
+      and pg.locator('.cp-conexao[data-robo=""] .cp-testar').count() == 0 and "não reconhecido" in pg.locator('.cp-conexao[data-robo=""]').inner_text() and "S3nh@dpk" not in pg.content(), pg.inner_text("#cp-conexoes")[:500])
+  dpk.locator(".cp-testar").click(); pg.wait_for_timeout(800)
+  chk(T("Testar conexão: a função faz o login de teste e a situação vira Conectado"), "Conectou e buscou: 1 preço" in pg.inner_text('.cp-conexao[data-robo="dpk"]') and "Conectado" in pg.inner_text('.cp-conexao[data-robo="dpk"]') and pg.evaluate("window.__AOVIVO[0].acao") == "testar" and pg.evaluate("window.__DB.compras_precos.filter(p => p.origem === 'ao_vivo').length") == 0, pg.inner_text('.cp-conexao[data-robo="dpk"]'))
+  pg.screenshot(path=os.path.join(TMP, "compras_conexoes_robo_" + nome + ".png"))
+  pg.goto(U + "#/compras"); pg.wait_for_timeout(800)
+  chk(T("Compras: avisa que a consulta ao vivo busca na DPK"), "ao vivo" in pg.inner_text("#cp-origem") and "DPK DISTRIBUIDORA" in pg.inner_text("#cp-origem"), pg.inner_text("#cp-origem"))
+  pg.fill("#cp-txt", ""); pg.fill("#cp-placa", "onx2a20"); pg.wait_for_timeout(2500)
+  it = pg.locator('.cp-item[data-todos*="|CDRD0314|"]')
+  chk(T("cada peça tem o botão Consultar fornecedores"), it.locator(".cp-consultar").count() == 1 and pg.locator(".cp-consultar").count() >= 6)
+  antes = pg.evaluate("window.__AOVIVO.length")
+  it.locator(".cp-consultar").click(); pg.wait_for_timeout(1200)
+  chamada = pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1]")
+  chk(T("clique: uma chamada só, com os códigos da peça e dos equivalentes (no máximo 6) e só a conexão com robô"), pg.evaluate("window.__AOVIVO.length") == antes + 1 and "CDRD0314" in [c.upper().replace(" ", "") for c in chamada["termos"]] and 1 <= len(chamada["termos"]) <= 6 and len(chamada["conexoes"]) == 1, chamada)
+  chk(T("resultado: linha Ao vivo da DPK com preço, estoque e a hora; resumo da consulta na peça"), "Ao vivo" in it.inner_text() and "63,24" in it.inner_text() and "12 un no fornecedor" in it.inner_text() and re.search(r"\d\d/\d\d/\d{4},? \d\d:\d\d", it.inner_text()) is not None and "DPK DISTRIBUIDORA:" in it.locator(".cp-vivo-estado").inner_text() and "preço" in it.locator(".cp-vivo-estado").inner_text(), it.inner_text()[:600])
+  chk(T("preço ao vivo de hoje leva o selo de menor preço"), it.locator('.cp-oferta[data-forn="DPK DISTRIBUIDORA"].cp-menor').count() >= 1, it.locator(".cp-oferta").all_inner_texts())
+  chk(T("sem rolagem lateral com a consulta"), pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
+  pg.screenshot(path=os.path.join(TMP, "compras_aovivo_" + nome + ".png"))
+  # função fora do ar / não publicada: aviso na peça, nada quebra
+  pg.evaluate("window.__AOVIVO_RESPOSTA = { ok: false, desligada: true, erro: 'A consulta aos fornecedores ainda não foi ligada: falta publicar a função \"compras\" no Supabase.' }")
+  it2 = pg.locator(".cp-item").nth(0); it2.locator(".cp-consultar").click(); pg.wait_for_timeout(800)
+  chk(T("função não publicada: o aviso aparece na peça e a tela segue"), "falta publicar" in it2.locator(".cp-vivo-estado").inner_text() and pg.locator("#cp-placa").count() == 1)
+  pg.evaluate("window.__AOVIVO_RESPOSTA = null")
+  # sem placa: consulta pelo texto digitado
+  pg.fill("#cp-placa", ""); pg.fill("#cp-txt", "WK84213"); pg.wait_for_timeout(600)
+  chk(T("sem placa: botão para consultar os fornecedores com o código digitado"), pg.locator("#cp-consultar-livre").count() == 1 and "WK84213" in pg.inner_text("#cp-consultar-livre"))
+  pg.click("#cp-consultar-livre"); pg.wait_for_timeout(1200)
+  res = pg.inner_text("#cp-soltos") if pg.locator("#cp-soltos").count() else pg.inner_text(".cp-resultado") if pg.locator(".cp-resultado").count() else ""
+  chk(T("código digitado: consulta e mostra o preço Ao vivo (na peça do catálogo ou fora dele)"), pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1].termos") == ["WK84213"] and "Ao vivo" in res and "63,24" in res and "DPK DISTRIBUIDORA:" in pg.inner_text(".cp-vivo-livre"), res[:500])
+  pg.fill("#cp-txt", "")
   # 7. banco sem o v59: aviso, não quebra
   pg2 = pg.context.new_page(); pg2.on("pageerror", lambda e: erros.append(nome + ": " + str(e)))
   pg2.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js")); pg2.add_init_script("window.__SEM_V59 = true;")

@@ -1580,8 +1580,14 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cp-ped-acoes{flex-wrap:wrap}.cp-texto span{margin-left:4px}
 .cp-texto-area{min-height:260px;font-family:inherit;white-space:pre-wrap}
 .cp-pedidos{display:flex;flex-direction:column;gap:12px}.cp-carrinho{display:flex;flex-direction:column;gap:12px}
+/* consulta ao vivo (etapa 2): estado da última consulta e botões da conexão em Ajustes */
+.cp-vivo-estado{display:block;margin:0 0 6px;font-weight:500}
+.cp-vivo-livre{margin-top:8px;align-items:center;flex-wrap:wrap}
+.cp-conexao-botoes{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.cp-teste{font-weight:500;color:var(--steel)}
 @media (max-width:640px){
   .cp-campo-placa{flex:1 1 100%}.cp-limpar{flex:1 1 100%}
+  .cp-conexao-botoes{flex-direction:column;align-items:stretch}
   .cp-item{grid-template-columns:64px minmax(0,1fr)}.cp-item .pv-botoes{grid-column:1 / -1;flex-direction:row}.cp-item .pv-botoes .btn{flex:1}
   .cp-oferta{grid-template-columns:minmax(0,1fr) auto}.cp-of-cod,.cp-of-est,.cp-of-origem{grid-column:1 / -1}.cp-of-acao{grid-column:1 / -1;text-align:left}.cp-of-acao .btn{width:100%}
   .cp-item-car{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cp-ic-desc{grid-column:1 / -1}.cp-ic-total,.cp-tirar{grid-column:auto}

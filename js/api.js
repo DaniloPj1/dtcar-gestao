@@ -53,13 +53,14 @@ export const definirSemRede = v => { const antes = semRede; semRede = !!v;
   if (semRede) { for (const c of ativos) c.abort(semConexao("sem internet")); ativos.clear(); if (!antes) window.dispatchEvent(new Event("dtcar-sem-rede")); } };
 export const estaSemRede = () => semRede;
 const LIMITE_MS = 15000, LIMITE_ARQUIVO_MS = 120000;
-// WhatsApp (função "zap"): a função espera o WhatsApp responder por até 40 s antes de devolver o resultado
-const LIMITE_ZAP_MS = 60000;
+// WhatsApp (função "zap"): a função espera o WhatsApp responder por até 40 s antes de devolver o resultado.
+// Compras (função "compras"): entra em até 3 portais e busca até 6 códigos em cada um — pode passar de 15 s.
+const LIMITE_ZAP_MS = 60000, LIMITE_COMPRAS_MS = 90000;
 // erro de rede "final": o nome AbortError faz a biblioteca do Supabase não repetir a tentativa (cada repetição esperava de novo)
 const semConexao = motivo => { const e = new Error("Failed to fetch (" + motivo + ")"); e.name = "AbortError"; return e; };
 function fetchComLimite(url, opts = {}) {
   if (semRede || !navigator.onLine) return Promise.reject(semConexao("sem internet"));
-  const ctl = new AbortController(), lim = /\/storage\/v1\//.test(String(url)) ? LIMITE_ARQUIVO_MS : /\/functions\/v1\/zap\b/.test(String(url)) ? LIMITE_ZAP_MS : LIMITE_MS;
+  const ctl = new AbortController(), lim = /\/storage\/v1\//.test(String(url)) ? LIMITE_ARQUIVO_MS : /\/functions\/v1\/zap\b/.test(String(url)) ? LIMITE_ZAP_MS : /\/functions\/v1\/compras\b/.test(String(url)) ? LIMITE_COMPRAS_MS : LIMITE_MS;
   const t = setTimeout(() => { ativos.delete(ctl); ctl.abort(semConexao("tempo esgotado")); }, lim); // o motivo vira o erro, inclusive na leitura do corpo
   ativos.add(ctl);
   if (opts.signal) { if (opts.signal.aborted) ctl.abort(); else opts.signal.addEventListener("abort", () => ctl.abort()); }
@@ -403,6 +404,22 @@ function criarApiSupabase() {
         acessos: () => v59(async () => ok(await sb.rpc("compras_acessos")) || []),
         /** grava (ou, com senha vazia, apaga) a senha/chave do fornecedor em segredos */
         gravarAcesso: (conexaoId, senha) => v59(async () => ok(await sb.rpc("compras_gravar_acesso", { p_conexao: conexaoId, p_senha: senha || "" }))),
+        /** Consulta AO VIVO nos portais dos fornecedores pela função "compras" (etapa 2): o servidor entra com o login guardado em segredos,
+         *  busca os códigos e grava os preços em compras_precos com origem "ao_vivo". { termos: [códigos], conexoes?: [ids] } ou
+         *  { acao: "testar", conexao: id }. Devolve { ok, resultados: [{ conexao, nome, ok, ofertas, erro, no_pc }] } ou { ok: false, erro, desligada?, semRede? }. Não lança erro. */
+        aoVivo: async body => {
+          let data, error;
+          const SEM_RESPOSTA = { ok: false, semRede: true, erro: "Sem resposta da consulta aos fornecedores (sem conexão, ou a função ainda não foi publicada no Supabase)." };
+          try { ({ data, error } = await sb.functions.invoke("compras", { body })); } catch (e) { return SEM_RESPOSTA; }
+          if (error) {
+            const st = error.context && error.context.status; let m = error.message || "";
+            if (error.name === "FunctionsFetchError" || !error.context || /failed to (send|fetch)|networkerror|load failed/i.test(m)) return SEM_RESPOSTA;
+            try { const j = await error.context.json(); if (j && j.erro) m = j.erro; } catch (e) {}
+            if (st === 404 || /not found/i.test(m)) return { ok: false, desligada: true, erro: "A consulta aos fornecedores ainda não foi ligada: falta publicar a função \"compras\" no Supabase." };
+            return { ok: false, erro: m || "Falha na consulta aos fornecedores." };
+          }
+          return data || { ok: false, erro: "Sem resposta da consulta aos fornecedores." };
+        },
         precos: { ...tab("compras_precos"),
           /** o mesmo código no mesmo fornecedor atualiza o preço (o banco grava a data e a origem "manual") */
           salvar: p => v59(async () => { const { id, criado_em, atualizado_em, consultado_em, criado_por_nome, origem, ...resto } = p;

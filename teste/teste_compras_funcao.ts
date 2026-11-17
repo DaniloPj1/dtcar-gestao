@@ -318,6 +318,19 @@ dpkBuscas.length = 0;
 rc = await F.executar({ termos: ["pastilha"], conexoes: ["c-dpk"] }, deps()) as L;
 confere("sem placa: busca sem filtro do carro", rc.resultados[0].ofertas.length === 2 && !/VehicleId/.test(dpkBuscas[0] || ""));
 
+{ // falha passageira do portal na lista de veículos: não fica guardada; quando o portal volta, o carro é reconhecido
+  sessoes["c-dpk"] = null; dpkBuscas.length = 0;
+  const cai = (async (u: string | URL | Request, i?: RequestInit) => /superk\/filter\?Type=3/.test(String(u)) ? new Response("fora", { status: 503 }) : fakeFetch(u, i)) as typeof fetch;
+  let x = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, { ...deps(), fetch: cai }) as L;
+  confere("lista de veículos fora do ar: busca sem filtro e nada vai para o cache", x.resultados[0].ok && !x.resultados[0].veiculo && !(sessoes["c-dpk"]?.carros && "QXN1E49" in sessoes["c-dpk"].carros), JSON.stringify(sessoes["c-dpk"]?.carros || null));
+  dpkBuscas.length = 0;
+  x = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, deps()) as L;
+  confere("portal de volta: o carro é reconhecido e a busca sai filtrada", /VehicleId=2420/.test(dpkBuscas.find((u) => /Query=pastilha/.test(u)) || "") && /TORO/.test(x.resultados[0].veiculo || ""), JSON.stringify(x.resultados[0]).slice(0, 200));
+  sessoes["c-dpk"] = null;
+  const motorCai = (async (u: string | URL | Request, i?: RequestInit) => /superk\/filter\?Type=5/.test(String(u)) ? new Response("x", { status: 500 }) : fakeFetch(u, i)) as typeof fetch;
+  x = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, { ...deps(), fetch: motorCai }) as L;
+  confere("lista de motores fora do ar: filtra por montadora/veículo/ano, mas não guarda o filtro incompleto", /TORO/.test(x.resultados[0].veiculo || "") && !(sessoes["c-dpk"]?.carros && "QXN1E49" in sessoes["c-dpk"].carros)); }
+
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));
 confere("sem segredo no código", !/senha-|password":\s*"[^"{]|sb_secret|eyJ[A-Za-z0-9_-]{30,}/.test(fonte) && !/[A-Za-z0-9]{40}/.test(fonte.replace(/CHAVEPUBLICA/g, "")));

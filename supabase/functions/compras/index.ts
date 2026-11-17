@@ -218,17 +218,22 @@ async function dpkFiltroDoCarro(deps: Deps, s: Sessao, carro: Carro): Promise<Fi
   const cache = (s.carros || {}) as Record<string, FiltroDpk | null>;
   const chaveC = carro.placa || semAcento(carro.texto);
   if (chaveC in cache) return cache[chaveC];
-  const J = async (u: string) => { const r = await pedir(deps, DPK.api + u, { headers: dpkHeaders(s) }); if (r.status === 401) throw new ErroAcesso("sessão vencida"); return r.ok ? await r.json().catch(() => null) : null; };
+  // falhou = o portal não respondeu direito (erro HTTP, corpo inválido): o resultado NÃO vai para o cache, para tentar de novo na próxima
+  // busca. Só fica guardado o que veio de respostas válidas (inclusive "carro não reconhecido"). Revisão do Codex, 17/11/2026.
+  let falhou = false;
+  const J = async (u: string) => { const r = await pedir(deps, DPK.api + u, { headers: dpkHeaders(s) }); if (r.status === 401) throw new ErroAcesso("sessão vencida");
+    if (!r.ok) { falhou = true; return null; } const v = await r.json().catch(() => undefined); if (v === undefined) { falhou = true; return null; } return v; };
+  const lista = (v: unknown) => { if (Array.isArray(v)) return v as Json[]; falhou = true; return null; };
   let texto = carro.texto;
   if (carro.placa) { const p = await J("/api-product/api/productSearch/plate?plate=" + encodeURIComponent(carro.placa)); if (typeof p === "string" && p.trim()) texto = p; }
-  const montadoras = (await J("/api-external/api/superk/filter?Type=2")) as Json[] | null;
-  if (!Array.isArray(montadoras)) return null;
+  const montadoras = lista(await J("/api-external/api/superk/filter?Type=2"));
+  if (!montadoras) return null;
   const listas = new Map<number, Json[]>();
   let r = dpkCasarCarro(texto, montadoras, () => null);
-  if (r.carMakerId) { const vs = await J("/api-external/api/superk/filter?Type=3&ManufacturerId=" + r.carMakerId); listas.set(r.carMakerId, Array.isArray(vs) ? vs : []); r = dpkCasarCarro(texto, montadoras, (id) => listas.get(id) || null); }
-  if (r.carMakerId && r.vehicleId) { const ms = await J("/api-external/api/superk/filter?Type=5&ManufacturerId=" + r.carMakerId + "&VehicleId=" + r.vehicleId); r = dpkCasarCarro(texto, montadoras, (id) => listas.get(id) || null, Array.isArray(ms) ? ms : null); }
+  if (r.carMakerId) { const vs = lista(await J("/api-external/api/superk/filter?Type=3&ManufacturerId=" + r.carMakerId)); if (vs) listas.set(r.carMakerId, vs); r = dpkCasarCarro(texto, montadoras, (id) => listas.get(id) || null); }
+  if (r.carMakerId && r.vehicleId) { const ms = lista(await J("/api-external/api/superk/filter?Type=5&ManufacturerId=" + r.carMakerId + "&VehicleId=" + r.vehicleId)); r = dpkCasarCarro(texto, montadoras, (id) => listas.get(id) || null, ms); }
   const f = r.carMakerId && r.vehicleId ? { carMakerId: r.carMakerId, vehicleId: r.vehicleId, year: r.year || 0, engineId: r.engineId || 0, nome: r.nome || texto } : null;
-  s.carros = { ...cache, [chaveC]: f }; s.carrosMudou = true;
+  if (!falhou) { s.carros = { ...cache, [chaveC]: f }; s.carrosMudou = true; }
   return f;
 }
 async function dpkBuscar(deps: Deps, s: Sessao, termo: string, carro: Carro | null = null, info: Json = {}): Promise<Oferta[]> {

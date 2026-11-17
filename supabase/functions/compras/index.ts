@@ -196,7 +196,8 @@ export function dpkCasarCarro(texto: string, montadoras: Json[], veiculosDe: (id
   const vs = veiculosDe(Number(mont.m.id)) || [];
   const v = melhor(vs, T2); if (!v) return out;
   out.vehicleId = Number(v.m.id); out.veiculo = v.m;
-  const anos = (T.match(/ (19[6-9]\d|20[0-4]\d) /g) || []).map((a) => Number(a.trim()));
+  // todos os anos do texto, inclusive "2019/2020" (fabricação/modelo): o ano-modelo (o maior) é o que vale. Revisão do Codex, 17/11/2026.
+  const anos = [...T.matchAll(/(?<![0-9])(19[6-9]\d|20[0-4]\d)(?![0-9])/g)].map((m) => Number(m[1]));
   if (anos.length) out.year = Math.max(...anos);
   if (motores && motores.length) {
     // motor: a cilindrada (2.0) e o combustível/turbo do texto contra a descrição de cada motor ("2.0 16V MULTIJET II TURBO DIESEL")

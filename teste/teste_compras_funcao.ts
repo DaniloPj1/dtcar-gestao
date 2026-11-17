@@ -14,6 +14,9 @@ confere("robô só pelo endereço (nome do fornecedor não conta)", F.roboDe({ e
   && F.roboDe({ endereco: "https://compreonline.pellegrino.com.br/" }) === "pellegrino" && F.roboDe({ endereco: "https://portal.tolidistribuidora.com.br/ords/f?p=2401" }) === "toli"
   && F.roboDe({ endereco: "https://compreonline.sama.com.br/" }) === "pellegrino" && F.siteCompreOnline({ endereco: "https://compreonline.sama.com.br/x" }) === "https://compreonline.sama.com.br"
   && F.roboDe({ endereco: "" }) === null && F.roboDe({ endereco: "https://outro.com.br" }) === null && F.roboDe({ endereco: "https://capitolio.com.br" }) === null);
+confere("foto relativa completada com o site do portal; só https; nada de data:/javascript:", F.fotoDoSite("/img/a.jpg", "https://rolemarmaster.com") === "https://rolemarmaster.com/img/a.jpg"
+  && F.fotoDoSite("img/b.png", "https://compreonline.pellegrino.com.br") === "https://compreonline.pellegrino.com.br/img/b.png" && F.fotoDoSite("//cdn.x.com/c.webp", "https://a.com") === "https://cdn.x.com/c.webp"
+  && F.fotoDoSite("http://x.com/d.jpg", "https://a.com") === "https://x.com/d.jpg" && F.fotoDoSite("data:image/png;base64,AA", "https://a.com") === "" && F.fotoDoSite("javascript:alert(1)", "https://a.com") === "" && F.fotoDoSite("", "https://a.com") === "");
 confere("número em reais", F.numero("1.234,56") === 1234.56 && F.numero("63,24") === 63.24 && F.numero("88.81") === 88.81 && F.numero(12.5) === 12.5 && F.numero("") === 0 && F.numero("R$ 10,00") === 10 && F.numero("1.000") === 1000);
 try { await F.executar({ acao: "testar", conexao: "abc def; drop" }, { papel: { gestor: true, admin: true } } as never); confere("testar com id inválido: recusa sem ir ao banco", false); } catch (e) { confere("testar com id inválido: recusa sem ir ao banco", e instanceof F.ErroUso); }
 confere("cookies juntados", (() => { const r = new Response("", { headers: [["set-cookie", "PHPSESSID=abc; Path=/; HttpOnly"], ["set-cookie", "cf_clearance=xyz; Secure"]] });
@@ -21,8 +24,8 @@ confere("cookies juntados", (() => { const r = new Response("", { headers: [["se
 confere("DPK: leitura da busca", (() => { const l = F.dpkLerBusca({ totalCount: 2, products: [{ id: 1, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545" }, { id: 2, code: "", description: "x" }] });
   return l.length === 1 && l[0].id === "83545" && l[0].codigo === "WK84213" && l[0].marca === "MANN"; })());
 confere("DPK: leitura dos preços", (() => { const m = F.dpkLerPrecos([{ id: 83545, status: "02 - Disponível", stock: 12, price: 63.24 }]); const p = m.get("83545"); return !!p && p.preco === 63.24 && p.estoque === 12; })());
-confere("Rolemar: leitura da busca", (() => { const l = F.rolemarLerBusca({ data: [{ id: 9, fabricante: "WEGA", codigo_fabricante: "FCD2158/1", item: "FILTRO COMBUSTIVEL", estoque: "5", preco: "70,00", valor_final: "63,24", texto: "TORO 2.0 DIESEL" },
-  { id: 10, fabricante: "X", codigo_fabricante: "", item: "sem código", preco: "1" }] }); return l.length === 1 && l[0].codigo === "FCD2158/1" && l[0].preco === 63.24 && l[0].estoque === 5 && l[0].aplicacao === "TORO 2.0 DIESEL"; })());
+confere("Rolemar: leitura da busca", (() => { const l = F.rolemarLerBusca({ data: [{ id: 9, fabricante: "WEGA", codigo_fabricante: "FCD2158/1", item: "FILTRO COMBUSTIVEL", estoque: "5", preco: "70,00", valor_final: "63,24", texto: "TORO 2.0 DIESEL", imagens: [{ url: "/storage/produtos/fcd2158.jpg" }] },
+  { id: 10, fabricante: "X", codigo_fabricante: "", item: "sem código", preco: "1" }] }); return l.length === 1 && l[0].codigo === "FCD2158/1" && l[0].preco === 63.24 && l[0].estoque === 5 && l[0].aplicacao === "TORO 2.0 DIESEL" && l[0].foto === "https://rolemarmaster.com/storage/produtos/fcd2158.jpg"; })());
 const HTML_PELL = `<table><tbody>
 <tr data-objectid="A1" class="linha"><td><a class="font-weight-bold" href="#">FILTRO DE COMBUSTIVEL</a></td><td><span class="d-none">MANN</span> <img src="m.png"></td>
 <td><span data-toggle="popover" data-original-title="WK84213">cód</span></td><td>R$ 88,81</td></tr>

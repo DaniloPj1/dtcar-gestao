@@ -21,6 +21,8 @@ import { MAIUSC } from "../js/maiusculas.js";
 const LS_VISTOS = "dtcar-app-avisos-vistos";   // ids dos orçamentos aprovados/recusados que a pessoa já viu (avisos do app)
 const ABERTA = o => !["entregue", "cancelado", "recusado"].includes(o.status);   // O.S. em andamento (orçamento, execução ou aguardando pagamento)
 const ORC_ABERTO = o => o.situacao === "elaboracao" || o.situacao === "enviado";
+/** Regra do Danilo (17/11/2026): o mecânico só vê os orçamentos que ele mesmo abriu; administrador e consultor veem todos */
+const ORC_MEU = (o, perfil) => perfil.papel !== "mecanico" || o.consultor_id === perfil.id || o.criado_por === perfil.id;
 const etapaTexto = o => (situacaoOS(o) || STATUS[o.status] || {}).t || o.status;
 const SIT_ORC = { elaboracao: "Em elaboração no sistema", enviado: "Enviado ao cliente", aprovado: "Aprovado · virou O.S.", recusado: "Recusado" };
 const Ctx = createContext(null);
@@ -179,7 +181,7 @@ function Inicio() {
   // consulta rápida da placa (pedido do Danilo, 16/11/2026): O.S. e orçamentos em aberto do carro e o histórico, tudo sem preço
   const ordens = useMemo(() => v ? ordensDoVeiculo(dados, v) : [], [dados.ordens, v]);
   const abertas = ordens.filter(ABERTA), fechadas = ordens.filter(o => !ABERTA(o));
-  const orcs = useMemo(() => v ? (dados.orcamentos || []).filter(o => ORC_ABERTO(o) && (o.veiculo_id && o.veiculo_id === v.id || normPlaca((o.veiculo || {}).placa) === v.placa)) : [], [dados.orcamentos, v]);
+  const orcs = useMemo(() => v ? (dados.orcamentos || []).filter(o => ORC_ABERTO(o) && ORC_MEU(o, perfil) && (o.veiculo_id && o.veiculo_id === v.id || normPlaca((o.veiculo || {}).placa) === v.placa)) : [], [dados.orcamentos, v]);
   const papel = { admin: "Administrador", consultor: "Consultor", mecanico: "Mecânico" }[perfil.papel] || "";
   return html`<div class="app">
     <header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /><${SairBotao} /></div>
@@ -287,9 +289,10 @@ function PedidoNovo({ onFeito, onCancelar }) {
 }
 
 function Orcamentos() {
-  const { dados, avisos, avisar, recarregarOrcamentos } = useApp();
+  const { dados, avisos, avisar, recarregarOrcamentos, perfil } = useApp();
+  const [abertoId, setAbertoId] = useState("");   // barra de uma linha: o conteúdo só aparece ao tocar (regra do Danilo, 17/11/2026)
   const [novo, setNovo] = useState(() => { try { return !!sessionStorage.getItem(CH_PLACA_PEDIDO); } catch (e) { return false; } }), [feito, setFeito] = useState(null), [acrescentar, setAcrescentar] = useState(null), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [q, setQ] = useState("");
-  const abertos = useMemo(() => (dados.orcamentos || []).filter(ORC_ABERTO).filter(o => { const n = norm(q), p = normPlaca(q); return !q.trim() || norm((o.cliente || {}).nome).includes(n) || (p.length >= 3 && normPlaca((o.veiculo || {}).placa).includes(p)) || String(o.numero) === soDig(q) || norm(o.reclamacao).includes(n); }).sort((a, b) => b.numero - a.numero), [dados.orcamentos, q]);
+  const abertos = useMemo(() => (dados.orcamentos || []).filter(ORC_ABERTO).filter(o => ORC_MEU(o, perfil)).filter(o => { const n = norm(q), p = normPlaca(q); return !q.trim() || norm((o.cliente || {}).nome).includes(n) || (p.length >= 3 && normPlaca((o.veiculo || {}).placa).includes(p)) || String(o.numero) === soDig(q) || norm(o.reclamacao).includes(n); }).sort((a, b) => b.numero - a.numero), [dados.orcamentos, q]);
   const gravarAcrescimo = async () => {
     const t = texto.trim(); if (t.length < 3) return avisar("Escreva o que é para acrescentar.", true);
     setSalvando(true);
@@ -306,13 +309,16 @@ function Orcamentos() {
       <button type="button" class="btn-barra curto claro" data-visto=${o.id} onClick=${() => { marcarVisto(o.id); recarregarOrcamentos(); }}>OK</button></div>`)}</${Cartao}>` : null}
     <${Cartao} titulo="Orçamentos abertos" id="orc-abertos">
       <input id="orc-busca" class="inp livre" autocomplete="off" placeholder="Buscar por placa, cliente ou número" value=${q} onInput=${e => setQ(e.target.value)} />
-      ${!abertos.length ? html`<div class="vazio">${q ? "Nenhum orçamento aberto com esse texto." : "Nenhum orçamento em aberto. Toque em “+ Pedido de orçamento” para pedir um."}</div>` : null}</${Cartao}>
-    ${abertos.map(o => html`<${Cartao} key=${o.id} titulo=${numORC(o.numero) + " · " + (SIT_ORC[o.situacao] || o.situacao)}>
-      <${KV} a="Veículo" b=${veicTxt(o) || "—"} p />${(o.cliente || {}).nome ? html`<${KV} a="Cliente" b=${o.cliente.nome} p />` : null}
-      <${KV} a="Pedido em" b=${fmtData((o.criado_em || "").slice(0, 10)) + (o.consultor_nome ? " · " + o.consultor_nome : "")} p />
-      <${Pedido} texto=${o.reclamacao} />
-      ${o.validade ? html`<div class="nota">Válido até ${fmtData(o.validade)}.</div>` : null}
-      <button type="button" class="btn-barra claro" data-acrescentar=${o.id} onClick=${() => { setAcrescentar(o); setTexto(""); }}><${Ic} n="orc" t=${20} />Acrescentar ao pedido</button></${Cartao}>`)}
+      ${!abertos.length ? html`<div class="vazio">${q ? "Nenhum orçamento aberto com esse texto." : perfil.papel === "mecanico" ? "Nenhum pedido de orçamento seu em aberto. Toque em “+ Pedido de orçamento” para pedir um." : "Nenhum orçamento em aberto. Toque em “+ Pedido de orçamento” para pedir um."}</div>` : html`<div class="nota">Toque num orçamento para ver o pedido.</div>`}</${Cartao}>
+    ${abertos.map(o => html`<section class=${"orc-item" + (abertoId === o.id ? " aberto" : "")} key=${o.id}>
+      <button type="button" class="orc-barra" data-orc=${o.id} aria-expanded=${abertoId === o.id ? "true" : "false"} onClick=${() => setAbertoId(abertoId === o.id ? "" : o.id)}>
+        <b>${numORC(o.numero)}</b><span class="orc-veic">${veicTxt(o) || (o.cliente || {}).nome || "—"}</span><span class="orc-sit">${o.situacao === "elaboracao" ? "Em elaboração" : o.situacao === "enviado" ? "Enviado" : (SIT_ORC[o.situacao] || o.situacao)}</span><${Ic} n="down" t=${18} /></button>
+      ${abertoId === o.id ? html`<div class="orc-corpo">
+        <${KV} a="Veículo" b=${veicTxt(o) || "—"} p />${(o.cliente || {}).nome ? html`<${KV} a="Cliente" b=${o.cliente.nome} p />` : null}
+        <${KV} a="Pedido em" b=${fmtData((o.criado_em || "").slice(0, 10)) + (o.consultor_nome ? " · " + o.consultor_nome : "")} p />
+        <${Pedido} texto=${o.reclamacao} />
+        ${o.validade ? html`<div class="nota">Válido até ${fmtData(o.validade)}.</div>` : null}
+        <button type="button" class="btn-barra claro" data-acrescentar=${o.id} onClick=${() => { setAcrescentar(o); setTexto(""); }}><${Ic} n="orc" t=${20} />Acrescentar ao pedido</button></div>` : null}</section>`)}
     ${acrescentar ? html`<${Quadro} titulo=${"Acrescentar ao " + numORC(acrescentar.numero)} onFechar=${() => setAcrescentar(null)}>
       <p class="nota">${veicTxt(acrescentar)}. O que mais é para orçar neste carro?</p>
       <textarea id="ac-area" class="area" rows="4" placeholder="Ex.: palhetas e óleo do câmbio" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>

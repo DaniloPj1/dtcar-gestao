@@ -215,3 +215,10 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .ag-meio{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:14px}.ag-meio b{font-size:15px;color:var(--tinta)}.ag-meio span{color:var(--cinza-texto)}
 /* finalizar o serviço: item + responsável */
 .fim-item{display:flex;flex-direction:column;gap:4px;padding:6px 0;border-bottom:1px dashed #d3d7dc}.fim-item .marcar input{width:22px;height:22px;accent-color:var(--azul)}
+
+/* orçamentos abertos: barra de uma linha; o conteúdo abre ao tocar (regra do Danilo, 17/11/2026) */
+.orc-item{background:#fff;border:1.5px solid var(--azul);border-radius:12px;overflow:hidden}
+.orc-barra{width:100%;min-height:48px;display:flex;align-items:center;gap:10px;padding:0 12px;border:0;background:#fff;color:var(--tinta);font:inherit;text-align:left}
+.orc-barra b{color:var(--azul);font-size:15px;flex-shrink:0}.orc-barra .orc-veic{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:14px}
+.orc-barra .orc-sit{font-size:12px;color:var(--cinza-texto);flex-shrink:0}.orc-barra svg{flex-shrink:0;transition:transform .15s}.orc-item.aberto .orc-barra svg{transform:rotate(180deg)}
+.orc-item.aberto .orc-barra{border-bottom:1px solid #d3d7dc}.orc-corpo{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px}

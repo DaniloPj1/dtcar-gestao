@@ -3,7 +3,7 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Seg, Vazio, Placa } from "../ui.js";
-import { norm, reais, qtdFmt, hojeISO, fmtData, numOS, exPlaca, normPlaca } from "../util.js";
+import { norm, reais, qtdFmt, hojeISO, fmtData, fmtDataHora, numOS, exPlaca, normPlaca } from "../util.js";
 import { pode, STATUS, situacaoOS, gruposDeProdutos, chaveGrupo as chaveDoGrupo } from "../regras.js";
 import { passaSituacao } from "./produtos.js";
 import { nomeFavorecido, situacao } from "./financeiro.js";
@@ -13,6 +13,7 @@ const RELATORIOS = [
   ["Operação", [
     ["historico", "Histórico de serviços", "O.S. por período, placa, cliente ou mecânico, com os serviços e peças de cada uma."],
     ["mecanicos", "Produtividade dos mecânicos", "O.S. entregues, horas e mão de obra por mecânico."],
+    ["colaboradores", "Serviços por colaborador (app)", "Carros em que cada colaborador mexeu, apontados pelo app: início, pausas, fim e tempo, com filtro de data."],
     ["terceiros", "Serviços de terceiros", "Custo do prestador, valor cobrado e lucro em cada serviço terceirizado."],
   ]],
   ["Vendas", [
@@ -199,6 +200,32 @@ function RelMecanicos() {
   </${Moldura}>`;
 }
 
+/** Serviços apontados pelo app (v60): cada início/fim do colaborador, com filtro de data e por pessoa (pedido do Danilo, 16/11/2026 à noite) */
+const minutosDe = s => { const ini = new Date(s.inicio).getTime(), fim = s.fim ? new Date(s.fim).getTime() : Date.now(); const pausado = (Array.isArray(s.pausas) ? s.pausas : []).reduce((t, p) => t + (p.em ? ((p.retomado_em ? new Date(p.retomado_em).getTime() : (s.fim ? new Date(s.fim).getTime() : Date.now())) - new Date(p.em).getTime()) : 0), 0); return Math.max(0, Math.round((fim - ini - pausado) / 60000)); };
+const horasTxt = min => min >= 60 ? Math.floor(min / 60) + "h" + (min % 60 ? String(min % 60).padStart(2, "0") : "") : min + " min";
+const SITUACAO_AP = { andamento: "Em andamento", pausado: "Pausado", finalizado: "Finalizado" };
+function RelColaboradores() {
+  const { dados } = useApp();
+  const { de, ate, setPer } = usePeriodo();
+  const [quem, setQuem] = useState("");
+  const [lin, erro] = useCarga(() => api.apontamentos.listar({ desde: limites(de, ate)[0], ate: limites(de, ate)[1] }), [de, ate]);
+  const ordens = useMemo(() => Object.fromEntries((dados.ordens || []).map(o => [o.id, o])), [dados.ordens]);
+  const linhas = useMemo(() => (lin || []).filter(s => !quem || s.perfil_id === quem).map(s => { const o = ordens[s.ordem_id] || {}; const v = o.veiculo || {};
+    return { ...s, numero: s.os_numero || o.numero, placa: v.placa || "", veiculo: [v.marca, v.modelo].filter(Boolean).join(" "), cliente: (o.cliente || {}).nome || "", minutos: minutosDe(s), executados: (s.itens_executados || []).length, indicou: (Array.isArray(s.indicacoes) ? s.indicacoes : []).map(i => i.descricao + " → " + i.para_nome).join("; ") }; }), [lin, quem, ordens]);
+  const porPessoa = useMemo(() => { const g = new Map(); for (const x of linhas) { const k = x.perfil_nome || "?"; const y = g.get(k) || { k, servicos: 0, carros: new Set(), minutos: 0 }; y.servicos++; y.carros.add(x.ordem_id); y.minutos += x.minutos; g.set(k, y); } return [...g.values()].map(y => ({ k: y.k, servicos: y.servicos, carros: y.carros.size, minutos: y.minutos })); }, [linhas]);
+  const cols = [{ t: "Colaborador", v: x => x.perfil_nome }, { t: "Início", v: x => fmtDataHora(x.inicio) }, { t: "Fim", v: x => x.fim ? fmtDataHora(x.fim) : "—" }, { t: "Tempo", v: x => horasTxt(x.minutos) },
+    { t: "O.S.", v: x => x.numero ? numOS(x.numero) : "—" }, { t: "Placa", v: x => exPlaca(x.placa) }, { t: "Veículo", v: x => x.veiculo }, { t: "Cliente", v: x => x.cliente },
+    { t: "Situação", v: x => SITUACAO_AP[x.situacao] || x.situacao }, { t: "Pausa", v: x => x.motivo_pausa || "" }, { t: "Itens executados", v: x => x.executados, f: "qtd" }, { t: "Indicou", v: x => x.indicou }];
+  const pessoas = (dados.perfis || []).filter(p => p.papel !== "pendente");
+  return html`<${Moldura} chave="colaboradores" de=${de} ate=${ate} setPer=${setPer} exportar=${() => baixarCSV("colaboradores-" + de + "-a-" + ate, cols, linhas)}
+    filtros=${html`<div class="filtros-linha"><div class="campo"><label for="rel-quem">Colaborador</label><select id="rel-quem" class="inp" value=${quem} onChange=${e => setQuem(e.target.value)}><option value="">Todos</option>${pessoas.map(p => html`<option key=${p.id} value=${p.id}>${p.nome}</option>`)}</select></div></div>`}>
+    ${!lin ? html`<${Carregando} erro=${erro} />` : html`<${Kpis} itens=${[["Serviços apontados", qtdFmt(linhas.length)], ["Carros", qtdFmt(new Set(linhas.map(x => x.ordem_id)).size)], ["Tempo trabalhado", horasTxt(linhas.reduce((t, x) => t + x.minutos, 0))]]} />
+      ${porPessoa.length > 1 ? html`<section class="card"><h2>Por colaborador</h2><${Tabela} cols=${[{ t: "Colaborador", v: x => x.k }, { t: "Serviços", v: x => x.servicos, f: "qtd" }, { t: "Carros", v: x => x.carros, f: "qtd" }, { t: "Tempo", v: x => horasTxt(x.minutos) }]} linhas=${porPessoa} /></section>` : null}
+      <section class="card"><${Tabela} cols=${cols} linhas=${linhas} vazio="Nenhum serviço apontado pelo app no período." /></section>
+      <p class="dica">Apontamentos feitos em “Iniciar serviço” no app do celular. O tempo desconta as pausas. No app, cada colaborador vê o próprio histórico por quinzena.</p>`}
+  </${Moldura}>`;
+}
+
 function RelTerceiros() {
   const { dados } = useApp(); const { de, ate, setPer } = usePeriodo();
   const [base, setBase] = useState("entrega");
@@ -355,7 +382,7 @@ function RelContas() {
   </${Moldura}>`;
 }
 
-const TELAS = { historico: RelHistorico, faturamento: RelFaturamento, mecanicos: RelMecanicos, terceiros: RelTerceiros, clientes: RelClientes, vendidos: RelVendidos, estoque: RelEstoque, caixa: RelCaixa, contas: RelContas };
+const TELAS = { historico: RelHistorico, faturamento: RelFaturamento, mecanicos: RelMecanicos, colaboradores: RelColaboradores, terceiros: RelTerceiros, clientes: RelClientes, vendidos: RelVendidos, estoque: RelEstoque, caixa: RelCaixa, contas: RelContas };
 
 export function Relatorios({ params = {} }) {
   const { perfil, ir } = useApp();

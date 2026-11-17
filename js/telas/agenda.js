@@ -210,6 +210,7 @@ export function SemanaJanela() {
 const MOTIVOS = ["Cliente desmarcou", "Cliente vai remarcar", "Fez em outra oficina", "Peça não chegou", "Oficina sem horário"];
 export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
   const { dados, cfg, perfil, avisar, confirmar, ir } = useApp();
+  const temMecanico = !!(dados && dados.perfis && dados.perfis.length) && !(api.semV60 && api.semV60());   // v60 no banco (sem ele, o salvar deixa a coluna de fora e o campo some)
   const novo = !inicial.id;
   const [a, setA] = useState(() => ({ ...inicial, hora: horaCurta(inicial.hora), cliente: { nome: "", telefone: "", ...(inicial.cliente || {}) }, veiculo: { placa: "", marca: "", modelo: "", ano: "", ...(inicial.veiculo || {}) } }));
   const [semCad, setSemCad] = useState(!novo && !inicial.cliente_id), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [sujo, setSujo] = useState(novo), [cancela, setCancela] = useState(null);
@@ -249,7 +250,9 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
       const r = await api.agenda.salvar({ ...(novo ? {} : { id: a.id }), data: a.data, hora: a.hora || null, situacao: a.situacao || "agendado",
         cliente_id: a.cliente_id || null, veiculo_id: a.veiculo_id || null,
         cliente: a.cliente_id ? { nome: String(a.cliente.nome).trim(), telefone: a.cliente.telefone || "" } : copiaClienteDig(a.cliente), veiculo: { ...a.veiculo, placa: normPlaca(a.veiculo.placa) },
-        servico: String(a.servico).trim(), obs: a.obs || "", motivo: a.motivo || "", ...mudancas });
+        servico: String(a.servico).trim(), obs: a.obs || "", motivo: a.motivo || "",
+        // v60: mecânico que vai mexer no carro (o app mostra ao colaborador só os agendamentos dele); sem o v60 o banco recusa a coluna
+        ...(temMecanico ? { mecanico_id: a.mecanico_id || null, mecanico_nome: a.mecanico_id ? ((dados.perfis || []).find(p => p.id === a.mecanico_id) || {}).nome || "" : "" } : {}), ...mudancas });
       setSujo(false);
       if (msg !== false) onSalvo(r, msg || (novo ? "Agendado para " + fmtData(r.data) + (r.hora ? " às " + horaCurta(r.hora) : "") + "." : "Agendamento salvo."));
       return r;
@@ -301,6 +304,8 @@ export function AgendaModal({ a: inicial, onFechar, onSalvo }) {
     ${autoPlaca.botao || (autoPlaca.estado && autoPlaca.estado !== "quieto") ? html`<div class="placa-linha"><${PlacaBusca} c=${autoPlaca} /></div>` : null}
     <${Campo} id="ag-serv" rotulo="Serviço combinado" obrig><${Area} id="ag-serv" rows="2" placeholder="Ex.: revisão dos 40 mil, troca de óleo e filtros" valor=${a.servico} disabled=${trancado} onMuda=${v => set({ servico: v })} /></${Campo}>
     <${Campo} id="ag-obs" rotulo="Anotação interna (o cliente não vê)"><${Area} id="ag-obs" rows="2" valor=${a.obs} disabled=${trancado} onMuda=${v => set({ obs: v })} /></${Campo}>
+    ${temMecanico ? html`<${Campo} id="ag-mec" rotulo="Mecânico que vai mexer" dica="No app do celular, o colaborador vê só os agendamentos dele; o administrador vê todos."><select id="ag-mec" class="inp" value=${a.mecanico_id || ""} disabled=${trancado} onChange=${e => set({ mecanico_id: e.target.value })}>
+      <option value="">Ainda não definido</option>${(dados.perfis || []).filter(p => p.ativo !== false && p.papel !== "pendente").map(p => html`<option key=${p.id} value=${p.id}>${p.nome}</option>`)}</select></${Campo}>` : null}
 
     ${!trancado ? html`<div class="ag-acoes">
       ${!novo && AGENDA_ATIVA.includes(inicial.situacao) ? html`<div class="ag-acoes-dia">

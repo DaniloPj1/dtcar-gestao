@@ -52,13 +52,17 @@ const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="
 
 /* ---------------- botões do Início e abas (ordem aprovada pelo Danilo) ---------------- */
 const TELAS = [
+  { r: "servico", ic: "os", barra: "INICIAR SERVIÇO", aba: "Iniciar serviço", titulo: "INICIAR SERVIÇO" },
   { r: "oleo", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
   { r: "orcamento", ic: "orc", barra: "ORÇAMENTOS", aba: "Orçamentos", titulo: "ORÇAMENTOS" },
   { r: "agendar", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
+  { r: "agenda", ic: "ag", barra: "AGENDA", aba: "Agenda", titulo: "AGENDA" },
   { r: "peca", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
   { r: "historico", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
+  { r: "meus", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
   { r: "osconsulta", ic: "clip", barra: "CONSULTAR O.S.", aba: "Consultar O.S.", titulo: "CONSULTAR O.S." },
 ];
+const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta)$/;
 const ir = r => { location.hash = "#/" + r; };
 const rotaAtual = () => { const m = /^#\/([a-z]+)/.exec(location.hash || ""); return m ? m[1] : "inicio"; };
 
@@ -69,9 +73,8 @@ function Cabecalho() {
     <button type="button" class="sair" onClick=${sair}><${Ic} n="exit" t=${22} /> Sair</button></div></header>`;
 }
 function Abas({ ativa }) {
-  const { telas } = useApp();
-  const { avisos } = useApp();
-  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : null}</a>`)}</nav>`;
+  const { telas, avisos, indicacoes } = useApp();
+  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : t.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</a>`)}</nav>`;
 }
 function Titulo({ tela, ajuda }) {
   const t = TELAS.find(x => x.r === tela);
@@ -167,7 +170,9 @@ function ModeloAMao({ valor, onMuda }) {
 
 /* ---------------- INÍCIO ---------------- */
 function Inicio() {
-  const { perfil, telas, dados, avisos } = useApp(); const { placa, buscar, limpar } = usarPlaca(true);
+  const { perfil, telas, dados, avisos, indicacoes, recarregarServicos } = useApp();
+  const { placa, buscar, limpar } = usarPlaca(true);
+  useEffect(() => { recarregarServicos(); }, []);   // ao voltar ao Início, atualiza serviços abertos e indicações (a bolinha)
   const [t, setT] = useState(placa.texto || "");
   const [ajuda, setAjuda] = useState(false), [osAberta, setOsAberta] = useState(null);
   const v = placa.veic;
@@ -193,7 +198,7 @@ function Inicio() {
           ${fechadas.length ? html`<div class="sec"><h3>Histórico de serviços</h3>${fechadas.slice(0, 5).map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => setOsAberta(o)}><span><b>${fmtData((o.criado_em || "").slice(0, 10))}</b>${o.km_entrada ? " · " + fmtKm(o.km_entrada) : ""}<br /><span class="nota">${numOS(o.numero)} · ${o.reclamacao ? String(o.reclamacao).slice(0, 70) : etapaTexto(o)}</span></span><${Ic} n="down" t=${18} /></button>`)}
             ${fechadas.length > 5 ? html`<button type="button" class="link" onClick=${() => ir("historico")}>Ver todo o histórico</button>` : null}</div>` : null}</${Cartao}>` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
-      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : null}</button>`)}
+      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</button>`)}
       ${osAberta ? html`<${OSDetalhe} o=${osAberta} onFechar=${() => setOsAberta(null)} />` : null}
       ${!telas.length ? html`<div class="vazio">Nenhuma tela liberada para o seu login. Peça ao administrador (Sistema › Equipe).</div>` : null}
     </main>
@@ -246,6 +251,8 @@ const Pedido = ({ texto }) => html`<div class="pedido">${String(texto || "").spl
 
 function PedidoNovo({ onFeito, onCancelar }) {
   const { avisar } = useApp(); const pl = usarPlaca();
+  // veio de "Iniciar serviço" (carro sem O.S.): a placa já chega buscada; contato continua opcional
+  useEffect(() => { let p = ""; try { p = sessionStorage.getItem(CH_PLACA_PEDIDO) || ""; sessionStorage.removeItem(CH_PLACA_PEDIDO); } catch (e) { /* nada */ } if (p) pl.buscar(p); }, []);
   const [mao, setMao] = useState({ modelo: "", ano: "" }), [nome, setNome] = useState(""), [whats, setWhats] = useState(""), [texto, setTexto] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
   const v = pl.veic, trava = useRef(false);
   const enviar = async () => {
@@ -281,7 +288,7 @@ function PedidoNovo({ onFeito, onCancelar }) {
 
 function Orcamentos() {
   const { dados, avisos, avisar, recarregarOrcamentos } = useApp();
-  const [novo, setNovo] = useState(false), [feito, setFeito] = useState(null), [acrescentar, setAcrescentar] = useState(null), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [q, setQ] = useState("");
+  const [novo, setNovo] = useState(() => { try { return !!sessionStorage.getItem(CH_PLACA_PEDIDO); } catch (e) { return false; } }), [feito, setFeito] = useState(null), [acrescentar, setAcrescentar] = useState(null), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [q, setQ] = useState("");
   const abertos = useMemo(() => (dados.orcamentos || []).filter(ORC_ABERTO).filter(o => { const n = norm(q), p = normPlaca(q); return !q.trim() || norm((o.cliente || {}).nome).includes(n) || (p.length >= 3 && normPlaca((o.veiculo || {}).placa).includes(p)) || String(o.numero) === soDig(q) || norm(o.reclamacao).includes(n); }).sort((a, b) => b.numero - a.numero), [dados.orcamentos, q]);
   const gravarAcrescimo = async () => {
     const t = texto.trim(); if (t.length < 3) return avisar("Escreva o que é para acrescentar.", true);
@@ -615,6 +622,159 @@ function OSConsulta() {
   </${Tela}>`;
 }
 
+
+/* ---------------- INICIAR SERVIÇO (mecânico): O.S. pela placa → iniciar, pausar com motivo, finalizar marcando o que fez e indicando responsável ---------------- */
+const MOTIVOS_PAUSA = ["Aguardando peças", "Aguardando aprovação do cliente", "Outro serviço na frente", "Fim do expediente", "Outro motivo"];
+const hhmm = iso => iso ? new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "";
+const minutosAp = s => { const ini = new Date(s.inicio).getTime(), fim = s.fim ? new Date(s.fim).getTime() : Date.now();
+  const pausado = (Array.isArray(s.pausas) ? s.pausas : []).reduce((t, p) => t + (p.em ? ((p.retomado_em ? new Date(p.retomado_em).getTime() : (s.fim ? new Date(s.fim).getTime() : Date.now())) - new Date(p.em).getTime()) : 0), 0);
+  return Math.max(0, Math.round((fim - ini - pausado) / 60000)); };
+const tempoTxt = min => min >= 60 ? Math.floor(min / 60) + "h" + (min % 60 ? String(min % 60).padStart(2, "0") : "") : min + " min";
+const CH_PLACA_PEDIDO = "dtcar-app-placa-pedido";   // placa levada de "Iniciar serviço" para o pedido de orçamento
+/** O.S. (resumo do cabeçalho) + itens de serviço carregados, para a tela do serviço */
+function usarOS(o) {
+  const [det, setDet] = useState(null), [erro, setErro] = useState("");
+  const carregar = () => api.ordem(o.id).then(d => { setDet(d); setErro(""); }).catch(() => setErro("Não deu para carregar os itens da O.S. (sem internet?)."));
+  useEffect(() => { let vivo = true; setDet(null); api.ordem(o.id).then(d => vivo && setDet(d)).catch(() => vivo && setErro("Não deu para carregar os itens da O.S. (sem internet?).")); return () => { vivo = false; }; }, [o.id]);
+  const servicos = (det && det.itens || []).filter(i => i.tipo === "servico" && i.aprovado !== false);
+  const aOrcar = (det && det.eventos || []).filter(e => e.tipo === "a_orcar");
+  return { det, erro, servicos, aOrcar, recarregar: carregar };
+}
+/** o que precisa ser feito no carro (sem preço) */
+function OQueFazer({ o, os }) {
+  return html`${o.reclamacao ? html`<div class="sec"><h3>O que o cliente pediu</h3><${Pedido} texto=${o.reclamacao} /></div>` : null}
+    <div class="sec"><h3>Serviços</h3>${os.erro ? html`<div class="nota">${os.erro}</div>` : !os.det ? html`<div class="nota">Carregando…</div>` : os.servicos.length ? os.servicos.map(i => html`<div class="check" key=${i.id}><${Ic} n="check" t=${16} sw=${2.4} />${i.descricao}${i.executado ? html` <span class="selo">Feito</span>` : null}</div>`) : html`<div class="nota">Nenhum serviço lançado ainda (veja o pedido acima).</div>`}</div>
+    ${os.aOrcar.length ? html`<div class="sec"><h3>Itens a orçar (pedidos pelo app)</h3>${os.aOrcar.map(e => html`<div class="acrescimo" key=${e.id}>— ${e.usuario_nome || "App"}: ${e.texto}</div>`)}</div>` : null}`;
+}
+function ServicoAberto({ s, o, onMudou }) {
+  const { perfil, dados, avisar } = useApp();
+  const os = usarOS(o);
+  const [pausar, setPausar] = useState(false), [motivo, setMotivo] = useState(""), [outro, setOutro] = useState(""), [finalizar, setFinalizar] = useState(false), [feitos, setFeitos] = useState({}), [resp, setResp] = useState({}), [salvando, setSalvando] = useState(false);
+  const veic = o.veiculo || {};
+  const pessoas = (dados.perfis || []).filter(p => p.id !== perfil.id && p.ativo !== false && p.papel !== "pendente");
+  const agora = () => new Date().toISOString();
+  const gravar = async (patch, msg) => { setSalvando(true); try { await api.apontamentos.atualizar(s.id, patch); avisar(msg); await onMudou(); } catch (x) { avisar("Não deu: " + (x.message || x), true); } finally { setSalvando(false); } };
+  const confirmarPausa = () => { const m = motivo === "Outro motivo" ? outro.trim() : motivo; if (!m) return avisar("Escolha o motivo da pausa.", true);
+    setPausar(false); gravar({ situacao: "pausado", motivo_pausa: m, pausas: (Array.isArray(s.pausas) ? s.pausas : []).concat([{ em: agora(), motivo: m }]) }, "Serviço pausado: " + m + "."); };
+  const retomar = () => { const ps = (Array.isArray(s.pausas) ? s.pausas : []).map((p, i, l) => i === l.length - 1 && !p.retomado_em ? { ...p, retomado_em: agora() } : p);
+    gravar({ situacao: "andamento", motivo_pausa: "", pausas: ps }, "Serviço retomado."); };
+  const confirmarFim = async () => {
+    const exec = os.servicos.filter(i => feitos[i.id]);
+    const ind = os.servicos.filter(i => !feitos[i.id] && !i.executado && resp[i.id]).map(i => { const p = pessoas.find(x => x.id === resp[i.id]); return { item_id: i.id, descricao: i.descricao, para_id: p.id, para_nome: p.nome, em: agora(), visto_em: null }; });
+    setFinalizar(false); setSalvando(true);
+    try {
+      // os itens feitos ficam marcados na O.S. (mesmo caminho do sistema: salvarItens); se falhar, o apontamento ainda guarda a lista
+      // só a coluna "executado" vai para a O.S. (o upsert do PostgREST grava só o que é enviado): nada de preço, quantidade ou aprovação da cópia antiga
+      if (exec.length) { try { await api.salvarItens(o.id, exec.map(i => ({ id: i.id, posicao: i.posicao, executado: true })), []); } catch (e) { avisar("Os itens não puderam ser marcados na O.S. (" + (e.message || e) + "), mas o serviço foi finalizado.", true); } }
+      const ps = (Array.isArray(s.pausas) ? s.pausas : []).map((p, i, l) => i === l.length - 1 && !p.retomado_em ? { ...p, retomado_em: agora() } : p);
+      await api.apontamentos.atualizar(s.id, { situacao: "finalizado", fim: agora(), motivo_pausa: "", pausas: ps, itens_executados: exec.map(i => i.id), indicacoes: (Array.isArray(s.indicacoes) ? s.indicacoes : []).concat(ind) });
+      avisar("Serviço finalizado" + (ind.length ? ": " + ind.length + " etapa(s) indicada(s) a outro responsável." : ".")); await onMudou();
+    } catch (x) { avisar("Não deu para finalizar: " + (x.message || x), true); } finally { setSalvando(false); }
+  };
+  return html`<${Cartao} titulo=${(s.situacao === "pausado" ? "Pausado · " : "Em andamento · ") + numOS(o.numero)} id=${"sv-" + s.id}>
+    <${KV} a="Veículo" b=${[exPlaca(veic.placa), veic.marca, veic.modelo].filter(Boolean).join(" ") || "—"} p />
+    ${(o.cliente || {}).nome ? html`<${KV} a="Cliente" b=${o.cliente.nome} p />` : null}
+    <${KV} a="Início" b=${new Date(s.inicio).toLocaleDateString("pt-BR") + " " + hhmm(s.inicio) + " · " + tempoTxt(minutosAp(s)) + " trabalhados"} p />
+    ${s.situacao === "pausado" ? html`<div class="nota"><span class="selo atencao">Pausado</span>${s.motivo_pausa}</div>` : null}
+    <${OQueFazer} o=${o} os=${os} />
+    <div class="linha" style="gap:8px;flex-wrap:wrap">
+      ${s.situacao === "pausado" ? html`<button type="button" class="btn-barra claro" data-retomar=${s.id} disabled=${salvando} onClick=${retomar}><${Ic} n="os" t=${20} />Retomar</button>`
+        : html`<button type="button" class="btn-barra claro" data-pausar=${s.id} disabled=${salvando} onClick=${() => setPausar(true)}><${Ic} n="x" t=${20} />Pausar</button>`}
+      <button type="button" class="btn-barra" data-finalizar=${s.id} disabled=${salvando || !os.det} onClick=${() => setFinalizar(true)}><${Ic} n="check" t=${20} />Finalizar</button></div>
+    ${pausar ? html`<${Quadro} titulo="Pausar o serviço" onFechar=${() => setPausar(false)}>
+      <p class="nota">Por que está pausando? O sistema fica sabendo.</p>
+      <div class="chips" role="group" aria-label="Motivo">${MOTIVOS_PAUSA.map(m => html`<button type="button" key=${m} class="btn-chip" aria-pressed=${motivo === m ? "true" : "false"} onClick=${() => setMotivo(m)}>${m}</button>`)}</div>
+      ${motivo === "Outro motivo" ? html`<input id="sv-outro" class="inp livre" autocomplete="off" placeholder="Qual?" value=${outro} onInput=${e => setOutro(e.target.value)} />` : null}
+      <button type="button" class="btn-acao" id="sv-pausar-ok" onClick=${confirmarPausa}>Pausar</button>
+      <button type="button" class="link" onClick=${() => setPausar(false)}>Cancelar</button></${Quadro}>` : null}
+    ${finalizar ? html`<${Quadro} titulo="Finalizar o serviço" onFechar=${() => setFinalizar(false)}>
+      <p class="nota">Marque o que você executou. O que não é seu, indique o responsável: a pessoa recebe o aviso no app.</p>
+      ${os.servicos.length ? os.servicos.map(i => html`<div class="fim-item" key=${i.id}>
+        <label class="marcar" style="min-height:40px"><input type="checkbox" data-feito=${i.id} checked=${!!feitos[i.id] || !!i.executado} disabled=${!!i.executado} onChange=${e => setFeitos(f => ({ ...f, [i.id]: e.target.checked }))} /><span>${i.descricao}${i.executado ? " (já feito)" : ""}</span></label>
+        ${!feitos[i.id] && !i.executado ? html`<select class="inp livre" data-resp=${i.id} value=${resp[i.id] || ""} onChange=${e => setResp(r => ({ ...r, [i.id]: e.target.value }))}><option value="">Responsável: ninguém indicado</option>${pessoas.map(p => html`<option key=${p.id} value=${p.id}>${p.nome}</option>`)}</select>` : null}</div>`)
+        : html`<div class="nota">Esta O.S. ainda não tem serviços lançados. Finalize mesmo assim ou acrescente itens a orçar na consulta da O.S.</div>`}
+      <button type="button" class="btn-acao" id="sv-fim-ok" onClick=${confirmarFim}>Finalizar serviço</button>
+      <button type="button" class="link" onClick=${() => setFinalizar(false)}>Cancelar</button></${Quadro}>` : null}
+  </${Cartao}>`;
+}
+function Servico() {
+  const { perfil, dados, avisar, indicacoes, recarregarServicos } = useApp(); const pl = usarPlaca();
+  useEffect(() => { recarregarServicos(); }, []);
+  const v = pl.veic;
+  const meus = dados.meusAbertos || [], andamento = meus.find(x => x.situacao === "andamento"), pausados = meus.filter(x => x.situacao === "pausado");
+  const ordemDe = s => dados.ordens.find(o => o.id === s.ordem_id) || { id: s.ordem_id, numero: s.os_numero, veiculo: {}, cliente: {} };
+  const abertas = useMemo(() => v ? ordensDoVeiculo(dados, v).filter(ABERTA) : [], [dados.ordens, v]);
+  const [iniciando, setIniciando] = useState(false);
+  const iniciar = async o => {
+    if (andamento) return avisar("Pause ou finalize o serviço em andamento antes de iniciar outro.", true);
+    setIniciando(true);
+    try { await api.apontamentos.abrir({ ordem_id: o.id, os_numero: o.numero, perfil_id: perfil.id, perfil_nome: perfil.nome }); avisar("Serviço iniciado na " + numOS(o.numero) + "."); pl.limpar(); await recarregarServicos(); }
+    catch (x) { avisar("Não deu para iniciar: " + (x.message || x), true); } finally { setIniciando(false); }
+  };
+  const placaSem = v ? v.placa : (pl.placa.naoAchou ? normPlaca(pl.placa.texto) : "");   // carro sem O.S. (ou placa fora do cadastro): segue para o pedido de orçamento
+  const pedirOrcamento = () => { try { sessionStorage.setItem(CH_PLACA_PEDIDO, placaSem); } catch (e) { /* nada */ } ir("orcamento"); };
+  const verIndicacao = async i => { try { await api.apontamentos.visto(i.apontamento_id); await recarregarServicos(); } catch (x) { avisar("Não deu: " + (x.message || x), true); } };
+  const ajuda = "Busque a placa: se o carro tem O.S. aberta, aparece o que precisa ser feito e o botão Iniciar serviço. Sem O.S., vá para o pedido de orçamento. Só um serviço em andamento por vez: para abrir outro, pause (com o motivo) ou finalize. Ao finalizar, marque o que você fez e indique o responsável pelo resto.";
+  return html`<${Tela} tela="servico" ajuda=${ajuda}>
+    ${indicacoes.length ? html`<${Cartao} titulo="Avisos" id="sv-avisos">${indicacoes.map(i => html`<div class="aviso-orc" key=${i.apontamento_id + i.item_id + i.em}>
+      <div><b>${i.de_nome}</b> indicou você: <b>${i.descricao}</b>${i.os_numero ? " · " + numOS(i.os_numero) : ""}<br /><span class="nota">${new Date(i.em).toLocaleDateString("pt-BR")} ${hhmm(i.em)}</span></div>
+      <button type="button" class="btn-barra curto claro" data-indicacao=${i.apontamento_id} onClick=${() => verIndicacao(i)}>OK</button></div>`)}</${Cartao}>` : null}
+    ${andamento ? html`<${ServicoAberto} s=${andamento} o=${ordemDe(andamento)} onMudou=${recarregarServicos} />` : null}
+    ${pausados.map(s => html`<${ServicoAberto} key=${s.id} s=${s} o=${ordemDe(s)} onMudou=${recarregarServicos} />`)}
+    <${BuscaPlaca} id="sv-placa" titulo=${andamento ? "Outro carro (pause ou finalize antes)" : "Qual carro vai mexer?"} pl=${pl} /><${Veiculo} v=${v} />
+    ${placaSem && !abertas.length ? html`<div class="vazio">${v ? "Este carro não tem O.S. aberta." : "Placa fora do cadastro e sem O.S."}<br /><button type="button" class="btn-acao" id="sv-pedir" style="margin-top:10px" onClick=${pedirOrcamento}>Pedir orçamento para este carro</button></div>` : null}
+    ${abertas.filter(o => !meus.some(s => s.ordem_id === o.id)).map(o => html`<${CartaoOS} key=${o.id} o=${o} iniciar=${() => iniciar(o)} bloqueado=${!!andamento || iniciando} />`)}
+  </${Tela}>`;
+}
+function CartaoOS({ o, iniciar, bloqueado }) {
+  const os = usarOS(o);
+  return html`<${Cartao} titulo=${numOS(o.numero) + " · " + etapaTexto(o)}>
+    ${o.mecanico_nome ? html`<${KV} a="Responsável" b=${o.mecanico_nome} p />` : null}
+    <${OQueFazer} o=${o} os=${os} />
+    <button type="button" class="btn-acao" data-iniciar=${o.id} disabled=${bloqueado} onClick=${iniciar}>Iniciar serviço</button>
+    ${bloqueado ? html`<div class="nota">Pause ou finalize o serviço em andamento para iniciar este.</div>` : null}</${Cartao}>`;
+}
+
+/* ---------------- AGENDA (lista): administrador vê todos; colaborador só os dele ---------------- */
+const SIT_AG = { agendado: "Agendado", confirmado: "Confirmado", chegou: "Chegou", faltou: "Faltou", cancelado: "Cancelado" };
+function AgendaLista() {
+  const { perfil } = useApp();
+  const [lista, setLista] = useState(null), [erro, setErro] = useState("");
+  useEffect(() => { let vivo = true; api.agenda.listar({ de: hojeISO() }).then(l => vivo && setLista(l)).catch(e => vivo && setErro("Não deu para carregar a agenda (" + (e.message || "sem internet") + ").")); return () => { vivo = false; }; }, []);
+  const admin = perfil.papel === "admin";
+  const minha = (lista || []).filter(a => a.situacao !== "cancelado" && (admin || a.mecanico_id === perfil.id));
+  const dias = [...new Set(minha.map(a => a.data))];
+  const diaTxt = d => { const x = new Date(d + "T12:00:00"); return SEM_EXT[x.getDay()] + ", " + d.slice(8, 10) + "/" + d.slice(5, 7); };
+  return html`<${Tela} tela="agenda" ajuda=${admin ? "Todos os carros agendados daqui para a frente, por dia, com o mecânico de cada um." : "Os carros agendados para você mexer, por dia. O administrador define o mecânico no sistema."}>
+    ${erro ? html`<div class="erro">${erro}</div>` : !lista ? html`<div class="carregando">Carregando a agenda…</div>` : null}
+    ${lista && !dias.length ? html`<div class="vazio">${admin ? "Nenhum serviço agendado daqui para a frente." : "Nenhum carro agendado para você. Quando o administrador marcar um agendamento no seu nome, ele aparece aqui."}</div>` : null}
+    ${dias.map(d => html`<${Cartao} key=${d} titulo=${diaTxt(d)}>${minha.filter(a => a.data === d).map(a => { const v = a.veiculo || {}; return html`<div class="ag-item" key=${a.id}>
+      <div class="ag-hora">${a.hora ? String(a.hora).slice(0, 5) : "sem hora"}</div>
+      <div class="ag-meio"><b>${[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" ") || "Veículo a confirmar"}</b><span>${(a.cliente || {}).nome || ""}</span><span>${a.servico}</span>
+        <span class="nota">${SIT_AG[a.situacao] || a.situacao}${admin ? " · " + (a.mecanico_nome || "mecânico não definido") : ""}</span></div></div>`; })}</${Cartao}>`)}
+  </${Tela}>`;
+}
+
+/* ---------------- MEUS SERVIÇOS: carros em que a pessoa mexeu, por quinzena ---------------- */
+const quinzenaDe = iso => { const d = new Date(iso); const q = d.getDate() <= 15 ? 1 : 2; return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + q; };
+const quinzenaTxt = k => { const [a, m, q] = k.split("-"); const mes = MESES[Number(m) - 1]; const ult = new Date(Number(a), Number(m), 0).getDate(); return (q === "1" ? "1 a 15" : "16 a " + ult) + " de " + mes + " de " + a; };
+function MeusServicos() {
+  const { perfil, dados } = useApp();
+  const [lista, setLista] = useState(null), [erro, setErro] = useState("");
+  useEffect(() => { let vivo = true; api.apontamentos.listar({ perfil_id: perfil.id, desde: new Date(Date.now() - 120 * 86400000).toISOString() }).then(l => vivo && setLista(l)).catch(e => vivo && setErro("Não deu para carregar (" + (e.message || "sem internet") + ").")); return () => { vivo = false; }; }, []);
+  const grupos = useMemo(() => { const g = new Map(); (lista || []).forEach(s => { const k = quinzenaDe(s.inicio); (g.get(k) || g.set(k, []).get(k)).push(s); }); return [...g.entries()].sort((a, b) => b[0].localeCompare(a[0])); }, [lista]);
+  const ordemDe = s => dados.ordens.find(o => o.id === s.ordem_id) || { numero: s.os_numero, veiculo: {} };
+  return html`<${Tela} tela="meus" ajuda="Os carros em que você mexeu, por quinzena (1 a 15 e 16 ao fim do mês), com o tempo trabalhado em cada um. Vem do botão Iniciar serviço.">
+    ${erro ? html`<div class="erro">${erro}</div>` : !lista ? html`<div class="carregando">Carregando…</div>` : null}
+    ${lista && !grupos.length ? html`<div class="vazio">Nenhum serviço apontado ainda. Use “Iniciar serviço” quando pegar um carro.</div>` : null}
+    ${grupos.map(([k, l]) => html`<${Cartao} key=${k} titulo=${quinzenaTxt(k)}>
+      <div class="nota" style="margin-bottom:4px"><b>${new Set(l.map(s => s.ordem_id)).size}</b> carro(s) · <b>${l.length}</b> serviço(s) · <b>${tempoTxt(l.reduce((t, s) => t + minutosAp(s), 0))}</b></div>
+      ${l.map(s => { const o = ordemDe(s), v = o.veiculo || {}; return html`<div class="ag-item" key=${s.id}><div class="ag-hora">${new Date(s.inicio).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</div>
+        <div class="ag-meio"><b>${[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" ") || numOS(o.numero)}</b><span>${numOS(o.numero)} · ${tempoTxt(minutosAp(s))} · ${s.situacao === "finalizado" ? "Finalizado" : s.situacao === "pausado" ? "Pausado" : "Em andamento"}</span>
+          ${(s.itens_executados || []).length ? html`<span class="nota">${s.itens_executados.length} item(ns) executado(s)</span>` : null}</div></div>`; })}</${Cartao}>`)}
+  </${Tela}>`;
+}
+
 /* ---------------- AJUDA (acesso, digital, versão, sair) ---------------- */
 function Ajuda() {
   const { perfil, sair, nativo, telas } = useApp();
@@ -634,7 +794,7 @@ function Ajuda() {
 }
 
 /* ---------------- raiz: dados, rota, aviso ---------------- */
-const ROTAS = { inicio: Inicio, ajuda: Ajuda, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, peca: Peca, historico: Historico, osconsulta: OSConsulta };
+const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta };
 // quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
 const quadros = [];
 /** Pilha das telas visitadas: o botão Voltar do celular volta para a tela anterior, uma por vez, e só sai do app no Início
@@ -674,6 +834,10 @@ function App({ usuario, nativo }) {
     } catch (e) {} setTick(t => t + 1); };
   useEffect(() => { const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) recarregarOrcamentos(); }, 60000); const vis = () => { if (!document.hidden) recarregarOrcamentos(); }; document.addEventListener("visibilitychange", vis); return () => { clearInterval(i); document.removeEventListener("visibilitychange", vis); }; }, []);
   const avisos = useMemo(() => avisosDe(dados.orcamentos, usuario), [dados.orcamentos, tick]);
+  // serviços abertos da pessoa e indicações feitas para ela (v60): com o v60 ausente, listar devolve [] e nada quebra
+  const recarregarServicos = async () => { try { const [meusAbertos, indicacoes] = await Promise.all([api.apontamentos.listar({ perfil_id: usuario.id, abertos: true }), api.apontamentos.indicadasPara(usuario.id)]); setDados(d => ({ ...d, meusAbertos, indicacoes })); } catch (e) { /* sem internet: fica o que tinha */ } };
+  useEffect(() => { recarregarServicos(); const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) recarregarServicos(); }, 60000); return () => clearInterval(i); }, []);
+  const indicacoes = dados.indicacoes || [];
   // horário de uso (Sistema › Equipe): fora dele a tela trava até o horário voltar (o administrador não tem limite); o tick confere a cada minuto
   const acessoAgora = cfgOk ? acessoApp(cfg, usuario) : { horario: usuario.horario || null };
   const fora = usuario.papel === "admin" ? "" : foraDoHorario(acessoAgora.horario);
@@ -681,7 +845,7 @@ function App({ usuario, nativo }) {
     <main class="folha inicio"><div class="vazio" id="fora-horario"><b>Fora do horário de uso.</b><br />${fora}</div></main></div>`;
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
   const telas = cfgOk ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
-  const ctx = { perfil: usuario, dados, cfg, telas, avisos, avisar, recarregar: carregar, recarregarOrcamentos, sair: nativo.sair, nativo };
+  const ctx = { perfil: usuario, dados, cfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
     ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}
@@ -691,7 +855,7 @@ function App({ usuario, nativo }) {
 
 /** chamado pelo app.js depois do login (e da digital) */
 export function montar(usuario, nativo) {
-  if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = "#/inicio";
+  if (!ROTAS_RE.test(location.hash)) location.hash = "#/inicio";
   const raiz = document.getElementById("raiz"); raiz.innerHTML = "";
   render(html`<${App} usuario=${usuario} nativo=${nativo} />`, raiz);
 }

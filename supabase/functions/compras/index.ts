@@ -61,6 +61,8 @@ export const numero = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 const soDig = (s: unknown) => txt(s).replace(/\D/g, "");
+/** data e hora no horário de Brasília, para o detalhe da conexão que a tela mostra (ex.: 17/11/2026 10:05) */
+export const horaBR = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }).replace(",", "");
 
 /** Robô SÓ pelo endereço do portal cadastrado em Ajustes (mesma regra de roboDaConexao em js/compraspecas.js; o nome do fornecedor não conta) */
 export function roboDe(c: { endereco?: string }): Robo | null {
@@ -305,7 +307,7 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     try {
       await deps.gravarSessao(c.id, null);   // teste = login novo de verdade
       const ofertas = await comSessao(deps, c, robo, cnpjOficina, (s) => buscar(deps, robo, s, String(corpo.termo || "WK84213")));
-      await deps.situacao(c.id, "ok", "Conectado em " + agora.toISOString() + " (teste: " + ofertas.length + " preço(s)).");
+      await deps.situacao(c.id, "ok", "Conectado em " + horaBR(agora) + " (teste: " + ofertas.length + " preço(s)).");
       return { ok: true, robo, nome: NOME_ROBO[robo], ofertas: ofertas.slice(0, 10) };
     } catch (e) {
       const msg = (e as Error).message || "falha";
@@ -333,7 +335,7 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
       });
       const ofertas = [...vistas.values()];
       const gravadas = ofertas.length ? await deps.gravarPrecos(c.fornecedor_id, ofertas, em) : 0;
-      await deps.situacao(c.id, "ok", "Última consulta " + em + " (" + ofertas.length + " preço(s)).");
+      await deps.situacao(c.id, "ok", "Última consulta " + horaBR(agora) + " (" + ofertas.length + " preço(s)).");
       return { ...base, ok: true, ofertas, gravadas, em };
     } catch (e) {
       const msg = (e as Error).message || "falha";

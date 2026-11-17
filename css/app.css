@@ -1580,6 +1580,33 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cp-ped-acoes{flex-wrap:wrap}.cp-texto span{margin-left:4px}
 .cp-texto-area{min-height:260px;font-family:inherit;white-space:pre-wrap}
 .cp-pedidos{display:flex;flex-direction:column;gap:12px}.cp-carrinho{display:flex;flex-direction:column;gap:12px}
+/* aba Fornecedores (protótipo): tabela única + carrinho ao lado */
+.cot{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+.cot-principal{display:flex;flex-direction:column;gap:14px;min-width:0}
+.cot-busca{display:flex;flex-direction:column;gap:10px}
+.cot-busca .cp-campos{align-items:flex-end}.cot-consultar{height:42px;white-space:nowrap}
+.cot-tabela{padding:0;overflow:hidden}
+.cot-cab,.cot-linha{display:grid;grid-template-columns:minmax(140px,1.4fr) minmax(100px,1fr) 100px 90px 70px minmax(130px,1.2fr) 108px;gap:8px 10px;align-items:center;padding:12px 14px}
+.cot-cab{background:#f5f6f8;font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.cot-linha{border-top:1px solid var(--line);font-size:15px}
+.cot-menor{background:#f3f7fc}
+.cot-forn{display:flex;flex-direction:column;gap:2px}.cot-forn small{color:var(--muted);font-size:12px}.cot-forn .pill{align-self:flex-start}
+.cot-preco b{font-size:18px}.cot-ori{font-size:13px;color:var(--muted)}.cot-acao{text-align:right}
+.cot-sem .cot-resto{grid-column:2 / -1;color:var(--muted);font-size:14px}
+.cot-rodape{padding:8px 16px 12px;margin:0}
+.cot-situacoes{display:flex;flex-wrap:wrap;gap:8px}
+.cot-sit{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:4px;background:#eceef0;font-size:13px;color:#16191d}
+.cot-sit i{width:9px;height:9px;border-radius:50%;background:#9aa3b0;flex-shrink:0}
+.cot-sit-ok i{background:#1e8e3e}.cot-sit-erro i{background:#c62828}.cot-sit-erro{background:#fdecea}.cot-sit-pc i{background:#174f94}
+.cot-sit small{color:var(--muted)}
+.cot-carrinho{display:flex;flex-direction:column;gap:10px;position:sticky;top:12px}
+.cot-carrinho h3{margin:0}
+.cot-car-forn{border-bottom:1px solid var(--line);padding-bottom:8px}
+.cot-car-nome{display:block;font-size:12px;font-weight:600;color:var(--steel);text-transform:uppercase}
+.cot-car-item{display:flex;justify-content:space-between;gap:8px;font-size:14px;margin-top:4px}
+.cot-car-total{display:flex;justify-content:space-between;font-size:17px;font-weight:700}
+@media (max-width:1560px){.cot{grid-template-columns:1fr}.cot-carrinho{position:static}}
+@media (min-width:641px) and (max-width:1560px){.cot-carrinho{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px}.cot-carrinho h3,.cot-carrinho .cot-car-forn,.cot-carrinho .cot-car-total{grid-column:1 / -1}.cot-carrinho .dica{grid-column:1}.cot-carrinho #cot-gerar{grid-column:2;grid-row:span 1}}
 /* consulta ao vivo (etapa 2): estado da última consulta e botões da conexão em Ajustes */
 .cp-vivo-estado{display:block;margin:0 0 6px;font-weight:500}
 .cp-vivo-livre{margin-top:8px;align-items:center;flex-wrap:wrap}
@@ -1588,6 +1615,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (max-width:640px){
   .cp-campo-placa{flex:1 1 100%}.cp-limpar{flex:1 1 100%}
   .cp-conexao-botoes{flex-direction:column;align-items:stretch}
+  .cot-cab{display:none}.cot-linha{grid-template-columns:minmax(0,1fr) auto}.cot-forn{grid-column:1 / -1}.cot-cod,.cot-est,.cot-prazo,.cot-ori{grid-column:auto;font-size:13px}
+  .cot-ori{grid-column:1 / -1}.cot-acao{grid-column:1 / -1;text-align:left}.cot-acao .btn{width:100%}.cot-consultar{flex:1 1 100%}
   .cp-item{grid-template-columns:64px minmax(0,1fr)}.cp-item .pv-botoes{grid-column:1 / -1;flex-direction:row}.cp-item .pv-botoes .btn{flex:1}
   .cp-oferta{grid-template-columns:minmax(0,1fr) auto}.cp-of-cod,.cp-of-est,.cp-of-origem{grid-column:1 / -1}.cp-of-acao{grid-column:1 / -1;text-align:left}.cp-of-acao .btn{width:100%}
   .cp-item-car{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cp-ic-desc{grid-column:1 / -1}.cp-ic-total,.cp-tirar{grid-column:auto}

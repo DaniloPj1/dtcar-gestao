@@ -103,7 +103,7 @@ confere("Toli: fica para o programa do PC", porConexao("c-toli").ok === false &&
 confere("portal desconhecido: erro claro", porConexao("c-x").ok === false && /não reconhecido/.test(porConexao("c-x").erro));
 confere("conexão desligada não é consultada", !porConexao("c-off"));
 confere("preços gravados por fornecedor", gravados["f-dpk"]?.length === 1 && gravados["f-rol"]?.length === 1 && gravados["f-pel"]?.length === 2);
-confere("situação ok com a hora", situacoes["c-dpk"][0] === "ok" && /2026-11-16T15:00:00/.test(situacoes["c-dpk"][1]) && situacoes["c-rol"][0] === "ok" && situacoes["c-pel"][0] === "ok");
+confere("situação ok com a hora de Brasília", situacoes["c-dpk"][0] === "ok" && /16\/11\/2026 12:00/.test(situacoes["c-dpk"][1]) && situacoes["c-rol"][0] === "ok" && situacoes["c-pel"][0] === "ok");
 confere("nenhuma senha na resposta", !JSON.stringify(r).includes("senha-"));
 
 // ---------- 2ª consulta reaproveita a sessão (sem novo login)

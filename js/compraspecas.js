@@ -186,3 +186,43 @@ export function resumoAoVivo(r, nomeDe = () => "") {
   });
   return l.length ? l.join(" · ") : "Nenhum fornecedor conectado para consultar.";
 }
+
+/**
+ * Aba "Fornecedores" (pedido do Danilo em 17/11/2026: "uma aba em compras para resultados apenas dos fornecedores", como o protótipo):
+ * UMA tabela com o que cada fornecedor respondeu — Fornecedor | Código | Preço | Estoque | Prazo | Origem — sem as linhas do acervo.
+ *   resposta  o que a função "compras" devolveu ({ em, resultados: [{ fornecedor_id, nome, ok, ofertas, erro, no_pc }] }) ou null
+ *   idx       índice de preços da tela (informados e última compra entram como referência, pelos códigos pesquisados)
+ *   codigos   códigos pesquisados (normalizados ou não)
+ * Devolve { linhas: [{ fornecedor, codigo, marca, descricao, preco, estoque, prazo, origem, em, menor, antigo }], semResposta: [{ fornecedor, motivo, no_pc }], semEstoque }.
+ * Menor preço = o mais barato entre os preços atuais com estoque (ao vivo ou informado há até DIAS_ATUAL dias), quando há 2+ linhas.
+ * REGRA DO DANILO (17/11/2026): só entra resultado com estoque disponível — linha "sem estoque" (estoque 0) fica de fora (contada em semEstoque)
+ * e a última compra das notas (que não diz estoque) não entra nesta aba. Estoque em branco (o portal não informa a quantidade, como o
+ * Pellegrino, que só diz quando NÃO tem) conta como disponível e aparece "disponível".
+ */
+export function linhasCotacao({ resposta = null, idx = new Map(), codigos = [], fornecedores = [], agora = Date.now(), soComEstoque = true } = {}) {
+  const forn = new Map(fornecedores.map(f => [f.id, f]));
+  const nomeDe = (id, alt) => nomeFornecedor(forn.get(id)) || alt || "Fornecedor";
+  const linhas = [], vistas = new Set(), semResposta = [];
+  const chaveDe = (fid, cod) => fid + "|" + nc(cod);
+  for (const r of (resposta && resposta.resultados) || []) {
+    const nome = nomeDe(r.fornecedor_id, r.nome);
+    if (!r.ok) { semResposta.push({ fornecedor_id: r.fornecedor_id, fornecedor: nome, motivo: r.no_pc ? "consulta pelo programa do PC (em preparação)" : (r.erro || "não respondeu"), no_pc: !!r.no_pc }); continue; }
+    for (const o of r.ofertas || []) {
+      const k = chaveDe(r.fornecedor_id, o.codigo); if (vistas.has(k) || !(Number(o.preco) > 0)) continue; vistas.add(k);
+      linhas.push({ chave: "av:" + k, fornecedor_id: r.fornecedor_id, fornecedor: nome, codigo: o.codigo || "", marca: o.marca || "", descricao: o.descricao || "", preco: Number(o.preco),
+        estoque: o.estoque === null || o.estoque === undefined ? null : Number(o.estoque), prazo: o.prazo || "", origem: "ao_vivo", em: resposta.em || new Date(agora).toISOString(), idade: 0, antigo: false });
+    }
+    if (!(r.ofertas || []).length) semResposta.push({ fornecedor_id: r.fornecedor_id, fornecedor: nome, motivo: "sem resultado para esse código", no_pc: false, vazio: true });
+  }
+  // referência: preços informados e última compra dos códigos pesquisados (um por fornecedor + código, sem repetir o que veio ao vivo)
+  const chaves = new Set(codigos.map(nc).filter(k => k.length >= 3));
+  const ref = [];
+  for (const [k, l] of idx) if ([...chaves].some(c => k === c || k.startsWith(c))) for (const o of l) ref.push(o);
+  for (const o of ofertasDaLinha(new Map([["x", ref]]), ["x"], agora)) { const k = chaveDe(o.fornecedor_id, o.codigo); if (vistas.has(k)) continue; vistas.add(k); linhas.push({ ...o, menor: false }); }
+  let semEstoque = 0, mostradas = linhas;
+  if (soComEstoque) { mostradas = linhas.filter(o => o.origem !== "ultima_compra" && o.estoque !== 0); semEstoque = linhas.filter(o => o.origem !== "ultima_compra" && o.estoque === 0).length; }
+  mostradas.sort((a, b) => a.preco - b.preco || (a.origem === "ultima_compra" ? 1 : 0) - (b.origem === "ultima_compra" ? 1 : 0) || a.fornecedor.localeCompare(b.fornecedor, "pt-BR"));
+  const valem = mostradas.filter(o => o.origem !== "ultima_compra" && !o.antigo && o.estoque !== 0);
+  const menor = valem.length && mostradas.length >= 2 ? valem[0] : null;
+  return { linhas: mostradas.map(o => ({ ...o, menor: !!menor && o.chave === menor.chave })), semResposta, semEstoque };
+}

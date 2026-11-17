@@ -13,6 +13,10 @@ insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, 
 values ('00000000-0000-0000-0000-000000000600', 600, 'execucao', '00000000-0000-0000-0000-0000000000c1', '00000000-0000-0000-0000-0000000000f1', '{"nome": "Ana Souza"}', '{"placa": "ABC1D23", "marca": "Fiat", "modelo": "Uno"}', 1000, 0)
 on conflict (id) do nothing;
 
+-- pode rodar de novo no mesmo banco
+delete from public.servico_apontamentos where ordem_id = '00000000-0000-0000-0000-000000000600';
+delete from public.agendamentos where id = '00000000-0000-0000-0000-00000000a601';
+
 create temp table antes as select (select count(*) from public.ordens) ordens, (select count(*) from public.estoque_mov) mov,
   (select count(*) from public.contas) contas, (select count(*) from public.recibos) recibos;
 grant select on antes to authenticated;

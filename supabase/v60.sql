@@ -6,6 +6,9 @@
 --    no sino). Um apontamento em andamento por pessoa (regra conferida no app e pela função apontamento_abrir abaixo).
 --    O histórico do colaborador (por quinzena no app; Relatórios › Serviços por colaborador no sistema) sai daqui.
 -- Não mexe em O.S., estoque nem financeiro. Backup, banco do PC (atualizado_em + exclusoes) e restauração incluídos. Idempotente.
+-- Período de transição (espelho do OS Oficina): servico_apontamentos é PRESERVADA, não entra em espelho_legado_zerar(); some só
+-- junto com a O.S. (ordem_id on delete cascade). Apagar um acesso em perfis NÃO apaga o histórico de horas (perfil_id vira nulo;
+-- perfil_nome fica).
 
 alter table public.agendamentos add column if not exists mecanico_id uuid references public.perfis (id) on delete set null;
 alter table public.agendamentos add column if not exists mecanico_nome text not null default '';
@@ -15,7 +18,7 @@ create table if not exists public.servico_apontamentos (
   id uuid primary key default gen_random_uuid(),
   ordem_id uuid not null references public.ordens (id) on delete cascade,
   os_numero int,
-  perfil_id uuid not null references public.perfis (id) on delete cascade,
+  perfil_id uuid references public.perfis (id) on delete set null,
   perfil_nome text not null default '',
   situacao text not null default 'andamento' check (situacao in ('andamento', 'pausado', 'finalizado')),
   inicio timestamptz not null default now(),
@@ -58,9 +61,9 @@ returns void language plpgsql security definer set search_path = public as $$
 begin
   if not public.e_membro() then raise exception 'Sem acesso.'; end if;
   update public.servico_apontamentos
-     set indicacoes = (select coalesce(jsonb_agg(case when (i->>'para_id')::uuid = auth.uid() and i->>'visto_em' is null then i || jsonb_build_object('visto_em', now()) else i end), '[]'::jsonb)
-                         from jsonb_array_elements(indicacoes) i)
-   where id = p_id;
+     set indicacoes = (select coalesce(jsonb_agg(case when i->>'para_id' = auth.uid()::text and i->>'visto_em' is null then i || jsonb_build_object('visto_em', now()) else i end), '[]'::jsonb)
+                         from jsonb_array_elements(indicacoes) i)   -- só a indicação feita para quem chama
+   where id = p_id and exists (select 1 from jsonb_array_elements(indicacoes) j where j->>'para_id' = auth.uid()::text and j->>'visto_em' is null);
 end $$;
 revoke all on function public.apontamento_visto(uuid) from public, anon;
 grant execute on function public.apontamento_visto(uuid) to authenticated;

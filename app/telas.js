@@ -664,7 +664,8 @@ function ServicoAberto({ s, o, onMudou }) {
     setFinalizar(false); setSalvando(true);
     try {
       // os itens feitos ficam marcados na O.S. (mesmo caminho do sistema: salvarItens); se falhar, o apontamento ainda guarda a lista
-      if (exec.length) { try { await api.salvarItens(o.id, exec.map(({ _novo, ...i }) => ({ ...i, executado: true })), []); } catch (e) { avisar("Os itens não puderam ser marcados na O.S. (" + (e.message || e) + "), mas o serviço foi finalizado.", true); } }
+      // só a coluna "executado" vai para a O.S. (o upsert do PostgREST grava só o que é enviado): nada de preço, quantidade ou aprovação da cópia antiga
+      if (exec.length) { try { await api.salvarItens(o.id, exec.map(i => ({ id: i.id, posicao: i.posicao, executado: true })), []); } catch (e) { avisar("Os itens não puderam ser marcados na O.S. (" + (e.message || e) + "), mas o serviço foi finalizado.", true); } }
       const ps = (Array.isArray(s.pausas) ? s.pausas : []).map((p, i, l) => i === l.length - 1 && !p.retomado_em ? { ...p, retomado_em: agora() } : p);
       await api.apontamentos.atualizar(s.id, { situacao: "finalizado", fim: agora(), motivo_pausa: "", pausas: ps, itens_executados: exec.map(i => i.id), indicacoes: (Array.isArray(s.indicacoes) ? s.indicacoes : []).concat(ind) });
       avisar("Serviço finalizado" + (ind.length ? ": " + ind.length + " etapa(s) indicada(s) a outro responsável." : ".")); await onMudou();
@@ -673,7 +674,7 @@ function ServicoAberto({ s, o, onMudou }) {
   return html`<${Cartao} titulo=${(s.situacao === "pausado" ? "Pausado · " : "Em andamento · ") + numOS(o.numero)} id=${"sv-" + s.id}>
     <${KV} a="Veículo" b=${[exPlaca(veic.placa), veic.marca, veic.modelo].filter(Boolean).join(" ") || "—"} p />
     ${(o.cliente || {}).nome ? html`<${KV} a="Cliente" b=${o.cliente.nome} p />` : null}
-    <${KV} a="Início" b=${fmtData((s.inicio || "").slice(0, 10)) + " " + hhmm(s.inicio) + " · " + tempoTxt(minutosAp(s)) + " trabalhados"} p />
+    <${KV} a="Início" b=${new Date(s.inicio).toLocaleDateString("pt-BR") + " " + hhmm(s.inicio) + " · " + tempoTxt(minutosAp(s)) + " trabalhados"} p />
     ${s.situacao === "pausado" ? html`<div class="nota"><span class="selo atencao">Pausado</span>${s.motivo_pausa}</div>` : null}
     <${OQueFazer} o=${o} os=${os} />
     <div class="linha" style="gap:8px;flex-wrap:wrap">
@@ -716,7 +717,7 @@ function Servico() {
   const ajuda = "Busque a placa: se o carro tem O.S. aberta, aparece o que precisa ser feito e o botão Iniciar serviço. Sem O.S., vá para o pedido de orçamento. Só um serviço em andamento por vez: para abrir outro, pause (com o motivo) ou finalize. Ao finalizar, marque o que você fez e indique o responsável pelo resto.";
   return html`<${Tela} tela="servico" ajuda=${ajuda}>
     ${indicacoes.length ? html`<${Cartao} titulo="Avisos" id="sv-avisos">${indicacoes.map(i => html`<div class="aviso-orc" key=${i.apontamento_id + i.item_id + i.em}>
-      <div><b>${i.de_nome}</b> indicou você: <b>${i.descricao}</b>${i.os_numero ? " · " + numOS(i.os_numero) : ""}<br /><span class="nota">${fmtData((i.em || "").slice(0, 10))} ${hhmm(i.em)}</span></div>
+      <div><b>${i.de_nome}</b> indicou você: <b>${i.descricao}</b>${i.os_numero ? " · " + numOS(i.os_numero) : ""}<br /><span class="nota">${new Date(i.em).toLocaleDateString("pt-BR")} ${hhmm(i.em)}</span></div>
       <button type="button" class="btn-barra curto claro" data-indicacao=${i.apontamento_id} onClick=${() => verIndicacao(i)}>OK</button></div>`)}</${Cartao}>` : null}
     ${andamento ? html`<${ServicoAberto} s=${andamento} o=${ordemDe(andamento)} onMudou=${recarregarServicos} />` : null}
     ${pausados.map(s => html`<${ServicoAberto} key=${s.id} s=${s} o=${ordemDe(s)} onMudou=${recarregarServicos} />`)}
@@ -768,7 +769,7 @@ function MeusServicos() {
     ${lista && !grupos.length ? html`<div class="vazio">Nenhum serviço apontado ainda. Use “Iniciar serviço” quando pegar um carro.</div>` : null}
     ${grupos.map(([k, l]) => html`<${Cartao} key=${k} titulo=${quinzenaTxt(k)}>
       <div class="nota" style="margin-bottom:4px"><b>${new Set(l.map(s => s.ordem_id)).size}</b> carro(s) · <b>${l.length}</b> serviço(s) · <b>${tempoTxt(l.reduce((t, s) => t + minutosAp(s), 0))}</b></div>
-      ${l.map(s => { const o = ordemDe(s), v = o.veiculo || {}; return html`<div class="ag-item" key=${s.id}><div class="ag-hora">${(s.inicio || "").slice(8, 10) + "/" + (s.inicio || "").slice(5, 7)}</div>
+      ${l.map(s => { const o = ordemDe(s), v = o.veiculo || {}; return html`<div class="ag-item" key=${s.id}><div class="ag-hora">${new Date(s.inicio).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</div>
         <div class="ag-meio"><b>${[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" ") || numOS(o.numero)}</b><span>${numOS(o.numero)} · ${tempoTxt(minutosAp(s))} · ${s.situacao === "finalizado" ? "Finalizado" : s.situacao === "pausado" ? "Pausado" : "Em andamento"}</span>
           ${(s.itens_executados || []).length ? html`<span class="nota">${s.itens_executados.length} item(ns) executado(s)</span>` : null}</div></div>`; })}</${Cartao}>`)}
   </${Tela}>`;

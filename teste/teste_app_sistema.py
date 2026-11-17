@@ -392,7 +392,7 @@ try:
         t(f.apont[-1]['situacao'] == 'andamento' and f.apont[-1]['pausas'][0].get('retomado_em'), 'retomar fecha a pausa')
         pg.click('[data-finalizar]'); pg.wait_for_selector('#sv-fim-ok'); pg.check('[data-feito="i2"]'); pg.select_option('[data-resp="i3"]', 'outra-pessoa'); pg.click('#sv-fim-ok'); pg.wait_for_timeout(800)
         ap = f.apont[-1]; t(ap['situacao'] == 'finalizado' and ap['fim'] and ap['itens_executados'] == ['i2'] and ap['indicacoes'][0]['para_id'] == 'outra-pessoa' and ap['indicacoes'][0]['descricao'] == 'PASTILHAS DE FREIO DIANTEIRAS', 'finalizar grava itens executados e a indicação do responsável: %s' % ap)
-        t(any(tb == 'os_itens' and any(x.get('executado') is True and x.get('id') == 'i2' for x in (c if isinstance(c, list) else [c])) for tb, c in f.gravados), 'o item feito fica marcado como executado na O.S.')
+        t(any(tb == 'os_itens' and any(x.get('executado') is True and x.get('id') == 'i2' and 'valor_unit' not in x and 'aprovado' not in x for x in (c if isinstance(c, list) else [c])) for tb, c in f.gravados), 'o item feito fica marcado como executado na O.S. (só a coluna executado, sem preço)')
         t(pg.locator('[data-pausar]').count() == 0 and pg.locator('[data-finalizar]').count() == 0, 'depois de finalizar não há serviço aberto')
         # carro sem O.S. aberta: vai para o pedido de orçamento com a placa já buscada (contato opcional)
         pg.fill('#sv-placa', 'qxn1e49'); pg.keyboard.press('Enter'); pg.wait_for_selector('#sv-pedir', timeout=8000); pg.click('#sv-pedir'); pg.wait_for_selector('#pd-area', timeout=8000); pg.wait_for_timeout(800)

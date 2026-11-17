@@ -718,7 +718,16 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   **Fichinha de cada fornecedor conectado** (`SituacaoFornecedores`, `#cot-situacoes`): verde = Conectado (logado), vermelho = Com erro (com o
   motivo), cinza = aguardando a primeira consulta / portal não reconhecido, azul = pelo programa do PC. `detalheLegivel` troca a hora ISO do
   detalhe pelo horário de Brasília (a função passou a gravar `horaBR`). Carrinho resumido ao lado (PC largo) ou embaixo, com "Gerar pedidos por
-  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **v179 (pedidos do Danilo em 17/11/2026, de manhã):** placa fora do cadastro na aba Compras: 1º o modelo de graça pelo portal com login (ação `placa` da função: DPK `productSearch/plate`, depois Rolemar `/ajax-busca-placa`); só se nenhum portal conhecer, a consulta paga de sempre.
+  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **v181 — peça pelo carro da placa (pedido do Danilo em 17/11/2026: "quero que elas me entreguem a peça que estou pedindo pelo
+  modelo que a placa do carro informa"):** a tela manda `placa` e `veiculo` (marca, modelo, motor e ano do cadastro ou da consulta).
+  **DPK** (mapeado em 17/11/2026): placa → `productSearch/plate` (texto do carro) → listas do catálogo `api-external/api/superk/filter`
+  (Type=2 montadoras, Type=3&ManufacturerId= veículos, Type=5&ManufacturerId=&VehicleId= motores) → `dpkCasarCarro` acha montadora, veículo
+  (palavra inteira; o nome mais completo vence: ONIX PLUS antes de ONIX; GM/VW viram CHEVROLET/VOLKSWAGEN), ano e motor (cilindrada + diesel/
+  flex/turbo; empate = sem motor) → `productSearch` com `CarMakerId`, `VehicleId`, `Year`, `EngineId` (ex.: "pastilha" cai de 1.500 para 16 na
+  Toro 2020 diesel). O carro casado fica na sessão (`carros[placa]`). **Código de peça (`ehCodigo`: sem espaço, com número) vai SEM o filtro**
+  (código é exato e o filtro zera). A resposta traz `veiculo` (o carro filtrado) ou `sem_carro` (portal que ainda não filtra); a tela mostra
+  `#cot-carro`. Rolemar e Pellegrino/Sama: ainda sem o filtro do carro.
+  **v179 (pedidos do Danilo em 17/11/2026, de manhã):** placa fora do cadastro na aba Compras: 1º o modelo de graça pelo portal com login (ação `placa` da função: DPK `productSearch/plate`, depois Rolemar `/ajax-busca-placa`); só se nenhum portal conhecer, a consulta paga de sempre.
   resultado no estilo da pesquisa da DPK — CARDS com foto da peça, "Fabricante:", "Cód. de fábrica:", estoque em verde e "Adicionar", visão
   **Cards | Lista** e tamanho **Pequeno | Médio | Grande** (guardados no aparelho, `dtcar-compras-cot`), filtros por fornecedor e por marca da
   peça; cor fixa por fornecedor (`corDoFornecedor` em `js/compraspecas.js`) nos cards, nas linhas e nas fichinhas. A função devolve `foto`

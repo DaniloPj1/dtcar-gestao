@@ -110,7 +110,9 @@ function Cotacao({ d, recarregar, irCarrinho }) {
     if (!alvo.termos.length || (vivo && vivo.buscando)) return;
     setVivo({ buscando: true, termos: alvo.termos });
     setSoForn(""); setSoMarca("");
-    const r = await api.compras.aoVivo({ termos: alvo.termos, placa: ePlaca ? placa : "", veiculo: veiculo ? nomeVeic(veiculo) : "", conexoes: noServidor.map(c => c.id) });
+    // o carro vai junto: a placa (o portal confere o modelo) e o texto do carro (marca, modelo, motor, ano) para quem casa pelo nome
+    const textoCarro = veiculo ? [veiculo.marca, veiculo.modelo, veiculo.motor, veiculo.ano_mod || veiculo.ano].filter(Boolean).join(" ") : "";
+    const r = await api.compras.aoVivo({ termos: alvo.termos, placa: ePlaca ? placa : "", veiculo: textoCarro, conexoes: noServidor.map(c => c.id) });
     setVivo({ r, termos: alvo.termos });
     if (r && r.ok) await recarregar();
   };
@@ -138,6 +140,10 @@ function Cotacao({ d, recarregar, irCarrinho }) {
           : html`Nenhum fornecedor com portal reconhecido. Conecte em Ajustes › Fornecedores conectados (endereço do portal, usuário e senha).`}</p>
       </section>
       ${vivo && vivo.r && !vivo.r.ok ? html`<div class="aviso aviso-erro" id="cot-erro">${vivo.r.erro}</div>` : null}
+      ${vivo && vivo.r && vivo.r.ok && (vivo.r.resultados || []).some(x => x.veiculo || x.sem_carro) ? html`<div class="cot-carro" id="cot-carro" role="status">
+        ${(vivo.r.resultados || []).filter(x => x.veiculo).map(x => html`<span key=${x.conexao} class="cot-carro-ok"><b>${nomeDe(x.fornecedor_id) || x.nome}</b>: só peças do <b>${x.veiculo}</b></span>`)}
+        ${(vivo.r.resultados || []).filter(x => x.sem_carro && !x.veiculo).length ? html`<span class="cot-carro-sem"><b>${(vivo.r.resultados || []).filter(x => x.sem_carro && !x.veiculo).map(x => nomeDe(x.fornecedor_id) || x.nome).join(", ")}</b>: ainda sem o filtro do carro (confira a aplicação)</span>` : null}
+      </div>` : null}
       ${res.linhas.length || res.semResposta.length ? (() => {
         const fornsRes = [...new Map(res.linhas.map(o => [o.fornecedor_id, o.fornecedor])).entries()];
         const marcas = [...new Set(res.linhas.map(o => o.marca).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));

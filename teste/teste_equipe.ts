@@ -30,7 +30,7 @@ const erro = async (p: Promise<unknown>) => { try { await p; return ""; } catch 
 confere("não administrador é barrado", /USO:.*administrador/.test(await erro(executar({ acao: "criar", nome: "X", email: "x@x.com", senha: "abc12345", papel: "mecanico" }, deps(false)))));
 confere("nome em branco", /USO:.*nome/.test(await erro(executar({ acao: "criar", nome: " ", email: "x@x.com", senha: "abc12345", papel: "mecanico" }, deps(true)))));
 confere("nome comprido demais (81) é recusado", /USO:.*80/.test(await erro(executar({ acao: "criar", nome: "A".repeat(81), email: "x@x.com", senha: "abc12345", papel: "mecanico" }, deps(true)))));
-confere("e-mail inválido", /USO:.*e-mail/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "carlos", senha: "abc12345", papel: "mecanico" }, deps(true)))));
+confere("e-mail inválido (com @ mas sem domínio)", /USO:.*e-mail/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "carlos@x", senha: "abc12345", papel: "mecanico" }, deps(true)))));
 confere("senha fraca", /USO:.*8 ou mais/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "c@x.com", senha: "123", papel: "mecanico" }, deps(true)))));
 confere("papel fora da lista", /USO:.*papel/.test(await erro(executar({ acao: "criar", nome: "Carlos", email: "c@x.com", senha: "abc12345", papel: "dono" }, deps(true)))));
 confere("e-mail já usado", /USO:.*já tem acesso/.test(await erro(executar({ acao: "criar", nome: "Ana 2", email: "ANA@dtcar.com", senha: "abc12345", papel: "mecanico" }, deps(true)))));
@@ -46,5 +46,9 @@ const r2 = await executar({ acao: "senha", id, senha: "Nova2027x" }, deps(true))
 confere("troca a senha do colaborador", r2.ok === true && r2.nome === "Carlos Mecânico" && senhas[id] === "Nova2027x");
 confere("ação desconhecida", /USO:/.test(await erro(executar({ acao: "apagar" }, deps(true)))));
 
+confere("usuário sem e-mail vira o e-mail interno do app", await (async () => { const r = await executar({ acao: "criar", nome: "João Silva", login: "Joao.Silva", senha: "abc12345", papel: "mecanico" }, deps(true)); return r.ok === true && r.email === "joao.silva@app.dtcarcentroautomotivo.com.br" && r.usuario === "joao.silva" && log.some(l => l.startsWith("criar joao.silva@app.dtcarcentroautomotivo.com.br")); })());
+confere("usuário com espaço/acentos é recusado", /USO:.*usuário precisa/.test(await erro(executar({ acao: "criar", nome: "Xavier", login: "joão silva", senha: "abc12345", papel: "mecanico" }, deps(true)))));
+confere("usuário curto demais é recusado", /USO:.*usuário precisa/.test(await erro(executar({ acao: "criar", nome: "Xavier", login: "jo", senha: "abc12345", papel: "mecanico" }, deps(true)))));
+confere("login vazio é recusado", /USO:.*Informe o usuário/.test(await erro(executar({ acao: "criar", nome: "Xavier", login: "", senha: "abc12345", papel: "mecanico" }, deps(true)))));
 console.log(ok.length + " OK, " + falhas.length + " falha(s)"); falhas.forEach(f => console.log("FALHA: " + f));
 if (falhas.length) Deno.exit(1);

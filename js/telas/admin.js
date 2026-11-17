@@ -1,6 +1,6 @@
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
-import { acessoApp, TELAS_APP, telasDoPapel } from "../appacesso.js";
+import { acessoApp, TELAS_APP, telasDoPapel, usuarioValido, emailDoLogin, usuarioDoEmail, loginParaMostrar, DIAS_SEMANA, HORARIO_PADRAO, horarioValido } from "../appacesso.js";
 import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
@@ -47,13 +47,23 @@ export function Mais() {
 /** App do celular por pessoa (cfg.appAcessos): entra ou não e quais telas vê. Grava na hora na tabela config. */
 function AcessoApp({ p, cfg, salvar }) {
   const a = acessoApp(cfg, p), ligado = a.entra;
-  const gravar = (entra, telas) => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { entra, telas } } });
+  const atual = ((cfg.appAcessos || {})[p.id]) || {};
+  const gravar = (entra, telas, horario = atual.horario) => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { entra, telas, ...(horario ? { horario } : {}) } } });
+  const h = horarioValido(atual.horario) ? atual.horario : null;   // null = sem limite de horário
+  const mudarHorario = novo => gravar(true, a.telas, novo);
+  const semLimite = () => { const { horario, ...resto } = atual; salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { ...resto, entra: true, telas: a.telas } } }); };
+  const alternarDia = d => { const dias = h.dias.includes(d) ? h.dias.filter(x => x !== d) : h.dias.concat([d]).sort(); if (dias.length) mudarHorario({ ...h, dias }); };
   const alternarTela = id => gravar(true, a.telas.includes(id) ? a.telas.filter(x => x !== id) : TELAS_APP.map(t => t[0]).filter(x => x === id || a.telas.includes(x)));
   return html`<div class="app-acesso" data-acesso=${p.id}>
     <div class="chave-linha"><span><b>App do celular</b>${a.padrao ? html`<span class="sub"> · padrão do papel</span>` : null}</span>
       <button type="button" role="switch" aria-checked=${ligado ? "true" : "false"} aria-label=${"Entra no app: " + p.nome} class=${"chave" + (ligado ? " on" : "")} onClick=${() => gravar(!ligado, ligado ? a.telas : TELAS_APP.map(t => t[0]))}><i></i></button></div>
     ${ligado ? html`<div class="chips">${TELAS_APP.map(([id, nome]) => html`<button type="button" key=${id} class="chip-btn" disabled=${!telasDoPapel(p.papel).includes(id)} title=${telasDoPapel(p.papel).includes(id) ? "" : "Só administrador e consultor fazem orçamento"} aria-pressed=${a.telas.includes(id) ? "true" : "false"} onClick=${() => alternarTela(id)}>${nome}</button>`)}</div>
-      ${!a.telas.length ? html`<span class="dica">Nenhuma tela marcada: a pessoa entra e vê só o Início e a Ajuda.</span>` : null}` : html`<span class="dica">Não entra no app do celular.</span>`}
+      ${!a.telas.length ? html`<span class="dica">Nenhuma tela marcada: a pessoa entra e vê só o Início e a Ajuda.</span>` : null}
+      ${p.papel !== "admin" ? html`<div class="horario-uso" data-horario=${p.id}><span class="horario-rotulo"><b>Horário de uso</b><span class="sub"> · fora dele o app não entra</span></span>
+        <div class="horario-linha"><button type="button" class="chip-btn" aria-pressed=${h ? "false" : "true"} onClick=${() => { if (h) semLimite(); }}>Sem limite</button>
+          <button type="button" class="chip-btn" aria-pressed=${h ? "true" : "false"} onClick=${() => { if (!h) mudarHorario({ ...HORARIO_PADRAO }); }}>Só no horário de trabalho</button></div>
+        ${h ? html`<div class="horario-linha"><label>das <input type="time" class="inp inp-hora" value=${h.de} onChange=${e => e.target.value && mudarHorario({ ...h, de: e.target.value })} /></label><label>às <input type="time" class="inp inp-hora" value=${h.ate} onChange=${e => e.target.value && mudarHorario({ ...h, ate: e.target.value })} /></label></div>
+          <div class="chips">${DIAS_SEMANA.map((d, i) => html`<button type="button" key=${d} class="chip-btn" aria-pressed=${h.dias.includes(i) ? "true" : "false"} onClick=${() => alternarDia(i)}>${d}</button>`)}</div>` : null}</div>` : null}` : html`<span class="dica">Não entra no app do celular.</span>`}
   </div>`;
 }
 
@@ -77,19 +87,21 @@ function NovoAcessoModal({ onFechar, onFeito }) {
   const [f, setF] = useState({ nome: "", email: "", senha: "", papel: "consultor" }), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
   const set = p => setF(o => ({ ...o, ...p }));
   const salvar = async () => {
-    const nome = f.nome.trim(), email = f.email.trim().toLowerCase();
+    const nome = f.nome.trim(), login = f.email.trim().toLowerCase(), email = emailDoLogin(login);
     if (nome.length < 2) return setErro("Informe o nome do colaborador.");
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setErro("Informe um e-mail válido: é o login da pessoa.");
+    if (!login) return setErro("Informe o usuário (ou o e-mail): é o login da pessoa.");
+    if (!login.includes("@") && !usuarioValido(login)) return setErro("Usuário: de 3 a 30 letras minúsculas, números, ponto, traço ou sublinhado, sem espaço (ex.: joao.silva).");
+    if (login.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setErro("Informe um e-mail válido: é o login da pessoa.");
     if (!senhaOk(f.senha)) return setErro("A senha precisa ter 8 ou mais caracteres, com letras e números.");
     setErro(""); setSalvando(true);
-    try { const r = await api.equipe.criar({ nome, email, senha: f.senha, papel: f.papel }); onFeito(r, { nome, email, senha: f.senha }); }
+    try { const r = await api.equipe.criar({ nome, login, senha: f.senha, papel: f.papel }); onFeito(r, { nome, email, login, senha: f.senha }); }
     catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };
   return html`<${Modal} titulo="Criar acesso para um colaborador" onFechar=${onFechar}>
-    <p class="sub">A pessoa entra no sistema e no app do celular com este e-mail e esta senha. Não precisa confirmar e-mail.</p>
+    <p class="sub">A pessoa entra no sistema e no app do celular com este usuário e esta senha. Não precisa de e-mail nem de confirmação.</p>
     ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
     <${Campo} id="na-nome" rotulo="Nome" obrig><${Texto} id="na-nome" valor=${f.nome} onMuda=${v => set({ nome: v })} /></${Campo}>
-    <${Campo} id="na-email" rotulo="E-mail (login)" obrig><input id="na-email" class="inp" type="email" inputmode="email" autocomplete="off" autocapitalize="none" value=${f.email} onInput=${e => set({ email: e.target.value })} /></${Campo}>
+    <${Campo} id="na-email" rotulo="Usuário (login)" obrig dica="Ex.: joao.silva. Só letras minúsculas, números, ponto, traço ou sublinhado. Se preferir, pode ser um e-mail de verdade."><input id="na-email" class="inp" type="text" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" value=${f.email} onInput=${e => set({ email: e.target.value.toLowerCase().replace(/\s/g, "") })} /></${Campo}>
     <${CampoSenha} id="na-senha" valor=${f.senha} onMuda=${v => set({ senha: v })} />
     <${Campo} id="na-papel" rotulo="Papel" obrig><select id="na-papel" class="inp" value=${f.papel} onChange=${e => set({ papel: e.target.value })}>
       ${Object.entries(PAPEIS).filter(([k]) => k !== "pendente").map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select></${Campo}>
@@ -107,7 +119,7 @@ function TrocarSenhaModal({ p, onFechar }) {
     catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };
   return html`<${Modal} titulo=${"Trocar a senha de " + p.nome} onFechar=${onFechar}>
-    <p class="sub">${p.email}. A senha antiga deixa de valer na hora.</p>
+    <p class="sub">${loginParaMostrar(p.email)}. A senha antiga deixa de valer na hora.</p>
     ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
     <${CampoSenha} id="ts-senha" valor=${senha} onMuda=${setSenha} />
     <div class="acoes"><button type="button" class="btn" onClick=${onFechar}>Cancelar</button><span class="espaco"></span><button type="button" class="btn btn-pri" id="ts-salvar" disabled=${salvando} onClick=${salvar}>${salvando ? "Trocando…" : "Trocar senha"}</button></div>
@@ -120,7 +132,7 @@ export function Equipe() {
   const salvarAcesso = async c => { try { await api.salvarConfig(c); await recarregar(["config"]); avisar("Acesso ao app atualizado. Vale na próxima vez que a pessoa abrir o app."); } catch (e) { avisar(e.message, true); } };
   const pendentes = dados.perfis.filter(p => p.papel === "pendente");
   const mudar = async (p, patch) => { try { await api.salvarPerfil(p.id, patch); avisar("Acesso atualizado."); recarregar(["perfis"]); } catch (e) { avisar(e.message, true); } };
-  const linha = p => html`<div class="linha" key=${p.id}><span class="meio"><strong>${p.nome}${p.id === perfil.id ? " (você)" : ""}</strong><span>${p.email}${p.ativo === false ? " · desativado" : ""}</span></span>
+  const linha = p => html`<div class="linha" key=${p.id}><span class="meio"><strong>${p.nome}${p.id === perfil.id ? " (você)" : ""}</strong><span>${loginParaMostrar(p.email)}${p.ativo === false ? " · desativado" : ""}</span></span>
     <select class="inp inp-curto" aria-label=${"Papel de " + p.nome} value=${p.papel} disabled=${p.id === perfil.id} onChange=${e => mudar(p, { papel: e.target.value })}>
       ${Object.entries(PAPEIS).map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
     ${p.id !== perfil.id ? html`<button type="button" class="btn btn-sm" onClick=${() => setSenhaDe(p)}>Trocar senha</button><button type="button" class="btn btn-sm" onClick=${() => mudar(p, { ativo: p.ativo === false })}>${p.ativo === false ? "Reativar" : "Desativar"}</button>` : null}
@@ -133,7 +145,7 @@ export function Equipe() {
     ${senhaDe ? html`<${TrocarSenhaModal} p=${senhaDe} onFechar=${() => setSenhaDe(null)} />` : null}
     ${criado ? html`<${Modal} titulo="Acesso criado" onFechar=${() => setCriado(null)}>
       <p>Passe estes dados para <b>${criado.nome}</b>. A pessoa já pode entrar no sistema e no app do celular.</p>
-      <div class="lista"><div class="linha"><span class="meio"><strong>E-mail (login)</strong><span id="cr-email">${criado.email}</span></span></div><div class="linha"><span class="meio"><strong>Senha</strong><span id="cr-senha">${criado.senha}</span></span></div></div>
+      <div class="lista"><div class="linha"><span class="meio"><strong>${usuarioDoEmail(criado.email) ? "Usuário (login)" : "E-mail (login)"}</strong><span id="cr-email">${usuarioDoEmail(criado.email) || criado.email}</span></span></div><div class="linha"><span class="meio"><strong>Senha</strong><span id="cr-senha">${criado.senha}</span></span></div></div>
       <p class="dica">Esta senha não fica guardada em lugar nenhum: se perder, use “Trocar senha” na pessoa. No bloco “App do celular” você escolhe o que ela vê no app.</p>
       <div class="acoes"><span class="espaco"></span><button type="button" class="btn btn-pri" onClick=${() => setCriado(null)}>Entendi</button></div></${Modal}>` : null}
     ${pendentes.length ? html`<section class="card alerta"><h3>Aguardando liberação (${pendentes.length})</h3><div class="lista">${pendentes.map(linha)}</div></section>` : null}

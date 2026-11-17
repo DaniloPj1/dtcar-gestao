@@ -88,7 +88,9 @@
 
   function entrarComSenha(email, senha) {
     E.ocupado = true; desenhar();
-    return sb.auth.signInWithPassword({ email: email, password: senha }).then(function (r) {
+    // usuário sem e-mail ("joao") vira o e-mail interno do app (js/appacesso.js: emailDoLogin)
+    var login = email.indexOf('@') >= 0 ? email.toLowerCase() : email.toLowerCase() + '@app.dtcarcentroautomotivo.com.br';
+    return sb.auth.signInWithPassword({ email: login, password: senha }).then(function (r) {
       if (r.error || !r.data || !r.data.user) { E.ocupado = false; E.erro = mensagemDeErro(r.error); desenhar(); return; }
       return aposLogin(r.data.user, 'senha');
     }, function () { E.ocupado = false; E.erro = 'Não consegui entrar. Confira a internet.'; desenhar(); });
@@ -104,6 +106,12 @@
       var r = rs[0], cfg = (rs[1] && rs[1].data && rs[1].data.dados) || {}, acesso = rs[2].acessoApp(cfg, r.data);
       if (r.error || (rs[1] && rs[1].error)) { E.ocupado = false; E.tela = 'login'; E.erro = 'Não consegui conferir o seu acesso. Confira a internet e tente de novo.'; desenhar(); return; }
       var pf = r.data;
+      var fora = pf && acesso.horario ? rs[2].foraDoHorario(acesso.horario) : '';
+      if (pf && pf.ativo !== false && acesso.entra && fora) {
+        sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
+        try { window.sessionStorage.removeItem(CH_ABERTO); } catch (e) { /* nada */ }
+        E.ocupado = false; E.tela = 'login'; E.usuario = null; E.erro = fora; desenhar(); return;
+      }
       if (!pf || pf.ativo === false || !acesso.entra) {
         sb.auth.signOut({ scope: 'local' }).catch(function () { /* nada */ });
         desligarDigital(); try { window.sessionStorage.removeItem(CH_ABERTO); } catch (e) { /* nada */ }
@@ -111,8 +119,8 @@
         E.erro = pf && pf.ativo !== false && pf.papel !== 'pendente' ? 'Este app não está liberado para o seu login. Peça ao administrador (Sistema › Equipe).' : 'Este app é para a equipe da DTCar com acesso liberado pelo administrador.'; desenhar(); return;
       }
       var nome = pf.nome || user.email, primeiro = String(nome).split(' ')[0];
-      lsSet(CH_EMAIL, user.email); lsSet(CH_NOME, primeiro);
-      E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email, telas: acesso.telas };
+      lsSet(CH_EMAIL, rs[2].usuarioDoEmail(user.email) || user.email); lsSet(CH_NOME, primeiro);
+      E.usuario = { id: pf.id, nome: nome, primeiro: primeiro, papel: pf.papel, email: user.email, telas: acesso.telas, horario: acesso.horario };
       if (digitalLigada()) sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; if (se) guardarToken(se.refresh_token); });
       E.ocupado = false; E.erro = ''; E.tela = 'app';
       if (!/^#\/(inicio|ajuda|oleo|orcamento|agendar|peca|historico|osconsulta)$/.test(location.hash)) location.hash = '#/inicio';
@@ -194,8 +202,8 @@
     var email = lsGet(CH_EMAIL) || '', nome = lsGet(CH_NOME);
     return '<main class="tela login"><div class="topo"><div class="topo-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo"></div></div>' +
       '<form class="folha-login" id="f-login" novalidate><h1>' + (nome ? 'Olá, ' + esc(nome) : 'Entrar') + '</h1>' +
-      '<p class="nota-login">Use o mesmo e-mail e a mesma senha do DTCar Gestão. Este app é para o administrador e o consultor.</p>' +
-      '<div class="campo-login"><label for="lg-email">E-mail</label><input id="lg-email" type="email" inputmode="email" autocomplete="username" autocapitalize="none" value="' + esc(email) + '"></div>' +
+      '<p class="nota-login">Entre com o seu usuário (ou e-mail) e a senha do DTCar Gestão.</p>' +
+      '<div class="campo-login"><label for="lg-email">Usuário ou e-mail</label><input id="lg-email" type="text" inputmode="email" autocomplete="username" autocapitalize="none" spellcheck="false" value="' + esc(email) + '"></div>' +
       '<div class="campo-login"><label for="lg-senha">Senha</label><div class="senha-linha"><input id="lg-senha" type="password" autocomplete="current-password">' +
       '<button type="button" class="ver" data-acao="ver" aria-label="Mostrar a senha">Mostrar</button></div></div>' +
       (E.erro ? '<p class="nota-login" role="alert" style="color:#a12a2a;font-weight:600">' + esc(E.erro) + '</p>' : '') +
@@ -295,7 +303,7 @@
     ev.preventDefault();
     if (E.ocupado) return;
     var email = document.getElementById('lg-email').value.trim(), senha = document.getElementById('lg-senha').value;
-    if (!email) { E.erro = 'Digite o seu e-mail.'; desenhar(); return; }
+    if (!email) { E.erro = 'Digite o seu usuário ou e-mail.'; desenhar(); return; }
     if (!senha) { E.erro = 'Digite a sua senha.'; desenhar(); return; }
     E.erro = ''; entrarComSenha(email, senha);
   });

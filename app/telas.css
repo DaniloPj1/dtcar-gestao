@@ -199,3 +199,12 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .os-cab .etapa{align-self:flex-start;background:var(--azul);color:#fff;border-radius:6px;padding:3px 8px;font-size:13px;font-weight:700}
 .oleo-linha .visc{font-size:26px;font-weight:700;color:var(--azul);letter-spacing:.02em;line-height:1.1;margin:2px 0 4px}
 .oleo-linha.outra{border-top:1px dashed #d3d7dc;padding-top:8px;margin-top:4px}
+
+/* aviso pelo WhatsApp na agenda: botão pequeno, só para o administrador (16/11/2026 à noite) */
+.resumo-linha{display:flex;align-items:center;gap:8px}.resumo-linha .resumo{flex:1;min-width:0}
+.zap-mini{width:40px;height:40px;flex-shrink:0;border-radius:50%;border:1.5px solid var(--azul);background:#fff;color:var(--azul);display:flex;align-items:center;justify-content:center;padding:0}
+.zap-mini.on{background:#1f9d55;border-color:#1f9d55;color:#fff}
+/* fotos das peças (acervo do catálogo): miniatura à esquerda, amplia ao tocar */
+.foto-peca{width:72px;height:56px;object-fit:contain;background:#fff;border:1px solid #d3d7dc;border-radius:8px;display:block}
+.foto-peca.grande{width:100%;height:auto;max-height:52vh;aspect-ratio:1/1;border-radius:10px}
+.foto-peca-btn{padding:0;border:0;background:none;align-self:flex-start;cursor:zoom-in}

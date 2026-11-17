@@ -15,7 +15,7 @@ import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conve
 import { copiaClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D } from "../js/appmecanico.js";
-import { acessoApp } from "../js/appacesso.js";
+import { acessoApp, foraDoHorario } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
 
 const LS_VISTOS = "dtcar-app-avisos-vistos";   // ids dos orçamentos aprovados/recusados que a pessoa já viu (avisos do app)
@@ -46,6 +46,7 @@ const P = {
   clip: '<path d="M9 4h6v3H9z"/><path d="M7 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"/><path d="M8 12h8M8 16h5"/>',
   hist: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  zap: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z"/><path d="M9 8.5c0 3 2.5 5.5 5.5 6.5l1.5-1.5 2 1-.5 1.8c-4.5.6-9.4-4.3-8.8-8.8L10.5 7l1 2z"/>',
 };
 const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width=${sw} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0" dangerouslySetInnerHTML=${{ __html: P[n] }}></svg>`;
 
@@ -99,9 +100,16 @@ const nomeVeic = v => [v.marca, v.modelo].filter(Boolean).join(" ");
 /* ---------------- veículo: busca pela placa (um lugar só para todas as telas) ----------------
  * Regra do Danilo: placa do cadastro usa o cadastro (sem custo); placa nova consulta a função "placa" (básica), que guarda a cópia
  * no banco da DTCar. A placa vale só na tela em que foi digitada: sair da tela limpa (pedido do Danilo, 16/11/2026). */
-function usarPlaca() {
+/** Placa buscada no Início fica guardada (sessionStorage) até uma nova busca ou "limpar": sair da tela e voltar mostra o mesmo carro
+ *  (pedido do Danilo, 16/11/2026 à noite). As outras telas continuam sem memória: a placa vale só ali. */
+const CH_PLACA_INICIO = "dtcar-app-placa-inicio";
+const lerPlacaGuardada = () => { try { const v = JSON.parse(sessionStorage.getItem(CH_PLACA_INICIO) || "null"); return v && v.veic ? v : { texto: "" }; } catch (e) { return { texto: "" }; } };
+const guardarPlaca = p => { try { if (p && p.veic) sessionStorage.setItem(CH_PLACA_INICIO, JSON.stringify({ texto: p.texto, veic: p.veic })); else sessionStorage.removeItem(CH_PLACA_INICIO); } catch (e) { /* sem espaço */ } };
+export const limparPlacaGuardada = () => guardarPlaca(null);
+function usarPlaca(guardar = false) {
   const { dados } = useApp();
-  const [placa, setPlaca] = useState({ texto: "" });
+  const [placa, setPlacaBruto] = useState(() => guardar ? lerPlacaGuardada() : { texto: "" });
+  const setPlaca = p => { setPlacaBruto(p); if (guardar) guardarPlaca(p); };
   const buscar = async (texto) => {
     const p = normPlaca(texto);
     if (!placaValida(p)) { setPlaca({ texto, erro: "Digite a placa inteira (ABC1234 ou ABC1D23)." }); return null; }
@@ -128,15 +136,18 @@ function BuscaPlaca({ id, titulo = "Buscar por placa", pl }) {
   const { placa, buscar, limpar } = pl;
   const [t, setT] = useState(placa.texto || "");
   useEffect(() => { setT(placa.texto || ""); }, [placa.texto]);
+  // a busca lê o valor direto do campo: Enter logo depois de digitar não pode pegar o texto antigo (corrida de estado)
+  const campo = useRef(null);
+  const buscarAgora = () => buscar(campo.current ? campo.current.value : t);
   const v = placa.veic;
   const linha = placa.buscando ? html`<div class="achou buscando" role="status">Consultando a placa…</div>`
     : v ? html`<div class="achou" role="status"><${Ic} n="check" t=${16} sw=${2.4} />${v.origem === "cadastro" ? "Placa gravada no banco da DTCar" : v.origem === "copia" ? "Placa consultada antes: sem custo" : "Placa nova: consultada e gravada"}</div>`
     : placa.naoAchou ? html`<div class="achou nao" role="status">${placa.motivo} Digite o modelo abaixo.</div>`
     : placa.erro ? html`<div class="achou nao" role="status">${placa.erro}</div>` : null;
   return html`<${Cartao} titulo=${titulo}>${linha}
-    <${Campo} id=${id} rotulo="Placa"><div class="linha"><input id=${id} class="inp placa" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="ABC1D23" value=${t}
-        onInput=${e => setT(e.target.value)} onKeyDown=${e => { if (e.key === "Enter") buscar(t); }} onBlur=${() => { if (normPlaca(t).length === 7 && normPlaca(t) !== placa.texto) buscar(t); }} />
-      <button type="button" class="btn-busca g" aria-label="Buscar pela placa" onClick=${() => buscar(t)}><${Ic} n="search" t=${22} /></button>
+    <${Campo} id=${id} rotulo="Placa"><div class="linha"><input id=${id} ref=${campo} class="inp placa" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="ABC1D23" value=${t}
+        onInput=${e => setT(e.target.value)} onKeyDown=${e => { if (e.key === "Enter") buscarAgora(); }} onBlur=${e => { const x = e.target.value; if (normPlaca(x).length === 7 && normPlaca(x) !== placa.texto && !placa.buscando) buscar(x); }} />
+      <button type="button" class="btn-busca g" aria-label="Buscar pela placa" onClick=${buscarAgora}><${Ic} n="search" t=${22} /></button>
       ${t ? html`<button type="button" class="btn-busca g" style="background:#fff;color:#6b727b;border:1px solid #d3d7dc" aria-label="Limpar a placa" onClick=${() => { setT(""); limpar(); }}><${Ic} n="trash" t=${20} /></button>` : null}</div></${Campo}>
     <div class="nota">Placa já gravada não gera nova consulta paga. Placa nova é consultada uma vez e fica salva.</div></${Cartao}>`;
 }
@@ -155,8 +166,8 @@ function ModeloAMao({ valor, onMuda }) {
 
 /* ---------------- INÍCIO ---------------- */
 function Inicio() {
-  const { perfil, telas, dados, avisos } = useApp(); const { placa, buscar, limpar } = usarPlaca();
-  const [t, setT] = useState("");
+  const { perfil, telas, dados, avisos } = useApp(); const { placa, buscar, limpar } = usarPlaca(true);
+  const [t, setT] = useState(placa.texto || "");
   const [ajuda, setAjuda] = useState(false), [osAberta, setOsAberta] = useState(null);
   const v = placa.veic;
   // consulta rápida da placa (pedido do Danilo, 16/11/2026): O.S. e orçamentos em aberto do carro e o histórico, tudo sem preço
@@ -167,9 +178,9 @@ function Inicio() {
   return html`<div class="app">
     <header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /><${SairBotao} /></div>
       <div class="cab-busca"><div class="rotulo">Placa<${Ic} n="down" t=${16} /></div>
-        <div class="caixa"><input id="ini-placa" type="text" placeholder="Digite aqui a placa" aria-label="Placa" autocomplete="off" autocapitalize="characters" maxlength="8" value=${t} onInput=${e => setT(e.target.value)} onKeyDown=${e => { if (e.key === "Enter") buscar(t); }} />
+        <div class="caixa"><input id="ini-placa" type="text" placeholder="Digite aqui a placa" aria-label="Placa" autocomplete="off" autocapitalize="characters" maxlength="8" value=${t} onInput=${e => setT(e.target.value)} onKeyDown=${e => { if (e.key === "Enter") buscar(e.target.value); }} />
           <button type="button" class="limpar" aria-label="Limpar" onClick=${() => { setT(""); limpar(); }}><${Ic} n="trash" t=${20} /></button>
-          <button type="button" class="btn-busca" aria-label="Buscar placa" onClick=${() => buscar(t)}><${Ic} n="search" t=${20} /></button></div>
+          <button type="button" class="btn-busca" aria-label="Buscar placa" onClick=${() => buscar((document.getElementById("ini-placa") || {}).value || t)}><${Ic} n="search" t=${20} /></button></div>
         <button type="button" class="ajuda" aria-label="Ajuda" onClick=${() => setAjuda(true)}><${Ic} n="help" t=${30} sw=${1.7} /></button></div>
       <div class="cab-texto">${placa.buscando ? "Consultando a placa…" : placa.erro || placa.motivo || "Digite a placa para consultar o veículo. Toda placa buscada fica gravada no banco da DTCar."}</div></header>
     <main class="folha inicio">
@@ -277,6 +288,7 @@ function Orcamentos() {
     try { await api.pedido.acrescentar(acrescentar.id, t); avisar("Acrescentado ao " + numORC(acrescentar.numero) + ". O sistema foi avisado."); setAcrescentar(null); setTexto(""); await recarregarOrcamentos(); }
     catch (x) { avisar("Não foi possível acrescentar: " + (x.message || x), true); } finally { setSalvando(false); }
   };
+  usarPasso(novo, () => setNovo(false));
   if (novo) return html`<${PedidoNovo} onCancelar=${() => setNovo(false)} onFeito=${async r => { setNovo(false); setFeito(r); await recarregarOrcamentos(); }} />`;
   const veicTxt = o => [exPlaca((o.veiculo || {}).placa), (o.veiculo || {}).marca, (o.veiculo || {}).modelo].filter(Boolean).join(" ");
   const acao = html`<div class="acao"><button type="button" class="btn-acao" id="orc-novo" onClick=${() => setNovo(true)}>+ Pedido de orçamento</button></div>`;
@@ -361,7 +373,7 @@ export function feriadosDoAno(ano) {
   return f;
 }
 function Agendar() {
-  const { dados, avisar } = useApp();
+  const { dados, avisar, perfil } = useApp();
   const pl = usarPlaca();
   const hoje = hojeISO();
   const [a, setA] = useState(() => ({ clienteId: "", nome: "", whats: "", servico: 0, outro: "", data: hoje, hora: "", horaOutra: "", aviso: true, mes: hoje.slice(0, 7) }));
@@ -396,15 +408,17 @@ function Agendar() {
         cliente: cli ? { nome: cli.nome, telefone: cli.telefone || "" } : copiaClienteDig({ nome: a.nome, telefone: tel }),
         veiculo: v ? { placa: v.placa, marca: v.marca || "", modelo: v.modelo || "", ano: v.ano || "" } : { placa: "", marca: "", modelo: "", ano: "" },
         servico, obs: "Agendado pelo app.", motivo: "" });
-      const zap = a.aviso && tel ? linkWhats(tel, mensagemAgenda(a.nome, servico, a.data, hora, v)) : "";
+      const zap = perfil.papel === "admin" && a.aviso && tel ? linkWhats(tel, mensagemAgenda(a.nome, servico, a.data, hora, v)) : "";
       setAgenda(m => ({ ...m, [a.data]: (m[a.data] || 0) + 1 }));
       setFeito({ r, zap });
     } catch (x) { setErro(x.message || String(x)); } finally { trava.current = false; setSalvando(false); }
   };
+  // aviso pelo WhatsApp: só o administrador, num botão pequeno ao lado do resumo (pedido do Danilo, 16/11/2026 à noite)
+  const admin = perfil.papel === "admin", avisa = admin && a.aviso;
   const acao = html`<div class="acao">
-    <button type="button" class="marcar" aria-pressed=${a.aviso ? "true" : "false"} onClick=${() => set({ aviso: !a.aviso })}><span class="cx">${a.aviso ? html`<${Ic} n="check" t=${16} sw=${2.6} />` : null}</span>Avisar o cliente pelo WhatsApp</button>
-    <div class="resumo">${resumo}</div>
-    <button type="button" class="btn-acao" disabled=${salvando} onClick=${gravar}>${salvando ? "Gravando…" : a.aviso ? "Agendar e avisar o cliente" : "Agendar serviço"}</button></div>`;
+    <div class="resumo-linha"><div class="resumo">${resumo}</div>
+      ${admin ? html`<button type="button" class=${"zap-mini" + (a.aviso ? " on" : "")} aria-pressed=${a.aviso ? "true" : "false"} title=${a.aviso ? "Vai abrir a confirmação no WhatsApp" : "Avisar o cliente pelo WhatsApp"} aria-label="Avisar o cliente pelo WhatsApp" onClick=${() => set({ aviso: !a.aviso })}><${Ic} n="zap" t=${20} sw=${1.8} /></button>` : null}</div>
+    <button type="button" class="btn-acao" disabled=${salvando} onClick=${gravar}>${salvando ? "Gravando…" : avisa ? "Agendar e avisar o cliente" : "Agendar serviço"}</button></div>`;
   return html`<${Tela} tela="agendar" acao=${acao} ajuda="Busque a placa (opcional), informe o cliente, escolha o serviço, o dia no calendário (feriados em laranja; o número no canto é quantos serviços já tem no dia) e o horário. Com “Avisar o cliente” marcado, a mensagem de confirmação abre pronta no WhatsApp para você enviar.">
     ${erro ? html`<div class="erro" role="alert">${erro}</div>` : null}
     <${BuscaPlaca} id="ag-placa" titulo="Veículo" pl=${pl} /><${Veiculo} v=${pl.veic} />
@@ -502,6 +516,8 @@ function Peca() {
   const textoLista = () => lista.map((x, i) => `${i + 1}. ${x.descricao} — ${x.marca} ${x.codigo}${x.oem !== x.codigo ? " (orig. " + x.oem + ")" : ""}${x.carro ? " · " + x.carro : ""}${x.placa ? " · " + exPlaca(x.placa) : ""}`).join("\n");
   const compartilhar = async () => { const t = "Lista de peças · DTCar\n" + textoLista(); try { if (navigator.share) await navigator.share({ title: "Lista de peças", text: t }); else { await navigator.clipboard.writeText(t); avisar("Lista copiada."); } } catch (e) { /* cancelou */ } };
   const sisAtual = SISTEMAS.find(x => x.id === sis);
+  usarPasso(!!sis, () => setSis(""));
+  const [fotoAberta, setFotoAberta] = useState(null);
   return html`<${Tela} tela="peca" ajuda="Busque a placa (ou digite o modelo), toque no sistema do carro (freios, suspensão…) e veja as peças de catálogo que servem nele, com conversão de marcas e o que há no estoque. “Adicionar item” monta uma lista para cotar ou enviar.">
     <${BuscaPlaca} id="pc-placa" pl=${pl} /><${Veiculo} v=${v} />
     ${!v ? html`<${ModeloAMao} valor=${mao} onMuda=${setMao} />` : null}
@@ -516,6 +532,7 @@ function Peca() {
       <div class="linha"><input id="pc-q" class="inp livre" type="search" autocomplete="off" placeholder="Pesquisar peça: bandeja, pastilha, código…" value=${txt} onInput=${e => { setTxt(e.target.value); setLim(20); }} /><span class="btn-busca g" aria-hidden="true"><${Ic} n="search" t=${22} /></span></div></section>
       ${itens.length ? html`<div class="res-titulo">RESULTADO DA PESQUISA (${itens.length})</div>
       ${itens.slice(0, lim).map(e => { const p = e.peca, conv = conversaoDoItem(e); return html`<section class="cartao liso" key=${p.marca + p.codigo}>
+        ${p.foto ? html`<${FotoPeca} p=${p} onAbrir=${() => setFotoAberta(e)} />` : null}
         <button type="button" class="btn-barra" style="justify-content:center" onClick=${() => adicionar(e)}>Adicionar item</button>
         <${KV} a="Marca" b=${p.marca} /><${KV} a="Descrição" b=${p.descricao} p /><${KV} a="Código" b=${p.codigo} />
         ${p.oem && p.oem.length ? html`<${KV} a="Cód. montadora" b=${p.oem.slice(0, 2).join(" / ")} p />` : null}
@@ -527,6 +544,13 @@ function Peca() {
         ${e.conferir ? html`<div class="nota"><span class="selo atencao">Confira a versão</span>catálogo antigo para este ano</div>` : null}</section>`; })}
       ${itens.length > lim ? html`<button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setLim(lim + 20)}>Ver mais (${itens.length - lim})</button>` : null}` : html`<div class="vazio">Nada com esse filtro.</div>`}` : null}
     <div style="margin-top:auto;flex-shrink:0"><button type="button" class="btn-barra curto" onClick=${() => setVerLista(true)}><${Ic} n="share" t=${20} />Ver lista (${lista.length})</button></div>
+    ${fotoAberta ? html`<${Quadro} titulo=${fotoAberta.peca.marca + " " + fotoAberta.peca.codigo} onFechar=${() => setFotoAberta(null)}>
+      <${FotoPeca} p=${fotoAberta.peca} grande />
+      <p><b>${fotoAberta.peca.descricao}</b></p>
+      ${fotoAberta.peca.medidas ? html`<${KV} a="Medidas" b=${fotoAberta.peca.medidas} p />` : null}
+      <${KV} a="Aplicação" b=${(fotoAberta.aplicacoes || []).slice(0, 4).join(" · ") || "—"} p />
+      <button type="button" class="btn-acao" onClick=${() => { adicionar(fotoAberta); setFotoAberta(null); }}>Adicionar item</button>
+      <button type="button" class="link" onClick=${() => setFotoAberta(null)}>Fechar</button></${Quadro}>` : null}
     ${verLista ? html`<${Quadro} titulo=${"Lista de peças (" + lista.length + ")"} onFechar=${() => setVerLista(false)}>
       ${!lista.length ? html`<div class="vazio">A lista está vazia. Toque em “Adicionar item” nas peças.</div>` : html`<div class="lista-itens">${lista.map((x, i) => html`<div class="item-linha" key=${i}><span><b>${x.descricao}</b><br /><span class="nota">${x.marca} ${x.codigo}${x.carro ? " · " + x.carro : ""}${x.estoque ? " · estoque: " + x.estoque : ""}</span></span><button type="button" aria-label="Tirar da lista" onClick=${() => setLista(l => l.filter((_, j) => j !== i))}>Tirar</button></div>`)}</div>
         <button type="button" class="btn-acao" onClick=${compartilhar}>Enviar / copiar a lista</button>
@@ -557,6 +581,15 @@ function Historico() {
       <button type="button" class="btn-barra" style="justify-content:center" data-os=${o.id} onClick=${() => setAberta(o)}><${Ic} n="os" t=${22} />Ver ${numOS(o.numero)}</button></${Cartao}>`)}
     ${aberta ? html`<${OSDetalhe} o=${aberta} onFechar=${() => setAberta(null)} />` : null}
   </${Tela}>`;
+}
+
+/* ---------------- foto da peça (acervo do catálogo: catalogo/fotos/<pasta>/<foto>.jpg; sempre que houver, aparece) ---------------- */
+const urlFotoPeca = p => new URL("../catalogo/fotos/" + p.pasta + "/" + p.foto + ".jpg", import.meta.url).href;
+function FotoPeca({ p, grande = false, onAbrir = null }) {
+  const [falhou, setFalhou] = useState(false);
+  if (!p.foto || falhou) return null;
+  const img = html`<img class=${grande ? "foto-peca grande" : "foto-peca"} loading=${grande ? "eager" : "lazy"} alt=${"Foto da peça " + p.codigo} src=${urlFotoPeca(p)} onError=${() => setFalhou(true)} />`;
+  return onAbrir ? html`<button type="button" class="foto-peca-btn" aria-label=${"Ampliar a foto da peça " + p.codigo} onClick=${onAbrir}>${img}</button>` : img;
 }
 
 /* ---------------- CONSULTAR O.S. ---------------- */
@@ -603,13 +636,22 @@ function Ajuda() {
 const ROTAS = { inicio: Inicio, ajuda: Ajuda, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, peca: Peca, historico: Historico, osconsulta: OSConsulta };
 // quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
 const quadros = [];
+/** Pilha das telas visitadas: o botão Voltar do celular volta para a tela anterior, uma por vez, e só sai do app no Início
+ *  (pedido do Danilo, 16/11/2026 à noite). "voltando" evita empilhar a própria volta. */
+const pilha = [];
+let voltando = false;
+function registrarRota(r) { if (voltando) { voltando = false; return; } if (pilha[pilha.length - 1] !== r) pilha.push(r); if (pilha.length > 30) pilha.shift(); }
+/** passo dentro de uma tela (formulário aberto, sistema escolhido): o Voltar desfaz o passo antes de trocar de tela */
+function usarPasso(ativo, desfazer) {
+  useLayoutEffect(() => { if (!ativo) return; const f = () => desfazer(); quadros.push(f); return () => { const i = quadros.indexOf(f); if (i >= 0) quadros.splice(i, 1); }; }, [ativo]);
+}
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], orcamentos: [], carregado: false, erro: "" });
   const [cfg, setCfg] = useState(cfgCompleta({})), [cfgOk, setCfgOk] = useState(false);
   const [placa, setPlaca] = useState({ texto: "" });
   const [toast, setToast] = useState(null);
-  useEffect(() => { const f = () => { setRota(rotaAtual()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  useEffect(() => { registrarRota(rotaAtual()); const f = () => { registrarRota(rotaAtual()); setRota(rotaAtual()); window.scrollTo(0, 0); }; window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
   const avisar = (msg, erro) => { setToast({ msg, erro }); clearTimeout(avisar.t); avisar.t = setTimeout(() => setToast(null), 4500); };
   const desdeOS = useRef(null);   // última leitura das O.S. (a recarga de cada minuto só traz as alteradas desde então)
   const carregar = async () => {
@@ -631,6 +673,11 @@ function App({ usuario, nativo }) {
     } catch (e) {} setTick(t => t + 1); };
   useEffect(() => { const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) recarregarOrcamentos(); }, 60000); const vis = () => { if (!document.hidden) recarregarOrcamentos(); }; document.addEventListener("visibilitychange", vis); return () => { clearInterval(i); document.removeEventListener("visibilitychange", vis); }; }, []);
   const avisos = useMemo(() => avisosDe(dados.orcamentos, usuario), [dados.orcamentos, tick]);
+  // horário de uso (Sistema › Equipe): fora dele a tela trava até o horário voltar (o administrador não tem limite); o tick confere a cada minuto
+  const acessoAgora = cfgOk ? acessoApp(cfg, usuario) : { horario: usuario.horario || null };
+  const fora = usuario.papel === "admin" ? "" : foraDoHorario(acessoAgora.horario);
+  if (fora) return html`<div class="app"><header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" /><button type="button" class="sair" onClick=${nativo.sair}><${Ic} n="exit" t=${22} /> Sair</button></div></header>
+    <main class="folha inicio"><div class="vazio" id="fora-horario"><b>Fora do horário de uso.</b><br />${fora}</div></main></div>`;
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
   const telas = cfgOk ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
   const ctx = { perfil: usuario, dados, cfg, telas, avisos, avisar, recarregar: carregar, recarregarOrcamentos, sair: nativo.sair, nativo };
@@ -647,10 +694,11 @@ export function montar(usuario, nativo) {
   const raiz = document.getElementById("raiz"); raiz.innerHTML = "";
   render(html`<${App} usuario=${usuario} nativo=${nativo} />`, raiz);
 }
-export function desmontar() { render(null, document.getElementById("raiz")); }
+export function desmontar() { limparPlacaGuardada(); pilha.length = 0; render(null, document.getElementById("raiz")); }
 /** botão Voltar do celular (app.js): fecha o quadro aberto; senão vai para o Início; no Início devolve false (o app sai) */
 export function voltar() {
   if (quadros.length) { quadros[quadros.length - 1](); return true; }
+  if (pilha.length > 1 && pilha[pilha.length - 1] === rotaAtual()) { pilha.pop(); voltando = true; location.hash = "#/" + pilha[pilha.length - 1]; return true; }
   if (rotaAtual() !== "inicio") { ir("inicio"); return true; }
   return false;
 }

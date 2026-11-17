@@ -149,3 +149,41 @@ export function textoPedido(pedido, itens, { contato = "", hora = 9 } = {}) {
     "Total: " + reaisTxt(pedido.total), "Por favor, confirme a disponibilidade e o prazo de entrega.", "",
     "DTCar Centro Automotivo", "*Mensagem gerada pelo sistema Gestão DTCar*"].join("\n");
 }
+
+/* ---------------- consulta ao vivo (etapa 2): robô reconhecido pelo endereço do portal ---------------- */
+/** Mesma regra da função "compras": o robô é escolhido pelo endereço cadastrado em Ajustes (ou pelo nome do fornecedor). */
+export const NOME_ROBO = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Pellegrino Compre Online", toli: "Portal Toli" };
+export function roboDaConexao(c, nomeForn = "") {
+  const t = ((c && c.endereco) || "") + " " + ((c && c.obs) || "") + " " + nomeForn;
+  const s = t.toLowerCase();
+  if (/dpk\.com\.br|\bdpk\b/.test(s)) return "dpk";
+  if (/rolemar/.test(s)) return "rolemar";
+  if (/pellegrino/.test(s)) return "pellegrino";
+  if (/toli/.test(s)) return "toli";
+  return null;
+}
+/** Como a conexão consulta: "servidor" (DPK, Rolemar, Pellegrino), "pc" (Toli: pelo programa do PC, em preparação) ou "" (portal não reconhecido) */
+export const ondeConsulta = robo => robo === "toli" ? "pc" : robo ? "servidor" : "";
+/** Códigos que vão para a consulta ao vivo de uma linha da pesquisa: o da peça, os equivalentes e os da montadora (sem repetir, no máximo `max`) */
+export function termosDaLinha(e, max = 6) {
+  const out = [], vistos = new Set();
+  const add = c => { const k = normCodigo(c); if (k.length < 3 || vistos.has(k) || out.length >= max) return; vistos.add(k); out.push(String(c).trim()); };
+  if (!e || !e.peca) return out;
+  add(e.peca.codigo);
+  for (const a of e.alternativas || []) add(a.codigo);
+  for (const o of e.peca.oem || []) add(typeof o === "string" ? o : o && o.codigo);
+  return out;
+}
+/** Resumo em uma frase do que a consulta ao vivo devolveu, para a tela: "DPK: 2 preços · Rolemar: sem resultado · Pellegrino: senha recusada…" */
+export function resumoAoVivo(r, nomeDe = () => "") {
+  if (!r) return "";
+  if (!r.ok) return r.erro || "A consulta não respondeu.";
+  const l = (r.resultados || []).map(x => {
+    const nome = nomeDe(x.fornecedor_id) || x.nome || "Fornecedor";
+    if (x.no_pc) return nome + ": pelo programa do PC (em preparação)";
+    if (!x.ok) return nome + ": " + (x.erro || "falhou");
+    const n = (x.ofertas || []).length;
+    return nome + ": " + (n ? n + (n === 1 ? " preço" : " preços") : "sem resultado");
+  });
+  return l.length ? l.join(" · ") : "Nenhum fornecedor conectado para consultar.";
+}

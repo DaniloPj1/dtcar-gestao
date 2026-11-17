@@ -3,8 +3,11 @@
 // numa tela só (com a origem e a data de cada preço), põe no carrinho e, ao comprar, o carrinho vira um pedido por fornecedor,
 // que o Danilo finaliza em cada fornecedor depois (site, WhatsApp ou vendedor). Nada é comprado sozinho.
 // Também aqui: o cartão "Fornecedores conectados" dos Ajustes (tipo de acesso, endereço, usuário e senha — a senha vai para
-// segredos e nunca volta para a tela). A consulta automática pelo webservice de cada fornecedor entra nas próximas etapas.
-// Regras (preços, menor preço, pesquisa, texto do pedido): js/compraspecas.js.
+// segredos e nunca volta para a tela).
+// Etapa 2 (consulta AO VIVO, pedido do Danilo em 16/11/2026): o botão "Consultar fornecedores" de cada peça manda os códigos dela para a
+// função "compras", que entra nos portais (DPK, Rolemar Master, Pellegrino) com o login guardado, busca e grava os preços com origem
+// "Ao vivo" e a hora. Uma consulta por clique, nunca varredura. O Portal Toli (SMS, Oracle APEX) fica para o robô do programa do PC.
+// Regras (preços, menor preço, pesquisa, texto do pedido, robô pelo endereço): js/compraspecas.js.
 import { html, useState, useEffect, useMemo, useCallback } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Modal, Vazio, Campo, Texto, Dinheiro, Seg, Abas, I } from "../ui.js";
@@ -14,7 +17,7 @@ import { consultarPlaca, paraResumo } from "../placa.js";
 import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conversaoDoItem, chaveDaPeca } from "../pecas.js";
 import { FotoPeca } from "./pecasveiculo.js";
 import { DIAS_ATUAL, ORIGEM_TEXTO, SITUACOES_PEDIDO, numPedido, nomeFornecedor, totalLinha, arred2, codigosDaLinha, indiceOfertas, ofertasDaLinha,
-  precosSoltos, buscarNoCatalogo, agruparCarrinho, textoPedido, normCodigo } from "../compraspecas.js";
+  precosSoltos, buscarNoCatalogo, agruparCarrinho, textoPedido, normCodigo, NOME_ROBO, roboDaConexao, ondeConsulta, termosDaLinha, resumoAoVivo } from "../compraspecas.js";
 
 const LS_BUSCA = "dtcar-compras-busca";
 // tabela ausente = o v59 ainda não foi rodado (a api já traduz; aqui vale também para a resposta crua)
@@ -56,6 +59,7 @@ function Pesquisa({ d, recarregar, irCarrinho }) {
   const [placaTxt, setPlacaTxt] = useState(g.placa || ""), [txt, setTxt] = useState(g.txt || ""), [grupo, setGrupo] = useState("");
   const [cat, setCat] = useState(null), [erroCat, setErroCat] = useState("");
   const [aberta, setAberta] = useState(""), [detalhe, setDetalhe] = useState(null), [informar, setInformar] = useState(null), [aoCarrinho, setAoCarrinho] = useState(null);
+  const [vivo, setVivo] = useState(null);   // { chave, buscando, r } da última consulta ao vivo (uma por clique)
   useEffect(() => { lsSet(LS_BUSCA, { placa: placaTxt, txt }); }, [placaTxt, txt]);
   useEffect(() => { let vivo = true; carregarPecas().then(c => vivo && setCat(c)).catch(() => vivo && setErroCat("Não deu para abrir o catálogo de peças agora. Abra o sistema uma vez com internet e tente de novo.")); return () => { vivo = false; }; }, []);
   // placa: a do cadastro vale sem custo; fora do cadastro, a consulta básica da função "placa" (guarda a cópia, não paga duas vezes)
@@ -87,6 +91,18 @@ function Pesquisa({ d, recarregar, irCarrinho }) {
   const linhas = grupos.reduce((n, x) => n + x.itens.length, 0);
   const conectados = d.conexoes.filter(c => c.ativo !== false);
   const nomeDe = id => nomeFornecedor(dados.fornecedores.find(f => f.id === id));
+  const noServidor = conectados.filter(c => ondeConsulta(roboDaConexao(c, nomeDe(c.fornecedor_id))) === "servidor");
+  const noPC = conectados.filter(c => ondeConsulta(roboDaConexao(c, nomeDe(c.fornecedor_id))) === "pc");
+  // consulta ao vivo: manda os códigos para a função "compras" (ela entra nos portais com o login guardado) e recarrega os preços
+  const consultar = async (termos, chave) => {
+    if (vivo && vivo.buscando) return;
+    if (!termos.length) { setVivo({ chave, r: { ok: false, erro: "Esta peça não tem código para consultar." } }); return; }
+    setVivo({ chave, buscando: true });
+    const r = await api.compras.aoVivo({ termos, conexoes: noServidor.map(c => c.id) });
+    setVivo({ chave, r });
+    if (r && r.ok) await recarregar();
+  };
+  const estadoVivo = chave => vivo && vivo.chave === chave ? (vivo.buscando ? "Consultando os fornecedores…" : resumoAoVivo(vivo.r, nomeDe)) : "";
   const nomeVeic = v => [v.marca, v.modelo, v.ano_mod || v.ano].filter(Boolean).join(" ");
 
   return html`
@@ -106,10 +122,13 @@ function Pesquisa({ d, recarregar, irCarrinho }) {
           : cr && cr.ok ? html`<span>placa não encontrada na consulta. Pesquise pelo código ou pela descrição (deixe a placa em branco).</span>`
           : cr ? html`<span>fora do cadastro e a consulta não respondeu${cr.semRede ? " (sem internet)" : cr.sem_saldo ? " (sem saldo no API Placas)" : cr.desligada ? " (consulta de placa desligada)" : ""}. Pesquise pelo código ou pela descrição.</span>` : null}
         ${base && base.entendido ? html`<span class="of-entendido">Buscando por: <b>${base.entendido}</b></span>` : null}</div>` : null}
-      <p class="sub" id="cp-origem">${conectados.length
-        ? html`Fornecedores conectados: <b>${conectados.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ")}</b>. A consulta automática pelo webservice entra quando cada fornecedor liberar o acesso; por enquanto valem os preços informados e a última compra das notas.`
-        : html`Os preços vêm do que você informar (o que o vendedor passou) e da última compra das notas de entrada. Os fornecedores com webservice são conectados em Ajustes › Fornecedores conectados.`}
+      <p class="sub" id="cp-origem">${noServidor.length
+        ? html`<b>Consultar fornecedores</b> em cada peça busca ao vivo em <b>${noServidor.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ")}</b> com o seu login (uma consulta por clique).${noPC.length ? " " + noPC.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ") + ": pelo programa do PC, em preparação." : ""}`
+        : conectados.length ? html`Fornecedores conectados: <b>${conectados.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ")}</b>. Nenhum deles tem portal reconhecido para a consulta ao vivo: confira o endereço em Ajustes › Fornecedores conectados.`
+        : html`Os preços vêm do que você informar (o que o vendedor passou) e da última compra das notas de entrada. Para consultar ao vivo, conecte os fornecedores em Ajustes › Fornecedores conectados.`}
         ${" "}Preço com mais de ${DIAS_ATUAL} dias não conta como menor preço.</p>
+      ${!ePlaca && txt.trim().length >= 3 && noServidor.length ? html`<div class="acoes cp-vivo-livre"><button type="button" class="btn btn-sm" id="cp-consultar-livre" disabled=${!!(vivo && vivo.buscando)} onClick=${() => consultar([txt.trim()], "livre:" + txt.trim())}><span>Consultar fornecedores com “${txt.trim()}”</span></button>
+        ${estadoVivo("livre:" + txt.trim()) ? html`<span class="dica cp-vivo-estado" role="status">${estadoVivo("livre:" + txt.trim())}</span>` : null}</div>` : null}
     </section>
     ${erroCat ? html`<div class="aviso aviso-erro">${erroCat}</div>` : null}
     ${!cat && !erroCat ? html`<${Vazio}>Carregando o catálogo de peças…</${Vazio}>` : null}
@@ -124,7 +143,8 @@ function Pesquisa({ d, recarregar, irCarrinho }) {
           <option value="">Todos os grupos</option>${base.grupos.map(x => html`<option key=${x.grupo} value=${x.grupo}>${x.grupo} (${x.itens.length})</option>`)}</select>` : null}</div>
       <div class="cp-lista">${grupos.map(x => html`<div key=${x.grupo} class="pv-grupo"><h4>${x.grupo}</h4>
         ${x.itens.map(e => html`<${LinhaPeca} key=${e.peca.marca + e.peca.codigo} e=${e} idx=${idx} aberta=${aberta === e.peca.codigo} onConversao=${() => setAberta(aberta === e.peca.codigo ? "" : e.peca.codigo)}
-          onAmpliar=${() => setDetalhe(e)} onInformar=${() => setInformar({ e })} onCarrinho=${o => setAoCarrinho({ o, e })} />`)}</div>`)}</div>
+          onAmpliar=${() => setDetalhe(e)} onInformar=${() => setInformar({ e })} onCarrinho=${o => setAoCarrinho({ o, e })}
+          aoVivo=${noServidor.length ? { estado: estadoVivo(e.peca.marca + e.peca.codigo), ocupado: !!(vivo && vivo.buscando), consultar: () => consultar(termosDaLinha(e), e.peca.marca + e.peca.codigo) } : null} />`)}</div>`)}</div>
     </section>` : null}
     ${soltos.length ? html`<section class="card" id="cp-soltos"><h3>Preços informados com esse código (fora do catálogo)</h3>
       <${TabelaOfertas} ofertas=${soltos.map(o => ({ ...o, menor: false }))} onCarrinho=${o => setAoCarrinho({ o, e: null })} /></section>` : null}
@@ -135,7 +155,7 @@ function Pesquisa({ d, recarregar, irCarrinho }) {
 }
 
 /* uma peça da pesquisa, com os preços de cada fornecedor */
-function LinhaPeca({ e, idx, aberta, onConversao, onAmpliar, onInformar, onCarrinho }) {
+function LinhaPeca({ e, idx, aberta, onConversao, onAmpliar, onInformar, onCarrinho, aoVivo }) {
   const p = e.peca, conv = conversaoDoItem(e);
   const ofertas = useMemo(() => ofertasDaLinha(idx, codigosDaLinha(e)), [idx, e]);
   return html`<div class="pv-item cp-item" data-cod=${p.codigo} data-todos=${"|" + [p.codigo, ...(e.alternativas || []).map(a => a.codigo)].join("|") + "|"}>
@@ -147,10 +167,12 @@ function LinhaPeca({ e, idx, aberta, onConversao, onAmpliar, onInformar, onCarri
       <span class="pv-cod">${p.oem.length ? "Cód. montadora " + chaveDaPeca(p) + " · " : ""}${p.marca} ${p.codigo}${(e.alternativas || []).length ? " · equivalentes: " + e.alternativas.slice(0, 3).map(a => a.marca + " " + a.codigo).join(", ") + (e.alternativas.length > 3 ? "…" : "") : ""}</span>
       ${aberta ? html`<div class="pv-conv">${conv.length ? conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)
         : html`<span class="dica">O catálogo ${p.marca} não traz conversão para esta peça.</span>`}</div>` : null}</div>
-    <div class="pv-botoes"><button type="button" class="btn btn-sm cp-informar" onClick=${onInformar}>Informar preço</button>
+    <div class="pv-botoes">${aoVivo ? html`<button type="button" class="btn btn-sm btn-pri cp-consultar" disabled=${aoVivo.ocupado} onClick=${aoVivo.consultar}>Consultar fornecedores</button>` : null}
+      <button type="button" class="btn btn-sm cp-informar" onClick=${onInformar}>Informar preço</button>
       <button type="button" class="btn btn-sm pv-conversao" aria-expanded=${aberta} onClick=${onConversao}>Conversão</button></div>
-    <div class="cp-precos">${ofertas.length ? html`<${TabelaOfertas} ofertas=${ofertas} onCarrinho=${onCarrinho} />`
-      : html`<span class="dica cp-sem-preco">Nenhum preço ainda para esta peça. Use “Informar preço” com o valor que o fornecedor passou.</span>`}</div>
+    <div class="cp-precos">${aoVivo && aoVivo.estado ? html`<span class="dica cp-vivo-estado" role="status">${aoVivo.estado}</span>` : null}
+      ${ofertas.length ? html`<${TabelaOfertas} ofertas=${ofertas} onCarrinho=${onCarrinho} />`
+      : html`<span class="dica cp-sem-preco">Nenhum preço ainda para esta peça.${aoVivo ? " Clique em “Consultar fornecedores” para buscar ao vivo, ou use" : " Use"} “Informar preço” com o valor que o fornecedor passou.</span>`}</div>
   </div>`;
 }
 
@@ -387,23 +409,36 @@ function Cancelar({ p, onFechar, onOk }) {
 
 /* ---------------- Ajustes › Fornecedores conectados (só o administrador) ---------------- */
 const TIPOS = [["Webservice", "webservice"], ["Portal (site)", "portal"], ["Sem integração", "sem_integracao"]];
-const SITUACAO_CONEXAO = { aguardando: "Aguardando a integração", ok: "Conectado", erro: "Com erro" };
+const SITUACAO_CONEXAO = { aguardando: "Aguardando a primeira consulta", ok: "Conectado", erro: "Com erro" };
+const PORTAIS_DICA = "Portais reconhecidos pelo endereço: www.dpk.com.br, rolemarmaster.com, compreonline.pellegrino.com.br (consulta pelo servidor) e portal.tolidistribuidora.com.br (pelo programa do PC, em preparação).";
 export function CartaoFornecedoresConectados() {
   const { dados } = useApp();
-  const [l, setL] = useState(null), [acessos, setAcessos] = useState([]), [erro, setErro] = useState(""), [edita, setEdita] = useState(null);
+  const [l, setL] = useState(null), [acessos, setAcessos] = useState([]), [erro, setErro] = useState(""), [edita, setEdita] = useState(null), [teste, setTeste] = useState(null);
+  // "Testar conexão": a função "compras" entra no portal com o login guardado e faz uma busca de teste, sem gravar preço
+  const testar = async c => {
+    setTeste({ id: c.id, rodando: true });
+    const r = await api.compras.aoVivo({ acao: "testar", conexao: c.id });
+    setTeste({ id: c.id, r }); await carregar();
+  };
   const carregar = async () => { try { const [c, a] = await Promise.all([api.compras.conexoes.listar(), api.compras.acessos()]); setL(c); setAcessos(a || []); setErro(""); } catch (e) { setErro(semV59(e) || e.message); } };
   useEffect(() => { if (api.compras) carregar(); else setErro("Para usar Compras, rode o supabase/v59.sql no Supabase."); }, []);
   const nome = id => nomeFornecedor(dados.fornecedores.find(f => f.id === id)) || "Fornecedor fora do cadastro";
   const acesso = id => acessos.find(a => a.id === id);
   return html`<section class="card" id="cp-conexoes"><h2>Fornecedores conectados</h2>
-    <span class="sub">Fornecedores que a tela Compras vai consultar. A senha (ou a chave do webservice) fica guardada só no servidor e nunca volta para a tela.
-      A consulta automática de cada fornecedor entra quando ele liberar o webservice; até lá, a tela Compras usa os preços informados e a última compra das notas.</span>
+    <span class="sub">Fornecedores que a tela Compras consulta ao vivo com o seu login. A senha fica guardada só no servidor e nunca volta para a tela.
+      ${" " + PORTAIS_DICA}</span>
     ${erro ? html`<div class="aviso">${erro}</div>` : !l ? html`<span class="dica">Carregando…</span>` : html`
-      ${l.length ? html`<div class="lista">${l.map(c => { const a = acesso(c.id);
-        return html`<div class="linha cp-conexao" key=${c.id} data-forn=${nome(c.fornecedor_id)}><span class="meio"><strong>${nome(c.fornecedor_id)}${c.ativo === false ? " (desligado)" : ""}</strong>
+      ${l.length ? html`<div class="lista">${l.map(c => { const a = acesso(c.id), robo = roboDaConexao(c, nome(c.fornecedor_id)), onde = ondeConsulta(robo), t = teste && teste.id === c.id ? teste : null;
+        return html`<div class="linha cp-conexao" key=${c.id} data-forn=${nome(c.fornecedor_id)} data-robo=${robo || ""}><span class="meio"><strong>${nome(c.fornecedor_id)}${c.ativo === false ? " (desligado)" : ""}</strong>
           <span>${(TIPOS.find(t => t[1] === c.tipo) || TIPOS[0])[0]}${c.endereco ? " · " + c.endereco : ""}${c.usuario ? " · usuário " + c.usuario : ""} · ${a ? "senha guardada em " + fmtData(a.gravado_em) : "sem senha guardada"}</span>
-          <span>${SITUACAO_CONEXAO[c.situacao] || c.situacao}${c.detalhe ? ": " + c.detalhe : ""}</span></span>
-          <button type="button" class="btn btn-sm" onClick=${() => setEdita(c)}>Editar</button></div>`; })}</div>` : html`<span class="dica">Nenhum fornecedor conectado.</span>`}
+          <span class="cp-robo">${c.tipo === "sem_integracao" ? "Sem consulta ao vivo (preços informados e última compra)."
+            : onde === "servidor" ? html`Robô: <b>${NOME_ROBO[robo]}</b> · consulta pelo servidor`
+            : onde === "pc" ? html`Robô: <b>${NOME_ROBO[robo]}</b> · consulta pelo programa do PC (em preparação; o código do SMS do primeiro acesso entra junto)`
+            : html`<b class="c-warn">Portal não reconhecido pelo endereço.</b> ${PORTAIS_DICA}`}</span>
+          <span>${SITUACAO_CONEXAO[c.situacao] || c.situacao}${c.detalhe ? ": " + c.detalhe : ""}</span>
+          ${t ? html`<span class="cp-teste" role="status">${t.rodando ? "Testando a conexão…" : t.r && t.r.ok ? (t.r.no_pc ? "Este portal é consultado pelo programa do PC (em preparação)." : "Conectou e buscou: " + ((t.r.ofertas || []).length) + " preço(s) de teste.") : "Não conectou: " + ((t.r && t.r.erro) || "sem resposta")}</span>` : null}</span>
+          <span class="cp-conexao-botoes">${onde === "servidor" && c.ativo !== false && a ? html`<button type="button" class="btn btn-sm cp-testar" disabled=${!!(t && t.rodando)} onClick=${() => testar(c)}>Testar conexão</button>` : null}
+          <button type="button" class="btn btn-sm" onClick=${() => setEdita(c)}>Editar</button></span></div>`; })}</div>` : html`<span class="dica">Nenhum fornecedor conectado.</span>`}
       <div class="acoes"><button type="button" class="btn" id="cp-conectar" onClick=${() => setEdita({})}>+ Conectar fornecedor</button></div>`}
     ${edita ? html`<${EditarConexao} c=${edita} ja=${(l || []).map(x => x.fornecedor_id)} acesso=${edita.id ? acesso(edita.id) : null} onFechar=${() => setEdita(null)} onSalvo=${async () => { setEdita(null); await carregar(); }} />` : null}
   </section>`;
@@ -436,7 +471,9 @@ function EditarConexao({ c, ja, acesso, onFechar, onSalvo }) {
         <option value="">Escolha…</option>${forns.map(f => html`<option key=${f.id} value=${f.id}>${nomeFornecedor(f)}</option>`)}</select></${Campo}>`}
     <div class="campo"><label>Acesso</label><${Seg} rotulo="Tipo de acesso" opcoes=${TIPOS.map(t => [t[0], "info"])} valor=${(TIPOS.find(t => t[1] === x.tipo) || TIPOS[0])[0]} onEscolha=${t => set({ tipo: TIPOS.find(y => y[0] === t)[1] })} /></div>
     ${x.tipo !== "sem_integracao" ? html`
-      <${Campo} id="cp-cx-end" rotulo=${x.tipo === "portal" ? "Endereço do portal" : "Endereço do webservice"} dica="Começa com https:// (o fornecedor informa)."><${Texto} id="cp-cx-end" valor=${x.endereco} onMuda=${v => set({ endereco: v })} /></${Campo}>
+      <${Campo} id="cp-cx-end" rotulo=${x.tipo === "portal" ? "Endereço do portal" : "Endereço do webservice"} dica=${"Começa com https://. É pelo endereço que o sistema sabe qual robô usar. " + PORTAIS_DICA}><${Texto} id="cp-cx-end" valor=${x.endereco} onMuda=${v => set({ endereco: v })} /></${Campo}>
+      ${(() => { const robo = roboDaConexao({ endereco: x.endereco, obs: x.obs }, nomeFornecedor(dados.fornecedores.find(f => f.id === x.fornecedor_id))); return x.endereco.trim()
+        ? html`<p class="dica" id="cp-cx-robo">${robo ? "Robô reconhecido: " + NOME_ROBO[robo] + (ondeConsulta(robo) === "pc" ? " (consulta pelo programa do PC, em preparação)." : (robo === "rolemar" ? ". Usuário = o CNPJ da oficina." : ". Usuário = o e-mail de login no portal.")) : "Portal não reconhecido: a consulta ao vivo não vai funcionar neste endereço."}</p>` : null; })()}
       <div class="grade">
         <${Campo} id="cp-cx-usu" rotulo="Usuário (login no fornecedor)"><${Texto} id="cp-cx-usu" autocomplete="off" valor=${x.usuario} onMuda=${v => set({ usuario: v })} /></${Campo}>
         <${Campo} id="cp-cx-senha" rotulo=${x.tipo === "webservice" ? "Senha ou chave do webservice" : "Senha"} dica=${acesso ? "Guardada em " + fmtData(acesso.gravado_em) + ". Digite só para trocar." : "Fica guardada só no servidor."}>

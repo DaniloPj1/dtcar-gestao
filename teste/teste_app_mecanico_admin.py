@@ -57,6 +57,7 @@ try:
     pg.locator(".app-acesso[data-acesso=p2] .horario-uso .chip-btn", has_text="Sáb").click(); pg.wait_for_timeout(400)
     chk("desmarcar sábado grava os dias", hz()["dias"] == [1, 2, 3, 4, 5], hz())
     pg.locator(".app-acesso[data-acesso=p2] .inp-hora").first.fill("08:00"); pg.wait_for_timeout(400); chk("mudar a hora de início grava", hz()["de"] == "08:00", hz())
+    pg.locator(".app-acesso[data-acesso=p2] .inp-hora").first.fill("19:00"); pg.wait_for_timeout(400); chk("início depois do fim é recusado (não grava)", hz()["de"] == "08:00" and "antes do fim" in pg.inner_text("body"), hz())
     pg.locator(".app-acesso[data-acesso=p2] .horario-uso .chip-btn", has_text="Sem limite").click(); pg.wait_for_timeout(400)
     chk("Sem limite apaga o horário e mantém as telas", hz() is None and len(pg.evaluate("window.__DB.config")["appAcessos"]["p2"]["telas"]) == 6)
     mec = pg.locator(".app-acesso[data-acesso=p2]")

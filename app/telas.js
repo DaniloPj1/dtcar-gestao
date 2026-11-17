@@ -104,7 +104,8 @@ const nomeVeic = v => [v.marca, v.modelo].filter(Boolean).join(" ");
  *  (pedido do Danilo, 16/11/2026 à noite). As outras telas continuam sem memória: a placa vale só ali. */
 const CH_PLACA_INICIO = "dtcar-app-placa-inicio";
 const lerPlacaGuardada = () => { try { const v = JSON.parse(sessionStorage.getItem(CH_PLACA_INICIO) || "null"); return v && v.veic ? v : { texto: "" }; } catch (e) { return { texto: "" }; } };
-const guardarPlaca = p => { try { if (p && p.veic) sessionStorage.setItem(CH_PLACA_INICIO, JSON.stringify({ texto: p.texto, veic: p.veic })); else sessionStorage.removeItem(CH_PLACA_INICIO); } catch (e) { /* sem espaço */ } };
+// guarda o carro e, do dono, só id/nome/telefone (não a ficha inteira)
+const guardarPlaca = p => { try { if (p && p.veic) { const c = p.veic.cliente; sessionStorage.setItem(CH_PLACA_INICIO, JSON.stringify({ texto: p.texto, veic: { ...p.veic, cliente: c ? { id: c.id, nome: c.nome, telefone: c.telefone || "" } : null } })); } else sessionStorage.removeItem(CH_PLACA_INICIO); } catch (e) { /* sem espaço */ } };
 export const limparPlacaGuardada = () => guardarPlaca(null);
 function usarPlaca(guardar = false) {
   const { dados } = useApp();
@@ -640,7 +641,7 @@ const quadros = [];
  *  (pedido do Danilo, 16/11/2026 à noite). "voltando" evita empilhar a própria volta. */
 const pilha = [];
 let voltando = false;
-function registrarRota(r) { if (voltando) { voltando = false; return; } if (pilha[pilha.length - 1] !== r) pilha.push(r); if (pilha.length > 30) pilha.shift(); }
+function registrarRota(r) { if (voltando) { voltando = false; return; } if (r === "inicio") { pilha.length = 0; } if (pilha[pilha.length - 1] !== r) pilha.push(r); if (pilha.length > 30) pilha.splice(1, 1); }   // o Início é sempre o fundo da pilha
 /** passo dentro de uma tela (formulário aberto, sistema escolhido): o Voltar desfaz o passo antes de trocar de tela */
 function usarPasso(ativo, desfazer) {
   useLayoutEffect(() => { if (!ativo) return; const f = () => desfazer(); quadros.push(f); return () => { const i = quadros.indexOf(f); if (i >= 0) quadros.splice(i, 1); }; }, [ativo]);
@@ -698,6 +699,7 @@ export function desmontar() { limparPlacaGuardada(); pilha.length = 0; render(nu
 /** botão Voltar do celular (app.js): fecha o quadro aberto; senão vai para o Início; no Início devolve false (o app sai) */
 export function voltar() {
   if (quadros.length) { quadros[quadros.length - 1](); return true; }
+  if (rotaAtual() === "inicio") return false;   // no Início o Voltar deixa o app de lado, sempre
   if (pilha.length > 1 && pilha[pilha.length - 1] === rotaAtual()) { pilha.pop(); voltando = true; location.hash = "#/" + pilha[pilha.length - 1]; return true; }
   if (rotaAtual() !== "inicio") { ir("inicio"); return true; }
   return false;

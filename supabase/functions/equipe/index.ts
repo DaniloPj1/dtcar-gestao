@@ -30,7 +30,7 @@ export type Deps = {
 /** Login sem e-mail (pedido do Danilo, 16/11/2026 à noite): o usuário "joao" vira o e-mail interno joao@app.dtcarcentroautomotivo.com.br
  *  (o Supabase exige e-mail; este domínio é da oficina e nunca recebe mensagem). O mesmo que js/appacesso.js faz na tela de entrar. */
 export const DOMINIO_USUARIO = "app.dtcarcentroautomotivo.com.br";
-export const usuarioValido = (u: string) => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(u);
+export const usuarioValido = (u: string) => /^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$/.test(u) && !/[._-]{2}/.test(u);
 
 export async function executar(corpo: Record<string, unknown>, deps: Deps): Promise<Record<string, unknown>> {
   if (!deps.admin) throw new ErroUso("Só o administrador cria acessos e troca senhas da equipe.");
@@ -43,7 +43,7 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
     if (nome.length > 80) throw new ErroUso("O nome pode ter no máximo 80 caracteres.");
     if (nome.length < 2) throw new ErroUso("Informe o nome do colaborador.");
     if (!login) throw new ErroUso("Informe o usuário (ou o e-mail) da pessoa: é o login dela.");
-    if (!login.includes("@") && !usuarioValido(login)) throw new ErroUso("O usuário precisa ter de 3 a 30 letras minúsculas, números, ponto, traço ou sublinhado, sem espaço (ex.: joao.silva).");
+    if (!login.includes("@") && !usuarioValido(login)) throw new ErroUso("O usuário precisa ter de 3 a 30 letras minúsculas, números, ponto, traço ou sublinhado, sem espaço, sem começar nem terminar com ponto/traço e sem dois seguidos (ex.: joao.silva).");
     if (login.includes("@") && !emailValido(email)) throw new ErroUso("Informe um e-mail válido (é o login da pessoa).");
     if (!senhaValida(senha)) throw new ErroUso("A senha precisa ter 8 ou mais caracteres, com letras e números.");
     if (!PAPEIS.includes(papel)) throw new ErroUso("Escolha o papel: administrador, consultor ou mecânico.");

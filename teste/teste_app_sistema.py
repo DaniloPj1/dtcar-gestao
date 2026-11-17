@@ -347,6 +347,9 @@ try:
         pg.evaluate('window.__voltar()'); pg.wait_for_timeout(400); t(pg.url.endswith('#/peca') and pg.locator('#pc-sistemas').count() == 1, 'Voltar com o sistema escolhido volta para a escolha dos sistemas')
         pg.evaluate('window.__voltar()'); pg.wait_for_timeout(400); t(pg.url.endswith('#/inicio') and pg.evaluate('window.__app') == [], 'Voltar numa tela vai ao Início sem sair do app')
         pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300); t(pg.evaluate('window.__app') == ['minimize'], 'Voltar no Início deixa o app de lado (não encerra)')
+        # voltou ao Início pela barra de baixo: o Voltar no Início continua deixando o app de lado (revisão: a pilha não pode levar de volta a Peças)
+        tela(pg, 'peca'); pg.click('.nav a[href="#/inicio"]'); pg.wait_for_timeout(400); pg.evaluate('window.__voltar()'); pg.wait_for_timeout(300)
+        t(pg.evaluate('window.__app') == ['minimize', 'minimize'] and pg.url.endswith('#/inicio'), 'Voltar no Início (depois de passar por Peças) deixa o app de lado, não volta a Peças')
         # placa do Início fica guardada ao sair e voltar; some ao limpar
         pg.goto(URL + '#/inicio'); pg.wait_for_selector('#ini-placa'); buscar_placa(pg); tela(pg, 'oleo'); pg.goto(URL + '#/inicio'); pg.wait_for_selector('#ini-placa'); pg.wait_for_timeout(400)
         t(pg.locator('#veic').count() == 1 and pg.input_value('#ini-placa') == 'ABC1D23', 'a placa buscada no Início continua lá depois de sair e voltar')

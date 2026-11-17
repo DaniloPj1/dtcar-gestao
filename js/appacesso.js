@@ -15,7 +15,7 @@ export const telasDoPapel = () => TODAS.slice();
  * O Supabase exige um e-mail por conta, então o usuário "joao" vira o e-mail interno joao@app.dtcarcentroautomotivo.com.br
  * (domínio da oficina; nunca recebe mensagem: a conta nasce confirmada). Quem tem e-mail de verdade continua entrando com ele. */
 export const DOMINIO_USUARIO = "app.dtcarcentroautomotivo.com.br";
-export const usuarioValido = u => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(String(u || ""));
+export const usuarioValido = u => /^[a-z0-9][a-z0-9._-]{1,28}[a-z0-9]$/.test(String(u || "")) && !/[._-]{2}/.test(String(u || ""));
 /** o que a pessoa digitou na tela de entrar → e-mail para o Supabase */
 export const emailDoLogin = txt => { const t = String(txt || "").trim().toLowerCase(); return !t || t.includes("@") ? t : t + "@" + DOMINIO_USUARIO; };
 /** e-mail interno → nome de usuário; e-mail de verdade → "" */

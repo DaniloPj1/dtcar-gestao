@@ -179,7 +179,7 @@
   // sair: com a digital ligada tranca — a chave de renovação vai para o cofre e some do aparelho (sem encerrar no servidor,
   // senão a do cofre deixaria de valer); a próxima abertura pede a digital. Sem digital, encerra a sessão (a do sistema também, é a mesma)
   function sair() {
-    try { window.sessionStorage.removeItem(CH_ABERTO); window.sessionStorage.removeItem(CH_MODO); } catch (e) { /* nada */ }
+    try { window.sessionStorage.removeItem(CH_ABERTO); window.sessionStorage.removeItem(CH_MODO); window.sessionStorage.removeItem('dtcar-app-placa-inicio'); } catch (e) { /* nada */ }
     if (digitalLigada()) {
       sb.auth.getSession().then(function (g) { var se = g && g.data && g.data.session; return se ? guardarToken(se.refresh_token) : null; })
         .catch(function () { /* nada */ }).then(function () { apagarSessaoLocal(); location.hash = ''; location.reload(); });

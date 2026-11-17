@@ -46,11 +46,13 @@ export function Mais() {
 /* ---------------- Equipe ---------------- */
 /** App do celular por pessoa (cfg.appAcessos): entra ou não e quais telas vê. Grava na hora na tabela config. */
 function AcessoApp({ p, cfg, salvar }) {
+  const { avisar } = useApp();
   const a = acessoApp(cfg, p), ligado = a.entra;
   const atual = ((cfg.appAcessos || {})[p.id]) || {};
   const gravar = (entra, telas, horario = atual.horario) => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { entra, telas, ...(horario ? { horario } : {}) } } });
   const h = horarioValido(atual.horario) ? atual.horario : null;   // null = sem limite de horário
   const mudarHorario = novo => gravar(true, a.telas, novo);
+  const mudarHora = novo => { if (!horarioValido(novo)) { avisar("O horário de início precisa ser antes do fim (ex.: 07:30 às 18:00).", true); return; } mudarHorario(novo); };
   const semLimite = () => { const { horario, ...resto } = atual; salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { ...resto, entra: true, telas: a.telas } } }); };
   const alternarDia = d => { const dias = h.dias.includes(d) ? h.dias.filter(x => x !== d) : h.dias.concat([d]).sort(); if (dias.length) mudarHorario({ ...h, dias }); };
   const alternarTela = id => gravar(true, a.telas.includes(id) ? a.telas.filter(x => x !== id) : TELAS_APP.map(t => t[0]).filter(x => x === id || a.telas.includes(x)));
@@ -62,7 +64,7 @@ function AcessoApp({ p, cfg, salvar }) {
       ${p.papel !== "admin" ? html`<div class="horario-uso" data-horario=${p.id}><span class="horario-rotulo"><b>Horário de uso</b><span class="sub"> · fora dele o app não entra</span></span>
         <div class="horario-linha"><button type="button" class="chip-btn" aria-pressed=${h ? "false" : "true"} onClick=${() => { if (h) semLimite(); }}>Sem limite</button>
           <button type="button" class="chip-btn" aria-pressed=${h ? "true" : "false"} onClick=${() => { if (!h) mudarHorario({ ...HORARIO_PADRAO }); }}>Só no horário de trabalho</button></div>
-        ${h ? html`<div class="horario-linha"><label>das <input type="time" class="inp inp-hora" value=${h.de} onChange=${e => e.target.value && mudarHorario({ ...h, de: e.target.value })} /></label><label>às <input type="time" class="inp inp-hora" value=${h.ate} onChange=${e => e.target.value && mudarHorario({ ...h, ate: e.target.value })} /></label></div>
+        ${h ? html`<div class="horario-linha"><label>das <input type="time" class="inp inp-hora" value=${h.de} onChange=${e => mudarHora({ ...h, de: e.target.value })} /></label><label>às <input type="time" class="inp inp-hora" value=${h.ate} onChange=${e => mudarHora({ ...h, ate: e.target.value })} /></label></div>
           <div class="chips">${DIAS_SEMANA.map((d, i) => html`<button type="button" key=${d} class="chip-btn" aria-pressed=${h.dias.includes(i) ? "true" : "false"} onClick=${() => alternarDia(i)}>${d}</button>`)}</div>` : null}</div>` : null}` : html`<span class="dica">Não entra no app do celular.</span>`}
   </div>`;
 }

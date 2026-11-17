@@ -56,19 +56,19 @@ export const numero = (v: unknown): number => {
   if (typeof v === "number") return v;
   const s = txt(v).replace(/[^\d,.-]/g, "");
   if (!s) return 0;
-  // "1.234,56" → 1234.56; "63,24" → 63.24; "88.81" → 88.81
-  const n = s.includes(",") ? Number(s.replace(/\./g, "").replace(",", ".")) : Number(s);
+  // "1.234,56" → 1234.56; "63,24" → 63.24; "88.81" → 88.81; "1.000" (milhar sem centavos) → 1000
+  const n = s.includes(",") ? Number(s.replace(/\./g, "").replace(",", ".")) : /^\d{1,3}(\.\d{3})+$/.test(s) ? Number(s.replace(/\./g, "")) : Number(s);
   return Number.isFinite(n) ? n : 0;
 };
 const soDig = (s: unknown) => txt(s).replace(/\D/g, "");
 
-/** Robô pelo endereço do portal cadastrado em Ajustes (ou pelo nome, se o endereço estiver em branco) */
-export function roboDe(c: { endereco?: string; obs?: string }, nomeFornecedor = ""): Robo | null {
-  const t = ((c.endereco || "") + " " + (c.obs || "") + " " + nomeFornecedor).toLowerCase();
-  if (/dpk\.com\.br|\bdpk\b/.test(t)) return "dpk";
-  if (/rolemar/.test(t)) return "rolemar";
-  if (/pellegrino/.test(t)) return "pellegrino";
-  if (/toli/.test(t)) return "toli";
+/** Robô SÓ pelo endereço do portal cadastrado em Ajustes (mesma regra de roboDaConexao em js/compraspecas.js; o nome do fornecedor não conta) */
+export function roboDe(c: { endereco?: string }): Robo | null {
+  const t = String(c.endereco || "").toLowerCase();
+  if (/dpk\.com\.br/.test(t)) return "dpk";
+  if (/rolemarmaster\.com|rolemar\./.test(t)) return "rolemar";
+  if (/pellegrino\.com\.br/.test(t)) return "pellegrino";
+  if (/tolidistribuidora\.com\.br/.test(t)) return "toli";
   return null;
 }
 export const NOME_ROBO: Record<Robo, string> = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Pellegrino Compre Online", toli: "Portal Toli" };
@@ -153,6 +153,7 @@ async function dpkBuscar(deps: Deps, s: Sessao, termo: string): Promise<Oferta[]
   if (!prods.length) return [];
   const q = prods.map((p) => "Item=" + encodeURIComponent(p.id)).join("&");
   const rp = await pedir(deps, DPK.api + "/dpk-price/api/price/dpk?StoreCode=" + store + "&" + q, { headers: dpkHeaders(s) });
+  if (rp.status === 401) throw new ErroAcesso("sessão vencida");
   const precos = rp.ok ? dpkLerPrecos(await rp.json().catch(() => null)) : new Map();
   return prods.map((p) => { const pr = precos.get(p.id); if (!pr || !(pr.preco > 0)) return null;
     return { codigo: p.codigo, marca: p.marca, descricao: p.descricao, preco: pr.preco, estoque: pr.estoque, prazo: "", aplicacao: "", ref: p.id } as Oferta; }).filter((x): x is Oferta => !!x);
@@ -198,8 +199,10 @@ async function rolemarBuscar(deps: Deps, s: Sessao, termo: string): Promise<Ofer
   const r = await pedir(deps, ROLEMAR.site + "/ajax-busca", { method: "POST", headers: rolemarHeaders(s),
     body: form({ page: "1", tipo_carrinho: "compras", tipo: "simples", busca: termo, cod_emp: String(s.cod_emp || "") }) });
   if (r.status === 401 || r.status === 302) throw new ErroAcesso("sessão vencida");
+  if (r.status === 403) throw new Error("Rolemar: o portal bloqueou o acesso automático (proteção do site). Tente de novo mais tarde.");
+  if (!r.ok) throw new Error("Rolemar: a busca falhou (HTTP " + r.status + ").");
   const corpo = await r.json().catch(() => null) as Json | null;
-  if (!corpo) throw new ErroAcesso("sessão vencida");
+  if (!corpo) throw new Error("Rolemar: a busca respondeu fora do padrão (página em vez de dados). Tente de novo; se continuar, o portal mudou.");
   if (corpo.status === "erro") { if (/login|sess|autentic/i.test(txt(corpo.mensagem))) throw new ErroAcesso("sessão vencida"); throw new Error("Rolemar: " + txt(corpo.mensagem)); }
   return rolemarLerBusca(corpo);
 }
@@ -273,12 +276,13 @@ async function comSessao(deps: Deps, c: Conexao, robo: Robo, cnpjOficina: string
   if (!senha) throw new ErroAcesso("Sem senha guardada: cadastre a senha em Ajustes › Fornecedores conectados.");
   if (!c.usuario) throw new ErroAcesso("Sem usuário: informe o login do fornecedor em Ajustes.");
   const login = () => robo === "dpk" ? dpkLogin(deps, c, senha, cnpjOficina) : robo === "rolemar" ? rolemarLogin(deps, c, senha) : pellegrinoLogin(deps, c, senha);
-  let s = await deps.lerSessao(c.id);
-  if (!s) { s = await login(); await deps.gravarSessao(c.id, s); }
+  let s = await deps.lerSessao(c.id), nova = false;
+  if (!s) { s = await login(); await deps.gravarSessao(c.id, s); nova = true; }
   try { return await usar(s); }
   catch (e) {
     if (!(e instanceof ErroAcesso)) throw e;
-    // sessão vencida: entra de novo uma vez
+    // sessão guardada vencida: entra de novo UMA vez; sessão recém-aberta que já falhou não repete o login (o portal mudou ou bloqueou)
+    if (nova) throw new Error(NOME_ROBO[robo] + ": entrou, mas a busca foi recusada logo em seguida (" + e.message + "). Tente de novo mais tarde.");
     s = await login(); await deps.gravarSessao(c.id, s);
     return await usar(s);
   }
@@ -291,7 +295,9 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
   const agora = (deps.agora || (() => new Date()))();
   if (acao === "testar") {
     if (!deps.papel.admin) throw new ErroUso("Só o administrador testa a conexão.");
-    const [c] = await deps.conexoes([String(corpo.conexao || "")]);
+    const idc = String(corpo.conexao || "");
+    if (!/^[\w-]{1,64}$/.test(idc)) throw new ErroUso("Fornecedor conectado não encontrado.");
+    const [c] = await deps.conexoes([idc]);
     if (!c) throw new ErroUso("Fornecedor conectado não encontrado.");
     const robo = roboDe(c);
     if (!robo) { await deps.situacao(c.id, "erro", "Portal não reconhecido pelo endereço: use o endereço do site do fornecedor (DPK, Rolemar, Pellegrino ou Toli)."); return { ok: false, erro: "Portal não reconhecido pelo endereço.", robo: null }; }

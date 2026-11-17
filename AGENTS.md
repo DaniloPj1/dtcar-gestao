@@ -706,7 +706,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   botão não aparece. Publicar: colar o `compras/index.ts` no painel do Supabase ("Verify JWT" desligado; sem segredo próprio). **Os portais de
   verdade não são alcançáveis do ambiente de desenvolvimento** (DPK e Pellegrino respondem 403 ao proxy): a primeira consulta real é feita em
   produção com o login do Danilo em Ajustes — conferir contra `teste/teste_compras_funcao.ts` (portais de mentira no formato mapeado).
-  Testes: `deno run -A teste/teste_compras_funcao.ts` (47) e `python3 teste/teste_compras.py` (função de mentira no `mock.js`, PC e celular).
+  Testes: `deno run -A teste/teste_compras_funcao.ts` (50) e `python3 teste/teste_compras.py` (função de mentira no `mock.js`, PC e celular).
 
 ### Quadro "Óleo e filtros" recolhido na página do veículo (15/11/2026, v138)
 - Com ficha gravada, o card começa recolhido: só a linha de cima (litros, viscosidade, selo) e o botão "Mostrar/Ocultar" (`#fo-alternar`). O corpo (`#fo-corpo`) com filtros, "Refazer ou editar" e "Confirmar" só existe aberto. Sem ficha, o card continua como antes. Vale para PC e celular (é o mesmo componente).

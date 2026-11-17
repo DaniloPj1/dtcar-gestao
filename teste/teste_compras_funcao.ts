@@ -10,10 +10,11 @@ const F = await import("../supabase/functions/compras/index.ts");
 type L = Record<string, any>;
 
 // ---------- regras puras
-confere("robô pelo endereço", F.roboDe({ endereco: "https://www.dpk.com.br/#/" }) === "dpk" && F.roboDe({ endereco: "https://rolemarmaster.com" }) === "rolemar"
+confere("robô só pelo endereço (nome do fornecedor não conta)", F.roboDe({ endereco: "https://www.dpk.com.br/#/" }) === "dpk" && F.roboDe({ endereco: "https://rolemarmaster.com" }) === "rolemar"
   && F.roboDe({ endereco: "https://compreonline.pellegrino.com.br/" }) === "pellegrino" && F.roboDe({ endereco: "https://portal.tolidistribuidora.com.br/ords/f?p=2401" }) === "toli"
-  && F.roboDe({ endereco: "" }, "DPK Distribuidora") === "dpk" && F.roboDe({ endereco: "https://outro.com.br" }) === null);
-confere("número em reais", F.numero("1.234,56") === 1234.56 && F.numero("63,24") === 63.24 && F.numero("88.81") === 88.81 && F.numero(12.5) === 12.5 && F.numero("") === 0 && F.numero("R$ 10,00") === 10);
+  && F.roboDe({ endereco: "" }) === null && F.roboDe({ endereco: "https://outro.com.br" }) === null && F.roboDe({ endereco: "https://capitolio.com.br" }) === null);
+confere("número em reais", F.numero("1.234,56") === 1234.56 && F.numero("63,24") === 63.24 && F.numero("88.81") === 88.81 && F.numero(12.5) === 12.5 && F.numero("") === 0 && F.numero("R$ 10,00") === 10 && F.numero("1.000") === 1000);
+try { await F.executar({ acao: "testar", conexao: "abc def; drop" }, { papel: { gestor: true, admin: true } } as never); confere("testar com id inválido: recusa sem ir ao banco", false); } catch (e) { confere("testar com id inválido: recusa sem ir ao banco", e instanceof F.ErroUso); }
 confere("cookies juntados", (() => { const r = new Response("", { headers: [["set-cookie", "PHPSESSID=abc; Path=/; HttpOnly"], ["set-cookie", "cf_clearance=xyz; Secure"]] });
   const c = F.juntarCookies({ velho: "1" }, r); return c.PHPSESSID === "abc" && c.cf_clearance === "xyz" && c.velho === "1"; })());
 confere("DPK: leitura da busca", (() => { const l = F.dpkLerBusca({ totalCount: 2, products: [{ id: 1, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545" }, { id: 2, code: "", description: "x" }] });
@@ -137,6 +138,19 @@ bloquear403 = true;
 r = await F.executar({ termos: ["WK84213"], conexoes: ["c-rol"] }, deps()) as L;
 confere("portal bloqueou (403): aviso para tentar depois", !r.resultados[0].ok && /mais tarde|bloqueou|HTTP|esperado/.test(r.resultados[0].erro), r.resultados[0].erro);
 bloquear403 = false;
+
+// ---------- Rolemar: busca devolve página (HTML) em vez de JSON → erro claro, UM login só, sem apagar a sessão
+let rolemarHtml = false;
+const fetchHtml = (async (u: string | URL | Request, i?: RequestInit) => { if (rolemarHtml && String(u) === F.ROLEMAR.site + "/ajax-busca") return new Response("<html>manutenção</html>", { status: 200 }); return fakeFetch(u, i); }) as typeof fetch;
+sessoes["c-rol"] = null; rolemarHtml = true; const rl = rolemarLogins;
+r = await F.executar({ termos: ["WK84213"], conexoes: ["c-rol"] }, { ...deps(), fetch: fetchHtml }) as L;
+confere("Rolemar fora do padrão: erro claro e só um login (sem laço)", !r.resultados[0].ok && /fora do padrão|recusada logo em seguida/.test(r.resultados[0].erro) && rolemarLogins === rl + 1 && sessoes["c-rol"] !== null, r.resultados[0].erro + " logins=" + (rolemarLogins - rl));
+rolemarHtml = false;
+// DPK: preço responde 401 → sessão vencida → relogin
+dpkTokenValido = "tok3"; sessoes["c-dpk"] = { apiKey: "CHAVEPUBLICA1234567890ABCDEFGHIJKLMN", token: "tok2" };
+const fetch401 = (async (u: string | URL | Request, i?: RequestInit) => { const h = new Headers(i && i.headers || {}); if (String(u).includes("/dpk-price/") && h.get("authorization") !== "Bearer tok3") return j({}, 401); return fakeFetch(u, i); }) as typeof fetch;
+r = await F.executar({ termos: ["WK84213"], conexoes: ["c-dpk"] }, { ...deps(), fetch: fetch401 }) as L;
+confere("DPK: 401 no preço → novo login e preços saem", r.resultados[0].ok && r.resultados[0].ofertas.length === 1 && sessoes["c-dpk"]?.token === "tok3", JSON.stringify(r.resultados[0]));
 
 // ---------- sem senha guardada
 senhas["c-dpk"] = null; sessoes["c-dpk"] = null;

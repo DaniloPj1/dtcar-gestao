@@ -151,15 +151,14 @@ export function textoPedido(pedido, itens, { contato = "", hora = 9 } = {}) {
 }
 
 /* ---------------- consulta ao vivo (etapa 2): robô reconhecido pelo endereço do portal ---------------- */
-/** Mesma regra da função "compras": o robô é escolhido pelo endereço cadastrado em Ajustes (ou pelo nome do fornecedor). */
+/** Mesma regra da função "compras": o robô é escolhido SÓ pelo endereço do portal cadastrado em Ajustes (o nome do fornecedor não conta). */
 export const NOME_ROBO = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Pellegrino Compre Online", toli: "Portal Toli" };
-export function roboDaConexao(c, nomeForn = "") {
-  const t = ((c && c.endereco) || "") + " " + ((c && c.obs) || "") + " " + nomeForn;
-  const s = t.toLowerCase();
-  if (/dpk\.com\.br|\bdpk\b/.test(s)) return "dpk";
-  if (/rolemar/.test(s)) return "rolemar";
-  if (/pellegrino/.test(s)) return "pellegrino";
-  if (/toli/.test(s)) return "toli";
+export function roboDaConexao(c) {
+  const s = String((c && c.endereco) || "").toLowerCase();
+  if (/dpk\.com\.br/.test(s)) return "dpk";
+  if (/rolemarmaster\.com|rolemar\./.test(s)) return "rolemar";
+  if (/pellegrino\.com\.br/.test(s)) return "pellegrino";
+  if (/tolidistribuidora\.com\.br/.test(s)) return "toli";
   return null;
 }
 /** Como a conexão consulta: "servidor" (DPK, Rolemar, Pellegrino), "pc" (Toli: pelo programa do PC, em preparação) ou "" (portal não reconhecido) */

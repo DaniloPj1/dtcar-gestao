@@ -91,8 +91,8 @@ function Pesquisa({ d, recarregar, irCarrinho }) {
   const linhas = grupos.reduce((n, x) => n + x.itens.length, 0);
   const conectados = d.conexoes.filter(c => c.ativo !== false);
   const nomeDe = id => nomeFornecedor(dados.fornecedores.find(f => f.id === id));
-  const noServidor = conectados.filter(c => ondeConsulta(roboDaConexao(c, nomeDe(c.fornecedor_id))) === "servidor");
-  const noPC = conectados.filter(c => ondeConsulta(roboDaConexao(c, nomeDe(c.fornecedor_id))) === "pc");
+  const noServidor = conectados.filter(c => ondeConsulta(roboDaConexao(c)) === "servidor");
+  const noPC = conectados.filter(c => ondeConsulta(roboDaConexao(c)) === "pc");
   // consulta ao vivo: manda os códigos para a função "compras" (ela entra nos portais com o login guardado) e recarrega os preços
   const consultar = async (termos, chave) => {
     if (vivo && vivo.buscando) return;
@@ -428,7 +428,7 @@ export function CartaoFornecedoresConectados() {
     <span class="sub">Fornecedores que a tela Compras consulta ao vivo com o seu login. A senha fica guardada só no servidor e nunca volta para a tela.
       ${" " + PORTAIS_DICA}</span>
     ${erro ? html`<div class="aviso">${erro}</div>` : !l ? html`<span class="dica">Carregando…</span>` : html`
-      ${l.length ? html`<div class="lista">${l.map(c => { const a = acesso(c.id), robo = roboDaConexao(c, nome(c.fornecedor_id)), onde = ondeConsulta(robo), t = teste && teste.id === c.id ? teste : null;
+      ${l.length ? html`<div class="lista">${l.map(c => { const a = acesso(c.id), robo = roboDaConexao(c), onde = ondeConsulta(robo), t = teste && teste.id === c.id ? teste : null;
         return html`<div class="linha cp-conexao" key=${c.id} data-forn=${nome(c.fornecedor_id)} data-robo=${robo || ""}><span class="meio"><strong>${nome(c.fornecedor_id)}${c.ativo === false ? " (desligado)" : ""}</strong>
           <span>${(TIPOS.find(t => t[1] === c.tipo) || TIPOS[0])[0]}${c.endereco ? " · " + c.endereco : ""}${c.usuario ? " · usuário " + c.usuario : ""} · ${a ? "senha guardada em " + fmtData(a.gravado_em) : "sem senha guardada"}</span>
           <span class="cp-robo">${c.tipo === "sem_integracao" ? "Sem consulta ao vivo (preços informados e última compra)."
@@ -472,7 +472,7 @@ function EditarConexao({ c, ja, acesso, onFechar, onSalvo }) {
     <div class="campo"><label>Acesso</label><${Seg} rotulo="Tipo de acesso" opcoes=${TIPOS.map(t => [t[0], "info"])} valor=${(TIPOS.find(t => t[1] === x.tipo) || TIPOS[0])[0]} onEscolha=${t => set({ tipo: TIPOS.find(y => y[0] === t)[1] })} /></div>
     ${x.tipo !== "sem_integracao" ? html`
       <${Campo} id="cp-cx-end" rotulo=${x.tipo === "portal" ? "Endereço do portal" : "Endereço do webservice"} dica=${"Começa com https://. É pelo endereço que o sistema sabe qual robô usar. " + PORTAIS_DICA}><${Texto} id="cp-cx-end" valor=${x.endereco} onMuda=${v => set({ endereco: v })} /></${Campo}>
-      ${(() => { const robo = roboDaConexao({ endereco: x.endereco, obs: x.obs }, nomeFornecedor(dados.fornecedores.find(f => f.id === x.fornecedor_id))); return x.endereco.trim()
+      ${(() => { const robo = roboDaConexao({ endereco: x.endereco }); return x.endereco.trim()
         ? html`<p class="dica" id="cp-cx-robo">${robo ? "Robô reconhecido: " + NOME_ROBO[robo] + (ondeConsulta(robo) === "pc" ? " (consulta pelo programa do PC, em preparação)." : (robo === "rolemar" ? ". Usuário = o CNPJ da oficina." : ". Usuário = o e-mail de login no portal.")) : "Portal não reconhecido: a consulta ao vivo não vai funcionar neste endereço."}</p>` : null; })()}
       <div class="grade">
         <${Campo} id="cp-cx-usu" rotulo="Usuário (login no fornecedor)"><${Texto} id="cp-cx-usu" autocomplete="off" valor=${x.usuario} onMuda=${v => set({ usuario: v })} /></${Campo}>

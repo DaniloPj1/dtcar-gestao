@@ -255,6 +255,16 @@ confere("testar portal desconhecido", r.ok === false && situacoes["c-x"][0] === 
   rc = await F.executar({ acao: "placa", placa: "QXN1E49" }, semDpk) as L;
   confere("placa Rolemar: sessão expirada em JSON → novo login e o modelo vem", rc.encontrado === true && rolemarLogins === rl0 + 1, JSON.stringify(rc) + " logins=" + (rolemarLogins - rl0)); }
 
+{ // duas inclusões AO MESMO TEMPO no carrinho da DPK: com a trava, as duas peças ficam (sem a trava a segunda apagava a primeira)
+  dpkCart = null; let trava = false; const lento = (async (u: string | URL | Request, i?: RequestInit) => { if (String(u).endsWith("/dpk-order/api/cart/getByFilter")) await new Promise((r) => setTimeout(r, 30)); return fakeFetch(u, i); }) as typeof fetch;
+  const dt = { ...deps(), fetch: lento, travar: async () => { if (trava) return false; trava = true; return true; }, destravar: async () => { trava = false; }, esperar: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 20))) };
+  const um = (cod: string, prod: number, sap: string) => F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: cod, descricao: "X", marca: "M", qtd: 1, preco: 1, extra: { productId: prod, sapCode: sap } } }, dt, "49016409000195") as Promise<L>;
+  const [a, b] = await Promise.all([um("AAA111", 1, "111"), um("BBB222", 2, "222")]);
+  const sap = (dpkCart?.cartItems || []).map((i: L) => i.productRetailerId).sort();
+  confere("carrinho do portal: duas inclusões ao mesmo tempo, as duas peças ficam (trava por conexão)", a.ok && b.ok && sap.length === 2 && sap[0] === 111 && sap[1] === 222 && trava === false, JSON.stringify(sap));
+  trava = true; const c = await um("CCC333", 3, "333"); trava = false;
+  confere("carrinho do portal: trava presa por outra inclusão → espera e, sem conseguir, avisa sem gravar", c.ok === false && /em andamento/.test(c.erro));
+}
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));
 confere("sem segredo no código", !/senha-|password":\s*"[^"{]|sb_secret|eyJ[A-Za-z0-9_-]{30,}/.test(fonte) && !/[A-Za-z0-9]{40}/.test(fonte.replace(/CHAVEPUBLICA/g, "")));

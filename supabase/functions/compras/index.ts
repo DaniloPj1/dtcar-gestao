@@ -49,6 +49,11 @@ export type Deps = {
   limparSessoes?: (idsVivos: string[]) => Promise<void>;
   fetch: typeof fetch;
   agora?: () => Date;
+  /** trava por conexão para o carrinho do portal (o POST da DPK manda o carrinho inteiro: duas inclusões ao mesmo tempo se sobrescreveriam).
+   *  Devolve true se pegou a trava. Revisão do Codex, 17/11/2026. */
+  travar?: (conexaoId: string) => Promise<boolean>;
+  destravar?: (conexaoId: string) => Promise<void>;
+  esperar?: (ms: number) => Promise<void>;
   /** só no "testar" com amostra=true (administrador): recebe um trecho da página de resultado, para afinar o leitor do portal */
   amostra?: (trecho: string) => void;
 };
@@ -426,6 +431,10 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     const item: ItemPortal = { codigo: txt(it.codigo).slice(0, 60), descricao: txt(it.descricao).slice(0, 200), marca: txt(it.marca).slice(0, 60), qtd: Number(it.qtd) || 1, preco: Number(it.preco) || 0, extra: it.extra && typeof it.extra === "object" ? it.extra : undefined };
     if (!item.codigo) throw new ErroUso("Informe o código da peça.");
     if (robo !== "dpk") return { ok: false, robo, nome: robo ? NOME_ROBO[robo] : "", erro: (robo ? NOME_ROBO[robo] : "Este portal") + ": pôr no carrinho do portal ainda não está pronto; o item ficou só no carrinho do sistema." };
+    // uma inclusão por vez no carrinho de cada conexão (ler → somar → gravar), mesmo vindo de aparelhos diferentes
+    let travou = !deps.travar;
+    for (let n = 0; !travou && n < 20; n++) { travou = await deps.travar!(c.id); if (!travou) await (deps.esperar || ((ms) => new Promise((r) => setTimeout(r, ms))))(500); }
+    if (!travou) return { ok: false, robo, nome: NOME_ROBO[robo], erro: NOME_ROBO[robo] + ": outra inclusão no carrinho do portal está em andamento; tente de novo em alguns segundos. O item ficou no carrinho do sistema." };
     try {
       let res = { ok: false, detalhe: "" };
       await comSessao(deps, c, robo, cnpjOficina, async (s) => { res = await dpkCarrinho(deps, s, item); return []; });
@@ -434,7 +443,7 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
       const msg = (e as Error).message || "falha";
       if (e instanceof ErroAcesso) { await deps.situacao(c.id, "erro", msg); const v = await deps.lerSessao(c.id); await deps.gravarSessao(c.id, v && v.apiKey ? { apiKey: v.apiKey } : null); }
       return { ok: false, robo, nome: NOME_ROBO[robo], erro: msg };
-    }
+    } finally { if (deps.destravar) await deps.destravar(c.id).catch(() => {}); }
   }
   if (acao !== "consultar") throw new ErroUso("Ação desconhecida: " + acao);
   const termos = [...new Set((Array.isArray(corpo.termos) ? corpo.termos : [corpo.termo]).map((t: unknown) => txt(t)).filter((t: string) => t.length >= 3))].slice(0, MAX_TERMOS);
@@ -487,6 +496,19 @@ export function depsDoBanco(adm: Db, usuario: Db): Omit<Deps, "papel" | "fetch" 
       if (!s) { await adm.from("segredos").delete().eq("chave", chave("compras_sessao", id)); return; }
       await adm.from("segredos").upsert({ chave: chave("compras_sessao", id), valor: JSON.stringify(s), atualizado_em: new Date().toISOString() });
     },
+    travar: async (id) => {
+      const k = chave("compras_trava", id), agora = Date.now();
+      const { error } = await adm.from("segredos").insert({ chave: k, valor: String(agora), atualizado_em: new Date(agora).toISOString() });
+      if (!error) return true;
+      // já existe: se ficou esquecida (função caiu no meio), toma a trava velha com segurança (só se ainda for a mesma)
+      const { data } = await adm.from("segredos").select("valor").eq("chave", k).maybeSingle();
+      const desde = Number(data && data.valor) || 0;
+      if (!data) return false;
+      if (agora - desde < 30000) return false;
+      const { data: tomada } = await adm.from("segredos").update({ valor: String(agora), atualizado_em: new Date(agora).toISOString() }).eq("chave", k).eq("valor", String(desde)).select("chave");
+      return Array.isArray(tomada) && tomada.length === 1;
+    },
+    destravar: async (id) => { await adm.from("segredos").delete().eq("chave", chave("compras_trava", id)); },
     limparSessoes: async (vivos) => {
       const { data } = await adm.from("segredos").select("chave").like("chave", "compras_sessao:%");
       const mortas = (data || []).map((l: { chave: string }) => l.chave).filter((k: string) => !vivos.includes(k.slice("compras_sessao:".length)));

@@ -707,6 +707,19 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   verdade não são alcançáveis do ambiente de desenvolvimento** (DPK e Pellegrino respondem 403 ao proxy): a primeira consulta real é feita em
   produção com o login do Danilo em Ajustes — conferir contra `teste/teste_compras_funcao.ts` (portais de mentira no formato mapeado).
   Testes: `deno run -A teste/teste_compras_funcao.ts` (50) e `python3 teste/teste_compras.py` (função de mentira no `mock.js`, PC e celular).
+- **Aba Fornecedores (v178, pedidos do Danilo em 17/11/2026): "não quero que a pesquisa seja no meu sistema, quero que pesquise a peça no fornecedor".**
+  A tela Compras abre na aba **Fornecedores** (`Cotacao` em `js/telas/compraspecas.js`; a aba do acervo saiu de Compras — o acervo de peças fica só
+  dentro da O.S., em "Peças deste veículo"). O que for digitado (código ou descrição) vai COMO ESTÁ para a busca de cada portal (`termos: [texto]`),
+  com `placa` e `veiculo` junto (os portais que buscam por placa vão usar quando esse passo for mapeado; hoje vale o texto). O resultado é UMA
+  tabela no jeito do protótipo — Fornecedor | Código | Preço | Estoque | Prazo | Origem | Carrinho — montada por `linhasCotacao` em
+  `js/compraspecas.js`: ao vivo (resposta da função) + preços informados dos mesmos códigos como referência; **só entra resultado com estoque
+  disponível** (estoque 0 fica de fora e é contado; última compra das notas não entra; estoque em branco = "disponível", caso do Pellegrino que
+  só diz quando NÃO tem). Fornecedor que não respondeu aparece na tabela com o motivo (senha recusada, Toli pelo PC, sem resultado).
+  **Fichinha de cada fornecedor conectado** (`SituacaoFornecedores`, `#cot-situacoes`): verde = Conectado (logado), vermelho = Com erro (com o
+  motivo), cinza = aguardando a primeira consulta / portal não reconhecido, azul = pelo programa do PC. `detalheLegivel` troca a hora ISO do
+  detalhe pelo horário de Brasília (a função passou a gravar `horaBR`). Carrinho resumido ao lado (PC largo) ou embaixo, com "Gerar pedidos por
+  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **Ainda não feito:** pôr o item também no carrinho do PORTAL do fornecedor
+  (hoje o carrinho é só do sistema: o pedido é finalizado no portal à mão); busca por placa dentro de cada portal; robô da Toli no PC.
 
 ### Quadro "Óleo e filtros" recolhido na página do veículo (15/11/2026, v138)
 - Com ficha gravada, o card começa recolhido: só a linha de cima (litros, viscosidade, selo) e o botão "Mostrar/Ocultar" (`#fo-alternar`). O corpo (`#fo-corpo`) com filtros, "Refazer ou editar" e "Confirmar" só existe aberto. Sem ficha, o card continua como antes. Vale para PC e celular (é o mesmo componente).

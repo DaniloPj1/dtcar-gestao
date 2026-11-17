@@ -1,7 +1,7 @@
-// Compras (v59, pedido do Danilo em 16/11/2026) — etapa 1.
-// Pesquisa a peça pela PLACA do carro (essencial, pedido do Danilo) ou pelo código/descrição, mostra o preço de cada fornecedor
-// numa tela só (com a origem e a data de cada preço), põe no carrinho e, ao comprar, o carrinho vira um pedido por fornecedor,
-// que o Danilo finaliza em cada fornecedor depois (site, WhatsApp ou vendedor). Nada é comprado sozinho.
+// Compras (v59, pedido do Danilo em 16/11/2026).
+// Aba Fornecedores: a peça é pesquisada NOS PORTAIS dos fornecedores (com o login do Danilo) e o preço e o estoque de cada um aparecem numa
+// tabela só, do mais barato para o mais caro, só com estoque; põe no carrinho e, ao comprar, o carrinho vira um pedido por fornecedor,
+// que o Danilo finaliza em cada fornecedor depois. Nada é comprado sozinho. O acervo de peças do sistema fica dentro da O.S. (17/11/2026).
 // Também aqui: o cartão "Fornecedores conectados" dos Ajustes (tipo de acesso, endereço, usuário e senha — a senha vai para
 // segredos e nunca volta para a tela).
 // Etapa 2 (consulta AO VIVO, pedido do Danilo em 16/11/2026): o botão "Consultar fornecedores" de cada peça manda os códigos dela para a
@@ -14,10 +14,8 @@ import { useApp, Modal, Vazio, Campo, Texto, Dinheiro, Seg, Abas, I } from "../u
 import { normPlaca, placaValida, exPlaca, reais, fmtDataHora, fmtData, qtdFmt, parseValor, linkWhats, lsGet, lsSet, num2 } from "../util.js";
 import { etapaOS } from "../regras.js";
 import { consultarPlaca, paraResumo } from "../placa.js";
-import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conversaoDoItem, chaveDaPeca } from "../pecas.js";
-import { FotoPeca } from "./pecasveiculo.js";
-import { DIAS_ATUAL, ORIGEM_TEXTO, SITUACOES_PEDIDO, numPedido, nomeFornecedor, totalLinha, arred2, codigosDaLinha, indiceOfertas, ofertasDaLinha,
-  precosSoltos, buscarNoCatalogo, agruparCarrinho, textoPedido, normCodigo, NOME_ROBO, roboDaConexao, ondeConsulta, termosDaLinha, resumoAoVivo } from "../compraspecas.js";
+import { ORIGEM_TEXTO, SITUACOES_PEDIDO, numPedido, nomeFornecedor, totalLinha, arred2, indiceOfertas, agruparCarrinho, textoPedido,
+  NOME_ROBO, roboDaConexao, ondeConsulta, linhasCotacao } from "../compraspecas.js";
 
 const LS_BUSCA = "dtcar-compras-busca";
 // tabela ausente = o v59 ainda não foi rodado (a api já traduz; aqui vale também para a resposta crua)
@@ -29,7 +27,7 @@ const fornecedoresAtivos = l => (l || []).filter(f => f.ativo !== false).slice()
 /* ---------------- tela principal: Pesquisar | Carrinho | Pedidos ---------------- */
 export function Compras({ params = {} }) {
   const { dados, ir } = useApp();
-  const [aba, setAba] = useState(["pesquisar", "carrinho", "pedidos"].includes(params.aba) ? params.aba : "pesquisar");
+  const [aba, setAba] = useState(["fornecedores", "carrinho", "pedidos"].includes(params.aba) ? params.aba : "fornecedores");
   const [d, setD] = useState(null), [erro, setErro] = useState("");
   const carregar = useCallback(async () => {
     try {
@@ -39,223 +37,123 @@ export function Compras({ params = {} }) {
     } catch (e) { setErro(semV59(e) || e.message || "Não deu para abrir as compras agora."); }
   }, []);
   useEffect(() => { carregar(); }, []);
-  const trocar = k => { setAba(k); ir("/compras" + (k === "pesquisar" ? "" : "?aba=" + k)); };
+  const trocar = k => { setAba(k); ir("/compras" + (k === "fornecedores" ? "" : "?aba=" + k)); };
   if (erro) return html`<div class="pagina"><section class="card"><h2>Compras</h2><div class="aviso" id="cp-erro">${erro}</div>
     <div class="acoes"><button type="button" class="btn" onClick=${carregar}>Tentar de novo</button></div></section></div>`;
   if (!d) return html`<div class="pagina"><${Vazio}>Carregando as compras…</${Vazio}></div>`;
   const aFinalizar = d.pedidos.filter(p => p.situacao === "a_finalizar").length;
   return html`<div class="pagina cp-pagina">
-    <${Abas} abas=${[["pesquisar", "Pesquisar peça"], ["carrinho", "Carrinho" + (d.carrinho.length ? " (" + d.carrinho.length + ")" : "")], ["pedidos", "Pedidos aos fornecedores" + (aFinalizar ? " (" + aFinalizar + " a finalizar)" : "")]]} ativa=${aba} onTroca=${trocar} />
-    ${aba === "pesquisar" ? html`<${Pesquisa} d=${d} recarregar=${carregar} irCarrinho=${() => trocar("carrinho")} />`
+    <${Abas} abas=${[["fornecedores", "Fornecedores"], ["carrinho", "Carrinho" + (d.carrinho.length ? " (" + d.carrinho.length + ")" : "")], ["pedidos", "Pedidos aos fornecedores" + (aFinalizar ? " (" + aFinalizar + " a finalizar)" : "")]]} ativa=${aba} onTroca=${trocar} />
+    ${aba === "fornecedores" ? html`<${Cotacao} d=${d} recarregar=${carregar} irCarrinho=${() => trocar("carrinho")} />`
       : aba === "carrinho" ? html`<${Carrinho} d=${d} recarregar=${carregar} irPedidos=${() => trocar("pedidos")} irPesquisa=${() => trocar("pesquisar")} />`
       : html`<${Pedidos} d=${d} recarregar=${carregar} />`}
   </div>`;
 }
 
-/* ---------------- pesquisa: placa primeiro ---------------- */
-function Pesquisa({ d, recarregar, irCarrinho }) {
+/* ---------------- aba Fornecedores: a pesquisa é NO FORNECEDOR (protótipo aprovado; pedidos do Danilo em 17/11/2026) ----------------
+ * "Não quero que a pesquisa seja no meu sistema: quero que pesquise a peça no fornecedor." O que for digitado (código ou descrição) vai
+ * como está para a busca de cada portal, como se fosse digitado lá; a placa vai junto (os portais que buscam por placa usam; os outros
+ * ignoram — em preparação). Resultado: UMA tabela Fornecedor | Código | Preço | Estoque | Prazo | Origem | Carrinho, só com estoque
+ * disponível. O acervo de peças do sistema fica só dentro da O.S., ao incluir peça. Carrinho resumido ao lado para gerar os pedidos. */
+const LS_COT = "dtcar-compras-cot";
+/** detalhe da conexão gravado pelo servidor pode trazer a hora em ISO (2026-11-17T13:05:15.263Z): mostra no horário de Brasília */
+const detalheLegivel = t => String(t || "").replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/g, m => fmtDataHora(m));
+const SITUACAO_CURTA = { ok: "Conectado", erro: "Com erro", aguardando: "Aguardando a primeira consulta" };
+/** Fichinha de cada fornecedor conectado: logado (conectado) ou não, com o motivo. Pedido do Danilo em 17/11/2026. */
+function SituacaoFornecedores({ conexoes, nomeDe }) {
+  if (!conexoes.length) return null;
+  return html`<div class="cot-situacoes" id="cot-situacoes" aria-label="Situação dos fornecedores">${conexoes.map(c => { const robo = roboDaConexao(c), onde = ondeConsulta(robo);
+    const sit = onde === "pc" ? "pc" : !onde ? "sem_robo" : c.situacao === "ok" ? "ok" : c.situacao === "erro" ? "erro" : "aguardando";
+    const texto = sit === "pc" ? "pelo programa do PC (em preparação)" : sit === "sem_robo" ? "portal não reconhecido" : SITUACAO_CURTA[sit];
+    return html`<span key=${c.id} class=${"cot-sit cot-sit-" + sit} data-forn=${nomeDe(c.fornecedor_id)} title=${detalheLegivel(c.detalhe)}><i aria-hidden="true"></i><b>${nomeDe(c.fornecedor_id)}</b> · ${texto}${sit === "erro" && c.detalhe ? html`<small>: ${detalheLegivel(c.detalhe).slice(0, 90)}</small>` : null}</span>`; })}</div>`;
+}
+function Cotacao({ d, recarregar, irCarrinho }) {
   const { dados } = useApp();
-  const g = lsGet(LS_BUSCA) || {};
-  const [placaTxt, setPlacaTxt] = useState(g.placa || ""), [txt, setTxt] = useState(g.txt || ""), [grupo, setGrupo] = useState("");
-  const [cat, setCat] = useState(null), [erroCat, setErroCat] = useState("");
-  const [aberta, setAberta] = useState(""), [detalhe, setDetalhe] = useState(null), [informar, setInformar] = useState(null), [aoCarrinho, setAoCarrinho] = useState(null);
-  const [vivo, setVivo] = useState(null);   // { chave, buscando, r } da última consulta ao vivo (uma por clique)
-  useEffect(() => { lsSet(LS_BUSCA, { placa: placaTxt, txt }); }, [placaTxt, txt]);
-  useEffect(() => { let vivo = true; carregarPecas().then(c => vivo && setCat(c)).catch(() => vivo && setErroCat("Não deu para abrir o catálogo de peças agora. Abra o sistema uma vez com internet e tente de novo.")); return () => { vivo = false; }; }, []);
-  // placa: a do cadastro vale sem custo; fora do cadastro, a consulta básica da função "placa" (guarda a cópia, não paga duas vezes)
+  const g = lsGet(LS_COT) || {};
+  const [placaTxt, setPlacaTxt] = useState(g.placa || ""), [txt, setTxt] = useState(g.txt || "");
+  const [vivo, setVivo] = useState(null), [aoCarrinho, setAoCarrinho] = useState(null);
+  useEffect(() => { lsSet(LS_COT, { placa: placaTxt, txt }); }, [placaTxt, txt]);
   const placa = normPlaca(placaTxt), ePlaca = placaValida(placa);
   const doCadastro = useMemo(() => ePlaca ? dados.veiculos.find(v => v.placa === placa) || null : null, [ePlaca, placa, dados.veiculos]);
   const [cons, setCons] = useState(null);
   useEffect(() => {
     if (!ePlaca || doCadastro) { setCons(null); return; }
-    let vivo = true; setCons({ placa, buscando: true });
-    const t = setTimeout(() => consultarPlaca(placa, "basico", { manual: true }).then(x => { if (vivo) setCons({ placa, r: x }); }), 600);
-    return () => { vivo = false; clearTimeout(t); };
+    let v = true; setCons({ placa, buscando: true });
+    const t = setTimeout(() => consultarPlaca(placa, "basico", { manual: true }).then(x => { if (v) setCons({ placa, r: x }); }), 600);
+    return () => { v = false; clearTimeout(t); };
   }, [ePlaca, placa, doCadastro]);
   const cr = cons && cons.placa === placa ? cons.r : null;
   const daConsulta = cr && cr.ok && cr.encontrado ? paraResumo(cr.dados || {}) : null;
   const veiculo = doCadastro || daConsulta;
-  const estoque = useMemo(() => dados.produtos.filter(p => p.ativo !== false && p.tipo === "produto" && p.referencia && Number(p.estoque_atual) > 0)
-    .map(p => ({ id: p.id, ref: p.referencia, descricao: p.descricao, qtd: Number(p.estoque_atual) })), [dados.produtos]);
+  const nomeVeic = v => [v.marca, v.modelo, v.ano_mod || v.ano].filter(Boolean).join(" ");
   const idx = useMemo(() => indiceOfertas({ precos: d.precos, vinculos: d.vinculos, produtos: dados.produtos, fornecedores: dados.fornecedores }), [d.precos, d.vinculos, dados.produtos, dados.fornecedores]);
-  // resultado: com placa, as peças do carro (o texto filtra dentro delas); sem placa, a pesquisa no catálogo pelo código ou pela descrição
-  const base = useMemo(() => {
-    if (!cat) return null;
-    if (ePlaca) { if (!veiculo) return null; const x = pecasDoVeiculo(cat, veiculo); return { modo: "placa", entendido: x.entendido, ano: x.ano, total: x.total, grupos: agruparEquivalentes(x.grupos, estoque) }; }
-    if (txt.trim().length < 3) return null;
-    const x = buscarNoCatalogo(cat, txt); return { ...x, grupos: agruparEquivalentes(x.grupos, estoque) };
-  }, [cat, ePlaca, veiculo, txt, estoque]);
-  const grupos = useMemo(() => !base ? [] : (base.modo === "placa" ? filtrarPecas(base.grupos, txt) : base.grupos).filter(x => !grupo || x.grupo === grupo), [base, txt, grupo]);
-  const mostrados = useMemo(() => { const s = new Set(); for (const x of grupos) for (const e of x.itens) for (const k of codigosDaLinha(e)) s.add(k); return s; }, [grupos]);
-  const soltos = useMemo(() => !ePlaca && txt.trim().length >= 3 ? precosSoltos(idx, txt, mostrados) : [], [ePlaca, txt, idx, mostrados]);
-  const linhas = grupos.reduce((n, x) => n + x.itens.length, 0);
   const conectados = d.conexoes.filter(c => c.ativo !== false);
   const nomeDe = id => nomeFornecedor(dados.fornecedores.find(f => f.id === id));
   const noServidor = conectados.filter(c => ondeConsulta(roboDaConexao(c)) === "servidor");
   const noPC = conectados.filter(c => ondeConsulta(roboDaConexao(c)) === "pc");
-  // consulta ao vivo: manda os códigos para a função "compras" (ela entra nos portais com o login guardado) e recarrega os preços
-  const consultar = async (termos, chave) => {
-    if (vivo && vivo.buscando) return;
-    if (!termos.length) { setVivo({ chave, r: { ok: false, erro: "Esta peça não tem código para consultar." } }); return; }
-    setVivo({ chave, buscando: true });
-    const r = await api.compras.aoVivo({ termos, conexoes: noServidor.map(c => c.id) });
-    setVivo({ chave, r });
+  // o que vai para os fornecedores: exatamente o que foi digitado (código ou descrição), como se fosse digitado no portal; a placa vai junto
+  const alvo = useMemo(() => { const t = txt.trim(); return { termos: t.length >= 3 ? [t] : [] }; }, [txt]);
+  const consultar = async () => {
+    if (!alvo.termos.length || (vivo && vivo.buscando)) return;
+    setVivo({ buscando: true, termos: alvo.termos });
+    const r = await api.compras.aoVivo({ termos: alvo.termos, placa: ePlaca ? placa : "", veiculo: veiculo ? nomeVeic(veiculo) : "", conexoes: noServidor.map(c => c.id) });
+    setVivo({ r, termos: alvo.termos });
     if (r && r.ok) await recarregar();
   };
-  const estadoVivo = chave => vivo && vivo.chave === chave ? (vivo.buscando ? "Consultando os fornecedores…" : resumoAoVivo(vivo.r, nomeDe)) : "";
-  const nomeVeic = v => [v.marca, v.modelo, v.ano_mod || v.ano].filter(Boolean).join(" ");
-
-  return html`
-    <section class="card cp-busca">
-      <div class="cp-campos">
-        <label class="cp-campo cp-campo-placa"><span>Placa do veículo</span>
-          <input id="cp-placa" class="inp" autocomplete="off" maxlength="8" placeholder="ABC1D23" value=${placaTxt}
-            onInput=${e => { setPlacaTxt(e.target.value.toUpperCase()); setGrupo(""); }} /></label>
-        <label class="cp-campo cp-campo-txt"><span>${ePlaca ? "Filtrar as peças do carro" : "Ou código / descrição da peça"}</span>
-          <input id="cp-txt" class="inp" type="search" autocomplete="off" placeholder=${ePlaca ? "Ex.: pastilha, amortecedor, código" : "Ex.: N1234, amortecedor dianteiro"} value=${txt} onInput=${e => setTxt(e.target.value)} /></label>
-        ${placaTxt || txt ? html`<button type="button" class="btn cp-limpar" onClick=${() => { setPlacaTxt(""); setTxt(""); setGrupo(""); }}>Limpar</button>` : null}
-      </div>
-      ${ePlaca ? html`<div class=${"of-placa" + (veiculo ? "" : " of-placa-sem")} id="cp-veiculo" role="status"><b>${exPlaca(placa)}</b>
-        ${doCadastro ? html`<span>do cadastro: ${nomeVeic(doCadastro)}</span>`
-          : cons && cons.buscando ? html`<span>fora do cadastro: consultando a placa…</span>`
-          : daConsulta ? html`<span>fora do cadastro, pela consulta da placa: ${nomeVeic(daConsulta)}${cr.origem === "api" && cr.valor_centavos ? " (consulta paga: " + reais(cr.valor_centavos / 100) + ")" : " (sem custo: já consultada antes)"}</span>`
-          : cr && cr.ok ? html`<span>placa não encontrada na consulta. Pesquise pelo código ou pela descrição (deixe a placa em branco).</span>`
-          : cr ? html`<span>fora do cadastro e a consulta não respondeu${cr.semRede ? " (sem internet)" : cr.sem_saldo ? " (sem saldo no API Placas)" : cr.desligada ? " (consulta de placa desligada)" : ""}. Pesquise pelo código ou pela descrição.</span>` : null}
-        ${base && base.entendido ? html`<span class="of-entendido">Buscando por: <b>${base.entendido}</b></span>` : null}</div>` : null}
-      <p class="sub" id="cp-origem">${noServidor.length
-        ? html`<b>Consultar fornecedores</b> em cada peça busca ao vivo em <b>${noServidor.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ")}</b> com o seu login (uma consulta por clique).${noPC.length ? " " + noPC.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ") + ": pelo programa do PC, em preparação." : ""}`
-        : conectados.length ? html`Fornecedores conectados: <b>${conectados.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ")}</b>. Nenhum deles tem portal reconhecido para a consulta ao vivo: confira o endereço em Ajustes › Fornecedores conectados.`
-        : html`Os preços vêm do que você informar (o que o vendedor passou) e da última compra das notas de entrada. Para consultar ao vivo, conecte os fornecedores em Ajustes › Fornecedores conectados.`}
-        ${" "}Preço com mais de ${DIAS_ATUAL} dias não conta como menor preço.</p>
-      ${!ePlaca && txt.trim().length >= 3 && noServidor.length ? html`<div class="acoes cp-vivo-livre"><button type="button" class="btn btn-sm" id="cp-consultar-livre" disabled=${!!(vivo && vivo.buscando)} onClick=${() => consultar([txt.trim()], "livre:" + txt.trim())}><span>Consultar fornecedores com “${txt.trim()}”</span></button>
-        ${estadoVivo("livre:" + txt.trim()) ? html`<span class="dica cp-vivo-estado" role="status">${estadoVivo("livre:" + txt.trim())}</span>` : null}</div>` : null}
-    </section>
-    ${erroCat ? html`<div class="aviso aviso-erro">${erroCat}</div>` : null}
-    ${!cat && !erroCat ? html`<${Vazio}>Carregando o catálogo de peças…</${Vazio}>` : null}
-    ${cat && !ePlaca && txt.trim().length < 3 ? html`<${Vazio}>Digite a placa do carro para ver as peças que servem nele e o preço de cada fornecedor. Sem a placa, pesquise pelo código ou pela descrição da peça.</${Vazio}>` : null}
-    ${base && !linhas && !soltos.length ? html`<div class="vazio" id="cp-nada">${base.modo === "placa"
-      ? (base.total ? "Nada com esse filtro nas peças do carro." : html`Nenhuma peça de catálogo para ${base.entendido || "este veículo"}. Pesquise pelo código ou pela descrição (deixe a placa em branco).`)
-      : html`Nada no catálogo para "${txt.trim()}".`}
-      <div class="acoes"><button type="button" class="btn btn-sm" id="cp-informar-livre" onClick=${() => setInformar({ livre: txt.trim() })}>Informar preço para outro código</button></div></div>` : null}
-    ${base && linhas ? html`<section class="card cp-resultado">
-      <div class="cp-res-topo"><span class="sub" id="cp-res-info"><b>${linhas} ${linhas === 1 ? "peça" : "peças"}</b>${base.modo === "placa" ? " para " + base.entendido : base.modo === "codigo" ? " com esse código" : ""}${base.cortado ? " (mostrando as " + linhas + " primeiras: escreva mais para afinar)" : ""}. Dado de catálogo: confira a aplicação antes de comprar.</span>
-        ${base.modo === "placa" && base.grupos.length > 1 ? html`<select id="cp-grupo" class="inp pv-sel" aria-label="Grupo de peças" value=${grupo} onChange=${e => setGrupo(e.target.value)}>
-          <option value="">Todos os grupos</option>${base.grupos.map(x => html`<option key=${x.grupo} value=${x.grupo}>${x.grupo} (${x.itens.length})</option>`)}</select>` : null}</div>
-      <div class="cp-lista">${grupos.map(x => html`<div key=${x.grupo} class="pv-grupo"><h4>${x.grupo}</h4>
-        ${x.itens.map(e => html`<${LinhaPeca} key=${e.peca.marca + e.peca.codigo} e=${e} idx=${idx} aberta=${aberta === e.peca.codigo} onConversao=${() => setAberta(aberta === e.peca.codigo ? "" : e.peca.codigo)}
-          onAmpliar=${() => setDetalhe(e)} onInformar=${() => setInformar({ e })} onCarrinho=${o => setAoCarrinho({ o, e })}
-          aoVivo=${noServidor.length ? { estado: estadoVivo(e.peca.marca + e.peca.codigo), ocupado: !!(vivo && vivo.buscando), consultar: () => consultar(termosDaLinha(e), e.peca.marca + e.peca.codigo) } : null} />`)}</div>`)}</div>
-    </section>` : null}
-    ${soltos.length ? html`<section class="card" id="cp-soltos"><h3>Preços informados com esse código (fora do catálogo)</h3>
-      <${TabelaOfertas} ofertas=${soltos.map(o => ({ ...o, menor: false }))} onCarrinho=${o => setAoCarrinho({ o, e: null })} /></section>` : null}
-    ${detalhe ? html`<${DetalhePeca} e=${detalhe} onFechar=${() => setDetalhe(null)} />` : null}
-    ${informar ? html`<${InformarPreco} e=${informar.e} livre=${informar.livre} onFechar=${() => setInformar(null)} onSalvo=${async () => { setInformar(null); await recarregar(); }} />` : null}
-    ${aoCarrinho ? html`<${AoCarrinho} o=${aoCarrinho.o} e=${aoCarrinho.e} placa=${ePlaca ? placa : ""} onFechar=${() => setAoCarrinho(null)}
-      onSalvo=${async ir => { setAoCarrinho(null); await recarregar(); if (ir) irCarrinho(); }} />` : null}`;
-}
-
-/* uma peça da pesquisa, com os preços de cada fornecedor */
-function LinhaPeca({ e, idx, aberta, onConversao, onAmpliar, onInformar, onCarrinho, aoVivo }) {
-  const p = e.peca, conv = conversaoDoItem(e);
-  const ofertas = useMemo(() => ofertasDaLinha(idx, codigosDaLinha(e)), [idx, e]);
-  return html`<div class="pv-item cp-item" data-cod=${p.codigo} data-todos=${"|" + [p.codigo, ...(e.alternativas || []).map(a => a.codigo)].join("|") + "|"}>
-    <${FotoPeca} p=${p} onAbrir=${onAmpliar} />
-    <div class="pv-meio"><strong>${p.descricao}</strong>
-      ${p.medidas ? html`<span class="pv-med">${p.medidas}</span>` : null}
-      <span class="pv-apl">${e.conferir ? html`<b class="c-warn">Confira a versão: </b>` : null}${e.aplicacoes.slice(0, 3).join(" · ")}${e.aplicacoes.length > 3 ? " · e mais " + (e.aplicacoes.length - 3) : ""}</span>
-      ${e.estoque ? html`<span class="pv-estoque"><b>Tem no estoque:</b> ${e.estoque.descricao} (${qtdFmt(e.estoque.qtd)} un)</span>` : null}
-      <span class="pv-cod">${p.oem.length ? "Cód. montadora " + chaveDaPeca(p) + " · " : ""}${p.marca} ${p.codigo}${(e.alternativas || []).length ? " · equivalentes: " + e.alternativas.slice(0, 3).map(a => a.marca + " " + a.codigo).join(", ") + (e.alternativas.length > 3 ? "…" : "") : ""}</span>
-      ${aberta ? html`<div class="pv-conv">${conv.length ? conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)
-        : html`<span class="dica">O catálogo ${p.marca} não traz conversão para esta peça.</span>`}</div>` : null}</div>
-    <div class="pv-botoes">${aoVivo ? html`<button type="button" class="btn btn-sm btn-pri cp-consultar" disabled=${aoVivo.ocupado} onClick=${aoVivo.consultar}>Consultar fornecedores</button>` : null}
-      <button type="button" class="btn btn-sm cp-informar" onClick=${onInformar}>Informar preço</button>
-      <button type="button" class="btn btn-sm pv-conversao" aria-expanded=${aberta} onClick=${onConversao}>Conversão</button></div>
-    <div class="cp-precos">${aoVivo && aoVivo.estado ? html`<span class="dica cp-vivo-estado" role="status">${aoVivo.estado}</span>` : null}
-      ${ofertas.length ? html`<${TabelaOfertas} ofertas=${ofertas} onCarrinho=${onCarrinho} />`
-      : html`<span class="dica cp-sem-preco">Nenhum preço ainda para esta peça.${aoVivo ? " Clique em “Consultar fornecedores” para buscar ao vivo, ou use" : " Use"} “Informar preço” com o valor que o fornecedor passou.</span>`}</div>
+  const res = useMemo(() => linhasCotacao({ resposta: vivo && vivo.r && vivo.r.ok ? vivo.r : null, idx, codigos: vivo && vivo.termos ? vivo.termos : alvo.termos, fornecedores: dados.fornecedores }), [vivo, idx, alvo.termos, dados.fornecedores]);
+  const grupos = useMemo(() => agruparCarrinho(d.carrinho, dados.fornecedores), [d.carrinho, dados.fornecedores]);
+  const totalCar = arred2(grupos.reduce((s, x) => s + x.total, 0));
+  const podeConsultar = !!alvo.termos.length && !!noServidor.length && !(vivo && vivo.buscando);
+  return html`<div class="cot">
+    <div class="cot-principal">
+      <section class="card cot-busca">
+        <span class="sub">Pesquisar a peça nos fornecedores (a busca é feita no portal de cada um, com o seu login)</span>
+        <div class="cp-campos">
+          <label class="cp-campo cp-campo-placa"><span>Placa (opcional)</span><input id="cot-placa" class="inp" autocomplete="off" maxlength="8" placeholder="ABC1D23" value=${placaTxt} onInput=${e => setPlacaTxt(e.target.value.toUpperCase())} /></label>
+          <label class="cp-campo cp-campo-txt"><span>Código ou descrição da peça (vai como está para o fornecedor)</span>
+            <input id="cot-txt" class="inp" type="search" autocomplete="off" placeholder="Ex.: WK84213, pastilha de freio" value=${txt} onInput=${e => setTxt(e.target.value)} onKeyDown=${e => { if (e.key === "Enter" && podeConsultar) consultar(); }} /></label>
+          <button type="button" class="btn btn-pri cot-consultar" id="cot-consultar" disabled=${!podeConsultar} onClick=${consultar}>${vivo && vivo.buscando ? "Consultando…" : "Consultar fornecedores"}</button>
+        </div>
+        ${ePlaca ? html`<div class=${"of-placa" + (veiculo ? "" : " of-placa-sem")} id="cot-veiculo" role="status"><b>${exPlaca(placa)}</b>
+          ${doCadastro ? html`<span>do cadastro: ${nomeVeic(doCadastro)}</span>` : cons && cons.buscando ? html`<span>consultando a placa…</span>`
+            : daConsulta ? html`<span>pela consulta da placa: ${nomeVeic(daConsulta)}</span>` : cr ? html`<span>placa não encontrada. Pesquise pelo código (deixe a placa em branco).</span>` : null}
+          ${veiculo ? html`<span class="of-entendido">A placa vai junto na busca dos portais que aceitam placa (em preparação); o que vale hoje é o texto da peça.</span>` : null}</div>` : null}
+        <${SituacaoFornecedores} conexoes=${conectados} nomeDe=${nomeDe} />
+        <p class="sub" id="cot-origem">${noServidor.length
+          ? html`Consulta ao vivo em <b>${noServidor.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ")}</b> com o seu login.${noPC.length ? " " + noPC.map(c => nomeDe(c.fornecedor_id)).filter(Boolean).join(", ") + ": pelo programa do PC, em preparação." : ""} Só aparece peça com estoque no fornecedor.`
+          : html`Nenhum fornecedor com portal reconhecido. Conecte em Ajustes › Fornecedores conectados (endereço do portal, usuário e senha).`}</p>
+      </section>
+      ${vivo && vivo.r && !vivo.r.ok ? html`<div class="aviso aviso-erro" id="cot-erro">${vivo.r.erro}</div>` : null}
+      ${res.linhas.length || res.semResposta.length ? html`<section class="card cot-tabela">
+        <div class="cot-cab"><span class="cot-forn">Fornecedor</span><span class="cot-cod">Código</span><span class="cot-preco">Preço</span><span class="cot-est">Estoque</span><span class="cot-prazo">Prazo</span><span class="cot-ori">Origem do preço</span><span class="cot-acao"></span></div>
+        ${res.linhas.map(o => html`<div key=${o.chave} class=${"cot-linha" + (o.menor ? " cot-menor" : "") + (o.antigo ? " cp-velho" : "")} data-forn=${o.fornecedor}>
+          <span class="cot-forn"><b>${o.fornecedor}</b>${o.menor ? html` <span class="pill p-ok cp-selo-menor">menor preço</span>` : null}<small>${o.descricao}</small></span>
+          <span class="cot-cod">${[o.marca, o.codigo].filter(Boolean).join(" ")}</span>
+          <span class="cot-preco"><b>${reais(o.preco)}</b></span>
+          <span class="cot-est">${o.estoque === null || o.estoque === undefined ? "disponível" : qtdFmt(o.estoque) + " un"}</span>
+          <span class="cot-prazo">${o.prazo || "—"}</span>
+          <span class="cot-ori">${ORIGEM_TEXTO[o.origem].toLowerCase()} · ${dataPreco(o)}${o.antigo ? html` <span class="c-warn">(há ${o.idade} dias)</span>` : null}</span>
+          <span class="cot-acao"><button type="button" class=${"btn btn-sm cp-add" + (o.menor ? " btn-pri" : "")} onClick=${() => setAoCarrinho(o)}>${I.carrinho}<span>Carrinho</span></button></span>
+        </div>`)}
+        ${res.semResposta.map(x => html`<div key=${"s" + x.fornecedor_id} class="cot-linha cot-sem" data-forn=${x.fornecedor}><span class="cot-forn"><b>${x.fornecedor}</b></span><span class="cot-resto">${x.motivo}</span></div>`)}
+        ${res.semEstoque ? html`<p class="sub cot-rodape">${res.semEstoque} ${res.semEstoque === 1 ? "resultado sem estoque não aparece" : "resultados sem estoque não aparecem"} (só peça disponível entra).</p>` : null}
+      </section>` : vivo && !vivo.buscando && vivo.r && vivo.r.ok ? html`<div class="vazio" id="cot-nada">Nenhum fornecedor tem essa peça em estoque agora.</div>`
+      : !vivo ? html`<${Vazio}>Digite o código ou a descrição da peça e clique em “Consultar fornecedores”. A busca é feita no portal de cada fornecedor; aparece o preço e o estoque de cada um, do mais barato para o mais caro.</${Vazio}>` : null}
+    </div>
+    <aside class="card cot-carrinho" id="cot-carrinho">
+      <h3>Carrinho</h3>
+      ${grupos.length ? html`${grupos.map(x => html`<div class="cot-car-forn" key=${x.fornecedor_id}><span class="cot-car-nome">${x.fornecedor}</span>
+          ${x.itens.map(i => html`<div class="cot-car-item" key=${i.id}><span>${i.descricao} × ${qtdFmt(i.qtd)}</span><span>${reais(totalLinha(i))}</span></div>`)}</div>`)}
+        <div class="cot-car-total"><span>Total</span><b>${reais(totalCar)}</b></div>
+        <button type="button" class="btn btn-pri" id="cot-gerar" onClick=${irCarrinho}>Gerar pedidos por fornecedor</button>
+        <span class="dica">Os pedidos são criados aqui e finalizados em cada fornecedor, um a um.</span>`
+        : html`<span class="dica">Vazio. Use “Carrinho” no preço do fornecedor escolhido.</span>`}
+    </aside>
+    ${aoCarrinho ? html`<${AoCarrinho} o=${aoCarrinho} e=${null} placa=${ePlaca ? placa : ""} onFechar=${() => setAoCarrinho(null)} onSalvo=${async ir => { setAoCarrinho(null); await recarregar(); if (ir) irCarrinho(); }} />` : null}
   </div>`;
 }
 
-/* preços de uma peça: um por fornecedor e código, do menor para o maior */
-function TabelaOfertas({ ofertas, onCarrinho }) {
-  return html`<div class="cp-ofertas" role="table" aria-label="Preços nos fornecedores">
-    ${ofertas.map(o => html`<div key=${o.chave} role="row" class=${"cp-oferta" + (o.menor ? " cp-menor" : "") + (o.antigo || o.origem === "ultima_compra" ? " cp-velho" : "")} data-forn=${o.fornecedor}>
-      <span role="cell" class="cp-of-forn"><b>${o.fornecedor}</b>${o.menor ? html` <span class="pill p-ok cp-selo-menor">Menor preço</span>` : null}</span>
-      <span role="cell" class="cp-of-cod">${[o.marca, o.codigo].filter(Boolean).join(" ")}</span>
-      <span role="cell" class="cp-of-preco"><b>${reais(o.preco)}</b></span>
-      <span role="cell" class="cp-of-est">${o.estoque === null || o.estoque === undefined ? "" : o.estoque > 0 ? qtdFmt(o.estoque) + " un no fornecedor" : html`<b class="c-bad">sem estoque no fornecedor</b>`}${o.prazo ? (o.estoque !== null && o.estoque !== undefined ? " · " : "") + o.prazo : ""}</span>
-      <span role="cell" class="cp-of-origem"><b>${ORIGEM_TEXTO[o.origem]}</b> · ${dataPreco(o)}${o.antigo ? html` <span class="c-warn">(há ${o.idade === null ? "?" : o.idade} dias: confirme)</span>` : null}
-        ${o.ultima ? html`<small>última compra: ${reais(o.ultima.preco)} em ${fmtData(o.ultima.em)}</small>` : null}</span>
-      <span role="cell" class="cp-of-acao"><button type="button" class=${"btn btn-sm cp-add" + (o.menor ? " btn-pri" : "")} onClick=${() => onCarrinho(o)}>${I.carrinho}<span>Carrinho</span></button></span>
-    </div>`)}</div>`;
-}
-
-/* peça ampliada (clicar na foto): foto grande, medidas, aplicações e conversão */
-function DetalhePeca({ e, onFechar }) {
-  const p = e.peca, conv = conversaoDoItem(e);
-  return html`<${Modal} titulo=${p.descricao} onFechar=${onFechar} largo>
-    <div class="pv-grande" id="cp-detalhe"><${FotoPeca} p=${p} grande />
-      <div class="pv-meio"><span class="pv-cod">${p.grupo} · ${p.marca} ${p.codigo}${p.emb ? " · embalagem com " + p.emb : ""}</span>
-        <div class="pv-bloco"><h5>Medidas</h5>${p.medidas ? html`<span class="pv-med">${p.medidas}</span>` : html`<span class="dica">O catálogo não traz medidas separadas para esta peça.</span>`}</div>
-        <div class="pv-bloco"><h5>Serve em</h5>${e.conferir ? html`<span class="c-warn"><b>Confira a versão do carro.</b></span>` : null}<ul class="pv-aplis">${e.aplicacoes.map((a, n) => html`<li key=${n}>${a}</li>`)}</ul></div>
-        <div class="pv-bloco"><h5>Conversão</h5>${conv.length ? html`<div class="pv-conv">${conv.map(c => html`<div key=${c.marca}><span>${c.marca}</span><b>${c.codigos.join(" / ")}</b></div>`)}</div>`
-          : html`<span class="dica">O catálogo ${p.marca} não traz conversão para esta peça.</span>`}</div></div></div>
-    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Fechar</button></div>
-  </${Modal}>`;
-}
-
-/* preço que o vendedor passou: fornecedor, a peça (marca e código), preço, estoque e prazo. O banco grava a data e a origem "Informado". */
-function InformarPreco({ e, livre, onFechar, onSalvo }) {
-  const { dados, avisar } = useApp();
-  const forns = fornecedoresAtivos(dados.fornecedores);
-  // opções de peça: a da linha, as equivalentes, a conversão e o código da montadora
-  const opcoes = useMemo(() => {
-    if (!e) return [];
-    const l = [[e.peca.marca, e.peca.codigo, e.peca.descricao]], vistos = new Set([normCodigo(e.peca.codigo)]);
-    const add = (marca, cod) => { const k = normCodigo(cod); if (k.length < 3 || vistos.has(k)) return; vistos.add(k); l.push([marca === "Montadora (original)" ? "ORIGINAL" : marca, cod, e.peca.descricao]); };
-    for (const a of e.alternativas || []) add(a.marca, a.codigo);
-    for (const c of conversaoDoItem(e)) for (const cod of c.codigos) add(c.marca, cod);
-    return l;
-  }, [e]);
-  const [forn, setForn] = useState(forns.length === 1 ? forns[0].id : ""), [op, setOp] = useState(e ? "0" : "outro");
-  const [codigo, setCodigo] = useState(livre || ""), [marca, setMarca] = useState(""), [desc, setDesc] = useState(e ? e.peca.descricao : "");
-  const [preco, setPreco] = useState(0), [est, setEst] = useState(""), [prazo, setPrazo] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
-  const escolhida = op === "outro" ? [marca, codigo, desc] : opcoes[Number(op)];
-  const salvar = async () => {
-    if (!forn) return setErro("Escolha o fornecedor.");
-    if (!escolhida || normCodigo(escolhida[1]).length < 2) return setErro("Informe o código da peça no fornecedor.");
-    if (!escolhida[2] || !String(escolhida[2]).trim()) return setErro("Informe a descrição da peça.");
-    if (!(preco > 0)) return setErro("Informe o preço.");
-    const estoque = String(est).trim() === "" ? null : parseValor(est);
-    if (estoque !== null && !(estoque >= 0)) return setErro("Estoque no fornecedor inválido.");
-    setSalvando(true); setErro("");
-    try { await api.compras.precos.salvar({ fornecedor_id: forn, codigo: escolhida[1], marca: escolhida[0], descricao: escolhida[2], preco, estoque, prazo }); avisar("Preço guardado."); await onSalvo(); }
-    catch (x) { setErro(x.message); } finally { setSalvando(false); }
-  };
-  return html`<${Modal} titulo="Informar preço do fornecedor" onFechar=${onFechar}>
-    ${e ? html`<p class="sub">${e.peca.descricao}</p>` : null}
-    ${!forns.length ? html`<div class="aviso">Nenhum fornecedor no cadastro. Cadastre em Cadastros › Fornecedores.</div>` : null}
-    <${Campo} id="cp-pr-forn" rotulo="Fornecedor" obrig><select id="cp-pr-forn" class="inp" value=${forn} onChange=${x => setForn(x.target.value)}>
-      <option value="">Escolha…</option>${forns.map(f => html`<option key=${f.id} value=${f.id}>${nomeFornecedor(f)}</option>`)}</select></${Campo}>
-    ${e ? html`<${Campo} id="cp-pr-peca" rotulo="Peça que o fornecedor tem (marca e código)" obrig><select id="cp-pr-peca" class="inp" value=${op} onChange=${x => setOp(x.target.value)}>
-      ${opcoes.map((o, n) => html`<option key=${n} value=${String(n)}>${o[0]} ${o[1]}</option>`)}<option value="outro">Outro código (digitar)</option></select></${Campo}>` : null}
-    ${op === "outro" ? html`<div class="grade">
-      <${Campo} id="cp-pr-cod" rotulo="Código" obrig><${Texto} id="cp-pr-cod" valor=${codigo} onMuda=${setCodigo} /></${Campo}>
-      <${Campo} id="cp-pr-marca" rotulo="Marca"><${Texto} id="cp-pr-marca" class="inp maiusc" valor=${marca} onMuda=${v => setMarca(v.toUpperCase())} /></${Campo}></div>
-      ${!e ? html`<${Campo} id="cp-pr-desc" rotulo="Descrição da peça" obrig><${Texto} id="cp-pr-desc" class="inp maiusc" valor=${desc} onMuda=${v => setDesc(v.toUpperCase())} /></${Campo}>` : null}` : null}
-    <div class="grade">
-      <${Campo} id="cp-pr-preco" rotulo="Preço (cada)" obrig><${Dinheiro} id="cp-pr-preco" valor=${preco} onMuda=${setPreco} /></${Campo}>
-      <${Campo} id="cp-pr-est" rotulo="Estoque no fornecedor" dica="Opcional."><${Texto} id="cp-pr-est" inputmode="decimal" valor=${est} onMuda=${setEst} /></${Campo}>
-      <${Campo} id="cp-pr-prazo" rotulo="Prazo de entrega" dica="Opcional. Ex.: amanhã cedo."><${Texto} id="cp-pr-prazo" valor=${prazo} onMuda=${setPrazo} /></${Campo}>
-    </div>
-    <p class="sub">O preço fica guardado com a data de hoje como “Informado”. O mesmo código no mesmo fornecedor troca o preço anterior.</p>
-    ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
-    <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
-      <button type="button" class="btn btn-pri" id="cp-pr-salvar" disabled=${salvando} onClick=${salvar}>${salvando ? "Guardando…" : "Guardar preço"}</button></div>
-  </${Modal}>`;
-}
-
-/* pôr no carrinho: quantidade e, se quiser, a O.S. para a qual a peça vai */
+/* ---------------- pôr no carrinho (a partir do preço de um fornecedor) ---------------- */
 function AoCarrinho({ o, e, placa, onFechar, onSalvo }) {
   const { dados, avisar } = useApp();
   const abertas = useMemo(() => dados.ordens.filter(x => !x._pendente && ["orcamento", "execucao", "pagamento"].includes(etapaOS(x))), [dados.ordens]);
@@ -435,7 +333,7 @@ export function CartaoFornecedoresConectados() {
             : onde === "servidor" ? html`Robô: <b>${NOME_ROBO[robo]}</b> · consulta pelo servidor`
             : onde === "pc" ? html`Robô: <b>${NOME_ROBO[robo]}</b> · consulta pelo programa do PC (em preparação; o código do SMS do primeiro acesso entra junto)`
             : html`<b class="c-warn">Portal não reconhecido pelo endereço.</b> ${PORTAIS_DICA}`}</span>
-          <span>${SITUACAO_CONEXAO[c.situacao] || c.situacao}${c.detalhe ? ": " + c.detalhe : ""}</span>
+          <span>${SITUACAO_CONEXAO[c.situacao] || c.situacao}${c.detalhe ? ": " + detalheLegivel(c.detalhe) : ""}</span>
           ${t ? html`<span class="cp-teste" role="status">${t.rodando ? "Testando a conexão…" : t.r && t.r.ok ? (t.r.no_pc ? "Este portal é consultado pelo programa do PC (em preparação)." : "Conectou e buscou: " + ((t.r.ofertas || []).length) + " preço(s) de teste.") : "Não conectou: " + ((t.r && t.r.erro) || "sem resposta")}</span>` : null}</span>
           <span class="cp-conexao-botoes">${onde === "servidor" && c.ativo !== false && a ? html`<button type="button" class="btn btn-sm cp-testar" disabled=${!!(t && t.rodando)} onClick=${() => testar(c)}>Testar conexão</button>` : null}
           <button type="button" class="btn btn-sm" onClick=${() => setEdita(c)}>Editar</button></span></div>`; })}</div>` : html`<span class="dica">Nenhum fornecedor conectado.</span>`}

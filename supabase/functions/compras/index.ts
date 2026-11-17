@@ -188,7 +188,8 @@ const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, 
 export function dpkCasarCarro(texto: string, montadoras: Json[], veiculosDe: (id: number) => Json[] | null, motores: Json[] | null = null): Partial<FiltroDpk> & { montadora?: Json; veiculo?: Json } {
   const T = " " + semAcento(texto).replace(/[^A-Z0-9.]+/g, " ") + " ";
   const contem = (d: string) => { const x = semAcento(d).replace(/[^A-Z0-9.]+/g, " ").trim(); return x.length >= 2 && T.includes(" " + x + " ") ? x.length : 0; };
-  const APELIDO: Record<string, string> = { VW: "VOLKSWAGEN", GM: "CHEVROLET", CHEV: "CHEVROLET", "M.BENZ": "MERCEDES-BENZ", MB: "MERCEDES-BENZ" };
+  // valores já no mesmo formato das descrições comparadas (sem acento, só letras, números e ponto; "-" vira espaço). Revisão do Codex, 17/11/2026.
+  const APELIDO: Record<string, string> = { VW: "VOLKSWAGEN", GM: "CHEVROLET", CHEV: "CHEVROLET", "M.BENZ": "MERCEDES BENZ", MB: "MERCEDES BENZ", MERCEDES: "MERCEDES BENZ" };
   const T2 = Object.entries(APELIDO).reduce((a, [k, v]) => a.replace(new RegExp(" " + k.replace(".", "\\.") + " ", "g"), " " + v + " "), T);
   const melhor = (lista: Json[], alvo: string) => lista.map((m) => ({ m, n: (() => { const x = semAcento(String(m.description || m.model || m.name || "")).replace(/[^A-Z0-9.]+/g, " ").trim(); return x.length >= 2 && alvo.includes(" " + x + " ") ? x.length : 0; })() })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
   const mont = melhor(montadoras, T2); if (!mont) return {};

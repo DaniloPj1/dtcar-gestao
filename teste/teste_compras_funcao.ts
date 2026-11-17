@@ -296,6 +296,9 @@ confere("é código? código vai sem filtro do carro; descrição vai com", F.eh
   confere("casar o carro: o nome mais completo vence (ONIX PLUS, não ONIX)", o.vehicleId === 901 && o.year === 2021, JSON.stringify(o));
   const g = F.dpkCasarCarro("GM ONIX 1.0 2020", [{ id: 7, description: "CHEVROLET" }], () => [{ id: 900, description: "ONIX" }]);
   confere("casar o carro: GM vira CHEVROLET", g.carMakerId === 7 && g.vehicleId === 900);
+  for (const tx of ["MB SPRINTER 2.2 2020", "M.BENZ SPRINTER 2.2 2020", "MERCEDES-BENZ SPRINTER 2.2 2020", "MERCEDES SPRINTER 2.2 2020"]) {
+    const m = F.dpkCasarCarro(tx, [{ id: 30, description: "MERCEDES-BENZ" }, { id: 19, description: "FIAT" }], (id) => id === 30 ? [{ id: 3001, description: "SPRINTER" }] : null);
+    confere("casar o carro: " + tx + " → MERCEDES-BENZ SPRINTER", m.carMakerId === 30 && m.vehicleId === 3001, JSON.stringify(m)); }
   for (const tx of ["FIAT TORO 2.0 2019/2020", "FIAT TORO 2.0 2019 2020", "FIAT TORO 2019-2020 2.0"]) {
     const y = F.dpkCasarCarro(tx, [{ id: 19, description: "FIAT" }], () => [{ id: 2420, description: "TORO" }]);
     confere("casar o carro: fabricação/modelo (" + tx + ") usa o ano-modelo 2020", y.year === 2020, JSON.stringify(y)); }

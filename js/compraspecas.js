@@ -152,12 +152,13 @@ export function textoPedido(pedido, itens, { contato = "", hora = 9 } = {}) {
 
 /* ---------------- consulta ao vivo (etapa 2): robô reconhecido pelo endereço do portal ---------------- */
 /** Mesma regra da função "compras": o robô é escolhido SÓ pelo endereço do portal cadastrado em Ajustes (o nome do fornecedor não conta). */
-export const NOME_ROBO = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Pellegrino Compre Online", toli: "Portal Toli" };
+export const NOME_ROBO = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Compre Online", toli: "Portal Toli" };
 export function roboDaConexao(c) {
   const s = String((c && c.endereco) || "").toLowerCase();
   if (/dpk\.com\.br/.test(s)) return "dpk";
   if (/rolemarmaster\.com|rolemar\./.test(s)) return "rolemar";
-  if (/pellegrino\.com\.br/.test(s)) return "pellegrino";
+  // plataforma "Compre Online" (Pellegrino, Sama e outras): mesma regra do roboDe da função "compras"
+  if (/^https?:\/\/compreonline\.[a-z0-9-]+(\.[a-z0-9-]+)*\.com\.br(\/|$)/.test(s) || /pellegrino\.com\.br/.test(s)) return "pellegrino";
   if (/tolidistribuidora\.com\.br/.test(s)) return "toli";
   return null;
 }

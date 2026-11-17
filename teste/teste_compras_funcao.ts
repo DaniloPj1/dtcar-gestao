@@ -12,6 +12,7 @@ type L = Record<string, any>;
 // ---------- regras puras
 confere("robô só pelo endereço (nome do fornecedor não conta)", F.roboDe({ endereco: "https://www.dpk.com.br/#/" }) === "dpk" && F.roboDe({ endereco: "https://rolemarmaster.com" }) === "rolemar"
   && F.roboDe({ endereco: "https://compreonline.pellegrino.com.br/" }) === "pellegrino" && F.roboDe({ endereco: "https://portal.tolidistribuidora.com.br/ords/f?p=2401" }) === "toli"
+  && F.roboDe({ endereco: "https://compreonline.sama.com.br/" }) === "pellegrino" && F.siteCompreOnline({ endereco: "https://compreonline.sama.com.br/x" }) === "https://compreonline.sama.com.br"
   && F.roboDe({ endereco: "" }) === null && F.roboDe({ endereco: "https://outro.com.br" }) === null && F.roboDe({ endereco: "https://capitolio.com.br" }) === null);
 confere("número em reais", F.numero("1.234,56") === 1234.56 && F.numero("63,24") === 63.24 && F.numero("88.81") === 88.81 && F.numero(12.5) === 12.5 && F.numero("") === 0 && F.numero("R$ 10,00") === 10 && F.numero("1.000") === 1000);
 try { await F.executar({ acao: "testar", conexao: "abc def; drop" }, { papel: { gestor: true, admin: true } } as never); confere("testar com id inválido: recusa sem ir ao banco", false); } catch (e) { confere("testar com id inválido: recusa sem ir ao banco", e instanceof F.ErroUso); }
@@ -60,7 +61,7 @@ async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): P
   if (u === F.ROLEMAR.site + "/ajax-login") { rolemarLogins++; const f = await texto() as L; if (h.get("x-requested-with") !== "XMLHttpRequest") return j({ status: "erro" }, 400);
     return f.usuario === "49016409000195" && f.senha === "senha-rol" && !recusarSenha ? j({ data: { idusuario_lojista: 7, nome: "DTCAR", cod_erp: "66333" } }, 200, { "set-cookie": "logado=1; Path=/" }) : j({ status: "erro", mensagem: "Usuário ou senha inválidos" }); }
   if (u === F.ROLEMAR.site + "/ajax-lista-filiais") return h.get("cookie")?.includes("logado=1") ? j({ cod_emp: "16", filiais: [{ CODPARC: "66333", CODEMP: "16", EMPRESA: "ROLEMAR-CARIACICA" }] }) : j({ status: "erro", mensagem: "Faça login" });
-  if (u === F.ROLEMAR.site + "/ajax-busca-placa") { if (!h.get("cookie")?.includes("logado=1")) return j({ status: "erro" }); const f = await texto() as L; return f.placa === "QXN1E49" ? j({ data: { brand: "FIAT", model: "TORO", madeYear: "2020", engine: "2.0" } }) : j({ data: null }); }
+  if (u === F.ROLEMAR.site + "/ajax-busca-placa") { if (!h.get("cookie")?.includes("logado=1")) return j({ status: "erro", mensagem: "Sessão expirada, faça login" }); const f = await texto() as L; return f.placa === "QXN1E49" ? j({ data: { brand: "FIAT", model: "TORO", madeYear: "2020", engine: "2.0" } }) : j({ data: null }); }
   if (u === F.ROLEMAR.site + "/ajax-busca") { if (!h.get("cookie")?.includes("logado=1")) return j({ status: "erro", mensagem: "Sessão expirada, faça login" }); const f = await texto() as L;
     return f.cod_emp === "16" && f.busca === "WK84213" ? j({ data: [{ id: 9, fabricante: "WEGA", codigo_fabricante: "FCD2158/1", item: "FILTRO COMBUSTIVEL", estoque: "5", preco: "70,00", valor_final: "63,24", multiplo: 1, texto: "TORO 2.0" }], ultima_pagina: 1 }) : j({ data: [] }); }
   // Pellegrino
@@ -109,6 +110,14 @@ rc = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codig
 confere("carrinho do portal DPK: item repetido soma a quantidade no carrinho que já existe", rc.ok === true && dpkPosts.length === 2 && dpkPosts[1].id === "cart-1" && dpkPosts[1].cartItems.length === 1 && dpkPosts[1].cartItems[0].quantity === 3 && /somada/.test(rc.detalhe), JSON.stringify(dpkPosts[1]));
 rc = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "X1", descricao: "x", marca: "m", qtd: 1, preco: 1 } }, deps()) as L;
 confere("carrinho do portal DPK: sem código interno, recusa com orientação", rc.ok === false && /consulte de novo/.test(rc.erro));
+{ // leitura do carrinho falhou (500) ou veio fora do padrão: NÃO grava (o POST substituiria o carrinho inteiro)
+  const antes = dpkPosts.length;
+  for (const ruim of [new Response("erro", { status: 500 }), j({ cartItems: "x" }), j([{ id: "c", cartItems: "x" }])]) {
+    const f = (async (u: string | URL | Request, i?: RequestInit) => String(u) === F.DPK.api + "/dpk-order/api/cart/getByFilter" ? ruim.clone() : fakeFetch(u, i)) as typeof fetch;
+    const x = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "WK84213", descricao: "F", marca: "MANN", qtd: 1, preco: 1, extra: { productId: 2905056, sapCode: "83545" } } }, { ...deps(), fetch: f }) as L;
+    confere("carrinho do portal DPK: leitura do carrinho falhou/fora do padrão → não grava nada", x.ok === false && /nada foi gravado/.test(x.erro) && dpkPosts.length === antes, JSON.stringify(x));
+  }
+}
 rc = await F.executar({ acao: "carrinho_portal", conexao: "c-rol", item: { codigo: "FCD2158/1", descricao: "x", marca: "WEGA", qtd: 1, preco: 1 } }, deps()) as L;
 confere("carrinho do portal Rolemar: ainda não pronto, aviso claro", rc.ok === false && /ainda não está pronto/.test(rc.erro));
 try { await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "WK84213" } }, deps({ gestor: false, admin: false })); confere("carrinho do portal: mecânico não", false); } catch (e) { confere("carrinho do portal: mecânico não", e instanceof F.ErroUso); }
@@ -239,6 +248,12 @@ confere("testar portal desconhecido", r.ok === false && situacoes["c-x"][0] === 
   const st = ops.find((o) => o._t === "compras_fornecedores" && o._op === "update");
   confere("banco: situação e detalhe (cortado em 300)", st._v.situacao === "erro" && st._v.detalhe.length === 300 && st._f.id === "c1");
 }
+
+{ // Rolemar responde 200 com "Sessão expirada": refaz o login uma vez e acha o modelo
+  const semDpk = { ...deps(), conexoes: async (ids: string[] | null) => conexoes.filter((c) => c.id !== "c-dpk" && (!ids || ids.includes(c.id))) };
+  sessoes["c-rol"] = { cookies: { PHPSESSID: "velho" }, cod_emp: "16" }; const rl0 = rolemarLogins;
+  rc = await F.executar({ acao: "placa", placa: "QXN1E49" }, semDpk) as L;
+  confere("placa Rolemar: sessão expirada em JSON → novo login e o modelo vem", rc.encontrado === true && rolemarLogins === rl0 + 1, JSON.stringify(rc) + " logins=" + (rolemarLogins - rl0)); }
 
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));

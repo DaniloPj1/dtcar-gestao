@@ -196,7 +196,11 @@ async function dpkCarrinho(deps: Deps, s: Sessao, item: ItemPortal): Promise<{ o
   if (!productId || !sap) return { ok: false, detalhe: "DPK: este preço veio sem o código interno do portal; consulte de novo e adicione pelo resultado ao vivo." };
   const rg = await pedir(deps, DPK.api + "/dpk-order/api/cart/getByFilter", { headers: dpkHeaders(s) });
   if (rg.status === 401) throw new ErroAcesso("sessão vencida");
-  const lista = (await rg.json().catch(() => null)) as Json[] | null;
+  // o POST manda o carrinho INTEIRO: sem ler o que já está lá, gravar apagaria os itens do portal. Falhou a leitura → não grava (revisão do Codex, 17/11/2026)
+  if (!rg.ok) return { ok: false, detalhe: "DPK: não deu para ler o carrinho do portal (HTTP " + rg.status + "); nada foi gravado lá. O item ficou só no carrinho do sistema." };
+  const lista = (await rg.json().catch(() => undefined)) as Json[] | null | undefined;
+  if (!Array.isArray(lista) || lista.some((c) => !c || typeof c !== "object" || (c.cartItems !== undefined && !Array.isArray(c.cartItems))))
+    return { ok: false, detalhe: "DPK: o carrinho do portal respondeu fora do padrão; nada foi gravado lá. O item ficou só no carrinho do sistema." };
   const atual = Array.isArray(lista) && lista.length ? lista.find((c) => c && c.closed === false) || lista[0] : null;
   const retailerId = Number(atual && atual.retailerId) || Number(s.retailerId) || 2;
   const existentes: Json[] = atual && Array.isArray(atual.cartItems) ? atual.cartItems : [];
@@ -256,6 +260,7 @@ async function rolemarPlaca(deps: Deps, s: Sessao, placa: string): Promise<strin
   if (r.status === 401 || r.status === 302) throw new ErroAcesso("sessão vencida");
   if (!r.ok) return "";
   const c = await r.json().catch(() => null) as Json | null;
+  if (c && c.status === "erro") { if (/login|sess|autentic/i.test(txt(c.mensagem))) throw new ErroAcesso("sessão vencida"); return ""; }
   const d = (c && (c.data || c.veiculo || c)) as Json | null;
   if (!d || typeof d !== "object") return "";
   return [txt(d.brand || d.marca), txt(d.model || d.modelo), txt(d.version || d.versao), txt(d.madeYear || d.ano || d.anoModelo), txt(d.engine || d.motor)].filter(Boolean).join(" ").slice(0, 120);

@@ -138,6 +138,9 @@ def rodar(b, nome, w, h):
   pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1000)
   pg.click("#cp-conectar"); pg.wait_for_timeout(300); pg.select_option("#cp-cx-forn", "f2"); pg.click("button:has-text('Portal (site)')"); pg.fill("#cp-cx-end", "https://www.dpk.com.br/#/"); pg.wait_for_timeout(200)
   chk(T("Ajustes: robô reconhecido pelo endereço ao digitar"), "Robô reconhecido: DPK" in pg.inner_text("#cp-cx-robo"), pg.inner_text("[role=dialog]")[:300])
+  pg.fill("#cp-cx-end", "https://compreonline.sama.com.br/"); pg.wait_for_timeout(150)
+  chk(T("Ajustes: Compre Online de outra loja (Sama) também reconhecido, igual ao servidor"), "Robô reconhecido: Compre Online" in pg.inner_text("#cp-cx-robo"), pg.inner_text("#cp-cx-robo"))
+  pg.fill("#cp-cx-end", "https://www.dpk.com.br/#/"); pg.wait_for_timeout(150)
   pg.fill("#cp-cx-usu", "danilo@dtcar.com"); pg.fill("#cp-cx-senha", "S3nh@dpk"); pg.click("#cp-cx-salvar"); pg.wait_for_timeout(600)
   dpk = pg.locator('.cp-conexao[data-robo="dpk"]')
   chk(T("conexão DPK: robô, consulta pelo servidor e botão Testar conexão; AutoPeças sem robô e sem o botão"), dpk.count() == 1 and "Robô: DPK" in dpk.inner_text() and "pelo servidor" in dpk.inner_text() and dpk.locator(".cp-testar").count() == 1

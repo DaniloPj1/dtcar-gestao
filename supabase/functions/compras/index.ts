@@ -37,6 +37,11 @@ export type Robo = "dpk" | "rolemar" | "pellegrino" | "toli";
 export type Oferta = { codigo: string; marca: string; descricao: string; preco: number; estoque: number | null; prazo: string; aplicacao: string; ref?: string; foto?: string; extra?: Json };
 /** endereço de foto que o portal devolveu: só https e só se parecer um endereço (nada de data: ou javascript:) */
 const fotoOk = (u: unknown) => { const t = txt(u); return /^https:\/\/[^\s"'<>]+$/i.test(t) ? t : ""; };
+/** foto com endereço relativo ("/img/x.jpg", "img/x.jpg" ou "//cdn/x.jpg"): completa com o site do portal; só sai https */
+export const fotoDoSite = (u: unknown, site: string) => {
+  const t = txt(u); if (!t || /^(data|javascript):/i.test(t)) return "";
+  try { const x = new URL(t.startsWith("//") ? "https:" + t : t, site + "/"); x.protocol = "https:"; return fotoOk(x.href); } catch (_e) { return ""; }
+};
 export type Conexao = { id: string; fornecedor_id: string; tipo: string; endereco: string; usuario: string; ativo: boolean; situacao: string; detalhe: string };
 export type Sessao = Json;   // o que cada robô precisa guardar entre consultas (token, cookies, filial…)
 export type Deps = {
@@ -263,7 +268,7 @@ export function rolemarLerBusca(corpo: Json | null): Oferta[] {
   const l = corpo && Array.isArray(corpo.data) ? corpo.data : [];
   return l.map((p: Json) => ({ codigo: txt(p.codigo_fabricante), marca: txt(p.fabricante), descricao: txt(p.item), preco: numero(p.valor_final || p.preco),
     estoque: p.estoque === undefined || p.estoque === null || p.estoque === "" ? null : numero(p.estoque), prazo: "", aplicacao: txt(p.texto).slice(0, 300), ref: txt(p.id),
-    foto: fotoOk(Array.isArray(p.imagens) ? (p.imagens[0] && (p.imagens[0].url || p.imagens[0].imagem || p.imagens[0].src || p.imagens[0])) : (p.imagem || p.foto || "")) }))
+    foto: fotoDoSite(Array.isArray(p.imagens) ? (p.imagens[0] && (p.imagens[0].url || p.imagens[0].imagem || p.imagens[0].src || p.imagens[0].caminho || p.imagens[0])) : (p.imagem || p.foto || ""), ROLEMAR.site) }))
     .filter((o: Oferta) => o.codigo && o.preco > 0);
 }
 /** Modelo do carro pela placa pelo portal da Rolemar (mapeado em 16/11/2026): POST /ajax-busca-placa placa=… → dados do carro (brand, model, madeYear, engine) */
@@ -327,7 +332,12 @@ export function pellegrinoLerPagina(html: string): { id: string; descricao: stri
     const descricao = (/font-weight-bold[^>]*>([^<]{3,120})</.exec(tr) || [])[1] || "";
     const marca = (/<span class="d-none">([^<]{2,40})<\/span>\s*<img/.exec(tr) || [])[1] || "";
     const semEstoque = /avise quando estiver dispon/i.test(tr);
-    const foto = fotoOk(desHtml((/<img[^>]+(?:data-src|src)="(https:\/\/[^"]+\.(?:jpe?g|png|webp)[^"]*)"/i.exec(tr) || [])[1] || ""));
+    // foto da peça: a 1ª imagem da linha que NÃO é o logotipo do fabricante (o logotipo vem logo depois do nome da marca escondido,
+    // <span class="d-none">MANN</span><img …>, ou tem logo/marca/fabricante no endereço ou no alt). Revisão do Codex, 17/11/2026.
+    const logo = (/<span class="d-none">[^<]{2,40}<\/span>\s*(<img[^>]*>)/.exec(tr) || [])[1] || "";
+    const foto = desHtml([...tr.matchAll(/<img[^>]*>/gi)].map((m) => m[0])
+      .filter((tag) => tag !== logo && !/logo|marca|fabricante|brand|manufacturer/i.test(tag))
+      .map((tag) => (/(?:data-src|src)="([^"]+\.(?:jpe?g|png|webp)[^"]*)"/i.exec(tag) || [])[1] || "").find(Boolean) || "");
     if (id && (codigo || descricao)) out.push({ id, descricao: txt(descricao), marca: txt(marca), codigo: txt(desHtml(codigo)), semEstoque, foto });
   }
   return out;
@@ -350,7 +360,7 @@ async function pellegrinoBuscar(deps: Deps, s: Sessao, termo: string): Promise<O
   const rp = await pedir(deps, site + "/api/progress/b2b/produtos/precos?ids=" + encodeURIComponent(linhas.map((l) => l.id).join(",")), { headers: pellHeaders(s) });
   const precos = rp.ok ? pellegrinoLerPrecos(await rp.json().catch(() => null)) : new Map<string, number>();
   return linhas.map((l) => { const p = precos.get(l.id); if (!(p && p > 0)) return null;
-    return { codigo: l.codigo || l.id, marca: l.marca, descricao: l.descricao, preco: p, estoque: l.semEstoque ? 0 : null, prazo: "", aplicacao: "", ref: l.id, foto: l.foto } as Oferta; }).filter((x): x is Oferta => !!x);
+    return { codigo: l.codigo || l.id, marca: l.marca, descricao: l.descricao, preco: p, estoque: l.semEstoque ? 0 : null, prazo: "", aplicacao: "", ref: l.id, foto: fotoDoSite(l.foto, site) } as Oferta; }).filter((x): x is Oferta => !!x);
 }
 
 /** Trecho da página de resultado (só a tabela de produtos, até 6 KB) para o administrador afinar o leitor quando o portal mudar */

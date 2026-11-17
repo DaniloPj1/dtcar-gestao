@@ -1582,6 +1582,38 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cp-pedidos{display:flex;flex-direction:column;gap:12px}.cp-carrinho{display:flex;flex-direction:column;gap:12px}
 /* aba Fornecedores (protótipo): tabela única + carrinho ao lado */
 .cot{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+/* computador (pedido do Danilo em 17/11/2026: "usar mais a tela do computador e distribuir melhor os espaços"): a tela Compras usa a
+   largura toda, a busca vira uma faixa compacta numa linha e o carrinho fica fixo ao lado a partir de 1200 px. O celular (até 640 px) não muda. */
+@media (min-width:900px){.pagina.cp-pagina{max-width:1760px}}
+@media (min-width:641px){
+  .cot{grid-template-columns:minmax(0,1fr) 320px;gap:18px}
+  .cot-busca{padding:14px 18px;gap:8px}
+  .cot-busca > .sub:first-child{display:none}
+  .cot-busca .cp-campos{flex-wrap:nowrap;gap:12px}
+  .cot-busca .cp-campo-placa{flex:0 0 170px}.cot-busca .cp-campo-txt{flex:1 1 auto;min-width:0}
+  .cot-busca .cot-consultar{flex:0 0 auto;padding:0 22px}
+  .cot-busca .of-placa{margin:0;padding:8px 12px}
+  .cot-busca #cot-origem{margin:0;font-size:13px}
+  .cot-carrinho{top:16px;max-height:calc(100vh - 32px);overflow:auto}
+  .cot-topo{padding:10px 16px}
+  .cot-cards{grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px;padding:16px}
+  .cot-cards.cot-t-p{grid-template-columns:repeat(auto-fill,minmax(160px,1fr))}
+  .cot-cards.cot-t-g{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+}
+@media (min-width:641px){
+  .cot-rot-extra{display:none}
+  .cot{grid-template-columns:minmax(0,1fr) 280px;gap:16px}
+  .cot-topo{flex-wrap:nowrap}.cot-topo #cot-res-info{flex:0 1 auto;min-width:0}
+  .cot-filtros{flex-wrap:nowrap;gap:6px}
+  .cot-topo .cot-filtros select.inp{height:32px;min-height:32px;max-width:170px;font-size:13px;padding:0 8px}
+  .cot-topo .seg button{min-height:32px;padding:4px 10px;font-size:13px}
+  .cot-topo .seg{flex-wrap:nowrap}
+  .cot-cards{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+  .cot-cards.cot-t-p{grid-template-columns:repeat(auto-fill,minmax(150px,1fr))}
+  .cot-cards.cot-t-g{grid-template-columns:repeat(auto-fill,minmax(260px,1fr))}
+}
+@media (min-width:641px) and (max-width:1299px){.cot-topo{flex-wrap:wrap}.cot-filtros{flex-wrap:wrap}}
+@media (min-width:1600px){.cot{grid-template-columns:minmax(0,1fr) 340px}}
 .cot-principal{display:flex;flex-direction:column;gap:14px;min-width:0}
 .cot-busca{display:flex;flex-direction:column;gap:10px}
 .cot-busca .cp-campos{align-items:flex-end}.cot-consultar{height:42px;white-space:nowrap}
@@ -1627,8 +1659,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cot-car-nome{display:block;font-size:12px;font-weight:600;color:var(--steel);text-transform:uppercase}
 .cot-car-item{display:flex;justify-content:space-between;gap:8px;font-size:14px;margin-top:4px}
 .cot-car-total{display:flex;justify-content:space-between;font-size:17px;font-weight:700}
-@media (max-width:1560px){.cot{grid-template-columns:1fr}.cot-carrinho{position:static}}
-@media (min-width:641px) and (max-width:1560px){.cot-carrinho{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px}.cot-carrinho h3,.cot-carrinho .cot-car-forn,.cot-carrinho .cot-car-total{grid-column:1 / -1}.cot-carrinho .dica{grid-column:1}.cot-carrinho #cot-gerar{grid-column:2;grid-row:span 1}}
+@media (max-width:1199px){.cot{grid-template-columns:1fr}.cot-carrinho{position:static}}
+@media (min-width:641px) and (max-width:1199px){.cot-carrinho{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px}.cot-carrinho h3,.cot-carrinho .cot-car-forn,.cot-carrinho .cot-car-total{grid-column:1 / -1}.cot-carrinho .dica{grid-column:1}.cot-carrinho #cot-gerar{grid-column:2;grid-row:span 1}}
 /* consulta ao vivo (etapa 2): estado da última consulta e botões da conexão em Ajustes */
 .cp-vivo-estado{display:block;margin:0 0 6px;font-weight:500}
 .cp-vivo-livre{margin-top:8px;align-items:center;flex-wrap:wrap}

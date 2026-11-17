@@ -14,6 +14,9 @@ confere("robô só pelo endereço (nome do fornecedor não conta)", F.roboDe({ e
   && F.roboDe({ endereco: "https://compreonline.pellegrino.com.br/" }) === "pellegrino" && F.roboDe({ endereco: "https://portal.tolidistribuidora.com.br/ords/f?p=2401" }) === "toli"
   && F.roboDe({ endereco: "https://compreonline.sama.com.br/" }) === "pellegrino" && F.siteCompreOnline({ endereco: "https://compreonline.sama.com.br/x" }) === "https://compreonline.sama.com.br"
   && F.roboDe({ endereco: "" }) === null && F.roboDe({ endereco: "https://outro.com.br" }) === null && F.roboDe({ endereco: "https://capitolio.com.br" }) === null);
+confere("foto relativa completada com o site do portal; só https; nada de data:/javascript:", F.fotoDoSite("/img/a.jpg", "https://rolemarmaster.com") === "https://rolemarmaster.com/img/a.jpg"
+  && F.fotoDoSite("img/b.png", "https://compreonline.pellegrino.com.br") === "https://compreonline.pellegrino.com.br/img/b.png" && F.fotoDoSite("//cdn.x.com/c.webp", "https://a.com") === "https://cdn.x.com/c.webp"
+  && F.fotoDoSite("http://x.com/d.jpg", "https://a.com") === "https://x.com/d.jpg" && F.fotoDoSite("data:image/png;base64,AA", "https://a.com") === "" && F.fotoDoSite("javascript:alert(1)", "https://a.com") === "" && F.fotoDoSite("", "https://a.com") === "");
 confere("número em reais", F.numero("1.234,56") === 1234.56 && F.numero("63,24") === 63.24 && F.numero("88.81") === 88.81 && F.numero(12.5) === 12.5 && F.numero("") === 0 && F.numero("R$ 10,00") === 10 && F.numero("1.000") === 1000);
 try { await F.executar({ acao: "testar", conexao: "abc def; drop" }, { papel: { gestor: true, admin: true } } as never); confere("testar com id inválido: recusa sem ir ao banco", false); } catch (e) { confere("testar com id inválido: recusa sem ir ao banco", e instanceof F.ErroUso); }
 confere("cookies juntados", (() => { const r = new Response("", { headers: [["set-cookie", "PHPSESSID=abc; Path=/; HttpOnly"], ["set-cookie", "cf_clearance=xyz; Secure"]] });
@@ -21,15 +24,16 @@ confere("cookies juntados", (() => { const r = new Response("", { headers: [["se
 confere("DPK: leitura da busca", (() => { const l = F.dpkLerBusca({ totalCount: 2, products: [{ id: 1, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545" }, { id: 2, code: "", description: "x" }] });
   return l.length === 1 && l[0].id === "83545" && l[0].codigo === "WK84213" && l[0].marca === "MANN"; })());
 confere("DPK: leitura dos preços", (() => { const m = F.dpkLerPrecos([{ id: 83545, status: "02 - Disponível", stock: 12, price: 63.24 }]); const p = m.get("83545"); return !!p && p.preco === 63.24 && p.estoque === 12; })());
-confere("Rolemar: leitura da busca", (() => { const l = F.rolemarLerBusca({ data: [{ id: 9, fabricante: "WEGA", codigo_fabricante: "FCD2158/1", item: "FILTRO COMBUSTIVEL", estoque: "5", preco: "70,00", valor_final: "63,24", texto: "TORO 2.0 DIESEL" },
-  { id: 10, fabricante: "X", codigo_fabricante: "", item: "sem código", preco: "1" }] }); return l.length === 1 && l[0].codigo === "FCD2158/1" && l[0].preco === 63.24 && l[0].estoque === 5 && l[0].aplicacao === "TORO 2.0 DIESEL"; })());
+confere("Rolemar: leitura da busca", (() => { const l = F.rolemarLerBusca({ data: [{ id: 9, fabricante: "WEGA", codigo_fabricante: "FCD2158/1", item: "FILTRO COMBUSTIVEL", estoque: "5", preco: "70,00", valor_final: "63,24", texto: "TORO 2.0 DIESEL", imagens: [{ url: "/storage/produtos/fcd2158.jpg" }] },
+  { id: 10, fabricante: "X", codigo_fabricante: "", item: "sem código", preco: "1" }] }); return l.length === 1 && l[0].codigo === "FCD2158/1" && l[0].preco === 63.24 && l[0].estoque === 5 && l[0].aplicacao === "TORO 2.0 DIESEL" && l[0].foto === "https://rolemarmaster.com/storage/produtos/fcd2158.jpg"; })());
 const HTML_PELL = `<table><tbody>
-<tr data-objectid="A1" class="linha"><td><a class="font-weight-bold" href="#">FILTRO DE COMBUSTIVEL</a></td><td><span class="d-none">MANN</span> <img src="m.png"></td>
+<tr data-objectid="A1" class="linha"><td><img src="/fotos/produtos/wk84213.jpg"><a class="font-weight-bold" href="#">FILTRO DE COMBUSTIVEL</a></td><td><span class="d-none">MANN</span> <img src="m.png"></td>
 <td><span data-toggle="popover" data-original-title="WK84213">cód</span></td><td>R$ 88,81</td></tr>
 <tr data-objectid="B2"><td><a class="font-weight-bold">FILTRO DE COMBUSTIVEL</a></td><td><span class="d-none">TECFIL</span> <img src="t.png"></td>
 <td><span data-toggle="popover" data-original-title="PSC498">cód</span></td><td><button>Me avise quando estiver disponível</button></td></tr>
 </tbody></table>`;
-confere("Pellegrino: leitura da página", (() => { const l = F.pellegrinoLerPagina(HTML_PELL); return l.length === 2 && l[0].id === "A1" && l[0].codigo === "WK84213" && l[0].marca === "MANN" && !l[0].semEstoque && l[1].semEstoque && l[1].codigo === "PSC498"; })(),
+confere("Pellegrino: leitura da página; foto é a da peça, nunca o logotipo do fabricante", (() => { const l = F.pellegrinoLerPagina(HTML_PELL); return l.length === 2 && l[0].id === "A1" && l[0].codigo === "WK84213" && l[0].marca === "MANN" && !l[0].semEstoque && l[1].semEstoque && l[1].codigo === "PSC498"
+  && l[0].foto === "/fotos/produtos/wk84213.jpg" && l[1].foto === ""; })(),
   JSON.stringify(F.pellegrinoLerPagina(HTML_PELL)));
 confere("Pellegrino: leitura dos preços", F.pellegrinoLerPrecos({ precos: [{ id: "A1", preco: 80, preco_com_imposto: 88.81 }] }).get("A1") === 88.81);
 
@@ -135,6 +139,7 @@ confere("Rolemar: logou com o CNPJ só em números, achou a filial e buscou", po
   JSON.stringify(porConexao("c-rol")));
 confere("Pellegrino: logou, leu a página e os preços; sem estoque = 0", porConexao("c-pel").ok && porConexao("c-pel").ofertas.length === 2 && porConexao("c-pel").ofertas[0].preco === 88.81 && porConexao("c-pel").ofertas[0].estoque === null
   && porConexao("c-pel").ofertas[1].estoque === 0 && pellLogins === 1, JSON.stringify(porConexao("c-pel")));
+confere("Pellegrino: foto relativa completada com o site do portal", porConexao("c-pel").ofertas[0].foto === "https://compreonline.pellegrino.com.br/fotos/produtos/wk84213.jpg", porConexao("c-pel").ofertas[0].foto);
 confere("Toli: fica para o programa do PC", porConexao("c-toli").ok === false && porConexao("c-toli").no_pc === true);
 confere("portal desconhecido: erro claro", porConexao("c-x").ok === false && /não reconhecido/.test(porConexao("c-x").erro));
 confere("conexão desligada não é consultada", !porConexao("c-off"));

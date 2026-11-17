@@ -124,7 +124,7 @@ function Cotacao({ d, recarregar, irCarrinho }) {
         <span class="sub">Pesquisar a peça nos fornecedores (a busca é feita no portal de cada um, com o seu login)</span>
         <div class="cp-campos">
           <label class="cp-campo cp-campo-placa"><span>Placa (opcional)</span><input id="cot-placa" class="inp" autocomplete="off" maxlength="8" placeholder="ABC1D23" value=${placaTxt} onInput=${e => setPlacaTxt(e.target.value.toUpperCase())} /></label>
-          <label class="cp-campo cp-campo-txt"><span>Código ou descrição da peça (vai como está para o fornecedor)</span>
+          <label class="cp-campo cp-campo-txt"><span>Código ou descrição da peça<span class="cot-rot-extra"> (vai como está para o fornecedor)</span></span>
             <input id="cot-txt" class="inp" type="search" autocomplete="off" placeholder="Ex.: WK84213, pastilha de freio" value=${txt} onInput=${e => setTxt(e.target.value)} onKeyDown=${e => { if (e.key === "Enter" && podeConsultar) consultar(); }} /></label>
           <button type="button" class="btn btn-pri cot-consultar" id="cot-consultar" disabled=${!podeConsultar} onClick=${consultar}>${vivo && vivo.buscando ? "Consultando…" : "Consultar fornecedores"}</button>
         </div>

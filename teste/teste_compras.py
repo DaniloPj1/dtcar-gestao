@@ -35,7 +35,11 @@ def rodar(b, nome, w, h):
   pg.evaluate("window.__AOVIVO_RESPOSTA = { ok: true, encontrado: true, placa: 'RST4E56', modelo: 'FIAT TORO 2.0 DIESEL 2020', fornecedor: 'DPK' }")
   pg.fill("#cot-placa", "RST4E56"); pg.wait_for_timeout(1500)
   chk(T("placa fora do cadastro: o modelo vem de graça pelo portal (DPK), sem a consulta paga"), "pela DPK (sem custo): FIAT TORO" in pg.inner_text("#cot-veiculo") and pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1].acao") == "placa" and pg.evaluate("(window.__PLACA && window.__PLACA.chamadas || []).length") == 0, pg.inner_text("#cot-veiculo"))
-  pg.evaluate("window.__AOVIVO_RESPOSTA = null")
+  # trocou a placa enquanto o portal respondia: a placa antiga NÃO vai para a consulta paga
+  pg.evaluate("window.__AOVIVO_RESPOSTA = { ok: true, encontrado: false, placa: 'XYZ9A88' }; window.__AOVIVO_ATRASO = 1500; window.__PLACA = window.__PLACA || {}; window.__PLACA.chamadas = [];")
+  pg.fill("#cot-placa", "XYZ9A88"); pg.wait_for_timeout(900); pg.fill("#cot-placa", ""); pg.wait_for_timeout(2200)
+  chk(T("placa trocada antes do portal responder: nenhuma consulta paga da placa antiga"), not any("XYZ9A88" in str(c) for c in pg.evaluate("(window.__PLACA && window.__PLACA.chamadas) || []")), pg.evaluate("(window.__PLACA && window.__PLACA.chamadas) || []"))
+  pg.evaluate("window.__AOVIVO_RESPOSTA = null; window.__AOVIVO_ATRASO = 0")
   pg.fill("#cot-placa", "onx2a20"); pg.wait_for_timeout(1200)
   chk(T("sem fornecedor com robô, o botão fica desligado"), pg.locator("#cot-consultar").is_disabled())
   # conecta a DPK (robô pelo endereço) e consulta

@@ -287,7 +287,7 @@
         acessos: async () => { v59(); return Object.keys(window.__SEGREDOS).filter(k => k.startsWith("compras_acesso:")).map(k => ({ id: k.slice(15), gravado_em: now() })); },
         gravarAcesso: async (id, senha) => { v59(); if (!senha) { delete window.__SEGREDOS["compras_acesso:" + id]; return { gravado: false }; } window.__SEGREDOS["compras_acesso:" + id] = senha; return { gravado: true, gravado_em: now() }; },
         // função "compras" de mentira (consulta ao vivo): registra a chamada e, para cada conexão com portal reconhecido e senha, "acha" um preço por código
-        aoVivo: async body => { net(); window.__AOVIVO = window.__AOVIVO || []; window.__AOVIVO.push(body); if (window.__AOVIVO_RESPOSTA) return window.__AOVIVO_RESPOSTA;
+        aoVivo: async body => { net(); window.__AOVIVO = window.__AOVIVO || []; window.__AOVIVO.push(body); if (window.__AOVIVO_ATRASO) await new Promise(r => setTimeout(r, window.__AOVIVO_ATRASO)); if (window.__AOVIVO_RESPOSTA) return window.__AOVIVO_RESPOSTA;
           const robo = c => /dpk/.test(c.endereco || "") ? "dpk" : /rolemar/.test(c.endereco || "") ? "rolemar" : /pellegrino/.test(c.endereco || "") ? "pellegrino" : /toli/.test(c.endereco || "") ? "toli" : null;
           const cxs = db.compras_fornecedores.filter(c => c.ativo !== false && (!body.conexoes || body.conexoes.includes(c.id)) && (body.acao !== "testar" || c.id === body.conexao));
           const consultar = c => { const r = robo(c); if (!r) return { conexao: c.id, fornecedor_id: c.fornecedor_id, robo: null, ok: false, ofertas: [], erro: "Portal não reconhecido pelo endereço." };

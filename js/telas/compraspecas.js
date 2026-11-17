@@ -88,6 +88,7 @@ function Cotacao({ d, recarregar, irCarrinho }) {
     const t = setTimeout(async () => {
       let r = null;
       const p = await api.compras.aoVivo({ acao: "placa", placa });
+      if (!v) return;   // a placa mudou ou saiu da aba enquanto o portal respondia: não gasta a consulta paga com a placa antiga
       if (p && p.ok && p.encontrado && p.modelo) r = { ok: true, encontrado: true, portal: p.fornecedor, modelo: p.modelo };
       else r = await consultarPlaca(placa, "basico", { manual: true });
       if (v) setCons({ placa, r });

@@ -23,6 +23,8 @@
 import { withSupabase } from "npm:@supabase/server@1.9.2";
 
 export const MAX_TERMOS = 6;
+/** trava do carrinho do portal esquecida há mais que isto pode ser tomada (maior que um login completo da DPK + leitura + gravação) */
+export const PRAZO_TRAVA_MS = 150000;
 export const LIMITE_MS = 12000;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 // deno-lint-ignore no-explicit-any
@@ -50,9 +52,12 @@ export type Deps = {
   fetch: typeof fetch;
   agora?: () => Date;
   /** trava por conexão para o carrinho do portal (o POST da DPK manda o carrinho inteiro: duas inclusões ao mesmo tempo se sobrescreveriam).
-   *  Devolve true se pegou a trava. Revisão do Codex, 17/11/2026. */
-  travar?: (conexaoId: string) => Promise<boolean>;
-  destravar?: (conexaoId: string) => Promise<void>;
+   *  travar devolve o "dono" (marca aleatória) se pegou a trava, ou null; renovar confirma que a trava ainda é desse dono e renova o prazo
+   *  (chamado logo antes de gravar no portal: se outra chamada tomou a trava, não grava); destravar só apaga a trava desse dono.
+   *  Revisão do Codex, 17/11/2026. */
+  travar?: (conexaoId: string) => Promise<string | null>;
+  renovar?: (conexaoId: string, dono: string) => Promise<boolean>;
+  destravar?: (conexaoId: string, dono: string) => Promise<void>;
   esperar?: (ms: number) => Promise<void>;
   /** só no "testar" com amostra=true (administrador): recebe um trecho da página de resultado, para afinar o leitor do portal */
   amostra?: (trecho: string) => void;
@@ -195,7 +200,7 @@ async function dpkPlaca(deps: Deps, s: Sessao, placa: string): Promise<string> {
  *   POST dpk-order/api/cart { hubId, retailerId, cartItems: [{ productId, productRetailerId, quantity, position, code, description, manufacturer, total }] } → o carrinho
  *   DELETE dpk-order/api/cart/{cartId}/{itemId} → true  (não usado: o sistema só põe; tirar é no portal) */
 export type ItemPortal = { codigo: string; descricao: string; marca: string; qtd: number; preco: number; extra?: Json };
-async function dpkCarrinho(deps: Deps, s: Sessao, item: ItemPortal): Promise<{ ok: boolean; detalhe: string }> {
+async function dpkCarrinho(deps: Deps, s: Sessao, item: ItemPortal, aindaMinha: () => Promise<boolean> = async () => true): Promise<{ ok: boolean; detalhe: string }> {
   const store = Number(s.store) || DPK.store;
   const productId = Number(item.extra && item.extra.productId) || 0, sap = Number(item.extra && item.extra.sapCode) || 0;
   if (!productId || !sap) return { ok: false, detalhe: "DPK: este preço veio sem o código interno do portal; consulte de novo e adicione pelo resultado ao vivo." };
@@ -214,6 +219,8 @@ async function dpkCarrinho(deps: Deps, s: Sessao, item: ItemPortal): Promise<{ o
   const corpo = { ...(atual && atual.id ? { id: atual.id } : {}), hubId: store, retailerId, cartItems: [
     ...existentes.filter((i) => Number(i.productRetailerId) !== sap).map((i) => ({ productId: i.productId, productRetailerId: i.productRetailerId, quantity: i.quantity, position: i.position, code: i.code, description: i.description, manufacturer: i.manufacturer, total: i.total || 0 })),
     { productId, productRetailerId: sap, quantity: qtd, position: existentes.length + 1, code: item.codigo, description: item.descricao, manufacturer: item.marca, total: Math.round((item.preco || 0) * qtd * 100) / 100 }] };
+  // a trava ainda é desta chamada? (se demorou e outra tomou, gravar agora apagaria o que a outra pôs)
+  if (!(await aindaMinha())) return { ok: false, detalhe: "DPK: a inclusão demorou e outra começou no mesmo carrinho; nada foi gravado no portal. Tente de novo." };
   const r = await pedir(deps, DPK.api + "/dpk-order/api/cart", { method: "POST", headers: { ...dpkHeaders(s), "content-type": "application/json" }, body: JSON.stringify(corpo) });
   if (r.status === 401) throw new ErroAcesso("sessão vencida");
   const resp = (await r.json().catch(() => null)) as Json | null;
@@ -432,18 +439,19 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     if (!item.codigo) throw new ErroUso("Informe o código da peça.");
     if (robo !== "dpk") return { ok: false, robo, nome: robo ? NOME_ROBO[robo] : "", erro: (robo ? NOME_ROBO[robo] : "Este portal") + ": pôr no carrinho do portal ainda não está pronto; o item ficou só no carrinho do sistema." };
     // uma inclusão por vez no carrinho de cada conexão (ler → somar → gravar), mesmo vindo de aparelhos diferentes
-    let travou = !deps.travar;
-    for (let n = 0; !travou && n < 20; n++) { travou = await deps.travar!(c.id); if (!travou) await (deps.esperar || ((ms) => new Promise((r) => setTimeout(r, ms))))(500); }
-    if (!travou) return { ok: false, robo, nome: NOME_ROBO[robo], erro: NOME_ROBO[robo] + ": outra inclusão no carrinho do portal está em andamento; tente de novo em alguns segundos. O item ficou no carrinho do sistema." };
+    let dono: string | null = deps.travar ? null : "sem-trava";
+    for (let n = 0; !dono && n < 20; n++) { dono = await deps.travar!(c.id); if (!dono) await (deps.esperar || ((ms) => new Promise((r) => setTimeout(r, ms))))(500); }
+    const aindaMinha = async () => !deps.renovar || dono === "sem-trava" || await deps.renovar(c.id, dono!);
+    if (!dono) return { ok: false, robo, nome: NOME_ROBO[robo], erro: NOME_ROBO[robo] + ": outra inclusão no carrinho do portal está em andamento; tente de novo em alguns segundos. O item ficou no carrinho do sistema." };
     try {
       let res = { ok: false, detalhe: "" };
-      await comSessao(deps, c, robo, cnpjOficina, async (s) => { res = await dpkCarrinho(deps, s, item); return []; });
+      await comSessao(deps, c, robo, cnpjOficina, async (s) => { res = await dpkCarrinho(deps, s, item, aindaMinha); return []; });
       return { ok: res.ok, robo, nome: NOME_ROBO[robo], detalhe: res.detalhe, erro: res.ok ? undefined : res.detalhe };
     } catch (e) {
       const msg = (e as Error).message || "falha";
       if (e instanceof ErroAcesso) { await deps.situacao(c.id, "erro", msg); const v = await deps.lerSessao(c.id); await deps.gravarSessao(c.id, v && v.apiKey ? { apiKey: v.apiKey } : null); }
       return { ok: false, robo, nome: NOME_ROBO[robo], erro: msg };
-    } finally { if (deps.destravar) await deps.destravar(c.id).catch(() => {}); }
+    } finally { if (deps.destravar && dono && dono !== "sem-trava") await deps.destravar(c.id, dono).catch(() => {}); }
   }
   if (acao !== "consultar") throw new ErroUso("Ação desconhecida: " + acao);
   const termos = [...new Set((Array.isArray(corpo.termos) ? corpo.termos : [corpo.termo]).map((t: unknown) => txt(t)).filter((t: string) => t.length >= 3))].slice(0, MAX_TERMOS);
@@ -496,19 +504,26 @@ export function depsDoBanco(adm: Db, usuario: Db): Omit<Deps, "papel" | "fetch" 
       if (!s) { await adm.from("segredos").delete().eq("chave", chave("compras_sessao", id)); return; }
       await adm.from("segredos").upsert({ chave: chave("compras_sessao", id), valor: JSON.stringify(s), atualizado_em: new Date().toISOString() });
     },
+    // trava em segredos: valor = "<hora em ms>|<dono>"; esquecida (função caiu no meio) por mais de PRAZO é tomada por outra chamada
     travar: async (id) => {
-      const k = chave("compras_trava", id), agora = Date.now();
-      const { error } = await adm.from("segredos").insert({ chave: k, valor: String(agora), atualizado_em: new Date(agora).toISOString() });
-      if (!error) return true;
-      // já existe: se ficou esquecida (função caiu no meio), toma a trava velha com segurança (só se ainda for a mesma)
+      const k = chave("compras_trava", id), agora = Date.now(), dono = crypto.randomUUID();
+      const { error } = await adm.from("segredos").insert({ chave: k, valor: agora + "|" + dono, atualizado_em: new Date(agora).toISOString() });
+      if (!error) return dono;
       const { data } = await adm.from("segredos").select("valor").eq("chave", k).maybeSingle();
-      const desde = Number(data && data.valor) || 0;
-      if (!data) return false;
-      if (agora - desde < 30000) return false;
-      const { data: tomada } = await adm.from("segredos").update({ valor: String(agora), atualizado_em: new Date(agora).toISOString() }).eq("chave", k).eq("valor", String(desde)).select("chave");
-      return Array.isArray(tomada) && tomada.length === 1;
+      if (!data) return null;
+      const desde = Number(String(data.valor).split("|")[0]) || 0;
+      if (agora - desde < PRAZO_TRAVA_MS) return null;
+      const { data: tomada } = await adm.from("segredos").update({ valor: agora + "|" + dono, atualizado_em: new Date(agora).toISOString() }).eq("chave", k).eq("valor", data.valor).select("chave");
+      return Array.isArray(tomada) && tomada.length === 1 ? dono : null;
     },
-    destravar: async (id) => { await adm.from("segredos").delete().eq("chave", chave("compras_trava", id)); },
+    renovar: async (id, dono) => {
+      const k = chave("compras_trava", id), agora = Date.now();
+      const { data } = await adm.from("segredos").select("valor").eq("chave", k).maybeSingle();
+      if (!data || String(data.valor).split("|")[1] !== dono) return false;
+      const { data: ok } = await adm.from("segredos").update({ valor: agora + "|" + dono, atualizado_em: new Date(agora).toISOString() }).eq("chave", k).eq("valor", data.valor).select("chave");
+      return Array.isArray(ok) && ok.length === 1;
+    },
+    destravar: async (id, dono) => { await adm.from("segredos").delete().eq("chave", chave("compras_trava", id)).like("valor", "%|" + dono); },
     limparSessoes: async (vivos) => {
       const { data } = await adm.from("segredos").select("chave").like("chave", "compras_sessao:%");
       const mortas = (data || []).map((l: { chave: string }) => l.chave).filter((k: string) => !vivos.includes(k.slice("compras_sessao:".length)));

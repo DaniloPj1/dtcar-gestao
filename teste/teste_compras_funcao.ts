@@ -257,13 +257,21 @@ confere("testar portal desconhecido", r.ok === false && situacoes["c-x"][0] === 
 
 { // duas inclusões AO MESMO TEMPO no carrinho da DPK: com a trava, as duas peças ficam (sem a trava a segunda apagava a primeira)
   dpkCart = null; let trava = false; const lento = (async (u: string | URL | Request, i?: RequestInit) => { if (String(u).endsWith("/dpk-order/api/cart/getByFilter")) await new Promise((r) => setTimeout(r, 30)); return fakeFetch(u, i); }) as typeof fetch;
-  const dt = { ...deps(), fetch: lento, travar: async () => { if (trava) return false; trava = true; return true; }, destravar: async () => { trava = false; }, esperar: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 20))) };
+  let donoAtual = "";
+  const dt = { ...deps(), fetch: lento, travar: async () => { if (trava) return null; trava = true; donoAtual = crypto.randomUUID(); return donoAtual; },
+    renovar: async (_id: string, d: string) => trava && d === donoAtual, destravar: async (_id: string, d: string) => { if (d === donoAtual) trava = false; },
+    esperar: (ms: number) => new Promise<void>((r) => setTimeout(r, Math.min(ms, 20))) };
   const um = (cod: string, prod: number, sap: string) => F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: cod, descricao: "X", marca: "M", qtd: 1, preco: 1, extra: { productId: prod, sapCode: sap } } }, dt, "49016409000195") as Promise<L>;
   const [a, b] = await Promise.all([um("AAA111", 1, "111"), um("BBB222", 2, "222")]);
   const sap = (dpkCart?.cartItems || []).map((i: L) => i.productRetailerId).sort();
   confere("carrinho do portal: duas inclusões ao mesmo tempo, as duas peças ficam (trava por conexão)", a.ok && b.ok && sap.length === 2 && sap[0] === 111 && sap[1] === 222 && trava === false, JSON.stringify(sap));
   trava = true; const c = await um("CCC333", 3, "333"); trava = false;
   confere("carrinho do portal: trava presa por outra inclusão → espera e, sem conseguir, avisa sem gravar", c.ok === false && /em andamento/.test(c.erro));
+  // trava tomada por outra chamada no meio (inclusão demorou): não grava e não apaga a trava da outra
+  const n0 = dpkPosts.length;
+  const roubada = { ...dt, renovar: async () => false, destravar: async (_id: string, d: string) => { if (d === donoAtual) trava = false; } };
+  const x = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "DDD444", descricao: "X", marca: "M", qtd: 1, preco: 1, extra: { productId: 4, sapCode: "444" } } }, roubada, "49016409000195") as L;
+  confere("carrinho do portal: trava tomada por outra chamada → não grava no portal", x.ok === false && /nada foi gravado/.test(x.erro) && dpkPosts.length === n0, JSON.stringify(x));
 }
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));

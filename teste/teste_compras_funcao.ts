@@ -310,7 +310,7 @@ rc = await F.executar({ termos: ["pastilha"], placa: "QXN-1E49", conexoes: ["c-d
   confere("DPK pela placa: a busca vai com montadora, veículo, ano e motor do carro", /CarMakerId=19/.test(b) && /VehicleId=2420/.test(b) && /Year=2020/.test(b) && /EngineId=1006/.test(b), b);
   confere("DPK pela placa: só a peça do carro volta, e a resposta diz qual carro filtrou", d.ok && d.ofertas.length === 1 && d.ofertas[0].codigo === "PD1512" && /FIAT TORO 2020 2\.0 16V MULTIJET II TURBO DIESEL/.test(d.veiculo), JSON.stringify(d));
   confere("portal que ainda não filtra pelo carro: a resposta avisa", rl.ok && /sem o filtro do carro/.test(rl.sem_carro || ""), JSON.stringify(rl).slice(0, 300));
-  confere("o carro casado fica guardado na sessão", !!(sessoes["c-dpk"] && sessoes["c-dpk"].carros && sessoes["c-dpk"].carros.QXN1E49 && sessoes["c-dpk"].carros.QXN1E49.vehicleId === 2420)); }
+  confere("o carro casado fica guardado na sessão", !!(sessoes["c-dpk"] && sessoes["c-dpk"].carros && sessoes["c-dpk"].carros["QXN1E49|"] && sessoes["c-dpk"].carros["QXN1E49|"].vehicleId === 2420)); }
 const nFiltros = dpkFiltros.length; dpkBuscas.length = 0;
 rc = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, deps()) as L;
 confere("mesma placa de novo: não consulta as listas do catálogo outra vez", dpkFiltros.length === nFiltros && /VehicleId=2420/.test(dpkBuscas[0] || ""));
@@ -325,14 +325,22 @@ confere("sem placa: busca sem filtro do carro", rc.resultados[0].ofertas.length 
   sessoes["c-dpk"] = null; dpkBuscas.length = 0;
   const cai = (async (u: string | URL | Request, i?: RequestInit) => /superk\/filter\?Type=3/.test(String(u)) ? new Response("fora", { status: 503 }) : fakeFetch(u, i)) as typeof fetch;
   let x = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, { ...deps(), fetch: cai }) as L;
-  confere("lista de veículos fora do ar: busca sem filtro e nada vai para o cache", x.resultados[0].ok && !x.resultados[0].veiculo && !(sessoes["c-dpk"]?.carros && "QXN1E49" in sessoes["c-dpk"].carros), JSON.stringify(sessoes["c-dpk"]?.carros || null));
+  confere("lista de veículos fora do ar: busca sem filtro e nada vai para o cache", x.resultados[0].ok && !x.resultados[0].veiculo && !(sessoes["c-dpk"]?.carros && "QXN1E49|" in sessoes["c-dpk"].carros), JSON.stringify(sessoes["c-dpk"]?.carros || null));
   dpkBuscas.length = 0;
   x = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, deps()) as L;
   confere("portal de volta: o carro é reconhecido e a busca sai filtrada", /VehicleId=2420/.test(dpkBuscas.find((u) => /Query=pastilha/.test(u)) || "") && /TORO/.test(x.resultados[0].veiculo || ""), JSON.stringify(x.resultados[0]).slice(0, 200));
   sessoes["c-dpk"] = null;
   const motorCai = (async (u: string | URL | Request, i?: RequestInit) => /superk\/filter\?Type=5/.test(String(u)) ? new Response("x", { status: 500 }) : fakeFetch(u, i)) as typeof fetch;
   x = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, { ...deps(), fetch: motorCai }) as L;
-  confere("lista de motores fora do ar: filtra por montadora/veículo/ano, mas não guarda o filtro incompleto", /TORO/.test(x.resultados[0].veiculo || "") && !(sessoes["c-dpk"]?.carros && "QXN1E49" in sessoes["c-dpk"].carros)); }
+  confere("lista de motores fora do ar: filtra por montadora/veículo/ano, mas não guarda o filtro incompleto", /TORO/.test(x.resultados[0].veiculo || "") && !(sessoes["c-dpk"]?.carros && "QXN1E49|" in sessoes["c-dpk"].carros)); }
+
+{ // placa que a DPK não conhece: 1ª busca sem o texto do carro (não reconhece); a 2ª, com o texto que chegou depois, reconhece
+  sessoes["c-dpk"] = null; dpkBuscas.length = 0;
+  let x = await F.executar({ termos: ["pastilha"], placa: "AAA1A11", conexoes: ["c-dpk"] }, deps()) as L;
+  confere("placa desconhecida e sem texto: sem filtro", !x.resultados[0].veiculo);
+  dpkBuscas.length = 0;
+  x = await F.executar({ termos: ["pastilha"], placa: "AAA1A11", veiculo: "FIAT TORO 2.0 TURBO DIESEL 2020", conexoes: ["c-dpk"] }, deps()) as L;
+  confere("mesma placa, agora com o texto do carro: reavalia e filtra pela Toro", /TORO/.test(x.resultados[0].veiculo || "") && /VehicleId=2420/.test(dpkBuscas.find((u) => /Query=pastilha/.test(u)) || ""), JSON.stringify(x.resultados[0]).slice(0, 200)); }
 
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));

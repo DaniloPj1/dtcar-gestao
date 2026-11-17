@@ -217,7 +217,9 @@ export function dpkCasarCarro(texto: string, montadoras: Json[], veiculosDe: (id
 async function dpkFiltroDoCarro(deps: Deps, s: Sessao, carro: Carro): Promise<FiltroDpk | null> {
   if (!carro.placa && !carro.texto) return null;
   const cache = (s.carros || {}) as Record<string, FiltroDpk | null>;
-  const chaveC = carro.placa || semAcento(carro.texto);
+  // a chave leva a placa E o texto do carro: se o texto chegar depois (consulta da placa terminou), reavalia em vez de usar o "não reconhecido"
+  // guardado sem ele. Revisão do Codex, 17/11/2026.
+  const chaveC = (carro.placa || "") + "|" + semAcento(carro.texto).replace(/\s+/g, " ").trim();
   if (chaveC in cache) return cache[chaveC];
   // falhou = o portal não respondeu direito (erro HTTP, corpo inválido): o resultado NÃO vai para o cache, para tentar de novo na próxima
   // busca. Só fica guardado o que veio de respostas válidas (inclusive "carro não reconhecido"). Revisão do Codex, 17/11/2026.

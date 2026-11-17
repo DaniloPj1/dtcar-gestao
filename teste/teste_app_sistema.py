@@ -298,7 +298,9 @@ try:
         # Orçamentos: avisos (aprovado), abertos, pedido novo pelo app (sem item e sem preço) e acréscimo ao pedido
         tela(pg, 'orcamento'); tx = textos(pg)
         t('ORC-00006 aprovado' in tx and 'OS 01920' in tx and 'ORC-00007' not in tx, 'aviso de aprovado só para quem pediu, com o número da O.S.')
-        t('ORC-00005' in tx and 'Barulho na suspensão' in tx and 'Enviado ao cliente' in tx and 'ORC-00006' not in tx.split('Orçamentos abertos')[1], 'lista só os orçamentos abertos, com o pedido escrito')
+        # barra de uma linha (regra do Danilo, 17/11): o pedido só aparece ao tocar
+        t('ORC-00005' in tx and 'Enviado ao cliente' in tx and 'Barulho na suspensão' not in tx and 'ORC-00006' not in tx.split('Orçamentos abertos')[1], 'lista só os orçamentos abertos, fechados numa barra de uma linha')
+        pg.click('button[data-orc="orc1"]'); pg.wait_for_timeout(300); t('Barulho na suspensão' in textos(pg) and pg.locator('button[data-acrescentar="orc1"]').count() == 1, 'tocar na barra abre o pedido e o botão de acrescentar')
         t(pg.locator('.bolinha').count() >= 1 and pg.locator('.abas .bolinha').inner_text() == '1', 'a aba Orçamentos mostra 1 aviso')
         pg.click('button[data-visto="orc2"]'); pg.wait_for_timeout(500); t('ORC-00006 aprovado' not in textos(pg) and pg.locator('.bolinha').count() == 0, 'OK no aviso tira o aviso (fica guardado no aparelho)')
         # função ainda não publicada no Supabase (404 sem CORS): a mensagem diz a causa certa, não "sem internet" (bug visto pelo Danilo em 16/11 às 21h)
@@ -313,7 +315,7 @@ try:
         novos = [d for d in f.funcao_pedido if d['acao'] == 'novo']
         t(len(novos) == 1 and novos[0]['texto'] == 'Pastilhas e discos dianteiros' and novos[0]['placa'] == 'ABC1D23' and novos[0]['veiculo_id'] == 'v1' and novos[0]['cliente_id'] == 'c1' and novos[0]['cliente']['nome'] == 'JOÃO DA SILVA' and 'itens' not in novos[0] and not f.tabela('rpc/orcamento_salvar'), 'pedido vai pela função pedido (sem item, sem preço, sem orcamento_salvar; dois toques = um pedido): %s' % novos)
         t('ORC-00012 enviado' in textos(pg) and pg.locator('a[href*="index.html"]').count() == 0, 'quadro confirma o envio sem levar ao sistema')
-        pg.click('#pd-entendi'); pg.wait_for_timeout(400); t('ORC-00012' in textos(pg) and 'Pastilhas e discos dianteiros' in textos(pg), 'o pedido novo aparece em Orçamentos abertos')
+        pg.click('#pd-entendi'); pg.wait_for_timeout(400); t('ORC-00012' in textos(pg), 'o pedido novo aparece em Orçamentos abertos'); pg.click('button[data-orc="orc-app12"]'); pg.wait_for_timeout(300); t('Pastilhas e discos dianteiros' in textos(pg), 'abrir a barra do pedido novo mostra o texto')
         # pedido para carro fora do cadastro: modelo à mão e cliente digitado
         pg.click('#orc-novo'); pg.wait_for_selector('#pd-area'); pg.wait_for_timeout(800); pg.fill('#pd-placa', 'XYZ9A88'); pg.keyboard.press('Enter'); pg.wait_for_selector('.achou.nao:has-text("Digite o modelo")', timeout=8000)
         pg.fill('#mm-modelo', 'onix 1.0'); pg.fill('#mm-ano', '2020'); pg.fill('#pd-nome', 'Maria Nova'); pg.fill('#pd-whats', '27988887777'); pg.fill('#pd-area', 'Troca de óleo'); pg.click('#pd-enviar'); pg.wait_for_selector('.quadro', timeout=10000)
@@ -425,7 +427,13 @@ try:
         f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['orcamento', 'osconsulta']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         tela(pg, 'osconsulta'); placa_na_tela('oc-placa'); pg.click('button[data-os="o2"]'); pg.wait_for_selector('.quadro'); pg.wait_for_timeout(400)
         t(pg.locator('#os-orcar').count() == 0 and 'Só o mecânico responsável' in pg.inner_text('.quadro'), 'mecânico que não é o responsável não acrescenta itens a orçar'); pg.keyboard.press('Escape')
-        tela(pg, 'orcamento'); t(pg.locator('#orc-novo').count() == 1 and 'R$' not in textos(pg), 'mecânico liberado pede orçamento, sem preço'); ctx.close()
+        tela(pg, 'orcamento'); t(pg.locator('#orc-novo').count() == 1 and 'R$' not in textos(pg), 'mecânico liberado pede orçamento, sem preço')
+        # regra (17/11): o mecânico só vê os orçamentos que ele mesmo abriu (orc1 foi aberto por ele; orc-de-outro não)
+        f.orcs.append({'id': 'orc-de-outro', 'numero': 9, 'situacao': 'elaboracao', 'cliente': {'nome': 'OUTRO CLIENTE'}, 'veiculo': {'placa': 'ABC1D23', 'marca': 'Volkswagen', 'modelo': 'GOL 1.0'}, 'reclamacao': 'pedido de outro', 'obs_internas': '', 'consultor_id': 'outra-pessoa', 'consultor_nome': 'Outra', 'criado_em': '2026-11-16T18:00:00Z', 'atualizado_em': '2026-11-16T18:00:00Z'})
+        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra'); pg.wait_for_timeout(1500); tela(pg, 'orcamento'); pg.wait_for_timeout(600); tx = textos(pg)
+        t('ORC-00005' in tx and 'ORC-00009' not in tx, 'mecânico vê só os orçamentos que ele abriu: %s' % ('ORC-00009' in tx))
+
+        ctx.close()
         del ORD[1]['mecanico_id']; del ORD[1]['mecanico_nome']
         # 9) a tela "Sem internet" que vai dentro do APK (app/www): abre sozinha, com a logo, e tem o botão de tentar de novo
         f = Fake(); ctx, pg, er = abrir(br, f, 'http://localhost:8766/app/www/index.html', plugin=False)

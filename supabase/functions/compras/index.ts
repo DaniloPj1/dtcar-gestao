@@ -178,9 +178,67 @@ export function dpkLerPrecos(corpo: Json | null): Map<string, { preco: number; e
   for (const p of Array.isArray(corpo) ? corpo : []) m.set(String(p.id), { preco: numero(p.price), estoque: typeof p.stock === "number" ? p.stock : numero(p.stock), status: txt(p.status) });
   return m;
 }
-async function dpkBuscar(deps: Deps, s: Sessao, termo: string): Promise<Oferta[]> {
+/** O texto é um CÓDIGO de peça (WK84213, FCD2158/1, 0986BF0018)? Código é exato: vai sem o filtro do carro (com o filtro a DPK zera). */
+export const ehCodigo = (t: string) => { const x = txt(t); return !/\s/.test(x) && /\d/.test(x) && /^[A-Za-z0-9][A-Za-z0-9.\-\/]{2,}$/.test(x); };
+/** carro que a busca usa (pedido do Danilo em 17/11/2026: "quero que elas me entreguem a peça que estou pedindo pelo modelo que a placa informa") */
+export type Carro = { placa: string; texto: string };
+export type FiltroDpk = { carMakerId: number; vehicleId: number; year: number; engineId: number; nome: string };
+const semAcento = (t: string) => t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+/** Casa o texto do carro ("FIAT TORO 2.0 TURBO DIESEL RANCH 2020 2.0") com as listas do catálogo da DPK: montadora, veículo, ano e motor. */
+export function dpkCasarCarro(texto: string, montadoras: Json[], veiculosDe: (id: number) => Json[] | null, motores: Json[] | null = null): Partial<FiltroDpk> & { montadora?: Json; veiculo?: Json } {
+  const T = " " + semAcento(texto).replace(/[^A-Z0-9.]+/g, " ") + " ";
+  const contem = (d: string) => { const x = semAcento(d).replace(/[^A-Z0-9.]+/g, " ").trim(); return x.length >= 2 && T.includes(" " + x + " ") ? x.length : 0; };
+  const APELIDO: Record<string, string> = { VW: "VOLKSWAGEN", GM: "CHEVROLET", CHEV: "CHEVROLET", "M.BENZ": "MERCEDES-BENZ", MB: "MERCEDES-BENZ" };
+  const T2 = Object.entries(APELIDO).reduce((a, [k, v]) => a.replace(new RegExp(" " + k.replace(".", "\\.") + " ", "g"), " " + v + " "), T);
+  const melhor = (lista: Json[], alvo: string) => lista.map((m) => ({ m, n: (() => { const x = semAcento(String(m.description || m.model || m.name || "")).replace(/[^A-Z0-9.]+/g, " ").trim(); return x.length >= 2 && alvo.includes(" " + x + " ") ? x.length : 0; })() })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n)[0];
+  const mont = melhor(montadoras, T2); if (!mont) return {};
+  const out: Partial<FiltroDpk> & { montadora?: Json; veiculo?: Json } = { carMakerId: Number(mont.m.id), montadora: mont.m };
+  const vs = veiculosDe(Number(mont.m.id)) || [];
+  const v = melhor(vs, T2); if (!v) return out;
+  out.vehicleId = Number(v.m.id); out.veiculo = v.m;
+  const anos = (T.match(/ (19[6-9]\d|20[0-4]\d) /g) || []).map((a) => Number(a.trim()));
+  if (anos.length) out.year = Math.max(...anos);
+  if (motores && motores.length) {
+    // motor: a cilindrada (2.0) e o combustível/turbo do texto contra a descrição de cada motor ("2.0 16V MULTIJET II TURBO DIESEL")
+    const cil = (T.match(/ (\d\.\d) /) || [])[1] || "";
+    const pts = (d: string) => { const x = " " + semAcento(d).replace(/[^A-Z0-9.]+/g, " ") + " "; let n = 0;
+      if (cil && x.includes(" " + cil + " ")) n += 4; else if (cil) return -1;
+      for (const w of ["DIESEL", "FLEX", "TURBO", "GASOLINA", "ETANOL", "MULTIJET", "16V", "8V"]) if (T.includes(" " + w + " ") && x.includes(" " + w + " ")) n += 1;
+      if (T.includes(" DIESEL ") !== x.includes(" DIESEL ")) n -= 3;
+      return n; };
+    const r = motores.map((m) => ({ m, n: pts(String(m.description || m.model || "")) })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n);
+    if (r.length && (r.length === 1 || r[0].n > r[1].n)) out.engineId = Number(r[0].m.id);
+  }
+  out.nome = [mont.m.description, v.m.description, out.year || "", motores && out.engineId ? (motores.find((m) => Number(m.id) === out.engineId) || {}).description : ""].filter(Boolean).join(" ");
+  return out;
+}
+async function dpkFiltroDoCarro(deps: Deps, s: Sessao, carro: Carro): Promise<FiltroDpk | null> {
+  if (!carro.placa && !carro.texto) return null;
+  const cache = (s.carros || {}) as Record<string, FiltroDpk | null>;
+  const chaveC = carro.placa || semAcento(carro.texto);
+  if (chaveC in cache) return cache[chaveC];
+  const J = async (u: string) => { const r = await pedir(deps, DPK.api + u, { headers: dpkHeaders(s) }); if (r.status === 401) throw new ErroAcesso("sessão vencida"); return r.ok ? await r.json().catch(() => null) : null; };
+  let texto = carro.texto;
+  if (carro.placa) { const p = await J("/api-product/api/productSearch/plate?plate=" + encodeURIComponent(carro.placa)); if (typeof p === "string" && p.trim()) texto = p; }
+  const montadoras = (await J("/api-external/api/superk/filter?Type=2")) as Json[] | null;
+  if (!Array.isArray(montadoras)) return null;
+  const listas = new Map<number, Json[]>();
+  let r = dpkCasarCarro(texto, montadoras, () => null);
+  if (r.carMakerId) { const vs = await J("/api-external/api/superk/filter?Type=3&ManufacturerId=" + r.carMakerId); listas.set(r.carMakerId, Array.isArray(vs) ? vs : []); r = dpkCasarCarro(texto, montadoras, (id) => listas.get(id) || null); }
+  if (r.carMakerId && r.vehicleId) { const ms = await J("/api-external/api/superk/filter?Type=5&ManufacturerId=" + r.carMakerId + "&VehicleId=" + r.vehicleId); r = dpkCasarCarro(texto, montadoras, (id) => listas.get(id) || null, Array.isArray(ms) ? ms : null); }
+  const f = r.carMakerId && r.vehicleId ? { carMakerId: r.carMakerId, vehicleId: r.vehicleId, year: r.year || 0, engineId: r.engineId || 0, nome: r.nome || texto } : null;
+  s.carros = { ...cache, [chaveC]: f }; s.carrosMudou = true;
+  return f;
+}
+async function dpkBuscar(deps: Deps, s: Sessao, termo: string, carro: Carro | null = null, info: Json = {}): Promise<Oferta[]> {
   const store = Number(s.store) || DPK.store;
-  const r = await pedir(deps, DPK.api + "/api-product/api/productSearch?Query=" + encodeURIComponent(termo) + "&StoreCode=" + store, { headers: dpkHeaders(s) });
+  let filtro = "";
+  if (carro && !ehCodigo(termo)) {
+    const f = await dpkFiltroDoCarro(deps, s, carro);
+    if (f) { filtro = "&CarMakerId=" + f.carMakerId + "&VehicleId=" + f.vehicleId + (f.year ? "&Year=" + f.year : "") + (f.engineId ? "&EngineId=" + f.engineId : ""); info.veiculo = f.nome; }
+    else info.semCarro = "a DPK não reconheceu o carro da placa; busca sem o filtro do carro";
+  }
+  const r = await pedir(deps, DPK.api + "/api-product/api/productSearch?Query=" + encodeURIComponent(termo) + "&StoreCode=" + store + filtro, { headers: dpkHeaders(s) });
   if (r.status === 401) throw new ErroAcesso("sessão vencida");
   if (!r.ok) throw new Error("DPK: a busca falhou (HTTP " + r.status + ").");
   const prods = dpkLerBusca(await r.json().catch(() => null)).slice(0, 25);
@@ -373,7 +431,7 @@ export function amostraHtml(html: string): string {
 /* ======================================================================================================================
  * Orquestração
  * ====================================================================================================================== */
-type Resultado = { conexao: string; fornecedor_id: string; robo: Robo | null; nome: string; ok: boolean; ofertas: Oferta[]; erro?: string; gravadas?: number; em?: string; no_pc?: boolean };
+type Resultado = { conexao: string; fornecedor_id: string; robo: Robo | null; nome: string; ok: boolean; ofertas: Oferta[]; erro?: string; gravadas?: number; em?: string; no_pc?: boolean; veiculo?: string; sem_carro?: string };
 
 async function comSessao(deps: Deps, c: Conexao, robo: Robo, cnpjOficina: string, usar: (s: Sessao) => Promise<Oferta[]>): Promise<Oferta[]> {
   const senha = await deps.senha(c.id);
@@ -392,7 +450,10 @@ async function comSessao(deps: Deps, c: Conexao, robo: Robo, cnpjOficina: string
     return await usar(s);
   }
 }
-const buscar = (deps: Deps, robo: Robo, s: Sessao, termo: string) => robo === "dpk" ? dpkBuscar(deps, s, termo) : robo === "rolemar" ? rolemarBuscar(deps, s, termo) : pellegrinoBuscar(deps, s, termo);
+const buscar = (deps: Deps, robo: Robo, s: Sessao, termo: string, carro: Carro | null = null, info: Json = {}) => {
+  if (carro && !ehCodigo(termo) && robo !== "dpk") info.semCarro = "este portal ainda busca sem o filtro do carro";
+  return robo === "dpk" ? dpkBuscar(deps, s, termo, carro, info) : robo === "rolemar" ? rolemarBuscar(deps, s, termo) : pellegrinoBuscar(deps, s, termo);
+};
 
 export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promise<Json> {
   const acao = String(corpo.acao || "consultar");
@@ -466,6 +527,8 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
   if (acao !== "consultar") throw new ErroUso("Ação desconhecida: " + acao);
   const termos = [...new Set((Array.isArray(corpo.termos) ? corpo.termos : [corpo.termo]).map((t: unknown) => txt(t)).filter((t: string) => t.length >= 3))].slice(0, MAX_TERMOS);
   if (!termos.length) throw new ErroUso("Informe o código (ou a descrição) da peça para consultar.");
+  const placaC = txt(corpo.placa).toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const carro: Carro | null = /^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placaC) || txt(corpo.veiculo) ? { placa: /^[A-Z]{3}\d[A-Z0-9]\d{2}$/.test(placaC) ? placaC : "", texto: txt(corpo.veiculo).slice(0, 160) } : null;
   const ids = Array.isArray(corpo.conexoes) && corpo.conexoes.length ? corpo.conexoes.map(String) : null;
   const todas = await deps.conexoes(null);
   if (deps.limparSessoes) await deps.limparSessoes(todas.map((c) => c.id)).catch(() => {});
@@ -476,15 +539,16 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     if (!robo) return { ...base, ok: false, ofertas: [], erro: "Portal não reconhecido pelo endereço." };
     if (robo === "toli") return { ...base, ok: false, ofertas: [], no_pc: true, erro: "Portal Toli: consulta pelo programa do PC (em preparação)." };
     try {
-      const vistas = new Map<string, Oferta>();
+      const vistas = new Map<string, Oferta>(), info: Json = {};
       await comSessao(deps, c, robo, cnpjOficina, async (s) => {
-        for (const t of termos) for (const o of await buscar(deps, robo, s, t)) { const k = normCodigo(o.codigo) + "|" + normCodigo(o.marca); if (!vistas.has(k)) vistas.set(k, o); }
+        for (const t of termos) for (const o of await buscar(deps, robo, s, t, carro, info)) { const k = normCodigo(o.codigo) + "|" + normCodigo(o.marca); if (!vistas.has(k)) vistas.set(k, o); }
+        if (s.carrosMudou) { delete s.carrosMudou; await deps.gravarSessao(c.id, s); }   // o carro casado fica guardado: a próxima busca da mesma placa não refaz
         return [];
       });
       const ofertas = [...vistas.values()];
       const gravadas = ofertas.length ? await deps.gravarPrecos(c.fornecedor_id, ofertas, em) : 0;
       await deps.situacao(c.id, "ok", "Última consulta " + horaBR(agora) + " (" + ofertas.length + " preço(s)).");
-      return { ...base, ok: true, ofertas, gravadas, em };
+      return { ...base, ok: true, ofertas, gravadas, em, ...(info.veiculo ? { veiculo: info.veiculo } : {}), ...(info.semCarro ? { sem_carro: info.semCarro } : {}) };
     } catch (e) {
       const msg = (e as Error).message || "falha";
       await deps.situacao(c.id, "erro", msg);

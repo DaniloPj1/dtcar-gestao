@@ -51,6 +51,15 @@ def rodar(b, nome, w, h):
   pg.click("#cot-consultar"); pg.wait_for_timeout(1200)
   chamada = pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1]")
   chk(T("a busca vai para o fornecedor como foi digitada, com a placa e o veículo junto"), chamada["termos"] == ["CDRD0314"] and chamada["placa"] == "ONX2A20" and "ONIX" in chamada["veiculo"] and chamada["conexoes"] == ["cx-dpk"], chamada)
+  # peça pelo carro: a resposta diz para qual carro cada fornecedor filtrou
+  pg.evaluate("""window.__AOVIVO_RESPOSTA = { ok: true, em: new Date().toISOString(), resultados: [
+    { conexao: 'cx-dpk', fornecedor_id: 'f2', ok: true, veiculo: 'CHEVROLET ONIX 2020 1.0 FLEX', ofertas: [{ codigo: 'PD1512', marca: 'FRAS-LE', descricao: 'PASTILHA DE FREIO', preco: 120, estoque: 3, prazo: '' }] },
+    { conexao: 'cx-r', fornecedor_id: 'f1', ok: true, sem_carro: 'este portal ainda busca sem o filtro do carro', ofertas: [] } ] }""")
+  pg.fill("#cot-txt", "pastilha"); pg.click("#cot-consultar"); pg.wait_for_timeout(1000)
+  chk(T("peça pelo carro: aviso diz o carro filtrado na DPK e quem ainda busca sem o filtro"), "só peças do CHEVROLET ONIX 2020" in pg.inner_text("#cot-carro") and "AutoPeças" in pg.inner_text("#cot-carro .cot-carro-sem") and pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1].veiculo").startswith("CHEVROLET ONIX"), pg.inner_text("#cot-carro"))
+  pg.evaluate("""window.__AOVIVO_RESPOSTA = { ok: true, em: new Date().toISOString(), resultados: [
+    { conexao: 'cx-dpk', fornecedor_id: 'f2', ok: true, ofertas: [{ codigo: 'CDRD0314', marca: 'PERFECT', descricao: 'CUBO DE RODA', preco: 150, estoque: 4, prazo: '' }, { codigo: 'NKF8288', marca: 'NAKATA', descricao: 'CUBO DE RODA', preco: 120, estoque: 0, prazo: '' }] } ] }""")
+  pg.fill("#cot-txt", "CDRD0314"); pg.click("#cot-consultar"); pg.wait_for_timeout(1000)
   linhas = pg.locator(".cot-card")
   chk(T("tabela: DPK ao vivo (4 un) e AutoPeças informado (5 un), do mais barato para o mais caro; sem estoque fica de fora"), linhas.count() == 2 and linhas.nth(0).get_attribute("data-forn") == "DPK DISTRIBUIDORA" and "150,00" in linhas.nth(0).inner_text() and "4 un" in linhas.nth(0).inner_text()
       and linhas.nth(1).get_attribute("data-forn") == "AutoPeças" and "189,90" in linhas.nth(1).inner_text() and "NKF8288" not in pg.inner_text(".cot-resultado") and "1 sem estoque não aparece" in pg.inner_text(".cot-resultado"), pg.inner_text(".cot-resultado")[:600])

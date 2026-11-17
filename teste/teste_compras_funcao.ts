@@ -40,7 +40,7 @@ confere("Pellegrino: leitura dos preços", F.pellegrinoLerPrecos({ precos: [{ id
 // ---------- portais de mentira
 const chamadas: string[] = [];
 let dpkLogins = 0, rolemarLogins = 0, pellLogins = 0, dpkTokenValido = "tok1", recusarSenha = false, bloquear403 = false;
-let dpkCart: L | null = null; const dpkPosts: L[] = [];
+let dpkCart: L | null = null; const dpkPosts: L[] = []; const dpkFiltros: string[] = []; const dpkBuscas: string[] = [];
 const j = (b: unknown, status = 200, headers: Record<string, string> = {}) => new Response(JSON.stringify(b), { status, headers: { "content-type": "application/json", ...headers } });
 async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): Promise<Response> {
   const u = String(url); chamadas.push(u);
@@ -48,6 +48,12 @@ async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): P
   const texto = async () => typeof body === "string" ? body : body instanceof FormData ? Object.fromEntries([...body.entries()].map(([k, v]) => [k, String(v)])) : "";
   if (bloquear403) return new Response("blocked", { status: 403 });
   // DPK
+  if (u.startsWith(F.DPK.api + "/api-external/api/superk/filter?")) { const q = new URL(u).searchParams; dpkFiltros.push(u);
+    if (q.get("Type") === "2") return j([{ id: 1, description: "AGRALE" }, { id: 19, description: "FIAT" }, { id: 7, description: "CHEVROLET" }]);
+    if (q.get("Type") === "3" && q.get("ManufacturerId") === "19") return j([{ id: 2419, description: "TORINO" }, { id: 2420, description: "TORO" }, { id: 500, description: "UNO" }]);
+    if (q.get("Type") === "3" && q.get("ManufacturerId") === "7") return j([{ id: 900, description: "ONIX" }, { id: 901, description: "ONIX PLUS" }]);
+    if (q.get("Type") === "5" && q.get("VehicleId") === "2420") return j([{ id: 2603, description: "1.3 16V T270 TURBO L4 FLEX" }, { id: 170, description: "1.8 16V E-TORQ FLEX" }, { id: 1006, description: "2.0 16V MULTIJET II TURBO DIESEL" }, { id: 1679, description: "2.4 16V TIGERSHARK FLEX" }]);
+    return j([]); }
   if (u.startsWith(F.DPK.api + "/api-product/api/productSearch/plate?")) { const h2 = new Headers(init.headers || {}); if (h2.get("authorization") !== "Bearer " + dpkTokenValido) return j({}, 401); return new URL(u).searchParams.get("plate") === "QXN1E49" ? j("FIAT TORO 2.0 TURBO DIESEL RANCH 2020") : j(""); }
   if (u === F.DPK.api + "/dpk-order/api/cart/getByFilter") return j(dpkCart ? [dpkCart] : []);
   if (u === F.DPK.api + "/dpk-order/api/cart" && init.method === "POST") { const b = JSON.parse(String(await texto())); dpkPosts.push(b); dpkCart = { id: "cart-1", retailerId: b.retailerId, hubId: b.hubId, closed: false, cartItems: b.cartItems.map((i: L, n: number) => ({ id: "it" + n, ...i })) }; return j(dpkCart); }
@@ -57,8 +63,11 @@ async function fakeFetch(url: string | URL | Request, init: RequestInit = {}): P
     if (h.get("x-api-key") !== "CHAVEPUBLICA1234567890ABCDEFGHIJKLMN" || h.get("x-portal") !== "DPK") return j({ erro: "sem chave" }, 401);
     if (u.endsWith("/api-auth/api/connect/token")) { dpkLogins++; const b = JSON.parse(String(await texto())); if (b.password === "senha-dpk" && b.userPrincipalName === "danilo@dtcar.com" && !recusarSenha) return j({ accessToken: dpkTokenValido, refreshToken: "r", document: "49016409000195", documents: ["49016409000195"] }); return j({ error: "invalid_grant" }, 400); }
     if (h.get("authorization") !== "Bearer " + dpkTokenValido) return j({}, 401);
-    if (u.includes("/productSearch?")) { const q = new URL(u).searchParams; return q.get("StoreCode") === "21" && q.get("Query") === "WK84213" ? j({ totalCount: 1, products: [{ id: 2905056, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545", image: "MANN_WK84213.jpg", minimumQuantity: 0 }] }) : j({ totalCount: 0, products: [] }); }
-    if (u.includes("/dpk-price/api/price/dpk?")) return j([{ id: 83545, status: "02 - Disponível", stock: 12, price: 63.24, unitePrice: 63.24 }]);
+    if (u.includes("/productSearch?") && new URL(u).searchParams.get("Query") === "pastilha") { dpkBuscas.push(u); const q = new URL(u).searchParams;
+      return q.get("VehicleId") === "2420" ? j({ totalCount: 1, products: [{ id: 77, code: "PD1512", description: "PASTILHA FREIO TORO", manufacturer: "FRAS-LE", sapCode: "5512" }] })
+        : j({ totalCount: 2, products: [{ id: 77, code: "PD1512", description: "PASTILHA FREIO TORO", manufacturer: "FRAS-LE", sapCode: "5512" }, { id: 78, code: "PD999", description: "PASTILHA FREIO UNO", manufacturer: "COBREQ", sapCode: "5513" }] }); }
+    if (u.includes("/productSearch?")) { dpkBuscas.push(u); const q = new URL(u).searchParams; return q.get("StoreCode") === "21" && q.get("Query") === "WK84213" ? j({ totalCount: 1, products: [{ id: 2905056, code: "WK84213", description: "FILTRO COMBUSTIVEL", manufacturer: "MANN", sapCode: "83545", image: "MANN_WK84213.jpg", minimumQuantity: 0 }] }) : j({ totalCount: 0, products: [] }); }
+    if (u.includes("/dpk-price/api/price/dpk?")) return j([{ id: 83545, status: "02 - Disponível", stock: 12, price: 63.24, unitePrice: 63.24 }, { id: 5512, status: "02 - Disponível", stock: 4, price: 210.5 }, { id: 5513, status: "02 - Disponível", stock: 9, price: 99.9 }]);
   }
   // Rolemar
   if (u === F.ROLEMAR.site + "/login") return new Response("<html>", { headers: { "set-cookie": "PHPSESSID=s1; Path=/" } });
@@ -278,6 +287,34 @@ confere("testar portal desconhecido", r.ok === false && situacoes["c-x"][0] === 
   const x = await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "DDD444", descricao: "X", marca: "M", qtd: 1, preco: 1, extra: { productId: 4, sapCode: "444" } } }, roubada, "49016409000195") as L;
   confere("carrinho do portal: trava tomada por outra chamada → não grava no portal", x.ok === false && /nada foi gravado/.test(x.erro) && dpkPosts.length === n0, JSON.stringify(x));
 }
+// ---------- peça pelo carro da placa (DPK): placa → FIAT TORO 2020 2.0 diesel → busca só desse carro
+confere("é código? código vai sem filtro do carro; descrição vai com", F.ehCodigo("WK84213") && F.ehCodigo("FCD2158/1") && F.ehCodigo("0986BF0018") && !F.ehCodigo("pastilha") && !F.ehCodigo("filtro de oleo") && !F.ehCodigo("PD 1512"));
+{ const c = F.dpkCasarCarro("FIAT TORO 2.0 TURBO DIESEL RANCH 2020 2.0", [{ id: 19, description: "FIAT" }, { id: 7, description: "CHEVROLET" }], (id) => id === 19 ? [{ id: 2419, description: "TORINO" }, { id: 2420, description: "TORO" }] : null,
+    [{ id: 170, description: "1.8 16V E-TORQ FLEX" }, { id: 1006, description: "2.0 16V MULTIJET II TURBO DIESEL" }, { id: 2603, description: "1.3 16V T270 TURBO L4 FLEX" }]);
+  confere("casar o carro: montadora, veículo (palavra inteira: TORO, não TORINO), ano e motor pela cilindrada + diesel", c.carMakerId === 19 && c.vehicleId === 2420 && c.year === 2020 && c.engineId === 1006, JSON.stringify(c));
+  const o = F.dpkCasarCarro("CHEVROLET ONIX PLUS 1.0 TURBO 2021", [{ id: 7, description: "CHEVROLET" }], () => [{ id: 900, description: "ONIX" }, { id: 901, description: "ONIX PLUS" }]);
+  confere("casar o carro: o nome mais completo vence (ONIX PLUS, não ONIX)", o.vehicleId === 901 && o.year === 2021, JSON.stringify(o));
+  const g = F.dpkCasarCarro("GM ONIX 1.0 2020", [{ id: 7, description: "CHEVROLET" }], () => [{ id: 900, description: "ONIX" }]);
+  confere("casar o carro: GM vira CHEVROLET", g.carMakerId === 7 && g.vehicleId === 900);
+  confere("casar o carro: montadora desconhecida → nada", !F.dpkCasarCarro("XPTO MODELO 2020", [{ id: 19, description: "FIAT" }], () => []).carMakerId); }
+sessoes["c-dpk"] = null; dpkFiltros.length = 0; dpkBuscas.length = 0; dpkTokenValido = "tok1";
+rc = await F.executar({ termos: ["pastilha"], placa: "QXN-1E49", conexoes: ["c-dpk", "c-rol"] }, deps(), "49016409000195") as L;
+{ const d = rc.resultados.find((x: L) => x.conexao === "c-dpk"), rl = rc.resultados.find((x: L) => x.conexao === "c-rol");
+  const b = dpkBuscas.find((u) => u.includes("Query=pastilha")) || "";
+  confere("DPK pela placa: a busca vai com montadora, veículo, ano e motor do carro", /CarMakerId=19/.test(b) && /VehicleId=2420/.test(b) && /Year=2020/.test(b) && /EngineId=1006/.test(b), b);
+  confere("DPK pela placa: só a peça do carro volta, e a resposta diz qual carro filtrou", d.ok && d.ofertas.length === 1 && d.ofertas[0].codigo === "PD1512" && /FIAT TORO 2020 2\.0 16V MULTIJET II TURBO DIESEL/.test(d.veiculo), JSON.stringify(d));
+  confere("portal que ainda não filtra pelo carro: a resposta avisa", rl.ok && /sem o filtro do carro/.test(rl.sem_carro || ""), JSON.stringify(rl).slice(0, 300));
+  confere("o carro casado fica guardado na sessão", !!(sessoes["c-dpk"] && sessoes["c-dpk"].carros && sessoes["c-dpk"].carros.QXN1E49 && sessoes["c-dpk"].carros.QXN1E49.vehicleId === 2420)); }
+const nFiltros = dpkFiltros.length; dpkBuscas.length = 0;
+rc = await F.executar({ termos: ["pastilha"], placa: "QXN1E49", conexoes: ["c-dpk"] }, deps()) as L;
+confere("mesma placa de novo: não consulta as listas do catálogo outra vez", dpkFiltros.length === nFiltros && /VehicleId=2420/.test(dpkBuscas[0] || ""));
+dpkBuscas.length = 0;
+rc = await F.executar({ termos: ["WK84213"], placa: "QXN1E49", conexoes: ["c-dpk"] }, deps()) as L;
+confere("código com placa: vai SEM o filtro do carro (código é exato)", rc.resultados[0].ofertas.length === 1 && !/VehicleId/.test(dpkBuscas[0] || "") && !rc.resultados[0].veiculo, dpkBuscas[0]);
+dpkBuscas.length = 0;
+rc = await F.executar({ termos: ["pastilha"], conexoes: ["c-dpk"] }, deps()) as L;
+confere("sem placa: busca sem filtro do carro", rc.resultados[0].ofertas.length === 2 && !/VehicleId/.test(dpkBuscas[0] || ""));
+
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));
 confere("sem segredo no código", !/senha-|password":\s*"[^"{]|sb_secret|eyJ[A-Za-z0-9_-]{30,}/.test(fonte) && !/[A-Za-z0-9]{40}/.test(fonte.replace(/CHAVEPUBLICA/g, "")));

@@ -718,7 +718,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   **Fichinha de cada fornecedor conectado** (`SituacaoFornecedores`, `#cot-situacoes`): verde = Conectado (logado), vermelho = Com erro (com o
   motivo), cinza = aguardando a primeira consulta / portal não reconhecido, azul = pelo programa do PC. `detalheLegivel` troca a hora ISO do
   detalhe pelo horário de Brasília (a função passou a gravar `horaBR`). Carrinho resumido ao lado (PC largo) ou embaixo, com "Gerar pedidos por
-  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **v179 (pedidos do Danilo em 17/11/2026, de manhã):**
+  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **v179 (pedidos do Danilo em 17/11/2026, de manhã):** placa fora do cadastro na aba Compras: 1º o modelo de graça pelo portal com login (ação `placa` da função: DPK `productSearch/plate`, depois Rolemar `/ajax-busca-placa`); só se nenhum portal conhecer, a consulta paga de sempre.
   resultado no estilo da pesquisa da DPK — CARDS com foto da peça, "Fabricante:", "Cód. de fábrica:", estoque em verde e "Adicionar", visão
   **Cards | Lista** e tamanho **Pequeno | Médio | Grande** (guardados no aparelho, `dtcar-compras-cot`), filtros por fornecedor e por marca da
   peça; cor fixa por fornecedor (`corDoFornecedor` em `js/compraspecas.js`) nos cards, nas linhas e nas fichinhas. A função devolve `foto`

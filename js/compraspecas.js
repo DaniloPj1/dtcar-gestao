@@ -152,12 +152,13 @@ export function textoPedido(pedido, itens, { contato = "", hora = 9 } = {}) {
 
 /* ---------------- consulta ao vivo (etapa 2): robô reconhecido pelo endereço do portal ---------------- */
 /** Mesma regra da função "compras": o robô é escolhido SÓ pelo endereço do portal cadastrado em Ajustes (o nome do fornecedor não conta). */
-export const NOME_ROBO = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Pellegrino Compre Online", toli: "Portal Toli" };
+export const NOME_ROBO = { dpk: "DPK", rolemar: "Rolemar Master", pellegrino: "Compre Online", toli: "Portal Toli" };
 export function roboDaConexao(c) {
   const s = String((c && c.endereco) || "").toLowerCase();
   if (/dpk\.com\.br/.test(s)) return "dpk";
   if (/rolemarmaster\.com|rolemar\./.test(s)) return "rolemar";
-  if (/pellegrino\.com\.br/.test(s)) return "pellegrino";
+  // plataforma "Compre Online" (Pellegrino, Sama e outras): mesma regra do roboDe da função "compras"
+  if (/^https?:\/\/compreonline\.[a-z0-9-]+(\.[a-z0-9-]+)*\.com\.br(\/|$)/.test(s) || /pellegrino\.com\.br/.test(s)) return "pellegrino";
   if (/tolidistribuidora\.com\.br/.test(s)) return "toli";
   return null;
 }
@@ -209,7 +210,7 @@ export function linhasCotacao({ resposta = null, idx = new Map(), codigos = [], 
     if (!r.ok) { semResposta.push({ fornecedor_id: r.fornecedor_id, fornecedor: nome, motivo: r.no_pc ? "consulta pelo programa do PC (em preparação)" : (r.erro || "não respondeu"), no_pc: !!r.no_pc }); continue; }
     for (const o of r.ofertas || []) {
       const k = chaveDe(r.fornecedor_id, o.codigo); if (vistas.has(k) || !(Number(o.preco) > 0)) continue; vistas.add(k);
-      linhas.push({ chave: "av:" + k, fornecedor_id: r.fornecedor_id, fornecedor: nome, codigo: o.codigo || "", marca: o.marca || "", descricao: o.descricao || "", preco: Number(o.preco),
+      linhas.push({ chave: "av:" + k, conexao: r.conexao || "", fornecedor_id: r.fornecedor_id, fornecedor: nome, codigo: o.codigo || "", marca: o.marca || "", descricao: o.descricao || "", preco: Number(o.preco), foto: /^https:\/\//.test(o.foto || "") ? o.foto : "", extra: o.extra && typeof o.extra === "object" ? o.extra : null,
         estoque: o.estoque === null || o.estoque === undefined ? null : Number(o.estoque), prazo: o.prazo || "", origem: "ao_vivo", em: resposta.em || new Date(agora).toISOString(), idade: 0, antigo: false });
     }
     if (!(r.ofertas || []).length) semResposta.push({ fornecedor_id: r.fornecedor_id, fornecedor: nome, motivo: "sem resultado para esse código", no_pc: false, vazio: true });
@@ -225,4 +226,12 @@ export function linhasCotacao({ resposta = null, idx = new Map(), codigos = [], 
   const valem = mostradas.filter(o => o.origem !== "ultima_compra" && !o.antigo && o.estoque !== 0);
   const menor = valem.length && mostradas.length >= 2 ? valem[0] : null;
   return { linhas: mostradas.map(o => ({ ...o, menor: !!menor && o.chave === menor.chave })), semResposta, semEstoque };
+}
+
+/** Cor de cada fornecedor nos cards e nas fichinhas (sempre a mesma para o mesmo fornecedor, pela ordem do cadastro): tons da DTCar, sem neon */
+export const CORES_FORNECEDOR = ["#174f94", "#16191d", "#2e7d32", "#8e3b46", "#b26a00", "#4a5260", "#5b3fa0", "#00707a"];
+export function corDoFornecedor(id, fornecedores = []) {
+  const ids = fornecedores.map(f => f.id).sort();
+  const n = ids.indexOf(id);
+  return CORES_FORNECEDOR[(n < 0 ? 0 : n) % CORES_FORNECEDOR.length];
 }

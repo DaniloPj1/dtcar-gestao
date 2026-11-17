@@ -718,8 +718,17 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   **Fichinha de cada fornecedor conectado** (`SituacaoFornecedores`, `#cot-situacoes`): verde = Conectado (logado), vermelho = Com erro (com o
   motivo), cinza = aguardando a primeira consulta / portal não reconhecido, azul = pelo programa do PC. `detalheLegivel` troca a hora ISO do
   detalhe pelo horário de Brasília (a função passou a gravar `horaBR`). Carrinho resumido ao lado (PC largo) ou embaixo, com "Gerar pedidos por
-  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **Ainda não feito:** pôr o item também no carrinho do PORTAL do fornecedor
-  (hoje o carrinho é só do sistema: o pedido é finalizado no portal à mão); busca por placa dentro de cada portal; robô da Toli no PC.
+  fornecedor" (vai para a aba Carrinho). Celular: tabela empilhada. **v179 (pedidos do Danilo em 17/11/2026, de manhã):** placa fora do cadastro na aba Compras: 1º o modelo de graça pelo portal com login (ação `placa` da função: DPK `productSearch/plate`, depois Rolemar `/ajax-busca-placa`); só se nenhum portal conhecer, a consulta paga de sempre.
+  resultado no estilo da pesquisa da DPK — CARDS com foto da peça, "Fabricante:", "Cód. de fábrica:", estoque em verde e "Adicionar", visão
+  **Cards | Lista** e tamanho **Pequeno | Médio | Grande** (guardados no aparelho, `dtcar-compras-cot`), filtros por fornecedor e por marca da
+  peça; cor fixa por fornecedor (`corDoFornecedor` em `js/compraspecas.js`) nos cards, nas linhas e nas fichinhas. A função devolve `foto`
+  (DPK: nome do arquivo → CDN `cdn-superk.azureedge.net/img/`; Rolemar: `imagens`; Pellegrino: `<img>` da página; só https) e `extra`
+  (DPK: `productId` + `sapCode`, os códigos internos do portal). **Carrinho do portal (mapeado em 17/11/2026):** ação `carrinho_portal`
+  da função — DPK: `GET dpk-order/api/cart/getByFilter` + `POST dpk-order/api/cart` (o carrinho inteiro vai no corpo; item repetido soma a
+  quantidade; o sistema NUNCA remove nem fecha pedido no portal). No "Pôr no carrinho" de um preço ao vivo, a caixa "Pôr também no carrinho
+  do portal" (marcada) chama a ação; falha vira aviso, o item fica no carrinho do sistema do mesmo jeito. Rolemar/Pellegrino: ainda não
+  mapeados (a ação responde "ainda não está pronto"). **Ainda não feito:** carrinho do portal da Rolemar e do Pellegrino (precisa de um
+  clique do Danilo em cada portal para gravar a rota); busca por placa dentro de cada portal; robô da Toli no PC.
 
 ### Quadro "Óleo e filtros" recolhido na página do veículo (15/11/2026, v138)
 - Com ficha gravada, o card começa recolhido: só a linha de cima (litros, viscosidade, selo) e o botão "Mostrar/Ocultar" (`#fo-alternar`). O corpo (`#fo-corpo`) com filtros, "Refazer ou editar" e "Confirmar" só existe aberto. Sem ficha, o card continua como antes. Vale para PC e celular (é o mesmo componente).

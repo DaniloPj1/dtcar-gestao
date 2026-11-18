@@ -3,7 +3,8 @@
 -- matriz e lança: a comissão entra como CUSTO do item de serviço na O.S. (os_itens.custo_unit) e como lançamento da folha
 -- (funcionario_lanc, tipo 'comissao'). Decisões do Danilo:
 --   1. A comissão vira custo na O.S. INCLUSIVE nas já fechadas e pagas (a margem de meses antigos muda e fica correta).
---   2. A matriz de percentuais é editada na própria tela (config.dados.comissao), não na ficha do funcionário.
+--   2. A matriz de percentuais é editada na própria tela. Os valores ficam na FICHA DO FUNCIONÁRIO
+--      (funcionarios.comissao_pct e a coluna nova comissao_grupos), não no config: config é lido por toda a equipe.
 --   3. Quinzena fixa: 1 a 15 e 16 ao fim do mês.
 --   4. Ordem do percentual: exceção por grupo de serviço → padrão do mecânico → o que o Danilo digitar na hora (vence os dois).
 --   5. O percentual incide sobre a mão de obra do serviço. Serviço apontado por mais de um mecânico: a mão de obra é dividida
@@ -125,21 +126,22 @@ language sql stable security invoker set search_path = public as $$
     from public.os_itens i
     join public.ordens o on o.id = i.ordem_id
     left join public.produtos pr on pr.id = i.produto_id
-   where i.tipo = 'servico' and i.qtd > 0 and o.status <> 'cancelado'
-     and case when o.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end
+   where i.tipo = 'servico' and i.qtd > 0 and o.status <> 'cancelado' and i.aprovado is true
+     -- aprovado is true, e não "is distinct from false": item de orçamento ainda sem resposta do cliente poderia ser
+     -- recusado depois, e aí a comissão ficaria na folha e sumiria da margem. Comissão é sobre serviço aprovado.
 $$;
 revoke all on function public.comissao_itens_validos() from public, anon;
 grant execute on function public.comissao_itens_validos() to authenticated;
 
 -- quanto da mão de obra de um item ainda não foi comprometido em lançamento vivo
-create or replace function public.comissao_fracao_livre(p_item uuid, p_fora uuid default null)
+create or replace function public.comissao_fracao_livre(p_item uuid)
 returns numeric language sql stable security invoker set search_path = public as $$
   select greatest(0, 1 - coalesce((select sum(ci.fracao) from public.comissao_itens ci
-                                     where ci.item_id = p_item and not ci.cancelado
-                                       and (p_fora is null or ci.comissao_id <> p_fora)), 0))
+                                     where ci.item_id = p_item and not ci.cancelado), 0))
 $$;
-revoke all on function public.comissao_fracao_livre(uuid, uuid) from public, anon;
-grant execute on function public.comissao_fracao_livre(uuid, uuid) to authenticated;
+drop function if exists public.comissao_fracao_livre(uuid, uuid);
+revoke all on function public.comissao_fracao_livre(uuid) from public, anon;
+grant execute on function public.comissao_fracao_livre(uuid) to authenticated;
 
 create or replace function public.comissao_quinzena(p_inicio date, p_fim date, p_funcionario uuid default null,
                                                    p_itens uuid[] default '{}')
@@ -390,7 +392,7 @@ create or replace function public.agente_totais_os(p_ordem uuid) returns jsonb
 language sql stable security invoker set search_path = public as $$
   with o as (select * from public.ordens where id = p_ordem),
   conta as (
-    select i.* from public.os_itens i, o where i.ordem_id = o.id
+    select i.* from public.os_itens i, o where i.ordem_id = o.id and not i.fornecida_cliente   -- v61: peça do cliente não é custo (igual ao relatório e ao vincular_nfe_os)
       and case when o.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end)
   select jsonb_build_object(
     'total', greatest(0, coalesce((select sum(round(qtd * valor_unit - coalesce(desconto, 0), 2)) from conta), 0) - coalesce((select desconto from o), 0)),
@@ -431,6 +433,9 @@ begin
   for it in select * from jsonb_array_elements(coalesce(p->'itens', '[]'::jsonb)) loop
     select * into item from public.os_itens where id = (it->>'item_id')::uuid and ordem_id = o.id;
     if not found then raise exception 'Item não pertence a esta O.S.'; end if;
+    -- v61: nota fiscal é de peça. Em item de serviço o custo_unit é a comissão do mecânico: sobrescrever apagaria o que
+    -- já foi lançado na folha. A tela da SEFAZ nem oferece serviço; isto fecha o caminho pelo agente.
+    if item.tipo = 'servico' then raise exception 'O item "%" é serviço: nota fiscal entra em peça. Escolha o item da peça.', item.descricao; end if;
     select exists (select 1 from public.nfe_os_vinculos where item_id = item.id) into ja_vinculado;
     -- peça do cadastro que já saiu do estoque pela O.S.: a compra desta nota entra no estoque (saldo fica correto)
     select coalesce(max(v.entrada_estoque), 0) into entrada from public.nfe_os_vinculos v where v.item_id = item.id;
@@ -615,7 +620,7 @@ grant execute on function public.agente_lancar_itens_os(jsonb, boolean) to authe
 
 update public.ordens o set custo = t.custo
   from (select o2.id, coalesce((select sum(round(i.qtd * i.custo_unit, 2)) from public.os_itens i
-                                  where i.ordem_id = o2.id
+                                  where i.ordem_id = o2.id and not i.fornecida_cliente
                                     and case when o2.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end), 0) custo
           from public.ordens o2
          where exists (select 1 from public.os_itens i2 where i2.ordem_id = o2.id and i2.tipo = 'servico' and i2.custo_unit <> 0)) t

@@ -1,5 +1,5 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
-import { local, erroDeRede } from "./local.js";
+import { local, erroDeRede, semTabelaComissao } from "./local.js";
 import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
 import { versaoOS, tocarOS } from "./fila.js";
 import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente, comTrava, podeAlterarSemInternet } from "./alteracoes.js";
@@ -372,6 +372,9 @@ function criarApiSupabase() {
       indicadasPara: async perfil_id => { const l = await metodos.apontamentos.listar({ desde: new Date(Date.now() - 60 * 86400000).toISOString() });
         return l.flatMap(s => (Array.isArray(s.indicacoes) ? s.indicacoes : []).filter(i => i.para_id === perfil_id && !i.visto_em).map(i => ({ ...i, apontamento_id: s.id, ordem_id: s.ordem_id, os_numero: s.os_numero, de_nome: s.perfil_nome }))); },
     },
+    /** Só "a tabela não existe" (banco ainda sem o v61) vale como "não há comissão lançada". Erro de permissão, tempo
+     *  esgotado ou rede TEM de estourar: a folha precisa distinguir "não foi lançado" de "não consegui ler", senão volta
+     *  a calcular a comissão automática por cima de uma já lançada. */
     /** Comissão por quinzena (v61, pedido do Danilo em 18/11/2026). A comissão vira custo do item de serviço na O.S. e
      *  lançamento na folha. Só administrador. Sem o v61 no banco, "quinzena" devolve null e a tela avisa. */
     comissao: {
@@ -387,11 +390,11 @@ function criarApiSupabase() {
         if (competencia) q = q.eq("competencia", competencia);
         if (funcionarioId) q = q.eq("funcionario_id", funcionarioId); if (comId) q = q.eq("id", comId);
         const r = await q.order("criado_em", { ascending: false });
-        if (r.error && /comissoes|schema cache|PGRST205/i.test(r.error.message || "")) return [];
+        if (semTabelaComissao(r.error)) return [];   // banco ainda sem o v61: não existe comissão lançada
         return ok(r);
       },
       itens: async comId => { const r = await sb.from("comissao_itens").select("*").eq("comissao_id", comId).order("os_numero");
-        if (r.error && /comissao_itens|schema cache|PGRST205/i.test(r.error.message || "")) return []; return ok(r); },
+        if (semTabelaComissao(r.error)) return []; return ok(r); },
       lancar: async p => { const r = await sb.rpc("comissao_lancar", { p });
         if (r.error && /comissao_lancar|schema cache|PGRST202|404/i.test(r.error.message || "")) throw new Error("A comissão ainda não foi ligada: falta rodar o supabase/v61.sql no banco.");
         return ok(r); },

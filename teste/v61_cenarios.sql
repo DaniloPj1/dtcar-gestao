@@ -304,21 +304,65 @@ do $$ declare r jsonb; begin
   if exists (select 1 from public.comissoes where inicio = '2027-05-01') then raise exception 'FALHOU 15c: sobrou lançamento de tentativa recusada'; end if;
 end $$;
 
--- 16. vincular nota fiscal NÃO apaga a comissão do custo guardado na O.S.
-do $$ declare r jsonb; v_antes numeric; begin
+-- 16. vincular nota fiscal (a função de verdade) NÃO apaga a comissão do custo guardado na O.S.
+insert into public.nfe_recebidas (chave, cnpj_emitente, nome_emitente, numero, valor, status)
+values ('61000000000000000000000000000000000000000001', '11222333000181', 'AUTOPECAS TESTE', '9001', 120, 'nova')
+on conflict (chave) do update set status = 'nova';
+delete from public.nfe_os_vinculos where chave = '61000000000000000000000000000000000000000001';
+do $$ declare r jsonb; v_antes numeric; v_peca uuid; begin
   r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-06-01', 'fim', '2027-06-15',
     'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'pct', 10))));
   select custo into v_antes from public.ordens where id = '00000000-0000-0000-0000-000000000704';
   if v_antes <> (public.agente_totais_os('00000000-0000-0000-0000-000000000704')->>'custo')::numeric
     then raise exception 'FALHOU 16a: ordens.custo já não bate com o agente_totais_os'; end if;
-  -- a função do v9, republicada no v61: o custo recalculado continua contando a mão de obra
-  update public.ordens o set custo = (select coalesce(sum(round(i.qtd * i.custo_unit, 2)), 0) from public.os_itens i
-      where i.ordem_id = o.id and not i.fornecida_cliente
-        and (case when o.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end))
-    where id = '00000000-0000-0000-0000-000000000704';
-  if (select custo from public.ordens where id = '00000000-0000-0000-0000-000000000704') <> v_antes
-    then raise exception 'FALHOU 16b: o recálculo da nota fiscal mudaria o custo (a comissão sumiria)'; end if;
+  -- uma peça nesta O.S. para a nota entrar
+  insert into public.os_itens (id, ordem_id, tipo, descricao, qtd, valor_unit, custo_unit, desconto, aprovado)
+  values ('00000000-0000-0000-0000-0000000000a9', '00000000-0000-0000-0000-000000000704', 'peca', 'PECA DA NOTA', 1, 300, 0, 0, true)
+  on conflict (id) do update set custo_unit = 0 returning id into v_peca;
+  r := public.vincular_nfe_os(jsonb_build_object('chave', '61000000000000000000000000000000000000000001',
+    'ordem_id', '00000000-0000-0000-0000-000000000704',
+    'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a9', 'custo_total', 120, 'descricao_nf', 'PECA', 'qtd', 1, 'nf_item', 1))));
+  -- o custo da O.S. passa a ser a comissão (100) + a peça da nota (120). Antes do v61 a comissão sumia aqui.
+  if (select custo from public.ordens where id = '00000000-0000-0000-0000-000000000704') <> v_antes + 120
+    then raise exception 'FALHOU 16b: vincular a nota mexeu na comissão: era % + 120, ficou %', v_antes,
+      (select custo from public.ordens where id = '00000000-0000-0000-0000-000000000704'); end if;
+  if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8') <> 180
+    then raise exception 'FALHOU 16c: a nota mexeu no custo do serviço'; end if;
+  -- nota fiscal em item de SERVIÇO é recusada (apagaria a comissão)
+  begin r := public.vincular_nfe_os(jsonb_build_object('chave', '61000000000000000000000000000000000000000001',
+      'ordem_id', '00000000-0000-0000-0000-000000000704',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'custo_total', 50, 'descricao_nf', 'X', 'qtd', 1, 'nf_item', 1))));
+    raise exception 'FALHOU 16d: vinculou nota fiscal em item de serviço';
+  exception when others then if sqlerrm not like '%é serviço: nota fiscal entra em peça%' then raise; end if; end;
+  if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8') <> 180
+    then raise exception 'FALHOU 16e: a tentativa recusada mexeu no custo do serviço'; end if;
   r := public.comissao_cancelar((select id from public.comissoes where funcionario_id = '00000000-0000-0000-0000-0000000000e1' and inicio = '2027-06-01'), 'teste');
+end $$;
+delete from public.os_itens where id = '00000000-0000-0000-0000-0000000000a9';
+
+-- 17. comissão é sobre serviço APROVADO: item de orçamento ainda sem resposta do cliente não entra
+--     (se entrasse e o cliente recusasse depois, o dinheiro ficava na folha e sumia da margem)
+do $$ declare q jsonb; r jsonb; begin
+  insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total)
+  values ('00000000-0000-0000-0000-000000000705', 705, 'diagnostico', '00000000-0000-0000-0000-0000000000c9', '00000000-0000-0000-0000-0000000000f9', '{"nome": "Ana Souza"}', '{"placa": "ABC1D23"}', 5000, 0)
+  on conflict (id) do update set status = 'diagnostico';
+  delete from public.servico_apontamentos where ordem_id = '00000000-0000-0000-0000-000000000705';
+  delete from public.os_itens where ordem_id = '00000000-0000-0000-0000-000000000705';
+  insert into public.os_itens (id, ordem_id, tipo, descricao, qtd, valor_unit, custo_unit, desconto, aprovado)
+  values ('00000000-0000-0000-0000-0000000000aa', '00000000-0000-0000-0000-000000000705', 'servico', 'ORCADO SEM RESPOSTA', 1, 700, 0, 0, null);
+  insert into public.servico_apontamentos (ordem_id, os_numero, perfil_id, perfil_nome, situacao, inicio, fim, itens_executados)
+  values ('00000000-0000-0000-0000-000000000705', 705, '88888888-8888-8888-8888-888888888888', 'Zé', 'finalizado', '2027-07-02 09:00-03', '2027-07-02 10:00-03',
+          array['00000000-0000-0000-0000-0000000000aa']::uuid[]);
+  q := public.comissao_quinzena('2027-07-01', '2027-07-15', '00000000-0000-0000-0000-0000000000e1');
+  if (q->0->'itens') @> '[{"descricao": "ORCADO SEM RESPOSTA"}]'::jsonb then raise exception 'FALHOU 17a: serviço sem resposta do cliente entrou na quinzena'; end if;
+  begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-07-01', 'fim', '2027-07-15',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000aa'))));
+    raise exception 'FALHOU 17b: lançou comissão de serviço ainda sem resposta do cliente';
+  exception when others then if sqlerrm not like '%não serve para comissão%' then raise; end if; end;
+  -- aprovado, entra
+  update public.os_itens set aprovado = true where id = '00000000-0000-0000-0000-0000000000aa';
+  q := public.comissao_quinzena('2027-07-01', '2027-07-15', '00000000-0000-0000-0000-0000000000e1');
+  if not ((q->0->'itens') @> '[{"descricao": "ORCADO SEM RESPOSTA"}]'::jsonb) then raise exception 'FALHOU 17c: serviço aprovado não entrou: %', q; end if;
 end $$;
 
 select 'v61: todos os cenários passaram' as resultado;

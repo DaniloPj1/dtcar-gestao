@@ -41,6 +41,14 @@ export async function tabelaLocal(t) {
 }
 const limpar = t => (t ? cache.delete(t) : cache.clear());
 
+/** Como tabelaLocal, mas FALHA se a tabela ainda não foi carregada neste computador, em vez de devolver lista vazia.
+ *  Para dado em que "vazio" e "ainda não li" têm consequências diferentes — a comissão da folha é o caso (v61). */
+export async function exigeCarregada(t) {
+  if (!B) throw new Error("Sem conexão com a internet e sem os dados deste computador.");
+  if (!(await B.meta("marca:" + t))) throw new Error("A tabela " + t + " ainda não foi copiada para este computador. Conecte à internet uma vez para o programa trazer os dados.");
+  return tabelaLocal(t);
+}
+
 // ---------- gravações locais (etapa 3: alterações feitas sem internet, que vão para a fila de envio) ----------
 export async function gravarLocal(t, linhas) { if (!B || !linhas.length) return; await B.mesclar(t, JSON.stringify(linhas)); limpar(t); }
 export async function removerLocal(t, ids) { if (!B || !ids.length) return; await B.remover(t, ids.map(String)); limpar(t); }
@@ -83,7 +91,10 @@ export async function replicar(api, { completo = false, espelho = null, config =
     for (const t of TABELAS_REPLICA) {
       const marca = await B.meta("marca:" + t);
       const incremental = !cicloCompleto && marca && (v13 || COM_DATA_ANTIGA.includes(t));
-      if (!incremental && !cicloCompleto) continue; // sem atualizado_em (antes do v13): espera o ciclo completo
+      // tabela NOVA (nunca carregada) não espera o ciclo completo de 6 h: até ser copiada, quem lê dela aqui falha de
+      // propósito (exigeCarregada), e uma folha sem a tabela de comissões calcularia comissão a mais
+      const primeiraVez = !marca && v13;
+      if (!incremental && !cicloCompleto && !primeiraVez) continue; // sem atualizado_em (antes do v13): espera o ciclo completo
       let linhas;
       try {
         linhas = incremental ? await api.replica.desde(t, new Date(new Date(marca).getTime() - MARGEM_MS).toISOString()) : await api.backup.tabela(t);
@@ -170,11 +181,13 @@ export const leitorLocal = {
   vendaUma: async id => { const v = (await tabelaLocal("vendas")).find(x => x.id === id); if (!v) return null; return { ...v, itens: ordena((await tabelaLocal("venda_itens")).filter(i => i.venda_id === id), (a, b) => (a.posicao || 0) - (b.posicao || 0)) }; },
   funcionarios: async () => tabelaLocal("funcionarios"),
   lancamentos: async (comp, fid) => (await tabelaLocal("funcionario_lanc")).filter(l => l.competencia === comp && (!fid || l.funcionario_id === fid)),
-  /** comissões lançadas por quinzena (v61): a folha precisa saber que já foram lançadas, senão calcula a automática por cima */
-  comissoes: async ({ inicio, fim, competencia, funcionarioId, comId } = {}) => (await tabelaLocal("comissoes")).filter(c =>
+  /** comissões lançadas por quinzena (v61): a folha precisa saber que já foram lançadas, senão calcula a automática por cima.
+   *  Enquanto a tabela não tiver sido carregada neste computador, isto FALHA de propósito: devolver [] faria a folha achar
+   *  que nada foi lançado e somar a comissão automática por cima da que já está lá (dinheiro inventado na folha). */
+  comissoes: async ({ inicio, fim, competencia, funcionarioId, comId } = {}) => (await exigeCarregada("comissoes")).filter(c =>
     (!inicio || c.inicio === inicio) && (!fim || c.fim === fim) && (!competencia || c.competencia === competencia)
     && (!funcionarioId || c.funcionario_id === funcionarioId) && (!comId || c.id === comId)),
-  comissaoItens: async comId => (await tabelaLocal("comissao_itens")).filter(i => i.comissao_id === comId),
+  comissaoItens: async comId => (await exigeCarregada("comissao_itens")).filter(i => i.comissao_id === comId),
   movimentos: async pid => ordena((await tabelaLocal("estoque_mov")).filter(m => !pid || m.produto_id === pid), (a, b) => (b.criado_em || "").localeCompare(a.criado_em || "")),
   sefazNotas: async () => tabelaLocal("nfe_recebidas"),
   ordensEntregues: async (ini, fim) => ordena(porData((await tabelaLocal("ordens")).filter(o => o.status === "entregue"), "entregue_em", ini, fim, true), (a, b) => a.numero - b.numero),

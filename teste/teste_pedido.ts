@@ -63,5 +63,13 @@ confere("nem texto nem itens é recusado", /USO:.*marque os itens/.test(await er
 confere("mais de 40 itens é recusado", /USO:.*40 itens/.test(await erro(executar({ acao: "novo", texto: "x y z", placa: "ABC1D23", itens: Array.from({ length: 41 }, () => ({ descricao: "AB", qtd: 1 })) }, deps(true)))));
 await executar({ acao: "acrescentar", id: "22222222-2222-4222-8222-222222222222", texto: "", itens: [{ descricao: "Bieleta", qtd: 2 }] }, deps(true, "Ana"));
 confere("acrescentar só com itens grava os itens e deixa a linha no pedido (aviso do sino)", itensGravados[itensGravados.length - 1].id === "22222222-2222-4222-8222-222222222222" && banco[0].reclamacao.endsWith("— Ana, 16/11/2026 15:30: itens: 2x BIELETA"));
+// mecânico só acrescenta no que abriu; itens que falham desfazem o ORC novo
+banco.push({ id: "55555555-5555-4555-8555-555555555555", numero: 10, situacao: "elaboracao", reclamacao: "x", obs_internas: "", consultor_id: "99999999-9999-4999-8999-999999999999", criado_por: null });
+confere("mecânico não acrescenta em orçamento de outro", /USO:.*não foi aberto por você/.test(await erro(executar({ acao: "acrescentar", id: "55555555-5555-4555-8555-555555555555", texto: "mais isso" }, { ...deps(true), mecanico: true }))));
+banco[banco.length - 1].consultor_id = "11111111-1111-4111-8111-111111111111";
+confere("mecânico acrescenta no que ele abriu", (await executar({ acao: "acrescentar", id: "55555555-5555-4555-8555-555555555555", texto: "mais isso" }, { ...deps(true), mecanico: true })).ok === true);
+const apagados: string[] = [];
+const dFalha = { ...deps(true), inserirItens: async () => { throw new Error("Não deu para gravar os itens: x"); }, apagar: async (id: string) => { apagados.push(id); } };
+confere("itens que falham desfazem o ORC novo", /Não deu para gravar os itens/.test(await erro(executar({ acao: "novo", texto: "", placa: "ABC1D23", itens: [{ descricao: "BIELETA", qtd: 1 }] }, dFalha))) && apagados[0] === "44444444-4444-4444-8444-444444444444");
 console.log(ok.length + " OK, " + falhas.length + " falha(s)"); falhas.forEach((f) => console.log("FALHA: " + f));
 if (falhas.length) Deno.exit(1);

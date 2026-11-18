@@ -29,6 +29,17 @@ try:
             chk(nome + ": relatório mostra o colaborador, a O.S., o tempo (descontando a pausa) e a indicação", "Carlos Mecânico" in tx and "Finalizado" in tx and "1h30" in tx and "ALINHAMENTO → Danilo" in tx, tx[-600:])
             pg.select_option("#rel-quem", "p1"); pg.wait_for_timeout(400); chk(nome + ": filtro por colaborador esvazia quando a pessoa não tem apontamento", "Nenhum serviço apontado" in (pg.inner_text("main") if pg.locator("main").count() else pg.inner_text("body")))
             if largura == 390: chk("celular: relatório sem rolagem lateral", pg.evaluate("document.documentElement.scrollWidth") <= 390)
+            # acréscimo pelo app com o orçamento aberto no sistema: salvar não apaga o que chegou (revisão do PR #149)
+            if largura == 1366:
+                pg.goto("http://localhost:8771/#/orcamento/novo"); pg.wait_for_timeout(900)
+                oid = pg.evaluate("""(async () => { const r = await window.__API_MOCK.orcamentos.salvar({ cliente_id: '', veiculo_id: '', cliente: { nome: 'TESTE APP', telefone: '' }, veiculo: { placa: 'ABC1D23', marca: '', modelo: '', ano: '' }, reclamacao: 'Barulho', obs: '', obs_internas: 'Pedido pelo app', tabela_preco: 'vista', condicoes_pagamento: '', desconto: 0, validade: '', situacao: 'elaboracao', motivo: '', itens: [] }); return r.id; })()""")
+                pg.goto("http://localhost:8771/#/orcamento/" + oid); pg.wait_for_selector("#orc-pedido", timeout=8000); pg.wait_for_timeout(400)
+                pg.evaluate("""(() => { const o = window.__DB.orcamentos.find(x => x.id === '%s'); o.reclamacao += '\\n— Carlos, 18/11/2026 14:00: itens: BIELETA'; o.itens = (o.itens || []).concat([{ id: 'it-app', tipo: 'servico', descricao: 'SUBST. BIELETA', qtd: 2, valor_unit: 0, custo_unit: 0, desconto: 0, posicao: 0, criado_em: new Date(Date.now() + 1000).toISOString() }]); o.atualizado_em = new Date(Date.now() + 2000).toISOString(); })()""" % oid)
+                pg.fill("#orc-pedido", "Barulho na roda"); pg.wait_for_timeout(100); pg.locator("button:has-text('Salvar')").first.click(); pg.wait_for_timeout(800); tx = pg.inner_text("body")
+                chk("PC: salvar com acréscimo do app no meio junta os itens e pede para conferir", "Chegou acréscimo do app" in tx and "SUBST. BIELETA" in tx and "itens: BIELETA" in pg.input_value("#orc-pedido"), tx[:300])
+                pg.locator("button:has-text('Salvar')").first.click(); pg.wait_for_timeout(800)
+                o = pg.evaluate("window.__DB.orcamentos.find(x => x.id === '%s')" % oid)
+                chk("PC: salvar de novo grava com o item do app e o texto do acréscimo", any(i["descricao"] == "SUBST. BIELETA" for i in o["itens"]) and "itens: BIELETA" in o["reclamacao"] and o["reclamacao"].startswith("Barulho na roda"), o)
             ctx.close()
         b.close()
 finally:

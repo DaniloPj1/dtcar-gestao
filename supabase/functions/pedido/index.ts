@@ -40,9 +40,11 @@ export function limparItens(v: unknown): { descricao: string; qtd: number }[] {
 }
 const resumoItens = (itens: { descricao: string; qtd: number }[]) => itens.map((i) => (i.qtd > 1 ? i.qtd + "x " : "") + i.descricao).join("; ");
 
-export type Orcamento = { id: string; numero: number; situacao: string; reclamacao: string; obs_internas: string };
+export type Orcamento = { id: string; numero: number; situacao: string; reclamacao: string; obs_internas: string; consultor_id?: string | null; criado_por?: string | null };
 export type Deps = {
   membro: boolean;
+  mecanico?: boolean;                                             // o mecânico só acrescenta no orçamento que ele abriu (regra do Danilo, 17/11/2026)
+  apagar?: (orcamentoId: string) => Promise<void>;
   quem: string;                                                   // id de quem chama
   nome: string;                                                   // nome de quem chama (perfis)
   inserir: (o: Record<string, unknown>) => Promise<{ id: string; numero: number }>;
@@ -73,17 +75,19 @@ export async function executar(corpo: Record<string, unknown>, deps: Deps): Prom
       situacao: "elaboracao", cliente_id, veiculo_id,
       cliente: { nome: nomeCli || "A INFORMAR", telefone: telCli },
       veiculo: { placa, marca: campo(v.marca, 60), modelo: campo(v.modelo, 80), ano: campo(v.ano, 9) },
-      reclamacao: texto || resumoItens(itens), obs: "", obs_internas: MARCA_APP + " — " + assinatura,
+      reclamacao: (texto || resumoItens(itens)).slice(0, 2000), obs: "", obs_internas: MARCA_APP + " — " + assinatura,
       tabela_preco: "vista", condicoes_pagamento: "", desconto: 0, total: 0, custo: 0, motivo: "",
       consultor_id: deps.quem || null, consultor_nome: deps.nome || "", criado_por: deps.quem || null,
     });
-    if (itens.length && deps.inserirItens) await deps.inserirItens(r.id, itens);
+    // itens falharam: desfaz o orçamento recém-criado, para a nova tentativa não gerar um segundo ORC
+    if (itens.length && deps.inserirItens) { try { await deps.inserirItens(r.id, itens); } catch (e) { if (deps.apagar) await deps.apagar(r.id).catch(() => {}); throw e; } }
     return { ok: true, id: r.id, numero: r.numero, itens: itens.length };
   }
   if (acao === "acrescentar") {
     if (!uuid(corpo.id)) throw new ErroUso("Orçamento inválido.");
     const o = await deps.ler(String(corpo.id));
     if (!o) throw new ErroUso("Este orçamento não existe mais.");
+    if (deps.mecanico && o.consultor_id !== deps.quem && o.criado_por !== deps.quem) throw new ErroUso("Este orçamento não foi aberto por você: peça ao administrador para acrescentar.");
     if (o.situacao !== "elaboracao" && o.situacao !== "enviado") throw new ErroUso("Este orçamento já foi " + (o.situacao === "aprovado" ? "aprovado e virou O.S.: acrescente pela O.S." : "respondido e não aceita mais itens."));
     const acrescimo = [texto, itens.length ? "itens: " + resumoItens(itens) : ""].filter(Boolean).join(" · ");
     const reclamacao = (o.reclamacao || "").trim() + "\n— " + assinatura + ": " + acrescimo;
@@ -104,17 +108,20 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
     const quem = String((ctx.userClaims && ctx.userClaims.id) || "");
     const m = await ctx.supabase.rpc("e_membro");
     if (m.error) throw new Error("Não deu para conferir o seu login (" + m.error.message + "). Tente de novo.");
-    const p = quem ? await ctx.supabase.from("perfis").select("nome,ativo").eq("id", quem).maybeSingle() : { data: null };
+    const p = quem ? await ctx.supabase.from("perfis").select("nome,ativo,papel").eq("id", quem).maybeSingle() : { data: null };
     const admin = ctx.supabaseAdmin;
     return json(await executar(corpo, {
-      membro: m.data === true && !!(p.data && p.data.ativo !== false), quem, nome: (p.data && p.data.nome) || "",
+      membro: m.data === true && !!(p.data && p.data.ativo !== false), quem, nome: (p.data && p.data.nome) || "", mecanico: !!(p.data && p.data.papel === "mecanico"),
+      apagar: async (id) => { await admin.from("orcamentos").delete().eq("id", id); },
       inserir: async (o) => { const r = await admin.from("orcamentos").insert(o).select("id,numero").single(); if (r.error) throw new Error("Não deu para gravar o pedido: " + r.error.message); return r.data as { id: string; numero: number }; },
-      ler: async (id) => { const r = await admin.from("orcamentos").select("id,numero,situacao,reclamacao,obs_internas").eq("id", id).maybeSingle(); if (r.error) throw new Error(r.error.message); return r.data as Orcamento | null; },
+      ler: async (id) => { const r = await admin.from("orcamentos").select("id,numero,situacao,reclamacao,obs_internas,consultor_id,criado_por").eq("id", id).maybeSingle(); if (r.error) throw new Error(r.error.message); return r.data as Orcamento | null; },
       gravar: async (id, patch) => { const r = await admin.from("orcamentos").update(patch).eq("id", id); if (r.error) throw new Error("Não deu para gravar o acréscimo: " + r.error.message); },
       // itens sem preço, depois dos que já existem (posição), como serviço; o Danilo põe os valores no sistema
       inserirItens: async (orcamentoId, itens) => {
         const u = await admin.from("orcamento_itens").select("posicao").eq("orcamento_id", orcamentoId).order("posicao", { ascending: false }).limit(1);
         const base = u.data && u.data.length ? Number(u.data[0].posicao) + 1 : 0;
+        const ab = await admin.from("orcamentos").select("situacao").eq("id", orcamentoId).maybeSingle();
+        if (!ab.data || !["elaboracao", "enviado"].includes(ab.data.situacao)) throw new ErroUso("Este orçamento acabou de ser respondido no sistema: os itens não entraram.");
         const r = await admin.from("orcamento_itens").insert(itens.map((i, n) => ({ orcamento_id: orcamentoId, tipo: "servico", descricao: i.descricao, qtd: i.qtd, valor_unit: 0, custo_unit: 0, desconto: 0, posicao: base + n })));
         if (r.error) throw new Error("Não deu para gravar os itens: " + r.error.message);
       },

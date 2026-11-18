@@ -86,7 +86,8 @@ export function Orcamento({ id }) {
   // aprovar: antes de abrir o quadro, grava o que estiver pendente (a aprovação lê o orçamento do banco)
   const abrirAprovar = async () => { if (!itens.length) return setErro("Inclua pelo menos um item antes de aprovar."); const base = sujo ? await gravar() : o; if (base) setAprovar(true); };
   const gestor = pode(perfil, "orcar"), ver = pode(perfil, "verValores");
-  const carregar = () => api.orcamentos.um(id).then(r => { if (!r) return setErro("Orçamento não encontrado."); setO(r); setItens(r.itens || []); setSujo(false); setSemCad(!r.cliente_id); })
+  const [baseRecl, setBaseRecl] = useState("");   // o "pedido" como estava no banco ao abrir/salvar (para juntar acréscimo do app)
+  const carregar = () => api.orcamentos.um(id).then(r => { if (!r) return setErro("Orçamento não encontrado."); setO(r); setItens(r.itens || []); setBaseRecl(r.reclamacao || ""); setSujo(false); setSemCad(!r.cliente_id); })
     .catch(e => setErro(FALTA_V52(e) ? AVISO_V52 : e.message));
   useEffect(() => { if (!novo) carregar(); }, [id]);
   if (erro && !o) return html`<div class="pagina"><div class="erros">${erro}</div><button type="button" class="btn" onClick=${() => ir("/orcamentos")}>Voltar aos orçamentos</button></div>`;
@@ -115,11 +116,26 @@ export function Orcamento({ id }) {
     const e = validar(); if (e) { setErro(e); return null; }
     setSalvando(true);
     try {
+      // o app do celular pode ter acrescentado itens/texto enquanto esta tela estava aberta (pedido pelo app, 18/11/2026): salvar daqui
+      // apagaria o acréscimo (orcamento_salvar troca a lista inteira). Então junta o que chegou e pede para conferir antes de salvar.
+      if (!novo && o.atualizado_em && !o._local) {
+        const atual = await api.orcamentos.um(o.id).catch(() => null);
+        if (atual && atual.atualizado_em && atual.atualizado_em !== o.atualizado_em) {
+          const meus = new Set(itens.map(i => i.id)), noBanco = (atual.itens || []).filter(i => !meus.has(i.id) && (!i.criado_em || i.criado_em > o.atualizado_em));
+          const extra = String(atual.reclamacao || "").startsWith(String(baseRecl || "")) ? String(atual.reclamacao || "").slice(String(baseRecl || "").length) : "";
+          if (noBanco.length || extra.trim()) {
+            setItens(l => l.concat(noBanco)); setO(x => ({ ...x, atualizado_em: atual.atualizado_em, reclamacao: (x.reclamacao || "") + extra })); setBaseRecl(atual.reclamacao || ""); setSujo(true);
+            setErro("Chegou acréscimo do app enquanto o orçamento estava aberto" + (noBanco.length ? " (" + noBanco.length + " item(ns))" : "") + ". Já entrou na lista: confira os valores e salve de novo.");
+            return null;
+          }
+          setO(x => ({ ...x, atualizado_em: atual.atualizado_em }));
+        }
+      }
       const r = await api.orcamentos.salvar({ ...(novo ? {} : { id: o.id }), cliente_id: o.cliente_id || "", veiculo_id: o.veiculo_id || "",
         cliente: o.cliente_id ? { nome: String(o.cliente.nome).trim(), telefone: o.cliente.telefone || "" } : copiaClienteDig(o.cliente), veiculo: { ...o.veiculo, placa: normPlaca(o.veiculo.placa) },
         reclamacao: o.reclamacao, obs: o.obs, obs_internas: o.obs_internas, tabela_preco: o.tabela_preco, condicoes_pagamento: o.condicoes_pagamento, desconto: Number(o.desconto) || 0,
         validade: o.validade || "", situacao: o.situacao, motivo: o.motivo || "", ...mudancas, itens: itens.map((i, n) => ({ ...i, posicao: n + 1 })) });
-      avisar(aviso); setO(r); setItens(r.itens || []); setSujo(false); setErro("");
+      avisar(aviso); setO(r); setItens(r.itens || []); setBaseRecl(r.reclamacao || ""); setSujo(false); setErro("");
       if (novo && daAgenda) await api.agenda.salvar({ id: daAgenda.agendaId, orcamento_id: r.id, orc_numero: r.numero }).catch(() => avisar("O orçamento foi salvo, mas não ficou ligado ao agendamento.", true));
       if (novo) ir("/orcamento/" + r.id);
       return r;

@@ -1,0 +1,3127 @@
+{
+  "fonte": "ReceitaFederal/calculadora-rtc-simples-nacional, versao 0.0.6, commit c5b0f01",
+  "extraido_em": "2026-11-18",
+  "observacoes": [
+    "Os tres arquivos de teste nao usam @DisplayName em nenhum metodo; o campo 'descricao' traz, condensado, o comentario Java que acompanha o teste na fonte (nunca um valor inventado). Quando nao ha comentario, 'descricao' e null.",
+    "O bloco 'api' tem 24 entradas, uma por metodo @Test do SimplesNacionalControllerTest. O enunciado falava em 25: 'grep -c @Test' conta 25 porque a anotacao de classe @TestPropertySource casa com o padrao; os metodos @Test reais sao 24 (linhas 39, 99, 155, 195, 226, 268, 307, 345, 378, 414, 450, 505, 546, 608, 640, 673, 703, 735, 766, 784, 818, 827, 837 e 847).",
+    "Testes que iteram sobre uma List.of(...) foram expandidos: a entrada fica em 'variacoes', uma por valor do laco, e todas compartilham o mesmo 'esperado'. O campo 'nome' continua sendo o nome do metodo Java.",
+    "Asercoes .doesNotExist() viraram a lista 'esperado_ausente' (caminhos jsonPath sem o '$.'); asercoes assertNull viraram 'esperado_nulo'. O matcher endsWith() virou 'esperado_termina_com'.",
+    "Quatro casos do bloco 'api' sao GET /calculadora/observabilidade/simples-nacional/erros (catalogo de erros), nao POST de calculo: eles trazem 'metodo': 'GET' e 'query' no lugar de 'entrada'.",
+    "ARREDONDAMENTO (shared/util/ArredondamentoUtils.java): calculo interno com 8 casas e HALF_EVEN; o arredondamento de apresentacao (2 casas em moeda, 2 a 4 casas em aliquota, HALF_EVEN) ocorre SO na serializacao JSON. Por isso o mesmo caso aparece como 11.875/26.125 no bloco 'motor' (valor do BigDecimal devolvido pelo servico) e como 11.88/26.12 no bloco 'api' (valor ja serializado). Os dois devem ser reproduzidos pela porta TypeScript.",
+    "O record InsumoCalculoSimples (api/simplesnacional/service/SimplesNacionalCalculoService.java) e (regime, tipoReceitaBruta, cAtivSNValido, baseCalculo, valorImpostoSeletivo, pIBSSN, pCBSSN, tpEnteGov, fatorTransicaoCompraGov). 'regime' e 'tipoReceitaBruta' sao entidades inteiras, nao codigos: no bloco 'motor' elas aparecem como as chaves 'regime' e 'tpRBSN', que apontam para as fixtures de 'fixtures.regimes' e 'fixtures.tiposReceitaBruta' abaixo (copiadas dos metodos regimeCrt1/regimeCrt2/regimeCrt3TpRegime2 e tipoReceita(int) do proprio teste, que declaram espelhar a carga oficial das tabelas).",
+    "O bloco 'validacao' vem de testes unitarios com repositorios mockados: o campo 'stubs' registra o estado de catalogo simulado por teste (sem ele a entrada nao reproduz o resultado). Os stubs padrao do @BeforeEach valem para todos: tpDocSuportado = true apenas para 55 e 65; buscarTipoReceitaBruta devolve a fixture do proprio codigo; buscarRegimeApuracao devolve a fixture do CRT; buscarFatorTransicaoCompraGov devolve 0.00 para datas a partir de 2027-01-01 e vazio antes disso.",
+    "Em 'validacao', 'esperado_codigo' guarda o codigo VSN-xxx afirmado pelo teste. Quando o teste afirma a LISTA exata de codigos (assertEquals em List.of), isso esta em 'esperado_codigos_exatos'; quando afirma apenas que a lista contem o codigo (assertTrue contains), fica em 'esperado_codigo'. 'escopo' diz se o erro e do item (HTTP 200 com estadoItem) ou global (ErrosCalculoException, HTTP 422).",
+    "Comparacoes do tipo assertEquals(0, new BigDecimal(\"X\").compareTo(valor)) e BigDecimal.ZERO.compareTo(valor) comparam por VALOR, ignorando a escala: onde o teste usa BigDecimal.ZERO o esperado foi registrado como \"0\" (vale 0, 0.00 ou 0.0000). Onde o teste usa um literal (\"12.50\", \"27.50\"), o literal foi copiado como esta.",
+    "No caso 'tpEnteGovDaOperacao_aplicadoATodosOsItens' o teste percorre todos os objetos com o mesmo esperado: isso aparece como o caminho 'objetos[*]'. 'esperado_quantidade_de_codigos' guarda o assertEquals sobre o tamanho da lista de codigos (caso 'dataInvalida_...')."
+  ],
+  "fixtures": {
+    "regimes": {
+      "crt1": {
+        "crt": 1,
+        "tpRegimeIBSCBS": null,
+        "descricao": "CRT 1",
+        "geraIbs": true,
+        "destinoDevido": "DEVIDO",
+        "destinoPendenteSuspenso": "PENDENTE_SUSPENSO"
+      },
+      "crt2": {
+        "crt": 2,
+        "tpRegimeIBSCBS": null,
+        "descricao": "CRT 2",
+        "geraIbs": false,
+        "destinoDevido": "DEVIDO",
+        "destinoPendenteSuspenso": "PENDENTE_SUSPENSO"
+      },
+      "crt3TpRegime2": {
+        "crt": 3,
+        "tpRegimeIBSCBS": 2,
+        "descricao": "CRT 3",
+        "geraIbs": true,
+        "destinoDevido": "PENDENTE_SUSPENSO",
+        "destinoPendenteSuspenso": "ZERO"
+      }
+    },
+    "tiposReceitaBruta": {
+      "0": {
+        "codigo": 0,
+        "descricao": "Não é receita bruta",
+        "compoeReceita": false,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "0.0",
+        "pendenteSuspenso": false,
+        "exigeAliquota": false,
+        "vedadoNaoTributavel": false
+      },
+      "1": {
+        "codigo": 1,
+        "descricao": "Receita bruta - interna",
+        "compoeReceita": true,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "1.0",
+        "pendenteSuspenso": false,
+        "exigeAliquota": true,
+        "vedadoNaoTributavel": true
+      },
+      "2": {
+        "codigo": 2,
+        "descricao": "Receita bruta - interna sem cálculo de IBS e CBS",
+        "compoeReceita": true,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "0.0",
+        "pendenteSuspenso": false,
+        "exigeAliquota": false,
+        "vedadoNaoTributavel": true
+      },
+      "3": {
+        "codigo": 3,
+        "descricao": "Receita bruta - exportação direta",
+        "compoeReceita": true,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "0.0",
+        "pendenteSuspenso": false,
+        "exigeAliquota": false,
+        "vedadoNaoTributavel": true
+      },
+      "4": {
+        "codigo": 4,
+        "descricao": "Receita bruta - exportação indireta",
+        "compoeReceita": true,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "1.0",
+        "pendenteSuspenso": true,
+        "exigeAliquota": true,
+        "vedadoNaoTributavel": true
+      },
+      "5": {
+        "codigo": 5,
+        "descricao": "Receita bruta - mercado interno e exportação",
+        "compoeReceita": true,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "0.5",
+        "pendenteSuspenso": false,
+        "exigeAliquota": true,
+        "vedadoNaoTributavel": true
+      },
+      "9": {
+        "codigo": 9,
+        "descricao": "Fornecimento incompatível com SN",
+        "compoeReceita": true,
+        "impostoSeletivoCompoeReceita": false,
+        "fatorReceita": "0.0",
+        "pendenteSuspenso": false,
+        "exigeAliquota": false,
+        "vedadoNaoTributavel": false
+      }
+    }
+  },
+  "api": [
+    {
+      "nome": "deveCalcularCaminhoFelizCrt1ComImpostoSeletivoForaDaReceitaBruta",
+      "descricao": "Caso dourado 2: base 950 + vIS 50 -> vRBSNitem 950 (o vIS NAO compoe a receita bruta em nenhuma vigencia); o IS segue repassado e entra no totalItem. 950 x 1.25% = 11.875 -> 11.88 e 950 x 2.75% = 26.125 -> 26.12 (HALF_EVEN na serializacao).",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "950.00",
+            "valorImpostoSeletivo": "50.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "oper.data": "2027-03-15",
+        "oper.tpDoc": "55",
+        "oper.CRT": "1",
+        "objetos[0].nObj": 1,
+        "objetos[0].estadoItem": "CALCULADO",
+        "objetos[0].tribCalc.vRBSNitem": "950.00",
+        "objetos[0].tribCalc.tpRBSN": 1,
+        "objetos[0].tribCalc.tpRBSNDescricao": "Receita bruta - interna",
+        "objetos[0].tribCalc.vBC": "950.00",
+        "objetos[0].tribCalc.pIBSSN": "1.25",
+        "objetos[0].tribCalc.vIBSSN": "11.88",
+        "objetos[0].tribCalc.vIBSPendSusp": "0.00",
+        "objetos[0].tribCalc.pCBSSN": "2.75",
+        "objetos[0].tribCalc.vCBSSN": "26.12",
+        "objetos[0].tribCalc.vCBSPendSusp": "0.00",
+        "objetos[0].tribCalc.IS.valor": "50.00",
+        "objetos[0].tribCalc.totalItem": "88.00",
+        "total.vRBSNtot": "950.00",
+        "total.vBC": "950.00",
+        "total.vIBSSNtot": "11.88",
+        "total.vIBSSNtotPendSusp": "0.00",
+        "total.vCBSSNtot": "26.12",
+        "total.vCBSSNtotPendSusp": "0.00",
+        "total.totalIs": "50.00",
+        "total.totalTributos": "88.00"
+      },
+      "esperado_ausente": [
+        "oper.tpRegimeIBSCBS"
+      ],
+      "arredondamento_empate": true
+    },
+    {
+      "nome": "deveManterImpostoSeletivoForaDaReceitaBrutaTambemAPartirDe2028",
+      "descricao": "O vIS fica fora da receita bruta em TODAS as vigencias: a partir de 2028 o resultado e o MESMO das demais vigencias - base 950 + vIS 50 -> vRBSNitem 950.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2028-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "950.00",
+            "valorImpostoSeletivo": "50.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "oper.data": "2028-03-15",
+        "objetos[0].nObj": 1,
+        "objetos[0].estadoItem": "CALCULADO",
+        "objetos[0].tribCalc.vRBSNitem": "950.00",
+        "objetos[0].tribCalc.tpRBSN": 1,
+        "objetos[0].tribCalc.tpRBSNDescricao": "Receita bruta - interna",
+        "objetos[0].tribCalc.vBC": "950.00",
+        "objetos[0].tribCalc.pIBSSN": "1.25",
+        "objetos[0].tribCalc.vIBSSN": "11.88",
+        "objetos[0].tribCalc.vIBSPendSusp": "0.00",
+        "objetos[0].tribCalc.pCBSSN": "2.75",
+        "objetos[0].tribCalc.vCBSSN": "26.12",
+        "objetos[0].tribCalc.vCBSPendSusp": "0.00",
+        "objetos[0].tribCalc.IS.valor": "50.00",
+        "objetos[0].tribCalc.totalItem": "88.00",
+        "total.vRBSNtot": "950.00",
+        "total.vBC": "950.00",
+        "total.vIBSSNtot": "11.88",
+        "total.vIBSSNtotPendSusp": "0.00",
+        "total.vCBSSNtot": "26.12",
+        "total.vCBSSNtotPendSusp": "0.00",
+        "total.totalIs": "50.00",
+        "total.totalTributos": "88.00"
+      },
+      "arredondamento_empate": true
+    },
+    {
+      "nome": "deveIgnorarCampoDesconhecidoPRedutorEAplicarApenasODeslocamento",
+      "descricao": "Caso dourado 33: campo extra pRedutor e ignorado pelo binding e o resultado e IDENTICO ao caso 15 (tpEnteGov=2, 2029: f=0.10) - nenhum redutor aplicado. tpEnteGov (e o pRedutor ignorado) sao dados da OPERACAO.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2029-06-01",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpEnteGov": "2",
+        "pRedutor": "0.50",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "oper.tpEnteGov": "2",
+        "objetos[0].estadoItem": "CALCULADO",
+        "objetos[0].tribCalc.pIBSSN": "1.525",
+        "objetos[0].tribCalc.vIBSSN": "15.25",
+        "objetos[0].tribCalc.pCBSSN": "2.475",
+        "objetos[0].tribCalc.vCBSSN": "24.75"
+      }
+    },
+    {
+      "nome": "deveRetornar422ParaTpEnteGovInvalido",
+      "descricao": "tpEnteGov e campo global da operacao: valor fora do dominio {1..4} rejeita a operacao inteira (VSN-024), sem processar nenhum item.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "abc",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpEnteGov": "7",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 422,
+      "esperado": {
+        "errors[0].code": "VSN-024"
+      }
+    },
+    {
+      "nome": "deveRetornarNaoCalculadoParaCAtivSNSemLinhaNoCatalogo",
+      "descricao": "Caso dourado 19: codigo '99' nao existe no catalogo de atividades -> NAO_CALCULADO.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "99",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "NAO_CALCULADO",
+        "objetos[0].tribCalc.vRBSNitem": "1000.00",
+        "objetos[0].tribCalc.tpRBSN": 1,
+        "objetos[0].tribCalc.tpRBSNDescricao": "Receita bruta - interna",
+        "total.vRBSNtot": "1000.00"
+      },
+      "esperado_ausente": [
+        "objetos[0].tribCalc.vBC",
+        "objetos[0].tribCalc.vIBSSN",
+        "objetos[0].tribCalc.vCBSSN",
+        "objetos[0].tribCalc.IS",
+        "total.vBC",
+        "total.vIBSSNtot",
+        "total.totalTributos"
+      ]
+    },
+    {
+      "nome": "atividadeSemVinculoAlgum_naoCalculadaEmNenhumDocumentoHabilitado",
+      "descricao": "Whitelist (mundo fechado): as atividades '05' e '06' constam do catalogo mas nao tem vinculo com documento algum na associativa - em TODO documento habilitado o item resulta em NAO_CALCULADO, sem erro (NT 2026.005, 5.3.4, Observacao 2).",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "variacoes": [
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "05",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "65",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "05",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "91",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "05",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "06",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "65",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "06",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "91",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "06",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        }
+      ],
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "NAO_CALCULADO",
+        "objetos[0].tribCalc.vRBSNitem": "1000.00"
+      },
+      "esperado_ausente": [
+        "objetos[0].tribCalc.vIBSSN",
+        "objetos[0].erros"
+      ]
+    },
+    {
+      "nome": "atividadeVinculadaCalculaNoDocumentoCertoENaoCalculaNoErrado",
+      "descricao": "A atividade '07' e vinculada somente a NFS-e (91): calcula la e resulta NAO_CALCULADO em NF-e (55). O teste faz duas requisicoes com esperados diferentes.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "requisicoes": [
+        {
+          "entrada": {
+            "id": "507f1f77bcf86cd799439011",
+            "versao": "2.0.0",
+            "data": "2027-03-15",
+            "tpDoc": "91",
+            "CRT": "1",
+            "itens": [
+              {
+                "numero": 1,
+                "cAtivSN": "07",
+                "cClassTrib": "000001",
+                "baseCalculo": "1000.00",
+                "valorImpostoSeletivo": "0.00",
+                "pIBSSN": "1.25",
+                "pCBSSN": "2.75"
+              }
+            ]
+          },
+          "http": 200,
+          "esperado": {
+            "objetos[0].estadoItem": "CALCULADO",
+            "objetos[0].tribCalc.vIBSSN": "12.50",
+            "objetos[0].tribCalc.vCBSSN": "27.50"
+          }
+        },
+        {
+          "entrada": {
+            "id": "507f1f77bcf86cd799439011",
+            "versao": "2.0.0",
+            "data": "2027-03-15",
+            "tpDoc": "55",
+            "CRT": "1",
+            "itens": [
+              {
+                "numero": 1,
+                "cAtivSN": "07",
+                "cClassTrib": "000001",
+                "baseCalculo": "1000.00",
+                "valorImpostoSeletivo": "0.00",
+                "pIBSSN": "1.25",
+                "pCBSSN": "2.75"
+              }
+            ]
+          },
+          "http": 200,
+          "esperado": {
+            "objetos[0].estadoItem": "NAO_CALCULADO"
+          },
+          "esperado_ausente": [
+            "objetos[0].erros"
+          ]
+        }
+      ]
+    },
+    {
+      "nome": "codigo90CalculaEmNfeNfceENfse",
+      "descricao": "O '90' e vinculado aos tres documentos habilitados: com cClassTrib de tpRBSN=0 (nao vedado para nao tributaveis), CALCULA em todos, com tudo zero.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "variacoes": [
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "90",
+              "cClassTrib": "410001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "65",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "90",
+              "cClassTrib": "410001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "91",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "90",
+              "cClassTrib": "410001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00"
+            }
+          ]
+        }
+      ],
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "CALCULADO",
+        "objetos[0].tribCalc.vRBSNitem": "0.00",
+        "objetos[0].tribCalc.tpRBSN": 0
+      }
+    },
+    {
+      "nome": "deveResolverTpRBSNPelaLinhaDaCbsQuandoCodigoColideComImpostoSeletivo",
+      "descricao": "Caso R-5: o CLTR_CD '000001' existe nos dois grupos da CLASSIFICACAO_TRIBUTARIA - CBS (tpRBSN=1, vigente desde 2026) e Imposto Seletivo (tpRBSN=0 inerte, vigente desde 2027). A resolucao DEVE usar a linha da CBS.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "CALCULADO",
+        "objetos[0].tribCalc.tpRBSN": 1,
+        "objetos[0].tribCalc.vIBSSN": "12.50",
+        "objetos[0].tribCalc.vCBSSN": "27.50"
+      }
+    },
+    {
+      "nome": "deveCalcularCAtivSN90ComTpRBSN0",
+      "descricao": "Caso R-4: '90' (Operacoes nao Tributaveis, linha 16 do catalogo, restrita a NF-e/NFC-e) + cClassTrib 410001 (tpRBSN=0) -> CALCULADO com vRBSNitem=0 e tributos zero. Fator de receita 0 (item CALCULADO): vBC presente, com 0.00.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "90",
+            "cClassTrib": "410001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "CALCULADO",
+        "objetos[0].tribCalc.vRBSNitem": "0.00",
+        "objetos[0].tribCalc.tpRBSN": 0,
+        "objetos[0].tribCalc.tpRBSNDescricao": "Não é receita bruta",
+        "objetos[0].tribCalc.vBC": "0.00",
+        "objetos[0].tribCalc.vIBSSN": "0.00",
+        "objetos[0].tribCalc.vCBSSN": "0.00"
+      }
+    },
+    {
+      "nome": "deveAcumularErroDeValidacaoNoItemEIgnorarNaTotalizacao",
+      "descricao": "vRBSNtot soma calculado + nao calculado; os demais totais (vBC inclusive), so o calculado.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "abc",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "-10.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          },
+          {
+            "numero": 2,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          },
+          {
+            "numero": 3,
+            "cAtivSN": "99",
+            "cClassTrib": "000001",
+            "baseCalculo": "500.00",
+            "valorImpostoSeletivo": "0.00"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].nObj": 1,
+        "objetos[0].estadoItem": "INCONSISTENCIA_ENTRADA",
+        "objetos[0].erros[0].code": "VSN-002",
+        "objetos[1].estadoItem": "CALCULADO",
+        "objetos[2].estadoItem": "NAO_CALCULADO",
+        "total.vRBSNtot": "1500.00",
+        "total.vBC": "1000.00",
+        "total.vIBSSNtot": "12.50",
+        "total.totalTributos": "40.00"
+      },
+      "esperado_ausente": [
+        "objetos[0].tribCalc"
+      ]
+    },
+    {
+      "nome": "deveRetornarNaoImplementadoParaCClassTribComTratamentoSemImplementacao",
+      "descricao": "620001 (tributacao monofasica sobre combustiveis) esta vinculado, na base, a tratamento tributario marcado como 'sem implementacao' (TRTR_IN_POSSUI_AJUSTE = 1). Mesmo com cAtivSN e aliquotas validos, o item sai NAO_IMPLEMENTADO com VSN-027, sem tribCalc e sem total.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "620001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].nObj": 1,
+        "objetos[0].estadoItem": "NAO_IMPLEMENTADO",
+        "objetos[0].erros.length()": 1,
+        "objetos[0].erros[0].code": "VSN-027",
+        "objetos[0].erros[0].pointer": "#/itens/0/cClassTrib"
+      },
+      "esperado_termina_com": {
+        "objetos[0].erros[0].type": "/calculadora/observabilidade/simples-nacional/erros?codigo=VSN-027"
+      },
+      "esperado_ausente": [
+        "objetos[0].tribCalc",
+        "total"
+      ]
+    },
+    {
+      "nome": "naoImplementadoTemPrioridadeSobreValidacoesDoItemENaoAfetaOsDemais",
+      "descricao": "Item 1: cClassTrib sem implementacao E base negativa E aliquotas ausentes - a verificacao de implementacao e a primeira consulta do item e encerra o processamento: apenas VSN-027 e reportado. Item 2 calcula normalmente e os totais vem so dele. Item 3: cAtivSN desconhecido com 800001, tambem sem implementacao - a prioridade prevalece sobre a regra do NAO_CALCULADO.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "620001",
+            "baseCalculo": "-10.00",
+            "valorImpostoSeletivo": "0.00"
+          },
+          {
+            "numero": 2,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          },
+          {
+            "numero": 3,
+            "cAtivSN": "99",
+            "cClassTrib": "800001",
+            "baseCalculo": "500.00",
+            "valorImpostoSeletivo": "0.00"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "NAO_IMPLEMENTADO",
+        "objetos[0].erros.length()": 1,
+        "objetos[0].erros[0].code": "VSN-027",
+        "objetos[1].estadoItem": "CALCULADO",
+        "objetos[2].estadoItem": "NAO_IMPLEMENTADO",
+        "objetos[2].erros[0].code": "VSN-027",
+        "objetos[2].erros[0].pointer": "#/itens/2/cClassTrib",
+        "total.vRBSNtot": "1000.00",
+        "total.vBC": "1000.00",
+        "total.vIBSSNtot": "12.50",
+        "total.vCBSSNtot": "27.50",
+        "total.totalTributos": "40.00"
+      },
+      "esperado_ausente": [
+        "objetos[0].tribCalc"
+      ]
+    },
+    {
+      "nome": "naoImplementadoTambemEmNfse",
+      "descricao": "820001 (tributacao em documento especifico) e admissivel apenas em NFS-e (91) e esta vinculado a tratamento 'sem implementacao'.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "91",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "07",
+            "cClassTrib": "820001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "NAO_IMPLEMENTADO",
+        "objetos[0].erros[0].code": "VSN-027"
+      },
+      "esperado_ausente": [
+        "total"
+      ]
+    },
+    {
+      "nome": "cClassTribEncerradoEm2026NaoEhNaoImplementado_ehForaDeVigencia",
+      "descricao": "220001 estava vinculado a tratamento 'sem implementacao', mas a classificacao e o vinculo encerraram em 2026-01-01: em 2027 a verificacao prioritaria conta zero e o fluxo normal reporta VSN-021 (desconhecido/fora de vigencia), nao VSN-027.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "220001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 200,
+      "esperado": {
+        "objetos[0].estadoItem": "INCONSISTENCIA_ENTRADA",
+        "objetos[0].erros[0].code": "VSN-021"
+      }
+    },
+    {
+      "nome": "deveRetornar422ParaRegimeRegular",
+      "descricao": "Caso dourado 23: tpRegimeIBSCBS=1 (regime regular) esta fora de escopo.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "abc",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "http": 422,
+      "esperado": {
+        "errors[0].code": "VSN-019"
+      }
+    },
+    {
+      "nome": "deveRetornar422ParaTpDocNaoSuportado",
+      "descricao": "Documentos sem NT publicada nao tem vinculo na tabela de documentos do calculo: a operacao inteira e rejeitada com VSN-015. Vale para o CT-e Simplificado (97) e para o BP-e TA (83).",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "variacoes": [
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "97",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00"
+            }
+          ]
+        },
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "83",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00"
+            }
+          ]
+        }
+      ],
+      "http": 422,
+      "esperado": {
+        "errors[0].code": "VSN-015"
+      }
+    },
+    {
+      "nome": "deveRetornar422ParaTpDocSemTratamento",
+      "descricao": null,
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "variacoes": [
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "77",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "94",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        }
+      ],
+      "http": 422,
+      "esperado": {
+        "errors[0].code": "VSN-015",
+        "errors[0].pointer": "#/tpDoc"
+      }
+    },
+    {
+      "nome": "deveRetornar422QuandoListaDeItensVazia",
+      "descricao": null,
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "entrada": {
+        "id": "abc",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "itens": []
+      },
+      "http": 422,
+      "esperado": {
+        "errors[0].code": "VSN-011"
+      }
+    },
+    {
+      "nome": "deveRetornar422ParaDataAnteriorATodaVigencia",
+      "descricao": "A parametrizacao do Simples Nacional vigora a partir de 2027-01-01. Qualquer data anterior (inclusive em 2026) nao tem documento habilitado na tabela TIPO_DFE_CALCULO_SIMPLES_NACIONAL.",
+      "metodo": "POST",
+      "endpoint": "/calculadora/observabilidade/simples-nacional",
+      "variacoes": [
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2025-06-01",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2025-12-31",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2026-06-01",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "abc",
+          "versao": "2.0.0",
+          "data": "2026-12-31",
+          "tpDoc": "55",
+          "CRT": "1",
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        }
+      ],
+      "http": 422,
+      "esperado": {
+        "errors[0].code": "VSN-015",
+        "errors[0].pointer": "#/tpDoc"
+      }
+    },
+    {
+      "nome": "deveConsultarCatalogoDeErros",
+      "descricao": null,
+      "metodo": "GET",
+      "endpoint": "/calculadora/observabilidade/simples-nacional/erros",
+      "query": {
+        "codigo": "VSN-025"
+      },
+      "http": 200,
+      "esperado": {
+        "codigo": "VSN-025",
+        "titulo": "Parametrização de compra governamental indisponível para a data"
+      }
+    },
+    {
+      "nome": "deveConsultarErroDeParametrizacaoIndisponivel",
+      "descricao": null,
+      "metodo": "GET",
+      "endpoint": "/calculadora/observabilidade/simples-nacional/erros",
+      "query": {
+        "codigo": "VSN-026"
+      },
+      "http": 200,
+      "esperado": {
+        "codigo": "VSN-026",
+        "titulo": "Parametrização do cálculo do Simples Nacional indisponível para a data"
+      }
+    },
+    {
+      "nome": "deveConsultarErroDeClassificacaoNaoImplementada",
+      "descricao": null,
+      "metodo": "GET",
+      "endpoint": "/calculadora/observabilidade/simples-nacional/erros",
+      "query": {
+        "codigo": "VSN-027"
+      },
+      "http": 200,
+      "esperado": {
+        "codigo": "VSN-027",
+        "titulo": "cClassTrib sem tratamento implementado no cálculo do Simples Nacional"
+      }
+    },
+    {
+      "nome": "deveRetornar404ParaCodigoDeErroDesconhecido",
+      "descricao": null,
+      "metodo": "GET",
+      "endpoint": "/calculadora/observabilidade/simples-nacional/erros",
+      "query": {
+        "codigo": "VSN-008"
+      },
+      "http": 404,
+      "esperado": {}
+    }
+  ],
+  "motor": [
+    {
+      "nome": "caso01_crt1_tpRBSN1",
+      "descricao": "Fator de receita 1.0: vBC = vRBSNitem.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "tpRBSN": 1,
+        "tpRBSNDescricao": "Receita bruta - interna",
+        "vBC": "1000.00",
+        "vIBSSN": "12.50",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "27.50",
+        "vCBSPendSusp": "0.00",
+        "totalItem": "40.00"
+      }
+    },
+    {
+      "nome": "caso02_crt1_tpRBSN1_impostoSeletivoForaDaReceitaBruta",
+      "descricao": "Carga vigente (todas as vigencias): vRBSNitem = 950 (o vIS NAO compoe a receita bruta), mas o IS segue repassado e entra no totalItem. Os valores aqui sao os BigDecimal devolvidos pelo servico, antes da serializacao (11.875 e 26.125).",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "950.00",
+        "valorImpostoSeletivo": "50.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "950.00",
+        "vIBSSN": "11.875",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "26.125",
+        "vCBSPendSusp": "0.00",
+        "IS.valor": "50.00",
+        "totalItem": "88.00"
+      },
+      "arredondamento_empate": true
+    },
+    {
+      "nome": "caso02b_crt1_tpRBSN1_impostoSeletivoNaReceitaBrutaQuandoParametrizado",
+      "descricao": "Alavanca de parametrizacao SEM carga hoje (TRBS_IN_IS_COMPOE_RECEITA ligado por hipotese): vRBSNitem = 950 + 50 e o IS entra no totalItem.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "tipoReceitaOverride": {
+          "impostoSeletivoCompoeReceita": true
+        },
+        "cAtivSNValido": true,
+        "baseCalculo": "950.00",
+        "valorImpostoSeletivo": "50.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vIBSSN": "12.50",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "27.50",
+        "vCBSPendSusp": "0.00",
+        "IS.valor": "50.00",
+        "totalItem": "90.00"
+      }
+    },
+    {
+      "nome": "caso03_crt1_tpRBSN5_metadeDaReceita",
+      "descricao": "Fator de receita 0.5: vBC = metade do vRBSNitem.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 5,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vBC": "500.00",
+        "vIBSSN": "6.25",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "13.75",
+        "vCBSPendSusp": "0.00"
+      }
+    },
+    {
+      "nome": "caso04_crt1_tpRBSN4_exportacaoIndiretaSuspende",
+      "descricao": "Pendente/suspenso fica fora do totalItem.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 4,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "12.50",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "27.50",
+        "totalItem": "0.00"
+      }
+    },
+    {
+      "nome": "caso05a07_crt1_tpRBSN2_3_9_tudoZero",
+      "descricao": "Fator de receita 0: vBC zerado (mas presente - o item e CALCULADO). O teste itera sobre tpRBSN 2, 3 e 9 com o mesmo esperado.",
+      "insumo_variacoes": [
+        {
+          "regime": "crt1",
+          "tpRBSN": 2,
+          "cAtivSNValido": true,
+          "baseCalculo": "1000.00",
+          "valorImpostoSeletivo": "0.00",
+          "pIBSSN": "1.25",
+          "pCBSSN": "2.75",
+          "tpEnteGov": null,
+          "fatorTransicaoCompraGov": null
+        },
+        {
+          "regime": "crt1",
+          "tpRBSN": 3,
+          "cAtivSNValido": true,
+          "baseCalculo": "1000.00",
+          "valorImpostoSeletivo": "0.00",
+          "pIBSSN": "1.25",
+          "pCBSSN": "2.75",
+          "tpEnteGov": null,
+          "fatorTransicaoCompraGov": null
+        },
+        {
+          "regime": "crt1",
+          "tpRBSN": 9,
+          "cAtivSNValido": true,
+          "baseCalculo": "1000.00",
+          "valorImpostoSeletivo": "0.00",
+          "pIBSSN": "1.25",
+          "pCBSSN": "2.75",
+          "tpEnteGov": null,
+          "fatorTransicaoCompraGov": null
+        }
+      ],
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vBC": "0.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "0.00"
+      }
+    },
+    {
+      "nome": "caso08_crt1_tpRBSN0_receitaBrutaZerada",
+      "descricao": "tpRBSN=0 (nao compoe receita): vRBSNitem = 0, mesmo com base e vIS informados.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 0,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "50.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "0.00",
+        "tpRBSN": 0,
+        "tpRBSNDescricao": "Não é receita bruta",
+        "vBC": "0.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "0.00"
+      }
+    },
+    {
+      "nome": "caso09_crt2_tpRBSN1_camposDeIbsSuprimidos",
+      "descricao": "O vBC nao depende da matriz de regime: presente tambem no CRT=2. totalItem sem IBS: apenas CBS + IS.",
+      "insumo": {
+        "regime": "crt2",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vBC": "1000.00",
+        "vCBSSN": "27.50",
+        "vCBSPendSusp": "0.00",
+        "totalItem": "27.50"
+      },
+      "esperado_nulo": [
+        "pIBSSN",
+        "vIBSSN",
+        "vIBSPendSusp"
+      ]
+    },
+    {
+      "nome": "caso10_crt2_tpRBSN4_cbsSuspensa",
+      "descricao": null,
+      "insumo": {
+        "regime": "crt2",
+        "tpRBSN": 4,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "27.50"
+      },
+      "esperado_nulo": [
+        "vIBSSN",
+        "vIBSPendSusp"
+      ]
+    },
+    {
+      "nome": "caso11_crt3tpReg2_tpRBSN1_tudoPendenteSuspenso",
+      "descricao": null,
+      "insumo": {
+        "regime": "crt3TpRegime2",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "12.50",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "27.50"
+      }
+    },
+    {
+      "nome": "caso12_crt3tpReg2_tpRBSN5_metadePendenteSuspensa",
+      "descricao": null,
+      "insumo": {
+        "regime": "crt3TpRegime2",
+        "tpRBSN": 5,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "6.25",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "13.75"
+      }
+    },
+    {
+      "nome": "caso13_crt3tpReg2_tpRBSN4_tudoZeroLiteralDaNT",
+      "descricao": "Literal nas formulas P32/P33 da NT 2026.005: exportacao indireta nesse regime cai em 'outro valor' - contraintuitivo e intencional. Na parametrizacao, e o destino ZERO do valor pendente/suspenso.",
+      "insumo": {
+        "regime": "crt3TpRegime2",
+        "tpRBSN": 4,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "0.00",
+        "vCBSSN": "0.00",
+        "vCBSPendSusp": "0.00"
+      }
+    },
+    {
+      "nome": "caso14_compraGovUniao_deslocaIbsParaCbs",
+      "descricao": "Uniao (tpEnteGov=1): regra estrutural, sem fator de transicao. Invariante dos casos 14-17: vIBSSN + vCBSSN = 40.00.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": 1,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "pIBSSN": "0.00",
+        "vIBSSN": "0.00",
+        "vIBSPendSusp": "0.00",
+        "pCBSSN": "4.00",
+        "vCBSSN": "40.00",
+        "vCBSPendSusp": "0.00"
+      },
+      "invariante": {
+        "vIBSSN+vCBSSN": "40.00"
+      }
+    },
+    {
+      "nome": "caso15_compraGovEstado_fator010",
+      "descricao": "Fator 0.10 (vigencia de 2029 na tabela de transicao). pIBS' = 1.25 + 0.10 x 2.75 = 1.5250; pCBS' = 0.90 x 2.75 = 2.4750.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": 2,
+        "fatorTransicaoCompraGov": "0.10"
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "pIBSSN": "1.525",
+        "vIBSSN": "15.25",
+        "pCBSSN": "2.475",
+        "vCBSSN": "24.75"
+      },
+      "invariante": {
+        "vIBSSN+vCBSSN": "40.00"
+      }
+    },
+    {
+      "nome": "caso16_compraGovDf_fator100_transicaoCompleta",
+      "descricao": "Fator 1.00 (vigencia a partir de 2033). f = 1.00: pIBS' = 1.25 + 2.75 = 4.00; pCBS' = 0.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": 3,
+        "fatorTransicaoCompraGov": "1.00"
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "pIBSSN": "4.00",
+        "vIBSSN": "40.00",
+        "pCBSSN": "0.00",
+        "vCBSSN": "0.00"
+      },
+      "invariante": {
+        "vIBSSN+vCBSSN": "40.00"
+      }
+    },
+    {
+      "nome": "caso17_compraGovMunicipio_fatorZero_preTransicao",
+      "descricao": "Fator 0.00 (vigencia de 2027 a 2028): as aliquotas nao mudam.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": 4,
+        "fatorTransicaoCompraGov": "0.00"
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "pIBSSN": "1.25",
+        "vIBSSN": "12.50",
+        "pCBSSN": "2.75",
+        "vCBSSN": "27.50"
+      },
+      "invariante": {
+        "vIBSSN+vCBSSN": "40.00"
+      }
+    },
+    {
+      "nome": "caso18_cAtivSNInvalido_naoCalculado_somenteReceitaBrutaETipo",
+      "descricao": "NAO_CALCULADO: sem vBC - o calculo nao ocorreu.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 1,
+        "cAtivSNValido": false,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "NAO_CALCULADO",
+        "vRBSNitem": "1000.00",
+        "tpRBSN": 1,
+        "tpRBSNDescricao": "Receita bruta - interna"
+      },
+      "esperado_nulo": [
+        "vBC",
+        "pIBSSN",
+        "vIBSSN",
+        "vIBSPendSusp",
+        "pCBSSN",
+        "vCBSSN",
+        "vCBSPendSusp",
+        "IS",
+        "totalItem"
+      ]
+    },
+    {
+      "nome": "compraGovUniao_crt2_usaPIbsApenasComoInsumoDaTransformacao",
+      "descricao": "CRT=2 + Uniao: pCBS' = pCBS + pIBS, mas os campos de IBS seguem suprimidos.",
+      "insumo": {
+        "regime": "crt2",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": "1.25",
+        "pCBSSN": "2.75",
+        "tpEnteGov": 1,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "pCBSSN": "4.00",
+        "vCBSSN": "40.00"
+      },
+      "esperado_nulo": [
+        "pIBSSN",
+        "vIBSSN"
+      ]
+    },
+    {
+      "nome": "compraGovUniao_crt2_semPIbs_trataInsumoComoZero",
+      "descricao": null,
+      "insumo": {
+        "regime": "crt2",
+        "tpRBSN": 1,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": null,
+        "pCBSSN": "2.75",
+        "tpEnteGov": 1,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "pCBSSN": "2.75",
+        "vCBSSN": "27.50"
+      },
+      "esperado_nulo": [
+        "pIBSSN"
+      ]
+    },
+    {
+      "nome": "aliquotasDispensadas_tpRBSN2_calculadoComTudoZero",
+      "descricao": "tpRBSN=2 sem aliquotas (dispensadas pela parametrizacao) - calculo com tudo zero.",
+      "insumo": {
+        "regime": "crt1",
+        "tpRBSN": 2,
+        "cAtivSNValido": true,
+        "baseCalculo": "1000.00",
+        "valorImpostoSeletivo": "0.00",
+        "pIBSSN": null,
+        "pCBSSN": null,
+        "tpEnteGov": null,
+        "fatorTransicaoCompraGov": null
+      },
+      "esperado": {
+        "estadoItem": "CALCULADO",
+        "vRBSNitem": "1000.00",
+        "vIBSSN": "0.00",
+        "vCBSSN": "0.00",
+        "totalItem": "0.00"
+      },
+      "esperado_nulo": [
+        "pIBSSN",
+        "pCBSSN"
+      ]
+    }
+  ],
+  "validacao": [
+    {
+      "nome": "caso18_cAtivSNAusente_naoCalculadoEContribuiSoParaVRBSNtot",
+      "descricao": "Contribui apenas para vRBSNtot: os demais totais ficam ausentes.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": null,
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_CALCULADO",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos[0].tribCalc.vRBSNitem": "1000.00",
+        "objetos[0].tribCalc.tpRBSN": 1,
+        "objetos[0].tribCalc.tpRBSNDescricao": "Receita bruta - interna",
+        "total.vRBSNtot": "1000.00"
+      },
+      "esperado_nulo": [
+        "objetos[0].tribCalc.vIBSSN",
+        "objetos[0].tribCalc.vCBSSN",
+        "total.vIBSSNtot",
+        "total.vCBSSNtot",
+        "total.totalIs",
+        "total.totalTributos"
+      ]
+    },
+    {
+      "nome": "caso19_cAtivSNSemLinhaNoCatalogo_naoCalculado",
+      "descricao": "Codigo '99' nao possui linha vigente no catalogo de atividades.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividadeInexistente": [
+          "99"
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "99",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_CALCULADO",
+      "esperado_codigo": null
+    },
+    {
+      "nome": "caso20_atividadeComVinculoParaOTpDoc_calculadoNormalmente",
+      "descricao": "Whitelist: atividade com vinculo vigente para o tpDoc da operacao - o item CALCULA normalmente.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos[0].tribCalc.vIBSSN": "12.50",
+        "objetos[0].tribCalc.vCBSSN": "27.50"
+      }
+    },
+    {
+      "nome": "atividadeSemVinculoAlgum_naoCalculadaEmTpDocNenhum",
+      "descricao": "Atividade sem vinculo vigente algum na associativa nao e admissivel em documento nenhum - NAO_CALCULADO (sem erro), em qualquer tpDoc habilitado.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "05",
+            "id": 5,
+            "vinculosComTpDoc": 0,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "variacoes": [
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "55",
+          "CRT": "1",
+          "tpRegimeIBSCBS": null,
+          "tpEnteGov": null,
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "05",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "65",
+          "CRT": "1",
+          "tpRegimeIBSCBS": null,
+          "tpEnteGov": null,
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "05",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        }
+      ],
+      "escopo": "item",
+      "esperado_estado": "NAO_CALCULADO",
+      "esperado_codigo": null
+    },
+    {
+      "nome": "atividadeVinculadaApenasAOutroTpDoc_naoCalculado",
+      "descricao": "Atividade com vinculos na associativa, mas nenhum com o tpDoc da operacao: inadmissivel - NAO_CALCULADO, sem erro.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "12",
+            "id": 12,
+            "vinculosComTpDoc": 0,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "12",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_CALCULADO",
+      "esperado_codigo": null
+    },
+    {
+      "nome": "atividadeVinculadaAoTpDocDaOperacao_calculado",
+      "descricao": "O inverso: com vinculo vigente para o tpDoc da operacao, calcula.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null
+    },
+    {
+      "nome": "vinculoComVigenciaEncerrada_ehIgnorado_atividadeFicaInadmissivel",
+      "descricao": "Vinculo com fim de vigencia anterior a data da operacao e filtrado pela clausula de vigencia: a contagem de vinculos VIGENTES com o tpDoc retorna zero e a atividade fica inadmissivel no documento.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 0,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_CALCULADO",
+      "esperado_codigo": null
+    },
+    {
+      "nome": "caso21_atividadeNaoTributavelComReceitaTributavel_erroDeItem",
+      "descricao": "Atividade marcada como nao tributavel (codigo 90) com cClassTrib de tpRBSN=1 (declara receita): contradicao - erro VSN-023.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "90",
+            "id": 15,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": true
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "90",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "INCONSISTENCIA_ENTRADA",
+      "esperado_codigo": "VSN-023",
+      "esperado_nulo": [
+        "objetos[0].tribCalc",
+        "total"
+      ]
+    },
+    {
+      "nome": "atividadeNaoTributavelComTpRBSN0_calculadoComTudoZero",
+      "descricao": "O 90 como linha do catalogo nao quebra o fluxo: com tpRBSN=0 o item CALCULA, com vRBSNitem=0 e tributos zero.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "410001",
+            "tpRBSN": 0,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "90",
+            "id": 15,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": true
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "90",
+            "cClassTrib": "410001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos[0].tribCalc.vRBSNitem": "0",
+        "objetos[0].tribCalc.tpRBSN": 0,
+        "objetos[0].tribCalc.vIBSSN": "0",
+        "objetos[0].tribCalc.vCBSSN": "0"
+      }
+    },
+    {
+      "nome": "cClassTribNaoImplementado_estadoNaoImplementadoSemCalculoNemTotal",
+      "descricao": "Fora de todos os totais (como item com erro).",
+      "stubs": {
+        "classTribNaoImplementado": [
+          "620001"
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "620001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_IMPLEMENTADO",
+      "esperado_codigos_exatos": [
+        "VSN-027"
+      ],
+      "esperado": {
+        "objetos[0].erros[0].pointer": "#/itens/0/cClassTrib",
+        "objetos[0].erros[0].type": "http://localhost/api/calculadora/observabilidade/simples-nacional/erros?codigo=VSN-027"
+      },
+      "esperado_contem": {
+        "objetos[0].erros[0].detail": "620001"
+      },
+      "esperado_nulo": [
+        "objetos[0].tribCalc",
+        "total"
+      ]
+    },
+    {
+      "nome": "cClassTribNaoImplementado_ehAPrimeiraConsultaEEncerraOItem",
+      "descricao": "Prioridade: com o indicador presente, nenhuma outra consulta de catalogo e feita para o item e nenhuma outra validacao roda - base negativa e aliquotas ausentes NAO sao reportadas.",
+      "stubs": {
+        "classTribNaoImplementado": [
+          "800001"
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "800001",
+            "baseCalculo": "-10.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": null,
+            "pCBSSN": null
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_IMPLEMENTADO",
+      "esperado_codigos_exatos": [
+        "VSN-027"
+      ],
+      "observacao": "O teste tambem afirma, por Mockito (verify/verifyNoInteractions), que nenhuma outra consulta de catalogo ocorre; essa parte nao e insumo->saida e esta registrada em nao_convertidos."
+    },
+    {
+      "nome": "cClassTribNaoImplementado_prevaleceSobreNumeroAusente",
+      "descricao": "O numero do item e validado antes (nao e consulta de banco); a falta de implementacao ainda assim define o estado do item.",
+      "stubs": {
+        "classTribNaoImplementado": [
+          "620001"
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": null,
+            "cAtivSN": "01",
+            "cClassTrib": "620001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "NAO_IMPLEMENTADO",
+      "esperado_codigos_exatos": [
+        "VSN-010",
+        "VSN-027"
+      ],
+      "esperado": {
+        "objetos[0].nObj": 1
+      }
+    },
+    {
+      "nome": "cClassTribNaoImplementado_naoContaminaOsDemaisItensNemOsTotais",
+      "descricao": "Totais apenas do item calculado.",
+      "stubs": {
+        "classTribNaoImplementado": [
+          "620001"
+        ],
+        "classTribImplementado": [
+          "000001"
+        ],
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "620001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          },
+          {
+            "numero": 2,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos.length()": 2,
+        "objetos[0].estadoItem": "NAO_IMPLEMENTADO",
+        "objetos[1].estadoItem": "CALCULADO",
+        "total.vRBSNtot": "1000.00",
+        "total.vIBSSNtot": "12.50",
+        "total.vCBSSNtot": "27.50"
+      }
+    },
+    {
+      "nome": "cClassTribImplementado_segueOFluxoNormal",
+      "descricao": "Indicador ausente (contagem zero, padrao do mock): o item calcula.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null
+    },
+    {
+      "nome": "cClassTribAusente_naoConsultaImplementacao",
+      "descricao": "cClassTrib em branco (um espaco).",
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": " ",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "INCONSISTENCIA_ENTRADA",
+      "esperado_codigo": "VSN-020"
+    },
+    {
+      "nome": "caso22_cClassTribDesconhecido_erroDeItem",
+      "descricao": "buscarVigentes('999999') devolve lista vazia.",
+      "stubs": {
+        "classTribSemLinhaVigente": [
+          "999999"
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "999999",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "INCONSISTENCIA_ENTRADA",
+      "esperado_codigo": "VSN-021"
+    },
+    {
+      "nome": "cClassTribIncompativelComTpDoc_erroDeItem",
+      "descricao": "Classificacao vigente com tpRBSN=5, mas zero vinculos com o tpDoc da operacao.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "222001",
+            "tpRBSN": 5,
+            "vinculosComTpDoc": 0
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "222001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "INCONSISTENCIA_ENTRADA",
+      "esperado_codigo": "VSN-022"
+    },
+    {
+      "nome": "cClassTribAusente_erroDeItem",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": null,
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-020"
+    },
+    {
+      "nome": "tipoReceitaBrutaSemLinhaVigente_erroDeItemVsn026",
+      "descricao": "O cClassTrib resolve o codigo tpRBSN, mas nao ha linha de efeito vigente na tabela de tipos de receita bruta: falha de parametrizacao.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "buscarTipoReceitaBruta": {
+          "1": "vazio"
+        }
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "INCONSISTENCIA_ENTRADA",
+      "esperado_codigo": "VSN-026"
+    },
+    {
+      "nome": "regimeSemLinhaVigente_erroGlobalVsn026",
+      "descricao": "Combinacao aprovada pela validacao de escopo, mas sem linha vigente na matriz de regime: falha de parametrizacao, global (HTTP 422).",
+      "stubs": {
+        "buscarRegimeApuracao": "vazio"
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-026"
+    },
+    {
+      "nome": "caso23_tpRegimeIbsCbs1_regimeRegularForaDeEscopo",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": "1",
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-019"
+    },
+    {
+      "nome": "caso24_crt4_meiForaDeEscopo",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "4",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-019"
+    },
+    {
+      "nome": "caso25_crt1ComTpRegime2_incompativel",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": "2",
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-018"
+    },
+    {
+      "nome": "caso26_crt3SemTpRegime_regimeNormalPuroForaDeEscopo",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "3",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-019"
+    },
+    {
+      "nome": "caso27_tpDoc91_naoSuportado",
+      "descricao": "O suporte de tpDoc vem da tabela de documentos do calculo; o stub da fachada reproduz a carga atual (apenas 55 e 65 vinculados).",
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "91",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-015"
+    },
+    {
+      "nome": "tpDocSemTratamento_rejeitadoGlobalmente",
+      "descricao": "Stub adicional: tpDocSemTratamentoCalculadora devolve true para 77 e 94.",
+      "stubs": {
+        "tpDocSemTratamentoCalculadora": [
+          77,
+          94
+        ]
+      },
+      "variacoes": [
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "77",
+          "CRT": "1",
+          "tpRegimeIBSCBS": null,
+          "tpEnteGov": null,
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        },
+        {
+          "id": "507f1f77bcf86cd799439011",
+          "versao": "2.0.0",
+          "data": "2027-03-15",
+          "tpDoc": "94",
+          "CRT": "1",
+          "tpRegimeIBSCBS": null,
+          "tpEnteGov": null,
+          "itens": [
+            {
+              "numero": 1,
+              "cAtivSN": "01",
+              "cClassTrib": "000001",
+              "baseCalculo": "1000.00",
+              "valorImpostoSeletivo": "0.00",
+              "pIBSSN": "1.25",
+              "pCBSSN": "2.75"
+            }
+          ]
+        }
+      ],
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-015"
+    },
+    {
+      "nome": "caso28_tpDocAusente_erroGlobal",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": null,
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-014"
+    },
+    {
+      "nome": "crtAusente_erroGlobal",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": null,
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-016"
+    },
+    {
+      "nome": "tpRegimeInvalido_erroGlobal",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "3",
+        "tpRegimeIBSCBS": "9",
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-017"
+    },
+    {
+      "nome": "dataInvalida_reportaApenasErroDeData_semVerificarSuporteDoTpDoc",
+      "descricao": "Com a data invalida, o lookup de vigencia do suporte do tpDoc nao pode ser executado e e omitido: apenas VSN-012 e reportado.",
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-13-99",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-012",
+      "esperado_quantidade_de_codigos": 1
+    },
+    {
+      "nome": "caso29_tpRBSN1SemPCbssn_erroDeAliquotaExigida",
+      "descricao": null,
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": null
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "INCONSISTENCIA_ENTRADA",
+      "esperado_codigo": "VSN-004"
+    },
+    {
+      "nome": "caso30_tpRBSN2SemAliquotas_calculadoComTudoZero",
+      "descricao": null,
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "410008",
+            "tpRBSN": 2,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "410008",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": null,
+            "pCBSSN": null
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos[0].tribCalc.vIBSSN": "0",
+        "objetos[0].tribCalc.vCBSSN": "0"
+      },
+      "esperado_nulo": [
+        "objetos[0].tribCalc.pIBSSN",
+        "objetos[0].tribCalc.pCBSSN"
+      ]
+    },
+    {
+      "nome": "crt2_pIbssnNuncaExigida",
+      "descricao": "Totais de IBS suprimidos para regime que nao gera IBS (CRT=2).",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "2",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": null,
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": null,
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos[0].tribCalc.vCBSSN": "27.50"
+      },
+      "esperado_nulo": [
+        "objetos[0].tribCalc.pIBSSN",
+        "objetos[0].tribCalc.vIBSSN",
+        "total.vIBSSNtot",
+        "total.vIBSSNtotPendSusp"
+      ]
+    },
+    {
+      "nome": "caso31_compraGovComDataForaDasVigencias_erroGlobal",
+      "descricao": "Data sem vigencia na tabela de transicao: como o tpEnteGov vale para a operacao inteira, a falha de parametrizacao e global (HTTP 422), nunca fator zero implicito.",
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2025-06-01",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": "2",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-025"
+    },
+    {
+      "nome": "tpEnteGovForaDoDominio_erroGlobal",
+      "descricao": null,
+      "stubs": {},
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": "5",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "global",
+      "http": 422,
+      "esperado_estado": null,
+      "esperado_codigo": "VSN-024"
+    },
+    {
+      "nome": "tpEnteGovDaOperacao_aplicadoATodosOsItens",
+      "descricao": "Uniao (tpEnteGov=1): pCBS' = pCBS + pIBS; pIBS' = 0 - a transformacao vem do contexto da operacao e alcanca TODOS os itens da nota.",
+      "stubs": {
+        "classTrib": [
+          {
+            "codigo": "000001",
+            "tpRBSN": 1,
+            "vinculosComTpDoc": 1
+          }
+        ],
+        "atividade": [
+          {
+            "cAtivSN": "01",
+            "id": 1,
+            "vinculosComTpDoc": 1,
+            "naoTributavel": false
+          }
+        ]
+      },
+      "entrada": {
+        "id": "507f1f77bcf86cd799439011",
+        "versao": "2.0.0",
+        "data": "2027-03-15",
+        "tpDoc": "55",
+        "CRT": "1",
+        "tpRegimeIBSCBS": null,
+        "tpEnteGov": "1",
+        "itens": [
+          {
+            "numero": 1,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          },
+          {
+            "numero": 2,
+            "cAtivSN": "01",
+            "cClassTrib": "000001",
+            "baseCalculo": "1000.00",
+            "valorImpostoSeletivo": "0.00",
+            "pIBSSN": "1.25",
+            "pCBSSN": "2.75"
+          }
+        ]
+      },
+      "escopo": "item",
+      "esperado_estado": "CALCULADO",
+      "esperado_codigo": null,
+      "esperado": {
+        "objetos.length()": 2,
+        "objetos[*].estadoItem": "CALCULADO",
+        "objetos[*].tribCalc.pIBSSN": "0",
+        "objetos[*].tribCalc.vIBSSN": "0",
+        "objetos[*].tribCalc.pCBSSN": "4.00",
+        "objetos[*].tribCalc.vCBSSN": "40.00"
+      }
+    }
+  ],
+  "nao_convertidos": [
+    {
+      "arquivo": "src/test/java/br/gov/serpro/rtc/testesunitarios/simplesnacional/Teste_SimplesNacionalObservabilidadeService.java",
+      "metodo": "cClassTribNaoImplementado_ehAPrimeiraConsultaEEncerraOItem",
+      "motivo": "Convertido so em parte. A parte insumo->saida (estado NAO_IMPLEMENTADO e lista de codigos exatamente ['VSN-027']) esta em 'validacao'. O nucleo do teste sao asercoes de interacao Mockito - verify(contarTratamentosNaoImplementados), verify(never()) em buscarVigentes e contarVinculosComTpDoc e verifyNoInteractions(atividadeCalculoRepository) - que afirmam a AUSENCIA de consultas ao catalogo. Isso nao e um par entrada->saida e nao foi transformado em valor esperado."
+    },
+    {
+      "arquivo": "src/test/java/br/gov/serpro/rtc/testesunitarios/simplesnacional/Teste_SimplesNacionalObservabilidadeService.java",
+      "metodo": "cClassTribImplementado_segueOFluxoNormal",
+      "motivo": "Convertido so em parte: o estado CALCULADO esta em 'validacao', mas a asercao verify(classificacaoRepository).contarTratamentosNaoImplementados('000001') e de interacao com o repositorio mockado e nao tem equivalente em par entrada->saida."
+    },
+    {
+      "arquivo": "src/test/java/br/gov/serpro/rtc/testesunitarios/simplesnacional/Teste_SimplesNacionalObservabilidadeService.java",
+      "metodo": "cClassTribAusente_naoConsultaImplementacao",
+      "motivo": "Convertido so em parte: o estado INCONSISTENCIA_ENTRADA e o codigo VSN-020 estao em 'validacao'; a asercao verify(never()).contarTratamentosNaoImplementados - que o catalogo nao e consultado quando o cClassTrib vem em branco - e de interacao e nao foi convertida."
+    }
+  ],
+  "limitacoes_conhecidas": [
+    "Os 24 casos de 'api' rodam contra a base de catalogo real do perfil 'testes' (Spring Boot). Os codigos cClassTrib (000001, 220001, 410001, 620001, 800001, 820001) e os cAtivSN (01, 05, 06, 07, 90, 99) dependem do conteudo dessa base, que NAO esta neste JSON: a porta TypeScript precisa carregar o mesmo catalogo para reproduzir esses esperados.",
+    "Os 36 casos de 'validacao' e os 20 de 'motor' nao dependem de banco: 'motor' usa o servico puro e 'validacao' usa repositorios mockados, cujo estado simulado esta no campo 'stubs' de cada caso."
+  ]
+}

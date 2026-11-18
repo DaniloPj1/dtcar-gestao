@@ -134,7 +134,16 @@ export const VSN = {
   "VSN-999": "Falha técnica no cálculo do item",
 };
 
-const erro = (code, campo, detail) => ({ code, title: VSN[code], pointer: `#/${campo}`, detail });
+// O "type" aponta para o catálogo de erros da própria Receita; o "pointer" diz
+// onde está o problema (no item N, ou num campo da operação).
+const CATALOGO = "/calculadora/observabilidade/simples-nacional/erros?codigo=";
+
+function erro(code, campo, detail, indice) {
+  const pointer = indice === undefined || indice === null
+    ? `#/${campo}`
+    : (campo ? `#/itens/${indice}/${campo}` : `#/itens/${indice}`);
+  return { type: CATALOGO + code, title: VSN[code], code, pointer, detail };
+}
 
 // ─── Leitura das entradas ──────────────────────────────────────────────────────
 
@@ -413,6 +422,16 @@ function repartir(regime, valor, pendenteSuspenso) {
 
 // ─── Item: validação + cálculo ─────────────────────────────────────────────────
 
+/** Erro de item leva o índice no pointer: #/itens/2/cClassTrib. */
+function carimbar(erros, indice) {
+  for (const e of erros) {
+    if (e.pointer.startsWith("#/itens/")) continue;
+    const campo = e.pointer.slice(2);
+    e.pointer = campo ? `#/itens/${indice}/${campo}` : `#/itens/${indice}`;
+  }
+  return erros;
+}
+
 function processarItem(item, indice, contexto, dados) {
   const erros = [];
   const nObj = item.numero === null || item.numero === undefined ? null : Number(item.numero);
@@ -424,7 +443,7 @@ function processarItem(item, indice, contexto, dados) {
   if (naoImplementado(item.cClassTrib, contexto.data, dados)) {
     const cd = String(item.cClassTrib).trim();
     erros.push(erro("VSN-027", "cClassTrib", `A classificação tributária '${cd}' ainda não possui tratamento implementado no cálculo do Simples Nacional na data '${contexto.data}'.`));
-    return { nObj: nObj ?? indice + 1, estadoItem: "NAO_IMPLEMENTADO", tribCalc: null, erros };
+    return { nObj: nObj ?? indice + 1, estadoItem: "NAO_IMPLEMENTADO", tribCalc: null, erros: carimbar(erros, indice) };
   }
 
   const base = lerDecimal(item.baseCalculo, "baseCalculo", "VSN-001", "VSN-002");
@@ -444,7 +463,7 @@ function processarItem(item, indice, contexto, dados) {
   if (pIbs.erro) erros.push(pIbs.erro);
 
   if (erros.length) {
-    return { nObj: nObj ?? indice + 1, estadoItem: "INCONSISTENCIA_ENTRADA", tribCalc: null, erros };
+    return { nObj: nObj ?? indice + 1, estadoItem: "INCONSISTENCIA_ENTRADA", tribCalc: null, erros: carimbar(erros, indice) };
   }
 
   try {
@@ -465,7 +484,7 @@ function processarItem(item, indice, contexto, dados) {
       nObj: nObj ?? indice + 1,
       estadoItem: "FALHA_TECNICA",
       tribCalc: null,
-      erros: [erro("VSN-999", "item", String(e && e.message ? e.message : e))],
+      erros: [erro("VSN-999", null, String(e && e.message ? e.message : e), indice)],
     };
   }
 }
@@ -512,27 +531,34 @@ export function calcularSimples(operacao, dados = RTC) {
   const comTrib = objetos.filter((o) => o.tribCalc);
   const total = comTrib.length ? totalizar(comTrib) : null;
 
-  return {
-    oper: { data: op.data, tpDoc: op.tpDoc, CRT: op.CRT, tpRegimeIBSCBS: op.tpRegimeIBSCBS ?? null, tpEnteGov: op.tpEnteGov ?? null },
-    objetos: objetos.map(formatarObjeto),
-    total,
-  };
+  // Campo que não foi informado não sai na resposta (a Receita omite nulos).
+  const oper = { data: op.data, tpDoc: op.tpDoc, CRT: op.CRT };
+  if (!vazio(op.tpRegimeIBSCBS)) oper.tpRegimeIBSCBS = op.tpRegimeIBSCBS;
+  if (!vazio(op.tpEnteGov)) oper.tpEnteGov = op.tpEnteGov;
+
+  const saida = { oper, objetos: objetos.map(formatarObjeto) };
+  if (total) saida.total = total;
+  return saida;
 }
 
 function totalizar(objetos) {
-  const soma = (f) => objetos.reduce((t, o) => t + (f(o.tribCalc) ?? ZERO), ZERO);
-  const t = {
-    vRBSNtot: moeda(soma((c) => c.vRBSNitem)),
-    vBC: moeda(soma((c) => c.vBC)),
-    vCBSSNtot: moeda(soma((c) => c.vCBSSN)),
-    vCBSSNtotPendSusp: moeda(soma((c) => c.vCBSPendSusp)),
-    totalIs: moeda(soma((c) => (c.IS ? c.IS.valor : null))),
-    totalTributos: moeda(soma((c) => c.totalItem)),
+  // Um campo do total só existe quando pelo menos um item tem esse valor: a nota
+  // com um item só, não calculado, soma a receita bruta e mais nada.
+  const soma = (f) => {
+    const vs = objetos.map((o) => f(o.tribCalc)).filter((v) => v !== null && v !== undefined);
+    return vs.length ? moeda(vs.reduce((t, v) => t + v, ZERO)) : undefined;
   };
-  if (objetos.some((o) => o.tribCalc.vIBSSN !== undefined)) {
-    t.vIBSSNtot = moeda(soma((c) => c.vIBSSN));
-    t.vIBSSNtotPendSusp = moeda(soma((c) => c.vIBSPendSusp));
-  }
+  const t = {
+    vRBSNtot: soma((c) => c.vRBSNitem),
+    vBC: soma((c) => c.vBC),
+    vIBSSNtot: soma((c) => c.vIBSSN),
+    vIBSSNtotPendSusp: soma((c) => c.vIBSPendSusp),
+    vCBSSNtot: soma((c) => c.vCBSSN),
+    vCBSSNtotPendSusp: soma((c) => c.vCBSPendSusp),
+    totalIs: soma((c) => (c.IS ? c.IS.valor : null)),
+    totalTributos: soma((c) => c.totalItem),
+  };
+  for (const k of Object.keys(t)) if (t[k] === undefined) delete t[k];
   return t;
 }
 

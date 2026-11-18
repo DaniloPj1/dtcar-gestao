@@ -372,7 +372,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   errado) e `produto_id` **não vem de fora**: a peça é ligada ao cadastro pelo `codigo` (`agente_orc_item_estoque`, regra D3 como o v21/v40 — o custo sai do
   estoque e a aprovação dá a baixa de verdade). A busca aceita código, código de barras e **referência** (a tela grava a referência ou o código do catálogo de
   peças no campo do código, `js/telas/ordem.js`); casando pela referência, a grafia que o Danilo mandou fica. Código que não é do cadastro vale como
-  **referência livre** (catálogo, montadora), sem vínculo e sem baixa — a resposta traz `codigos_fora_do_estoque` para o Claude avisar.
+  **referência livre** (catálogo, montadora), sem vínculo e sem baixa — a resposta do `orcamento` E a da prévia do `aprovar_orcamento` (onde a baixa
+  aconteceria) trazem `codigos_fora_do_estoque` para o Claude avisar; peça do cliente não entra nessa lista, porque o vínculo dela é zerado de propósito.
   **O item de `itens_alterar` chega MESCLADO com o do banco**, então ele sempre tem `codigo`, `custo_unit`, `produto_id` e `fornecida_cliente` mesmo que o
   pedido não tenha mandado nada disso: quem chama diz o que veio no pedido (`p_codigo_no_pedido`, `p_custo_do_estoque`, e `peca_do_cliente` lido antes de
   `fornecida_cliente`). Sem isso, mudar a quantidade de uma peça lançada na tela era recusado, apagar o código não soltava o produto e "o cliente trouxe a

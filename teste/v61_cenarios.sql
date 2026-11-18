@@ -445,4 +445,32 @@ do $$ declare r jsonb; id10 uuid; it jsonb; saldo numeric; cod text; begin
   if (r->'codigos_fora_do_estoque') is not null then raise exception 'FALHOU 26f: não é código fora do estoque'; end if;
 end $$;
 
+-- 27. o aviso dos códigos sem vínculo é honesto e aparece também na aprovação
+do $$ declare r jsonb; id11 uuid; it jsonb; cod text; begin
+  select codigo::text into cod from public.produtos where id = '00000000-0000-0000-0000-0000000000b1';
+  -- peça do cliente com código DO CADASTRO não é "fora do estoque" (o vínculo é zerado de propósito)
+  r := public.agente_fazer('orcamento', jsonb_build_object('acao', 'criar',
+    'cliente', jsonb_build_object('nome', 'AVISO HONESTO', 'telefone', '(27) 98888-6666'),
+    'veiculo', jsonb_build_object('placa', 'KYN9G90', 'marca', 'Fiat', 'modelo', 'UNO', 'ano', '2016'),
+    'itens', jsonb_build_array(
+      jsonb_build_object('tipo', 'peca', 'descricao', 'BIELETA DO CLIENTE', 'codigo', cod, 'qtd', 1, 'valor_unit', 80, 'peca_do_cliente', true),
+      jsonb_build_object('tipo', 'peca', 'descricao', 'PASTILHA DO CATALOGO', 'codigo', 'PERFECT 1234', 'qtd', 1, 'valor_unit', 150))), true);
+  id11 := (r->>'id')::uuid;
+  if (r->>'codigos_fora_do_estoque') like ('%' || cod || '%') then
+    raise exception 'FALHOU 27: peça do cliente não é código fora do estoque (%)', r->>'codigos_fora_do_estoque'; end if;
+  if not (r->>'codigos_fora_do_estoque') like '%PERFECT 1234%' then
+    raise exception 'FALHOU 27a: o código do catálogo tinha de aparecer (%)', r; end if;
+  -- a PRÉVIA da aprovação avisa (é lá que a baixa aconteceria)
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id11), false);
+  if not (r->>'codigos_fora_do_estoque') like '%PERFECT 1234%' then
+    raise exception 'FALHOU 27b: a prévia da aprovação tinha de avisar (%)', r; end if;
+  if (r->>'codigos_fora_do_estoque') like ('%' || cod || '%') then
+    raise exception 'FALHOU 27c: peça do cliente no aviso da aprovação'; end if;
+  -- item tirado pelo cliente não entra no aviso
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id11 and i.descricao = 'PASTILHA DO CATALOGO';
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id11, 'itens_fora', jsonb_build_array(it->>'id')), false);
+  if (r->'codigos_fora_do_estoque') is not null then
+    raise exception 'FALHOU 27d: item tirado não devia entrar no aviso (%)', r->>'codigos_fora_do_estoque'; end if;
+end $$;
+
 select 'v61 OK' as resultado;

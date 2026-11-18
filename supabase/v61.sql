@@ -333,8 +333,10 @@ begin
   v_antes := case when o.id is null then null else to_jsonb(o) end;
   v_res := public.orcamento_salvar(v_pay);
   perform public.agente_registrar('orcamento', p, 'orcamentos', (v_res->>'id'), v_antes, v_res);
+  -- peça do cliente tem o produto_id zerado de propósito (não baixa): não é "código que não é do cadastro"
   v_fora_estoque := (select jsonb_agg(distinct i->>'codigo') from jsonb_array_elements(v_res->'itens') i
-                      where i->>'tipo' = 'peca' and coalesce(i->>'codigo', '') <> '' and (i->>'produto_id') is null);
+                      where i->>'tipo' = 'peca' and coalesce(i->>'codigo', '') <> '' and (i->>'produto_id') is null
+                        and coalesce((i->>'fornecida_cliente')::boolean, false) = false);
   return v_res || case when v_fora_estoque is not null then jsonb_build_object('codigos_fora_do_estoque', v_fora_estoque,
       'sobre_os_codigos', 'Estes códigos não são do cadastro de produtos: ficam no item como referência, mas a aprovação NÃO dá baixa no estoque.')
     else '{}'::jsonb end
@@ -351,7 +353,7 @@ create or replace function public.agente_orcamento_aprovar(p jsonb) returns json
 language plpgsql volatile security invoker set search_path = public as $$
 declare
   o public.orcamentos; v_num int := nullif(p->>'numero', '')::int; v_id uuid := nullif(p->>'id', '')::uuid;
-  v_fora uuid[] := '{}'; v_res jsonb; v_cli uuid; v_extra jsonb; v_doc text; v_cep text; v_aviso text := '';
+  v_fora uuid[] := '{}'; v_res jsonb; v_cli uuid; v_extra jsonb; v_doc text; v_cep text; v_aviso text := ''; v_fora_estoque jsonb;
 begin
   perform public.agente_exige_admin();
   if v_id is null and v_num is null then raise exception 'Informe o número do orçamento (5 = ORC-00005) ou o id.'; end if;
@@ -361,6 +363,11 @@ begin
     if jsonb_typeof(p->'itens_fora') <> 'array' then raise exception 'itens_fora deve ser uma lista de ids de item (veja buscar_orcamento).'; end if;
     select coalesce(array_agg(x::uuid), '{}') into v_fora from jsonb_array_elements_text(p->'itens_fora') x;
   end if;
+  -- as peças que vão para a O.S. com código que não é do cadastro: é AQUI que a baixa aconteceria, então
+  -- a prévia da aprovação precisa dizer quais não vão baixar (quem aprova direto nunca passou pelo "orcamento")
+  select jsonb_agg(distinct i.codigo) into v_fora_estoque from public.orcamento_itens i
+    where i.orcamento_id = o.id and i.tipo = 'peca' and coalesce(i.codigo, '') <> '' and i.produto_id is null
+      and not i.fornecida_cliente and not (i.id = any(v_fora)) and i.aprovado is distinct from false;
   -- gravar = false confere sem gastar número de O.S. (v53)
   v_res := public.orcamento_aprovar(o.id, v_fora, coalesce(p->>'por', ''), coalesce(p->>'forma', ''), not public.agente_em_previa());
 
@@ -414,6 +421,9 @@ begin
     perform public.agente_registrar('orcamento_aprovar', p, 'orcamentos', o.id::text, to_jsonb(o), v_res);
   end if;
   return v_res || jsonb_build_object('orcamento_id', o.id, 'orcamento', public.orc_numero_texto(o.numero))
+    || case when v_fora_estoque is not null then jsonb_build_object('codigos_fora_do_estoque', v_fora_estoque,
+         'sobre_os_codigos', 'Estas peças têm código que não é do cadastro de produtos: entram na O.S., mas NÃO saem do estoque. Confira com o Danilo antes de aprovar.')
+       else '{}'::jsonb end
     || case when v_aviso <> '' then jsonb_build_object('atencao', v_aviso) else '{}'::jsonb end
     || case when (v_res->>'ordem_id') is not null
             then jsonb_build_object('link_os', 'https://gestao.dtcarcentroautomotivo.com.br/#/os/' || (v_res->>'ordem_id')) else '{}'::jsonb end;

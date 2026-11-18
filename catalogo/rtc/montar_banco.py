@@ -1,9 +1,21 @@
 #!/usr/bin/env python3
-"""Monta o banco SQLite da Calculadora RTC a partir dos .sql do Flyway.
+"""Monta o banco oficial da Calculadora de Tributos da Receita Federal.
 
-Uso: python3 -I montar_db.py <pasta_flyway_sql> <arquivo_saida.db>
-Aplica, em ordem: criacao/beforeMigrate.sql, criacao/B*.sql,
-manutencao/V*.sql (ordem numerica), criacao/afterMigrate.sql.
+Aplica os .sql do Flyway direto no SQLite, sem precisar de Java nem de Maven.
+
+Uso:
+    git clone --depth 1 https://github.com/ReceitaFederal/calculadora-rtc-regime-regular.git
+    python3 catalogo/rtc/montar_banco.py calculadora-rtc-regime-regular/flyway/sql calculadora.db
+
+ATENÇÃO: a pasta flyway/ com as tabelas NÃO está no repositório do Simples Nacional,
+e sim no do regime regular — os dois usam o mesmo banco. O README da Receita manda
+copiá-la do repositório errado (aponta para ele mesmo).
+
+Ordem: criacao/beforeMigrate.sql, criacao/B*.sql, manutencao/V*.sql (ordem numérica),
+criacao/afterMigrate.sql. Os scripts usam "PRAGMA defer_foreign_keys", que só vale
+dentro de UMA transação: sem isso 7 migrações falham por chave estrangeira.
+
+Depois de montar, gere o arquivo do sistema com catalogo/rtc/gerar_rtc.py.
 """
 import os
 import re

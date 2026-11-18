@@ -4,7 +4,8 @@
 //   { modelo?, texto?, numero_os?, cliente_id?, telefone?, anexo?, fora_do_horario?, pedido?, origem?, confirmar }
 //   - modelo: texto montado com js/mensagens.js (os mesmos textos da tela da O.S.): entrada, orcamento, adicionais, pronto,
 //     entrega, cobranca (parcelas em aberto da O.S.) e boas_vindas. Texto ditado pelo Danilo (texto) vale por cima do modelo.
-//   - anexo: UM PDF — {fonte:"os", documento: os|orcamento|entrada|recibo, fotos?, motor?}, {fonte:"boleto", os | nosso_numero}
+//   - anexo: UM PDF — {fonte:"os", documento: os|orcamento|entrada|recibo, fotos?, motor?}, {fonte:"orcamento", numero}
+//     (18/11/2026: o orçamento separado da O.S., ORC — numeração própria, sem numero_os), {fonte:"boleto", os | nosso_numero}
 //     (pela O.S., todos os boletos em aberto num PDF só), {fonte:"nf", os | id} (o PDF da NF anexada na O.S.) ou
 //     {fonte:"resumo", de: cliente|veiculo, orcamentos?, itens?} (13/11/2026: as O.S. em aberto do cliente ou do veículo da
 //     O.S. da mensagem num PDF só).
@@ -62,7 +63,7 @@ async function textoDoModelo(d: DepsZap, p: Record<string, unknown>, avisos: str
   const st = String(o.status);
   // mensagem curta só quando o PDF anexado é o próprio orçamento (os itens e preços estão nele)
   const an = (p.anexo && typeof p.anexo === "object" ? p.anexo : {}) as Record<string, unknown>;
-  const extra: Record<string, unknown> = { comPdf: an.fonte === "os" && an.documento === "orcamento" };
+  const extra: Record<string, unknown> = { comPdf: (an.fonte === "os" && an.documento === "orcamento") || an.fonte === "orcamento" };
   if (modelo === "orcamento" && !["diagnostico", "aguardando"].includes(st)) avisos.push(`A O.S. ${num} não está mais em orçamento (situação: ${st}).`);
   if (modelo === "orcamento" && !itens.length) throw new ErroAnexo(`A O.S. ${num} não tem itens no orçamento.`);
   if (modelo === "adicionais" && !itens.length) throw new ErroAnexo(`A O.S. ${num} não tem itens adicionais esperando aprovação.`);
@@ -86,7 +87,7 @@ async function textoDoModelo(d: DepsZap, p: Record<string, unknown>, avisos: str
 /** O PDF pedido (um só). */
 async function pdfDoPedido(d: DepsZap, anexo: Record<string, unknown>): Promise<{ arquivo: Arquivo; avisos: string[] }> {
   const fonte = String(anexo.fonte || "");
-  if (!["os", "boleto", "nf", "resumo"].includes(fonte)) throw new ErroAnexo('No WhatsApp vai um PDF: fonte "os" (O.S., orçamento ou checklist), "resumo" (O.S. em aberto do cliente ou do veículo), "boleto" ou "nf".');
+  if (!["os", "orcamento", "boleto", "nf", "resumo"].includes(fonte)) throw new ErroAnexo('No WhatsApp vai um PDF: fonte "os" (O.S., orçamento ou checklist), "orcamento" (orçamento separado da O.S., ORC), "resumo" (O.S. em aberto do cliente ou do veículo), "boleto" ou "nf".');
   const { arquivos, avisos } = await montarAnexos(d.adm, "", [anexo], d.geradores, d.site);
   const pdfs = arquivos.filter((a) => a.tipo === "application/pdf" || /\.pdf$/i.test(a.nome));
   if (!pdfs.length) throw new ErroAnexo(fonte === "nf" ? "A NF anexada na O.S. não tem PDF (só o XML): anexe o DANFE em PDF na tela da O.S." : "Nenhum PDF gerado.");
@@ -108,6 +109,13 @@ export async function prepararWhatsApp(d: DepsZap, p: Record<string, unknown>): 
   if (p.anexo && typeof p.anexo === "object") {
     // sem número no anexo: o da O.S. da mensagem
     const a = { ...(p.anexo as Record<string, unknown>) }, num = numeroOS(p.numero_os);
+    // orçamento separado da O.S. (ORC, 18/11/2026): não é documento de O.S., tem numeração própria e vai
+    // para o número que o Danilo mandar (o ORC pode nem ter cliente cadastrado ainda)
+    if (a.fonte === "orcamento") {
+      if (!a.numero && !a.orcamento) throw new ErroAnexo("Informe o número do orçamento (ORC) no anexo: {fonte:\"orcamento\", numero: 5}.");
+      if (num) throw new ErroAnexo("O anexo é um orçamento (ORC), que não é de O.S.: tire o numero_os da mensagem.");
+      pdf = await pdfDoPedido(d, a);
+    } else {
     if (!num) throw new ErroAnexo("O PDF é de uma O.S.: informe a O.S. da mensagem (numero_os).");
     // resumo das O.S. em aberto: do cliente ou do veículo da O.S. da mensagem (nunca de outro cliente)
     if (num && (a.fonte === "os" || a.fonte === "resumo") && !a.numero) a.numero = num;
@@ -130,6 +138,7 @@ export async function prepararWhatsApp(d: DepsZap, p: Record<string, unknown>): 
       if (n && Number(n.os_numero) !== num) throw new ErroAnexo(`Essa NF é da O.S. ${n.os_numero}, não da ${num}.`);
     }
     pdf = await pdfDoPedido(d, a);
+    }
   }
   if (!texto && !pdf) throw new ErroAnexo("Informe o texto, um modelo ou o PDF.");
   if (pdf) avisos.push(...pdf.avisos);

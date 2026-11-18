@@ -664,7 +664,8 @@ export function criarServidor(db: Banco): McpServer {
       "Com confirmar=false só confere e devolve a prévia (cliente, telefone, texto, PDF, erros e avisos). Envie (confirmar=true) só com ordem do Danilo. " +
       "Texto: o que o Danilo ditou (texto) ou um modelo do sistema (modelo + numero_os — os mesmos textos dos botões da tela da O.S.): entrada, orcamento, " +
       "adicionais (itens esperando aprovação), pronto, entrega (garantia), cobranca (parcelas em aberto da O.S.) e boas_vindas (só cliente_id/telefone). " +
-      "PDF (anexo, um por mensagem; sai logo depois do texto): {fonte:\"os\", documento: orcamento|os|entrada|recibo, fotos?, motor?} (O.S. da mensagem; recibo = O.S. Recibo, só O.S. paga), {fonte:\"boleto\"} " +
+      "PDF (anexo, um por mensagem; sai logo depois do texto): {fonte:\"os\", documento: orcamento|os|entrada|recibo, fotos?, motor?} (O.S. da mensagem; recibo = O.S. Recibo, só O.S. paga), " +
+      "{fonte:\"orcamento\", numero: 5} (o orçamento separado da O.S. — ORC, numeração própria: vai sem numero_os, para o telefone que o Danilo mandar), {fonte:\"boleto\"} " +
       "(boletos em aberto da O.S. num PDF só), {fonte:\"nf\"} (PDF da NF anexada na O.S.) ou {fonte:\"resumo\", de: cliente|veiculo, orcamentos?, itens?} " +
       "(resumo das O.S. em aberto do cliente ou do veículo da O.S. da mensagem: itens, total, recebido e falta receber de cada uma e o total geral). " +
       "Par usual: orcamento + PDF do orçamento; entrega + PDF da O.S.; cobranca + boleto. " +
@@ -673,13 +674,14 @@ export function criarServidor(db: Banco): McpServer {
       texto: z.string().max(2000).optional().describe("Mensagem exatamente como vai (ditada ou aprovada pelo Danilo). Vale por cima do modelo"),
       modelo: z.enum(["entrada", "orcamento", "adicionais", "pronto", "entrega", "cobranca", "boas_vindas"]).optional().describe("Texto pronto do sistema com os dados da O.S."),
       anexo: z.object({
-        fonte: z.enum(["os", "boleto", "nf", "resumo"]).describe("os = PDF da O.S./orçamento/checklist; boleto = boleto Sicredi; nf = PDF da NF anexada na O.S.; resumo = as O.S. em aberto do cliente ou do veículo num PDF só"),
+        fonte: z.enum(["os", "orcamento", "boleto", "nf", "resumo"]).describe("os = PDF da O.S./orçamento/checklist; orcamento = PDF do orçamento separado da O.S. (ORC); boleto = boleto Sicredi; nf = PDF da NF anexada na O.S.; resumo = as O.S. em aberto do cliente ou do veículo num PDF só"),
         de: z.enum(["cliente", "veiculo"]).optional().describe("fonte resumo (obrigatório): cliente = as O.S. em aberto do cliente da O.S. da mensagem; veiculo = as do veículo dela"),
         orcamentos: z.boolean().optional().describe("fonte resumo: true inclui os orçamentos ainda não aprovados (padrão: só aprovadas e aguardando pagamento)"),
         itens: z.boolean().optional().describe("fonte resumo: false manda só o quadro geral, sem os itens de cada O.S."),
         documento: z.enum(["os", "orcamento", "entrada", "recibo"]).optional().describe("fonte os: os (ordem de serviço/garantia, padrão), orcamento, entrada (checklist) ou recibo (O.S. Recibo: só O.S. paga, com prazo e condições da garantia)"),
         motor: z.boolean().optional().describe("documento recibo: false tira os cuidados do motor (amaciamento e troca de óleo aos 1.000 km); padrão com"),
         fotos: z.boolean().optional().describe("fonte os: false tira as fotos (PDF menor)"),
+        numero: z.number().int().positive().optional().describe("fonte orcamento (obrigatório): o número do ORC"),
         nosso_numero: z.string().optional().describe("fonte boleto: um boleto só, pelo nosso número"),
         id: z.string().optional().describe("fonte nf: id da nota, se a O.S. tiver mais de uma"),
       }).optional().describe("Um PDF gerado pelo sistema (nunca caminho de arquivo); usa a O.S. de numero_os"),
@@ -692,7 +694,11 @@ export function criarServidor(db: Banco): McpServer {
   }, async ({ texto: t, modelo, anexo, cliente_id, numero_os, telefone, fora_do_horario, pedido, confirmar }) => {
     if (!cliente_id && !numero_os && !telefone) return falha("Informe o telefone com DDD, o cliente (cliente_id) ou a O.S. (numero_os).");
     if (!t && !modelo && !anexo) return falha("Informe o texto, um modelo ou o PDF (anexo).");
-    if (anexo && !numero_os) return falha("O PDF é da O.S.: informe numero_os (o boleto ou a NF têm de ser dessa O.S.).");
+    if (anexo && anexo.fonte === "orcamento") {
+      if (!anexo.numero) return falha("Informe o número do orçamento no anexo: {fonte:\"orcamento\", numero: 5}.");
+      if (numero_os) return falha("O anexo é um orçamento (ORC), que não é de O.S.: tire o numero_os e mande pelo telefone (ou cliente_id).");
+      if (!telefone && !cliente_id) return falha("Informe o telefone com DDD (ou cliente_id) para mandar o orçamento.");
+    } else if (anexo && !numero_os) return falha("O PDF é da O.S.: informe numero_os (o boleto ou a NF têm de ser dessa O.S.).");
     let r: Record<string, unknown>;
     if (modelo || anexo) {
       // v34: texto do modelo e PDF montados pela função "email" (mesmos js/mensagens.js e js/pdf.js do site)
@@ -1592,18 +1598,20 @@ export function criarServidor(db: Banco): McpServer {
   /** O histórico do agente (v19) é só do administrador: se não gravar, diga, não finja que gravou. */
   const anotar = async (ferramenta: string, p: { pedido?: string; registro?: string; antes?: unknown; depois?: unknown }) => {
     if (!db.from) return "sem acesso às tabelas";
-    const { error } = await db.from("agente_acoes").insert({
-      ferramenta, pedido: p.pedido || "", tabela: "orcamentos", registro: String(p.registro || ""),
-      antes: p.antes ?? null, depois: p.depois ?? null, confirmado_por: "Danilo (conector)",
-    });
-    return error ? error.message : "";
+    try {
+      const { error } = await db.from("agente_acoes").insert({
+        ferramenta, pedido: p.pedido || "", tabela: "orcamentos", registro: String(p.registro || ""),
+        antes: p.antes ?? null, depois: p.depois ?? null, confirmado_por: "Danilo (conector)",
+      });
+      return error ? error.message : "";
+    } catch (e) { return e instanceof Error ? e.message : String(e); }  // o histórico nunca derruba o que já foi gravado
   };
 
   s.registerTool("buscar_orcamento", {
     title: "Buscar orçamento (ORC)",
     description: "Lê os orçamentos separados da O.S. (numeração ORC): pelo número (com todos os itens), pela placa do veículo (os 5 últimos) " +
       "ou a lista de uma situação (elaboracao, enviado, aprovado, recusado, vencido — vencido é o que passou da validade e ainda não foi respondido). " +
-      "Sem nada: os que estão em aberto (em elaboração e enviados, com os vencidos à parte). " +
+      "Sem nada: os que estão em aberto (em elaboração e enviados; os que passaram da validade vêm junto, marcados como vencido). " +
       "Orçamento não mexe em estoque nem no financeiro; ele só vira O.S. quando o cliente aprova (orcamento acao=aprovar).",
     inputSchema: z.object({
       numero: z.number().int().positive().optional().describe("Número do ORC (só os números, sem o ORC-)"),
@@ -1718,17 +1726,30 @@ export function criarServidor(db: Banco): McpServer {
       const item: ItemOrc = { ...resto, codigo: codigo || "", qualidade: i.tipo === "peca" ? "original" : "", fornecida_cliente: peca_do_cliente === true };
       // peça do estoque: liga no produto (é o produto_id que dá baixa quando o orçamento virar O.S.)
       if (codigo) {
-        const cod = String(codigo).trim();
-        const acha = async (coluna: string) => ((await db.from("produtos").select("id,codigo,referencia,custo").eq(coluna, cod).limit(1)).data || []) as Array<Record<string, unknown>>;
-        const prod = (await acha("codigo"))[0] || (await acha("referencia"))[0];
-        if (prod) { item.produto_id = prod.id; if (item.custo_unit === undefined) item.custo_unit = Number(prod.custo) || 0; }
-        else avisos.push("Código " + codigo + " não está no estoque: o item entrou como genérico e não vai dar baixa.");
+        const tab = db.from, cod = String(codigo).trim();
+        // mesmas regras do lancar_itens_os (v27): só produto, ativo na frente; referência e código de barras são texto,
+        // "codigo" é o número interno do estoque — por isso só entra na busca quando o que veio é só número
+        const acha = async (coluna: string) => {
+          const r = await tab("produtos").select("id,codigo,referencia,descricao,custo,ativo,tipo").eq(coluna, cod).eq("tipo", "produto").order("ativo", { ascending: false }).limit(3);
+          return ((r.data || []) as Array<Record<string, unknown>>);
+        };
+        let achados = await acha("referencia");
+        if (!achados.length) achados = await acha("codigo_barras");
+        if (!achados.length && /^\d+$/.test(cod)) achados = await acha("codigo");
+        const prod = achados[0];
+        if (prod) {
+          item.produto_id = prod.id;
+          if (item.custo_unit === undefined) item.custo_unit = Number(prod.custo) || 0;
+          if (achados.length > 1) avisos.push("Há mais de um produto com o código " + cod + " (entrou \"" + String(prod.descricao || "") + "\"): confira na tela de estoque.");
+          if (prod.ativo === false) avisos.push("O produto do código " + cod + " está inativo no estoque.");
+        } else avisos.push("Código " + cod + " não está no estoque: o item entrou como genérico e não vai dar baixa quando virar O.S.");
       }
       if (peca_do_cliente === true) { item.valor_unit = 0; item.custo_unit = 0; item.desconto = 0; }
       itens.push(item);
     }
 
-    let veiculo = p.veiculo as Record<string, unknown> | undefined;
+    const digitado = p.veiculo as Record<string, unknown> | undefined;
+    let veiculo: Record<string, unknown> | undefined, doCadastro = false;
     let veiculo_id = (p.veiculo_id as string | undefined) ?? undefined;
     if (!veiculo_id && placa) {
       const limpa = String(placa).toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -1736,17 +1757,33 @@ export function criarServidor(db: Banco): McpServer {
       if (ev) return falha(ev.message);
       if (!v) return falha("Placa " + limpa + " não está no cadastro. Use consultar_placa e passe veiculo {placa, marca, modelo, ano}.");
       const { id, ...resto } = v as Record<string, unknown>;
-      veiculo_id = id as string; veiculo = { ...resto, ...(veiculo || {}) };
-    } else if (veiculo_id && !veiculo) {
-      const { data: v } = await db.from("veiculos").select("placa,marca,modelo,ano,cor,motor").eq("id", veiculo_id).maybeSingle();
-      if (v) veiculo = v as Record<string, unknown>;
+      veiculo_id = id as string; veiculo = resto; doCadastro = true;
+    } else if (veiculo_id) {
+      const { data: v, error: ev } = await db.from("veiculos").select("placa,marca,modelo,ano,cor,motor").eq("id", veiculo_id).maybeSingle();
+      if (ev) return falha(ev.message);
+      if (!v) return falha("Esse veículo não está no cadastro (veiculo_id). Informe a placa ou veiculo {placa, marca, modelo, ano}.");
+      veiculo = v as Record<string, unknown>; doCadastro = true;
     }
-    let cliente = p.cliente as Record<string, unknown> | undefined;
+    if (digitado) veiculo = { ...(veiculo || {}), ...digitado };
+    // carro digitado com outra placa: retrato novo, para não herdar marca, modelo e ano do carro anterior
+    const placaAntes = String(((o.veiculo as Record<string, unknown>) || {}).placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const placaAgora = String((veiculo || {}).placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+    const vZerar = !!veiculo && ((doCadastro && !digitado) || (!!placaAgora && !!placaAntes && placaAgora !== placaAntes));
+
+    const cDigitado = p.cliente as Record<string, unknown> | undefined;
+    let cliente: Record<string, unknown> | undefined, cDoCadastro = false;
     const cliente_id = (p.cliente_id as string | undefined) ?? undefined;
     if (cliente_id) {
-      const { data: c } = await db.from("clientes").select("nome,telefone").eq("id", cliente_id).maybeSingle();
-      if (c) cliente = { ...(c as Record<string, unknown>), ...(cliente || {}) };
+      const { data: c, error: ec } = await db.from("clientes").select("nome,telefone").eq("id", cliente_id).maybeSingle();
+      if (ec) return falha(ec.message);
+      if (!c) return falha("Esse cliente não está no cadastro (cliente_id). Veja buscar_cliente ou informe cliente {nome, telefone}.");
+      cliente = c as Record<string, unknown>; cDoCadastro = true;
     }
+    if (cDigitado) cliente = { ...(cliente || {}), ...cDigitado };
+    // trocou de pessoa: retrato novo, para o CPF e o endereço do cliente anterior não irem no PDF nem virar cadastro errado
+    const nomeAntes = String(((o.cliente as Record<string, unknown>) || {}).nome || "").trim().toUpperCase();
+    const nomeAgora = String((cliente || {}).nome || "").trim().toUpperCase();
+    const cZerar = !!cliente && (cDoCadastro || (!!nomeAgora && !!nomeAntes && nomeAgora !== nomeAntes));
     const sit = acao === "enviar" ? "enviado" : acao === "recusar" ? "recusado" : (o.situacao as string) || "elaboracao";
     if (acao === "recusar" && !String(motivo || o.motivo || "").trim()) return falha("Informe o motivo da recusa.");
 
@@ -1755,8 +1792,8 @@ export function criarServidor(db: Banco): McpServer {
       ...(o.id ? { id: o.id } : {}),
       cliente_id: cliente_id ?? o.cliente_id ?? null,
       veiculo_id: veiculo_id ?? o.veiculo_id ?? null,
-      cliente: { ...((o.cliente as Record<string, unknown>) || {}), ...(cliente || {}) },
-      veiculo: { ...((o.veiculo as Record<string, unknown>) || {}), ...(veiculo || {}) },
+      cliente: cZerar ? { ...cliente } : { ...((o.cliente as Record<string, unknown>) || {}), ...(cliente || {}) },
+      veiculo: vZerar ? { ...veiculo } : { ...((o.veiculo as Record<string, unknown>) || {}), ...(veiculo || {}) },
       reclamacao: p.reclamacao ?? o.reclamacao ?? "",
       obs: p.obs ?? o.obs ?? "",
       obs_internas: p.obs_internas ?? o.obs_internas ?? "",

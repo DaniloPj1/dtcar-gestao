@@ -36,9 +36,10 @@ function fromFalso(t: string) {
   const exec = () => {
     if (!(t in tabelasF)) return { data: null, error: { message: `relation "public.${t}" does not exist` }, count: null };
     if (reg.apaga) {
-      const fica = tabelasF[t].filter((r) => !reg.f.every(([k, op, v]) => compara(r[k], op, v)));
-      const foram = tabelasF[t].length - fica.length; tabelasF[t] = fica; apagados.push([t, foram]);
-      return { data: [], error: null, count: null };
+      const saem = tabelasF[t].filter((r) => reg.f.every(([k, op, v]) => compara(r[k], op, v)));
+      tabelasF[t] = tabelasF[t].filter((r) => !saem.includes(r)); apagados.push([t, saem.length]);
+      // o supabase-js devolve as linhas apagadas quando o delete pede .select()
+      return { data: saem.map((r) => ({ id: r.id })), error: null, count: null };
     }
     let l = tabelasF[t].filter((r) => reg.f.every(([k, op, v]) => compara(r[k], op, v)));
     for (const [k, asc] of [...reg.ord].reverse()) l = [...l].sort((a, b) => (String(a[k] ?? "") < String(b[k] ?? "") ? -1 : String(a[k] ?? "") > String(b[k] ?? "") ? 1 : 0) * (asc ? 1 : -1));
@@ -552,7 +553,9 @@ tabelasF.orcamento_itens = [{ id: ITEM1, orcamento_id: "orc1", tipo: "peca", des
 tabelasF.agente_acoes = [];
 tabelasF.veiculos = [{ id: "11111111-2222-4333-8444-555555555555", placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018", cor: "PRATA", motor: "1.4" }];
 tabelasF.clientes = [{ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome: "JADI", telefone: "27997904328" }];
-tabelasF.produtos = [{ id: "p1", codigo: "640", referencia: "640", descricao: "BIELETA", custo: 30, tipo: "peca" }];
+tabelasF.produtos = [{ id: "p1", codigo: 640, codigo_barras: "", referencia: "640", descricao: "BIELETA", custo: 30, tipo: "produto", ativo: true },
+  { id: "p2", codigo: 999, codigo_barras: "", referencia: "ABC-9", descricao: "OUTRA COISA", custo: 5, tipo: "produto", ativo: true },
+  { id: "p3", codigo: 777, codigo_barras: "", referencia: "", descricao: "SERVIÇO DE TERCEIRO", custo: 0, tipo: "servico", ativo: true }];
 respostas.orcamento_salvar = { id: "orc1", numero: 5, situacao: "elaboracao", total: 310, custo: 60 };
 respostas.orcamento_aprovar = { pode_aprovar: true, gravado: true, ordem_id: "os9", os_numero: 1940, erros: [], avisos: [] };
 
@@ -574,17 +577,31 @@ confere("orcamento sem confirmar: só a prévia, sem gravar", jo.gravado === fal
 c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "BIELETA", qtd: 2, valor_unit: 53, codigo: "640" }], confirmar: true, pedido: "lançar peça" });
 let pgrav = (c.args?.p as L)?.itens as L[];
 confere("orcamento: peça com código entra ligada ao produto (é ela que dá baixa na O.S.)", c.fn === "orcamento_salvar" && pgrav?.[1]?.produto_id === "p1" && pgrav?.[1]?.custo_unit === 30, JSON.stringify(pgrav?.[1]));
-c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "PECA SEM CODIGO", qtd: 1, valor_unit: 10, codigo: "999" }], confirmar: true });
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "PECA SEM CODIGO", qtd: 1, valor_unit: 10, codigo: "ZZZ-1" }], confirmar: true });
 jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
 confere("orcamento: código fora do estoque avisa que não dá baixa", /não está no estoque/.test(JSON.stringify(jo.avisos || [])), JSON.stringify(jo.avisos));
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "OUTRA", qtd: 1, valor_unit: 10, codigo: "ABC-9" }], confirmar: true });
+pgrav = (c.args?.p as L)?.itens as L[];
+confere("orcamento: referência de texto acha o produto certo", pgrav?.[1]?.produto_id === "p2" && pgrav?.[1]?.custo_unit === 5, JSON.stringify(pgrav?.[1]));
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "SERVICO QUE NAO E PECA", qtd: 1, valor_unit: 10, codigo: "777" }], confirmar: true });
+pgrav = (c.args?.p as L)?.itens as L[];
+confere("orcamento: só liga em produto do estoque (serviço do cadastro não vira peça)", !pgrav?.[1]?.produto_id, JSON.stringify(pgrav?.[1]));
 
 c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50 }], confirmar: true, pedido: "lançar mão de obra" });
 confere("orcamento confirmado → orcamento_salvar com o item novo e o que já havia", c.fn === "orcamento_salvar"
   && (c.args?.p as L)?.id === "orc1" && ((c.args?.p as L)?.itens as L[])?.length === 2, JSON.stringify(c.args).slice(0, 220));
 confere("orcamento: a gravação fica no histórico do agente", inseridos.some(([t, l]) => t === "agente_acoes" && l[0]?.ferramenta === "orcamento" && l[0]?.pedido === "lançar mão de obra"), JSON.stringify(inseridos).slice(0, 160));
 
-c = await chama("orcamento", { numero: 5, cliente: { nome: "JADI SOUZA" }, confirmar: true });
-confere("orcamento: mandar só o nome não apaga o telefone gravado", ((c.args?.p as L)?.cliente as L)?.telefone === "27999990001" && ((c.args?.p as L)?.cliente as L)?.nome === "JADI SOUZA", JSON.stringify((c.args?.p as L)?.cliente));
+c = await chama("orcamento", { numero: 5, cliente: { telefone: "27988887777" }, confirmar: true });
+confere("orcamento: mandar só o telefone mantém o nome gravado", ((c.args?.p as L)?.cliente as L)?.nome === "CLIENTE DIVERSOS" && ((c.args?.p as L)?.cliente as L)?.telefone === "27988887777", JSON.stringify((c.args?.p as L)?.cliente));
+tabelasF.orcamentos[0].cliente = { nome: "MARIA", telefone: "27911112222", doc: "12345678909", cidade: "COLATINA" };
+c = await chama("orcamento", { numero: 5, cliente: { nome: "JOAO", telefone: "27933334444" }, confirmar: true });
+confere("orcamento: trocar de pessoa não leva junto o CPF e o endereço da anterior", !("doc" in (((c.args?.p as L)?.cliente as L) || {})) && !("cidade" in (((c.args?.p as L)?.cliente as L) || {})), JSON.stringify((c.args?.p as L)?.cliente));
+tabelasF.orcamentos[0].cliente = { nome: "CLIENTE DIVERSOS", telefone: "27999990001" };
+tabelasF.orcamentos[0].veiculo = { placa: "AAA1A11", marca: "Fiat", modelo: "UNO", ano: "2010" };
+c = await chama("orcamento", { numero: 5, veiculo: { placa: "BBB2B22" }, confirmar: true });
+confere("orcamento: carro com outra placa não herda marca e modelo do anterior", !((c.args?.p as L)?.veiculo as L)?.marca && ((c.args?.p as L)?.veiculo as L)?.placa === "BBB2B22", JSON.stringify((c.args?.p as L)?.veiculo));
+tabelasF.orcamentos[0].veiculo = { placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018", cor: "PRATA" };
 c = await chama("orcamento", { numero: 5, cliente_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", confirmar: true });
 confere("orcamento: cliente_id traz nome e telefone do cadastro", ((c.args?.p as L)?.cliente as L)?.nome === "JADI" && (c.args?.p as L)?.cliente_id === "cccccccc-cccc-4ccc-8ccc-cccccccccccc", JSON.stringify((c.args?.p as L)?.cliente));
 c = await chama("orcamento", { numero: 5, veiculo_id: "11111111-2222-4333-8444-555555555555", confirmar: true });
@@ -626,7 +643,21 @@ tabelasF.orcamentos.push({ id: "orc3", numero: 7, situacao: "elaboracao", os_num
 c = await chama("orcamento", { numero: 7, acao: "excluir" });
 confere("orcamento excluir sem confirmar: nada é apagado", apagados.length === 0 && JSON.parse(c.r?.content?.[0]?.text || "{}").gravado === false);
 c = await chama("orcamento", { numero: 7, acao: "excluir", confirmar: true });
-confere("orcamento excluir confirmado: apaga o ORC", apagados.some(([t, n]) => t === "orcamentos" && n === 1), JSON.stringify(apagados));
+jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
+confere("orcamento excluir confirmado: apaga o ORC e confirma que saiu mesmo", c.r?.isError !== true && jo.apagado === "ORC-00007"
+  && apagados.some(([t, n]) => t === "orcamentos" && n === 1), JSON.stringify({ jo, apagados }));
+{ // delete que não pega nada (sem permissão) não pode responder "apagado"
+  const antes = tabelasF.orcamentos.length;
+  tabelasF.orcamentos.push({ id: "orc8", numero: 8, situacao: "elaboracao", os_numero: null, cliente: { nome: "Z" }, veiculo: {}, desconto: 0, total: 0, custo: 0, reclamacao: "", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, cliente_id: null, veiculo_id: null });
+  const semApagar = fromFalso; // guarda o from normal
+  const orig = banco.from;
+  (banco as { from?: unknown }).from = (t: string) => { const q = semApagar(t); if (t === "orcamentos") { const d = q.delete; q.delete = () => { const q2 = d(); const then = q2.then; q2.then = (ok2: (v: unknown) => unknown) => then.call(q2, (r: L) => ok2({ ...r, data: [] })); return q2; }; } return q; };
+  c = await chama("orcamento", { numero: 8, acao: "excluir", confirmar: true });
+  confere("orcamento excluir que não apagou nada volta como erro", c.r?.isError === true && /Nada foi apagado/.test(c.r?.content?.[0]?.text || ""), c.r?.content?.[0]?.text);
+  (banco as { from?: unknown }).from = orig;
+  tabelasF.orcamentos = tabelasF.orcamentos.filter((o) => o.numero !== 8);
+  void antes;
+}
 confere("instruções: orçamento não mexe em estoque e só vira O.S. aprovado", String(ini.corpo.result?.instructions || "").includes("Orçamento separado da O.S. (ORC") && String(ini.corpo.result?.instructions || "").includes("não mexe em estoque"));
 
 

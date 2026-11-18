@@ -22,6 +22,12 @@ const ehPdf = (b: Uint8Array) => new TextDecoder().decode(b.slice(0, 5)) === "%P
 type L = Record<string, unknown>;
 const logo = await Deno.readFile(new URL("../icons/logo-preto.png", import.meta.url));
 const tabelas: Record<string, L[]> = {
+  // orçamento separado da O.S. (ORC, 18/11/2026): numeração própria, vai sem numero_os
+  orcamentos: [{ id: "orc1", numero: 5, situacao: "enviado", criado_em: "2026-11-18T10:00:00Z", cliente_id: null, veiculo_id: null, desconto: 0, total: 206.18, custo: 81.68,
+    cliente: { nome: "Jadi Souza", telefone: "27997904328" }, veiculo: { placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX 1.4AT LTZ", ano: "2017/2018" },
+    reclamacao: "Suspensão", obs: "", validade: "2027-01-01", consultor_nome: "Danilo", tabela_preco: "vista", condicoes_pagamento: "" }],
+  orcamento_itens: [{ id: "oi1", orcamento_id: "orc1", posicao: 1, tipo: "peca", descricao: "BIELETA DA BARRA ESTABILIZADORA DIANTEIRA", qtd: 2, valor_unit: 53.09, custo_unit: 40.84, desconto: 0 },
+    { id: "oi2", orcamento_id: "orc1", posicao: 2, tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50, custo_unit: 0, desconto: 0 }],
   config: [{ id: 1, dados: { nome: "DTCar Centro Automotivo", endereco: "Rua Teste, 10 - Colatina/ES", telefone: "(27) 99999-0000", espelhoLegado: false,
     cobranca: { cooperativa: "0523", posto: "16", beneficiario: "85453", conta: "85453-7", especie: "05", jurosMes: 2, multa: 2 } } }],
   clientes: [{ id: "c1", nome: "João da Silva" }],
@@ -169,6 +175,13 @@ confere("nome do PDF: longo continua terminando em .pdf; vazio vira documento.pd
   confere("tela apagou o texto (sem_texto): vai só o PDF", r.texto === "" && (r.arquivo as L).nome === "Orcamento_01887_ABC1D23.pdf", r);
 }
 await deve("fonte não aceita no WhatsApp", () => w({ numero_os: 1887, anexo: { fonte: "rh", id: "x" } }), /No WhatsApp vai um PDF/);
+{
+  // ORC: vai pelo telefone que o Danilo mandar, sem numero_os (o orçamento pode nem ter cliente cadastrado)
+  const r = await w({ telefone: "27997904328", texto: "Segue o orçamento.", anexo: { fonte: "orcamento", numero: 5 } });
+  confere("ORC: PDF do orçamento separado vai sem numero_os", (r.arquivo as L)?.nome === "Orcamento_ORC-00005_KYN9G83.pdf", r.arquivo);
+}
+await deve("ORC com numero_os é recusado (não é documento de O.S.)", () => w({ numero_os: 1887, anexo: { fonte: "orcamento", numero: 5 } }), /tire o numero_os/);
+await deve("ORC sem número no anexo", () => w({ telefone: "27997904328", texto: "x", anexo: { fonte: "orcamento" } }), /número do orçamento/);
 await deve("O.S. sem NF", () => w({ numero_os: 1887, anexo: { fonte: "nf" } }), /não tem NF anexada/);
 {
   // v34 não rodado: banco antigo não devolve "arquivo" na prévia — não deixa sair sem o PDF

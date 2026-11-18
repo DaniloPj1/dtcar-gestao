@@ -61,6 +61,13 @@ const tabelas: Record<string, L[]> = {
       descricao: "", seu_numero: "", codigo_barras: "74894" + "0".repeat(39), linha_digitavel: "", qr_url: "" }],
   os_notas: [{ id: "11111111-1111-1111-1111-111111111111", os_numero: 1887, numero_nf: "131", arquivo: "1887/nf131.pdf", nome_arquivo: "NF 131.pdf", tipo_arquivo: "application/pdf", criado_em: "1" },
     { id: "22222222-2222-2222-2222-222222222222", os_numero: 1887, numero_nf: "131", arquivo: "1887/nf131.xml", nome_arquivo: "NF 131.xml", tipo_arquivo: "application/xml", criado_em: "2" }],
+  orcamentos: [{ id: "orc1", numero: 5, situacao: "enviado", criado_em: "2026-11-18T10:00:00Z", cliente_id: null, veiculo_id: null, desconto: 0, total: 300, custo: 100,
+    cliente: { nome: "Jadi Souza", telefone: "27997904328" }, veiculo: { placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX 1.4AT LTZ", ano: "2017/2018" },
+    reclamacao: "Suspensão", obs: "", validade: "2027-01-01", consultor_nome: "Danilo", tabela_preco: "vista", condicoes_pagamento: "" },
+    { id: "orc2", numero: 6, situacao: "elaboracao", criado_em: "2026-11-18T10:00:00Z", cliente_id: null, veiculo_id: null, desconto: 0, total: 0, custo: 0,
+      cliente: { nome: "Sem itens" }, veiculo: {}, reclamacao: "", obs: "", validade: "2020-01-01", consultor_nome: "Danilo", tabela_preco: "vista", condicoes_pagamento: "" }],
+  orcamento_itens: [{ id: "oi1", orcamento_id: "orc1", posicao: 1, tipo: "peca", descricao: "BIELETA DA BARRA ESTABILIZADORA DIANTEIRA", qtd: 2, valor_unit: 53.09, custo_unit: 40.84, desconto: 0 },
+    { id: "oi2", orcamento_id: "orc1", posicao: 2, tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50, custo_unit: 0, desconto: 0 }],
   rh_documentos: [{ id: "33333333-3333-3333-3333-333333333333", arquivo: "2026-10/x.pdf", nome_arquivo: "PRO LABORE 10.2026.pdf", tipo_arquivo: "application/pdf", tipo: "pro_labore", competencia: "2026-10" }],
 };
 const pastas: Record<string, Map<string, Uint8Array>> = {
@@ -127,6 +134,18 @@ const orc = await montarAnexos(db, "AT", [{ fonte: "os", numero: 1887, documento
 confere("orçamento e checklist de entrada", orc.arquivos.map((a) => a.nome).join() === "Orcamento_01887_ABC1D23.pdf,Checklist_01887_ABC1D23.pdf" && orc.arquivos.every((a) => ehPdf(a.bytes))
   && /ORÇAMENTO/.test(await texto(orc.arquivos[0].bytes)), orc.arquivos.map((a) => a.nome));
 await deve("O.S. que não existe", () => montarAnexos(db, "AT", [{ fonte: "os", numero: 5 }], geradores, SITE), /O\.S\. 5 não encontrada/);
+
+// ----- orçamento separado da O.S. (ORC, 18/11/2026) -----
+const orcSep = await montarAnexos(db, "AT", [{ fonte: "orcamento", numero: 5 }], geradores, SITE);
+const tOrcSep = await texto(orcSep.arquivos[0].bytes);
+confere("ORC: PDF do orçamento separado, com a numeração própria e sem número de O.S.", ehPdf(orcSep.arquivos[0].bytes)
+  && orcSep.arquivos[0].nome === "Orcamento_ORC-00005_KYN9G83.pdf" && /ORC-00005/.test(tOrcSep) && !/1887/.test(tOrcSep), { nome: orcSep.arquivos[0].nome, t: tOrcSep.slice(0, 300) });
+confere("ORC: o PDF traz os itens e o cliente do orçamento", /BIELETA/.test(tOrcSep) && /Jadi Souza/i.test(tOrcSep) && /KYN9G83|KYN-9G83/.test(tOrcSep), tOrcSep.slice(0, 400));
+confere("ORC: a origem diz o número e a situação", /ORC-00005/.test(orcSep.arquivos[0].origem) && /Enviado/.test(orcSep.arquivos[0].origem), orcSep.arquivos[0].origem);
+const orcVenc = await montarAnexos(db, "AT", [{ fonte: "orcamento", numero: 6 }], geradores, SITE);
+confere("ORC: validade passada avisa, e orçamento sem itens também", orcVenc.avisos.some((a) => /validade/.test(a)) && orcVenc.avisos.some((a) => /não tem itens/.test(a)), orcVenc.avisos);
+await deve("ORC que não existe", () => montarAnexos(db, "AT", [{ fonte: "orcamento", numero: 99 }], geradores, SITE), /ORC-00099 não encontrado/);
+await deve("ORC sem número", () => montarAnexos(db, "AT", [{ fonte: "orcamento" }], geradores, SITE), /número do orçamento/);
 await deve("documento da O.S. inválido", () => montarAnexos(db, "AT", [{ fonte: "os", numero: 1887, documento: "nota" }], geradores, SITE), /os, orcamento, entrada ou recibo/);
 
 const bo = await montarAnexos(db, "AT", [{ fonte: "boleto", os: 1887 }], geradores, SITE);

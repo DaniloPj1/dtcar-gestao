@@ -1342,11 +1342,15 @@ export function criarServidor(db: Banco): McpServer {
     const encargos = ((cfgL as Array<Record<string, Record<string, unknown>>>)?.[0]?.dados || {}).encargos;
     const lancs = await todasLinhas(() => tabela("funcionario_lanc").select("*").eq("competencia", per.comp).order("data"));
     // v61: onde a comissão já foi lançada por quinzena, o cálculo automático (mão de obra x comissao_pct) não vale mais
-    let comLancada = new Set<string>();
+    let comLancada: Set<string> | null = new Set<string>();
     try {
       const coms = await todasLinhas(() => tabela("comissoes").select("funcionario_id,situacao").eq("competencia", per.comp));
       comLancada = new Set(coms.filter((c) => c.situacao === "lancado").map((c) => String(c.funcionario_id)));
-    } catch (_) { /* banco ainda sem o v61 */ }
+    } catch (e) {
+      // sem a tabela (banco ainda no v60) a comissão por quinzena não existe: a automática vale.
+      // Com a tabela, mas a consulta falhando, NÃO se calcula a automática: ela pode já ter sido lançada.
+      comLancada = /comiss|does not exist|schema cache|PGRST205/i.test(String((e as Error)?.message || "")) ? new Set<string>() : null;
+    }
     let ordens: Array<Record<string, unknown>>;
     try { ordens = await todasLinhas(() => tabela("ordens").select("id,numero,mecanico_id,mecanico_nome,tecnico_id,entregue_em").eq("status", "entregue").gte("entregue_em", per.ini + "T00:00:00-03:00").lt("entregue_em", per.fim + "T00:00:00-03:00").order("numero")); }
     catch (_) { ordens = await todasLinhas(() => tabela("ordens").select("id,numero,mecanico_id,mecanico_nome,entregue_em").eq("status", "entregue").gte("entregue_em", per.ini + "T00:00:00-03:00").lt("entregue_em", per.fim + "T00:00:00-03:00").order("numero")); }
@@ -1358,10 +1362,11 @@ export function criarServidor(db: Banco): McpServer {
     }
     return { mes: ym, nome_do_mes: nomeMes(ym), funcionarios: fs.map((f) => {
       const os = relev.filter((o) => eMecanicoDa(f, o)).map((o) => ({ numero: o.numero, mao_de_obra: mo.get(String(o.id)) || 0 }));
-      const { valorDe: _v, ...calc } = calcularMes(f, ym, lancs.filter((l) => l.funcionario_id === f.id), os.reduce((t, o) => t + o.mao_de_obra, 0), encargos, comLancada.has(String(f.id))) as Record<string, unknown>;
+      const { valorDe: _v, ...calc } = calcularMes(f, ym, lancs.filter((l) => l.funcionario_id === f.id), os.reduce((t, o) => t + o.mao_de_obra, 0), encargos, comLancada === null || comLancada.has(String(f.id))) as Record<string, unknown>;
       return { id: f.id, nome: f.nome, funcao: f.funcao, vinculo: f.vinculo, comissao_pct: f.comissao_pct, calculo: calc, os_da_comissao: os,
         lancamentos: lancs.filter((l) => l.funcionario_id === f.id).map((l) => ({ id: l.id, data: l.data, tipo: l.tipo, qtd: l.qtd, valor: l.valor, descricao: l.descricao })) };
-    }), aviso: "Valores de referência para a gestão; folha oficial, INSS/IRRF e DSR ficam com o contador." };
+    }), aviso: "Valores de referência para a gestão; folha oficial, INSS/IRRF e DSR ficam com o contador."
+      + (comLancada === null ? " ATENÇÃO: não deu para conferir a comissão lançada por quinzena, então a comissão automática não entrou nestes números — confira na tela de Comissão." : "") };
   }
 
   // ---------- Notas da SEFAZ ----------

@@ -817,6 +817,9 @@ function comBancoDoPC(a) {
       atualizar: soOnline(a.apontamentos.atualizar, "Sem conexão com a internet: tente de novo quando a internet voltar."), visto: soOnline(a.apontamentos.visto, "Sem conexão com a internet.") },
     // comissão: lançar e cancelar mexem em O.S. e na folha no servidor; sem internet, nem consulta (não vai para o banco do PC)
     comissao: { ...a.comissao,
+      // consultar os lançamentos funciona sem internet (pelo banco do PC): a folha PRECISA saber que a quinzena já foi
+      // lançada, senão volta a calcular a comissão automática por cima do que já foi lançado
+      lancamentos: ler(a.comissao.lancamentos, L.comissoes), itens: ler(a.comissao.itens, L.comissaoItens),
       lancar: soOnline(a.comissao.lancar, "Sem conexão com a internet: a comissão só pode ser lançada com internet."),
       cancelar: soOnline(a.comissao.cancelar, "Sem conexão com a internet: o lançamento só pode ser cancelado com internet.") },
     agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),

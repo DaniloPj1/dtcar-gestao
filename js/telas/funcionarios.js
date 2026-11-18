@@ -18,8 +18,9 @@ export async function dadosDoMes(ym, funcs) {
   const [lancs, ordens, coms] = await Promise.all([api.funcionarios.lancamentos(p.comp),
     api.funcionarios.ordensEntregues(p.ini + "T00:00:00-03:00", p.fim + "T00:00:00-03:00"),
     // v61: comissão lançada por quinzena. Onde ela existe, o cálculo automático (mão de obra x comissao_pct) não vale mais.
-    api.comissao ? api.comissao.lancamentos({ competencia: p.comp }).catch(() => []) : []]);
-  const lancado = new Set((coms || []).filter(c => c.situacao === "lancado").map(c => c.funcionario_id));
+    api.comissao ? api.comissao.lancamentos({ competencia: p.comp }).catch(() => null) : []]);
+  // não deu para consultar? então NÃO se calcula a comissão automática: ela pode já ter sido lançada por quinzena
+  const lancado = coms === null ? null : new Set(coms.filter(c => c.situacao === "lancado").map(c => c.funcionario_id));
   const comComissao = funcs.filter(f => Number(f.comissao_pct) > 0);
   const relevantes = ordens.filter(o => comComissao.some(f => eMecanicoDa(f, o)));
   const itens = relevantes.length ? await api.itensDasOrdens(relevantes.map(o => o.id)) : [];
@@ -28,7 +29,7 @@ export async function dadosDoMes(ym, funcs) {
   const porFunc = {};
   for (const f of funcs) {
     const os = relevantes.filter(o => eMecanicoDa(f, o)).map(o => ({ ...o, maoDeObra: mo.get(o.id) || 0 }));
-    porFunc[f.id] = { lancs: lancs.filter(l => l.funcionario_id === f.id), os, base: os.reduce((s, o) => s + o.maoDeObra, 0), comissaoLancada: lancado.has(f.id) };
+    porFunc[f.id] = { lancs: lancs.filter(l => l.funcionario_id === f.id), os, base: os.reduce((s, o) => s + o.maoDeObra, 0), comissaoLancada: lancado === null ? "?" : lancado.has(f.id) };
   }
   return porFunc;
 }
@@ -240,7 +241,7 @@ function MesFuncionario({ f, ymInicial }) {
       <div><h3>A pagar ao funcionário</h3>
         ${linha("Salário", r.salario, false, r.diasSalario < 30 ? r.diasSalario + " dias" : "")}
         ${linha("Horas extras", r.horasExtras, false, r.qtdHorasExtras ? fmtHoras(r.qtdHorasExtras) : "")}
-        ${linha("Comissão", r.comissao, false, r.comissaoAuto ? f.comissao_pct + "% de " + reais(r.baseComissao) : (r.comissaoLancada ? "lançada por quinzena" : ""))}
+        ${linha("Comissão", r.comissao, false, r.comissaoAuto ? f.comissao_pct + "% de " + reais(r.baseComissao) : (r.comissaoIncerta ? "não foi possível conferir a comissão da quinzena" : r.comissaoLancada ? "lançada por quinzena" : ""))}
         ${linha("Bônus / prêmios", r.bonus)}
         ${linha("Faltas", r.faltas, true, r.qtdFaltas ? r.qtdFaltas + " dia(s)" : "")}
         ${linha("Vales e adiantamentos", r.vales, true)}

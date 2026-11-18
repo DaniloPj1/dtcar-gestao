@@ -12,7 +12,12 @@ def chk(n, c, extra=''): (ok if c else falhas).append(n if c or not extra else n
 # reais() escreve "R$ 600,00" com espaço fino (\xa0): o teste compara com espaço comum
 def txt(pagina, sel="main"): return pagina.inner_text(sel).replace("\xa0", " ")
 U = "http://localhost:8781/"
-NOME = "window.__DB.os_itens.find(i => i.id === 'i1').descricao = 'REVISAO GERAL'"
+SEMEAR = """window.__DB.os_itens.find(i => i.id === 'i1').descricao = 'REVISAO GERAL';
+  window.__DB.perfis.push({ id: 'p3', nome: 'Beto Mecânico', email: 'b@x', papel: 'mecanico', ativo: true });
+  window.__DB.funcionarios.push(
+    { id: 'fmec1', nome: 'CARLOS MECANICO', apelido: 'Carlos', perfil_id: 'p2', comissao_pct: 40, comissao_grupos: {}, salario: 2200, horas_mes: 220, he_pct: 50, vinculo: 'clt', ativo: true, jornada: {} },
+    { id: 'fmec2', nome: 'ROBERTO LIMA', apelido: 'Beto', perfil_id: 'p3', comissao_pct: 30, comissao_grupos: {}, salario: 2000, horas_mes: 220, he_pct: 50, vinculo: 'clt', ativo: true, jornada: {} });"""
+NOME = SEMEAR
 CUSTO = "window.__DB.os_itens.find(i => i.id === 'i1').custo_unit || 0"
 LANCS = "(window.__DB.funcionario_lanc || []).filter(l => l.tipo === 'comissao')"
 try:
@@ -78,7 +83,9 @@ try:
     chk("matriz: padrão do mecânico e exceção por grupo", "Padrão de Carlos" in m and "Exceções por grupo" in m and "SUSPENSAO" in m, m[:400])
     pg.fill("#cm-padrao", "45"); pg.wait_for_timeout(300)
     pg.click(".acoes-modal button:has-text('Salvar percentuais')"); pg.wait_for_timeout(1500)
-    chk("matriz salva em config.comissao", pg.evaluate("((window.__DB.config.comissao || {}).padrao || {}).fu1") == 45, pg.evaluate("window.__DB.config.comissao"))
+    chk("matriz salva na ficha do funcionário, não no config (que a equipe toda lê)",
+        pg.evaluate("window.__DB.funcionarios.find(f => f.id === 'fmec1').comissao_pct") == 45 and not pg.evaluate("!!window.__DB.config.comissao"),
+        pg.evaluate("[window.__DB.funcionarios.find(f => f.id === 'fmec1').comissao_pct, window.__DB.config.comissao]"))
     t = txt(pg)
     chk("o novo padrão vale na quinzena (45% de 600 = 270)", "R$ 270,00" in t, t[:400])
 
@@ -88,6 +95,47 @@ try:
     chk("puxar O.S.: explica que só entra serviço apontado", "apontou no app" in m, m[:300])
     pg.click(".modal .fechar") if pg.locator(".modal .fechar").count() else pg.keyboard.press("Escape")
     pg.wait_for_timeout(400)
+
+    # 8b. serviço dividido entre DOIS mecânicos: o percentual de um não pode vazar para o outro
+    dois = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+    dois.on("pageerror", lambda e: erros.append("PAGEERR dois " + str(e)))
+    dois.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+    dois.add_init_script(NOME)
+    dois.add_init_script("""window.__DB.apontamentos = null;
+      window.__API_MOCK.apontamentos.listar = async () => (window.__DB.aps || (window.__DB.aps = [
+        { id: 'ap1', ordem_id: window.__DB.ordens[0].id, os_numero: window.__DB.ordens[0].numero, perfil_id: 'p2', perfil_nome: 'Carlos', situacao: 'finalizado', inicio: new Date(Date.now()-7200000).toISOString(), fim: new Date(Date.now()-3600000).toISOString(), itens_executados: ['i1'], indicacoes: [], pausas: [] },
+        { id: 'ap2', ordem_id: window.__DB.ordens[0].id, os_numero: window.__DB.ordens[0].numero, perfil_id: 'p3', perfil_nome: 'Beto', situacao: 'finalizado', inicio: new Date(Date.now()-7200000).toISOString(), fim: new Date(Date.now()-3600000).toISOString(), itens_executados: ['i1'], indicacoes: [], pausas: [] }]));""")
+    dois.goto(U + "#/comissao"); dois.wait_for_timeout(2400)
+    t = txt(dois)
+    chk("dividido: os dois mecânicos aparecem", "Carlos" in t and "Beto" in t, t[:300])
+    pcts = dois.locator(".cm-linhas li .cm-pct-campo input")
+    chk("dividido: cada um com o seu percentual (40 e 30)", [pcts.nth(i).input_value() for i in range(pcts.count())] == ["40", "30"],
+        [pcts.nth(i).input_value() for i in range(pcts.count())])
+    chk("dividido: metade da mão de obra para cada (R$ 300,00 de base)", t.count("parte dele: R$ 300,00") == 2, t[:600])
+    pcts.first.fill("10"); dois.wait_for_timeout(500)
+    depois = [pcts.nth(i).input_value() for i in range(pcts.count())]
+    chk("dividido: digitar o percentual de um NÃO mexe no do outro", depois == ["10", "30"], depois)
+    botoes = [dois.locator(".cm-bloco").nth(i).locator("button.btn-pri").inner_text().replace("\xa0", " ") for i in range(dois.locator(".cm-bloco").count())]
+    chk("dividido: cada botão com o total do seu mecânico", "R$ 30,00" in botoes[0] and "R$ 90,00" in botoes[1], botoes)
+    dois.locator(".cm-linhas li input[type=checkbox]").first.uncheck(); dois.wait_for_timeout(400)
+    marcados = [dois.locator(".cm-linhas li input[type=checkbox]").nth(i).is_checked() for i in range(2)]
+    chk("dividido: desmarcar o de um NÃO desmarca o do outro", marcados == [False, True], marcados)
+    dois.locator(".cm-linhas li input[type=checkbox]").first.check(); dois.wait_for_timeout(300)
+
+    # 8c. percentual fora de 0 a 100 trava o lançamento
+    pcts.first.fill("250"); dois.wait_for_timeout(500)
+    chk("percentual acima de 100 desliga o botão de lançar", dois.locator(".cm-bloco").first.locator("button.btn-pri").is_disabled())
+    chk("percentual fora da faixa fica marcado no campo", dois.locator(".cm-linhas li .cm-pct-campo input.inp-erro").count() >= 1)
+    pcts.first.fill("40"); dois.wait_for_timeout(400)
+
+    # 8d. custo que o serviço já tinha antes da comissão volta no cancelamento
+    dois.evaluate("window.__DB.os_itens.find(i => i.id === 'i1').custo_unit = 50")
+    dois.click(".cm-bloco >> nth=0 >> button.btn-pri"); dois.wait_for_timeout(600)
+    dois.click(".modal .btn-pri"); dois.wait_for_timeout(1400)
+    chk("custo = o que já existia (50) + a comissão (120)", dois.evaluate(CUSTO) == 170, dois.evaluate(CUSTO))
+    dois.click(".cm-lancados button:has-text('Cancelar')"); dois.wait_for_timeout(600)
+    dois.click(".modal .btn-perigo:has-text('Cancelar o lançamento')"); dois.wait_for_timeout(1400)
+    chk("cancelar devolve o custo que já existia (50), não zera", dois.evaluate(CUSTO) == 50, dois.evaluate(CUSTO))
 
     # 8. celular (até 640px) independente do PC
     cel = b.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True).new_page()

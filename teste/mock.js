@@ -1,6 +1,7 @@
 (() => {
   const uid = () => Math.random().toString(16).slice(2) + "-0000-4000-8000-" + Math.random().toString(16).slice(2, 14);
   const now = () => new Date().toISOString();
+  const r2 = v => Math.round((Number(v) || 0) * 100) / 100;
   const db = {
     contas: [{ id: "k1", descricao: "Boleto Auto Peças", fornecedor_id: "f1", favorecido: "", categoria: "Fornecedores de peças", documento: "123", valor: 850, vencimento: "2026-10-20", status: "aberta", origem: "boleto" },
       { id: "k2", descricao: "Energia", favorecido: "EDP", categoria: "Energia", documento: "", valor: 420, vencimento: "2026-10-29", status: "aberta", origem: "recorrente" },
@@ -20,7 +21,7 @@
       { id: "i7", ordem_id: "o4", tipo: "peca", descricao: "PASTILHA", qtd: 1, valor_unit: 200, desconto: 0, aprovado: null, posicao: 0 }, { id: "i8", ordem_id: "o4", tipo: "servico", descricao: "TROCA DE PASTILHAS", qtd: 1, valor_unit: 300, desconto: 0, aprovado: null, posicao: 1 },{ id: "i3", ordem_id: "o2", tipo: "peca", codigo: "KYB-334", descricao: "AMORTECEDOR DIANT TOYOTA HILUX", qtd: 2, valor_unit: 890, desconto: 0, aprovado: true, executado: false, posicao: 0 },
       { id: "i4", ordem_id: "o2", tipo: "servico", descricao: "TROCA DE AMORTECEDORES DIANTEIROS", qtd: 1, valor_unit: 350, desconto: 0, aprovado: true, executado: true, posicao: 1 },
       { id: "i5", ordem_id: "o2", tipo: "peca", codigo: "PST-11", descricao: "PASTILHA DE FREIO DIANT", qtd: 1, valor_unit: 260, desconto: 20, aprovado: null, posicao: 2 },{ id: "i1", ordem_id: "o1", tipo: "servico", qtd: 1, valor_unit: 600, desconto: 0, aprovado: true }, { id: "i2", ordem_id: "o1", tipo: "peca", qtd: 1, valor_unit: 300, desconto: 0, aprovado: true }],
-    funcionarios: [{ id: "fu1", nome: "CARLOS MECANICO", apelido: "Carlos", perfil_id: "p2", comissao_pct: 40, salario: 2200, horas_mes: 220, he_pct: 50, vinculo: "clt", ativo: true, jornada: {} }],
+    funcionarios: [],
     funcionario_lanc: [], comissoes: [], receber: [], config: { espelhoLegado: true }, // espelho ligado: os testes conferem a faixa do período de transição
     // pedidos de compra por fornecedor (pre_notas, v19/v31)
     pre_notas: [{ id: "pn1", data: "2026-10-20", fornecedor_id: "f1", fornecedor_nome: "AutoPeças", documento: "PV 100", total: 500, os_numero: 1898, ordem_id: "o2", placa: "QXN1E49", situacao: "aberta", obs: "" },
@@ -60,7 +61,7 @@
         .map(x => ({ tipo: "acesso", id: x.id, nome: x.nome, apelido: "", perfil_id: x.id, funcao: x.papel }));
       return f.concat(p).sort((a, b) => a.nome.localeCompare(b.nome)); },
     descontoOS: async (ordemId, desconto, motivo, gravar = true) => { net();
-      const r2 = v => Math.round(v * 100) / 100, o = db.ordens.find(x => x.id === ordemId), apr = ["execucao", "pronto", "entregue", "recusado"].includes(o.status);
+      const o = db.ordens.find(x => x.id === ordemId), apr = ["execucao", "pronto", "entregue", "recusado"].includes(o.status);
       if (o.status === "entregue" && o.finalizada_em) throw new Error("A O.S. está fechada (quitada). Reabra antes de mudar o desconto.");
       const bruto = r2(db.os_itens.filter(i => i.ordem_id === ordemId && (apr ? i.aprovado === true : i.aprovado !== false)).reduce((s, i) => s + i.qtd * i.valor_unit - (i.desconto || 0), 0));
       if (desconto > bruto + 0.005) throw new Error("O desconto não pode passar do valor dos itens.");
@@ -360,8 +361,19 @@
     estornos: { desde: async (de, ate) => (db.estornos || []).filter(e => e.registrado_em >= de && (!ate || e.registrado_em <= ate)) },
     sefaz: { novas: async () => 0, config: async () => null },
     painel: async () => ({}), contasAbertas: async () => [],
-    // comissão por quinzena (v61) de mentira: monta a quinzena a partir dos apontamentos finalizados e dos itens de serviço
+    // comissão por quinzena (v61) de mentira, seguindo o v61.sql: desconto na mão de obra, fração limitada ao que sobrou,
+    // custo que o item já tinha antes da comissão, e só serviço aprovado de O.S. que não foi cancelada.
     comissao: {
+      _chave: g => String(g || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim(),
+      _pct: (f, grupo) => { const g = (f.comissao_grupos || {})[window.__API_MOCK.comissao._chave(grupo)];
+        return r2(Number(g ?? f.comissao_pct ?? 0)); },
+      _valido: item => { const o = db.ordens.find(x => x.id === item.ordem_id);
+        if (!o || o.status === "cancelado" || item.tipo !== "servico" || !(Number(item.qtd) > 0)) return null;
+        const conta = ["execucao", "pronto", "entregue", "recusado"].includes(o.status) ? item.aprovado === true : item.aprovado !== false;
+        if (!conta) return null;
+        return { o, mao: r2(Number(item.qtd) * Number(item.valor_unit) - (Number(item.desconto) || 0)) }; },
+      _livre: (itemId, fora) => Math.max(0, r2(1 - db.comissoes.filter(c => c.situacao === "lancado" && c.id !== fora)
+        .flatMap(c => c.itens).filter(i => i.item_id === itemId).reduce((t, i) => t + Number(i.fracao), 0))),
       quinzena: async (inicio, fim, fid, puxados = []) => { net();
         const aps = (await window.__API_MOCK.apontamentos.listar({})).filter(a => a.situacao === "finalizado");
         const blocos = new Map();
@@ -369,23 +381,23 @@
           const f = db.funcionarios.find(x => x.perfil_id === a.perfil_id); if (!f || (fid && f.id !== fid)) continue;
           const dia = String(a.fim || "").slice(0, 10);
           for (const itemId of a.itens_executados || []) {
-            const i = (db.os_itens || []).find(x => x.id === itemId); if (!i || i.tipo !== "servico") continue;
+            const i = (db.os_itens || []).find(x => x.id === itemId); if (!i) continue;
+            const v = window.__API_MOCK.comissao._valido(i); if (!v) continue;
             if (!(dia >= inicio && dia <= fim) && !puxados.includes(itemId)) continue;
-            const o = db.ordens.find(x => x.id === i.ordem_id) || {};
-            const donos = aps.filter(b => (b.itens_executados || []).includes(itemId)).length || 1;
-            const mo = Math.round((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0) * 100) / 100;
-            const base = Math.round(mo / donos * 100) / 100;
+            const donos = [...new Set(aps.filter(b => (b.itens_executados || []).includes(itemId))
+              .map(b => (db.funcionarios.find(x => x.perfil_id === b.perfil_id) || {}).id).filter(Boolean))];
+            const fracao = Math.min(r2(1 / Math.max(donos.length, 1)), window.__API_MOCK.comissao._livre(itemId));
+            const base = r2(v.mao * fracao);
             const pr = db.produtos.find(x => x.id === i.produto_id) || {};
-            const cm = db.config.comissao || {};
-            const k = String(pr.categoria || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
-            const pct = Number(((cm.matriz || {})[f.id] || {})[k] ?? (cm.padrao || {})[f.id] ?? f.comissao_pct) || 0;
+            const pct = window.__API_MOCK.comissao._pct(f, pr.categoria);
             if (!blocos.has(f.id)) blocos.set(f.id, { funcionario_id: f.id, nome: f.apelido || f.nome, servicos: 0, mao_de_obra: 0, total: 0, itens: [] });
             const b = blocos.get(f.id);
-            const ja = db.comissoes.some(c => c.situacao === "lancado" && (c.itens || []).some(x => x.item_id === itemId && c.funcionario_id === f.id));
-            b.itens.push({ item_id: itemId, ordem_id: i.ordem_id, os_numero: o.numero, placa: (o.veiculo || {}).placa || "", descricao: i.descricao,
-              grupo: pr.categoria || "", mao_de_obra: mo, fracao: Math.round(1 / donos * 10000) / 10000, base, pct,
-              valor: Math.round(base * pct) / 100, dividido_com: "", ja_lancado: ja, fim: a.fim });
-            if (!ja) { b.servicos++; b.mao_de_obra = Math.round((b.mao_de_obra + base) * 100) / 100; b.total = Math.round((b.total + base * pct / 100) * 100) / 100; }
+            const ja = db.comissoes.some(c => c.situacao === "lancado" && c.funcionario_id === f.id && (c.itens || []).some(x => x.item_id === itemId));
+            const valor = r2(base * pct / 100);
+            b.itens.push({ item_id: itemId, ordem_id: i.ordem_id, os_numero: v.o.numero, placa: (v.o.veiculo || {}).placa || "", descricao: i.descricao,
+              grupo: pr.categoria || "", mao_de_obra: v.mao, fracao, base, pct, valor, ja_lancado: ja, sem_saldo: fracao <= 0, fim: a.fim,
+              dividido_com: donos.filter(d => d !== f.id).map(d => { const o = db.funcionarios.find(x => x.id === d) || {}; return o.apelido || o.nome; }).join(", ") });
+            if (!ja && fracao > 0) { b.servicos++; b.mao_de_obra = r2(b.mao_de_obra + base); b.total = r2(b.total + valor); }
           }
         }
         return [...blocos.values()];
@@ -396,24 +408,41 @@
       itens: async comId => ((db.comissoes.find(c => c.id === comId) || {}).itens || []),
       lancar: async p => { net();
         const f = db.funcionarios.find(x => x.id === p.funcionario_id) || {};
+        if (p.itens.some(i => i.pct != null && (i.pct < 0 || i.pct > 100))) throw new Error("Percentual de comissão fora de 0 a 100.");
         const bloco = (await window.__API_MOCK.comissao.quinzena(p.inicio, p.fim, p.funcionario_id, p.itens.map(i => i.item_id)))[0] || { itens: [] };
-        const itens = p.itens.map(ped => { const l = bloco.itens.find(x => x.item_id === ped.item_id) || {};
-          const pct = ped.pct === undefined || ped.pct === null ? Number(l.pct) || 0 : Number(ped.pct) || 0;
-          return { ...l, id: uid(), pct, valor: Math.round((Number(l.base) || 0) * pct) / 100 }; });
-        const total = Math.round(itens.reduce((s, i) => s + i.valor, 0) * 100) / 100;
+        const semSaldo = p.itens.filter(ped => window.__API_MOCK.comissao._livre(ped.item_id) <= 0);
+        if (semSaldo.length) throw new Error("A mão de obra destes serviços já foi toda comissionada em outro lançamento.");
+        const itens = p.itens.map(ped => { const l = bloco.itens.find(x => x.item_id === ped.item_id);
+          if (!l) throw new Error("Algum serviço da lista não serve para comissão.");
+          const it = (db.os_itens || []).find(x => x.id === ped.item_id) || {};
+          const vivo = db.comissoes.filter(c => c.situacao === "lancado").flatMap(c => c.itens).find(x => x.item_id === ped.item_id);
+          const pct = ped.pct == null ? l.pct : r2(ped.pct);
+          return { ...l, id: uid(), pct, valor: r2(l.base * pct / 100), custo_base: vivo ? vivo.custo_base : r2(it.custo_unit || 0) }; });
+        const total = r2(itens.reduce((s, i) => s + i.valor, 0));
+        if (total <= 0) throw new Error("A comissão desta quinzena ficou em zero: confira os percentuais.");
         const lanc = await window.__API_MOCK.funcionarios.lancar({ funcionario_id: f.id, competencia: p.competencia, data: p.inicio, tipo: "comissao", qtd: itens.length, valor: total, descricao: "Comissão de " + p.inicio + " a " + p.fim });
         const c = { id: uid(), funcionario_id: f.id, funcionario_nome: f.apelido || f.nome, inicio: p.inicio, fim: p.fim, competencia: p.competencia,
-          servicos: itens.length, mao_de_obra: Math.round(itens.reduce((s, i) => s + (Number(i.base) || 0), 0) * 100) / 100, total,
+          servicos: itens.length, mao_de_obra: r2(itens.reduce((s, i) => s + i.base, 0)), total,
           situacao: "lancado", lanc_id: lanc.id, criado_em: now(), itens };
         db.comissoes.push(c);
-        for (const i of itens) { const it = (db.os_itens || []).find(x => x.id === i.item_id); if (it) it.custo_unit = Math.round(i.valor / (Number(it.qtd) || 1) * 100) / 100; }
+        window.__API_MOCK.comissao._custos();
         return { ok: true, id: c.id, servicos: itens.length, total };
       },
       cancelar: async (id) => { const c = db.comissoes.find(x => x.id === id); if (!c) throw new Error("Lançamento não encontrado.");
+        if (c.situacao !== "lancado") throw new Error("Este lançamento já está cancelado.");
         c.situacao = "cancelado";
-        for (const i of c.itens) { const it = (db.os_itens || []).find(x => x.id === i.item_id); if (it) it.custo_unit = 0; }
         db.funcionario_lanc = db.funcionario_lanc.filter(x => x.id !== c.lanc_id);
+        window.__API_MOCK.comissao._custos();
         return { ok: true, id }; },
+      /** custo_unit do item = o que ele tinha antes da comissão + a soma das comissões vivas */
+      _custos: () => { const vivos = db.comissoes.filter(c => c.situacao === "lancado").flatMap(c => c.itens);
+        const tocados = new Set(db.comissoes.flatMap(c => c.itens).map(i => i.item_id));
+        for (const itemId of tocados) {
+          const it = (db.os_itens || []).find(x => x.id === itemId); if (!it || !(Number(it.qtd) > 0)) continue;
+          const meus = vivos.filter(i => i.item_id === itemId);
+          const base = (meus[0] || db.comissoes.flatMap(c => c.itens).find(i => i.item_id === itemId) || {}).custo_base || 0;
+          it.custo_unit = r2(base + r2(meus.reduce((s, i) => s + i.valor, 0) / Number(it.qtd)));
+        } },
     },
     funcionarios: { ...tab("funcionarios"),
       lancamentos: async (comp, fid) => db.funcionario_lanc.filter(l => l.competencia === comp && (!fid || l.funcionario_id === fid)),

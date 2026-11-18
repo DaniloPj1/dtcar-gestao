@@ -27,41 +27,61 @@ values ('00000000-0000-0000-0000-000000000701', 701, 'execucao', '00000000-0000-
        ('00000000-0000-0000-0000-000000000702', 702, 'entregue', '00000000-0000-0000-0000-0000000000c9', '00000000-0000-0000-0000-0000000000f9', '{"nome": "Ana Souza"}', '{"placa": "ABC1D23"}', 2000, 0)
 on conflict (id) do nothing;
 
+-- O.S. 703 CANCELADA e O.S. 704 em execução com item que o cliente ainda não aprovou
+insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total)
+values ('00000000-0000-0000-0000-000000000703', 703, 'cancelado', '00000000-0000-0000-0000-0000000000c9', '00000000-0000-0000-0000-0000000000f9', '{"nome": "Ana Souza"}', '{"placa": "ABC1D23"}', 3000, 0),
+       ('00000000-0000-0000-0000-000000000704', 704, 'execucao', '00000000-0000-0000-0000-0000000000c9', '00000000-0000-0000-0000-0000000000f9', '{"nome": "Ana Souza"}', '{"placa": "ABC1D23"}', 4000, 0)
+on conflict (id) do nothing;
+
 -- pode rodar de novo no mesmo banco
 delete from public.comissoes where funcionario_id in ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000e2');
 delete from public.funcionario_lanc where funcionario_id in ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000e2');
-delete from public.servico_apontamentos where ordem_id in ('00000000-0000-0000-0000-000000000701', '00000000-0000-0000-0000-000000000702');
-delete from public.os_itens where ordem_id in ('00000000-0000-0000-0000-000000000701', '00000000-0000-0000-0000-000000000702');
-update public.config set dados = dados - 'comissao' where id = 1;
+delete from public.servico_apontamentos where ordem_id in ('00000000-0000-0000-0000-000000000701', '00000000-0000-0000-0000-000000000702', '00000000-0000-0000-0000-000000000703', '00000000-0000-0000-0000-000000000704');
+delete from public.os_itens where ordem_id in ('00000000-0000-0000-0000-000000000701', '00000000-0000-0000-0000-000000000702', '00000000-0000-0000-0000-000000000703', '00000000-0000-0000-0000-000000000704');
+update public.funcionarios set comissao_grupos = '{}'::jsonb, comissao_pct = case when id = '00000000-0000-0000-0000-0000000000e1' then 40 else 30 end
+ where id in ('00000000-0000-0000-0000-0000000000e1', '00000000-0000-0000-0000-0000000000e2');
 
 -- itens: dois serviços e uma peça na 701; um serviço na 702 (entregue)
 insert into public.os_itens (id, ordem_id, tipo, descricao, qtd, valor_unit, custo_unit, desconto, produto_id, aprovado)
 values ('00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-000000000701', 'servico', 'TROCA DE OLEO', 1, 120, 0, 0, '00000000-0000-0000-0000-0000000000d1', true),
        ('00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-000000000701', 'servico', 'REVISAO DE FREIOS', 1, 300, 0, 0, '00000000-0000-0000-0000-0000000000d2', true),
        ('00000000-0000-0000-0000-0000000000a3', '00000000-0000-0000-0000-000000000701', 'peca', 'FILTRO DE OLEO', 1, 50, 20, 0, null, true),
-       ('00000000-0000-0000-0000-0000000000a4', '00000000-0000-0000-0000-000000000702', 'servico', 'TROCA DE OLEO', 2, 100, 0, 20, '00000000-0000-0000-0000-0000000000d1', true);
+       ('00000000-0000-0000-0000-0000000000a4', '00000000-0000-0000-0000-000000000702', 'servico', 'TROCA DE OLEO', 2, 100, 0, 20, '00000000-0000-0000-0000-0000000000d1', true),
+       ('00000000-0000-0000-0000-0000000000a5', '00000000-0000-0000-0000-000000000701', 'servico', 'ALINHAMENTO', 1, 200, 0, 0, null, true),
+       ('00000000-0000-0000-0000-0000000000a6', '00000000-0000-0000-0000-000000000703', 'servico', 'SERVICO DA OS CANCELADA', 1, 500, 0, 0, null, true),
+       ('00000000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-000000000704', 'servico', 'SERVICO NAO APROVADO', 1, 400, 0, 0, null, null),
+       ('00000000-0000-0000-0000-0000000000a8', '00000000-0000-0000-0000-000000000704', 'servico', 'SERVICO COM CUSTO ANTIGO', 1, 1000, 80, 0, null, true);
 
 -- apontamentos finalizados: Zé fez o óleo da 701 (sozinho) e o freio da 701 DIVIDIDO com o Beto; o óleo da 702 é do Zé, fora da quinzena
 insert into public.servico_apontamentos (id, ordem_id, os_numero, perfil_id, perfil_nome, situacao, inicio, fim, itens_executados)
 values ('00000000-0000-0000-0000-0000000000b1', '00000000-0000-0000-0000-000000000701', 701, '88888888-8888-8888-8888-888888888888', 'Zé', 'finalizado', '2026-11-05 09:00-03', '2026-11-05 11:00-03',
-        array['00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a2']::uuid[]),
+        array['00000000-0000-0000-0000-0000000000a1', '00000000-0000-0000-0000-0000000000a2', '00000000-0000-0000-0000-0000000000a5']::uuid[]),
        ('00000000-0000-0000-0000-0000000000b2', '00000000-0000-0000-0000-000000000701', 701, '66666666-6666-6666-6666-666666666666', 'Beto', 'finalizado', '2026-11-06 09:00-03', '2026-11-06 10:00-03',
         array['00000000-0000-0000-0000-0000000000a2']::uuid[]),
        ('00000000-0000-0000-0000-0000000000b3', '00000000-0000-0000-0000-000000000702', 702, '88888888-8888-8888-8888-888888888888', 'Zé', 'finalizado', '2026-10-20 09:00-03', '2026-10-20 10:00-03',
-        array['00000000-0000-0000-0000-0000000000a4']::uuid[]);
+        array['00000000-0000-0000-0000-0000000000a4']::uuid[]),
+       ('00000000-0000-0000-0000-0000000000b4', '00000000-0000-0000-0000-000000000703', 703, '88888888-8888-8888-8888-888888888888', 'Zé', 'finalizado', '2026-11-07 09:00-03', '2026-11-07 10:00-03',
+        array['00000000-0000-0000-0000-0000000000a6']::uuid[]),
+       ('00000000-0000-0000-0000-0000000000b5', '00000000-0000-0000-0000-000000000704', 704, '88888888-8888-8888-8888-888888888888', 'Zé', 'finalizado', '2026-11-08 09:00-03', '2026-11-08 10:00-03',
+        array['00000000-0000-0000-0000-0000000000a7', '00000000-0000-0000-0000-0000000000a8']::uuid[]);
 
 create temp table antes61 as select (select count(*) from public.ordens) ordens, (select count(*) from public.estoque_mov) mov,
   (select count(*) from public.contas) contas, (select count(*) from public.recibos) recibos, (select count(*) from public.receber) receber;
 
--- 1. matriz: ficha → padrão do mecânico → exceção por grupo
+-- 1. matriz na ficha do funcionário (não no config, que a equipe toda lê): padrão → exceção por grupo
 do $$ begin
-  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'MECANICA', 40) <> 40 then raise exception 'FALHOU 1a: sem matriz, vale a ficha'; end if;
-  update public.config set dados = jsonb_set(dados, '{comissao}', '{"padrao": {"00000000-0000-0000-0000-0000000000e1": 45}}'::jsonb) where id = 1;
-  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'MECANICA', 40) <> 45 then raise exception 'FALHOU 1b: padrão do mecânico não venceu a ficha'; end if;
-  update public.config set dados = jsonb_set(dados, '{comissao,matriz}', '{"00000000-0000-0000-0000-0000000000e1": {"freios": 60}}'::jsonb) where id = 1;
-  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'FREIOS', 40) <> 60 then raise exception 'FALHOU 1c: exceção do grupo não venceu o padrão'; end if;
-  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'MECANICA', 40) <> 45 then raise exception 'FALHOU 1d: a exceção vazou para outro grupo'; end if;
-  if public.comissao_pct('00000000-0000-0000-0000-0000000000e2', '', null) <> 0 then raise exception 'FALHOU 1e: sem nada, zero'; end if;
+  update public.funcionarios set comissao_grupos = '{}'::jsonb where id = '00000000-0000-0000-0000-0000000000e1';
+  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'MECANICA') <> 40 then raise exception 'FALHOU 1a: sem exceção, vale o comissao_pct da ficha'; end if;
+  update public.funcionarios set comissao_pct = 45 where id = '00000000-0000-0000-0000-0000000000e1';
+  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'MECANICA') <> 45 then raise exception 'FALHOU 1b: padrão do mecânico'; end if;
+  update public.funcionarios set comissao_grupos = '{"freios": 60}'::jsonb where id = '00000000-0000-0000-0000-0000000000e1';
+  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'FREIOS') <> 60 then raise exception 'FALHOU 1c: exceção do grupo não venceu o padrão'; end if;
+  if public.comissao_pct('00000000-0000-0000-0000-0000000000e1', 'MECANICA') <> 45 then raise exception 'FALHOU 1d: a exceção vazou para outro grupo'; end if;
+  update public.funcionarios set comissao_pct = 0 where id = '00000000-0000-0000-0000-0000000000e2';
+  if public.comissao_pct('00000000-0000-0000-0000-0000000000e2', '') <> 0 then raise exception 'FALHOU 1e: sem nada, zero'; end if;
+  update public.funcionarios set comissao_pct = 30 where id = '00000000-0000-0000-0000-0000000000e2';
+  -- a matriz não fica no config: nada de comissão lá
+  if (select dados ? 'comissao' from public.config where id = 1) then raise exception 'FALHOU 1f: a matriz voltou para o config'; end if;
 end $$;
 
 -- 2. a quinzena 1 a 15/11: Zé tem o óleo inteiro (45% de 120 = 54) e metade do freio (60% de 150 = 90); a peça não entra
@@ -69,8 +89,8 @@ do $$ declare q jsonb; z jsonb; it jsonb; begin
   q := public.comissao_quinzena('2026-11-01', '2026-11-15');
   z := (select x from jsonb_array_elements(q) x where x->>'funcionario_id' = '00000000-0000-0000-0000-0000000000e1');
   if z is null then raise exception 'FALHOU 2a: o Zé não apareceu na quinzena: %', q; end if;
-  if (z->>'servicos')::int <> 2 then raise exception 'FALHOU 2b: serviços do Zé: %', z; end if;
-  if (z->>'total')::numeric <> 144 then raise exception 'FALHOU 2c: total do Zé deveria ser 144 (54 + 90): %', z; end if;
+  if (z->>'servicos')::int <> 4 then raise exception 'FALHOU 2b: serviços do Zé: %', z; end if;
+  if (z->>'total')::numeric <> 684 then raise exception 'FALHOU 2c: total do Zé deveria ser 684 (54 + 90 + 90 + 450): %', z; end if;
   it := (select x from jsonb_array_elements(z->'itens') x where x->>'item_id' = '00000000-0000-0000-0000-0000000000a2');
   if (it->>'fracao')::numeric <> 0.5 or (it->>'base')::numeric <> 150 or (it->>'pct')::numeric <> 60 then raise exception 'FALHOU 2d: freio dividido ao meio: %', it; end if;
   if it->>'dividido_com' <> 'Beto' then raise exception 'FALHOU 2e: dividido com: %', it; end if;
@@ -104,7 +124,7 @@ do $$ declare r jsonb; c public.comissoes; begin
      or (select competencia from public.funcionario_lanc where id = c.lanc_id) <> '2026-11-01'
     then raise exception 'FALHOU 3e: folha: %', (select to_jsonb(l) from public.funcionario_lanc l where l.id = c.lanc_id); end if;
   -- os serviços lançados não voltam a aparecer para lançar
-  if (select (x->>'servicos')::int from jsonb_array_elements(public.comissao_quinzena('2026-11-01', '2026-11-15', '00000000-0000-0000-0000-0000000000e1')) x) <> 0
+  if (select (x->>'servicos')::int from jsonb_array_elements(public.comissao_quinzena('2026-11-01', '2026-11-15', '00000000-0000-0000-0000-0000000000e1')) x) <> 2
     then raise exception 'FALHOU 3f: serviço já lançado continuou a contar'; end if;
 end $$;
 
@@ -136,9 +156,10 @@ do $$ declare r jsonb; begin
   begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2026-12-01', 'fim', '2026-12-15',
       'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a1'))));
     raise exception 'FALHOU 6b: lançou o mesmo serviço duas vezes';
-  exception when unique_violation then null; end;
+  exception when others then if sqlerrm not like '%já foi toda comissionada%' and sqlerrm <> 'FALHOU 6b: lançou o mesmo serviço duas vezes' then raise; end if;
+    if sqlerrm = 'FALHOU 6b: lançou o mesmo serviço duas vezes' then raise; end if; end;
   begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e2', 'inicio', '2026-12-01', 'fim', '2026-12-15',
-      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a1'))));
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a5'))));
     raise exception 'FALHOU 6c: lançou serviço que o Beto não apontou';
   exception when others then if sqlerrm not like '%não serve para comissão%' then raise; end if; end;
   begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2026-12-01', 'fim', '2026-12-15',
@@ -173,7 +194,7 @@ do $$ declare c public.comissoes; v_lanc uuid; r jsonb; begin
   if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a1') <> 0 then raise exception 'FALHOU 8c: custo do óleo não voltou a zero'; end if;
   if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a2') <> 45 then
     raise exception 'FALHOU 8d: o freio deveria ficar só com os 45 do Beto, está %', (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a2'); end if;
-  if (select (x->>'servicos')::int from jsonb_array_elements(public.comissao_quinzena('2026-11-01', '2026-11-15', '00000000-0000-0000-0000-0000000000e1')) x) <> 2
+  if (select (x->>'servicos')::int from jsonb_array_elements(public.comissao_quinzena('2026-11-01', '2026-11-15', '00000000-0000-0000-0000-0000000000e1')) x) <> 4
     then raise exception 'FALHOU 8e: os serviços não voltaram para a quinzena'; end if;
   -- cancelar duas vezes não desfaz nada a mais
   begin r := public.comissao_cancelar(c.id); raise exception 'FALHOU 8f: cancelou duas vezes';
@@ -205,6 +226,99 @@ do $$ declare a record; begin
      or a.contas <> (select count(*) from public.contas) or a.recibos <> (select count(*) from public.recibos)
      or a.receber <> (select count(*) from public.receber)
     then raise exception 'FALHOU 9: a comissão mexeu em estoque/financeiro'; end if;
+end $$;
+
+-- 11. O.S. cancelada e item que o cliente ainda não aprovou ficam de fora (senão a comissão sairia na folha sem aparecer na margem)
+do $$ declare q jsonb; r jsonb; begin
+  q := public.comissao_quinzena('2026-11-01', '2026-11-15', '00000000-0000-0000-0000-0000000000e1');
+  if (q->0->'itens') @> '[{"descricao": "SERVICO DA OS CANCELADA"}]'::jsonb then raise exception 'FALHOU 11a: serviço de O.S. cancelada entrou'; end if;
+  if (q->0->'itens') @> '[{"descricao": "SERVICO NAO APROVADO"}]'::jsonb then raise exception 'FALHOU 11b: item não aprovado entrou'; end if;
+  begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-01-01', 'fim', '2027-01-15',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a6'))));
+    raise exception 'FALHOU 11c: lançou comissão de O.S. cancelada';
+  exception when others then if sqlerrm not like '%não serve para comissão%' then raise; end if; end;
+  begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-01-01', 'fim', '2027-01-15',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a7'))));
+    raise exception 'FALHOU 11d: lançou comissão de item não aprovado';
+  exception when others then if sqlerrm not like '%não serve para comissão%' then raise; end if; end;
+end $$;
+
+-- 12. serviço dividido entre duas quinzenas NUNCA paga mais que a mão de obra (a fração é limitada ao que sobrou)
+do $$ declare r jsonb; v_livre numeric; v_soma numeric; begin
+  -- o Zé sozinho no ALINHAMENTO (200): leva a mão de obra inteira
+  r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-02-01', 'fim', '2027-02-15',
+    'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a5', 'pct', 100))));
+  if (r->>'total')::numeric <> 200 then raise exception 'FALHOU 12a: %', r; end if;
+  -- agora o Beto aponta o MESMO serviço, na quinzena seguinte
+  insert into public.servico_apontamentos (ordem_id, os_numero, perfil_id, perfil_nome, situacao, inicio, fim, itens_executados)
+  values ('00000000-0000-0000-0000-000000000701', 701, '66666666-6666-6666-6666-666666666666', 'Beto', 'finalizado', '2027-02-20 09:00-03', '2027-02-20 10:00-03',
+          array['00000000-0000-0000-0000-0000000000a5']::uuid[]);
+  v_livre := public.comissao_fracao_livre('00000000-0000-0000-0000-0000000000a5');
+  if v_livre <> 0 then raise exception 'FALHOU 12b: ainda sobra fração depois de a mão de obra inteira ter sido lançada: %', v_livre; end if;
+  begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e2', 'inicio', '2027-02-16', 'fim', '2027-02-28',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a5', 'pct', 100))));
+    raise exception 'FALHOU 12c: pagou comissão em cima de mão de obra já comissionada';
+  exception when others then if sqlerrm not like '%já foi toda comissionada%' then raise; end if; end;
+  select coalesce(sum(fracao), 0) into v_soma from public.comissao_itens where item_id = '00000000-0000-0000-0000-0000000000a5' and not cancelado;
+  if v_soma > 1 then raise exception 'FALHOU 12d: a soma das frações passou de 1: %', v_soma; end if;
+  if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a5') <> 200
+    then raise exception 'FALHOU 12e: o custo do serviço passou da mão de obra: %', (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a5'); end if;
+end $$;
+
+-- 13. custo que o serviço já tinha ANTES da comissão volta no cancelamento (o a8 vem com custo 80)
+do $$ declare r jsonb; c uuid; begin
+  if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8') <> 80 then raise exception 'FALHOU 13a: o fixture mudou'; end if;
+  r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-03-01', 'fim', '2027-03-15',
+    'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'pct', 10))));
+  if (r->>'total')::numeric <> 100 then raise exception 'FALHOU 13b: 10%% de 1000 = 100: %', r; end if;
+  if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8') <> 180
+    then raise exception 'FALHOU 13c: o custo deveria ser 80 (de antes) + 100 (comissão), está %', (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8'); end if;
+  select id into c from public.comissoes where id = (r->>'id')::uuid;
+  r := public.comissao_cancelar(c, 'teste');
+  if (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8') <> 80
+    then raise exception 'FALHOU 13d: o custo de antes não voltou, está %', (select custo_unit from public.os_itens where id = '00000000-0000-0000-0000-0000000000a8'); end if;
+end $$;
+
+-- 14. o lançamento da folha não se apaga à mão (senão a comissão ficaria presa, sem aparecer em lugar nenhum)
+do $$ declare r jsonb; v_lanc uuid; begin
+  r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-04-01', 'fim', '2027-04-15',
+    'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'pct', 10))));
+  v_lanc := (r->>'lanc_id')::uuid;
+  begin delete from public.funcionario_lanc where id = v_lanc; raise exception 'FALHOU 14a: apagou o lançamento da folha da comissão';
+  exception when others then if sqlerrm not like '%cancele o lançamento na tela de Comissão%' then raise; end if; end;
+  -- depois de cancelar, o lançamento some junto
+  r := public.comissao_cancelar((select id from public.comissoes where lanc_id = v_lanc), 'teste');
+  if exists (select 1 from public.funcionario_lanc where id = v_lanc) then raise exception 'FALHOU 14b: o cancelamento não tirou da folha'; end if;
+end $$;
+
+-- 15. percentual fora de 0 a 100 é recusado com mensagem clara, antes de gravar
+do $$ declare r jsonb; begin
+  begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-05-01', 'fim', '2027-05-15',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'pct', 250))));
+    raise exception 'FALHOU 15a: aceitou 250%%';
+  exception when others then if sqlerrm not like '%fora de 0 a 100%' then raise; end if; end;
+  begin r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-05-01', 'fim', '2027-05-15',
+      'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'pct', -10))));
+    raise exception 'FALHOU 15b: aceitou percentual negativo';
+  exception when others then if sqlerrm not like '%fora de 0 a 100%' then raise; end if; end;
+  if exists (select 1 from public.comissoes where inicio = '2027-05-01') then raise exception 'FALHOU 15c: sobrou lançamento de tentativa recusada'; end if;
+end $$;
+
+-- 16. vincular nota fiscal NÃO apaga a comissão do custo guardado na O.S.
+do $$ declare r jsonb; v_antes numeric; begin
+  r := public.comissao_lancar(jsonb_build_object('funcionario_id', '00000000-0000-0000-0000-0000000000e1', 'inicio', '2027-06-01', 'fim', '2027-06-15',
+    'itens', jsonb_build_array(jsonb_build_object('item_id', '00000000-0000-0000-0000-0000000000a8', 'pct', 10))));
+  select custo into v_antes from public.ordens where id = '00000000-0000-0000-0000-000000000704';
+  if v_antes <> (public.agente_totais_os('00000000-0000-0000-0000-000000000704')->>'custo')::numeric
+    then raise exception 'FALHOU 16a: ordens.custo já não bate com o agente_totais_os'; end if;
+  -- a função do v9, republicada no v61: o custo recalculado continua contando a mão de obra
+  update public.ordens o set custo = (select coalesce(sum(round(i.qtd * i.custo_unit, 2)), 0) from public.os_itens i
+      where i.ordem_id = o.id and not i.fornecida_cliente
+        and (case when o.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end))
+    where id = '00000000-0000-0000-0000-000000000704';
+  if (select custo from public.ordens where id = '00000000-0000-0000-0000-000000000704') <> v_antes
+    then raise exception 'FALHOU 16b: o recálculo da nota fiscal mudaria o custo (a comissão sumiria)'; end if;
+  r := public.comissao_cancelar((select id from public.comissoes where funcionario_id = '00000000-0000-0000-0000-0000000000e1' and inicio = '2027-06-01'), 'teste');
 end $$;
 
 select 'v61: todos os cenários passaram' as resultado;

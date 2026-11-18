@@ -1748,6 +1748,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cm-mo,.cm-valor{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
 .cm-pct-campo{display:flex;gap:4px;align-items:center}
 .cm-pct-campo .inp{width:72px;text-align:right}
+.cm-mx-linha .inp-erro,.cm-pct-campo .inp-erro,.cm-mx-padrao .inp-erro{border-color:var(--bad);background:var(--bad-soft)}
 .cm-mx-quem{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
 .cm-mx-padrao{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
 .cm-mx-tit{font-size:16px;margin-top:6px}

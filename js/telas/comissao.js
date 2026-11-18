@@ -31,47 +31,57 @@ function Topo({ ym, setYm, qz, setQz, qs }) {
 }
 
 /* =================== MATRIZ DE PERCENTUAIS =================== */
-function Matriz({ funcs, grupos, cfg, onFechar, onSalvou, avisar }) {
-  const atual = (cfg && cfg.comissao) || {};
-  const [padrao, setPadrao] = useState({ ...(atual.padrao || {}) });
-  const [matriz, setMatriz] = useState(JSON.parse(JSON.stringify(atual.matriz || {})));
+// Fica na FICHA DO FUNCIONÁRIO (comissao_pct e comissao_grupos), não nos Ajustes: a tabela config é lida por toda a
+// equipe e percentual de comissão é dado de folha.
+function Matriz({ funcs, grupos, onFechar, onSalvou, avisar }) {
+  const [vals, setVals] = useState(() => Object.fromEntries(funcs.map(f => [f.id, { pct: f.comissao_pct ?? 0, grupos: { ...(f.comissao_grupos || {}) } }])));
   const [salvando, setSalvando] = useState(false);
   const [quem, setQuem] = useState((funcs[0] || {}).id || "");
   const f = funcs.find(x => x.id === quem);
-  const porGrupo = (matriz[quem] || {});
-  const mudaGrupo = (chave, v) => setMatriz(m => { const c = { ...m, [quem]: { ...(m[quem] || {}) } };
-    if (v === "") delete c[quem][chave]; else c[quem][chave] = n2(v);
-    if (!Object.keys(c[quem]).length) delete c[quem]; return c; });
+  const v = vals[quem] || { pct: 0, grupos: {} };
+  const ok = n => n === "" || (Number.isFinite(Number(n)) && Number(n) >= 0 && Number(n) <= 100);
+  const valido = Object.values(vals).every(x => ok(x.pct) && Object.values(x.grupos).every(ok));
+  const mudaGrupo = (chave, valor) => setVals(a => { const g = { ...a[quem].grupos };
+    if (valor === "") delete g[chave]; else g[chave] = valor;
+    return { ...a, [quem]: { ...a[quem], grupos: g } }; });
   const salvar = async () => {
+    if (!valido) { avisar("Os percentuais têm de ficar entre 0 e 100.", true); return; }
     setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, comissao: { padrao, matriz } }); await onSalvou(); avisar("Percentuais salvos."); onFechar(); }
-    catch (e) { avisar(e.message, true); } finally { setSalvando(false); }
+    try {
+      for (const x of funcs) {
+        const a = vals[x.id];
+        const grupos = Object.fromEntries(Object.entries(a.grupos).map(([k, n]) => [k, n2(n)]));
+        const pct = n2(a.pct === "" ? 0 : a.pct);
+        if (pct === Number(x.comissao_pct ?? 0) && JSON.stringify(grupos) === JSON.stringify(x.comissao_grupos || {})) continue;
+        await api.funcionarios.salvar({ id: x.id, comissao_pct: pct, comissao_grupos: grupos });
+      }
+      await onSalvou(); avisar("Percentuais salvos."); onFechar();
+    } catch (e) { avisar(/comissao_grupos|column/i.test(e.message || "") ? FALTA_V61 : e.message, true); } finally { setSalvando(false); }
   };
   return html`<${Modal} titulo="Percentuais de comissão" onFechar=${onFechar} largo>
     <p class="sub">O serviço usa o percentual do grupo quando houver; sem exceção, vale o padrão do mecânico. Na hora de lançar
-      o senhor ainda pode digitar outro percentual só naquele serviço.</p>
+      o senhor ainda pode digitar outro percentual só naquele serviço. Fica na ficha do funcionário, que só o administrador vê.</p>
     <div class="cm-mx-quem">${funcs.map(x => html`<button type="button" key=${x.id} class=${"chip" + (x.id === quem ? " chip-f" : "")}
       onClick=${() => setQuem(x.id)}>${x.apelido || x.nome}</button>`)}</div>
     ${!f ? html`<${Vazio}>Cadastre os mecânicos em Funcionários, com o acesso do sistema vinculado.</${Vazio}>` : html`
       <div class="cm-mx-padrao">
         <${Campo} id="cm-padrao" rotulo=${"Padrão de " + (f.apelido || f.nome)}>
-          <div class="cm-pct-campo"><input id="cm-padrao" class="inp inp-curto" type="number" min="0" max="100" step="0.5"
-            value=${padrao[quem] ?? ""} placeholder=${String(f.comissao_pct || 0)}
-            onInput=${e => setPadrao(p => { const c = { ...p }; if (e.target.value === "") delete c[quem]; else c[quem] = n2(e.target.value); return c; })} /><span>%</span></div>
+          <div class="cm-pct-campo"><input id="cm-padrao" class=${"inp inp-curto" + (ok(v.pct) ? "" : " inp-erro")} type="number" min="0" max="100" step="0.5"
+            value=${v.pct} onInput=${e => setVals(a => ({ ...a, [quem]: { ...a[quem], pct: e.target.value } }))} /><span>%</span></div>
         </${Campo}>
-        <span class="dica">Em branco, vale o ${f.comissao_pct || 0}% da ficha do funcionário.</span>
+        <span class="dica">Vale para todo serviço sem exceção de grupo.</span>
       </div>
       <h3 class="cm-mx-tit">Exceções por grupo de serviço</h3>
       <div class="cm-mx-grupos">${grupos.map(g => html`<label class="cm-mx-linha" key=${g.chave}>
         <span>${g.nome}</span>
-        <span class="cm-pct-campo"><input class="inp inp-curto" type="number" min="0" max="100" step="0.5" aria-label=${"Percentual de " + g.nome}
-          value=${porGrupo[g.chave] ?? ""} placeholder=${String(padrao[quem] ?? f.comissao_pct ?? 0)}
+        <span class="cm-pct-campo"><input class=${"inp inp-curto" + (ok(v.grupos[g.chave] ?? "") ? "" : " inp-erro")} type="number" min="0" max="100" step="0.5"
+          aria-label=${"Percentual de " + g.nome} value=${v.grupos[g.chave] ?? ""} placeholder=${String(v.pct || 0)}
           onInput=${e => mudaGrupo(g.chave, e.target.value)} /><span>%</span></span>
       </label>`)}
       ${!grupos.length ? html`<${Vazio}>Nenhum grupo de serviço no cadastro de produtos ainda.</${Vazio}>` : null}</div>`}
     <div class="acoes-modal">
       <button type="button" class="btn" onClick=${onFechar}>Cancelar</button>
-      <button type="button" class="btn btn-pri" disabled=${salvando} onClick=${salvar}>${salvando ? "Salvando…" : "Salvar percentuais"}</button>
+      <button type="button" class="btn btn-pri" disabled=${salvando || !valido} onClick=${salvar}>${salvando ? "Salvando…" : "Salvar percentuais"}</button>
     </div>
   </${Modal}>`;
 }
@@ -125,20 +135,28 @@ function PuxarOS({ onFechar, onPuxar, avisar }) {
 
 /* =================== QUEM EXECUTOU ESTE SERVIÇO =================== */
 // Corrige o apontamento: troca o mecânico ou divide o serviço ao meio com outro.
-function QuemFez({ linha, funcs, perfilDe, onFechar, onFeito, avisar }) {
+/** Um instante dentro da quinzena: hoje se a quinzena for a de hoje, senão o último dia dela ao meio-dia. */
+const dentroDaQuinzena = q => {
+  const hoje = new Date().toISOString().slice(0, 10);
+  return hoje >= q.inicio && hoje <= q.fim ? new Date().toISOString() : q.fim + "T12:00:00-03:00";
+};
+
+function QuemFez({ linha, quinzena, funcs, perfilDe, onFechar, onFeito, avisar }) {
   const [salvando, setSalvando] = useState(false);
   const outros = funcs.filter(f => f.id !== linha.funcionario_id && f.perfil_id);
   const mexer = async (acao, destino) => {
     setSalvando(true);
     try {
       const aps = (await api.apontamentos.listar({ ordem_id: linha.ordem_id })).filter(a => a.situacao === "finalizado");
-      const meu = aps.find(a => a.perfil_id === perfilDe(linha.funcionario_id) && (a.itens_executados || []).includes(linha.item_id));
+      // tirar: TODOS os apontamentos do mecânico com este serviço (ele pode ter mais de um nesta O.S.)
+      if (acao === "trocar") for (const a of aps.filter(a => a.perfil_id === perfilDe(linha.funcionario_id) && (a.itens_executados || []).includes(linha.item_id)))
+        await api.apontamentos.atualizar(a.id, { itens_executados: (a.itens_executados || []).filter(x => x !== linha.item_id) });
       const alvo = aps.find(a => a.perfil_id === destino.perfil_id);
-      if (acao === "trocar" && meu) await api.apontamentos.atualizar(meu.id, { itens_executados: (meu.itens_executados || []).filter(x => x !== linha.item_id) });
       if (alvo) { if (!(alvo.itens_executados || []).includes(linha.item_id)) await api.apontamentos.atualizar(alvo.id, { itens_executados: [...(alvo.itens_executados || []), linha.item_id] }); }
       else {
+        // o apontamento novo nasce DENTRO da quinzena aberta, senão o serviço apareceria noutra
         const novo = await api.apontamentos.abrir({ ordem_id: linha.ordem_id, os_numero: linha.os_numero, perfil_id: destino.perfil_id, perfil_nome: destino.apelido || destino.nome });
-        await api.apontamentos.atualizar(novo.id, { situacao: "finalizado", fim: new Date().toISOString(), itens_executados: [linha.item_id] });
+        await api.apontamentos.atualizar(novo.id, { situacao: "finalizado", fim: dentroDaQuinzena(quinzena), itens_executados: [linha.item_id] });
       }
       avisar(acao === "trocar" ? "Serviço passado para " + (destino.apelido || destino.nome) + "." : "Serviço dividido com " + (destino.apelido || destino.nome) + ".");
       await onFeito(); onFechar();
@@ -165,9 +183,10 @@ export function Comissao() {
   const [ym, setYm] = useState(mesAtual());
   const [qz, setQz] = useState(new Date().getDate() <= 15 ? 0 : 1);
   const [funcs, setFuncs] = useState(null), [erro, setErro] = useState("");
-  const [lista, setLista] = useState(null), [lancs, setLancs] = useState([]);
+  const [lista, setLista] = useState(null), [lancs, setLancs] = useState([]), [doMes, setDoMes] = useState([]);
   const [quem, setQuem] = useState("");               // filtro de mecânico ("" = todos)
-  const [pcts, setPcts] = useState({});               // percentual digitado por serviço
+  // chaveados por mecânico + serviço: no serviço dividido o mesmo item aparece no bloco dos dois
+  const [pcts, setPcts] = useState({});               // percentual digitado
   const [fora, setFora] = useState({});               // serviços desmarcados
   const [puxados, setPuxados] = useState([]);
   const [verMatriz, setVerMatriz] = useState(false), [verPuxar, setVerPuxar] = useState(false), [verQuem, setVerQuem] = useState(null);
@@ -179,19 +198,20 @@ export function Comissao() {
   const carregar = async () => {
     setLista(null);
     try {
-      const [l, ls] = await Promise.all([api.comissao.quinzena(q.inicio, q.fim, null, puxados), api.comissao.lancamentos({ inicio: q.inicio, fim: q.fim })]);
+      const [l, ls, mes] = await Promise.all([api.comissao.quinzena(q.inicio, q.fim, null, puxados),
+        api.comissao.lancamentos({ inicio: q.inicio, fim: q.fim }), api.comissao.lancamentos({ competencia: ym + "-01" })]);
       if (l === null) { setErro("v61"); return; }
-      setLista(l); setLancs((ls || []).filter(x => x.situacao === "lancado"));
+      setLista(l); setLancs((ls || []).filter(x => x.situacao === "lancado")); setDoMes((mes || []).filter(x => x.situacao === "lancado"));
     } catch (e) { setErro(e.message); }
   };
-  useEffect(() => { if (funcs) carregar(); }, [funcs, q.inicio, q.fim, puxados]);
+  useEffect(() => { if (funcs) carregar(); }, [funcs, ym, q.inicio, q.fim, puxados]);
   useEffect(() => { setPcts({}); setFora({}); }, [q.inicio, q.fim]);
 
   const grupos = useMemo(() => {
     const comServico = new Set((dados.produtos || []).filter(p => p.tipo === "servico" && p.categoria).map(p => chaveGrupo(p.categoria)));
-    const naMatriz = new Set(Object.values(((cfg || {}).comissao || {}).matriz || {}).flatMap(m => Object.keys(m)));
+    const naMatriz = new Set((funcs || []).flatMap(f => Object.keys(f.comissao_grupos || {})));
     return gruposDeProdutos(dados.produtos || [], cfg).filter(g => comServico.has(g.chave) || naMatriz.has(g.chave));
-  }, [dados.produtos, cfg]);
+  }, [dados.produtos, cfg, funcs]);
   const mecanicos = useMemo(() => (funcs || []).filter(f => f.ativo !== false && f.perfil_id), [funcs]);
   const perfilDe = id => ((funcs || []).find(f => f.id === id) || {}).perfil_id;
 
@@ -201,15 +221,19 @@ export function Comissao() {
   if (!funcs || !lista) return html`<div class="pagina"><${AbasRH} ativa="comissao" /><div class="carregando">Carregando a quinzena…</div></div>`;
 
   const visiveis = quem ? lista.filter(x => x.funcionario_id === quem) : lista;
-  const pctDe = l => (pcts[l.item_id] === undefined || pcts[l.item_id] === "" ? Number(l.pct) || 0 : Number(pcts[l.item_id]) || 0);
-  const valorDe = l => n2(n2(l.base) * pctDe(l) / 100);
-  const entra = l => !l.ja_lancado && !fora[l.item_id];
+  const ch = (fid, l) => fid + "|" + l.item_id;
+  const pctDe = (fid, l) => { const v = pcts[ch(fid, l)]; return v === undefined || v === "" ? Number(l.pct) || 0 : Number(v) || 0; };
+  const pctOk = p => Number.isFinite(p) && p >= 0 && p <= 100;
+  const valorDe = (fid, l) => n2(n2(l.base) * pctDe(fid, l) / 100);
+  const entra = (fid, l) => !l.ja_lancado && !l.sem_saldo && !fora[ch(fid, l)];
   const porOS = itens => { const m = new Map(); for (const l of itens) { const k = String(l.os_numero || "—"); if (!m.has(k)) m.set(k, []); m.get(k).push(l); } return [...m.entries()]; };
 
   const lancar = async bloco => {
-    const itens = bloco.itens.filter(entra);
+    const itens = bloco.itens.filter(l => entra(bloco.funcionario_id, l));
     if (!itens.length) { avisar("Marque pelo menos um serviço.", true); return; }
-    const total = itens.reduce((s, l) => s + valorDe(l), 0);
+    const ruim = itens.find(l => !pctOk(pctDe(bloco.funcionario_id, l)));
+    if (ruim) { avisar("O percentual de \"" + ruim.descricao + "\" tem de ficar entre 0 e 100.", true); return; }
+    const total = itens.reduce((s, l) => s + valorDe(bloco.funcionario_id, l), 0);
     const oss = [...new Set(itens.map(l => l.os_numero))].filter(Boolean);
     const venc = quintoDiaUtil(ym);
     const ok = await confirmar({
@@ -226,7 +250,7 @@ export function Comissao() {
     try {
       const r = await api.comissao.lancar({ funcionario_id: bloco.funcionario_id, inicio: q.inicio, fim: q.fim,
         competencia: ym + "-01", usuario_nome: (perfil || {}).nome || "",
-        itens: itens.map(l => ({ item_id: l.item_id, pct: pctDe(l) })) });
+        itens: itens.map(l => ({ item_id: l.item_id, pct: pctDe(bloco.funcionario_id, l) })) });
       avisar("Comissão de " + bloco.nome + " lançada: " + reais(r.total) + ".");
       await carregar(); await recarregar(["ordens"]);
     } catch (e) { avisar(e.message, true); } finally { setLancando(""); }
@@ -263,6 +287,14 @@ export function Comissao() {
       </li>`)}</ul>
     </section>` : null}
 
+    ${(() => {
+      const outra = qs[qz === 0 ? 1 : 0];
+      const lancadosNaOutra = new Set(doMes.filter(c => c.inicio === outra.inicio && c.fim === outra.fim).map(c => c.funcionario_id));
+      const faltam = doMes.filter(c => c.inicio === q.inicio && c.fim === q.fim && !lancadosNaOutra.has(c.funcionario_id)).map(c => c.funcionario_nome);
+      return faltam.length ? html`<div class="aviso">A folha de ${nomeMes(ym)} só fecha com as duas quinzenas lançadas.
+        Ainda falta a de <b>${outra.rotulo}</b> para: ${faltam.join(", ")}.</div>` : null;
+    })()}
+
     ${mecanicos.length > 1 ? html`<div class="chips cm-chips">
       <button type="button" class=${"chip" + (quem ? "" : " chip-f")} onClick=${() => setQuem("")}>Todos</button>
       ${lista.map(b => html`<button type="button" key=${b.funcionario_id} class=${"chip" + (quem === b.funcionario_id ? " chip-f" : "")}
@@ -273,13 +305,14 @@ export function Comissao() {
       Se faltou um apontamento, use <b>Puxar O.S.</b> ou peça ao mecânico para apontar no app.</${Vazio}>` : null}
 
     ${visiveis.map(b => {
-      const dentro = b.itens.filter(entra);
-      const total = dentro.reduce((s, l) => s + valorDe(l), 0);
+      const dentro = b.itens.filter(l => entra(b.funcionario_id, l));
+      const total = dentro.reduce((s, l) => s + valorDe(b.funcionario_id, l), 0);
       const mo = dentro.reduce((s, l) => s + n2(l.base), 0);
+      const temErro = dentro.some(l => !pctOk(pctDe(b.funcionario_id, l)));
       const jaFoi = b.itens.filter(l => l.ja_lancado).length;
       return html`<section class="card cm-bloco" key=${b.funcionario_id}>
         <div class="secao-topo"><h2>${b.nome}</h2>
-          <button type="button" class="btn btn-pri" disabled=${!dentro.length || lancando === b.funcionario_id}
+          <button type="button" class="btn btn-pri" disabled=${!dentro.length || temErro || lancando === b.funcionario_id}
             onClick=${() => lancar(b)}>${lancando === b.funcionario_id ? "Lançando…" : "Lançar " + reais(total)}</button></div>
         <div class="cm-cartoes">
           <div><span>Serviços</span><b>${dentro.length}</b></div>
@@ -289,30 +322,30 @@ export function Comissao() {
         </div>
         ${porOS(b.itens).map(([num, itens]) => html`<div class="cm-os" key=${num}>
           <div class="cm-os-cab"><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b></div>
-          <ul class="cm-linhas">${itens.map(l => html`<li key=${l.item_id} class=${l.ja_lancado ? "cm-ja" : (fora[l.item_id] ? "cm-fora" : "")}>
+          <ul class="cm-linhas">${itens.map(l => html`<li key=${l.item_id} class=${l.ja_lancado || l.sem_saldo ? "cm-ja" : (fora[ch(b.funcionario_id, l)] ? "cm-fora" : "")}>
             <label class="cm-marca">
-              <input type="checkbox" disabled=${l.ja_lancado} checked=${entra(l)} aria-label=${"Incluir " + l.descricao}
-                onChange=${e => setFora(f => ({ ...f, [l.item_id]: !e.target.checked }))} />
+              <input type="checkbox" disabled=${l.ja_lancado || l.sem_saldo} checked=${entra(b.funcionario_id, l)} aria-label=${"Incluir " + l.descricao}
+                onChange=${e => setFora(f => ({ ...f, [ch(b.funcionario_id, l)]: !e.target.checked }))} />
               <span class="cm-desc"><b>${l.descricao}</b>
-                <span class="sub">${l.grupo || "sem grupo"}${l.dividido_com ? " · dividido com " + l.dividido_com : ""}${l.ja_lancado ? " · já lançado" : ""}</span></span>
+                <span class="sub">${l.grupo || "sem grupo"}${l.dividido_com ? " · dividido com " + l.dividido_com : ""}${l.ja_lancado ? " · já lançado" : ""}${!l.ja_lancado && l.sem_saldo ? " · a mão de obra já foi toda comissionada em outro lançamento" : ""}</span></span>
             </label>
-            <span class="cm-mo" title="Mão de obra do serviço">${reais(l.mao_de_obra)}${Number(l.fracao) < 1 ? html` <span class="sub">(metade: ${reais(l.base)})</span>` : null}</span>
-            <span class="cm-pct-campo"><input class="inp inp-curto" type="number" min="0" max="100" step="0.5" disabled=${l.ja_lancado}
-              aria-label=${"Percentual de " + l.descricao} value=${pcts[l.item_id] ?? l.pct}
-              onInput=${e => setPcts(p => ({ ...p, [l.item_id]: e.target.value }))} /><span>%</span></span>
-            <b class="cm-valor">${reais(valorDe(l))}</b>
-            <button type="button" class="btn btn-sm" disabled=${l.ja_lancado}
+            <span class="cm-mo" title="Mão de obra do serviço">${reais(l.mao_de_obra)}${Number(l.fracao) < 1 ? html` <span class="sub">(parte dele: ${reais(l.base)})</span>` : null}</span>
+            <span class="cm-pct-campo"><input class=${"inp inp-curto" + (pctOk(pctDe(b.funcionario_id, l)) ? "" : " inp-erro")} type="number" min="0" max="100" step="0.5"
+              disabled=${l.ja_lancado || l.sem_saldo} aria-label=${"Percentual de " + l.descricao} value=${pcts[ch(b.funcionario_id, l)] ?? l.pct}
+              onInput=${e => setPcts(p => ({ ...p, [ch(b.funcionario_id, l)]: e.target.value }))} /><span>%</span></span>
+            <b class="cm-valor">${reais(valorDe(b.funcionario_id, l))}</b>
+            <button type="button" class="btn btn-sm" disabled=${l.ja_lancado || l.sem_saldo}
               onClick=${() => setVerQuem({ ...l, funcionario_id: b.funcionario_id, nome: b.nome })}>Quem fez</button>
           </li>`)}</ul>
         </div>`)}
       </section>`;
     })}
 
-    ${verMatriz ? html`<${Matriz} funcs=${mecanicos} grupos=${grupos} cfg=${cfg} avisar=${avisar}
-      onFechar=${() => setVerMatriz(false)} onSalvou=${async () => { setPcts({}); await recarregar(["config"]); await carregar(); }} />` : null}
+    ${verMatriz ? html`<${Matriz} funcs=${mecanicos} grupos=${grupos} avisar=${avisar}
+      onFechar=${() => setVerMatriz(false)} onSalvou=${async () => { setPcts({}); setFuncs(await api.funcionarios.listar("nome")); }} />` : null}
     ${verPuxar ? html`<${PuxarOS} avisar=${avisar} onFechar=${() => setVerPuxar(false)}
       onPuxar=${id => setPuxados(p => p.includes(id) ? p : [...p, id])} />` : null}
-    ${verQuem ? html`<${QuemFez} linha=${verQuem} funcs=${mecanicos} perfilDe=${perfilDe} avisar=${avisar}
+    ${verQuem ? html`<${QuemFez} linha=${verQuem} quinzena=${q} funcs=${mecanicos} perfilDe=${perfilDe} avisar=${avisar}
       onFechar=${() => setVerQuem(null)} onFeito=${carregar} />` : null}
   </div>`;
 }

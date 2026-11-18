@@ -170,6 +170,11 @@ export const leitorLocal = {
   vendaUma: async id => { const v = (await tabelaLocal("vendas")).find(x => x.id === id); if (!v) return null; return { ...v, itens: ordena((await tabelaLocal("venda_itens")).filter(i => i.venda_id === id), (a, b) => (a.posicao || 0) - (b.posicao || 0)) }; },
   funcionarios: async () => tabelaLocal("funcionarios"),
   lancamentos: async (comp, fid) => (await tabelaLocal("funcionario_lanc")).filter(l => l.competencia === comp && (!fid || l.funcionario_id === fid)),
+  /** comissões lançadas por quinzena (v61): a folha precisa saber que já foram lançadas, senão calcula a automática por cima */
+  comissoes: async ({ inicio, fim, competencia, funcionarioId, comId } = {}) => (await tabelaLocal("comissoes")).filter(c =>
+    (!inicio || c.inicio === inicio) && (!fim || c.fim === fim) && (!competencia || c.competencia === competencia)
+    && (!funcionarioId || c.funcionario_id === funcionarioId) && (!comId || c.id === comId)),
+  comissaoItens: async comId => (await tabelaLocal("comissao_itens")).filter(i => i.comissao_id === comId),
   movimentos: async pid => ordena((await tabelaLocal("estoque_mov")).filter(m => !pid || m.produto_id === pid), (a, b) => (b.criado_em || "").localeCompare(a.criado_em || "")),
   sefazNotas: async () => tabelaLocal("nfe_recebidas"),
   ordensEntregues: async (ini, fim) => ordena(porData((await tabelaLocal("ordens")).filter(o => o.status === "entregue"), "entregue_em", ini, fim, true), (a, b) => a.numero - b.numero),

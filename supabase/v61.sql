@@ -58,6 +58,7 @@ create table if not exists public.comissao_itens (
   base numeric(12, 2) not null default 0,            -- a parte dele: mao_de_obra * fracao
   pct numeric(6, 2) not null default 0 check (pct >= 0 and pct <= 100),
   valor numeric(12, 2) not null default 0 check (valor >= 0),
+  custo_base numeric(12, 2) not null default 0,       -- custo_unit que o item tinha ANTES de qualquer comissão (volta no cancelamento)
   dividido_com text not null default '',             -- nomes de quem dividiu o mesmo serviço
   cancelado boolean not null default false,
   criado_em timestamptz not null default now()
@@ -88,30 +89,63 @@ drop policy if exists comissao_itens_admin on public.comissao_itens;
 create policy comissao_itens_admin on public.comissao_itens for all to authenticated using (public.e_admin()) with check (public.e_admin());
 
 /* =================== 2. A MATRIZ DE PERCENTUAIS =================== */
--- Fica em config.dados.comissao: { "padrao": { "<funcionario_id>": 45 }, "matriz": { "<funcionario_id>": { "<grupo>": 50 } } }
--- Ordem: exceção do mecânico naquele grupo → padrão do mecânico → comissao_pct da ficha → 0.
+-- Fica na FICHA DO FUNCIONÁRIO, não no config: a tabela config é lida por toda a equipe (config_ler = e_membro) e
+-- percentual de comissão é dado de folha. funcionarios já é só do administrador.
+--   funcionarios.comissao_pct     → padrão do mecânico
+--   funcionarios.comissao_grupos  → exceções por grupo de serviço: { "<grupo>": 50 }
+-- Ordem: exceção do grupo → padrão do mecânico → 0. O que o Danilo digitar na hora de lançar vence os dois.
 
-create or replace function public.comissao_pct(p_funcionario uuid, p_grupo text, p_ficha numeric default null)
+alter table public.funcionarios add column if not exists comissao_grupos jsonb not null default '{}'::jsonb;
+
+create or replace function public.comissao_pct(p_funcionario uuid, p_grupo text)
 returns numeric language sql stable security invoker set search_path = public as $$
-  with m as (select coalesce(dados->'comissao', '{}'::jsonb) c from public.config where id = 1)
   select round(coalesce(
-    nullif(m.c->'matriz'->p_funcionario::text->>public.grupo_chave(coalesce(p_grupo, '')), '')::numeric,
-    nullif(m.c->'padrao'->>p_funcionario::text, '')::numeric,
-    p_ficha, 0), 2) from m
+    nullif(f.comissao_grupos->>public.grupo_chave(coalesce(p_grupo, '')), '')::numeric,
+    f.comissao_pct, 0), 2)
+    from public.funcionarios f where f.id = p_funcionario
 $$;
-revoke all on function public.comissao_pct(uuid, text, numeric) from public, anon;
-grant execute on function public.comissao_pct(uuid, text, numeric) to authenticated;
+revoke all on function public.comissao_pct(uuid, text) from public, anon;
+grant execute on function public.comissao_pct(uuid, text) to authenticated;
+-- a versão antiga (com o percentual da ficha como 3º argumento, lendo o config) sai de cena
+drop function if exists public.comissao_pct(uuid, text, numeric);
 
 /* =================== 3. MONTAR A QUINZENA =================== */
 -- Devolve o que cada mecânico apontou na quinzena, já com a parte dele e o percentual da matriz. Não grava nada: é a prévia.
 -- p_itens: itens de serviço de fora da quinzena que o Danilo puxou na mão ("Puxar O.S. para o mecânico").
--- "ja" = este serviço já foi lançado para este mecânico num lançamento que vale (não entra de novo).
+-- Só entra serviço que CONTA no custo da O.S. (mesma regra do agente_totais_os) e de O.S. que não foi cancelada: senão a
+-- comissão sairia na folha sem aparecer na margem de lugar nenhum.
+-- A fração é 1 dividido pelos mecânicos que apontaram o serviço, limitada ao que ainda não foi comprometido em outro
+-- lançamento vivo daquele mesmo item (senão um serviço dividido entre duas quinzenas pagaria mais que a mão de obra).
+
+create or replace function public.comissao_itens_validos()
+returns table (item_id uuid, ordem_id uuid, os_numero int, placa text, descricao text, grupo text, qtd numeric, mao_de_obra numeric)
+language sql stable security invoker set search_path = public as $$
+  select i.id, i.ordem_id, o.numero, coalesce(o.veiculo->>'placa', ''), i.descricao, coalesce(pr.categoria, ''), i.qtd,
+         round(i.qtd * i.valor_unit - coalesce(i.desconto, 0), 2)
+    from public.os_itens i
+    join public.ordens o on o.id = i.ordem_id
+    left join public.produtos pr on pr.id = i.produto_id
+   where i.tipo = 'servico' and i.qtd > 0 and o.status <> 'cancelado'
+     and case when o.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end
+$$;
+revoke all on function public.comissao_itens_validos() from public, anon;
+grant execute on function public.comissao_itens_validos() to authenticated;
+
+-- quanto da mão de obra de um item ainda não foi comprometido em lançamento vivo
+create or replace function public.comissao_fracao_livre(p_item uuid, p_fora uuid default null)
+returns numeric language sql stable security invoker set search_path = public as $$
+  select greatest(0, 1 - coalesce((select sum(ci.fracao) from public.comissao_itens ci
+                                     where ci.item_id = p_item and not ci.cancelado
+                                       and (p_fora is null or ci.comissao_id <> p_fora)), 0))
+$$;
+revoke all on function public.comissao_fracao_livre(uuid, uuid) from public, anon;
+grant execute on function public.comissao_fracao_livre(uuid, uuid) to authenticated;
 
 create or replace function public.comissao_quinzena(p_inicio date, p_fim date, p_funcionario uuid default null,
                                                    p_itens uuid[] default '{}')
 returns jsonb language sql stable security invoker set search_path = public as $$
   with ap as (   -- todos os apontamentos finalizados (todos, não só os da quinzena: é como se sabe quem dividiu cada serviço)
-    select a.ordem_id, a.fim, f.id funcionario_id, coalesce(nullif(f.apelido, ''), f.nome) nome, f.comissao_pct, x.item_id
+    select a.fim, f.id funcionario_id, coalesce(nullif(f.apelido, ''), f.nome) nome, x.item_id
       from public.servico_apontamentos a
       join public.funcionarios f on f.perfil_id = a.perfil_id
       cross join unnest(a.itens_executados) x(item_id)
@@ -119,42 +153,39 @@ returns jsonb language sql stable security invoker set search_path = public as $
   ),
   donos as (select item_id, count(distinct funcionario_id) n from ap group by item_id),
   escolhidos as (   -- um por mecânico e serviço (o mesmo pode ter sido apontado mais de uma vez)
-    select distinct on (funcionario_id, item_id) funcionario_id, nome, comissao_pct, item_id, fim
+    select distinct on (funcionario_id, item_id) funcionario_id, nome, item_id, fim
       from ap
      where ((fim at time zone 'America/Sao_Paulo')::date between p_inicio and p_fim or item_id = any (coalesce(p_itens, '{}')))
        and (p_funcionario is null or funcionario_id = p_funcionario)
      order by funcionario_id, item_id, fim desc
   ),
   linhas as (
-    select e.funcionario_id, e.nome, e.fim, i.ordem_id, o.numero os_numero, e.item_id, i.descricao,
-           coalesce(o.veiculo->>'placa', '') placa, coalesce(pr.categoria, '') grupo,
-           round(i.qtd * i.valor_unit - coalesce(i.desconto, 0), 2) mao_de_obra,
-           round(1.0 / d.n, 4) fracao,
-           round((i.qtd * i.valor_unit - coalesce(i.desconto, 0)) / d.n, 2) base,
-           public.comissao_pct(e.funcionario_id, coalesce(pr.categoria, ''), e.comissao_pct) pct,
-           (select string_agg(distinct a2.nome, ', ') from ap a2 where a2.item_id = e.item_id and a2.funcionario_id <> e.funcionario_id) dividido_com,
-           exists (select 1 from public.comissao_itens ci where ci.item_id = e.item_id and ci.funcionario_id = e.funcionario_id and not ci.cancelado) ja
+    select e.funcionario_id, e.nome, e.fim, v.ordem_id, v.os_numero, e.item_id, v.descricao, v.placa, v.grupo, v.mao_de_obra,
+           (select exists (select 1 from public.comissao_itens ci where ci.item_id = e.item_id and ci.funcionario_id = e.funcionario_id and not ci.cancelado)) ja,
+           least(round(1.0 / d.n, 4), public.comissao_fracao_livre(e.item_id)) fracao,
+           public.comissao_pct(e.funcionario_id, v.grupo) pct,
+           (select string_agg(distinct a2.nome, ', ') from ap a2 where a2.item_id = e.item_id and a2.funcionario_id <> e.funcionario_id) dividido_com
       from escolhidos e
       join donos d on d.item_id = e.item_id
-      join public.os_itens i on i.id = e.item_id and i.tipo = 'servico' and i.aprovado is distinct from false
-      left join public.ordens o on o.id = i.ordem_id
-      left join public.produtos pr on pr.id = i.produto_id
+      join public.comissao_itens_validos() v on v.item_id = e.item_id
   ),
-  itens as (select l.*, round(l.base * l.pct / 100, 2) valor from linhas l),
+  itens as (
+    select l.*, round(l.mao_de_obra * l.fracao, 2) base, round(round(l.mao_de_obra * l.fracao, 2) * l.pct / 100, 2) valor from linhas l
+  ),
   porfunc as (
     select funcionario_id, nome,
-           count(*) filter (where not ja) servicos,
-           coalesce(sum(base) filter (where not ja), 0) mao_de_obra,
-           coalesce(sum(valor) filter (where not ja), 0) total,
+           count(*) filter (where not ja and fracao > 0) servicos,
+           coalesce(sum(base) filter (where not ja and fracao > 0), 0) mao_de_obra_parte,
+           coalesce(sum(valor) filter (where not ja and fracao > 0), 0) total,
            jsonb_agg(jsonb_build_object(
              'item_id', item_id, 'ordem_id', ordem_id, 'os_numero', os_numero, 'placa', placa, 'descricao', descricao,
              'grupo', grupo, 'mao_de_obra', mao_de_obra, 'fracao', fracao, 'base', base, 'pct', pct, 'valor', valor,
-             'dividido_com', coalesce(dividido_com, ''), 'ja_lancado', ja, 'fim', fim)
+             'dividido_com', coalesce(dividido_com, ''), 'ja_lancado', ja, 'sem_saldo', fracao <= 0, 'fim', fim)
              order by os_numero, descricao) itens
       from itens group by funcionario_id, nome
   )
   select coalesce((select jsonb_agg(jsonb_build_object('funcionario_id', funcionario_id, 'nome', nome, 'servicos', servicos,
-                                                       'mao_de_obra', mao_de_obra, 'total', total, 'itens', itens) order by nome)
+                                                       'mao_de_obra', mao_de_obra_parte, 'total', total, 'itens', itens) order by nome)
                      from porfunc), '[]'::jsonb)
 $$;
 revoke all on function public.comissao_quinzena(date, date, uuid, uuid[]) from public, anon;
@@ -165,6 +196,7 @@ grant execute on function public.comissao_quinzena(date, date, uuid, uuid[]) to 
 -- Recalcula TUDO no banco (mão de obra, fração, valor): o que vem da tela é só quais serviços entram e, se o Danilo digitou,
 -- o percentual de cada um. Grava: comissoes + comissao_itens, o custo nos itens das O.S. (pela sincronizar_alteracao_os) e o
 -- lançamento da folha (funcionario_lanc, tipo 'comissao'). Tudo numa transação: ou entra inteiro, ou nada entra.
+-- O custo do item fica sendo "o que ele já tinha antes da comissão" + a soma das comissões vivas daquele item.
 
 create or replace function public.comissao_lancar(p jsonb)
 returns jsonb language plpgsql security invoker set search_path = public as $$
@@ -174,8 +206,8 @@ declare
   v_fim date := (p->>'fim')::date;
   v_comp date := coalesce((p->>'competencia')::date, date_trunc('month', (p->>'fim')::date)::date);
   v_data date := coalesce((p->>'data')::date, current_date);
-  v_id uuid; v_lanc uuid; v_total numeric := 0; v_mo numeric := 0; v_qtd int := 0;
-  v_ordem uuid; v_status text; v_antes jsonb; v_itens jsonb; v_r jsonb; v_oss int[] := '{}';
+  v_id uuid; v_lanc uuid; v_total numeric := 0; v_mo numeric := 0; v_qtd int := 0; v_pedidos int;
+  v_ordem uuid; v_status text; v_antes jsonb; v_itens jsonb; v_r jsonb; v_oss int[] := '{}'; v_falta text;
 begin
   if not public.e_admin() then raise exception 'Só o administrador lança comissão.'; end if;
   if v_inicio is null or v_fim is null or v_fim < v_inicio then raise exception 'Informe a quinzena (início e fim).'; end if;
@@ -183,9 +215,27 @@ begin
   if not found then raise exception 'Funcionário não encontrado.'; end if;
   if jsonb_typeof(p->'itens') <> 'array' or jsonb_array_length(p->'itens') = 0 then
     raise exception 'Nenhum serviço selecionado para lançar.'; end if;
+  v_pedidos := jsonb_array_length(p->'itens');
+  if exists (select 1 from jsonb_to_recordset(p->'itens') as x(item_id uuid, pct numeric) where x.pct is not null and (x.pct < 0 or x.pct > 100)) then
+    raise exception 'Percentual de comissão fora de 0 a 100.'; end if;
   if exists (select 1 from public.comissoes where funcionario_id = v_func.id and inicio = v_inicio and fim = v_fim and situacao = 'lancado') then
     raise exception 'A quinzena de % a % já foi lançada para %. Cancele o lançamento antes de lançar de novo.',
       to_char(v_inicio, 'DD/MM'), to_char(v_fim, 'DD/MM/YYYY'), coalesce(nullif(v_func.apelido, ''), v_func.nome); end if;
+
+  -- trava as O.S. envolvidas ANTES de somar as comissões vivas: dois lançamentos ao mesmo tempo no mesmo item não se perdem
+  perform 1 from public.ordens o
+    where o.id in (select v.ordem_id from jsonb_to_recordset(p->'itens') as ped(item_id uuid, pct numeric)
+                     join public.comissao_itens_validos() v on v.item_id = ped.item_id)
+    order by o.id for update;
+
+  -- serviço cuja mão de obra já está toda comprometida em outro lançamento vivo não entra (senão pagaria mais que o serviço)
+  select string_agg(v.descricao || ' (' || coalesce(v.os_numero::text, 'O.S.') || ')', ', ') into v_falta
+    from jsonb_to_recordset(p->'itens') as ped(item_id uuid, pct numeric)
+    join public.comissao_itens_validos() v on v.item_id = ped.item_id
+   where public.comissao_fracao_livre(ped.item_id) <= 0;
+  if v_falta is not null then
+    raise exception 'A mão de obra destes serviços já foi toda comissionada em outro lançamento: %. Cancele aquele lançamento e lance os dois de novo.', v_falta;
+  end if;
 
   insert into public.comissoes (funcionario_id, funcionario_nome, inicio, fim, competencia, obs, usuario_nome)
   values (v_func.id, coalesce(nullif(v_func.apelido, ''), v_func.nome), v_inicio, v_fim, v_comp,
@@ -194,36 +244,32 @@ begin
 
   -- uma linha por serviço, com os números refeitos no banco
   insert into public.comissao_itens (comissao_id, funcionario_id, ordem_id, os_numero, placa, item_id, descricao, grupo,
-                                     mao_de_obra, fracao, base, pct, valor, dividido_com)
-  select v_id, v_func.id, i.ordem_id, o.numero, coalesce(o.veiculo->>'placa', ''), i.id, i.descricao,
-         coalesce(pr.categoria, ''),
-         round(i.qtd * i.valor_unit - coalesce(i.desconto, 0), 2),
-         round(1.0 / d.n, 4),
-         round((i.qtd * i.valor_unit - coalesce(i.desconto, 0)) / d.n, 2),
-         x.pct,
-         round(round((i.qtd * i.valor_unit - coalesce(i.desconto, 0)) / d.n, 2) * x.pct / 100, 2),
+                                     mao_de_obra, fracao, base, pct, valor, custo_base, dividido_com)
+  select v_id, v_func.id, v.ordem_id, v.os_numero, v.placa, v.item_id, v.descricao, v.grupo,
+         v.mao_de_obra, fr.fracao, round(v.mao_de_obra * fr.fracao, 2), x.pct,
+         round(round(v.mao_de_obra * fr.fracao, 2) * x.pct / 100, 2),
+         -- o custo que o item tinha antes de qualquer comissão: o já guardado por um lançamento vivo, ou o de hoje
+         coalesce((select max(ci.custo_base) from public.comissao_itens ci where ci.item_id = v.item_id and not ci.cancelado),
+                  (select i2.custo_unit from public.os_itens i2 where i2.id = v.item_id)),
          coalesce((select string_agg(distinct coalesce(nullif(f2.apelido, ''), f2.nome), ', ')
                      from public.servico_apontamentos a2
                      join public.funcionarios f2 on f2.perfil_id = a2.perfil_id
-                    where a2.situacao = 'finalizado' and i.id = any (a2.itens_executados) and f2.id <> v_func.id), '')
-    from jsonb_to_recordset(p->'itens') as pedido(item_id uuid, pct numeric)
-    join public.os_itens i on i.id = pedido.item_id
-    left join public.ordens o on o.id = i.ordem_id
-    left join public.produtos pr on pr.id = i.produto_id
+                    where a2.situacao = 'finalizado' and v.item_id = any (a2.itens_executados) and f2.id <> v_func.id), '')
+    from jsonb_to_recordset(p->'itens') as ped(item_id uuid, pct numeric)
+    join public.comissao_itens_validos() v on v.item_id = ped.item_id
     cross join lateral (select count(distinct f3.id) n from public.servico_apontamentos a3
                           join public.funcionarios f3 on f3.perfil_id = a3.perfil_id
-                         where a3.situacao = 'finalizado' and i.id = any (a3.itens_executados)) d
-    cross join lateral (select coalesce(pedido.pct, public.comissao_pct(v_func.id, coalesce(pr.categoria, ''), v_func.comissao_pct)) pct) x
-   where i.tipo = 'servico' and i.aprovado is distinct from false and d.n > 0
+                         where a3.situacao = 'finalizado' and v.item_id = any (a3.itens_executados)) d
+    cross join lateral (select least(round(1.0 / greatest(d.n, 1), 4), public.comissao_fracao_livre(v.item_id)) fracao) fr
+    cross join lateral (select coalesce(ped.pct, public.comissao_pct(v_func.id, v.grupo)) pct) x
+   where d.n > 0 and fr.fracao > 0
      and exists (select 1 from public.servico_apontamentos a
                    join public.funcionarios f on f.perfil_id = a.perfil_id
-                  where a.situacao = 'finalizado' and f.id = v_func.id and i.id = any (a.itens_executados));
+                  where a.situacao = 'finalizado' and f.id = v_func.id and v.item_id = any (a.itens_executados));
 
-  if (select count(*) from public.comissao_itens where comissao_id = v_id) <> jsonb_array_length(p->'itens') then
-    raise exception 'Algum serviço da lista não serve para comissão (não é serviço aprovado, ou este mecânico não apontou que executou). Nada foi lançado.';
+  if (select count(*) from public.comissao_itens where comissao_id = v_id) <> v_pedidos then
+    raise exception 'Algum serviço da lista não serve para comissão: tem de ser serviço aprovado, de O.S. que não foi cancelada, e este mecânico precisa ter apontado que executou. Nada foi lançado.';
   end if;
-  if exists (select 1 from public.comissao_itens where comissao_id = v_id and (pct < 0 or pct > 100)) then
-    raise exception 'Percentual de comissão fora de 0 a 100.'; end if;
 
   select count(*), coalesce(sum(base), 0), coalesce(sum(valor), 0) into v_qtd, v_mo, v_total
     from public.comissao_itens where comissao_id = v_id;
@@ -233,14 +279,14 @@ begin
   for v_ordem in select distinct ordem_id from public.comissao_itens where comissao_id = v_id and ordem_id is not null loop
     select status into v_status from public.ordens where id = v_ordem;
     select jsonb_object_agg(i.id::text, to_jsonb(i)),
-           jsonb_agg(to_jsonb(i) || jsonb_build_object('custo_unit', case when i.qtd > 0 then round(a.soma / i.qtd, 2) else a.soma end))
+           jsonb_agg(to_jsonb(i) || jsonb_build_object('custo_unit', a.base + round(a.soma / i.qtd, 2)))
       into v_antes, v_itens
-      from (select ci.item_id, round(sum(c2.valor), 2) soma
+      from (select ci.item_id, max(ci.custo_base) base,
+                   coalesce((select round(sum(c2.valor), 2) from public.comissao_itens c2 where c2.item_id = ci.item_id and not c2.cancelado), 0) soma
               from public.comissao_itens ci
-              join public.comissao_itens c2 on c2.item_id = ci.item_id and not c2.cancelado
              where ci.comissao_id = v_id and ci.ordem_id = v_ordem and not ci.cancelado
              group by ci.item_id) a
-      join public.os_itens i on i.id = a.item_id;
+      join public.os_itens i on i.id = a.item_id and i.qtd > 0;
     if v_itens is not null then
       v_r := public.sincronizar_alteracao_os(jsonb_build_object('tipo', 'itens_os', 'ordem_id', v_ordem,
                'antes', jsonb_build_object('status', v_status, 'itens', v_antes), 'itens', v_itens));
@@ -269,8 +315,8 @@ revoke all on function public.comissao_lancar(jsonb) from public, anon;
 grant execute on function public.comissao_lancar(jsonb) to authenticated;
 
 /* =================== 5. CANCELAR O LANÇAMENTO =================== */
--- Desfaz os três: tira o custo dos itens das O.S. (o que sobrar de outros lançamentos continua), apaga o lançamento da folha
--- e marca a comissão como cancelada. Os serviços voltam a aparecer na quinzena para lançar de novo.
+-- Desfaz os três: devolve o custo do item ao que era antes da comissão (mais o que sobrar de outros lançamentos vivos),
+-- apaga o lançamento da folha e marca a comissão como cancelada. Os serviços voltam a aparecer na quinzena.
 
 create or replace function public.comissao_cancelar(p_id uuid, p_motivo text default '')
 returns jsonb language plpgsql security invoker set search_path = public as $$
@@ -283,19 +329,21 @@ begin
   if not found then raise exception 'Lançamento de comissão não encontrado.'; end if;
   if c.situacao <> 'lancado' then raise exception 'Este lançamento já está cancelado.'; end if;
 
+  perform 1 from public.ordens o where o.id in (select ci.ordem_id from public.comissao_itens ci where ci.comissao_id = p_id and ci.ordem_id is not null)
+    order by o.id for update;
   update public.comissao_itens set cancelado = true where comissao_id = p_id;
 
   for v_ordem in select distinct ordem_id from public.comissao_itens where comissao_id = p_id and ordem_id is not null loop
     select status into v_status from public.ordens where id = v_ordem;
     select jsonb_object_agg(i.id::text, to_jsonb(i)),
-           jsonb_agg(to_jsonb(i) || jsonb_build_object('custo_unit', case when i.qtd > 0 then round(a.soma / i.qtd, 2) else a.soma end))
+           jsonb_agg(to_jsonb(i) || jsonb_build_object('custo_unit', a.base + round(a.soma / i.qtd, 2)))
       into v_antes, v_itens
-      from (select ci.item_id,
+      from (select ci.item_id, max(ci.custo_base) base,
                    coalesce((select round(sum(c2.valor), 2) from public.comissao_itens c2 where c2.item_id = ci.item_id and not c2.cancelado), 0) soma
               from public.comissao_itens ci
              where ci.comissao_id = p_id and ci.ordem_id = v_ordem
              group by ci.item_id) a
-      join public.os_itens i on i.id = a.item_id;
+      join public.os_itens i on i.id = a.item_id and i.qtd > 0;
     if v_itens is not null then
       v_r := public.sincronizar_alteracao_os(jsonb_build_object('tipo', 'itens_os', 'ordem_id', v_ordem,
                'antes', jsonb_build_object('status', v_status, 'itens', v_antes), 'itens', v_itens));
@@ -307,14 +355,31 @@ begin
       raise exception 'A O.S. mudou enquanto o cancelamento era feito (%). Nada foi desfeito.', v_r->>'conflito'; end if;
   end loop;
 
-  if c.lanc_id is not null then delete from public.funcionario_lanc where id = c.lanc_id; end if;
   update public.comissoes set situacao = 'cancelado', cancelado_em = now(),
          cancelado_por = coalesce(nullif(p_motivo, ''), 'cancelado pelo administrador'), lanc_id = null
    where id = p_id;
+  if c.lanc_id is not null then delete from public.funcionario_lanc where id = c.lanc_id; end if;
   return jsonb_build_object('ok', true, 'id', p_id);
 end $$;
 revoke all on function public.comissao_cancelar(uuid, text) from public, anon;
 grant execute on function public.comissao_cancelar(uuid, text) to authenticated;
+
+/* =================== 5b. O LANÇAMENTO DA FOLHA NÃO SE APAGA SOZINHO =================== */
+-- O lançamento de comissão na folha é o pagamento daquela quinzena. Apagá-lo à mão deixava a comissão presa: o custo na
+-- O.S. ficava, os serviços continuavam travados e o mês ficava sem comissão nenhuma. Agora é preciso cancelar o lançamento.
+
+create or replace function public.comissao_lanc_protege() returns trigger language plpgsql security definer set search_path = public as $$
+declare q text;
+begin
+  select to_char(c.inicio, 'DD/MM') || ' a ' || to_char(c.fim, 'DD/MM/YYYY') into q
+    from public.comissoes c where c.lanc_id = old.id and c.situacao = 'lancado';
+  if q is not null then
+    raise exception 'Este lançamento é a comissão da quinzena de %. Para tirá-lo da folha, cancele o lançamento na tela de Comissão.', q;
+  end if;
+  return old;
+end $$;
+drop trigger if exists funcionario_lanc_comissao on public.funcionario_lanc;
+create trigger funcionario_lanc_comissao before delete on public.funcionario_lanc for each row execute function public.comissao_lanc_protege();
 
 /* =================== 6. O CUSTO DA O.S. PASSA A CONTAR A MÃO DE OBRA =================== */
 -- Decisão 1 do Danilo. Até aqui o custo da O.S. somava só peças e terceiros (os_itens.custo_unit de 'servico' era ignorado em
@@ -348,6 +413,60 @@ begin
 end $$;
 revoke all on function public.os_custo_recalcular(uuid) from public, anon;
 grant execute on function public.os_custo_recalcular(uuid) to authenticated;
+
+-- vincular_nfe_os: a mesma do v9, só com o custo contando a mão de obra (sem isto, vincular uma nota apagaria a comissão
+-- do custo guardado na O.S. e o Painel passaria a discordar do Relatório)
+create or replace function public.vincular_nfe_os(p jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare n record; o record; it jsonb; item record; pr record; quem text; total numeric := 0; venda numeric := 0; n_itens int := 0; ref text; linhas text := '';
+  ja_vinculado boolean; reservado numeric; entrada numeric; entradas text := '';
+begin
+  if not public.e_gestor() then raise exception 'Seu usuário não pode vincular notas.'; end if;
+  select * into n from public.nfe_recebidas where chave = p->>'chave';
+  if not found then raise exception 'Nota não encontrada.'; end if;
+  select * into o from public.ordens where id = (p->>'ordem_id')::uuid;
+  if not found then raise exception 'O.S. não encontrada.'; end if;
+  select nome into quem from public.perfis where id = auth.uid();
+  ref := 'NF ' || n.numero || ' – ' || coalesce(nullif(n.nome_emitente, ''), n.cnpj_emitente);
+  for it in select * from jsonb_array_elements(coalesce(p->'itens', '[]'::jsonb)) loop
+    select * into item from public.os_itens where id = (it->>'item_id')::uuid and ordem_id = o.id;
+    if not found then raise exception 'Item não pertence a esta O.S.'; end if;
+    select exists (select 1 from public.nfe_os_vinculos where item_id = item.id) into ja_vinculado;
+    -- peça do cadastro que já saiu do estoque pela O.S.: a compra desta nota entra no estoque (saldo fica correto)
+    select coalesce(max(v.entrada_estoque), 0) into entrada from public.nfe_os_vinculos v where v.item_id = item.id;
+    if not ja_vinculado and item.produto_id is not null then
+      select r.qtd into reservado from public.estoque_reserva r where r.item_id = item.id;
+      select * into pr from public.produtos where id = item.produto_id;
+      if coalesce(reservado, 0) > 0 and pr.tipo = 'produto' and pr.controla_estoque then
+        entrada := reservado;
+        perform public.movimentar_estoque(item.produto_id, 'entrada', entrada, null, ref || ' (peça da OS ' || lpad(o.numero::text, 5, '0') || ')');
+        entradas := entradas || case when entradas = '' then '' else '; ' end || pr.descricao || ' +' || trim(to_char(entrada, 'FM999999990.###'));
+      end if;
+    end if;
+    delete from public.nfe_os_vinculos where item_id = item.id;
+    insert into public.nfe_os_vinculos (chave, ordem_id, item_id, nf_item, descricao_nf, qtd, custo_total, entrada_estoque, usuario_nome)
+    values (n.chave, o.id, item.id, nullif(it->>'nf_item', '')::int, coalesce(it->>'descricao_nf', ''), coalesce(nullif(it->>'qtd', '')::numeric, item.qtd),
+      (it->>'custo_total')::numeric, entrada, coalesce(quem, ''));
+    perform set_config('dtcar.sem_estoque', '1', true);
+    update public.os_itens set custo_unit = round((it->>'custo_total')::numeric / greatest(item.qtd, 0.001), 2), nfe_chave = n.chave, nfe_ref = ref where id = item.id;
+    perform set_config('dtcar.sem_estoque', '', true);
+    total := total + (it->>'custo_total')::numeric;
+    venda := venda + item.qtd * item.valor_unit - item.desconto;
+    n_itens := n_itens + 1;
+    linhas := linhas || case when n_itens > 1 then '; ' else '' end || item.descricao || ' custo ' || public.fmt_reais((it->>'custo_total')::numeric);
+  end loop;
+  if n_itens = 0 then raise exception 'Escolha pelo menos um item da O.S.'; end if;
+  update public.ordens set custo = (select coalesce(sum(round(i.qtd * i.custo_unit, 2)), 0) from public.os_itens i
+    where i.ordem_id = o.id and not i.fornecida_cliente   -- v61: a mão de obra (comissão) também é custo
+      and (case when o.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end))
+  where id = o.id;
+  insert into public.eventos (ordem_id, tipo, texto, usuario_nome)
+  values (o.id, 'nota', ref || ' vinculada: ' || linhas || '. Custo total ' || public.fmt_reais(total) || ', vendido ' || public.fmt_reais(venda) || '.'
+    || case when entradas <> '' then ' Entrada no estoque desta compra: ' || entradas || '.' else '' end, coalesce(quem, ''));
+  update public.nfe_recebidas set status = 'vinculada' where id = n.id and status = 'nova';
+  return jsonb_build_object('itens', n_itens, 'custo', total, 'venda', venda, 'ordem', o.numero, 'entradas', entradas);
+end $$;
+grant execute on function public.vincular_nfe_os(jsonb) to authenticated;
 
 -- agente_lancar_itens_os: a mesma do v27, só com o custo contando a mão de obra
 create or replace function public.agente_lancar_itens_os(p jsonb, p_gravar boolean default false) returns jsonb
@@ -488,3 +607,16 @@ end $$;
 
 revoke all on function public.agente_lancar_itens_os(jsonb, boolean) from public, anon;
 grant execute on function public.agente_lancar_itens_os(jsonb, boolean) to authenticated;
+
+/* =================== 7. ACERTO DAS O.S. QUE JÁ TINHAM CUSTO EM SERVIÇO =================== */
+-- Antes do v61 o custo_unit de item de serviço existia (importação do sistema antigo, agente, orçamento) e não entrava em
+-- lugar nenhum. Agora entra: o custo guardado em ordens.custo é acertado de uma vez, senão o Painel (que usa a coluna)
+-- ficaria discordando do Relatório (que soma os itens). Só mexe em O.S. com item de serviço com custo.
+
+update public.ordens o set custo = t.custo
+  from (select o2.id, coalesce((select sum(round(i.qtd * i.custo_unit, 2)) from public.os_itens i
+                                  where i.ordem_id = o2.id
+                                    and case when o2.status in ('execucao', 'pronto', 'entregue', 'recusado') then i.aprovado is true else i.aprovado is distinct from false end), 0) custo
+          from public.ordens o2
+         where exists (select 1 from public.os_itens i2 where i2.ordem_id = o2.id and i2.tipo = 'servico' and i2.custo_unit <> 0)) t
+ where o.id = t.id and o.custo is distinct from t.custo;

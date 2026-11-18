@@ -219,11 +219,12 @@ do $$ declare r jsonb; id4 uuid; cod text; saldo numeric; it jsonb; begin
   if (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1') <> saldo - 2 then
     raise exception 'FALHOU 13c: a aprovação tinha de baixar 2 do estoque (de % para %)', saldo,
       (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1'); end if;
-  -- código que não existe é recusado, em vez de virar item solto
-  begin r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "X"},
+  -- código que não é do cadastro entra como referência livre (catálogo, montadora), sem vínculo e com aviso
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "X"},
     "itens": [{"tipo": "peca", "descricao": "NADA", "codigo": "999999", "qtd": 1, "valor_unit": 10}]}'::jsonb, true);
-    raise exception 'FALHOU 13d: código inexistente devia ser recusado';
-  exception when others then if sqlerrm not like '%não existe no estoque%' then raise; end if; end;
+  if (r->'codigos_fora_do_estoque') is null then raise exception 'FALHOU 13d: devia avisar o código sem vínculo (%)', r; end if;
+  if (select produto_id from public.orcamento_itens where orcamento_id = (r->>'id')::uuid) is not null then
+    raise exception 'FALHOU 13e: código que não é do cadastro não pode ligar no estoque'; end if;
 end $$;
 
 -- 14. produto_id não vem de fora e campo errado não passa calado
@@ -394,6 +395,54 @@ do $$ declare r jsonb; id8 uuid := '00000000-0000-0000-0000-00000000e001'; it js
   if jsonb_array_length(r->'itens') <> 1 then raise exception 'FALHOU 24: a lista inteira devia deixar 1 item'; end if;
   select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8;
   if (it->>'qtd')::numeric <> 2 then raise exception 'FALHOU 24a: quantidade (%)', it->>'qtd'; end if;
+end $$;
+
+-- 25. "o cliente trouxe essa peça" zera o preço de verdade, inclusive em item que já está lançado
+do $$ declare r jsonb; id9 uuid; it jsonb; saldo numeric; begin
+  saldo := (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1');
+  r := public.agente_fazer('orcamento', '{"acao": "criar",
+    "cliente": {"nome": "PECA DO CLIENTE", "telefone": "(27) 98888-4444"},
+    "veiculo": {"placa": "KYN9G88", "marca": "Fiat", "modelo": "UNO", "ano": "2016"},
+    "itens": [{"tipo": "peca", "descricao": "BIELETA", "qtd": 2, "valor_unit": 80, "custo_unit": 30}]}'::jsonb, true);
+  id9 := (r->>'id')::uuid;
+  if (r->>'total')::numeric <> 160 then raise exception 'FALHOU 25: total inicial (%)', r->>'total'; end if;
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id9;
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id9,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'peca_do_cliente', true))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id9;
+  if not (it->>'fornecida_cliente')::boolean then raise exception 'FALHOU 25a: não marcou'; end if;
+  if (it->>'valor_unit')::numeric <> 0 or (it->>'custo_unit')::numeric <> 0 or (it->>'desconto')::numeric <> 0 then
+    raise exception 'FALHOU 25b: peça do cliente tem de zerar preço e custo (%)', it; end if;
+  if (r->>'total')::numeric <> 0 then raise exception 'FALHOU 25c: o total ainda cobra (%)', r->>'total'; end if;
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id9, 'por', 'Cliente'), true);
+  if (r->>'total')::numeric <> 0 then raise exception 'FALHOU 25d: a O.S. nasceu cobrando (%)', r->>'total'; end if;
+  if (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1') <> saldo then
+    raise exception 'FALHOU 25e: peça do cliente não pode mexer no estoque'; end if;
+end $$;
+
+-- 26. código do catálogo de peças (não é do cadastro) entra como referência, sem vínculo e com aviso na resposta
+do $$ declare r jsonb; id10 uuid; it jsonb; saldo numeric; cod text; begin
+  saldo := (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1');
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "CODIGO DE CATALOGO", "telefone": "(27) 98888-5555"},
+    "veiculo": {"placa": "KYN9G89", "marca": "Fiat", "modelo": "UNO", "ano": "2016"},
+    "itens": [{"tipo": "peca", "descricao": "PASTILHA DE FREIO", "codigo": "PERFECT 1234", "qtd": 1, "valor_unit": 150}]}'::jsonb, true);
+  id10 := (r->>'id')::uuid;
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id10;
+  if it->>'codigo' <> 'PERFECT 1234' then raise exception 'FALHOU 26: o código do catálogo tinha de ficar (%)', it->>'codigo'; end if;
+  if (it->>'produto_id') is not null then raise exception 'FALHOU 26a: não podia ligar no estoque'; end if;
+  if (r->'codigos_fora_do_estoque') is null or not (r->>'codigos_fora_do_estoque') like '%PERFECT 1234%' then
+    raise exception 'FALHOU 26b: a resposta tinha de avisar o código sem vínculo (%)', r; end if;
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id10, 'por', 'Cliente'), true);
+  if (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1') <> saldo then
+    raise exception 'FALHOU 26c: baixou estoque de código que não é do cadastro'; end if;
+  -- e o código do cadastro continua ligando e canonizando a grafia
+  select codigo::text into cod from public.produtos where id = '00000000-0000-0000-0000-0000000000b1';
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "CODIGO DO CADASTRO"},
+    "itens": [{"tipo": "peca", "descricao": "BIELETA", "codigo": "MN-9999", "qtd": 1, "valor_unit": 80}]}'::jsonb, true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = (r->>'id')::uuid;
+  if (it->>'produto_id') is null then raise exception 'FALHOU 26d: a referência devia ligar no estoque'; end if;
+  if it->>'codigo' <> 'MN-9999' then raise exception 'FALHOU 26e: casou pela referência, o código do Danilo tinha de ficar (%)', it->>'codigo'; end if;
+  if (r->'codigos_fora_do_estoque') is not null then raise exception 'FALHOU 26f: não é código fora do estoque'; end if;
 end $$;
 
 select 'v61 OK' as resultado;

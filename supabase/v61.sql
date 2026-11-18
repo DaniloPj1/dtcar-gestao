@@ -161,7 +161,9 @@ language plpgsql stable set search_path = public as $$
 declare v_cod text := trim(coalesce(it->>'codigo', '')); v_tipo text := coalesce(it->>'tipo', ''); pr public.produtos;
   v_pega_custo boolean := coalesce(p_custo_do_estoque, not (it ? 'custo_unit'));
 begin
-  if coalesce((it->>'fornecida_cliente')::boolean, coalesce((it->>'peca_do_cliente')::boolean, false)) then
+  -- o PEDIDO manda mais que o item mesclado (que sempre traz fornecida_cliente do banco):
+  -- sem isto, "essa peça o cliente trouxe" marcava o item e continuava cobrando
+  if coalesce((it->>'peca_do_cliente')::boolean, (it->>'fornecida_cliente')::boolean, false) then
     -- peça trazida pelo cliente: sem preço, sem custo e fora do estoque (como o editor da tela e o v40)
     it := (it - 'peca_do_cliente') || jsonb_build_object('fornecida_cliente', true, 'valor_unit', 0, 'custo_unit', 0, 'desconto', 0, 'produto_id', null);
     return it;
@@ -178,13 +180,15 @@ begin
     where (v_tipo = 'peca' and x.tipo = 'produto' or v_tipo <> 'peca' and x.tipo = 'servico' or v_tipo = '')
       and (x.codigo::text = v_cod or lower(coalesce(x.codigo_barras, '')) = lower(v_cod) or lower(coalesce(x.referencia, '')) = lower(v_cod))
     order by (x.codigo::text = v_cod) desc, x.ativo desc limit 1;
-  if pr.id is null then
-    if v_tipo = 'peca' then
-      raise exception 'Código % não existe no estoque (conferi código, código de barras e referência). Tire o código para lançar como peça avulsa.', v_cod;
-    end if;
-    return it;   -- serviço ou terceiro com código livre: fica como está
-  end if;
-  return it || jsonb_build_object('produto_id', pr.id, 'codigo', pr.codigo::text)
+  -- código que não casa com o cadastro é código LIVRE (o da montadora ou o do catálogo de peças, como a tela
+  -- grava em usarDoCatalogo): fica no item, sem vínculo com o estoque e sem baixa. Quem avisa é o agente_orcamento,
+  -- que lista na resposta os códigos sem vínculo — nada fica errado em silêncio.
+  if pr.id is null then return it || jsonb_build_object('produto_id', null); end if;
+  -- casou pela REFERÊNCIA: o código que o Danilo mandou fica como está (é o que sai impresso no orçamento);
+  -- casou pelo código ou pelo código de barras: grava a grafia do cadastro
+  return it || jsonb_build_object('produto_id', pr.id)
+            || case when pr.codigo::text = v_cod or lower(coalesce(pr.codigo_barras, '')) = lower(v_cod)
+                    then jsonb_build_object('codigo', pr.codigo::text) else '{}'::jsonb end
             || case when v_pega_custo and pr.tipo = 'produto' then jsonb_build_object('custo_unit', pr.custo) else '{}'::jsonb end;
 end $$;
 
@@ -199,7 +203,7 @@ declare
   o public.orcamentos; v_acao text; v_num int := nullif(p->>'numero', '')::int; v_id uuid := nullif(p->>'id', '')::uuid;
   v_sit text; v_itens jsonb := '[]'::jsonb; v_tira uuid[] := '{}'; it jsonb; v_pay jsonb; v_res jsonb; v_antes jsonb;
   v_sub numeric := 0; v_custo numeric := 0; v_desc numeric; v_val date; v_dias int := nullif(p->>'validade_dias', '')::int;
-  v_mexe boolean := (p ? 'itens_incluir') or (p ? 'itens_alterar') or (p ? 'itens_remover');
+  v_mexe boolean := (p ? 'itens_incluir') or (p ? 'itens_alterar') or (p ? 'itens_remover'); v_fora_estoque jsonb;
 begin
   perform public.agente_exige_admin();
   v_acao := lower(coalesce(nullif(p->>'acao', ''), case when v_num is null and v_id is null then 'criar' else 'editar' end));
@@ -329,7 +333,12 @@ begin
   v_antes := case when o.id is null then null else to_jsonb(o) end;
   v_res := public.orcamento_salvar(v_pay);
   perform public.agente_registrar('orcamento', p, 'orcamentos', (v_res->>'id'), v_antes, v_res);
-  return v_res || jsonb_build_object('acao', v_acao, 'numero', public.orc_numero_texto((v_res->>'numero')::int), 'n', (v_res->>'numero')::int,
+  v_fora_estoque := (select jsonb_agg(distinct i->>'codigo') from jsonb_array_elements(v_res->'itens') i
+                      where i->>'tipo' = 'peca' and coalesce(i->>'codigo', '') <> '' and (i->>'produto_id') is null);
+  return v_res || case when v_fora_estoque is not null then jsonb_build_object('codigos_fora_do_estoque', v_fora_estoque,
+      'sobre_os_codigos', 'Estes códigos não são do cadastro de produtos: ficam no item como referência, mas a aprovação NÃO dá baixa no estoque.')
+    else '{}'::jsonb end
+    || jsonb_build_object('acao', v_acao, 'numero', public.orc_numero_texto((v_res->>'numero')::int), 'n', (v_res->>'numero')::int,
     'situacao', public.orc_situacao(v_res->>'situacao', nullif(v_res->>'validade', '')::date),
     'link', 'https://gestao.dtcarcentroautomotivo.com.br/#/orcamento/' || (v_res->>'id'));
 end $$;

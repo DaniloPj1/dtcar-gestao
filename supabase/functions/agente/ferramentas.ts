@@ -354,7 +354,7 @@ export function criarServidor(db: Banco): McpServer {
     tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2), qtd: z.number().positive(),
     valor_unit: z.number().nonnegative().describe("Preço de venda unitário. Nunca invente: use o do cadastro (consultar_estoque) ou o que o Danilo passou"),
     custo_unit: z.number().nonnegative().optional().describe("Só se o Danilo informou (peça com código usa o custo do estoque)"),
-    codigo: z.string().optional().describe("Código da peça no estoque: liga no produto do cadastro e a aprovação dá baixa. Sem código é item avulso"),
+    codigo: z.string().optional().describe("Código da peça: o do cadastro (ou a referência dele) liga no produto e a aprovação dá baixa; outro código (catálogo, montadora) fica só como referência, sem baixa — a resposta avisa quais ficaram sem vínculo"),
     desconto: z.number().nonnegative().optional(), peca_do_cliente: z.boolean().optional(), qualidade: z.string().optional(),
   };
   const itemOrc = z.object({ ...campoItemOrc, qtd: campoItemOrc.qtd.default(1) }).strict();
@@ -375,7 +375,8 @@ export function criarServidor(db: Banco): McpServer {
       "Cliente e veículo: do cadastro (cliente_id/veiculo_id) ou só digitados (cliente {nome, telefone, doc, cep, rua, bairro}, veiculo {placa, marca, modelo, ano}) — " +
       "o cadastro é feito na aprovação, com o CPF e o endereço que estiverem aqui. " +
       "Itens: itens troca a lista inteira OU itens_incluir, itens_alterar [{id, qtd, valor_unit...}] e itens_remover [id] mexem no que já está lá (nunca os dois juntos; os ids vêm de buscar_orcamento). " +
-      "Peça com codigo do estoque dá baixa na aprovação; sem código é item avulso. Nunca invente preço: use o do cadastro ou o que o Danilo passou. " +
+      "Peça com o código do cadastro (ou a referência dele) dá baixa na aprovação; outro código fica só como referência e a resposta lista os que ficaram sem vínculo. " +
+      "Peça trazida pelo cliente: peca_do_cliente, que zera preço e custo. Nunca invente preço: use o do cadastro ou o que o Danilo passou. " +
       "validade (AAAA-MM-DD) ou validade_dias; sem nada, vale o padrão dos Ajustes. Ordem clara do Danilo: confirmar=true; excluir sempre com prévia e sim. " +
       "Na prévia de criar nada é gravado e o número ORC só sai na gravação.",
     inputSchema: z.object({
@@ -397,7 +398,7 @@ export function criarServidor(db: Banco): McpServer {
 
   s.registerTool("aprovar_orcamento", {
     title: "Orçamento aprovado: virar O.S.",
-    description: "O cliente aprovou: o orçamento vira O.S. com o próximo número, já em \"Aprovado · em execução\"; a peça com código do estoque sai do estoque aqui (é a única baixa do orçamento). " +
+    description: "O cliente aprovou: o orçamento vira O.S. com o próximo número, já em \"Aprovado · em execução\"; a peça ligada ao cadastro sai do estoque aqui (é a única baixa do orçamento). " +
       "Cliente ou veículo só digitados são cadastrados agora, com o CPF e o endereço do orçamento (telefone com DDD e placa são exigidos aí). " +
       "Regra do Danilo: o que não for tirado segue para a O.S.; o que for tirado (itens_fora, com os ids de buscar_orcamento) NÃO segue e fica registrado como " +
       "\"apontado pela oficina e não aprovado pelo cliente\", no orçamento e numa observação que sai na impressão da O.S. " +

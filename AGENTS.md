@@ -369,8 +369,14 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   e nunca o que virou O.S.) e ação `orcamento_aprovar` (`agente_orcamento_aprovar`, que chama a `orcamento_aprovar` com `p_gravar`).
   Itens: `itens` troca a lista inteira **ou** `itens_incluir`/`itens_alterar`/`itens_remover` mexem no que já está lá (nunca os dois juntos). Campo de item
   que não existe é recusado (no zod e no banco), id de item de outro orçamento nunca entra (o `orcamento_salvar` o descartaria em silêncio e o total sairia
-  errado) e `produto_id` **não vem de fora**: a peça é ligada ao cadastro pelo `codigo` (`agente_orc_item_estoque`, regra D3 como o v21/v40 — código que não
-  existe é recusado, o custo sai do estoque e a aprovação dá a baixa de verdade; sem código é item avulso). Orçamento novo sem validade nasce com
+  errado) e `produto_id` **não vem de fora**: a peça é ligada ao cadastro pelo `codigo` (`agente_orc_item_estoque`, regra D3 como o v21/v40 — o custo sai do
+  estoque e a aprovação dá a baixa de verdade). A busca aceita código, código de barras e **referência** (a tela grava a referência ou o código do catálogo de
+  peças no campo do código, `js/telas/ordem.js`); casando pela referência, a grafia que o Danilo mandou fica. Código que não é do cadastro vale como
+  **referência livre** (catálogo, montadora), sem vínculo e sem baixa — a resposta traz `codigos_fora_do_estoque` para o Claude avisar.
+  **O item de `itens_alterar` chega MESCLADO com o do banco**, então ele sempre tem `codigo`, `custo_unit`, `produto_id` e `fornecida_cliente` mesmo que o
+  pedido não tenha mandado nada disso: quem chama diz o que veio no pedido (`p_codigo_no_pedido`, `p_custo_do_estoque`, e `peca_do_cliente` lido antes de
+  `fornecida_cliente`). Sem isso, mudar a quantidade de uma peça lançada na tela era recusado, apagar o código não soltava o produto e "o cliente trouxe a
+  peça" marcava o item e continuava cobrando. Orçamento novo sem validade nasce com
   `cfg.validadeDias` (`orc_validade_padrao`), como a tela. Na aprovação, cliente só digitado recebe também o CPF, o nascimento e o endereço que estavam no
   orçamento (o mesmo `completarClienteNovo` da tela; CPF que já é de outro cliente vira `atencao` na resposta e o endereço vai assim mesmo).
   A `orcamento_aprovar` **não levanta exceção** quando não dá para aprovar (devolve `pode_aprovar: false` com os erros): o `agente_orcamento_aprovar`

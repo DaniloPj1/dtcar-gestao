@@ -15,7 +15,7 @@ import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
 import { z } from "npm:zod@4.3.6";
 // v50: cálculo da folha do mês (o mesmo js/folha.js da tela Funcionários), do GitHub NUMA VERSÃO TRAVADA (commit).
 // Mudou js/folha.js (ou o util.js que ele usa)? Troque o commit abaixo pelo da main com a mudança e publique a função "agente" de novo.
-import { calcularMes, eMecanicoDa, periodo, quintoDiaUtil, nomeMes } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/3b2696b0b1cfa3293d28bc5f82c2242765d923c2/js/folha.js";
+import { calcularMes, eMecanicoDa, periodo, quintoDiaUtil, nomeMes } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/921516a6907e021ccf1b2382fb5578d8f7c4b698/js/folha.js";
 
 // v58 (14/11/2026): oleo_filtros — litros/viscosidade do óleo e filtros do carro (catálogo + estoque), as mesmas regras da tela "Óleo e filtros".
 // Os módulos do site vêm do GitHub NUMA VERSÃO TRAVADA (commit). Mudou js/catalogo.js, js/fichaos.js, js/util.js ou catalogo/*.csv (catalogodados.js)?

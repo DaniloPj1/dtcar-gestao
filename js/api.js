@@ -282,7 +282,7 @@ function criarApiSupabase() {
     pedido: {
       chamar: async body => metodos.chamarFuncao("pedido", body, "O pedido de orçamento pelo app"),
       novo: async d => metodos.pedido.chamar({ acao: "novo", ...d }),
-      acrescentar: async (id, texto) => metodos.pedido.chamar({ acao: "acrescentar", id, texto }),
+      acrescentar: async (id, texto, itens = []) => metodos.pedido.chamar({ acao: "acrescentar", id, texto, ...(itens.length ? { itens } : {}) }),
     },
     /** Nome e nascimento do cliente pelo CPF, pela função "cpf" (API CPF; a chave fica no servidor; só administrador).
      *  Devolve { ok, encontrado, dados, origem } ou { ok: false, erro, desligada?, limite?, semRede? }. Não lança erro. */

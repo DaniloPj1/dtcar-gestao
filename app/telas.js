@@ -14,7 +14,7 @@ import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroPar
 import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conversaoDoItem, chaveDaPeca } from "../js/pecas.js";
 import { copiaClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
-import { ICONE_D } from "../js/appmecanico.js";
+import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
 import { acessoApp, foraDoHorario } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
 
@@ -255,18 +255,19 @@ function PedidoNovo({ onFeito, onCancelar }) {
   const { avisar } = useApp(); const pl = usarPlaca();
   // veio de "Iniciar serviço" (carro sem O.S.): a placa já chega buscada; contato continua opcional
   useEffect(() => { let p = ""; try { p = sessionStorage.getItem(CH_PLACA_PEDIDO) || ""; sessionStorage.removeItem(CH_PLACA_PEDIDO); } catch (e) { /* nada */ } if (p) pl.buscar(p); }, []);
-  const [mao, setMao] = useState({ modelo: "", ano: "" }), [nome, setNome] = useState(""), [whats, setWhats] = useState(""), [texto, setTexto] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const [mao, setMao] = useState({ modelo: "", ano: "" }), [nome, setNome] = useState(""), [whats, setWhats] = useState(""), [texto, setTexto] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [itens, setItens] = useState([]);
   const v = pl.veic, trava = useRef(false);
   const enviar = async () => {
     if (trava.current) return;
     const t = texto.trim();
     if (!v && !normPlaca(pl.placa.texto) && !nome.trim()) return setErro("Busque a placa ou informe o nome do cliente.");
-    if (t.length < 3) return setErro("Escreva o que é para orçar.");
+    if (t.length < 3 && !itens.length) return setErro("Marque os itens nos sistemas do carro ou escreva o que é para orçar.");
+    if (itens.some(i => i.falta)) return setErro("Escolha a posição dos itens marcados (dianteira, traseira…).");
     const tel = soDig(whats); if (tel && (tel.length < 10 || tel.length > 11)) return setErro("Informe o WhatsApp com DDD.");
     setErro(""); trava.current = true; setSalvando(true);
     try {
       const cli = v && v.cliente ? v.cliente : null;
-      const r = await api.pedido.novo({ texto: t, placa: v ? v.placa : normPlaca(pl.placa.texto), veiculo_id: v && v.id ? v.id : "", cliente_id: cli ? cli.id : "",
+      const r = await api.pedido.novo({ texto: t, itens: itens.map(i => ({ descricao: i.descricao, qtd: i.qtd })), placa: v ? v.placa : normPlaca(pl.placa.texto), veiculo_id: v && v.id ? v.id : "", cliente_id: cli ? cli.id : "",
         veiculo: v ? { marca: v.marca || "", modelo: v.modelo || "", ano: String(v.ano || "") } : { marca: "", modelo: mao.modelo.trim().toUpperCase(), ano: mao.ano },
         cliente: cli ? { nome: cli.nome, telefone: cli.telefone || "" } : { nome: MAIUSC(nome.trim()), telefone: tel } });
       onFeito(r);
@@ -281,9 +282,11 @@ function PedidoNovo({ onFeito, onCancelar }) {
     ${!(v && v.cliente) ? html`<${Cartao} titulo="Cliente (se souber)">
       <${Campo} id="pd-nome" rotulo="Nome"><input id="pd-nome" class="inp" autocomplete="off" placeholder="Nome do cliente" value=${nome} onInput=${e => setNome(e.target.value)} /></${Campo}>
       <${Campo} id="pd-whats" rotulo="WhatsApp"><input id="pd-whats" class="inp livre" inputmode="tel" autocomplete="off" placeholder="(27) 90000-0000" value=${whats} onInput=${e => setWhats(e.target.value)} onBlur=${() => { const d = soDig(whats); if (d.length >= 10) setWhats(fmtTel(d)); }} /></${Campo}></${Cartao}>` : null}
-    <${Cartao} titulo="O que é para orçar" id="pd-texto">
-      <textarea id="pd-area" class="area" rows="6" placeholder="Ex.: pastilhas e discos dianteiros, barulho na suspensão traseira, troca de óleo e filtros" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
-      <div class="nota">Sem preço e sem item: quem monta o orçamento é o sistema. Escreva tudo o que o cliente pediu e o que você viu no carro.</div></${Cartao}>
+    <${Cartao} titulo="Sistemas do carro" id="pd-sistemas"><div class="nota" style="margin-bottom:4px">Toque no sistema e marque o que precisa. Os itens chegam ao orçamento sem preço; os valores são lançados no sistema.</div>
+      <${SistemasCarro} onMuda=${setItens} />
+      ${itens.length ? html`<div class="lista-marcados" id="pd-marcados"><b>Marcados (${itens.length})</b>${itens.map((i, n) => html`<div key=${n} class=${i.falta ? "falta" : ""}>${i.qtd > 1 ? i.qtd + "× " : ""}${i.descricao}${i.falta ? " — falta a posição" : ""}</div>`)}</div>` : null}</${Cartao}>
+    <${Cartao} titulo="Observação (opcional)" id="pd-texto">
+      <textarea id="pd-area" class="area" rows="4" placeholder="O que não está na lista, o que o cliente reclamou, o que você viu no carro" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></${Cartao}>
     <button type="button" class="link" onClick=${onCancelar}>Cancelar e voltar aos orçamentos</button>
   </${Tela}>`;
 }
@@ -293,10 +296,12 @@ function Orcamentos() {
   const [abertoId, setAbertoId] = useState("");   // barra de uma linha: o conteúdo só aparece ao tocar (regra do Danilo, 17/11/2026)
   const [novo, setNovo] = useState(() => { try { return !!sessionStorage.getItem(CH_PLACA_PEDIDO); } catch (e) { return false; } }), [feito, setFeito] = useState(null), [acrescentar, setAcrescentar] = useState(null), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [q, setQ] = useState("");
   const abertos = useMemo(() => (dados.orcamentos || []).filter(ORC_ABERTO).filter(o => ORC_MEU(o, perfil)).filter(o => { const n = norm(q), p = normPlaca(q); return !q.trim() || norm((o.cliente || {}).nome).includes(n) || (p.length >= 3 && normPlaca((o.veiculo || {}).placa).includes(p)) || String(o.numero) === soDig(q) || norm(o.reclamacao).includes(n); }).sort((a, b) => b.numero - a.numero), [dados.orcamentos, q]);
+  const [acrItens, setAcrItens] = useState([]);
   const gravarAcrescimo = async () => {
-    const t = texto.trim(); if (t.length < 3) return avisar("Escreva o que é para acrescentar.", true);
+    const t = texto.trim(); if (t.length < 3 && !acrItens.length) return avisar("Marque os itens ou escreva o que é para acrescentar.", true);
+    if (acrItens.some(i => i.falta)) return avisar("Escolha a posição dos itens marcados.", true);
     setSalvando(true);
-    try { await api.pedido.acrescentar(acrescentar.id, t); avisar("Acrescentado ao " + numORC(acrescentar.numero) + ". O sistema foi avisado."); setAcrescentar(null); setTexto(""); await recarregarOrcamentos(); }
+    try { await api.pedido.acrescentar(acrescentar.id, t, acrItens.map(i => ({ descricao: i.descricao, qtd: i.qtd }))); avisar("Acrescentado ao " + numORC(acrescentar.numero) + ". O sistema foi avisado."); setAcrescentar(null); setTexto(""); await recarregarOrcamentos(); }
     catch (x) { avisar("Não foi possível acrescentar: " + (x.message || x), true); } finally { setSalvando(false); }
   };
   usarPasso(novo, () => setNovo(false));
@@ -318,16 +323,55 @@ function Orcamentos() {
         <${KV} a="Pedido em" b=${fmtData((o.criado_em || "").slice(0, 10)) + (o.consultor_nome ? " · " + o.consultor_nome : "")} p />
         <${Pedido} texto=${o.reclamacao} />
         ${o.validade ? html`<div class="nota">Válido até ${fmtData(o.validade)}.</div>` : null}
-        <button type="button" class="btn-barra claro" data-acrescentar=${o.id} onClick=${() => { setAcrescentar(o); setTexto(""); }}><${Ic} n="orc" t=${20} />Acrescentar ao pedido</button></div>` : null}</section>`)}
+        <button type="button" class="btn-barra claro" data-acrescentar=${o.id} onClick=${() => { setAcrescentar(o); setTexto(""); setAcrItens([]); }}><${Ic} n="orc" t=${20} />Acrescentar ao pedido</button></div>` : null}</section>`)}
     ${acrescentar ? html`<${Quadro} titulo=${"Acrescentar ao " + numORC(acrescentar.numero)} onFechar=${() => setAcrescentar(null)}>
       <p class="nota">${veicTxt(acrescentar)}. O que mais é para orçar neste carro?</p>
-      <textarea id="ac-area" class="area" rows="4" placeholder="Ex.: palhetas e óleo do câmbio" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+      <${SistemasCarro} onMuda=${setAcrItens} />
+      ${acrItens.length ? html`<div class="lista-marcados"><b>Marcados (${acrItens.length})</b>${acrItens.map((i, n) => html`<div key=${n} class=${i.falta ? "falta" : ""}>${i.qtd > 1 ? i.qtd + "× " : ""}${i.descricao}</div>`)}</div>` : null}
+      <textarea id="ac-area" class="area" rows="3" placeholder="Observação (opcional): o que não está na lista" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
       <button type="button" class="btn-acao" id="ac-gravar" disabled=${salvando} onClick=${gravarAcrescimo}>${salvando ? "Gravando…" : "Acrescentar"}</button>
       <button type="button" class="link" onClick=${() => setAcrescentar(null)}>Cancelar</button></${Quadro}>` : null}
     ${feito ? html`<${Quadro} titulo=${numORC(feito.numero) + " enviado"} onFechar=${() => setFeito(null)}>
       <p>O pedido chegou ao sistema com o aviso de novo orçamento. Quando for aprovado, o aviso aparece aqui em Orçamentos.</p>
       <button type="button" class="btn-acao" id="pd-entendi" onClick=${() => setFeito(null)}>Entendi</button></${Quadro}>` : null}
   </${Tela}>`;
+}
+
+
+/* ---------------- SISTEMAS DO CARRO: marcar os itens do orçamento (o mesmo do app do mecânico; pedido do Danilo, 18/11/2026) ----------------
+ * A lista vem de js/appmecanico.js (padrão + ajustes do administrador em Sistema › App do mecânico). Sem preço: os itens vão para o
+ * orçamento com valor zero e o Danilo põe os valores no sistema. onMuda recebe [{ descricao, qtd }]. */
+const IcPeca = ({ nome, t = 30 }) => html`<svg width=${t} height=${t} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${ICONE_D[nome] || ICONE_D.chave || ""} /></svg>`;
+function SistemasCarro({ onMuda }) {
+  const { cfg } = useApp();
+  const sistemas = useMemo(() => catalogoDoApp(cfg).filter(s => s.pecas.length), [cfg]);
+  const [ativo, setAtivo] = useState(""), [pick, setPick] = useState({});   // pick: { "<sis>|<peça>": { q, pos } }
+  const chave = (s, p) => s.id + "|" + p.orig;
+  useEffect(() => {
+    const itens = [];
+    sistemas.forEach(s => s.pecas.forEach(p => { const v = pick[chave(s, p)]; if (v) itens.push({ descricao: nomeItemApp(p, v), qtd: p.tipo === "par" || p.tipo === "cont" ? v.q : 1, falta: opcoesPosicao(p).lista.length > 0 && !v.pos }); }));
+    onMuda(itens);
+  }, [pick]);
+  const muda = (k, v) => setPick(o => { const n = { ...o }; if (v) n[k] = v; else delete n[k]; if (v && k === "sd|Bandeja / balança") delete n["sd|Bucha da bandeja"]; return n; });
+  const sis = sistemas.find(s => s.id === ativo);
+  usarPasso(!!ativo, () => setAtivo(""));
+  const marcadosEm = s => s.pecas.filter(p => pick[chave(s, p)]).length;
+  if (!sis) return html`<div class="sis-carro" id="sis-carro">${sistemas.map(s => html`<button type="button" key=${s.id} class="sistema" data-sis=${s.id} onClick=${() => setAtivo(s.id)}>
+      <${IcPeca} nome=${s.icone} t=${34} /><span>${s.nome}</span>${marcadosEm(s) ? html`<em class="bolinha">${marcadosEm(s)}</em>` : null}</button>`)}</div>`;
+  return html`<div class="sis-pecas" id="sis-pecas">
+    <div class="linha"><button type="button" class="btn-busca g" aria-label="Voltar aos sistemas" style="background:#fff;color:#2f6fb5;border:1.5px solid #2f6fb5" onClick=${() => setAtivo("")}>‹</button>
+      <div class="res-titulo" style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px"><${IcPeca} nome=${sis.icone} t=${24} />${sis.nome.toUpperCase()}</div></div>
+    ${sis.pecas.map(p => { const k = chave(sis, p), v = pick[k], op = opcoesPosicao(p);
+      const qtd = p.tipo === "par" ? html`<div class="peca-q">${[1, 2].map(n => html`<button type="button" key=${n} aria-pressed=${v && v.q === n ? "true" : "false"} onClick=${() => muda(k, v && v.q === n ? null : { q: n, pos: v ? v.pos : "" })}>${n}</button>`)}</div>`
+        : p.tipo === "cont" ? html`<div class="peca-q"><button type="button" aria-label="Menos" onClick=${() => muda(k, v && v.q > 1 ? { ...v, q: v.q - 1 } : null)}>−</button><b>${v ? v.q : 0}</b><button type="button" aria-label="Mais" onClick=${() => muda(k, { q: (v ? v.q : 0) + 1, pos: v ? v.pos : "" })}>+</button></div>` : null;
+      return html`<div key=${k} class=${"peca-app" + (v ? " on" : "")} data-peca=${p.orig}>
+        <button type="button" class="peca-topo" aria-pressed=${v ? "true" : "false"} onClick=${() => { if (p.tipo === "par" || p.tipo === "cont") muda(k, v ? null : { q: 1, pos: "" }); else muda(k, v ? null : { q: 1, pos: "" }); }}>
+          <span class="peca-ic"><${IcPeca} nome=${p.icone} t=${30} /></span><span class="peca-nome">${p.nome}</span><span class="peca-cx">${v ? html`<${Ic} n="check" t=${16} sw=${2.6} />` : null}</span></button>
+        ${v && (qtd || op.lista.length) ? html`<div class="peca-op">${qtd}
+          ${op.lista.length ? html`<div class="peca-pos">${op.lista.map(nm => { const at = v.pos ? v.pos.split(", ") : [], on = op.multi ? at.includes(nm) : v.pos === nm;
+            return html`<button type="button" key=${nm} aria-pressed=${on ? "true" : "false"} onClick=${() => muda(k, { ...v, pos: op.multi ? (on ? at.filter(x => x !== nm) : at.concat([nm])).join(", ") : (on ? "" : nm) })}>${nm}</button>`; })}</div>` : null}
+          ${op.lista.length && !v.pos ? html`<span class="nota">Escolha a posição.</span>` : null}</div>` : null}</div>`; })}
+    <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAtivo("")}>Pronto: voltar aos sistemas</button></div>`;
 }
 
 /* ---------------- O.S. no leiaute do app (nada do sistema abre dentro do app — regra do Danilo, 16/11/2026) ----------------
@@ -337,6 +381,7 @@ function OSDetalhe({ o, onFechar }) {
   const { perfil, avisar } = useApp();
   const ver = pode(perfil, "verValores");
   const [det, setDet] = useState(null), [erro, setErro] = useState(""), [texto, setTexto] = useState(""), [salvando, setSalvando] = useState(false), [escrevendo, setEscrevendo] = useState(false);
+  const [osItens, setOsItens] = useState([]);
   const carregar = () => api.ordem(o.id).then(d => { setDet(d); setErro(""); }).catch(() => setErro("Não deu para carregar os itens da O.S. (sem internet?)."));
   useEffect(() => { let vivo = true; api.ordem(o.id).then(d => vivo && setDet(d)).catch(() => vivo && setErro("Não deu para carregar os itens da O.S. (sem internet?).")); return () => { vivo = false; }; }, [o.id]);
   const responsavel = perfil.papel === "admin" || perfil.papel === "consultor" || (o.mecanico_id && o.mecanico_id === perfil.id);
@@ -344,9 +389,10 @@ function OSDetalhe({ o, onFechar }) {
   const itens = (det && det.itens || []).filter(i => i.aprovado !== false), serv = itens.filter(i => i.tipo === "servico"), pecas = itens.filter(i => i.tipo !== "servico");
   const aOrcar = (det && det.eventos || []).filter(e => e.tipo === "a_orcar");
   const gravar = async () => {
-    const t = texto.trim(); if (t.length < 3) return avisar("Escreva o que é para orçar.", true);
+    if (osItens.some(i => i.falta)) return avisar("Escolha a posição dos itens marcados.", true);
+    const t = [osItens.map(i => (i.qtd > 1 ? i.qtd + "x " : "") + i.descricao).join("; "), texto.trim()].filter(Boolean).join(" · "); if (t.length < 3) return avisar("Marque os itens ou escreva o que é para orçar.", true);
     setSalvando(true);
-    try { await api.evento(o.id, "a_orcar", t, perfil.nome); avisar("Itens a orçar enviados ao sistema para a " + numOS(o.numero) + "."); setTexto(""); setEscrevendo(false); await carregar(); }
+    try { await api.evento(o.id, "a_orcar", t, perfil.nome); avisar("Itens a orçar enviados ao sistema para a " + numOS(o.numero) + "."); setTexto(""); setOsItens([]); setEscrevendo(false); await carregar(); }
     catch (x) { avisar("Não foi possível enviar: " + (x.message || x), true); } finally { setSalvando(false); }
   };
   const veic = o.veiculo || {};
@@ -362,7 +408,9 @@ function OSDetalhe({ o, onFechar }) {
       ${ver ? html`<${KV} a="Total" b=${reais(o.total)} />` : null}`}
     ${aOrcar.length ? html`<div class="sec"><h3>Itens a orçar (pedidos pelo app)</h3>${aOrcar.map(e => html`<div class="acrescimo" key=${e.id}>— ${e.usuario_nome || "App"}, ${fmtData((e.criado_em || "").slice(0, 10))}: ${e.texto}</div>`)}</div>` : null}
     ${podeOrcar ? (escrevendo ? html`<div class="sec"><h3>Mais itens a orçar nesta O.S.</h3>
-        <textarea id="os-area" class="area" rows="4" placeholder="Ex.: vi a bucha da bandeja rasgada; orçar também o terminal" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+        <${SistemasCarro} onMuda=${setOsItens} />
+        ${osItens.length ? html`<div class="lista-marcados"><b>Marcados (${osItens.length})</b>${osItens.map((x, n) => html`<div key=${n} class=${x.falta ? "falta" : ""}>${x.qtd > 1 ? x.qtd + "× " : ""}${x.descricao}</div>`)}</div>` : null}
+        <textarea id="os-area" class="area" rows="3" placeholder="Ex.: vi a bucha da bandeja rasgada; orçar também o terminal" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
         <button type="button" class="btn-acao" id="os-orcar-gravar" disabled=${salvando} onClick=${gravar}>${salvando ? "Enviando…" : "Enviar para o sistema"}</button>
         <button type="button" class="link" onClick=${() => setEscrevendo(false)}>Cancelar</button></div>`
       : html`<button type="button" class="btn-barra claro" id="os-orcar" onClick=${() => setEscrevendo(true)}><${Ic} n="orc" t=${20} />Acrescentar itens a orçar</button>`) : null}

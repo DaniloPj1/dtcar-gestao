@@ -1560,11 +1560,16 @@ export function criarServidor(db: Banco): McpServer {
   }, async ({ acao }) => resposta(await email({ acao: acao === "enviar" ? "backup_leitura" : "backup_situacao" })));
 
 
+
   // ---------- Orçamento separado da O.S. (ORC, v52/v53 — conector em 18/11/2026) ----------
   // Grava pelas mesmas funções da tela: orcamento_salvar (cabeçalho + itens numa transação) e
   // orcamento_aprovar (vira O.S.). Sem SQL novo. O histórico vai para agente_acoes aqui mesmo.
   type ItemOrc = Record<string, unknown>;
   const orcNum = (n: unknown) => "ORC-" + String(n ?? "").padStart(5, "0");
+  const hojeBR = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+  /** "vencido" não é gravado: é calculado na leitura, como situacaoORC em js/regras.js */
+  const sitOrc = (o: Record<string, unknown>) =>
+    (o.situacao === "elaboracao" || o.situacao === "enviado") && o.validade && String(o.validade) < hojeBR() ? "vencido" : String(o.situacao || "");
   const somaOrc = (itens: ItemOrc[], desconto: number) => {
     let sub = 0, custo = 0;
     for (const i of itens) {
@@ -1584,20 +1589,21 @@ export function criarServidor(db: Banco): McpServer {
     if (e2) return { erro: e2.message };
     return { orc: o, itens: (itens || []) as ItemOrc[] };
   };
+  /** O histórico do agente (v19) é só do administrador: se não gravar, diga, não finja que gravou. */
   const anotar = async (ferramenta: string, p: { pedido?: string; registro?: string; antes?: unknown; depois?: unknown }) => {
-    if (!db.from) return;
-    try {
-      await db.from("agente_acoes").insert({
-        ferramenta, pedido: p.pedido || "", tabela: "orcamentos", registro: String(p.registro || ""),
-        antes: p.antes ?? null, depois: p.depois ?? null, confirmado_por: "Danilo (conector)",
-      });
-    } catch { /* o histórico não pode derrubar a gravação */ }
+    if (!db.from) return "sem acesso às tabelas";
+    const { error } = await db.from("agente_acoes").insert({
+      ferramenta, pedido: p.pedido || "", tabela: "orcamentos", registro: String(p.registro || ""),
+      antes: p.antes ?? null, depois: p.depois ?? null, confirmado_por: "Danilo (conector)",
+    });
+    return error ? error.message : "";
   };
 
   s.registerTool("buscar_orcamento", {
     title: "Buscar orçamento (ORC)",
     description: "Lê os orçamentos separados da O.S. (numeração ORC): pelo número (com todos os itens), pela placa do veículo (os 5 últimos) " +
-      "ou a lista de uma situação (elaboracao, enviado, aprovado, recusado, vencido). Sem nada: os que estão em aberto (em elaboração e enviados). " +
+      "ou a lista de uma situação (elaboracao, enviado, aprovado, recusado, vencido — vencido é o que passou da validade e ainda não foi respondido). " +
+      "Sem nada: os que estão em aberto (em elaboração e enviados, com os vencidos à parte). " +
       "Orçamento não mexe em estoque nem no financeiro; ele só vira O.S. quando o cliente aprova (orcamento acao=aprovar).",
     inputSchema: z.object({
       numero: z.number().int().positive().optional().describe("Número do ORC (só os números, sem o ORC-)"),
@@ -1612,35 +1618,41 @@ export function criarServidor(db: Banco): McpServer {
       const r = await lerOrc(numero);
       if ("erro" in r) return falha(r.erro as string);
       const o = r.orc as Record<string, unknown>;
-      return texto({ ...o, numero_formatado: orcNum(o.numero), itens: r.itens, ...somaOrc(r.itens, Number(o.desconto || 0)), abrir_no_sistema: SITE + "/#/orcamento/" + o.id });
+      return texto({ ...o, situacao: sitOrc(o), gravado_como: o.situacao, numero_formatado: orcNum(o.numero), itens: r.itens,
+        ...somaOrc(r.itens, Number(o.desconto || 0)), abrir_no_sistema: SITE + "/#/orcamento/" + o.id });
     }
-    let q = db.from("orcamentos").select("id,numero,situacao,cliente,veiculo,reclamacao,total,custo,validade,os_numero,consultor_nome,criado_em,atualizado_em");
+    let q = db.from("orcamentos").select("id,numero,situacao,cliente,veiculo,reclamacao,desconto,total,custo,validade,motivo,os_numero,consultor_nome,criado_em,atualizado_em");
     if (placa) q = q.eq("veiculo->>placa", String(placa).toUpperCase().replace(/[^A-Z0-9]/g, ""));
-    if (situacao) q = q.eq("situacao", situacao);
+    // "vencido" e os filtros de situação: o banco guarda só elaboracao/enviado/aprovado/recusado
+    if (situacao === "vencido") q = q.in("situacao", ["elaboracao", "enviado"]).lt("validade", hojeBR());
+    else if (situacao) q = q.eq("situacao", situacao);
     else if (!placa) q = q.in("situacao", ["elaboracao", "enviado"]);
     const { data, error } = await q.order("numero", { ascending: false }).range(0, (placa ? Math.min(limite, 5) : limite) - 1);
     if (error) return falha(error.message);
-    const linhas = ((data || []) as Array<Record<string, unknown>>).map((o) => ({ ...o, numero_formatado: orcNum(o.numero) }));
+    const linhas = ((data || []) as Array<Record<string, unknown>>).map((o) => ({ ...o, situacao: sitOrc(o), numero_formatado: orcNum(o.numero) }));
     return texto({ quantidade: linhas.length, orcamentos: linhas });
   });
 
   s.registerTool("orcamento", {
     title: "Criar, alterar ou aprovar orçamento (ORC)",
     description: "Mexe no orçamento separado da O.S. — o mesmo que a tela Orçamentos. acao: salvar (padrão: cria sem numero, altera com numero), " +
-      "enviar (marca como enviado ao cliente), recusar (motivo obrigatório), aprovar (vira O.S. já em execução, com vínculo nos dois sentidos) e excluir. " +
-      "Itens: itens_incluir (como lancar_itens_os), itens_alterar [{id, qtd, valor_unit, custo_unit, desconto, descricao}] e itens_remover [id] — os ids vêm de buscar_orcamento. " +
-      "Cliente: cliente_id do cadastro ou cliente {nome, telefone com DDD}. Veículo: veiculo_id, ou placa (do cadastro), ou veiculo {placa, marca, modelo, ano}. " +
-      "Orçamento NÃO mexe em estoque nem no financeiro: a peça só sai do estoque quando ele vira O.S. " +
+      "enviar (só marca como enviado ao cliente; quem manda a mensagem é whatsapp_enviar), recusar (motivo obrigatório), aprovar (vira O.S. já em execução, com vínculo nos dois sentidos) e excluir. " +
+      "Itens: itens_incluir, itens_alterar [{id, qtd, valor_unit, custo_unit, desconto, descricao}] e itens_remover [id] — os ids vêm de buscar_orcamento. " +
+      "Peça com código do estoque entra ligada ao produto (é ela que dá baixa quando o orçamento virar O.S.); sem código é item genérico e não mexe no estoque. " +
+      "REGRA DO DANILO (18/11/2026): orçamento nenhum leva marca de peça na descrição. " +
+      "Cliente: cliente_id do cadastro ou cliente {nome, telefone com DDD}. Veículo: veiculo_id, placa do cadastro, ou veiculo {placa, marca, modelo, ano}. " +
+      "Orçamento não mexe em estoque nem no financeiro: a peça só sai do estoque quando ele vira O.S. " +
       "Com confirmar=false devolve a prévia (itens, total, custo e os erros que impedem gravar); ordem clara do Danilo: confirmar=true. " +
-      "Orçamento já aprovado não pode ser alterado. acao=aprovar com itens_fora [id] deixa de fora os itens que o cliente não quis (eles ficam no orçamento, marcados como não aprovados).",
+      "Orçamento já aprovado não pode ser alterado nem excluído. acao=aprovar com itens_fora [id] deixa de fora os itens que o cliente não quis " +
+      "(eles ficam no orçamento, marcados como não aprovados); aprovado_por e forma_aprovacao dizem QUEM aprovou e COMO (não é forma de pagamento) e saem impressos na O.S.",
     inputSchema: z.object({
       numero: z.number().int().positive().optional().describe("Número do ORC a alterar (sem numero = orçamento novo)"),
       acao: z.enum(["salvar", "enviar", "recusar", "aprovar", "excluir"]).default("salvar"),
       cliente_id: z.string().uuid().optional(),
-      cliente: z.object({ nome: z.string(), telefone: z.string().optional() }).optional(),
+      cliente: z.object({ nome: z.string().optional(), telefone: z.string().optional() }).optional(),
       veiculo_id: z.string().uuid().optional(),
       placa: z.string().optional(),
-      veiculo: z.object({ placa: z.string().optional(), marca: z.string(), modelo: z.string(), ano: z.union([z.number(), z.string()]), cor: z.string().optional(), motor: z.string().optional() }).optional(),
+      veiculo: z.object({ placa: z.string().optional(), marca: z.string().optional(), modelo: z.string().optional(), ano: z.union([z.number(), z.string()]).optional(), cor: z.string().optional(), motor: z.string().optional() }).optional(),
       reclamacao: z.string().optional().describe("O que o cliente pediu"),
       obs: z.string().optional().describe("Observações que saem no orçamento"),
       obs_internas: z.string().optional(),
@@ -1648,70 +1660,103 @@ export function criarServidor(db: Banco): McpServer {
       validade: data.optional().describe("Validade do orçamento (AAAA-MM-DD)"),
       desconto: z.number().nonnegative().optional().describe("Desconto do total, em reais"),
       itens_incluir: z.array(z.object({
-        tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2), qtd: z.number().positive().default(1),
-        valor_unit: z.number().nonnegative(), custo_unit: z.number().nonnegative().optional(), codigo: z.string().optional(),
+        tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2).describe("Sem marca de peça (regra do Danilo)"),
+        qtd: z.number().positive().default(1), valor_unit: z.number().nonnegative(), custo_unit: z.number().nonnegative().optional(),
+        codigo: z.string().optional().describe("Código da peça no estoque do DTCar Gestão"), desconto: z.number().nonnegative().optional(),
         peca_do_cliente: z.boolean().optional(),
       })).max(40).optional(),
       itens_alterar: z.array(z.object({ id: z.string().uuid() }).passthrough()).max(60).optional(),
       itens_remover: z.array(z.string().uuid()).max(60).optional(),
       itens_fora: z.array(z.string().uuid()).max(60).optional().describe("acao=aprovar: itens que o cliente não aprovou"),
       motivo: z.string().optional().describe("acao=recusar: por que o cliente não quis"),
-      forma_pagamento: z.string().optional().describe("acao=aprovar: forma de pagamento combinada"),
+      aprovado_por: z.string().optional().describe("acao=aprovar: quem aprovou (o cliente). Vazio = o nome do cliente do cadastro"),
+      forma_aprovacao: z.enum(["WhatsApp", "Telefone", "Na oficina"]).optional().describe("acao=aprovar: COMO o cliente aprovou"),
       pedido, confirmar,
     }),
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async ({ numero, acao, confirmar: grava, pedido: ped, itens_incluir, itens_alterar, itens_remover, itens_fora, motivo, forma_pagamento, placa, ...p }) => {
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  }, async ({ numero, acao, confirmar: grava, pedido: ped, itens_incluir, itens_alterar, itens_remover, itens_fora, motivo, aprovado_por, forma_aprovacao, placa, ...p }) => {
     if (!db.from) return falha("Conector sem acesso de leitura às tabelas.");
     const atual = numero ? await lerOrc(numero) : null;
     if (atual && "erro" in atual) return falha(atual.erro as string);
     const o = (atual?.orc || {}) as Record<string, unknown>;
+    if (numero && o.situacao === "aprovado" && acao !== "aprovar")
+      return falha("O orçamento " + orcNum(numero) + " já virou a O.S. " + (o.os_numero || "?") + ": não pode mais ser alterado nem excluído. Mexa na O.S. (alterar_os).");
 
     if (acao === "aprovar" || acao === "excluir") {
       if (!numero) return falha("Informe o número do orçamento (ORC) para " + acao + ".");
       if (acao === "excluir") {
-        if (!grava) return texto({ gravado: false, aviso: "Vou apagar o orçamento " + orcNum(numero) + " e todos os itens dele. Confirma?", orcamento: { numero: o.numero, situacao: o.situacao, cliente: o.cliente, veiculo: o.veiculo, total: o.total } });
-        const { error } = await db.from("orcamentos").delete().eq("id", o.id);
+        if (!grava) return texto({ gravado: false, aviso: "Vou apagar o orçamento " + orcNum(numero) + " e todos os itens dele, inclusive os que o cliente não quis. Isso não volta. Confirma?", orcamento: { numero: o.numero, situacao: sitOrc(o), cliente: o.cliente, veiculo: o.veiculo, total: o.total, itens: (atual?.itens || []).length } });
+        const { data: apagados, error } = await db.from("orcamentos").delete().eq("id", o.id).select("id");
         if (error) return falha(error.message);
-        await anotar("orcamento", { pedido: ped, registro: String(o.id), antes: { ...o, itens: atual?.itens }, depois: null });
-        return texto({ gravado: true, apagado: orcNum(numero) });
+        if (!apagados || (apagados as unknown[]).length === 0) return falha("Nada foi apagado: o orçamento " + orcNum(numero) + " não saiu (apagar orçamento é só do administrador).");
+        const aviso = await anotar("orcamento", { pedido: ped, registro: String(o.id), antes: { ...o, itens: atual?.itens }, depois: null });
+        return texto({ gravado: true, apagado: orcNum(numero), ...(aviso ? { historico_nao_gravado: aviso } : {}) });
       }
       const { data: d, error } = await db.rpc("orcamento_aprovar", {
-        p_orcamento: o.id, p_itens_fora: itens_fora || [], p_por: ped || "Danilo", p_forma: forma_pagamento || "", p_gravar: grava === true,
+        p_orcamento: o.id, p_itens_fora: itens_fora || [], p_por: aprovado_por || "", p_forma: forma_aprovacao || "", p_gravar: grava === true,
       });
       if (error) return falha(error.message);
       const r = (d || {}) as Record<string, unknown>;
-      if (grava === true && r.ordem_id) await anotar("orcamento", { pedido: ped, registro: String(o.id), antes: o, depois: r });
-      return texto(r.ordem_numero ? { ...r, abrir_no_sistema: SITE + "/#/os/" + r.ordem_id } : r);
+      const erros = (r.erros || []) as string[];
+      if (grava === true && !r.gravado) return falha("O orçamento não virou O.S.: " + (erros.length ? erros.join(" ") : JSON.stringify(r)));
+      if (grava === true && r.os_numero) {
+        const aviso = await anotar("orcamento", { pedido: ped, registro: String(o.id), antes: o, depois: r });
+        return texto({ ...r, abrir_no_sistema: SITE + "/#/os/" + r.ordem_id, ...(aviso ? { historico_nao_gravado: aviso } : {}) });
+      }
+      return texto(r);
     }
 
     // salvar / enviar / recusar: monta a lista final de itens (a função do banco apaga o que não vier)
     const remover = new Set((itens_remover || []).map(String));
     const alterar = new Map((itens_alterar || []).map((i) => [String(i.id), i as ItemOrc]));
-    const itens: ItemOrc[] = (atual?.itens || []).filter((i) => !remover.has(String(i.id))).map((i) => ({ ...i, ...(alterar.get(String(i.id)) || {}) }));
-    for (const i of itens_incluir || []) {
-      const { peca_do_cliente, ...resto } = i;
-      itens.push({ ...resto, fornecida_cliente: peca_do_cliente === true, valor_unit: peca_do_cliente === true ? 0 : resto.valor_unit });
-    }
     const sobrando = [...remover, ...alterar.keys()].filter((id) => !(atual?.itens || []).some((i) => String(i.id) === id));
     if (sobrando.length) return falha("Estes itens não são do orçamento " + orcNum(numero) + ": " + sobrando.join(", ") + ".");
+    const itens: ItemOrc[] = (atual?.itens || []).filter((i) => !remover.has(String(i.id))).map((i) => ({ ...i, ...(alterar.get(String(i.id)) || {}) }));
+    const avisos: string[] = [];
+    for (const i of itens_incluir || []) {
+      const { peca_do_cliente, codigo, ...resto } = i;
+      const item: ItemOrc = { ...resto, codigo: codigo || "", qualidade: i.tipo === "peca" ? "original" : "", fornecida_cliente: peca_do_cliente === true };
+      // peça do estoque: liga no produto (é o produto_id que dá baixa quando o orçamento virar O.S.)
+      if (codigo) {
+        const cod = String(codigo).trim();
+        const acha = async (coluna: string) => ((await db.from("produtos").select("id,codigo,referencia,custo").eq(coluna, cod).limit(1)).data || []) as Array<Record<string, unknown>>;
+        const prod = (await acha("codigo"))[0] || (await acha("referencia"))[0];
+        if (prod) { item.produto_id = prod.id; if (item.custo_unit === undefined) item.custo_unit = Number(prod.custo) || 0; }
+        else avisos.push("Código " + codigo + " não está no estoque: o item entrou como genérico e não vai dar baixa.");
+      }
+      if (peca_do_cliente === true) { item.valor_unit = 0; item.custo_unit = 0; item.desconto = 0; }
+      itens.push(item);
+    }
 
     let veiculo = p.veiculo as Record<string, unknown> | undefined;
-    let veiculo_id = p.veiculo_id as string | undefined;
-    if (placa && !veiculo_id && !veiculo) {
+    let veiculo_id = (p.veiculo_id as string | undefined) ?? undefined;
+    if (!veiculo_id && placa) {
       const limpa = String(placa).toUpperCase().replace(/[^A-Z0-9]/g, "");
-      const { data: v } = await db.from("veiculos").select("id,placa,marca,modelo,ano,cor,motor").eq("placa", limpa).maybeSingle();
+      const { data: v, error: ev } = await db.from("veiculos").select("placa,marca,modelo,ano,cor,motor,id").eq("placa", limpa).maybeSingle();
+      if (ev) return falha(ev.message);
       if (!v) return falha("Placa " + limpa + " não está no cadastro. Use consultar_placa e passe veiculo {placa, marca, modelo, ano}.");
-      veiculo_id = (v as Record<string, unknown>).id as string; veiculo = v as Record<string, unknown>;
+      const { id, ...resto } = v as Record<string, unknown>;
+      veiculo_id = id as string; veiculo = { ...resto, ...(veiculo || {}) };
+    } else if (veiculo_id && !veiculo) {
+      const { data: v } = await db.from("veiculos").select("placa,marca,modelo,ano,cor,motor").eq("id", veiculo_id).maybeSingle();
+      if (v) veiculo = v as Record<string, unknown>;
+    }
+    let cliente = p.cliente as Record<string, unknown> | undefined;
+    const cliente_id = (p.cliente_id as string | undefined) ?? undefined;
+    if (cliente_id) {
+      const { data: c } = await db.from("clientes").select("nome,telefone").eq("id", cliente_id).maybeSingle();
+      if (c) cliente = { ...(c as Record<string, unknown>), ...(cliente || {}) };
     }
     const sit = acao === "enviar" ? "enviado" : acao === "recusar" ? "recusado" : (o.situacao as string) || "elaboracao";
     if (acao === "recusar" && !String(motivo || o.motivo || "").trim()) return falha("Informe o motivo da recusa.");
 
+    // cliente e veículo são um retrato: campo que não vier mantém o que já estava gravado
     const corpo: Record<string, unknown> = {
       ...(o.id ? { id: o.id } : {}),
-      cliente_id: p.cliente_id ?? o.cliente_id ?? null,
+      cliente_id: cliente_id ?? o.cliente_id ?? null,
       veiculo_id: veiculo_id ?? o.veiculo_id ?? null,
-      cliente: p.cliente ?? o.cliente ?? {},
-      veiculo: veiculo ?? o.veiculo ?? {},
+      cliente: { ...((o.cliente as Record<string, unknown>) || {}), ...(cliente || {}) },
+      veiculo: { ...((o.veiculo as Record<string, unknown>) || {}), ...(veiculo || {}) },
       reclamacao: p.reclamacao ?? o.reclamacao ?? "",
       obs: p.obs ?? o.obs ?? "",
       obs_internas: p.obs_internas ?? o.obs_internas ?? "",
@@ -1719,21 +1764,24 @@ export function criarServidor(db: Banco): McpServer {
       condicoes_pagamento: p.condicoes_pagamento ?? o.condicoes_pagamento ?? "",
       desconto: p.desconto ?? Number(o.desconto || 0),
       validade: p.validade ?? o.validade ?? null,
-      situacao: sit === "aprovado" ? "elaboracao" : sit,
+      situacao: sit,
       motivo: motivo ?? o.motivo ?? "",
       itens,
     };
-    if (!String((corpo.cliente as Record<string, unknown>)?.nome || "").trim() && !corpo.cliente_id)
-      return falha("Informe o cliente: cliente_id do cadastro (veja buscar_cliente) ou cliente {nome, telefone}.");
-    if (o.situacao === "aprovado") return falha("O orçamento " + orcNum(numero) + " já virou a O.S. " + (o.os_numero || "?") + ": não pode mais ser alterado.");
+    if (!String((corpo.cliente as Record<string, unknown>)?.nome || "").trim())
+      return falha("Informe o cliente: cliente_id de um cliente do cadastro (veja buscar_cliente) ou cliente {nome, telefone}.");
+    const contas = somaOrc(itens, Number(corpo.desconto || 0));
+    if (Number(corpo.desconto || 0) > contas.itens_valor + 0.001)
+      return falha("O desconto (" + corpo.desconto + ") não pode ser maior que o valor dos itens (" + contas.itens_valor + ").");
 
-    const resumo = { numero: o.numero ?? "novo", situacao: corpo.situacao, cliente: corpo.cliente, veiculo: corpo.veiculo, itens, ...somaOrc(itens, Number(corpo.desconto || 0)) };
+    const resumo = { numero: o.numero ?? "novo", situacao: corpo.situacao, cliente: corpo.cliente, veiculo: corpo.veiculo, itens, ...contas, ...(avisos.length ? { avisos } : {}) };
     if (grava !== true) return texto({ gravado: false, ...resumo });
     const { data: d, error } = await db.rpc("orcamento_salvar", { p: corpo });
     if (error) return falha(error.message);
     const novo = (d || {}) as Record<string, unknown>;
-    await anotar("orcamento", { pedido: ped, registro: String(novo.id || o.id || ""), antes: o.id ? { ...o, itens: atual?.itens } : null, depois: novo });
-    return texto({ gravado: true, ...novo, numero_formatado: orcNum(novo.numero), abrir_no_sistema: SITE + "/#/orcamento/" + novo.id });
+    const aviso = await anotar("orcamento", { pedido: ped, registro: String(novo.id || o.id || ""), antes: o.id ? { ...o, itens: atual?.itens } : null, depois: novo });
+    return texto({ gravado: true, ...novo, numero_formatado: orcNum(novo.numero), ...(avisos.length ? { avisos } : {}),
+      ...(aviso ? { historico_nao_gravado: aviso } : {}), abrir_no_sistema: SITE + "/#/orcamento/" + novo.id });
   });
 
   return s;

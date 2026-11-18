@@ -544,28 +544,55 @@ confere("instruções v55: só busca na API quando não tem os dados", String(in
 confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));
 
 // ---------- orçamento separado da O.S. (ORC, 18/11/2026) ----------
-tabelasF.orcamentos = [{ id: "orc1", numero: 5, situacao: "elaboracao", cliente_id: null, veiculo_id: "v1", desconto: 0, total: 100, custo: 60,
-  cliente: { nome: "CLIENTE DIVERSOS" }, veiculo: { placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018" }, reclamacao: "suspensão", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, os_numero: null }];
-tabelasF.orcamento_itens = [{ id: "11111111-1111-4111-8111-111111111111", orcamento_id: "orc1", tipo: "peca", descricao: "BIELETA", qtd: 2, valor_unit: 50, custo_unit: 30, desconto: 0, posicao: 1 }];
+const ITEM1 = "11111111-1111-4111-8111-111111111111";
+tabelasF.orcamentos = [{ id: "orc1", numero: 5, situacao: "elaboracao", cliente_id: null, veiculo_id: null, desconto: 0, total: 100, custo: 60,
+  cliente: { nome: "CLIENTE DIVERSOS", telefone: "27999990001" }, veiculo: { placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018", cor: "PRATA" },
+  reclamacao: "suspensão", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, os_numero: null }];
+tabelasF.orcamento_itens = [{ id: ITEM1, orcamento_id: "orc1", tipo: "peca", descricao: "BIELETA", qtd: 2, valor_unit: 50, custo_unit: 30, desconto: 0, posicao: 1, produto_id: "p1", codigo: "640" }];
 tabelasF.agente_acoes = [];
-tabelasF.veiculos = [{ id: "v1", placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018" }];
+tabelasF.veiculos = [{ id: "11111111-2222-4333-8444-555555555555", placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018", cor: "PRATA", motor: "1.4" }];
+tabelasF.clientes = [{ id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", nome: "JADI", telefone: "27997904328" }];
+tabelasF.produtos = [{ id: "p1", codigo: "640", referencia: "640", descricao: "BIELETA", custo: 30, tipo: "peca" }];
 respostas.orcamento_salvar = { id: "orc1", numero: 5, situacao: "elaboracao", total: 310, custo: 60 };
-respostas.orcamento_aprovar = { ordem_id: "os9", ordem_numero: 1940, erros: [], avisos: [] };
+respostas.orcamento_aprovar = { pode_aprovar: true, gravado: true, ordem_id: "os9", os_numero: 1940, erros: [], avisos: [] };
 
 c = await chama("buscar_orcamento", { numero: 5 });
 let jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
 confere("buscar_orcamento: traz o ORC com itens e totais", jo.numero_formatado === "ORC-00005" && jo.itens?.length === 1 && jo.total === 100, JSON.stringify(jo).slice(0, 200));
 c = await chama("buscar_orcamento", { numero: 99 });
 confere("buscar_orcamento: número que não existe é recusado", c.r?.isError === true);
+tabelasF.orcamentos[0].validade = "2020-01-01";
+c = await chama("buscar_orcamento", { numero: 5 });
+jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
+confere("buscar_orcamento: validade passada aparece como vencido (não é gravado)", jo.situacao === "vencido" && jo.gravado_como === "elaboracao", JSON.stringify(jo).slice(0, 120));
+tabelasF.orcamentos[0].validade = null;
 
 c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50 }] });
 jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
 confere("orcamento sem confirmar: só a prévia, sem gravar", jo.gravado === false && jo.itens?.length === 2 && jo.total === 200 && !c.fn, JSON.stringify(jo).slice(0, 200));
 
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "BIELETA", qtd: 2, valor_unit: 53, codigo: "640" }], confirmar: true, pedido: "lançar peça" });
+let pgrav = (c.args?.p as L)?.itens as L[];
+confere("orcamento: peça com código entra ligada ao produto (é ela que dá baixa na O.S.)", c.fn === "orcamento_salvar" && pgrav?.[1]?.produto_id === "p1" && pgrav?.[1]?.custo_unit === 30, JSON.stringify(pgrav?.[1]));
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "peca", descricao: "PECA SEM CODIGO", qtd: 1, valor_unit: 10, codigo: "999" }], confirmar: true });
+jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
+confere("orcamento: código fora do estoque avisa que não dá baixa", /não está no estoque/.test(JSON.stringify(jo.avisos || [])), JSON.stringify(jo.avisos));
+
 c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50 }], confirmar: true, pedido: "lançar mão de obra" });
 confere("orcamento confirmado → orcamento_salvar com o item novo e o que já havia", c.fn === "orcamento_salvar"
   && (c.args?.p as L)?.id === "orc1" && ((c.args?.p as L)?.itens as L[])?.length === 2, JSON.stringify(c.args).slice(0, 220));
-confere("orcamento: a gravação fica no histórico do agente", inseridos.some(([t, l]) => t === "agente_acoes" && l[0]?.ferramenta === "orcamento" && l[0]?.pedido === "lançar mão de obra"), JSON.stringify(inseridos).slice(0, 200));
+confere("orcamento: a gravação fica no histórico do agente", inseridos.some(([t, l]) => t === "agente_acoes" && l[0]?.ferramenta === "orcamento" && l[0]?.pedido === "lançar mão de obra"), JSON.stringify(inseridos).slice(0, 160));
+
+c = await chama("orcamento", { numero: 5, cliente: { nome: "JADI SOUZA" }, confirmar: true });
+confere("orcamento: mandar só o nome não apaga o telefone gravado", ((c.args?.p as L)?.cliente as L)?.telefone === "27999990001" && ((c.args?.p as L)?.cliente as L)?.nome === "JADI SOUZA", JSON.stringify((c.args?.p as L)?.cliente));
+c = await chama("orcamento", { numero: 5, cliente_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc", confirmar: true });
+confere("orcamento: cliente_id traz nome e telefone do cadastro", ((c.args?.p as L)?.cliente as L)?.nome === "JADI" && (c.args?.p as L)?.cliente_id === "cccccccc-cccc-4ccc-8ccc-cccccccccccc", JSON.stringify((c.args?.p as L)?.cliente));
+c = await chama("orcamento", { numero: 5, veiculo_id: "11111111-2222-4333-8444-555555555555", confirmar: true });
+confere("orcamento: veiculo_id traz o carro do cadastro (não grava vazio)", ((c.args?.p as L)?.veiculo as L)?.placa === "KYN9G83" && ((c.args?.p as L)?.veiculo as L)?.modelo === "ONIX", JSON.stringify((c.args?.p as L)?.veiculo));
+c = await chama("orcamento", { numero: 5, placa: "KYN-9G83", confirmar: true });
+confere("orcamento: placa do cadastro vira veiculo_id, sem a coluna id no retrato", (c.args?.p as L)?.veiculo_id === "11111111-2222-4333-8444-555555555555" && !("id" in (((c.args?.p as L)?.veiculo as L) || {})));
+c = await chama("orcamento", { numero: 5, desconto: 5000, confirmar: true });
+confere("orcamento: desconto maior que os itens é recusado antes do banco", c.r?.isError === true && !c.fn);
 
 c = await chama("orcamento", { numero: 5, itens_remover: ["22222222-2222-4222-8222-222222222222"], confirmar: true });
 confere("orcamento: item de outro orçamento é recusado antes do banco", c.r?.isError === true && !c.fn);
@@ -577,18 +604,28 @@ confere("orcamento recusar com motivo → situacao recusado", c.fn === "orcament
 
 c = await chama("orcamento", { numero: 5, acao: "aprovar" });
 confere("orcamento aprovar sem confirmar: prévia no banco (p_gravar false)", c.fn === "orcamento_aprovar" && c.args?.p_gravar === false);
-c = await chama("orcamento", { numero: 5, acao: "aprovar", itens_fora: ["11111111-1111-4111-8111-111111111111"], confirmar: true });
+c = await chama("orcamento", { numero: 5, acao: "aprovar", confirmar: true, pedido: "cliente aprovou tudo" });
+confere("orcamento aprovar: o pedido NÃO vai para o campo de quem autorizou (sai impresso na O.S.)", c.args?.p_por === "" && c.args?.p_forma === "");
+c = await chama("orcamento", { numero: 5, acao: "aprovar", itens_fora: [ITEM1], aprovado_por: "JADI", forma_aprovacao: "WhatsApp", confirmar: true });
 jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
-confere("orcamento aprovar confirmado: grava e devolve a O.S.", c.args?.p_gravar === true && JSON.stringify(c.args?.p_itens_fora) === JSON.stringify(["11111111-1111-4111-8111-111111111111"]) && jo.ordem_numero === 1940 && /#\/os\/os9/.test(jo.abrir_no_sistema || ""));
+confere("orcamento aprovar confirmado: grava, diz quem e como aprovou e devolve a O.S.", c.args?.p_gravar === true && c.args?.p_por === "JADI" && c.args?.p_forma === "WhatsApp"
+  && JSON.stringify(c.args?.p_itens_fora) === JSON.stringify([ITEM1]) && jo.os_numero === 1940 && /#\/os\/os9/.test(jo.abrir_no_sistema || ""), JSON.stringify(jo).slice(0, 160));
+respostas.orcamento_aprovar = { pode_aprovar: false, gravado: false, erros: ["Nenhum item aprovado."], avisos: [] };
+c = await chama("orcamento", { numero: 5, acao: "aprovar", confirmar: true });
+confere("orcamento aprovar que não virou O.S. volta como erro, não como sucesso", c.r?.isError === true && /Nenhum item aprovado/.test(c.r?.content?.[0]?.text || ""));
+respostas.orcamento_aprovar = { pode_aprovar: true, gravado: true, ordem_id: "os9", os_numero: 1940, erros: [], avisos: [] };
 
 tabelasF.orcamentos.push({ id: "orc2", numero: 6, situacao: "aprovado", os_numero: 1930, cliente: { nome: "X" }, veiculo: {}, desconto: 0, total: 10, custo: 0, reclamacao: "", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, cliente_id: null, veiculo_id: null });
-c = await chama("orcamento", { numero: 6, itens_incluir: [{ tipo: "servico", descricao: "X", qtd: 1, valor_unit: 1 }], confirmar: true });
+c = await chama("orcamento", { numero: 6, itens_incluir: [{ tipo: "servico", descricao: "XX", qtd: 1, valor_unit: 1 }], confirmar: true });
 confere("orcamento já aprovado não muda mais", c.r?.isError === true && !c.fn);
-
 apagados.length = 0;
-c = await chama("orcamento", { numero: 6, acao: "excluir" });
-confere("orcamento excluir sem confirmar: nada é apagado", apagados.length === 0 && JSON.parse(c.r?.content?.[0]?.text || "{}").gravado === false);
 c = await chama("orcamento", { numero: 6, acao: "excluir", confirmar: true });
+confere("orcamento aprovado também não pode ser excluído (os itens recusados são a prova da oficina)", c.r?.isError === true && apagados.length === 0);
+
+tabelasF.orcamentos.push({ id: "orc3", numero: 7, situacao: "elaboracao", os_numero: null, cliente: { nome: "Y" }, veiculo: {}, desconto: 0, total: 10, custo: 0, reclamacao: "", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, cliente_id: null, veiculo_id: null });
+c = await chama("orcamento", { numero: 7, acao: "excluir" });
+confere("orcamento excluir sem confirmar: nada é apagado", apagados.length === 0 && JSON.parse(c.r?.content?.[0]?.text || "{}").gravado === false);
+c = await chama("orcamento", { numero: 7, acao: "excluir", confirmar: true });
 confere("orcamento excluir confirmado: apaga o ORC", apagados.some(([t, n]) => t === "orcamentos" && n === 1), JSON.stringify(apagados));
 confere("instruções: orçamento não mexe em estoque e só vira O.S. aprovado", String(ini.corpo.result?.instructions || "").includes("Orçamento separado da O.S. (ORC") && String(ini.corpo.result?.instructions || "").includes("não mexe em estoque"));
 

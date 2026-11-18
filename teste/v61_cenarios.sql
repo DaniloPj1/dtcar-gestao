@@ -346,4 +346,54 @@ do $$ declare r jsonb; id7 uuid; cod text; it jsonb; begin
   if (it->>'custo_unit')::numeric <> 45 then raise exception 'FALHOU 22b: custo informado foi por cima (%)', it->>'custo_unit'; end if;
 end $$;
 
+-- 23. item lançado pela TELA (código = referência ou código do catálogo) continua editável pelo conector
+do $$ declare r jsonb; id8 uuid; it jsonb; pid uuid; begin
+  update public.produtos set referencia = 'MN-9999' where id = '00000000-0000-0000-0000-0000000000b1';
+  -- como a tela grava: produto do cadastro com a REFERÊNCIA no código
+  insert into public.orcamentos (id, cliente, veiculo) values ('00000000-0000-0000-0000-00000000e001',
+    '{"nome": "DA TELA"}'::jsonb, '{"placa": "KYN9G87"}'::jsonb) on conflict (id) do nothing;
+  id8 := '00000000-0000-0000-0000-00000000e001';
+  delete from public.orcamento_itens where orcamento_id = id8;
+  insert into public.orcamento_itens (orcamento_id, tipo, descricao, codigo, produto_id, qtd, valor_unit, custo_unit)
+    values (id8, 'peca', 'BIELETA', 'MN-9999', '00000000-0000-0000-0000-0000000000b1', 1, 80, 30),
+           (id8, 'peca', 'PASTILHA DO CATALOGO', 'PERFECT 1234', null, 1, 150, 0),
+           (id8, 'servico', 'ALINHAMENTO', '', '00000000-0000-0000-0000-0000000000b1', 1, 90, 0);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'BIELETA';
+  -- mudar só a quantidade não pode esbarrar no código nem soltar o produto
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id8,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'qtd', 2))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'BIELETA';
+  if (it->>'qtd')::numeric <> 2 then raise exception 'FALHOU 23: não mudou a quantidade'; end if;
+  if (it->>'produto_id') is null or it->>'codigo' <> 'MN-9999' then raise exception 'FALHOU 23a: perdeu o vínculo ou o código (%)', it; end if;
+  -- peça do catálogo (código que não é do estoque): mudar o valor continua valendo e o código fica
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'PASTILHA DO CATALOGO';
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id8,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'valor_unit', 170))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'PASTILHA DO CATALOGO';
+  if (it->>'valor_unit')::numeric <> 170 or it->>'codigo' <> 'PERFECT 1234' then raise exception 'FALHOU 23b: peça do catálogo (%)', it; end if;
+  -- serviço do cadastro com código vazio gravado: o vínculo não some numa alteração que não fala de código
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.tipo = 'servico';
+  pid := (it->>'produto_id')::uuid;
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id8,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'valor_unit', 95))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.tipo = 'servico';
+  if (it->>'produto_id')::uuid is distinct from pid then raise exception 'FALHOU 23c: serviço perdeu o produto_id'; end if;
+  -- e o código que a tela gravou pode ser achado pela referência quando o pedido manda o código
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'BIELETA';
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id8,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'codigo', 'MN-9999'))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'BIELETA';
+  if (it->>'produto_id') is null then raise exception 'FALHOU 23d: referência devia achar o produto'; end if;
+end $$;
+
+-- 24. trocar a lista inteira sem falar de código não liga nem solta nada
+do $$ declare r jsonb; id8 uuid := '00000000-0000-0000-0000-00000000e001'; it jsonb; begin
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8 and i.descricao = 'PASTILHA DO CATALOGO';
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id8,
+         'itens', jsonb_build_array(jsonb_build_object('id', it->>'id', 'tipo', 'peca', 'descricao', 'PASTILHA DO CATALOGO', 'qtd', 2, 'valor_unit', 170))), true);
+  if jsonb_array_length(r->'itens') <> 1 then raise exception 'FALHOU 24: a lista inteira devia deixar 1 item'; end if;
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id8;
+  if (it->>'qtd')::numeric <> 2 then raise exception 'FALHOU 24a: quantidade (%)', it->>'qtd'; end if;
+end $$;
+
 select 'v61 OK' as resultado;

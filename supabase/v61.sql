@@ -145,11 +145,18 @@ begin
 end $$;
 
 -- Liga o item ao produto do cadastro pelo código (regra D3): com código dá baixa na aprovação; sem código é genérico.
--- p_custo_do_estoque: true puxa o custo do cadastro, false respeita o que veio; null decide pelo próprio item (não tem custo_unit).
--- Em itens_alterar o item já vem mesclado com o do banco (sempre tem custo_unit e produto_id), por isso quem chama diz o que fazer.
+-- CUIDADO: em itens_alterar o item chega MESCLADO com o do banco, então ele sempre tem 'codigo', 'custo_unit' e
+-- 'produto_id' mesmo que o pedido não tenha mandado nada disso. Por isso quem chama diz o que veio no PEDIDO:
+--   p_codigo_no_pedido: o pedido mandou 'codigo'. false = não mexe no vínculo com o estoque (nem liga, nem solta,
+--     nem recusa) — mudar só a quantidade de uma peça lançada na tela não pode esbarrar no código dela.
+--   p_custo_do_estoque: true puxa o custo do cadastro, false respeita o que veio; null decide pelo próprio item.
+-- O código gravado pela tela pode ser a REFERÊNCIA do produto ou o código do catálogo de peças (js/telas/ordem.js),
+-- não só o código do cadastro: a busca aceita código, código de barras e referência.
 -- (uma versão de rascunho tinha só um argumento; sai para não ficar função solta no banco)
 drop function if exists public.agente_orc_item_estoque(jsonb);
-create or replace function public.agente_orc_item_estoque(it jsonb, p_custo_do_estoque boolean default null) returns jsonb
+drop function if exists public.agente_orc_item_estoque(jsonb, boolean);
+create or replace function public.agente_orc_item_estoque(it jsonb, p_custo_do_estoque boolean default null,
+                                                          p_codigo_no_pedido boolean default true) returns jsonb
 language plpgsql stable set search_path = public as $$
 declare v_cod text := trim(coalesce(it->>'codigo', '')); v_tipo text := coalesce(it->>'tipo', ''); pr public.produtos;
   v_pega_custo boolean := coalesce(p_custo_do_estoque, not (it ? 'custo_unit'));
@@ -160,17 +167,21 @@ begin
     return it;
   end if;
   it := (it - 'peca_do_cliente') || (case when it ? 'peca_do_cliente' then jsonb_build_object('fornecida_cliente', (it->>'peca_do_cliente')::boolean) else '{}'::jsonb end);
+  -- o pedido não falou de código: o item fica como está (o vínculo que a tela gravou continua valendo)
+  if not coalesce(p_codigo_no_pedido, true) then return it; end if;
   if v_cod = '' then
-    -- código apagado de propósito (veio a chave vazia): solta o produto do estoque, senão a aprovação
-    -- continuaria baixando uma peça que já não tem código
-    return case when it ? 'codigo' then it || jsonb_build_object('produto_id', null) else it end;
+    -- código apagado de propósito: solta o produto do estoque, senão a aprovação continuaria
+    -- baixando uma peça que já não tem código
+    return it || jsonb_build_object('produto_id', null);
   end if;
   select * into pr from public.produtos x
     where (v_tipo = 'peca' and x.tipo = 'produto' or v_tipo <> 'peca' and x.tipo = 'servico' or v_tipo = '')
-      and (x.codigo::text = v_cod or lower(coalesce(x.codigo_barras, '')) = lower(v_cod))
-    order by x.ativo desc limit 1;
+      and (x.codigo::text = v_cod or lower(coalesce(x.codigo_barras, '')) = lower(v_cod) or lower(coalesce(x.referencia, '')) = lower(v_cod))
+    order by (x.codigo::text = v_cod) desc, x.ativo desc limit 1;
   if pr.id is null then
-    if v_tipo = 'peca' then raise exception 'Código % não existe no estoque. Tire o código para lançar como peça avulsa.', v_cod; end if;
+    if v_tipo = 'peca' then
+      raise exception 'Código % não existe no estoque (conferi código, código de barras e referência). Tire o código para lançar como peça avulsa.', v_cod;
+    end if;
     return it;   -- serviço ou terceiro com código livre: fica como está
   end if;
   return it || jsonb_build_object('produto_id', pr.id, 'codigo', pr.codigo::text)
@@ -229,7 +240,7 @@ begin
   -- itens: lista inteira (itens) ou mexidas na lista que já está lá
   if p ? 'itens' then
     if jsonb_typeof(p->'itens') <> 'array' then raise exception 'itens deve ser uma lista.'; end if;
-    select coalesce(jsonb_agg(public.agente_orc_item_estoque(e)), '[]'::jsonb) into v_itens
+    select coalesce(jsonb_agg(public.agente_orc_item_estoque(e, null, e ? 'codigo')), '[]'::jsonb) into v_itens
       from jsonb_array_elements(p->'itens') e where public.agente_orc_item_confere(e, true);
   else
     v_itens := coalesce((select jsonb_agg(jsonb_build_object('id', i.id, 'tipo', i.tipo, 'descricao', i.descricao, 'codigo', i.codigo,
@@ -253,14 +264,14 @@ begin
           raise exception 'Item % não está neste orçamento.', it->>'id';
         end if;
         select coalesce(jsonb_agg(case when e->>'id' = it->>'id'
-                 then public.agente_orc_item_estoque(e || (it - 'id'), (it ? 'codigo') and not (it ? 'custo_unit'))
+                 then public.agente_orc_item_estoque(e || (it - 'id'), (it ? 'codigo') and not (it ? 'custo_unit'), it ? 'codigo')
                  else e end), '[]'::jsonb) into v_itens
           from jsonb_array_elements(v_itens) e;
       end loop;
     end if;
     if p ? 'itens_incluir' then
       if jsonb_typeof(p->'itens_incluir') <> 'array' then raise exception 'itens_incluir deve ser uma lista.'; end if;
-      select v_itens || coalesce(jsonb_agg(public.agente_orc_item_estoque(e)), '[]'::jsonb) into v_itens
+      select v_itens || coalesce(jsonb_agg(public.agente_orc_item_estoque(e, null, e ? 'codigo')), '[]'::jsonb) into v_itens
         from jsonb_array_elements(p->'itens_incluir') e where public.agente_orc_item_confere(e, false);
     end if;
   end if;
@@ -438,7 +449,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['orc_situacao(text, date)', 'orc_numero_texto(int)', 'orc_validade_padrao()',
-    'agente_orc_item_confere(jsonb, boolean)', 'agente_orc_item_estoque(jsonb, boolean)',
+    'agente_orc_item_confere(jsonb, boolean)', 'agente_orc_item_estoque(jsonb, boolean, boolean)',
     'agente_orcamentos(jsonb)', 'agente_buscar_orcamento(jsonb)',
     'agente_orcamento(jsonb)', 'agente_orcamento_aprovar(jsonb)', 'agente_fazer(text, jsonb, boolean)'] loop
     execute format('revoke all on function public.%s from public, anon', f);

@@ -32,7 +32,7 @@
   window.__API_MOCK = {
     tipo: "mock",
     auth: { sessao: async () => ({ user: { id: "p1", email: "d@x" } }), aoMudar: () => () => {}, sair: async () => {} },
-    meuPerfil: async () => { net(); return window.__PAPEL ? { ...db.perfis[0], papel: window.__PAPEL } : db.perfis[0]; }, perfis: async () => { net(); return db.perfis; },
+    meuPerfil: async () => { net(); const eu = (window.__PERFIL_ID && db.perfis.find(p => p.id === window.__PERFIL_ID)) || db.perfis[0]; return window.__PAPEL ? { ...eu, papel: window.__PAPEL } : eu; }, perfis: async () => { net(); return window.__PERFIS_VAZIOS ? [] : db.perfis; },
     config: async () => { net(); return db.config; }, salvarConfig: async d => { db.config = d; },
     // função "equipe" de mentira: cria o acesso (como o gatilho + a função) e troca senha; window.__EQUIPE guarda o que foi pedido
     avisosApp: async () => { net(); const orcs = (db.orcamentos || []).filter(o => (o.situacao === "elaboracao" || o.situacao === "enviado") && /^Pedido pelo app/.test(o.obs_internas || ""));

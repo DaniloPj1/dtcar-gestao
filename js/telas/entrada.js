@@ -48,7 +48,16 @@ async function ligarAgenda(agendaId, ordem, online) {
   lsSet(LS_VINCULOS, (lsGet(LS_VINCULOS) || []).filter(x => x.agendaId !== agendaId).concat([{ agendaId, ordemId: ordem.id }]));
 }
 
-function validarNova(f, dados) {
+/** Quem pode ser consultor da O.S.: administradores e consultores ativos da lista de perfis mais, quando faltar nela, o próprio
+ *  usuário logado (sem internet a lista do servidor vem vazia; o perfil de quem entrou fica guardado no aparelho). */
+export function listaConsultores(perfis, perfil) {
+  const ehConsultor = p => p && p.ativo !== false && (p.papel === "admin" || p.papel === "consultor");
+  const l = (perfis || []).filter(ehConsultor);
+  if (ehConsultor(perfil) && !l.some(c => c.id === perfil.id)) l.push({ id: perfil.id, nome: perfil.nome || perfil.email || "Eu", papel: perfil.papel, ativo: true });
+  return l;
+}
+
+function validarNova(f, dados, consultores) {
   const e = [], v = dados.veiculos.find(x => x.id === f.veiculoId);
   if (!placaValida(f.placa)) e.push("Informe uma placa válida (ABC1234 ou ABC1D23).");
   if (!f.veiculoId && placaValida(f.placa)) {
@@ -74,7 +83,9 @@ function validarNova(f, dados) {
   if (f.km === "" || !(km >= 0)) e.push("Informe o KM de entrada.");
   else if (v && v.km_atual && km < v.km_atual && !f.kmConfirmado) e.push("O KM informado é menor que o último registrado (" + fmtKm(v.km_atual) + "). Confira o painel ou confirme a divergência.");
   if (!f.reclamacao.trim()) e.push("Descreva o motivo da visita ou a reclamação do cliente.");
-  if (!f.consultorId) e.push("Selecione o consultor responsável.");
+  // Sem ninguém para escolher (lista de perfis ainda não carregada, ou sem internet num aparelho sem cópia), a O.S. NÃO fica travada:
+  // ela abre sem consultor e o nome pode ser posto depois, na própria O.S. Com alguém na lista, continua obrigatório.
+  if (!f.consultorId && consultores.length) e.push("Selecione o consultor responsável.");
   return e;
 }
 
@@ -89,13 +100,16 @@ function anosENumeros(f) {
 
 export function NovaOS() {
   const { dados, cfg, perfil, avisar, confirmar, ir, recarregar, atualizarPendentes } = useApp();
-  const consultores = dados.perfis.filter(p => p.ativo !== false && (p.papel === "admin" || p.papel === "consultor"));
+  // Consultores = administradores e consultores ativos. SEM INTERNET a lista de perfis pode vir vazia (entrou com a sessão do PC):
+  // quem está logado, sendo administrador ou consultor, entra na lista pelo próprio perfil guardado no aparelho — assim o sistema
+  // reconhece o mesmo consultor com ou sem internet e a Nova O.S. nunca fica sem opção para quem pode abrir.
+  const consultores = listaConsultores(dados.perfis, perfil);
   const [f, setF] = useState(() => { const r = lsGet(LS_NOVA); return r && r.vNovo ? { ...vazioNova(), ...r } : vazioNova(); });
   const [erros, setErros] = useState([]);
   const [salvando, setSalvando] = useState("");
   const topo = useRef(null);
   useEffect(() => { lsSet(LS_NOVA, f); }, [f]);
-  useEffect(() => { if (!f.consultorId && consultores.some(c => c.id === perfil.id)) setF(o => ({ ...o, consultorId: perfil.id })); }, [dados.perfis]);
+  useEffect(() => { if (!f.consultorId && consultores.some(c => c.id === perfil.id)) setF(o => ({ ...o, consultorId: perfil.id })); }, [dados.perfis, perfil && perfil.id]);
   const muda = p => setF(o => ({ ...o, ...p }));
   // Placa nova (fora do cadastro) e sem marca/modelo digitados: busca os dados pela placa (v55) e preenche só o que está em branco.
   // vNovo.daPlaca guarda de qual placa veio o preenchimento, o que foi posto na tela (campos) e o que a consulta trouxe além
@@ -134,7 +148,7 @@ export function NovaOS() {
 
   const descartar = async () => { if (!await confirmar({ titulo: "Limpar formulário", texto: "Os dados preenchidos serão apagados.", botao: "Limpar", perigo: true })) return; lsSet(LS_NOVA, null); setF(vazioNova()); setErros([]); };
   const abrir = async (comChecklist) => {
-    const e = validarNova(f, dados); setErros(e);
+    const e = validarNova(f, dados, consultores); setErros(e);
     if (e.length) { topo.current && topo.current.scrollIntoView({ behavior: "smooth" }); return; }
     if (abertaDoVeiculo && !await confirmar({ titulo: "Veículo com O.S. aberta", texto: `Este veículo já tem a ${numOS(abertaDoVeiculo.numero)} em andamento. Abrir outra O.S. mesmo assim?`, botao: "Abrir outra" })) return;
     setSalvando(comChecklist ? "ck" : "os");
@@ -155,7 +169,7 @@ export function NovaOS() {
         veiculo: { placa: vei.placa, marca: vei.marca, modelo: vei.modelo, ano: vei.ano, cor: vei.cor || "", motor: vei.combustivel || vei.motor || "" },
         km_entrada: km, reclamacao: f.reclamacao.trim(), box: (f.box || "").trim(), contato: (f.contato || "").trim(),
         checkin: { feito: false, kmAnterior: veiculo ? veiculo.km_atual : null, kmDivergente: !!(veiculo && veiculo.km_atual && km < veiculo.km_atual) },
-        consultor_id: f.consultorId, consultor_nome: cons ? cons.nome : "",
+        consultor_id: f.consultorId || null, consultor_nome: cons ? cons.nome : "",
         garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "",
       });
       // agenda (v54): ligada logo depois de criar a O.S., antes do histórico (se o histórico falhar, o agendamento não fica sem a O.S.)
@@ -187,7 +201,7 @@ export function NovaOS() {
         veiculo: { placa: vei.placa, marca: vei.marca, modelo: vei.modelo, ano: vei.ano, cor: vei.cor || "", motor: vei.combustivel || vei.motor || "" },
         km_entrada: km, reclamacao: f.reclamacao.trim(), box: (f.box || "").trim(), contato: (f.contato || "").trim(),
         checkin: { feito: false, kmAnterior: veiculo ? veiculo.km_atual : null, kmDivergente: !!(veiculo && veiculo.km_atual && km < veiculo.km_atual), offline: { provisorio: prov, aberta_em: agora } },
-        consultor_id: f.consultorId, consultor_nome: cons ? cons.nome : "",
+        consultor_id: f.consultorId || null, consultor_nome: cons ? cons.nome : "",
         garantia_dias: Number(cfg.garantiaDias) || 90, condicoes_pagamento: cfg.condicoesPadrao || "",
       };
       await fila.adicionar({ id: ordemId, tipo: "abrir_os", criado_em: agora, provisorio: prov, usuario_nome: perfil.nome, cliente: novoCli, veiculo: novoVei, veiculoAtualizar: veiAtual, ordem,
@@ -260,7 +274,7 @@ export function NovaOS() {
         <${Area} id="recl" valor=${f.reclamacao} onMuda=${v => muda({ reclamacao: v })} /></${Campo}>
       <div class="campo"><label>Consultor responsável <i>*</i></label>
         ${consultores.length ? html`<${Seg} rotulo="Consultor" opcoes=${consultores.map(c => [c.nome, "info"])} valor=${(consultores.find(c => c.id === f.consultorId) || {}).nome} onEscolha=${v => muda({ consultorId: consultores.find(c => c.nome === v).id })} />`
-          : html`<span class="dica">Nenhum consultor liberado. O administrador libera em Mais › Equipe.</span>`}</div>
+          : html`<span class="dica">Nenhum consultor liberado. O administrador libera em Mais › Equipe. A O.S. pode ser aberta assim mesmo e o consultor entra depois.</span>`}</div>
     </section>
     <p class="dica">O checklist de entrada (combustível, avarias, pneus, fotos e assinatura) é opcional e pode ser feito agora ou depois, dentro da O.S.</p>
     ${f.placa || f.clienteId || f.reclamacao ? html`<button type="button" class="btn-link" onClick=${descartar}>Limpar formulário</button>` : null}

@@ -375,6 +375,8 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   orçamento (o mesmo `completarClienteNovo` da tela; CPF que já é de outro cliente vira `atencao` na resposta e o endereço vai assim mesmo).
   A `orcamento_aprovar` **não levanta exceção** quando não dá para aprovar (devolve `pode_aprovar: false` com os erros): o `agente_orcamento_aprovar`
   levanta, senão o `agente_fazer` responderia "gravado" sem ter aberto O.S. nenhuma.
+  O `agente_buscar_orcamento` monta a resposta campo por campo (como o `agente_os_json` do v20), então **o telefone e o documento da cópia do cliente
+  não saem pelo conector**: quando a etapa de mandar o orçamento pelo WhatsApp for feita, o número tem de vir do cadastro, não daqui.
   **Prévia:** o `agente_fazer` desfaz a transação, mas a sequência do número NÃO volta atrás — por isso criar na prévia não grava nada e
   devolve a conta sem número (o mesmo cuidado da venda de balcão e do recibo avulso no v50); aprovar na prévia usa o `p_gravar = false` do
   v53, que confere sem gastar número de O.S. Ferramentas: `orcamentos`, `buscar_orcamento`, `orcamento` e `aprovar_orcamento` (64 no total).

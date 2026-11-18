@@ -145,9 +145,14 @@ begin
 end $$;
 
 -- Liga o item ao produto do cadastro pelo código (regra D3): com código dá baixa na aprovação; sem código é genérico.
-create or replace function public.agente_orc_item_estoque(it jsonb) returns jsonb
+-- p_custo_do_estoque: true puxa o custo do cadastro, false respeita o que veio; null decide pelo próprio item (não tem custo_unit).
+-- Em itens_alterar o item já vem mesclado com o do banco (sempre tem custo_unit e produto_id), por isso quem chama diz o que fazer.
+-- (uma versão de rascunho tinha só um argumento; sai para não ficar função solta no banco)
+drop function if exists public.agente_orc_item_estoque(jsonb);
+create or replace function public.agente_orc_item_estoque(it jsonb, p_custo_do_estoque boolean default null) returns jsonb
 language plpgsql stable set search_path = public as $$
 declare v_cod text := trim(coalesce(it->>'codigo', '')); v_tipo text := coalesce(it->>'tipo', ''); pr public.produtos;
+  v_pega_custo boolean := coalesce(p_custo_do_estoque, not (it ? 'custo_unit'));
 begin
   if coalesce((it->>'fornecida_cliente')::boolean, coalesce((it->>'peca_do_cliente')::boolean, false)) then
     -- peça trazida pelo cliente: sem preço, sem custo e fora do estoque (como o editor da tela e o v40)
@@ -155,7 +160,11 @@ begin
     return it;
   end if;
   it := (it - 'peca_do_cliente') || (case when it ? 'peca_do_cliente' then jsonb_build_object('fornecida_cliente', (it->>'peca_do_cliente')::boolean) else '{}'::jsonb end);
-  if v_cod = '' then return it; end if;
+  if v_cod = '' then
+    -- código apagado de propósito (veio a chave vazia): solta o produto do estoque, senão a aprovação
+    -- continuaria baixando uma peça que já não tem código
+    return case when it ? 'codigo' then it || jsonb_build_object('produto_id', null) else it end;
+  end if;
   select * into pr from public.produtos x
     where (v_tipo = 'peca' and x.tipo = 'produto' or v_tipo <> 'peca' and x.tipo = 'servico' or v_tipo = '')
       and (x.codigo::text = v_cod or lower(coalesce(x.codigo_barras, '')) = lower(v_cod))
@@ -165,7 +174,7 @@ begin
     return it;   -- serviço ou terceiro com código livre: fica como está
   end if;
   return it || jsonb_build_object('produto_id', pr.id, 'codigo', pr.codigo::text)
-            || case when not (it ? 'custo_unit') and pr.tipo = 'produto' then jsonb_build_object('custo_unit', pr.custo) else '{}'::jsonb end;
+            || case when v_pega_custo and pr.tipo = 'produto' then jsonb_build_object('custo_unit', pr.custo) else '{}'::jsonb end;
 end $$;
 
 -- p: { acao: criar|editar|enviar|recusar|reabrir|excluir (padrão: editar, ou criar quando não vem número/id),
@@ -243,7 +252,9 @@ begin
         if not exists (select 1 from jsonb_array_elements(v_itens) e where e->>'id' = it->>'id') then
           raise exception 'Item % não está neste orçamento.', it->>'id';
         end if;
-        select coalesce(jsonb_agg(case when e->>'id' = it->>'id' then public.agente_orc_item_estoque(e || (it - 'id')) else e end), '[]'::jsonb) into v_itens
+        select coalesce(jsonb_agg(case when e->>'id' = it->>'id'
+                 then public.agente_orc_item_estoque(e || (it - 'id'), (it ? 'codigo') and not (it ? 'custo_unit'))
+                 else e end), '[]'::jsonb) into v_itens
           from jsonb_array_elements(v_itens) e;
       end loop;
     end if;
@@ -254,7 +265,7 @@ begin
     end if;
   end if;
   -- id de item que não é deste orçamento nunca entra (o orcamento_salvar o descartaria em silêncio e o total sairia errado)
-  if o.id is not null and exists (select 1 from jsonb_array_elements(v_itens) e
+  if exists (select 1 from jsonb_array_elements(v_itens) e
         where nullif(e->>'id', '') is not null
           and not exists (select 1 from public.orcamento_itens i where i.id = (e->>'id')::uuid and i.orcamento_id = o.id)) then
     raise exception 'Há item com id que não é deste orçamento (veja os ids em buscar_orcamento).';
@@ -427,7 +438,7 @@ do $$
 declare f text;
 begin
   foreach f in array array['orc_situacao(text, date)', 'orc_numero_texto(int)', 'orc_validade_padrao()',
-    'agente_orc_item_confere(jsonb, boolean)', 'agente_orc_item_estoque(jsonb)',
+    'agente_orc_item_confere(jsonb, boolean)', 'agente_orc_item_estoque(jsonb, boolean)',
     'agente_orcamentos(jsonb)', 'agente_buscar_orcamento(jsonb)',
     'agente_orcamento(jsonb)', 'agente_orcamento_aprovar(jsonb)', 'agente_fazer(text, jsonb, boolean)'] loop
     execute format('revoke all on function public.%s from public, anon', f);

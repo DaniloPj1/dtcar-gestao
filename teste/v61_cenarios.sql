@@ -293,4 +293,57 @@ do $$ declare r jsonb; id1 uuid; begin
   exception when others then if sqlerrm not like '%OU as mexidas%' then raise; end if; end;
 end $$;
 
+-- 20. criar com id de item de outro orçamento também é recusado (o criar não tem id para mandar)
+do $$ declare r jsonb; outro text; n int; begin
+  select i.id::text into outro from public.orcamento_itens i limit 1;
+  n := (select count(*) from public.orcamentos);
+  begin r := public.agente_fazer('orcamento', jsonb_build_object('acao', 'criar', 'cliente', jsonb_build_object('nome', 'COM ID ROUBADO'),
+      'itens', jsonb_build_array(jsonb_build_object('id', outro, 'tipo', 'servico', 'descricao', 'ROUBADO', 'qtd', 1, 'valor_unit', 999))), true);
+    raise exception 'FALHOU 20: criar com id de item de outro orçamento';
+  exception when others then if sqlerrm not like '%não é deste orçamento%' then raise; end if; end;
+  if (select count(*) from public.orcamentos) <> n then raise exception 'FALHOU 20a: gravou mesmo assim'; end if;
+end $$;
+
+-- 21. apagar o código solta o produto: a aprovação NÃO pode baixar peça que já não tem código
+do $$ declare r jsonb; id6 uuid; cod text; saldo numeric; it jsonb; begin
+  select codigo::text into cod from public.produtos where id = '00000000-0000-0000-0000-0000000000b1';
+  r := public.agente_fazer('orcamento', jsonb_build_object('acao', 'criar',
+    'cliente', jsonb_build_object('nome', 'SEM CODIGO DEPOIS', 'telefone', '(27) 98888-3333'),
+    'veiculo', jsonb_build_object('placa', 'KYN9G86', 'marca', 'Fiat', 'modelo', 'UNO', 'ano', '2016'),
+    'itens', jsonb_build_array(jsonb_build_object('tipo', 'peca', 'descricao', 'BIELETA', 'codigo', cod, 'qtd', 1, 'valor_unit', 80))), true);
+  id6 := (r->>'id')::uuid;
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id6;
+  if (it->>'produto_id') is null then raise exception 'FALHOU 21: devia ter ligado no estoque'; end if;
+  if (it->>'custo_unit')::numeric <> 30 then raise exception 'FALHOU 21a: custo do estoque (%)', it->>'custo_unit'; end if;
+  -- o Danilo vai comprar a peça fora: tira o código
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id6,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'codigo', ''))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id6;
+  if (it->>'produto_id') is not null then raise exception 'FALHOU 21b: o produto devia ter sido solto junto com o código'; end if;
+  saldo := (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1');
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id6, 'por', 'Cliente'), true);
+  if not (r->>'gravado')::boolean then raise exception 'FALHOU 21c: não aprovou (%)', r; end if;
+  if (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1') <> saldo then
+    raise exception 'FALHOU 21d: baixou estoque de peça sem código'; end if;
+end $$;
+
+-- 22. acrescentar o código a um item que já existe traz o custo do estoque junto
+do $$ declare r jsonb; id7 uuid; cod text; it jsonb; begin
+  select codigo::text into cod from public.produtos where id = '00000000-0000-0000-0000-0000000000b1';
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "CODIGO DEPOIS"},
+    "itens": [{"tipo": "peca", "descricao": "BIELETA", "qtd": 1, "valor_unit": 80}]}'::jsonb, true);
+  id7 := (r->>'id')::uuid;
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id7;
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id7,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'codigo', cod))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id7;
+  if (it->>'produto_id') is null then raise exception 'FALHOU 22: devia ligar no estoque'; end if;
+  if (it->>'custo_unit')::numeric <> 30 then raise exception 'FALHOU 22a: devia trazer o custo do estoque (%)', it->>'custo_unit'; end if;
+  -- custo informado pelo Danilo manda mais que o do estoque
+  r := public.agente_fazer('orcamento', jsonb_build_object('id', id7,
+         'itens_alterar', jsonb_build_array(jsonb_build_object('id', it->>'id', 'codigo', cod, 'custo_unit', 45))), true);
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id7;
+  if (it->>'custo_unit')::numeric <> 45 then raise exception 'FALHOU 22b: custo informado foi por cima (%)', it->>'custo_unit'; end if;
+end $$;
+
 select 'v61 OK' as resultado;

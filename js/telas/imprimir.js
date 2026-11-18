@@ -398,9 +398,32 @@ function FolhaPonto({ f, ym, extras }) {
 }
 
 /* ---------------- resumo do mês do funcionário ---------------- */
+/** Extrato da comissão de uma quinzena (v61): o que entrou, com O.S., mão de obra, parte, percentual e valor. */
+function ExtratoComissao({ c, itens }) {
+  const { cfg } = useApp();
+  const porOS = [...itens.reduce((m, i) => { const k = String(i.os_numero || "—"); (m.get(k) || m.set(k, []).get(k)).push(i); return m; }, new Map())];
+  return html`<article class="folha">
+    <${Cabecalho} titulo="EXTRATO DE COMISSÃO" direita=${html`<span>${fmtData(c.inicio)} a ${fmtData(c.fim)}</span>`} />
+    <section class="imp-bloco"><div class="imp-grade g2">
+      <${Par} r="Mecânico" v=${c.funcionario_nome} /><${Par} r="Quinzena" v=${fmtData(c.inicio) + " a " + fmtData(c.fim)} />
+      <${Par} r="Folha de" v=${nomeMes(String(c.competencia).slice(0, 7))} /><${Par} r="Lançado em" v=${fmtData(c.criado_em)} />
+    </div></section>
+    <table class="imp-tab"><thead><tr><th>O.S.</th><th>Serviço</th><th class="num">Mão de obra</th><th class="num">Parte dele</th><th class="num">%</th><th class="num">Comissão</th></tr></thead><tbody>
+      ${porOS.map(([num, lista]) => lista.map((i, k) => html`<tr key=${i.id}>
+        <td>${k === 0 ? n5(Number(num)) : ""}</td>
+        <td>${i.descricao}${i.dividido_com ? html`<br /><span class="imp-sub">dividido com ${i.dividido_com}</span>` : null}</td>
+        <td class="num">${reais(i.mao_de_obra)}</td><td class="num">${reais(i.base)}</td>
+        <td class="num">${String(Number(i.pct)).replace(".", ",")}%</td><td class="num">${reais(i.valor)}</td></tr>`))}</tbody>
+      <tfoot><tr><td colspan="5">Total da quinzena (${c.servicos} serviço${c.servicos === 1 ? "" : "s"})</td><td class="num">${reais(c.total)}</td></tr></tfoot></table>
+    <p class="imp-termo">A comissão entra como custo do serviço na O.S. e como lançamento de comissão na folha de ${nomeMes(String(c.competencia).slice(0, 7))}.
+      Documento de controle interno da oficina.</p>
+    <div class="ponto-assins"><${Assinatura} rotulo="Mecânico" nome=${c.funcionario_nome} /><${Assinatura} rotulo=${cfg.nome} /></div>
+  </article>`;
+}
+
 function ResumoFuncionario({ f, ym, m }) {
   const { cfg } = useApp();
-  const r = calcularMes(f, ym, m.lancs, m.base, cfg.encargos);
+  const r = calcularMes(f, ym, m.lancs, m.base, cfg.encargos, m.comissaoLancada);
   const lin = (t, v, neg) => v ? html`<tr key=${t}><td>${t}</td><td class="num">${neg ? "− " : ""}${reais(v)}</td></tr>` : null;
   return html`<article class="folha">
     <${Cabecalho} titulo="RESUMO DO MÊS" direita=${html`<span>${nomeMes(ym)}</span>`} />
@@ -412,7 +435,7 @@ function ResumoFuncionario({ f, ym, m }) {
       <tfoot><tr><td>Saldo a pagar</td><td class="num">${reais(r.saldo)}</td></tr></tfoot></table>
     ${m.lancs.length ? html`<table class="imp-tab"><thead><tr><th>Data</th><th>Lançamento</th><th class="num">Valor</th></tr></thead><tbody>
       ${m.lancs.map(l => html`<tr key=${l.id}><td>${fmtData(l.data)}</td><td>${l.descricao || l.tipo.replace("_", " ")}</td><td class="num">${reais(r.valorDe(l))}</td></tr>`)}</tbody></table>` : null}
-    ${m.os.length ? html`<table class="imp-tab"><thead><tr><th>O.S. (comissão ${f.comissao_pct}%)</th><th>Entrega</th><th class="num">Mão de obra</th></tr></thead><tbody>
+    ${m.os.length && !m.comissaoLancada ? html`<table class="imp-tab"><thead><tr><th>O.S. (comissão ${f.comissao_pct}%)</th><th>Entrega</th><th class="num">Mão de obra</th></tr></thead><tbody>
       ${m.os.map(o => html`<tr key=${o.id}><td>${n5(o.numero)}</td><td>${fmtData(o.entregue_em)}</td><td class="num">${reais(o.maoDeObra)}</td></tr>`)}</tbody></table>` : null}
     <p class="imp-termo">Documento de controle interno da oficina. Não substitui o recibo de pagamento de salário (holerite) emitido pela contabilidade.</p>
     <div class="ponto-assins"><${Assinatura} rotulo="Funcionário" nome=${f.nome} /><${Assinatura} rotulo=${cfg.nome} /></div>
@@ -451,6 +474,12 @@ export function Imprimir({ tipo, id, params }) {
     else if (tipo === "venda") api.vendas.uma(id).then(setDoc).catch(e => setErro(e.message));
     else if (tipo === "cliente") { const c = dados.clientes.find(x => x.id === id); c ? setDoc(c) : setErro("Cliente não encontrado."); }
     else if (tipo === "veiculo") { const v = dados.veiculos.find(x => x.id === id); v ? setDoc(v) : setErro("Veículo não encontrado."); }
+    else if (tipo === "comissao") {
+      if (!pode(perfil, "financeiro")) { setErro("O extrato de comissão é da folha: apenas o administrador imprime."); return; }
+      Promise.all([api.comissao.lancamentos({ comId: id }), api.comissao.itens(id)])
+        .then(([l, itens]) => { const c = (l || [])[0]; c ? setDoc({ c, itens: itens || [] }) : setErro("Lançamento de comissão não encontrado."); })
+        .catch(e => setErro(e.message));
+    }
     else if (tipo === "ponto" || tipo === "funcionario") {
       if (!pode(perfil, "financeiro")) { setErro("Apenas o administrador imprime documentos de funcionários."); return; }
       api.funcionarios.listar("nome").then(async l => { const f = l.find(x => x.id === id); if (!f) return setErro("Funcionário não encontrado.");
@@ -458,8 +487,8 @@ export function Imprimir({ tipo, id, params }) {
     }
     else setErro("Documento desconhecido.");
   }, [tipo, id]);
-  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), osrecibo: "OS Recibo " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : ""), resumo: "Resumo OS " + (doc.veiculo ? doc.veiculo.placa || "" : doc.cliente ? doc.cliente.nome || "" : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
-  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" || tipo === "osrecibo" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : tipo === "resumo" && params.de !== "veiculo" ? "/cliente/" + id : "/veiculo/" + id);
+  useEffect(() => { const t = document.title; if (doc) document.title = { os: "OS " + n5(doc.numero), osrecibo: "OS Recibo " + n5(doc.numero), salao: "Salão OS " + n5(doc.numero), venda: "Venda " + n5(doc.numero), recibo: "Recibo " + n5(doc.numero), cliente: "Ficha " + (doc.nome || ""), veiculo: "Ficha " + (doc.placa || ""), comissao: "Comissao " + (doc.c ? doc.c.funcionario_nome : ""), ponto: "Folha de ponto " + (doc.f ? doc.f.nome : ""), funcionario: "Resumo " + (doc.f ? doc.f.nome : ""), resumo: "Resumo OS " + (doc.veiculo ? doc.veiculo.placa || "" : doc.cliente ? doc.cliente.nome || "" : "") }[tipo] || t; return () => { document.title = t; }; }, [doc]);
+  const voltar = () => history.length > 1 ? history.back() : ir(tipo === "os" || tipo === "salao" || tipo === "osrecibo" ? "/os/" + id : tipo === "venda" ? "/balcao?aba=historico" : tipo === "recibo" ? "/recibos" : tipo === "cliente" ? "/cliente/" + id : tipo === "comissao" ? "/comissao" : tipo === "ponto" ? "/funcionario/" + id + "?aba=jornada" : tipo === "funcionario" ? "/funcionario/" + id + "?aba=mes&mes=" + params.mes : tipo === "resumo" && params.de !== "veiculo" ? "/cliente/" + id : "/veiculo/" + id);
   const cancelarRecibo = async () => {
     if (!await confirmar({ titulo: "Cancelar recibo " + n5(doc.numero), texto: "O recibo continua registrado, marcado como cancelado, e deixa de contar como pagamento recebido.", botao: "Cancelar recibo", perigo: true })) return;
     try { await api.recibos.salvar({ id: doc.id, cancelado: true, cancelado_motivo: "Cancelado por " + perfil.nome + " em " + new Date().toLocaleDateString("pt-BR") });
@@ -472,7 +501,7 @@ export function Imprimir({ tipo, id, params }) {
   };
   const cli = doc && (tipo === "os" || tipo === "osrecibo") ? dados.clientes.find(c => c.id === doc.cliente_id) : null;
   const vei = doc && tipo === "os" ? dados.veiculos.find(v => v.id === doc.veiculo_id) : null;
-  const nVias = formato === "cupom" || tipo === "salao" || tipo === "osrecibo" || tipo === "resumo" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" ? 1 : vias;
+  const nVias = formato === "cupom" || tipo === "salao" || tipo === "osrecibo" || tipo === "resumo" || tipo === "cliente" || tipo === "veiculo" || tipo === "ponto" || tipo === "funcionario" || tipo === "comissao" ? 1 : vias;
   return html`<div class=${"imprimir" + (formato === "cupom" ? " imp-cupom" : "")}>
     ${formato === "cupom" ? html`<style>@page { size: 80mm auto; margin: 3mm; }</style>` : (tipo === "salao" ? html`<style>@page { size: A4; margin: 12mm; }</style>` : tipo === "osrecibo" ? html`<style>@page { size: A4; margin: 9mm 11mm; }</style>` : html`<style>@page { size: A4; margin: 9mm; }</style>`)}
     <div class="imp-barra so-tela">
@@ -494,6 +523,7 @@ export function Imprimir({ tipo, id, params }) {
       : tipo === "recibo" ? html`<div class=${"recibos-folha v" + nVias}>${Array.from({ length: nVias }, (_, n) => html`<${ViaRecibo} key=${n} r=${doc} via=${n + 1} nVias=${nVias} />`)}</div>`
       : tipo === "ponto" ? html`<${FolhaPonto} f=${doc.f} ym=${params.mes} extras=${String(params.feriados || "").split(/[^0-9]+/).filter(Boolean).map(Number)} />`
       : tipo === "funcionario" ? html`<${ResumoFuncionario} f=${doc.f} ym=${params.mes} m=${doc.m} />`
+      : tipo === "comissao" ? html`<${ExtratoComissao} c=${doc.c} itens=${doc.itens} />`
       : tipo === "cliente" ? html`<${FichaCliente} c=${doc} />` : html`<${FichaVeiculo} v=${doc} />`}
   </div>`;
 }

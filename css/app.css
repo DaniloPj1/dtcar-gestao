@@ -515,6 +515,7 @@ ol.ranking li::before{counter-increment:r;content:counter(r);font-weight:700;col
 .imp-totais div{display:flex;justify-content:space-between;gap:10px}
 .imp-totais .tot{border-top:2px solid #111;margin-top:3px;padding-top:3px;font-size:15px;font-weight:700}
 .imp-termo{font-size:10px;color:#333b47;text-align:justify;margin:0}
+.imp-tab .imp-sub{font-size:9.5px;color:#4a5363}
 .imp-autoriza p{margin:0}
 .imp-marcar{font-weight:700;margin:6px 0!important;letter-spacing:.04em}
 .imp-assins{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:24px;align-items:end;margin-top:14px}
@@ -1722,3 +1723,49 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (max-width:899px){.sino-cel{display:block;margin-left:8px}.sino-cel .sino-btn{width:34px;height:34px;background:transparent;border-color:rgba(255,255,255,.35);color:var(--on-steel)}.sino-cel .sino-btn.tem{color:#ffd27a;border-color:#ffd27a}}
 @media (max-width:640px){.sino-cel .sino-lista{position:fixed;left:12px;right:12px;top:58px;width:auto}}
 .pill-app{background:#fff1dc;color:#8a5200;border:1px solid #e08a00;font-weight:700}
+
+/* ---------- Comissão por quinzena (v61) ---------- */
+.cm-periodo{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between;margin-bottom:10px}
+.cm-chips{margin-bottom:10px}
+.cm-lancados ul{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.cm-lancados li{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;padding:8px 10px;border-radius:8px;background:var(--surface-2)}
+.cm-bloco .secao-topo{display:flex;gap:10px;align-items:center;justify-content:space-between;flex-wrap:wrap}
+.cm-cartoes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin:10px 0 4px}
+.cm-cartoes>div{padding:8px 10px;border-radius:8px;background:var(--surface-2);display:flex;flex-direction:column;gap:2px}
+.cm-cartoes span{color:var(--muted);font-size:12.5px}
+.cm-cartoes b{font-family:var(--f-display);font-size:20px;font-variant-numeric:tabular-nums}
+.cm-cartoes .cm-destaque{background:var(--brand-soft)}
+.cm-os{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
+.cm-os-cab{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.cm-linhas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
+.cm-linhas li{display:grid;grid-template-columns:1fr auto 86px auto auto;gap:8px;align-items:center;padding:6px 8px;border-radius:8px}
+.cm-linhas li:nth-child(odd){background:var(--surface-2)}
+.cm-linhas li.cm-ja{opacity:.6}
+.cm-linhas li.cm-fora .cm-valor,.cm-linhas li.cm-fora .cm-mo{text-decoration:line-through;color:var(--muted)}
+.cm-marca{display:flex;gap:8px;align-items:flex-start;min-width:0;cursor:pointer}
+.cm-desc{display:flex;flex-direction:column;min-width:0}
+.cm-desc b{overflow-wrap:anywhere}
+.cm-mo,.cm-valor{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.cm-pct-campo{display:flex;gap:4px;align-items:center}
+.cm-pct-campo .inp{width:72px;text-align:right}
+.cm-mx-linha .inp-erro,.cm-pct-campo .inp-erro,.cm-mx-padrao .inp-erro{border-color:var(--bad);background:var(--bad-soft)}
+.cm-mx-quem{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.cm-mx-padrao{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
+.cm-mx-tit{font-size:16px;margin-top:6px}
+.cm-mx-grupos{display:flex;flex-direction:column;gap:4px;max-height:40vh;overflow:auto}
+.cm-mx-linha{display:flex;gap:10px;align-items:center;justify-content:space-between;padding:5px 8px;border-radius:8px;background:var(--surface-2)}
+.cm-puxar-busca{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+.cm-puxar-busca .inp,.cm-puxar-busca input{flex:1}
+.cm-puxar-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px}
+.cm-puxar-itens,.cm-quem-lista{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-direction:column;gap:5px}
+.cm-puxar-itens li,.cm-quem-lista li{display:flex;gap:8px;align-items:center;justify-content:space-between;flex-wrap:wrap;padding:7px 9px;border-radius:8px;background:var(--surface-2)}
+.cm-puxar-itens li.cm-sem-ap{opacity:.6}
+@media (max-width:640px){
+  .cm-periodo{flex-direction:column;align-items:stretch}
+  .cm-linhas li{grid-template-columns:1fr auto;row-gap:4px}
+  .cm-marca{grid-column:1 / -1}
+  .cm-mo{grid-column:1;text-align:left}
+  .cm-valor{grid-column:2}
+  .cm-pct-campo{grid-column:1}
+  .cm-linhas li>button{grid-column:2;justify-self:end}
+}

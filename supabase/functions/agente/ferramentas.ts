@@ -1607,6 +1607,68 @@ export function criarServidor(db: Banco): McpServer {
     } catch (e) { return e instanceof Error ? e.message : String(e); }  // o histórico nunca derruba o que já foi gravado
   };
 
+  /** Orçamento novo sem validade nasce com os dias dos Ajustes (cfg.validadeDias), como a tela. */
+  const validadePadrao = async () => {
+    let dias = 10;
+    try {
+      const { data } = await db.from!("config").select("dados").eq("id", 1).maybeSingle();
+      const n = Number(((data || {}) as Record<string, unknown>).dados && ((((data || {}) as Record<string, unknown>).dados) as Record<string, unknown>).validadeDias);
+      if (n > 0) dias = n;
+    } catch { /* sem os Ajustes, vale o padrão de 10 dias */ }
+    const d = new Date(hojeBR() + "T12:00:00Z");
+    d.setUTCDate(d.getUTCDate() + dias);
+    return d.toISOString().slice(0, 10);
+  };
+  /** Gravar pelo conector é só do administrador, como as outras ferramentas de gravação (as telas aceitam consultor). */
+  const soAdmin = async () => {
+    const { error } = await db.rpc("agente_exige_admin");
+    return error ? error.message : "";
+  };
+  /** Campos do item que o conector mexe. Campo fora desta lista não passa calado (o item mesclado aceitaria qualquer chave). */
+  const CAMPOS_ITEM_ORC = ["tipo", "descricao", "codigo", "qtd", "valor_unit", "custo_unit", "desconto", "peca_do_cliente", "qualidade", "horas", "aprovado"];
+  /**
+   * Liga (ou solta) o item do produto do estoque e aplica a peça do cliente.
+   * Só mexe no vínculo quando o PEDIDO falou de código: o item lançado na tela guarda a referência ou o código do
+   * catálogo de peças, e mudar só a quantidade não pode esbarrar nisso nem soltar o produto sem querer.
+   */
+  const prepararItemOrc = async (item: ItemOrc, pedido: Record<string, unknown>, avisos: string[]) => {
+    const temCodigo = Object.prototype.hasOwnProperty.call(pedido, "codigo");
+    const temCusto = Object.prototype.hasOwnProperty.call(pedido, "custo_unit");
+    const temPeca = Object.prototype.hasOwnProperty.call(pedido, "peca_do_cliente");
+    if (temPeca) item.fornecida_cliente = pedido.peca_do_cliente === true;
+    delete item.peca_do_cliente;
+    if (item.fornecida_cliente === true) {
+      // peça trazida pelo cliente: sem preço, sem custo e fora do estoque (como o editor da tela)
+      item.valor_unit = 0; item.custo_unit = 0; item.desconto = 0; item.produto_id = null;
+      return item;
+    }
+    if (!temCodigo) return item;
+    const cod = String(item.codigo ?? "").trim();
+    if (!cod) { item.codigo = ""; item.produto_id = null; return item; }
+    const tab = db.from;
+    if (!tab) return item;
+    // mesmas regras do lancar_itens_os (v27): só produto, ativo na frente; referência e código de barras são texto,
+    // "codigo" é o número interno do estoque — por isso só entra na busca quando o que veio é só número
+    const acha = async (coluna: string) => {
+      const r = await tab("produtos").select("id,codigo,referencia,descricao,custo,ativo,tipo").eq(coluna, cod).eq("tipo", "produto").order("ativo", { ascending: false }).limit(3);
+      return ((r.data || []) as Array<Record<string, unknown>>);
+    };
+    let achados = await acha("referencia");
+    if (!achados.length) achados = await acha("codigo_barras");
+    if (!achados.length && /^\d+$/.test(cod)) achados = await acha("codigo");
+    const prod = achados[0];
+    if (prod) {
+      item.produto_id = prod.id;
+      if (!temCusto) item.custo_unit = Number(prod.custo) || 0;
+      if (achados.length > 1) avisos.push("Há mais de um produto com o código " + cod + " (entrou \"" + String(prod.descricao || "") + "\"): confira na tela de estoque.");
+      if (prod.ativo === false) avisos.push("O produto do código " + cod + " está inativo no estoque.");
+    } else {
+      item.produto_id = null;
+      avisos.push("Código " + cod + " não está no estoque: o item fica como referência e não vai dar baixa quando virar O.S.");
+    }
+    return item;
+  };
+
   s.registerTool("buscar_orcamento", {
     title: "Buscar orçamento (ORC)",
     description: "Lê os orçamentos separados da O.S. (numeração ORC): pelo número (com todos os itens), pela placa do veículo (os 5 últimos) " +
@@ -1673,7 +1735,14 @@ export function criarServidor(db: Banco): McpServer {
         codigo: z.string().optional().describe("Código da peça no estoque do DTCar Gestão"), desconto: z.number().nonnegative().optional(),
         peca_do_cliente: z.boolean().optional(),
       })).max(40).optional(),
-      itens_alterar: z.array(z.object({ id: z.string().uuid() }).passthrough()).max(60).optional(),
+      itens_alterar: z.array(z.object({
+        id: z.string().uuid().describe("Id do item (veja buscar_orcamento)"),
+        tipo: z.enum(["servico", "peca", "terceiro"]).optional(), descricao: z.string().min(2).optional(),
+        qtd: z.number().positive().optional(), valor_unit: z.number().nonnegative().optional(), custo_unit: z.number().nonnegative().optional(),
+        codigo: z.string().optional().describe("Código do estoque; vazio solta o vínculo e a peça deixa de dar baixa"),
+        desconto: z.number().nonnegative().optional(), peca_do_cliente: z.boolean().optional(),
+        aprovado: z.boolean().optional().describe("false = o cliente não quis este item"),
+      }).strict()).max(60).optional(),
       itens_remover: z.array(z.string().uuid()).max(60).optional(),
       itens_fora: z.array(z.string().uuid()).max(60).optional().describe("acao=aprovar: itens que o cliente não aprovou"),
       motivo: z.string().optional().describe("acao=recusar: por que o cliente não quis"),
@@ -1684,6 +1753,7 @@ export function criarServidor(db: Banco): McpServer {
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
   }, async ({ numero, acao, confirmar: grava, pedido: ped, itens_incluir, itens_alterar, itens_remover, itens_fora, motivo, aprovado_por, forma_aprovacao, placa, ...p }) => {
     if (!db.from) return falha("Conector sem acesso de leitura às tabelas.");
+    if (grava === true) { const erro = await soAdmin(); if (erro) return falha(erro); }
     const atual = numero ? await lerOrc(numero) : null;
     if (atual && "erro" in atual) return falha(atual.erro as string);
     const o = (atual?.orc || {}) as Record<string, unknown>;
@@ -1719,33 +1789,19 @@ export function criarServidor(db: Banco): McpServer {
     const alterar = new Map((itens_alterar || []).map((i) => [String(i.id), i as ItemOrc]));
     const sobrando = [...remover, ...alterar.keys()].filter((id) => !(atual?.itens || []).some((i) => String(i.id) === id));
     if (sobrando.length) return falha("Estes itens não são do orçamento " + orcNum(numero) + ": " + sobrando.join(", ") + ".");
-    const itens: ItemOrc[] = (atual?.itens || []).filter((i) => !remover.has(String(i.id))).map((i) => ({ ...i, ...(alterar.get(String(i.id)) || {}) }));
     const avisos: string[] = [];
+    const itens: ItemOrc[] = [];
+    for (const i of (atual?.itens || []).filter((x) => !remover.has(String(x.id)))) {
+      const mudanca = alterar.get(String(i.id));
+      if (!mudanca) { itens.push(i); continue; }
+      const fora = Object.keys(mudanca).filter((k) => k !== "id" && !CAMPOS_ITEM_ORC.includes(k));
+      if (fora.length) return falha("Campo \"" + fora[0] + "\" do item não existe. Campos: " + CAMPOS_ITEM_ORC.join(", ") + ".");
+      // o item vem MESCLADO com o do banco: quem decide o que mexer é o pedido (mudanca), não o item
+      itens.push(await prepararItemOrc({ ...i, ...mudanca }, mudanca as Record<string, unknown>, avisos));
+    }
     for (const i of itens_incluir || []) {
-      const { peca_do_cliente, codigo, ...resto } = i;
-      const item: ItemOrc = { ...resto, codigo: codigo || "", qualidade: i.tipo === "peca" ? "original" : "", fornecida_cliente: peca_do_cliente === true };
-      // peça do estoque: liga no produto (é o produto_id que dá baixa quando o orçamento virar O.S.)
-      if (codigo) {
-        const tab = db.from, cod = String(codigo).trim();
-        // mesmas regras do lancar_itens_os (v27): só produto, ativo na frente; referência e código de barras são texto,
-        // "codigo" é o número interno do estoque — por isso só entra na busca quando o que veio é só número
-        const acha = async (coluna: string) => {
-          const r = await tab("produtos").select("id,codigo,referencia,descricao,custo,ativo,tipo").eq(coluna, cod).eq("tipo", "produto").order("ativo", { ascending: false }).limit(3);
-          return ((r.data || []) as Array<Record<string, unknown>>);
-        };
-        let achados = await acha("referencia");
-        if (!achados.length) achados = await acha("codigo_barras");
-        if (!achados.length && /^\d+$/.test(cod)) achados = await acha("codigo");
-        const prod = achados[0];
-        if (prod) {
-          item.produto_id = prod.id;
-          if (item.custo_unit === undefined) item.custo_unit = Number(prod.custo) || 0;
-          if (achados.length > 1) avisos.push("Há mais de um produto com o código " + cod + " (entrou \"" + String(prod.descricao || "") + "\"): confira na tela de estoque.");
-          if (prod.ativo === false) avisos.push("O produto do código " + cod + " está inativo no estoque.");
-        } else avisos.push("Código " + cod + " não está no estoque: o item entrou como genérico e não vai dar baixa quando virar O.S.");
-      }
-      if (peca_do_cliente === true) { item.valor_unit = 0; item.custo_unit = 0; item.desconto = 0; }
-      itens.push(item);
+      const item: ItemOrc = { ...i, codigo: i.codigo || "", qualidade: i.tipo === "peca" ? "original" : "" };
+      itens.push(await prepararItemOrc(item, i as Record<string, unknown>, avisos));
     }
 
     const digitado = p.veiculo as Record<string, unknown> | undefined;
@@ -1800,7 +1856,7 @@ export function criarServidor(db: Banco): McpServer {
       tabela_preco: (o.tabela_preco as string) || "vista",
       condicoes_pagamento: p.condicoes_pagamento ?? o.condicoes_pagamento ?? "",
       desconto: p.desconto ?? Number(o.desconto || 0),
-      validade: p.validade ?? o.validade ?? null,
+      validade: p.validade ?? o.validade ?? (o.id ? null : await validadePadrao()),
       situacao: sit,
       motivo: motivo ?? o.motivo ?? "",
       itens,

@@ -360,8 +360,20 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   A O.S. nasce sem KM e com `checkin.aguardando_veiculo = true`: a tela da O.S. mostra "Veio do orçamento ORC-…" (link) e "Registrar
   chegada" (KM, pela `api.atualizarOrdem`), sem travar a aprovação; depois oferece o checklist. A O.S. nova é criada direto (como
   `agente_abrir_os`); dali em diante, alterações pela `sincronizar_alteracao_os`. Barra de cima (PC, a partir de 1100 px): botão próprio
-  "Novo orçamento". Teste: `bash teste/teste_v53.sh`. **Ainda não feito:** envio pelo WhatsApp da
-  oficina com PDF (função "email": trocar o commit de `pdf.js`/`util.js`/`regras.js` em `email/site.ts`), ferramentas do conector, painel e
+  "Novo orçamento". Teste: `bash teste/teste_v53.sh`.
+  **Etapa 4 (v61, 18/11/2026) — ferramentas do conector:** o Claude faz pelo conector o mesmo que o Danilo faz na tela, pelas MESMAS funções
+  (`orcamento_salvar` do v52 e `orcamento_aprovar` do v53; nenhum caminho paralelo e nenhuma tabela nova). Leitura: `agente_orcamentos`
+  (lista; a situação sai calculada por `orc_situacao` — "vencido" é validade passada em elaboração/enviado) e `agente_buscar_orcamento`
+  (número 5 = ORC-00005 ou id, com os ids dos itens, que são o que `itens_alterar`/`itens_remover`/`itens_fora` usam). Gravação pelo
+  `agente_fazer`: ação `orcamento` (`agente_orcamento`: criar, editar, enviar, recusar com motivo, reabrir e excluir — este só administrador
+  e nunca o que virou O.S.) e ação `orcamento_aprovar` (`agente_orcamento_aprovar`, que chama a `orcamento_aprovar` com `p_gravar`).
+  Itens: `itens` troca a lista inteira; `itens_incluir`/`itens_alterar`/`itens_remover` mexem no que já está lá. `validade_dias` vira data.
+  **Prévia:** o `agente_fazer` desfaz a transação, mas a sequência do número NÃO volta atrás — por isso criar na prévia não grava nada e
+  devolve a conta sem número (o mesmo cuidado da venda de balcão e do recibo avulso no v50); aprovar na prévia usa o `p_gravar = false` do
+  v53, que confere sem gastar número de O.S. Ferramentas: `orcamentos`, `buscar_orcamento`, `orcamento` e `aprovar_orcamento` (64 no total).
+  Publicar a função "agente" de novo (ferramentas novas). Testes: `bash teste/teste_v61.sh` (banco inteiro) e `deno run -A teste/teste_agente_mcp.ts`.
+  **Ainda não feito:** envio pelo WhatsApp da
+  oficina com PDF (função "email": trocar o commit de `pdf.js`/`util.js`/`regras.js` em `email/site.ts`), painel e
   relatórios, backup de leitura, orçamento sem internet. Testes: `bash teste/teste_v52.sh` (banco inteiro) e `python3 teste/teste_fluxo.py`.
 - **Ficha do salão (pedido do Danilo em 11/11/2026):** O.S. › Imprimir O.S. › "Ficha do salão" → `#/imprimir/salao/<id>` (`FichaSalao` e
   `servicosSalao` em `js/telas/imprimir.js`). O que fazer no carro, em letra grande, para o mecânico: A4, preto e branco, só contornos (pouca

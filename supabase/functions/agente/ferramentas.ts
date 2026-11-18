@@ -7,6 +7,8 @@
 // Gravação: abrir_os (v20), lancar_itens_os (v21/v27), receber_os (v37: recibo e baixa de O.S. entregue a receber), registrar_pre_nota (v31: pedido de compra do fornecedor), whatsapp_enviar (v25: põe na fila do WhatsApp da oficina;
 // v34: modelo de mensagem e PDF pela função "email")
 // e email_enviar/email_responder/email_regra (v29: e-mail da oficina pela função "email").
+// v61 (18/11/2026): orçamento separado da O.S. — orcamentos, buscar_orcamento, orcamento e aprovar_orcamento, pelas mesmas
+// funções da tela (orcamento_salvar do v52 e orcamento_aprovar do v53).
 // 15/11/2026: consultar_cpf — nome e nascimento do cliente pelo CPF (função "cpf", API CPF); só administrador, não grava.
 // v55 (13/11/2026): consultar_placa — dados do veículo pela placa (função "placa", API Placas); só paga quando o sistema não tem os dados.
 // 09/11/2026 (pedido do Danilo: "sem amarras"): rh_documentos, rh_abrir e rh_buscar_contabilidade — Documentos do RH
@@ -57,6 +59,11 @@ Responda ao Danilo em português do Brasil, curto e direto.
   emitir_boleto registra no Sicredi de verdade (aparece no DDA do cliente).
   "Receber e fechar" com o carro no pátio: receber_os (sinal) + alterar_os acao=entregar — a O.S. fecha sozinha quando quita.
   Nunca pague, transfira ou aceite nada no banco: conta_pagar só registra o que o Danilo já pagou.
+- Orçamento ORC (orcamentos, buscar_orcamento, orcamento, aprovar_orcamento): preço para quem pediu e NÃO deixou o carro. Não é O.S., não gasta
+  número de O.S. e não mexe em estoque nem em financeiro. Carro que entrou no pátio para diagnóstico continua sendo O.S. (abrir_os).
+  Criar/editar/enviar/recusar/reabrir com ordem clara: confirmar=true (na prévia de criar o número ORC ainda não sai). Excluir: prévia e "sim".
+  aprovar_orcamento cria a O.S. de verdade e dá baixa no estoque: SEMPRE prévia primeiro, mostre o que entra e o que fica de fora, e grave depois do "sim".
+  Item que o cliente não quis vai em itens_fora (ids de buscar_orcamento): ele fica registrado como apontado pela oficina e não aprovado.
 - preparar_envio só monta o texto e o link do WhatsApp: quem envia é o Danilo.
 - whatsapp_enviar ENVIA de verdade pelo WhatsApp da oficina (fila com horário comercial e intervalo). Só com ordem do Danilo para
   aquele cliente. Texto ditado ou aprovado por ele: confirmar=true. Texto que você redigiu: mostre e espere o "sim" antes de confirmar.
@@ -138,6 +145,28 @@ export function criarServidor(db: Banco): McpServer {
     inputSchema: z.object({ etapa: z.enum(["orcamento", "execucao", "pagamento", "todas"]).default("todas") }),
     annotations: LEITURA,
   }, async ({ etapa }) => chamar(db, "agente_listar_os", { p_etapa: etapa }));
+
+  // ---------- Orçamento separado da O.S. (v61, etapa 4): ORC-00001 é preço para quem NÃO deixou o carro ----------
+  s.registerTool("orcamentos", {
+    title: "Orçamentos (ORC)",
+    description: "Lista os orçamentos — o preço dado a quem ainda NÃO deixou o carro (telefone, WhatsApp, balcão). Não é O.S.: só vira O.S. quando o cliente aprova. " +
+      "situacao: abertos (em elaboração, enviados e vencidos), elaboracao, enviado, aprovado, recusado, vencido (validade passada sem resposta, calculado) ou todos. " +
+      "busca: parte do nome do cliente, a placa ou o número. de/ate: data de criação.",
+    inputSchema: z.object({
+      situacao: z.enum(["todos", "abertos", "elaboracao", "enviado", "aprovado", "recusado", "vencido"]).default("todos"),
+      busca: z.string().optional().describe("Nome do cliente, placa ou número do orçamento"),
+      de: data.optional(), ate: data.optional(), limite: z.number().int().positive().max(200).optional(),
+    }),
+    annotations: LEITURA,
+  }, async (p) => chamar(db, "agente_orcamentos", { p }));
+
+  s.registerTool("buscar_orcamento", {
+    title: "Buscar orçamento (ORC)",
+    description: "Abre um orçamento pelo número (5 = ORC-00005) ou pelo id, com cliente, veículo, condições e todos os itens. " +
+      "O id de cada item é o que se usa em orcamento (itens_alterar, itens_remover) e em aprovar_orcamento (itens_fora).",
+    inputSchema: z.object({ numero: z.number().int().positive().optional().describe("Número do orçamento (5 = ORC-00005)"), id: z.string().uuid().optional() }),
+    annotations: LEITURA,
+  }, async ({ numero, id }) => (numero || id) ? chamar(db, "agente_buscar_orcamento", { p: { numero, id } }) : falha("Informe o número do orçamento (5 = ORC-00005) ou o id."));
 
   s.registerTool("buscar_cliente", {
     title: "Buscar cliente",
@@ -319,6 +348,55 @@ export function criarServidor(db: Banco): McpServer {
     annotations: GRAVA,
   }, async ({ confirmar: c, ...p }) => fazer("alterar_os", { ...p, ...(p.km_saida !== undefined ? { km_saida: String(p.km_saida) } : {}) }, c === true,
     (r) => r.id ? { abrir_no_sistema: SITE + "/#/os/" + r.id } : {}));
+
+  // v61: o orçamento ORC pelo conector — as mesmas funções da tela (orcamento_salvar e orcamento_aprovar)
+  const itemOrc = z.object({
+    tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2), qtd: z.number().positive().default(1),
+    valor_unit: z.number().nonnegative(), custo_unit: z.number().nonnegative().optional(), codigo: z.string().optional(),
+    desconto: z.number().nonnegative().optional(), fornecida_cliente: z.boolean().optional(), qualidade: z.string().optional(),
+  });
+
+  s.registerTool("orcamento", {
+    title: "Orçamento (ORC): criar, editar, enviar, recusar, reabrir, excluir",
+    description: "Orçamento para quem pediu preço e NÃO deixou o carro. Não gasta número de O.S. e não mexe em estoque nem em financeiro: " +
+      "só vira O.S. com aprovar_orcamento. acao: criar (padrão quando não vem número), editar, enviar (cliente recebeu), recusar (motivo obrigatório), " +
+      "reabrir (volta para em elaboração) e excluir (só administrador, e nunca o que já virou O.S.). Localize por numero (5 = ORC-00005) ou id. " +
+      "Cliente e veículo: do cadastro (cliente_id/veiculo_id) ou só digitados (cliente {nome, telefone}, veiculo {placa, marca, modelo, ano}) — o cadastro é feito na aprovação. " +
+      "Itens: itens troca a lista inteira; itens_incluir, itens_alterar [{id, qtd, valor_unit...}] e itens_remover [id] mexem no que já está lá (os ids vêm de buscar_orcamento). " +
+      "validade (AAAA-MM-DD) ou validade_dias (padrão dos Ajustes: 10 dias). Ordem clara do Danilo: confirmar=true; excluir sempre com prévia e sim. " +
+      "Na prévia de criar nada é gravado e o número ORC só sai na gravação.",
+    inputSchema: z.object({
+      acao: z.enum(["criar", "editar", "enviar", "recusar", "reabrir", "excluir"]).optional(),
+      numero: z.number().int().positive().optional().describe("Número do orçamento (5 = ORC-00005)"), id: z.string().uuid().optional(),
+      cliente_id: z.string().uuid().optional(), veiculo_id: z.string().uuid().optional(),
+      cliente: z.record(z.string(), z.unknown()).optional().describe("Cliente só digitado: {nome, telefone, doc, cep, rua, bairro}"),
+      veiculo: z.record(z.string(), z.unknown()).optional().describe("Veículo só digitado: {placa, marca, modelo, ano}"),
+      reclamacao: z.string().optional().describe("O que o cliente pediu"), obs: z.string().optional().describe("Sai no orçamento"),
+      obs_internas: z.string().optional().describe("Só a oficina vê"),
+      tabela_preco: z.enum(["vista", "prazo", "atacado"]).optional(), condicoes_pagamento: z.string().optional(),
+      desconto: z.number().nonnegative().optional(), validade: data.optional(), validade_dias: z.number().int().positive().optional(),
+      itens: z.array(itemOrc).max(60).optional(), itens_incluir: z.array(itemOrc).max(40).optional(),
+      itens_alterar: z.array(z.object({ id: z.string().uuid() }).catchall(z.unknown())).max(60).optional(),
+      itens_remover: z.array(z.string().uuid()).max(60).optional(),
+      motivo: z.string().optional().describe("Por que o cliente recusou"), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("orcamento", p, c === true));
+
+  s.registerTool("aprovar_orcamento", {
+    title: "Orçamento aprovado: virar O.S.",
+    description: "O cliente aprovou: o orçamento vira O.S. com o próximo número, já em \"Aprovado · em execução\", e a peça sai do estoque (é aqui que a baixa acontece). " +
+      "Regra do Danilo: o que não for tirado segue para a O.S.; o que for tirado (itens_fora, com os ids de buscar_orcamento) NÃO segue e fica registrado como " +
+      "\"apontado pela oficina e não aprovado pelo cliente\", no orçamento e numa observação que sai na impressão da O.S. " +
+      "por = quem aprovou; forma = como (telefone, WhatsApp, balcão). O carro ainda não chegou: a O.S. nasce sem KM e a tela pede \"Registrar chegada\". " +
+      "Cria O.S. de verdade: SEMPRE confirmar=false primeiro (confere sem gastar número), mostre o que entra e o que fica de fora, e grave depois do sim.",
+    inputSchema: z.object({
+      numero: z.number().int().positive().optional().describe("Número do orçamento (5 = ORC-00005)"), id: z.string().uuid().optional(),
+      itens_fora: z.array(z.string().uuid()).max(60).optional().describe("Ids dos itens que o cliente NÃO quis"),
+      por: z.string().optional(), forma: z.string().optional(), pedido, confirmar,
+    }),
+    annotations: GRAVA,
+  }, async ({ confirmar: c, ...p }) => fazer("orcamento_aprovar", p, c === true));
 
   s.registerTool("salvar_cadastro", {
     title: "Cliente e veículo: criar, editar, excluir",

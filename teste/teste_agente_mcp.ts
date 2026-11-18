@@ -113,11 +113,13 @@ const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente
   // 15/11/2026: consulta do cliente pelo CPF (API CPF)
   "consultar_cpf",
   // etapa 4 (14/11/2026): óleo e filtros do veículo
-  "oleo_filtros"].sort();
-confere("60 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+  "oleo_filtros",
+  // v61 (18/11/2026): orçamento separado da O.S. — etapa 4 (ferramentas do conector)
+  "orcamentos", "buscar_orcamento", "orcamento", "aprovar_orcamento"].sort();
+confere("64 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("22 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; 15/11: consultar_cpf; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 22, String(leitura));
+confere("24 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; 15/11: consultar_cpf; v61: orcamentos e buscar_orcamento; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 24, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
@@ -249,6 +251,29 @@ for (const [nome, acao, args] of [["salvar_cadastro", "salvar_cadastro", { tipo:
   c = await chama(nome, args);
   confere(nome + " → agente_fazer('" + acao + "') prévia", c.fn === "agente_fazer" && c.args?.p_acao === acao && c.args?.p_gravar === false, JSON.stringify(c.args));
 }
+// v61: orçamento separado da O.S. (ORC) pelo conector
+c = await chama("orcamentos", { situacao: "abertos", busca: "KYN9G83" });
+confere("orcamentos → agente_orcamentos", c.fn === "agente_orcamentos" && (c.args?.p as Record<string, unknown>)?.situacao === "abertos"
+  && (c.args?.p as Record<string, unknown>)?.busca === "KYN9G83", JSON.stringify(c.args));
+c = await chama("orcamentos", {});
+confere("orcamentos padrão = todos", c.fn === "agente_orcamentos" && (c.args?.p as Record<string, unknown>)?.situacao === "todos");
+c = await chama("buscar_orcamento", { numero: 5 });
+confere("buscar_orcamento pelo número → agente_buscar_orcamento", c.fn === "agente_buscar_orcamento" && (c.args?.p as Record<string, unknown>)?.numero === 5);
+c = await chama("buscar_orcamento", {});
+confere("buscar_orcamento sem número nem id: erro sem ir ao banco", c.r?.isError === true && !c.fn);
+c = await chama("orcamento", { acao: "criar", cliente: { nome: "JOSE" }, itens: [{ tipo: "peca", descricao: "BIELETA", qtd: 2, valor_unit: 80 }] });
+confere("orcamento sem confirmar = prévia pelo agente_fazer", c.fn === "agente_fazer" && c.args?.p_acao === "orcamento" && c.args?.p_gravar === false
+  && (c.args?.p as Record<string, unknown>)?.acao === "criar", JSON.stringify(c.args));
+c = await chama("orcamento", { numero: 5, itens_remover: ["11111111-1111-4111-8111-111111111111"], confirmar: true });
+confere("orcamento confirmado grava e leva os ids dos itens", c.fn === "agente_fazer" && c.args?.p_gravar === true
+  && JSON.stringify((c.args?.p as Record<string, unknown>)?.itens_remover) === '["11111111-1111-4111-8111-111111111111"]', JSON.stringify(c.args));
+c = await chama("orcamento", { acao: "mandar_email", numero: 5 });
+confere("orcamento com ação inválida: erro sem ir ao banco", c.r?.isError === true && !c.fn);
+c = await chama("aprovar_orcamento", { numero: 5, itens_fora: ["22222222-2222-4222-8222-222222222222"], por: "José", forma: "WhatsApp" });
+confere("aprovar_orcamento sem confirmar = prévia (não gasta número de O.S.)", c.fn === "agente_fazer" && c.args?.p_acao === "orcamento_aprovar"
+  && c.args?.p_gravar === false && (c.args?.p as Record<string, unknown>)?.por === "José", JSON.stringify(c.args));
+confere("instruções v61: orçamento não é O.S. e aprovar sempre com prévia",
+  String(ini.corpo.result?.instructions || "").includes("Orçamento ORC") && String(ini.corpo.result?.instructions || "").includes("aprovar_orcamento cria a O.S. de verdade"));
 // v41: emitir_boleto — prévia não chama o Sicredi; confirmado: preparar → sicredi emitir → gravar
 acordadas.length = 0;
 c = await chama("emitir_boleto", { numero: 1887, vencimento: "2026-12-06", valor: 600 });

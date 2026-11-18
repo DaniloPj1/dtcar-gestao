@@ -5,13 +5,13 @@
 // pelo da main que tem a mudança e publique a função "email" de novo (o teste_anexos confere que o commit existe).
 // jsPDF na mesma versão do vendor/jspdf.umd.min.js do site.
 import { jsPDF } from "npm:jspdf@2.5.1";
-import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/pdf.js";
-import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/boletopdf.js";
-import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/mensagens.js";
-import { pdfOSRecibo, usarLeitorImagem as usarLeitorRecibo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/pdfrecibo.js";
-import { osQuitada } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/osrecibo.js";
-import { pdfResumoOS, usarLeitorImagem as usarLeitorResumo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/pdfresumo.js";
-import { etapaNoResumo, dadosResumoOS, nomeArquivoResumo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/9552880a909f18b1e03323f57d341582d95beba1/js/resumoos.js";
+import { pdfEntrada, pdfOrcamento, pdfOS, usarLeitorImagem } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/pdf.js";
+import { nomePdf, pdfBoletos } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/boletopdf.js";
+import * as mensagens from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/mensagens.js";
+import { pdfOSRecibo, usarLeitorImagem as usarLeitorRecibo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/pdfrecibo.js";
+import { osQuitada } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/osrecibo.js";
+import { pdfResumoOS, usarLeitorImagem as usarLeitorResumo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/pdfresumo.js";
+import { etapaNoResumo, dadosResumoOS, nomeArquivoResumo } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/resumoos.js";
 import type { Geradores } from "./anexos.ts";
 export { mensagens };
 

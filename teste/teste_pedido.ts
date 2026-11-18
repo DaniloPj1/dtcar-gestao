@@ -16,11 +16,13 @@ confere("placa limpa", normPlaca("abc-1d23") === "ABC1D23" && normPlaca("") === 
 const banco: Orc[] = [{ id: "22222222-2222-4222-8222-222222222222", numero: 7, situacao: "enviado", reclamacao: "Troca de pastilhas", obs_internas: "" },
   { id: "33333333-3333-4333-8333-333333333333", numero: 8, situacao: "aprovado", reclamacao: "x", obs_internas: "" }];
 const inseridos: Record<string, unknown>[] = [];
+const itensGravados: { id: string; itens: { descricao: string; qtd: number }[] }[] = [];
 const deps = (membro: boolean, nome = "Carlos Mecânico"): Deps => ({
   membro, quem: "11111111-1111-4111-8111-111111111111", nome, agora: AGORA,
   inserir: async (o) => { inseridos.push(o); return { id: "44444444-4444-4444-8444-444444444444", numero: 9 }; },
   ler: async (id) => banco.find((o) => o.id === id) || null,
   gravar: async (id, patch) => { const o = banco.find((x) => x.id === id)!; Object.assign(o, patch); },
+  inserirItens: async (id, itens) => { itensGravados.push({ id, itens }); },
 });
 const erro = async (p: Promise<unknown>) => { try { await p; return ""; } catch (e) { return (e instanceof ErroUso ? "USO:" : "ERRO:") + (e as Error).message; } };
 
@@ -52,5 +54,22 @@ confere("segundo acréscimo não repete a marca", r3.ok === true && banco[0].obs
 const r4 = await executar({ acao: "novo", texto: "Barulho na roda", placa: "QXN1E49" }, deps(true, "Ana"));
 confere("pedido só com a placa grava o cliente como A INFORMAR", r4.ok === true && (inseridos[inseridos.length - 1].cliente as { nome: string }).nome === "A INFORMAR");
 
+// itens marcados nos sistemas do carro (18/11/2026): entram sem preço; o texto vira opcional
+const r5 = await executar({ acao: "novo", texto: "", placa: "ABC1D23", itens: [{ descricao: "subst. pastilha de freio dianteira", qtd: 1, valor_unit: 999 }, { descricao: "x", qtd: 3 }, { descricao: "Amortecedor dianteiro", qtd: 2 }] }, deps(true));
+confere("pedido só com itens é aceito e o pedido vira o resumo dos itens", r5.ok === true && r5.itens === 2 && inseridos[inseridos.length - 1].reclamacao === "SUBST. PASTILHA DE FREIO DIANTEIRA; 2x AMORTECEDOR DIANTEIRO");
+const g5 = itensGravados[itensGravados.length - 1];
+confere("itens vão sem preço, em maiúsculas, item curto descartado", g5.itens.length === 2 && !("valor_unit" in g5.itens[0]) && g5.itens[1].qtd === 2 && g5.itens[0].descricao === "SUBST. PASTILHA DE FREIO DIANTEIRA");
+confere("nem texto nem itens é recusado", /USO:.*marque os itens/.test(await erro(executar({ acao: "novo", texto: "", placa: "ABC1D23", itens: [] }, deps(true)))));
+confere("mais de 40 itens é recusado", /USO:.*40 itens/.test(await erro(executar({ acao: "novo", texto: "x y z", placa: "ABC1D23", itens: Array.from({ length: 41 }, () => ({ descricao: "AB", qtd: 1 })) }, deps(true)))));
+await executar({ acao: "acrescentar", id: "22222222-2222-4222-8222-222222222222", texto: "", itens: [{ descricao: "Bieleta", qtd: 2 }] }, deps(true, "Ana"));
+confere("acrescentar só com itens grava os itens e deixa a linha no pedido (aviso do sino)", itensGravados[itensGravados.length - 1].id === "22222222-2222-4222-8222-222222222222" && banco[0].reclamacao.endsWith("— Ana, 16/11/2026 15:30: itens: 2x BIELETA"));
+// mecânico só acrescenta no que abriu; itens que falham desfazem o ORC novo
+banco.push({ id: "55555555-5555-4555-8555-555555555555", numero: 10, situacao: "elaboracao", reclamacao: "x", obs_internas: "", consultor_id: "99999999-9999-4999-8999-999999999999", criado_por: null });
+confere("mecânico não acrescenta em orçamento de outro", /USO:.*não foi aberto por você/.test(await erro(executar({ acao: "acrescentar", id: "55555555-5555-4555-8555-555555555555", texto: "mais isso" }, { ...deps(true), mecanico: true }))));
+banco[banco.length - 1].consultor_id = "11111111-1111-4111-8111-111111111111";
+confere("mecânico acrescenta no que ele abriu", (await executar({ acao: "acrescentar", id: "55555555-5555-4555-8555-555555555555", texto: "mais isso" }, { ...deps(true), mecanico: true })).ok === true);
+const apagados: string[] = [];
+const dFalha = { ...deps(true), inserirItens: async () => { throw new Error("Não deu para gravar os itens: x"); }, apagar: async (id: string) => { apagados.push(id); } };
+confere("itens que falham desfazem o ORC novo", /Não deu para gravar os itens/.test(await erro(executar({ acao: "novo", texto: "", placa: "ABC1D23", itens: [{ descricao: "BIELETA", qtd: 1 }] }, dFalha))) && apagados[0] === "44444444-4444-4444-8444-444444444444");
 console.log(ok.length + " OK, " + falhas.length + " falha(s)"); falhas.forEach((f) => console.log("FALHA: " + f));
 if (falhas.length) Deno.exit(1);

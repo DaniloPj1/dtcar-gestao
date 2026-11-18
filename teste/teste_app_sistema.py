@@ -299,7 +299,7 @@ try:
         tela(pg, 'orcamento'); tx = textos(pg)
         t('ORC-00006 aprovado' in tx and 'OS 01920' in tx and 'ORC-00007' not in tx, 'aviso de aprovado só para quem pediu, com o número da O.S.')
         # barra de uma linha (regra do Danilo, 17/11): o pedido só aparece ao tocar
-        t('ORC-00005' in tx and 'Enviado ao cliente' in tx and 'Barulho na suspensão' not in tx and 'ORC-00006' not in tx.split('Orçamentos abertos')[1], 'lista só os orçamentos abertos, fechados numa barra de uma linha')
+        t('ORC-00005' in tx and 'Enviado' in tx and 'Barulho na suspensão' not in tx and 'ORC-00006' not in tx.split('Orçamentos abertos')[1], 'lista só os orçamentos abertos, fechados numa barra de uma linha')
         pg.click('button[data-orc="orc1"]'); pg.wait_for_timeout(300); t('Barulho na suspensão' in textos(pg) and pg.locator('button[data-acrescentar="orc1"]').count() == 1, 'tocar na barra abre o pedido e o botão de acrescentar')
         t(pg.locator('.bolinha').count() >= 1 and pg.locator('.abas .bolinha').inner_text() == '1', 'a aba Orçamentos mostra 1 aviso')
         pg.click('button[data-visto="orc2"]'); pg.wait_for_timeout(500); t('ORC-00006 aprovado' not in textos(pg) and pg.locator('.bolinha').count() == 0, 'OK no aviso tira o aviso (fica guardado no aparelho)')
@@ -310,10 +310,17 @@ try:
         t(f.funcao_pedido[-1] == {'acao': 'acrescentar', 'id': 'orc1', 'texto': 'Palhetas'} and '— Fulano de Teste, 16/11/2026 15:31: Palhetas' in textos(pg), 'acrescentar manda o texto para a função pedido e mostra a linha no pedido')
         pg.click('#orc-novo'); pg.wait_for_selector('#pd-area'); pg.click('#pd-enviar'); pg.wait_for_timeout(300); t('Busque a placa ou informe o nome' in textos(pg), 'pedido novo exige placa ou cliente')
         pg.wait_for_timeout(600); pg.fill('#pd-placa', 'abc1d23'); pg.keyboard.press('Enter'); pg.wait_for_selector('#veic', timeout=5000); t('JOÃO DA SILVA' in textos(pg) and pg.locator('#pd-nome').count() == 0, 'placa do cadastro traz carro e dono; não pede o nome')
-        pg.click('#pd-enviar'); pg.wait_for_timeout(300); t('Escreva o que é para orçar' in textos(pg), 'pedido novo exige o texto')
+        pg.click('#pd-enviar'); pg.wait_for_timeout(300); t('Marque os itens nos sistemas do carro ou escreva' in textos(pg), 'pedido novo exige itens ou texto')
+        # sistemas do carro (18/11): Freios → pastilha pede a posição; marca Dianteira; bieleta 2 un.
+        t(pg.locator('#sis-carro [data-sis]').count() >= 6 and 'Freios' in pg.inner_text('#sis-carro'), 'pedido mostra os sistemas do carro com ícones')
+        pg.click('#sis-carro [data-sis="fr"]'); pg.wait_for_selector('#sis-pecas'); pg.click('[data-peca="Pastilha de freio"] .peca-topo'); pg.wait_for_timeout(200)
+        pg.click('#pd-enviar'); pg.wait_for_timeout(300); t('Escolha a posição' in textos(pg), 'item marcado sem posição não envia')
+        pg.click('[data-peca="Pastilha de freio"] .peca-pos button:has-text("Diant.")'); pg.click('button:has-text("Pronto: voltar aos sistemas")'); pg.click('#sis-carro [data-sis="sd"]'); pg.wait_for_selector('#sis-pecas')
+        pg.click('[data-peca="Bieleta"] .peca-topo'); pg.click('[data-peca="Bieleta"] .peca-q button:has-text("2")'); pg.click('button:has-text("Pronto: voltar aos sistemas")'); pg.wait_for_timeout(200)
+        t('SUBST. PASTILHA DE FREIO DIANTEIRA' in pg.inner_text('#pd-marcados') and '2× SUBST. BIELETA' in pg.inner_text('#pd-marcados') and pg.locator('#sis-carro [data-sis="fr"] .bolinha').inner_text() == '1', 'lista dos marcados com nome, posição e quantidade')
         pg.fill('#pd-area', 'Pastilhas e discos dianteiros'); pg.evaluate("(() => { const b = document.querySelector('#pd-enviar'); b.click(); b.click(); })()"); pg.wait_for_selector('.quadro', timeout=10000); pg.wait_for_timeout(400)
         novos = [d for d in f.funcao_pedido if d['acao'] == 'novo']
-        t(len(novos) == 1 and novos[0]['texto'] == 'Pastilhas e discos dianteiros' and novos[0]['placa'] == 'ABC1D23' and novos[0]['veiculo_id'] == 'v1' and novos[0]['cliente_id'] == 'c1' and novos[0]['cliente']['nome'] == 'JOÃO DA SILVA' and 'itens' not in novos[0] and not f.tabela('rpc/orcamento_salvar'), 'pedido vai pela função pedido (sem item, sem preço, sem orcamento_salvar; dois toques = um pedido): %s' % novos)
+        t(len(novos) == 1 and novos[0]['texto'] == 'Pastilhas e discos dianteiros' and novos[0].get('itens') == [{'descricao': 'SUBST. PASTILHA DE FREIO DIANTEIRA', 'qtd': 1}, {'descricao': 'SUBST. BIELETA', 'qtd': 2}] and novos[0]['placa'] == 'ABC1D23' and novos[0]['veiculo_id'] == 'v1' and novos[0]['cliente_id'] == 'c1' and novos[0]['cliente']['nome'] == 'JOÃO DA SILVA' and not any('valor_unit' in i for i in novos[0]['itens']) and not f.tabela('rpc/orcamento_salvar'), 'pedido vai pela função pedido (itens sem preço, sem orcamento_salvar; dois toques = um pedido): %s' % novos)
         t('ORC-00012 enviado' in textos(pg) and pg.locator('a[href*="index.html"]').count() == 0, 'quadro confirma o envio sem levar ao sistema')
         pg.click('#pd-entendi'); pg.wait_for_timeout(400); t('ORC-00012' in textos(pg), 'o pedido novo aparece em Orçamentos abertos'); pg.click('button[data-orc="orc-app12"]'); pg.wait_for_timeout(300); t('Pastilhas e discos dianteiros' in textos(pg), 'abrir a barra do pedido novo mostra o texto')
         # pedido para carro fora do cadastro: modelo à mão e cliente digitado

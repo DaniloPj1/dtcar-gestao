@@ -222,3 +222,19 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .orc-barra b{color:var(--azul);font-size:15px;flex-shrink:0}.orc-barra .orc-veic{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;font-size:14px}
 .orc-barra .orc-sit{font-size:12px;color:var(--cinza-texto);flex-shrink:0}.orc-barra svg{flex-shrink:0;transition:transform .15s}.orc-item.aberto .orc-barra svg{transform:rotate(180deg)}
 .orc-item.aberto .orc-barra{border-bottom:1px solid #d3d7dc}.orc-corpo{display:flex;flex-direction:column;gap:8px;padding:10px 12px 12px}
+
+/* sistemas do carro (marcar itens do orçamento, como no app do mecânico — 18/11/2026) */
+.sis-carro{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sis-carro .sistema{position:relative}
+.sis-carro .sistema .bolinha{position:absolute;top:4px;right:4px}
+.sis-pecas{display:flex;flex-direction:column;gap:8px}
+.peca-app{border:1.5px solid #d3d7dc;border-radius:12px;background:#fff;overflow:hidden}.peca-app.on{border-color:var(--azul);background:#eef4fb}
+.peca-topo{width:100%;min-height:56px;display:flex;align-items:center;gap:10px;padding:6px 10px;border:0;background:none;font:inherit;color:var(--tinta);text-align:left}
+.peca-ic{width:44px;height:44px;flex-shrink:0;border-radius:10px;background:#fff;border:1px solid #d3d7dc;display:flex;align-items:center;justify-content:center;color:var(--azul)}
+.peca-nome{flex:1;font-weight:600;font-size:15px}
+.peca-cx{width:24px;height:24px;flex-shrink:0;border-radius:6px;border:1.5px solid #6b727c;display:flex;align-items:center;justify-content:center;color:#fff}.peca-app.on .peca-cx{background:var(--azul);border-color:var(--azul)}
+.peca-op{display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:0 10px 10px 64px}
+.peca-q,.peca-pos{display:flex;gap:6px;align-items:center}.peca-q b{min-width:22px;text-align:center}
+.peca-q button,.peca-pos button{min-height:38px;min-width:42px;padding:0 10px;border-radius:19px;border:1.5px solid #9aa1ab;background:#fff;color:var(--tinta);font:inherit;font-weight:600}
+.peca-q button[aria-pressed=true],.peca-pos button[aria-pressed=true]{background:var(--azul);border-color:var(--azul);color:#fff}
+.lista-marcados{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding:8px 10px;border-radius:10px;background:#f4f6f8;font-size:14px}.lista-marcados b{font-size:13px;color:var(--azul)}.lista-marcados .falta{color:#b3261e}

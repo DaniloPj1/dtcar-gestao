@@ -105,3 +105,20 @@ export function pecasDoSistema(cfg, sis, incluirOcultos = false) {
 export const catalogoDoApp = cfg => SISTEMAS_PADRAO.map(s => ({ id: s.id, nome: s.nome, icone: s.icone, pecas: pecasDoSistema(cfg, s) }));
 
 export const novoId = () => Math.random().toString(36).slice(2, 8);
+
+/** Nome do item no jeito da oficina, com a posição (o mesmo do app do mecânico: mecanico/app.js nomePeca). Sem a quantidade:
+ *  ela vai na coluna qtd. v = { q, pos } (pos: "Diant." | "Tras." | "Os 2" | "Dianteira" | ... | "Interna, Externa"). */
+const SEM_PREFIXO = /^(alinhamento|fluido|oleo|óleo)/i;
+export function nomeItemApp(p, v) {
+  const base = String(p.nome).toUpperCase(), f = /A$/.test(base.split(/[^A-ZÀ-Ú]+/)[0] || "");
+  const mapa = { "Diant.": f ? "DIANTEIRA" : "DIANTEIRO", "Tras.": f ? "TRASEIRA" : "TRASEIRO", "Os 2": f ? "DIANTEIRA E TRASEIRA" : "DIANTEIRO E TRASEIRO", Dianteira: "DIANTEIRA", Traseira: "TRASEIRA", "As 2": "DIANTEIRA E TRASEIRA" };
+  const pos = v && v.pos ? v.pos.split(", ").map(x => mapa[x] || x.toUpperCase()).join(" E ") : "";
+  return (SEM_PREFIXO.test(base) ? "" : "SUBST. ") + base + (pos ? " " + pos : "");
+}
+/** opções de posição da peça: [] (não pergunta), lista simples ou várias (multi) */
+export function opcoesPosicao(p) {
+  if (Array.isArray(p.pm)) return { lista: p.pm, multi: true };
+  if (p.pm === "chips") return { lista: ["Diant.", "Tras.", "Os 2"], multi: false };
+  if (p.pm === "chips2") return { lista: ["Dianteira", "Traseira", "As 2"], multi: false };
+  return { lista: [], multi: false };
+}

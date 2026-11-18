@@ -119,7 +119,8 @@ export function totais(itens, desconto = 0, aprovados = false) {
   for (const i of itens || []) {
     if (aprovados ? i.aprovado !== true : i.aprovado === false) continue;
     const v = totalItem(i);
-    const c = arred((Number(i.qtd) || 0) * (Number(i.custo_unit) || 0));
+    // peça fornecida pelo cliente não é custo da oficina (a mesma conta do banco e do relatório)
+    const c = i.fornecida_cliente ? 0 : arred((Number(i.qtd) || 0) * (Number(i.custo_unit) || 0));
     if (i.tipo === "servico") { t.servicos += v; t.custoServicos += c; t.horas += Number(i.horas) || 0; }
     else if (i.tipo === "peca") { t.pecas += v; t.custoPecas += c; }
     else { t.terceiros += v; t.custoTerceiros += c; }

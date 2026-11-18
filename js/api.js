@@ -372,9 +372,6 @@ function criarApiSupabase() {
       indicadasPara: async perfil_id => { const l = await metodos.apontamentos.listar({ desde: new Date(Date.now() - 60 * 86400000).toISOString() });
         return l.flatMap(s => (Array.isArray(s.indicacoes) ? s.indicacoes : []).filter(i => i.para_id === perfil_id && !i.visto_em).map(i => ({ ...i, apontamento_id: s.id, ordem_id: s.ordem_id, os_numero: s.os_numero, de_nome: s.perfil_nome }))); },
     },
-    /** Só "a tabela não existe" (banco ainda sem o v61) vale como "não há comissão lançada". Erro de permissão, tempo
-     *  esgotado ou rede TEM de estourar: a folha precisa distinguir "não foi lançado" de "não consegui ler", senão volta
-     *  a calcular a comissão automática por cima de uma já lançada. */
     /** Comissão por quinzena (v61, pedido do Danilo em 18/11/2026). A comissão vira custo do item de serviço na O.S. e
      *  lançamento na folha. Só administrador. Sem o v61 no banco, "quinzena" devolve null e a tela avisa. */
     comissao: {

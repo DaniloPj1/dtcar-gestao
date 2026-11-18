@@ -567,7 +567,7 @@ begin
 
   -- totais como a tela calcula (js/util.js, totais): no orçamento soma o que não foi recusado; depois de aprovada, só o aprovado
   with todos as (
-    select i.tipo, i.qtd, i.valor_unit, coalesce(i.desconto, 0) desconto, i.custo_unit, i.aprovado from public.os_itens i where i.ordem_id = o.id
+    select i.tipo, i.qtd, i.valor_unit, coalesce(i.desconto, 0) desconto, i.custo_unit, i.aprovado from public.os_itens i where i.ordem_id = o.id and not i.fornecida_cliente   -- v61: peça do cliente não é custo
     union all
     select x->>'tipo', (x->>'qtd')::numeric, (x->>'valor_unit')::numeric, 0, (x->>'custo_unit')::numeric, (x->>'aprovado')::boolean from jsonb_array_elements(v_novos) x
   ), conta as (

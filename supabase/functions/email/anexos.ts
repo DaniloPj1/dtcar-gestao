@@ -5,6 +5,8 @@
 //        → o mesmo PDF da tela da O.S. (js/pdf.js do site, gerado aqui com os dados do banco)
 //   { fonte: "os", numero: 1887, documento: "recibo", motor?: false }
 //        → a O.S. Recibo (12/11/2026, js/pdfrecibo.js): só para O.S. paga; com os cuidados do motor, salvo motor=false
+//   { fonte: "orcamento", numero: 5 }
+//        → o PDF do orçamento separado da O.S. (ORC-00005, v52): o mesmo do botão "PDF / imprimir" da tela Orçamentos
 //   { fonte: "resumo", numero: 1928, de: "cliente" | "veiculo", orcamentos?: true, itens?: false }
 //        → o Resumo de O.S. em aberto (13/11/2026, js/pdfresumo.js): as O.S. aprovadas e aguardando pagamento do cliente ou do
 //          veículo da O.S. informada num PDF só (itens, total, recebido e falta receber de cada uma + total geral).
@@ -144,6 +146,31 @@ async function daOSRecibo(adm: Db, g: Geradores, o: Record<string, unknown>, num
     origem: `O.S. ${numero} (O.S. Recibo, ${motor ? "com" : "sem"} os cuidados do motor)` };
 }
 
+/** Orçamento separado da O.S. (ORC, v52; anexo criado em 18/11/2026): o mesmo PDF do botão "PDF / imprimir" da tela
+ *  Orçamentos — numeração própria (ORC-00005), nunca número de O.S., e sem mexer em nada. Só leitura. */
+const SIT_ORC: Record<string, string> = { elaboracao: "Em elaboração", enviado: "Enviado ao cliente", aprovado: "Aprovado", recusado: "Recusado", vencido: "Vencido" };
+async function doOrcamento(adm: Db, g: Geradores, p: Record<string, unknown>, cfg: Record<string, unknown>, avisos: string[]): Promise<Arquivo> {
+  const numero = parseInt(String(p.numero ?? p.orcamento ?? "").replace(/\D/g, ""), 10);
+  if (!numero) throw new ErroAnexo("Informe o número do orçamento (ORC) do anexo.");
+  const ref = "ORC-" + String(numero).padStart(5, "0");
+  const [o] = await lista(adm.from("orcamentos").select("*").eq("numero", numero));
+  if (!o) throw new ErroAnexo(`Orçamento ${ref} não encontrado.`);
+  const itens = await lista(adm.from("orcamento_itens").select("*").eq("orcamento_id", o.id).order("posicao"));
+  if (!itens.length) avisos.push(`O orçamento ${ref} ainda não tem itens: o PDF sai só com o cabeçalho.`);
+  const [cli] = o.cliente_id ? await lista(adm.from("clientes").select("*").eq("id", o.cliente_id)) : [];
+  const [vei] = o.veiculo_id ? await lista(adm.from("veiculos").select("*").eq("id", o.veiculo_id)) : [];
+  const hoje = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+  const sit = (o.situacao === "elaboracao" || o.situacao === "enviado") && o.validade && String(o.validade) < hoje ? "vencido" : String(o.situacao || "");
+  if (sit === "vencido") avisos.push(`A validade do orçamento ${ref} já passou: confira os preços antes de enviar.`);
+  // o mesmo retrato que a tela monta (paraPDF em js/telas/orcamentos.js): o orçamento não é O.S., não tem km, mecânico nem garantia
+  const base = { ...o, status: "diagnostico", situacao: "", itens, fotos: [], eventos: [], validade_orcamento: o.validade,
+    obs_execucao: o.obs, km_entrada: null, mecanico_nome: "", forma_pagamento: "", garantia_dias: null };
+  const blob = await g.pdfOrcamento(base, cfg, { cli: cli || null, vei: vei || null, numeroTexto: ref, situacaoTexto: SIT_ORC[sit] || "" });
+  const placa = String((o.veiculo as Record<string, unknown> || {}).placa || "");
+  return { nome: `Orcamento_${ref}${placa ? "_" + placa : ""}.pdf`, tipo: "application/pdf", bytes: await bytesDoPdf(blob),
+    origem: `Orçamento ${ref}${placa ? " · " + placa : ""} (${SIT_ORC[sit] || sit})` };
+}
+
 const dinheiro = (n: unknown) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 /** Resumo de O.S. em aberto (13/11/2026): as O.S. em aberto do cliente ou do veículo da O.S. informada num PDF só — itens, total,
  *  recebido e falta receber de cada uma e o total geral. Entram as aprovadas (em execução) e as aguardando pagamento; orçamento
@@ -258,14 +285,15 @@ export async function montarAnexos(adm: Db, token: string, pedidos: unknown, car
   let g: Geradores | null = null, cfg: Record<string, unknown> | null = null;
   for (const p of ps) {
     const fonte = String(p?.fonte || "");
-    if (fonte === "os" || fonte === "boleto" || fonte === "resumo") {
+    if (fonte === "os" || fonte === "boleto" || fonte === "resumo" || fonte === "orcamento") {
       if (!g) { g = await carregar(); g.usarLeitorImagem(leitorImagem(adm, site)); }
       if (!cfg) cfg = await config(adm);
-      arquivos.push(fonte === "os" ? await daOS(adm, g, p, cfg, avisos) : fonte === "resumo" ? await doResumo(adm, g, p, cfg, avisos) : await doBoleto(adm, g, p, cfg, avisos));
+      arquivos.push(fonte === "os" ? await daOS(adm, g, p, cfg, avisos) : fonte === "orcamento" ? await doOrcamento(adm, g, p, cfg, avisos)
+        : fonte === "resumo" ? await doResumo(adm, g, p, cfg, avisos) : await doBoleto(adm, g, p, cfg, avisos));
     } else if (fonte === "nf") arquivos.push(...await daNF(adm, p));
     else if (fonte === "rh") arquivos.push(await doRH(adm, p));
     else if (fonte === "email") arquivos.push(await doEmail(token, p));
-    else throw new ErroAnexo('Anexo: fonte "os", "resumo", "boleto", "nf", "rh" ou "email".');
+    else throw new ErroAnexo('Anexo: fonte "os", "orcamento", "resumo", "boleto", "nf", "rh" ou "email".');
   }
   if (arquivos.length > MAX_ARQUIVOS) throw new ErroAnexo(`No máximo ${MAX_ARQUIVOS} arquivos por e-mail.`);
   const total = arquivos.reduce((s, a) => s + a.bytes.length, 0);

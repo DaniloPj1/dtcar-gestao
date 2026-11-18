@@ -17,12 +17,21 @@
 import { RTC } from "./rtcdados.js";
 
 // ─── Números exatos ────────────────────────────────────────────────────────────
-// A Receita calcula com BigDecimal de 8 casas e arredondamento HALF_EVEN (bancário).
-// O número do JavaScript erra nos empates (11,875 tem de virar 11,88 e 26,125 vira
-// 26,12), então tudo aqui é BigInt na escala 8. Nada de ponto flutuante.
+// A Receita calcula com BigDecimal: as CONTAS arredondam para 8 casas com
+// HALF_EVEN (arredondamento bancário), mas o valor que entra é guardado como
+// veio, sem arredondar, e a soma (a receita bruta do item) também não arredonda.
+// O número comum do JavaScript erra nos empates (11,875 tem de virar 11,88 e
+// 26,125 vira 26,12), então aqui tudo é BigInt. Nada de ponto flutuante.
+//
+// Guardamos os valores com 18 casas, para o que entra caber inteiro, e cada conta
+// arredonda para 8, exatamente onde o Java arredonda. Entrada com mais de 18 casas
+// é arredondada na leitura — documento fiscal tem 2 casas no valor e 4 na alíquota,
+// então isso nunca acontece na prática.
 
-const ESCALA = 8;
+const ESCALA = 18;        // casas guardadas
+const ESCALA_CONTA = 8;   // casas com que a Receita faz cada conta
 const UM = 10n ** BigInt(ESCALA);
+const PASSO = 10n ** BigInt(ESCALA - ESCALA_CONTA);
 
 /** Divide arredondando meio-para-par, como o HALF_EVEN do Java. */
 function divPar(n, d) {
@@ -37,7 +46,10 @@ function divPar(n, d) {
   return neg ? -r : r;
 }
 
-/** Texto decimal -> BigInt na escala 8. Devolve null se não for número. */
+/** O setScale(8, HALF_EVEN) do Java, mantendo o valor na nossa escala. */
+const aConta = (v) => divPar(v, PASSO) * PASSO;
+
+/** Texto decimal -> BigInt. Devolve null se não for número (mesma regra do BigDecimal). */
 export function dec(texto) {
   if (texto === null || texto === undefined) return null;
   const s = String(texto).trim();
@@ -50,22 +62,24 @@ export function dec(texto) {
   const expo = m[4] ? parseInt(m[4], 10) : 0;
   // junta inteiro+fração como se fosse um inteiro, guardando quantas casas andou
   let valor = BigInt(inteiro + fracao);
-  let casas = fracao.length - expo; // casas decimais depois do expoente
+  const casas = fracao.length - expo; // casas decimais depois do expoente
   if (casas <= ESCALA) {
     valor = valor * 10n ** BigInt(ESCALA - casas);
   } else {
-    valor = divPar(valor, 10n ** BigInt(casas - ESCALA)); // mais casas que a escala: arredonda
+    valor = divPar(valor, 10n ** BigInt(casas - ESCALA)); // além do que guardamos
   }
   return sinal * valor;
 }
 
 const ZERO = 0n;
+// Soma não arredonda, como o totalizar() da Receita.
 const somar = (...vs) => vs.reduce((t, v) => t + (v ?? ZERO), ZERO);
-const subtrair = (a, b) => a - b;
-const multiplicar = (a, b) => (a === null || b === null ? null : divPar(a * b, UM));
-const dividirPorCem = (a) => (a === null ? null : divPar(a, 100n));
+// Estas três arredondam para 8 casas, como multiply/subtract/divide do Java.
+const subtrair = (a, b) => aConta(a - b);
+const multiplicar = (a, b) => (a === null || b === null ? null : divPar(a * b, UM * PASSO) * PASSO);
+const dividirPorCem = (a) => (a === null ? null : divPar(a, 100n * PASSO) * PASSO);
 
-/** Escala 8 -> texto com N casas, arredondando meio-para-par. */
+/** Texto com N casas, arredondando meio-para-par. */
 function texto(valor, casas) {
   const v = divPar(valor, 10n ** BigInt(ESCALA - casas));
   const neg = v < 0n;
@@ -134,15 +148,23 @@ export const VSN = {
   "VSN-999": "Falha técnica no cálculo do item",
 };
 
-// O "type" aponta para o catálogo de erros da própria Receita; o "pointer" diz
-// onde está o problema (no item N, ou num campo da operação).
-const CATALOGO = "/calculadora/observabilidade/simples-nacional/erros?codigo=";
+// O "type" é o caminho do catálogo de erros NA API DA RECEITA — serve de rastro
+// do código, não é endereço do nosso sistema e não deve virar link na tela.
+// Começa vazio, como no Java sem baseURL; quem publicar a calculadora num
+// endereço próprio ajusta com definirBaseCatalogo().
+const CAMINHO_CATALOGO = "/calculadora/observabilidade/simples-nacional/erros?codigo=";
+let baseCatalogo = "";
+
+/** Define o endereço do serviço que responde o catálogo de erros (opcional). */
+export function definirBaseCatalogo(url) {
+  baseCatalogo = url || "";
+}
 
 function erro(code, campo, detail, indice) {
   const pointer = indice === undefined || indice === null
     ? `#/${campo}`
     : (campo ? `#/itens/${indice}/${campo}` : `#/itens/${indice}`);
-  return { type: CATALOGO + code, title: VSN[code], code, pointer, detail };
+  return { type: baseCatalogo + CAMINHO_CATALOGO + code, title: VSN[code], code, pointer, detail };
 }
 
 // ─── Leitura das entradas ──────────────────────────────────────────────────────
@@ -278,11 +300,16 @@ function validarEscopo(op, data, erros, dados) {
 // ─── Resolução das tabelas ─────────────────────────────────────────────────────
 
 function acharRegime(crt, data, dados) {
+  // Como a consulta da Receita: CRT igual, tpRegimeIBSCBS igual (nulo casa só com
+  // nulo) e a vigência mais recente que vale na data. Hoje há uma linha por CRT,
+  // mas a tabela é gerada e pode ganhar outra vigência: a escolha tem de ser a
+  // mesma que o Java faria.
   const alvo = crt === 1 ? { crt: 1, tpRegime: null } : crt === 2 ? { crt: 2, tpRegime: null } : { crt: 3, tpRegime: 2 };
   const candidatos = dados.regimes.filter(
-    (r) => r.crt === alvo.crt && (alvo.tpRegime === null ? true : r.tpRegime === alvo.tpRegime) && valeNaData(r, data),
+    (r) => r.crt === alvo.crt
+      && (alvo.tpRegime === null ? (r.tpRegime === null || r.tpRegime === undefined) : r.tpRegime === alvo.tpRegime),
   );
-  return candidatos.length ? candidatos[0] : null;
+  return vigente(candidatos, data);
 }
 
 /** cClassTrib ligado a tratamento tributário ainda não implementado pela Receita. */
@@ -330,8 +357,10 @@ function validarAtividade(cAtivSN, tipoReceita, contexto, dados, erros) {
 }
 
 // ─── Cálculo do item (NT 2026.005, seções 5.3.2 a 5.3.4) ───────────────────────
+// Exportado para o teste conferir os valores internos (8 casas) contra os casos
+// oficiais do motor da Receita, antes de qualquer formatação.
 
-function calcularItem(insumo) {
+export function calcularItem(insumo) {
   const tipo = insumo.tipoReceita;
 
   // Receita bruta do item: zero quando o tipo de receita não compõe receita.
@@ -434,7 +463,7 @@ function carimbar(erros, indice) {
 
 function processarItem(item, indice, contexto, dados) {
   const erros = [];
-  const nObj = item.numero === null || item.numero === undefined ? null : Number(item.numero);
+  const nObj = inteiro(item.numero);
   if (nObj === null) {
     erros.push(erro("VSN-010", "numero", "O número do item é obrigatório."));
   }

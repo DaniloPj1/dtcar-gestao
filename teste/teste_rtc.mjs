@@ -14,7 +14,7 @@
 // Não toca no banco nem na internet.
 
 import { readFileSync, existsSync } from "node:fs";
-import { calcularSimples, dec, moeda, aliquota, atividadesVigentes, documentosVigentes, vigenteDesde, VSN } from "../js/rtc.js";
+import { calcularSimples, calcularItem, dec, moeda, aliquota, atividadesVigentes, documentosVigentes, vigenteDesde, VSN } from "../js/rtc.js";
 
 let ok = 0;
 let falhas = 0;
@@ -28,13 +28,30 @@ let conhecidas = 0;
 // Com a tabela de hoje o item é CALCULADO; com o dado de antes da V0059 o nosso
 // cálculo devolve NAO_IMPLEMENTADO e VSN-027, igual ao teste. Não é erro do porte:
 // é o dado que mudou. Quando a Receita atualizar os testes, esta linha sai daqui.
+// A V0059 vale para os quatro códigos da família 820 que o teste Java usa
+// (820001, 820005, 820008 e 820009), todos ligados ao tratamento 32. Com a tabela
+// de hoje eles caem em tpRBSN 9 ("Fornecimento incompatível com SN"), fator zero,
+// imposto zero — e nenhum deles é usado pela oficina.
+// A máscara vale só para estas três verificações: se o caso quebrar por outro
+// motivo, aparece como falha.
 const DIVERGENCIAS_CONHECIDAS = {
-  naoImplementadoTambemEmNfse: "o cClassTrib 820001 foi habilitado pela migração V0059, posterior a este teste",
+  naoImplementadoTambemEmNfse: {
+    motivo: "o cClassTrib 820001 foi habilitado pela migração V0059, posterior a este teste",
+    verificacoes: ["objetos[0].estadoItem", "objetos[0].erros[0].code", "total"],
+  },
 };
 
+/** Devolve o motivo quando esta verificação específica é uma divergência conhecida. */
+function divergenciaConhecida(nome, expr) {
+  const d = DIVERGENCIAS_CONHECIDAS[String(nome).split(" ")[0].split("#")[0]];
+  if (!d) return null;
+  return d.verificacoes.some((v) => expr === v || expr.startsWith(`${v} `)) ? d.motivo : null;
+}
+
 function conferir(titulo, obtido, esperado, conhecida) {
-  const a = JSON.stringify(obtido);
-  const b = JSON.stringify(esperado);
+  const mostrar = (v) => (typeof v === "bigint" ? `${v} (valor interno)` : JSON.stringify(v));
+  const a = mostrar(obtido);
+  const b = mostrar(esperado);
   if (a === b) {
     ok++;
   } else if (conhecida) {
@@ -66,19 +83,18 @@ if (existsSync(ARQUIVO)) {
   // Uma requisição oficial: a resposta de erro da Receita vem em "errors",
   // a nossa em "erros" — é o mesmo conteúdo, com outro nome.
   function rodar(nome, entrada, esperado, ausentes, terminaCom) {
-    const conhecida = DIVERGENCIAS_CONHECIDAS[String(nome).split(" ")[0].split("#")[0]];
     const bruto = calcularSimples(entrada);
     const r = bruto.erros ? { errors: bruto.erros } : bruto;
     rodados++;
     for (const [expr, valor] of Object.entries(esperado || {})) {
-      conferir(`[oficial] ${nome} -> ${expr}`, caminho(r, expr), valor, conhecida);
+      conferir(`[oficial] ${nome} -> ${expr}`, caminho(r, expr), valor, divergenciaConhecida(nome, expr));
     }
     for (const expr of ausentes || []) {
-      conferir(`[oficial] ${nome} -> ${expr} não existe`, caminho(r, expr), undefined, conhecida);
+      conferir(`[oficial] ${nome} -> ${expr} não existe`, caminho(r, expr), undefined, divergenciaConhecida(nome, expr));
     }
     for (const [expr, fim] of Object.entries(terminaCom || {})) {
       const v = caminho(r, expr);
-      conferir(`[oficial] ${nome} -> ${expr} termina com`, typeof v === "string" && v.endsWith(fim), true, conhecida);
+      conferir(`[oficial] ${nome} -> ${expr} termina com`, typeof v === "string" && v.endsWith(fim), true, divergenciaConhecida(nome, expr));
     }
   }
 
@@ -100,6 +116,57 @@ if (existsSync(ARQUIVO)) {
       rodar(`${caso.nome} (variação ${i + 1})`, entrada, caso.esperado, caso.esperado_ausente, caso.esperado_termina_com));
   }
   console.log(`Requisições oficiais conferidas: ${rodados}`);
+
+  // Bloco "motor": os casos que testam as fórmulas direto, com os valores
+  // internos de 8 casas, ANTES de qualquer formatação (11.875, e não 11.88).
+  // É o teste que protege a parte que calcula dinheiro.
+  const fx = casos.fixtures || {};
+  const comoRegime = (chave) => {
+    const f = fx.regimes[chave];
+    return { crt: f.crt, tpRegime: f.tpRegimeIBSCBS, descricao: f.descricao, geraIbs: f.geraIbs,
+      destinoDevido: f.destinoDevido, destinoPendenteSuspenso: f.destinoPendenteSuspenso };
+  };
+  const comoTipo = (tpRBSN, ajustes) => {
+    // o ajuste vem com os nomes do Java, então entra ANTES de traduzir os campos
+    const f = { ...fx.tiposReceitaBruta[String(tpRBSN)], ...(ajustes || {}) };
+    return { cd: f.codigo, descricao: f.descricao, compoeReceita: f.compoeReceita,
+      isCompoeReceita: f.impostoSeletivoCompoeReceita, fatorReceita: f.fatorReceita,
+      pendenteSuspenso: f.pendenteSuspenso, exigeAliquota: f.exigeAliquota,
+      vedadoNaoTributavel: f.vedadoNaoTributavel };
+  };
+
+  let motorRodados = 0;
+  for (const caso of casos.motor || []) {
+    for (const ins of caso.insumo ? [caso.insumo] : (caso.insumo_variacoes || [])) {
+      const r = calcularItem({
+        regime: comoRegime(ins.regime),
+        tipoReceita: comoTipo(ins.tpRBSN, ins.tipoReceitaOverride),
+        cAtivSNValido: ins.cAtivSNValido,
+        baseCalculo: dec(ins.baseCalculo),
+        valorIs: ins.valorImpostoSeletivo === null ? null : dec(ins.valorImpostoSeletivo),
+        pIbs: ins.pIBSSN === null ? null : dec(ins.pIBSSN),
+        pCbs: ins.pCBSSN === null ? null : dec(ins.pCBSSN),
+        tpEnteGov: ins.tpEnteGov,
+        fatorTransicao: ins.fatorTransicaoCompraGov === null ? null : dec(ins.fatorTransicaoCompraGov),
+      });
+      motorRodados++;
+      const achar = (campo) => (campo === "estadoItem" ? r.estadoItem
+        : campo === "IS.valor" ? (r.tribCalc.IS || {}).valor : r.tribCalc[campo]);
+      for (const [campo, esperado] of Object.entries(caso.esperado || {})) {
+        const obtido = achar(campo);
+        // número compara por valor (o Java guarda 8 casas, o texto pode vir "0.00")
+        const iguais = typeof esperado === "string" && typeof obtido === "bigint"
+          ? obtido === dec(esperado)
+          : obtido === esperado;
+        conferir(`[motor] ${caso.nome} -> ${campo}`, iguais ? esperado : obtido, esperado);
+      }
+      for (const campo of caso.esperado_nulo || []) {
+        const v = achar(campo);
+        conferir(`[motor] ${caso.nome} -> ${campo} é nulo`, v === null || v === undefined, true);
+      }
+    }
+  }
+  console.log(`Casos do motor conferidos: ${motorRodados}`);
 } else {
   console.log("AVISO: teste/casos_rtc.json não encontrado — só os casos da oficina rodaram.");
 }

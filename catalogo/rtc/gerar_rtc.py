@@ -147,7 +147,8 @@ def montar(con):
          "geraIbs": bool(r["RASN_IN_GERA_IBS"]), "destinoDevido": r["RASN_DESTINO_DEVIDO"],
          "destinoPendenteSuspenso": r["RASN_DESTINO_PENDENTE_SUSPENSO"],
          "de": r["RASN_INICIO_VIGENCIA"], "ate": r["RASN_FIM_VIGENCIA"]}
-        for r in linhas(con, "select * from REGIME_APURACAO_SIMPLES_NACIONAL order by RASN_CRT")
+        for r in linhas(con, "select * from REGIME_APURACAO_SIMPLES_NACIONAL "
+                             "order by RASN_CRT, RASN_INICIO_VIGENCIA desc")
     ]
 
     # Transição de alíquotas na compra governamental

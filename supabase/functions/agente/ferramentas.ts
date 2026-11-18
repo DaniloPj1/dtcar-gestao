@@ -1638,11 +1638,16 @@ export function criarServidor(db: Banco): McpServer {
     if (temPeca) item.fornecida_cliente = pedido.peca_do_cliente === true;
     delete item.peca_do_cliente;
     if (item.fornecida_cliente === true) {
-      // peça trazida pelo cliente: sem preço, sem custo e fora do estoque (como o editor da tela)
-      item.valor_unit = 0; item.custo_unit = 0; item.desconto = 0; item.produto_id = null;
+      // peça trazida pelo cliente: sem preço e sem custo, igual ao editor da tela. O vínculo com o produto FICA (quem
+      // segura a baixa de estoque é o fornecida_cliente, não o produto_id), senão desmarcar depois não teria volta.
+      if (Number(pedido.valor_unit) > 0 || Number(pedido.custo_unit) > 0) {
+        avisos.push("\"" + String(item.descricao || "o item") + "\" é peça do cliente: entrou sem valor e sem custo.");
+      }
+      item.valor_unit = 0; item.custo_unit = 0; item.desconto = 0;
       return item;
     }
-    if (!temCodigo) return item;
+    // desmarcou a peça do cliente: o item volta a ser da oficina, então busca o produto do código de novo (traz o custo)
+    if (!temCodigo && !(temPeca && item.produto_id == null && String(item.codigo ?? "").trim() !== "")) return item;
     const cod = String(item.codigo ?? "").trim();
     if (!cod) { item.codigo = ""; item.produto_id = null; return item; }
     const tab = db.from;

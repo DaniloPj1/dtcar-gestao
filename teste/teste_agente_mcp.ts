@@ -606,7 +606,18 @@ tabelasF.orcamentos[0].cliente = { nome: "CLIENTE DIVERSOS", telefone: "27999990
 c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, peca_do_cliente: true }], confirmar: true });
 let alt = ((c.args?.p as L)?.itens as L[])?.[0];
 confere("orcamento: peça do cliente por itens_alterar zera o preço", alt?.fornecida_cliente === true && alt?.valor_unit === 0
-  && alt?.custo_unit === 0 && alt?.desconto === 0 && alt?.produto_id === null, JSON.stringify(alt));
+  && alt?.custo_unit === 0 && alt?.desconto === 0 && alt?.produto_id === "p1", JSON.stringify(alt));
+// quem segura a baixa de estoque é o fornecida_cliente, então o vínculo fica e dá para desmarcar depois (revisão de 18/11)
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, peca_do_cliente: true, valor_unit: 80 }], confirmar: true });
+confere("orcamento: preço mandado numa peça do cliente é avisado, não engolido",
+  /BIELETA.{0,40}peça do cliente: entrou sem valor e sem custo/i.test(String(c.r?.content?.[0]?.text ?? "")),
+  (String(c.r?.content?.[0]?.text ?? "").match(/"avisos[\s\S]{0,200}/) || [""])[0]);
+tabelasF.orcamento_itens[0] = { ...tabelasF.orcamento_itens[0], fornecida_cliente: true, valor_unit: 0, custo_unit: 0, codigo: "ABC-9", produto_id: null };
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, peca_do_cliente: false, valor_unit: 53 }], confirmar: true });
+alt = ((c.args?.p as L)?.itens as L[])?.[0];
+confere("orcamento: desmarcar a peça do cliente religa o produto e traz o custo",
+  alt?.fornecida_cliente === false && alt?.valor_unit === 53 && alt?.produto_id === "p2" && alt?.custo_unit === 5, JSON.stringify(alt));
+tabelasF.orcamento_itens[0] = { ...tabelasF.orcamento_itens[0], fornecida_cliente: false, valor_unit: 50, custo_unit: 30, codigo: "640", produto_id: "p1" };
 // 2. apagar o código solta o produto: a aprovação não pode baixar peça que já não tem código
 c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, codigo: "" }], confirmar: true });
 alt = ((c.args?.p as L)?.itens as L[])?.[0];

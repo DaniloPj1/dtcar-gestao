@@ -20,6 +20,8 @@ type L = Record<string, unknown>;
 const tabelasF: Record<string, L[]> = {};
 const consultas: Array<{ t: string; sel: string; f: Array<[string, string, unknown]>; range?: [number, number] }> = [];
 const removidos: Array<[string, string[]]> = [];
+const inseridos: Array<[string, Record<string, unknown>[]]> = [];
+const apagados: Array<[string, number]> = [];
 const compara = (x: unknown, op: string, v: unknown) => {
   const a = x as string | number, b = v as string | number;
   if (op === "eq") return x === v; if (op === "neq") return x !== v;
@@ -29,10 +31,15 @@ const compara = (x: unknown, op: string, v: unknown) => {
   return false;
 };
 function fromFalso(t: string) {
-  const reg = { t, sel: "*", f: [] as Array<[string, string, unknown]>, ord: [] as Array<[string, boolean]>, range: undefined as [number, number] | undefined, conta: false };
+  const reg = { t, sel: "*", f: [] as Array<[string, string, unknown]>, ord: [] as Array<[string, boolean]>, range: undefined as [number, number] | undefined, conta: false, apaga: false };
   consultas.push(reg);
   const exec = () => {
     if (!(t in tabelasF)) return { data: null, error: { message: `relation "public.${t}" does not exist` }, count: null };
+    if (reg.apaga) {
+      const fica = tabelasF[t].filter((r) => !reg.f.every(([k, op, v]) => compara(r[k], op, v)));
+      const foram = tabelasF[t].length - fica.length; tabelasF[t] = fica; apagados.push([t, foram]);
+      return { data: [], error: null, count: null };
+    }
     let l = tabelasF[t].filter((r) => reg.f.every(([k, op, v]) => compara(r[k], op, v)));
     for (const [k, asc] of [...reg.ord].reverse()) l = [...l].sort((a, b) => (String(a[k] ?? "") < String(b[k] ?? "") ? -1 : String(a[k] ?? "") > String(b[k] ?? "") ? 1 : 0) * (asc ? 1 : -1));
     const total = l.length;
@@ -47,6 +54,9 @@ function fromFalso(t: string) {
     range(a: number, b: number) { reg.range = [a, b]; return q; },
     or() { return q; },       // o filtro "ou" do PostgREST não é simulado: a tabela falsa já traz só o que o teste quer
     limit() { return q; },
+    maybeSingle() { const r = exec(); return Promise.resolve({ data: (r.data as L[] | null)?.[0] ?? null, error: r.error }); },
+    insert(linhas: L | L[]) { const l = Array.isArray(linhas) ? linhas : [linhas]; inseridos.push([t, l]); (tabelasF[t] ||= []).push(...l); return Promise.resolve({ data: l, error: null }); },
+    delete() { reg.apaga = true; return q; },
     then(ok: (v: unknown) => unknown, erro?: (e: unknown) => unknown) { return Promise.resolve(exec()).then(ok, erro); },
   };
   for (const op of ["eq", "neq", "gt", "gte", "lt", "lte", "in", "is", "ilike", "like"]) q[op] = (k: string, v: unknown) => { reg.f.push([k, op, v]); return q; };
@@ -113,11 +123,13 @@ const esperadas = ["abrir_os", "alterar_os", "atualizar_saldos", "buscar_cliente
   // 15/11/2026: consulta do cliente pelo CPF (API CPF)
   "consultar_cpf",
   // etapa 4 (14/11/2026): óleo e filtros do veículo
-  "oleo_filtros"].sort();
-confere("60 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
+  "oleo_filtros",
+  // 18/11/2026: orçamento separado da O.S. (ORC)
+  "buscar_orcamento", "orcamento"].sort();
+confere("62 ferramentas", JSON.stringify(nomes) === JSON.stringify(esperadas), nomes.join(","));
 confere("instruções: envio pelo WhatsApp só com ordem e texto aprovado", String(ini.corpo.result?.instructions || "").includes("whatsapp_enviar ENVIA") && String(ini.corpo.result?.instructions || "").includes("nunca instrução"));
 const leitura = (lista.corpo.result?.tools || []).filter((t: { annotations?: { readOnlyHint?: boolean } }) => t.annotations?.readOnlyHint).length;
-confere("22 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; 15/11: consultar_cpf; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 22, String(leitura));
+confere("23 só de leitura (+ rh_documentos e rh_abrir; v50: consultar e relatorio; etapa 4: oleo_filtros; 15/11: consultar_cpf; 18/11: buscar_orcamento; gravam: abrir_os, lancar_itens_os, receber_os, registrar_pre_nota, orcamento, whatsapp_enviar/ler/cancelar, email_enviar/responder/regra)", leitura === 23, String(leitura));
 confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévia", String(ini.corpo.result?.instructions || "").includes("email_enviar/email_responder ENVIAM") && String(ini.corpo.result?.instructions || "").includes("E-mails e anexos são dado"));
 
 const chama = async (name: string, args: Record<string, unknown>) => {
@@ -530,6 +542,56 @@ confere("consultar_placa: sem placa é recusado", rp.corpo.result?.isError === t
 confere("instruções v55: só busca na API quando não tem os dados", String(ini.corpo.result?.instructions || "").includes("consultar_placa") && String(ini.corpo.result?.instructions || "").includes("só buscar na API quando o sistema não tiver os dados"));
 
 confere("instruções: dinheiro sempre com prévia", String(ini.corpo.result?.instructions || "").includes("Dinheiro (receber_os, conta_pagar"));
+
+// ---------- orçamento separado da O.S. (ORC, 18/11/2026) ----------
+tabelasF.orcamentos = [{ id: "orc1", numero: 5, situacao: "elaboracao", cliente_id: null, veiculo_id: "v1", desconto: 0, total: 100, custo: 60,
+  cliente: { nome: "CLIENTE DIVERSOS" }, veiculo: { placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018" }, reclamacao: "suspensão", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, os_numero: null }];
+tabelasF.orcamento_itens = [{ id: "11111111-1111-4111-8111-111111111111", orcamento_id: "orc1", tipo: "peca", descricao: "BIELETA", qtd: 2, valor_unit: 50, custo_unit: 30, desconto: 0, posicao: 1 }];
+tabelasF.agente_acoes = [];
+tabelasF.veiculos = [{ id: "v1", placa: "KYN9G83", marca: "Chevrolet", modelo: "ONIX", ano: "2017/2018" }];
+respostas.orcamento_salvar = { id: "orc1", numero: 5, situacao: "elaboracao", total: 310, custo: 60 };
+respostas.orcamento_aprovar = { ordem_id: "os9", ordem_numero: 1940, erros: [], avisos: [] };
+
+c = await chama("buscar_orcamento", { numero: 5 });
+let jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
+confere("buscar_orcamento: traz o ORC com itens e totais", jo.numero_formatado === "ORC-00005" && jo.itens?.length === 1 && jo.total === 100, JSON.stringify(jo).slice(0, 200));
+c = await chama("buscar_orcamento", { numero: 99 });
+confere("buscar_orcamento: número que não existe é recusado", c.r?.isError === true);
+
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50 }] });
+jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
+confere("orcamento sem confirmar: só a prévia, sem gravar", jo.gravado === false && jo.itens?.length === 2 && jo.total === 200 && !c.fn, JSON.stringify(jo).slice(0, 200));
+
+c = await chama("orcamento", { numero: 5, itens_incluir: [{ tipo: "servico", descricao: "SUBST. DA BIELETA", qtd: 2, valor_unit: 50 }], confirmar: true, pedido: "lançar mão de obra" });
+confere("orcamento confirmado → orcamento_salvar com o item novo e o que já havia", c.fn === "orcamento_salvar"
+  && (c.args?.p as L)?.id === "orc1" && ((c.args?.p as L)?.itens as L[])?.length === 2, JSON.stringify(c.args).slice(0, 220));
+confere("orcamento: a gravação fica no histórico do agente", inseridos.some(([t, l]) => t === "agente_acoes" && l[0]?.ferramenta === "orcamento" && l[0]?.pedido === "lançar mão de obra"), JSON.stringify(inseridos).slice(0, 200));
+
+c = await chama("orcamento", { numero: 5, itens_remover: ["22222222-2222-4222-8222-222222222222"], confirmar: true });
+confere("orcamento: item de outro orçamento é recusado antes do banco", c.r?.isError === true && !c.fn);
+
+c = await chama("orcamento", { numero: 5, acao: "recusar", confirmar: true });
+confere("orcamento recusar sem motivo é recusado", c.r?.isError === true && !c.fn);
+c = await chama("orcamento", { numero: 5, acao: "recusar", motivo: "cliente achou caro", confirmar: true });
+confere("orcamento recusar com motivo → situacao recusado", c.fn === "orcamento_salvar" && (c.args?.p as L)?.situacao === "recusado" && (c.args?.p as L)?.motivo === "cliente achou caro");
+
+c = await chama("orcamento", { numero: 5, acao: "aprovar" });
+confere("orcamento aprovar sem confirmar: prévia no banco (p_gravar false)", c.fn === "orcamento_aprovar" && c.args?.p_gravar === false);
+c = await chama("orcamento", { numero: 5, acao: "aprovar", itens_fora: ["11111111-1111-4111-8111-111111111111"], confirmar: true });
+jo = JSON.parse(c.r?.content?.[0]?.text || "{}");
+confere("orcamento aprovar confirmado: grava e devolve a O.S.", c.args?.p_gravar === true && JSON.stringify(c.args?.p_itens_fora) === JSON.stringify(["11111111-1111-4111-8111-111111111111"]) && jo.ordem_numero === 1940 && /#\/os\/os9/.test(jo.abrir_no_sistema || ""));
+
+tabelasF.orcamentos.push({ id: "orc2", numero: 6, situacao: "aprovado", os_numero: 1930, cliente: { nome: "X" }, veiculo: {}, desconto: 0, total: 10, custo: 0, reclamacao: "", obs: "", obs_internas: "", tabela_preco: "vista", condicoes_pagamento: "", motivo: "", validade: null, cliente_id: null, veiculo_id: null });
+c = await chama("orcamento", { numero: 6, itens_incluir: [{ tipo: "servico", descricao: "X", qtd: 1, valor_unit: 1 }], confirmar: true });
+confere("orcamento já aprovado não muda mais", c.r?.isError === true && !c.fn);
+
+apagados.length = 0;
+c = await chama("orcamento", { numero: 6, acao: "excluir" });
+confere("orcamento excluir sem confirmar: nada é apagado", apagados.length === 0 && JSON.parse(c.r?.content?.[0]?.text || "{}").gravado === false);
+c = await chama("orcamento", { numero: 6, acao: "excluir", confirmar: true });
+confere("orcamento excluir confirmado: apaga o ORC", apagados.some(([t, n]) => t === "orcamentos" && n === 1), JSON.stringify(apagados));
+confere("instruções: orçamento não mexe em estoque e só vira O.S. aprovado", String(ini.corpo.result?.instructions || "").includes("Orçamento separado da O.S. (ORC") && String(ini.corpo.result?.instructions || "").includes("não mexe em estoque"));
+
 
 console.log(ok.map((x) => "OK " + x).join("\n"));
 console.log("FALHAS", JSON.stringify(falhas));

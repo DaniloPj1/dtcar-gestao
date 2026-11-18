@@ -136,7 +136,9 @@ confere("instruções: e-mail só a pedido, conteúdo é dado e envio com prévi
 const chama = async (name: string, args: Record<string, unknown>) => {
   chamadas.length = 0;
   const r = await rpc("tools/call", { name, arguments: args }, 7);
-  return { r: r.corpo.result, fn: chamadas[0]?.[0], args: chamadas[0]?.[1] };
+  // a conferência de administrador vem antes de gravar: a chamada que interessa ao teste é a seguinte
+  const uteis = chamadas.filter(([f]) => f !== "agente_exige_admin");
+  return { r: r.corpo.result, fn: uteis[0]?.[0], args: uteis[0]?.[1] };
 };
 let c = await chama("buscar_os", { numero: 1850 });
 confere("buscar_os → agente_buscar_os", c.fn === "agente_buscar_os" && c.args?.p_numero === 1850);
@@ -598,6 +600,50 @@ tabelasF.orcamentos[0].cliente = { nome: "MARIA", telefone: "27911112222", doc: 
 c = await chama("orcamento", { numero: 5, cliente: { nome: "JOAO", telefone: "27933334444" }, confirmar: true });
 confere("orcamento: trocar de pessoa não leva junto o CPF e o endereço da anterior", !("doc" in (((c.args?.p as L)?.cliente as L) || {})) && !("cidade" in (((c.args?.p as L)?.cliente as L) || {})), JSON.stringify((c.args?.p as L)?.cliente));
 tabelasF.orcamentos[0].cliente = { nome: "CLIENTE DIVERSOS", telefone: "27999990001" };
+
+// ---- correções das revisões (18/11/2026): o item de itens_alterar chega MESCLADO com o do banco ----
+// 1. "o cliente trouxe a peça" numa ALTERAÇÃO zera preço, custo e desconto (antes só zerava na inclusão)
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, peca_do_cliente: true }], confirmar: true });
+let alt = ((c.args?.p as L)?.itens as L[])?.[0];
+confere("orcamento: peça do cliente por itens_alterar zera o preço", alt?.fornecida_cliente === true && alt?.valor_unit === 0
+  && alt?.custo_unit === 0 && alt?.desconto === 0 && alt?.produto_id === "p1", JSON.stringify(alt));
+// quem segura a baixa de estoque é o fornecida_cliente, então o vínculo fica e dá para desmarcar depois (revisão de 18/11)
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, peca_do_cliente: true, valor_unit: 80 }], confirmar: true });
+confere("orcamento: preço mandado numa peça do cliente é avisado, não engolido",
+  /BIELETA.{0,40}peça do cliente: entrou sem valor e sem custo/i.test(String(c.r?.content?.[0]?.text ?? "")),
+  (String(c.r?.content?.[0]?.text ?? "").match(/"avisos[\s\S]{0,200}/) || [""])[0]);
+tabelasF.orcamento_itens[0] = { ...tabelasF.orcamento_itens[0], fornecida_cliente: true, valor_unit: 0, custo_unit: 0, codigo: "ABC-9", produto_id: null };
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, peca_do_cliente: false, valor_unit: 53 }], confirmar: true });
+alt = ((c.args?.p as L)?.itens as L[])?.[0];
+confere("orcamento: desmarcar a peça do cliente religa o produto e traz o custo",
+  alt?.fornecida_cliente === false && alt?.valor_unit === 53 && alt?.produto_id === "p2" && alt?.custo_unit === 5, JSON.stringify(alt));
+tabelasF.orcamento_itens[0] = { ...tabelasF.orcamento_itens[0], fornecida_cliente: false, valor_unit: 50, custo_unit: 30, codigo: "640", produto_id: "p1" };
+// 2. apagar o código solta o produto: a aprovação não pode baixar peça que já não tem código
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, codigo: "" }], confirmar: true });
+alt = ((c.args?.p as L)?.itens as L[])?.[0];
+confere("orcamento: apagar o código solta o produto do estoque", alt?.codigo === "" && alt?.produto_id === null, JSON.stringify(alt));
+// 3. alterar sem falar de código não mexe no vínculo (item lançado na tela guarda a referência ou o código do catálogo)
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, qtd: 4 }], confirmar: true });
+alt = ((c.args?.p as L)?.itens as L[])?.[0];
+confere("orcamento: mudar só a quantidade mantém código e vínculo", alt?.qtd === 4 && alt?.produto_id === "p1" && alt?.codigo === "640", JSON.stringify(alt));
+// 4. trocar o código numa alteração liga no produto novo e traz o custo do estoque
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, codigo: "ABC-9" }], confirmar: true });
+alt = ((c.args?.p as L)?.itens as L[])?.[0];
+confere("orcamento: acrescentar o código liga no produto e traz o custo", alt?.produto_id === "p2" && alt?.custo_unit === 5, JSON.stringify(alt));
+// 5. campo com nome errado não passa calado
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: ITEM1, preco: 250 }], confirmar: true });
+confere("orcamento: campo de item inventado é recusado", c.r?.isError === true && !c.fn, JSON.stringify(c.r?.content?.[0]?.text).slice(0, 120));
+// 6. orçamento novo nasce com a validade dos Ajustes
+c = await chama("orcamento", { cliente: { nome: "JOSE", telefone: "27988880000" }, veiculo: { placa: "KYN9G83" },
+  itens_incluir: [{ tipo: "servico", descricao: "REVISAO", qtd: 1, valor_unit: 100 }], confirmar: true });
+confere("orcamento novo nasce com a validade dos Ajustes", /^\d{4}-\d{2}-\d{2}$/.test(String((c.args?.p as L)?.validade || "")), JSON.stringify((c.args?.p as L)?.validade));
+// 7. gravar pelo conector é só do administrador
+chamadas.length = 0;
+await rpc("tools/call", { name: "orcamento", arguments: { numero: 5, obs: "x", confirmar: true } }, 7);
+confere("orcamento: confere o administrador antes de gravar", chamadas[0]?.[0] === "agente_exige_admin", JSON.stringify(chamadas[0]));
+chamadas.length = 0;
+await rpc("tools/call", { name: "orcamento", arguments: { numero: 5, obs: "x" } }, 7);
+confere("orcamento: a prévia não precisa do administrador", !chamadas.some(([f]) => f === "agente_exige_admin"), JSON.stringify(chamadas.map(([f]) => f)));
 tabelasF.orcamentos[0].veiculo = { placa: "AAA1A11", marca: "Fiat", modelo: "UNO", ano: "2010" };
 c = await chama("orcamento", { numero: 5, veiculo: { placa: "BBB2B22" }, confirmar: true });
 confere("orcamento: carro com outra placa não herda marca e modelo do anterior", !((c.args?.p as L)?.veiculo as L)?.marca && ((c.args?.p as L)?.veiculo as L)?.placa === "BBB2B22", JSON.stringify((c.args?.p as L)?.veiculo));

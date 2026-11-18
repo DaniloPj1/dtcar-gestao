@@ -36,6 +36,7 @@ import { NotasSefaz } from "./telas/sefaz.js";
 import { WhatsApp } from "./telas/whatsapp.js";
 import { Email } from "./telas/email.js";
 import { Funcionarios, FuncionarioTela } from "./telas/funcionarios.js";
+import { Comissao } from "./telas/comissao.js";
 import { DocumentosRH } from "./telas/rh.js";
 import { BarraTopo, Sino } from "./telas/topo.js";
 import { DadosLocais } from "./telas/dadoslocais.js";
@@ -51,7 +52,7 @@ try { localStorage.removeItem("dtcar-modo"); } catch (e) {} // o visual "modo ba
 // Pedido do Danilo em 12/11/2026: a virada foi em 02/11 e a faixa ainda piscava a cada abertura (antes de os Ajustes carregarem)
 // e ficava na tela quando os Ajustes não podiam ser lidos. Sem a informação, não mostra.
 const lerRota = () => { const h = (location.hash || "").replace(/^#/, "") || "/painel"; return h.startsWith("/") ? h : "/" + h; };
-const TITULOS = { compras: "Compras", pecas: "Peças por catálogo", historico: "Histórico de serviços", "app-mecanico": "App do mecânico", "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
+const TITULOS = { compras: "Compras", pecas: "Peças por catálogo", historico: "Histórico de serviços", "app-mecanico": "App do mecânico", "oleo-filtros": "Óleo e filtros", agenda: "Agenda", orcamentos: "Orçamentos", orcamento: "Orçamento", painel: "Painel", entrada: "Nova O.S.", ordens: "Ordens de serviço", os: "Ordem de serviço", cadastros: "Cadastros", cliente: "Cliente", veiculo: "Veículo", mais: "Mais", equipe: "Equipe", ajustes: "Ajustes", recibos: "Recibos", importar: "Importar do OS Oficina", balcao: "Venda de balcão", nfe: "Entrada de nota fiscal", relatorios: "Relatórios", financeiro: "Contas a pagar", pedidos: "Pedidos de compra", receber: "Contas a receber", boletos: "Boletos Sicredi", caixa: "Previsão de caixa", backup: "Backup", sefaz: "Notas da SEFAZ", funcionarios: "Funcionários", funcionario: "Funcionário", comissao: "Comissão", rh: "Documentos do RH", "dados-locais": "Dados neste computador", whatsapp: "WhatsApp", email: "E-mail da oficina" };
 const SINC = ["ordens", "clientes", "veiculos", "produtos", "fornecedores"];
 // menu do celular (barra inferior) e menu lateral do computador
 // no programa com banco no PC, estas telas leem do banco do PC sem internet (consulta)
@@ -59,7 +60,7 @@ const LE_DO_BANCO = ["agenda", "orcamentos", "orcamento", "financeiro", "caixa",
 // telas que dependem do servidor (sem cópia no aparelho nesta etapa)
 const SO_ONLINE = { compras: "Os preços dos fornecedores, o carrinho e os pedidos ficam no servidor.", agenda: "A agenda fica no servidor.", orcamentos: "Os orçamentos ficam no servidor.", orcamento: "Os orçamentos ficam no servidor.", boletos: "Os boletos são registrados no banco e ficam no servidor.", financeiro: "As contas a pagar ficam no servidor.", pedidos: "Os pedidos de compra ficam no servidor.", caixa: "A previsão de caixa usa contas, recibos e parcelas do servidor.", recibos: "Os recibos ficam no servidor.",
   sefaz: "As notas da SEFAZ chegam pelo servidor.", nfe: "A entrada de nota grava estoque e custos no servidor.", relatorios: "Os relatórios são calculados no servidor.",
-  funcionarios: "Funcionários e lançamentos ficam no servidor.", funcionario: "Funcionários e lançamentos ficam no servidor.", rh: "Os documentos do RH ficam no servidor.", backup: "O backup lê tudo do servidor.",
+  comissao: "A comissão lê os apontamentos do app e lança na O.S. e na folha, tudo no servidor.", funcionarios: "Funcionários e lançamentos ficam no servidor.", funcionario: "Funcionários e lançamentos ficam no servidor.", rh: "Os documentos do RH ficam no servidor.", backup: "O backup lê tudo do servidor.",
   importar: "A carga do sistema antigo grava no servidor.", whatsapp: "A conexão do WhatsApp fica no servidor.", email: "O e-mail da oficina fica no servidor.", equipe: "A equipe e os acessos ficam no servidor." };
 const NAV = [["/painel", "Painel", "painel"], ["/ordens", "O.S.", "lista"], ["+", "Novo", "mais"], ["/cadastros", "Cadastros", "pessoas"], ["/mais", "Mais", "menu"]];
 const LATERAL = [
@@ -424,7 +425,7 @@ function App() {
   const [caminho, qs] = rota.split("?");
   const [, base, param, sub] = caminho.split("/");
   const params = Object.fromEntries(new URLSearchParams(qs || ""));
-  const restrito = { compras: "verValores", orcamentos: "orcar", orcamento: "orcar", whatsapp: "ajustes", email: "ajustes", ajustes: "ajustes", "app-mecanico": "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", pedidos: "financeiro", receber: "verValores", boletos: "financeiro", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro", rh: "financeiro" };
+  const restrito = { compras: "verValores", orcamentos: "orcar", orcamento: "orcar", whatsapp: "ajustes", email: "ajustes", ajustes: "ajustes", "app-mecanico": "ajustes", equipe: "ajustes", importar: "ajustes", entrada: "entrada", recibos: "verValores", balcao: "verValores", nfe: "cadastrar", relatorios: "verValores", financeiro: "financeiro", pedidos: "financeiro", receber: "verValores", boletos: "financeiro", caixa: "financeiro", backup: "ajustes", sefaz: "cadastrar", funcionarios: "financeiro", funcionario: "financeiro", comissao: "financeiro", rh: "financeiro" };
   const pendOS = pend.filter(op => op.tipo === "abrir_os");
   const pendAlt = pend.filter(ehAlteracao), conflitos = pendAlt.filter(op => op.conflito || (op.erro && op.tentativas >= 3));
   const dadosVis = !pendOS.length ? dados : {
@@ -460,7 +461,7 @@ function App() {
     recibos: () => html`<${Recibos} />`, importar: () => html`<${Importar} />`,
     balcao: () => html`<${Balcao} params=${params} key=${qs || ""} />`, nfe: () => html`<${EntradaNFe} params=${params} key=${qs || ""} />`, sefaz: () => html`<${NotasSefaz} />`, whatsapp: () => html`<${WhatsApp} />`, email: () => html`<${Email} params=${params} key=${qs || ""} />`, relatorios: () => html`<${Relatorios} params=${params} key=${qs || ""} />`,
     financeiro: () => html`<${Financeiro} params=${params} key=${qs || ""} />`, pedidos: () => html`<${PedidosCompra} />`, agenda: () => html`<${Agenda} params=${params} key=${qs || ""} />`, orcamentos: () => html`<${Orcamentos} />`, orcamento: () => html`<${Orcamento} id=${param} key=${param} />`, receber: () => html`<${ContasReceber} />`, boletos: () => html`<${Boletos} />`, caixa: () => html`<${PrevisaoCaixa} />`, backup: () => html`<${Backup} />`,
-    funcionarios: () => html`<${Funcionarios} params=${params} key=${qs || ""} />`, rh: () => html`<${DocumentosRH} />`, funcionario: () => html`<${FuncionarioTela} id=${param} params=${params} key=${param + (qs || "")} />`,
+    funcionarios: () => html`<${Funcionarios} params=${params} key=${qs || ""} />`, comissao: () => html`<${Comissao} key=${qs || ""} />`, rh: () => html`<${DocumentosRH} />`, funcionario: () => html`<${FuncionarioTela} id=${param} params=${params} key=${param + (qs || "")} />`,
   }[base]?.() || html`<${Painel} />`;
 
   const vencidasRec = (dados.receber || []).filter(p => p.status === "aberta" && diasAte(p.vencimento) < 0).length;
@@ -480,7 +481,7 @@ function App() {
           ? html`<button type="button" class="lateral-grupo-tit" aria-expanded=${aberto ? "true" : "false"} disabled=${noGrupo}
               onClick=${() => { const v = !sistemaAberto; setSistemaAberto(v); lsSet("dtcar-menu-sistema", v); }}>${grupo}<i aria-hidden="true">${aberto ? "▾" : "▸"}</i></button>`
           : html`<span>${grupo}</span>`}
-        ${!aberto ? null : vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo") || (r === "/whatsapp" && base === "email") || (r === "/funcionarios" && base === "rh") || (r === "/sefaz" && base === "nfe") || (r === "/ajustes" && ["equipe", "backup", "importar"].includes(base));
+        ${!aberto ? null : vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo") || (r === "/whatsapp" && base === "email") || (r === "/funcionarios" && (base === "rh" || base === "comissao")) || (r === "/sefaz" && base === "nfe") || (r === "/ajustes" && ["equipe", "backup", "importar"].includes(base));
           const pg = r === "/financeiro" && pagar ? pagar : null, nb = r === "/receber" ? vencidasRec : pg ? pg.vencidas + pg.hoje + pg.amanha : 0;
           const dica = pg ? [pg.vencidas && pg.vencidas + " vencida(s)", pg.hoje && pg.hoje + " vence(m) hoje", pg.amanha && pg.amanha + " vence(m) amanhã"].filter(Boolean).join(", ") : nb + " parcela(s) vencida(s)";
           return html`<button type="button" key=${r} aria-current=${ativo ? "page" : undefined} onClick=${() => ir(r)}>${I[ic]}<span>${t}</span>${nb ? html`<em class=${"lat-badge" + (pg && !pg.vencidas ? " lat-badge-aviso" : "")} title=${dica} aria-label=${dica}>${nb}</em>` : null}</button>`; })}</nav>`; })}

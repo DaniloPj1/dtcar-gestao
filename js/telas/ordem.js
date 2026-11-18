@@ -592,7 +592,7 @@ export function Ordem({ id, params = {} }) {
           : podeDescontoDepois ? html`<span class="desc-depois"><b>${reais(tAtual.desconto)}</b><button type="button" class="btn btn-sm" disabled=${!!ocupado} onClick=${abrirSalvo("desconto")}>Alterar</button></span>`
           : html`<b>${reais(tAtual.desconto)}</b>`}</div>
         <div class="tot"><span>Valor total${usaAprov ? " aprovado" : ""}</span><b>${reais(tAtual.total)}</b></div>
-        <div class="interno"><span>Custo de peças e terceiros</span><b>${reais(tAtual.custo)}</b></div>
+        <div class="interno"><span>Custo (peças, terceiros e comissão)</span><b>${reais(tAtual.custo)}</b></div>
         <div class="interno"><span>Margem bruta</span><b class=${tAtual.margemPct < 30 && tAtual.total > 0 ? "c-warn" : ""}>${reais(tAtual.margem)} · ${tAtual.margemPct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%</b></div>
       </div>` : null}</section>
     ${verValores ? html`<section class="card"><h3>Pagamento</h3>

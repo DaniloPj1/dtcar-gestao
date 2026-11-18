@@ -7,7 +7,7 @@
       { id: "k3", descricao: "Aluguel", favorecido: "Imobiliária", categoria: "Aluguel", documento: "", valor: 3000, vencimento: "2026-10-05", status: "paga", pago_em: "2026-10-05", valor_pago: 3000, forma_pagamento: "PIX", origem: "recorrente" },
       { id: "k4", descricao: "Peças NF 555", fornecedor_id: "f1", categoria: "Fornecedores de peças", documento: "555-1", valor: 1200, vencimento: "2026-11-10", status: "aberta", origem: "nfe", parcela: 1, parcelas: 2 }],
     perfis: [{ id: "p1", nome: "Danilo", email: "d@x", papel: "admin", ativo: true }, { id: "p2", nome: "Carlos Mecânico", email: "c@x", papel: "mecanico", ativo: true }],
-    produtos: [{ id: "pr1", codigo: 101, tipo: "produto", descricao: "AMORTECEDOR DIANT TOYOTA HILUX", referencia: "KYB-334", unidade: "UN", preco_vista: 890, preco_prazo: 940, controla_estoque: true, estoque_atual: 4, ativo: true, categoria: "SUSPENSAO", marca: "KAYABA" },{ id: "pr2", codigo: 102, tipo: "produto", descricao: "PASTILHA DE FREIO DIANT", referencia: "PST-11", unidade: "JG", preco_vista: 260, controla_estoque: true, estoque_atual: 0, ativo: true },{ id: "pr3", codigo: 103, tipo: "produto", descricao: "FILTRO DE OLEO", unidade: "UN", preco_vista: 45, controla_estoque: true, estoque_atual: 1, estoque_min: 3, avisar_estoque_baixo: true, ativo: true },{ id: "pr4", codigo: 104, tipo: "servico", descricao: "ALINHAMENTO", unidade: "SERV", preco_vista: 120, ativo: true }],
+    produtos: [{ id: "pr1", codigo: 101, tipo: "produto", descricao: "AMORTECEDOR DIANT TOYOTA HILUX", referencia: "KYB-334", unidade: "UN", preco_vista: 890, preco_prazo: 940, controla_estoque: true, estoque_atual: 4, ativo: true, categoria: "SUSPENSAO", marca: "KAYABA" },{ id: "pr2", codigo: 102, tipo: "produto", descricao: "PASTILHA DE FREIO DIANT", referencia: "PST-11", unidade: "JG", preco_vista: 260, controla_estoque: true, estoque_atual: 0, ativo: true },{ id: "pr3", codigo: 103, tipo: "produto", descricao: "FILTRO DE OLEO", unidade: "UN", preco_vista: 45, controla_estoque: true, estoque_atual: 1, estoque_min: 3, avisar_estoque_baixo: true, ativo: true },{ id: "pr4", codigo: 104, tipo: "servico", descricao: "ALINHAMENTO", unidade: "SERV", preco_vista: 120, ativo: true, categoria: "SUSPENSAO" }],
     clientes: [{ id: "c1", nome: "Cliente Teste", telefone: "27999990000", situacao: "liberado" }], veiculos: [{ id: "v1", placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015", cliente_id: "c1", km_atual: 1000, motor: "", ficha_oleo: null }, { id: "v2", placa: "QXN1E49", marca: "Toyota", modelo: "Hilux", ano: "2022", cliente_id: "c1", km_atual: 50000, motor: "", ficha_oleo: null }], fornecedores: [{ id: "f1", razao: "AUTO PECAS COLATINA LTDA", fantasia: "AutoPeças", cnpj: "", telefone: "27988887777", contato: "Joao", cidade: "Colatina", uf: "ES" }, { id: "f2", razao: "DPK DISTRIBUIDORA", fantasia: "", cnpj: "", telefone: "", cidade: "Vitoria", uf: "ES" }],
     produto_fornecedor: [{ id: "pf1", produto_id: "pr1", fornecedor_id: "f2", codigo: "KYB-334", fator: 1, ultimo_custo: 610, ultima_compra: "2026-10-01" }],
     ordens: [{ id: "o2", numero: 1898, recebido: 0, status: "execucao", cliente_id: "c1", veiculo_id: "v2", mecanico_nome: "Carlos", criado_em: "2026-10-29T07:15:00-03:00", atualizado_em: "2026-10-29T07:15:00-03:00", cliente: { nome: "Ministério Vale do Rio Doce", telefone: "27999990000" }, veiculo: { placa: "QXN1E49", marca: "Toyota", modelo: "Hilux", ano: "2022" }, km_entrada: 51000, total: 2650, checkin: { feito: true }, box: "3", situacao: "", tabela_preco: "vista", condicoes_pagamento: "Pagamento na retirada do veículo." },
@@ -20,7 +20,8 @@
       { id: "i7", ordem_id: "o4", tipo: "peca", descricao: "PASTILHA", qtd: 1, valor_unit: 200, desconto: 0, aprovado: null, posicao: 0 }, { id: "i8", ordem_id: "o4", tipo: "servico", descricao: "TROCA DE PASTILHAS", qtd: 1, valor_unit: 300, desconto: 0, aprovado: null, posicao: 1 },{ id: "i3", ordem_id: "o2", tipo: "peca", codigo: "KYB-334", descricao: "AMORTECEDOR DIANT TOYOTA HILUX", qtd: 2, valor_unit: 890, desconto: 0, aprovado: true, executado: false, posicao: 0 },
       { id: "i4", ordem_id: "o2", tipo: "servico", descricao: "TROCA DE AMORTECEDORES DIANTEIROS", qtd: 1, valor_unit: 350, desconto: 0, aprovado: true, executado: true, posicao: 1 },
       { id: "i5", ordem_id: "o2", tipo: "peca", codigo: "PST-11", descricao: "PASTILHA DE FREIO DIANT", qtd: 1, valor_unit: 260, desconto: 20, aprovado: null, posicao: 2 },{ id: "i1", ordem_id: "o1", tipo: "servico", qtd: 1, valor_unit: 600, desconto: 0, aprovado: true }, { id: "i2", ordem_id: "o1", tipo: "peca", qtd: 1, valor_unit: 300, desconto: 0, aprovado: true }],
-    funcionarios: [], funcionario_lanc: [], receber: [], config: { espelhoLegado: true }, // espelho ligado: os testes conferem a faixa do período de transição
+    funcionarios: [{ id: "fu1", nome: "CARLOS MECANICO", apelido: "Carlos", perfil_id: "p2", comissao_pct: 40, salario: 2200, horas_mes: 220, he_pct: 50, vinculo: "clt", ativo: true, jornada: {} }],
+    funcionario_lanc: [], comissoes: [], receber: [], config: { espelhoLegado: true }, // espelho ligado: os testes conferem a faixa do período de transição
     // pedidos de compra por fornecedor (pre_notas, v19/v31)
     pre_notas: [{ id: "pn1", data: "2026-10-20", fornecedor_id: "f1", fornecedor_nome: "AutoPeças", documento: "PV 100", total: 500, os_numero: 1898, ordem_id: "o2", placa: "QXN1E49", situacao: "aberta", obs: "" },
       { id: "pn2", data: "2026-10-22", fornecedor_id: "f1", fornecedor_nome: "AutoPeças", documento: "PV 101", total: 350, os_numero: null, ordem_id: null, placa: "", situacao: "aberta", obs: "" },
@@ -359,6 +360,61 @@
     estornos: { desde: async (de, ate) => (db.estornos || []).filter(e => e.registrado_em >= de && (!ate || e.registrado_em <= ate)) },
     sefaz: { novas: async () => 0, config: async () => null },
     painel: async () => ({}), contasAbertas: async () => [],
+    // comissão por quinzena (v61) de mentira: monta a quinzena a partir dos apontamentos finalizados e dos itens de serviço
+    comissao: {
+      quinzena: async (inicio, fim, fid, puxados = []) => { net();
+        const aps = (await window.__API_MOCK.apontamentos.listar({})).filter(a => a.situacao === "finalizado");
+        const blocos = new Map();
+        for (const a of aps) {
+          const f = db.funcionarios.find(x => x.perfil_id === a.perfil_id); if (!f || (fid && f.id !== fid)) continue;
+          const dia = String(a.fim || "").slice(0, 10);
+          for (const itemId of a.itens_executados || []) {
+            const i = (db.os_itens || []).find(x => x.id === itemId); if (!i || i.tipo !== "servico") continue;
+            if (!(dia >= inicio && dia <= fim) && !puxados.includes(itemId)) continue;
+            const o = db.ordens.find(x => x.id === i.ordem_id) || {};
+            const donos = aps.filter(b => (b.itens_executados || []).includes(itemId)).length || 1;
+            const mo = Math.round((Number(i.qtd) || 0) * (Number(i.valor_unit) || 0) * 100) / 100;
+            const base = Math.round(mo / donos * 100) / 100;
+            const pr = db.produtos.find(x => x.id === i.produto_id) || {};
+            const cm = db.config.comissao || {};
+            const k = String(pr.categoria || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+            const pct = Number(((cm.matriz || {})[f.id] || {})[k] ?? (cm.padrao || {})[f.id] ?? f.comissao_pct) || 0;
+            if (!blocos.has(f.id)) blocos.set(f.id, { funcionario_id: f.id, nome: f.apelido || f.nome, servicos: 0, mao_de_obra: 0, total: 0, itens: [] });
+            const b = blocos.get(f.id);
+            const ja = db.comissoes.some(c => c.situacao === "lancado" && (c.itens || []).some(x => x.item_id === itemId && c.funcionario_id === f.id));
+            b.itens.push({ item_id: itemId, ordem_id: i.ordem_id, os_numero: o.numero, placa: (o.veiculo || {}).placa || "", descricao: i.descricao,
+              grupo: pr.categoria || "", mao_de_obra: mo, fracao: Math.round(1 / donos * 10000) / 10000, base, pct,
+              valor: Math.round(base * pct) / 100, dividido_com: "", ja_lancado: ja, fim: a.fim });
+            if (!ja) { b.servicos++; b.mao_de_obra = Math.round((b.mao_de_obra + base) * 100) / 100; b.total = Math.round((b.total + base * pct / 100) * 100) / 100; }
+          }
+        }
+        return [...blocos.values()];
+      },
+      lancamentos: async ({ inicio, fim, competencia, funcionarioId, comId } = {}) => db.comissoes.filter(c =>
+        (!inicio || c.inicio === inicio) && (!fim || c.fim === fim) && (!competencia || c.competencia === competencia)
+        && (!funcionarioId || c.funcionario_id === funcionarioId) && (!comId || c.id === comId)),
+      itens: async comId => ((db.comissoes.find(c => c.id === comId) || {}).itens || []),
+      lancar: async p => { net();
+        const f = db.funcionarios.find(x => x.id === p.funcionario_id) || {};
+        const bloco = (await window.__API_MOCK.comissao.quinzena(p.inicio, p.fim, p.funcionario_id, p.itens.map(i => i.item_id)))[0] || { itens: [] };
+        const itens = p.itens.map(ped => { const l = bloco.itens.find(x => x.item_id === ped.item_id) || {};
+          const pct = ped.pct === undefined || ped.pct === null ? Number(l.pct) || 0 : Number(ped.pct) || 0;
+          return { ...l, id: uid(), pct, valor: Math.round((Number(l.base) || 0) * pct) / 100 }; });
+        const total = Math.round(itens.reduce((s, i) => s + i.valor, 0) * 100) / 100;
+        const lanc = await window.__API_MOCK.funcionarios.lancar({ funcionario_id: f.id, competencia: p.competencia, data: p.inicio, tipo: "comissao", qtd: itens.length, valor: total, descricao: "Comissão de " + p.inicio + " a " + p.fim });
+        const c = { id: uid(), funcionario_id: f.id, funcionario_nome: f.apelido || f.nome, inicio: p.inicio, fim: p.fim, competencia: p.competencia,
+          servicos: itens.length, mao_de_obra: Math.round(itens.reduce((s, i) => s + (Number(i.base) || 0), 0) * 100) / 100, total,
+          situacao: "lancado", lanc_id: lanc.id, criado_em: now(), itens };
+        db.comissoes.push(c);
+        for (const i of itens) { const it = (db.os_itens || []).find(x => x.id === i.item_id); if (it) it.custo_unit = Math.round(i.valor / (Number(it.qtd) || 1) * 100) / 100; }
+        return { ok: true, id: c.id, servicos: itens.length, total };
+      },
+      cancelar: async (id) => { const c = db.comissoes.find(x => x.id === id); if (!c) throw new Error("Lançamento não encontrado.");
+        c.situacao = "cancelado";
+        for (const i of c.itens) { const it = (db.os_itens || []).find(x => x.id === i.item_id); if (it) it.custo_unit = 0; }
+        db.funcionario_lanc = db.funcionario_lanc.filter(x => x.id !== c.lanc_id);
+        return { ok: true, id }; },
+    },
     funcionarios: { ...tab("funcionarios"),
       lancamentos: async (comp, fid) => db.funcionario_lanc.filter(l => l.competencia === comp && (!fid || l.funcionario_id === fid)),
       lancar: async l => { const x = { id: uid(), criado_em: now(), ...l }; db.funcionario_lanc.push(x); return x; },

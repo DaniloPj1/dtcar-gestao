@@ -115,7 +115,7 @@ function agruparOS(linhas) {
   for (const o of m.values()) {
     const s = t => o.itens.filter(i => i.tipo === t);
     o.servicos = s("servico").reduce((a, i) => a + valorItem(i), 0); o.pecas = s("peca").reduce((a, i) => a + valorItem(i), 0); o.terceiros = s("terceiro").reduce((a, i) => a + valorItem(i), 0);
-    o.custo = o.itens.reduce((a, i) => a + (i.tipo === "servico" ? 0 : custoItem(i)), 0); o.horas = s("servico").reduce((a, i) => a + n(i.horas), 0);
+    o.custo = o.itens.reduce((a, i) => a + custoItem(i), 0); o.horas = s("servico").reduce((a, i) => a + n(i.horas), 0);   // custo com a mão de obra (comissão, v61)
   }
   return [...m.values()];
 }
@@ -138,7 +138,7 @@ function RelHistorico() {
     { t: base === "entrega" ? "Entrega" : "Abertura", v: o => diaDe(base === "entrega" ? o.entregue_em : o.criado_em), f: "data" },
     { t: "Placa", v: o => exPlaca(o.placa) }, { t: "Veículo", v: o => o.veiculo }, { t: "Cliente", v: o => o.cliente }, { t: "Mecânico", v: o => o.mecanico },
     { t: "Serviços", v: o => descServ(o), cls: () => "col-larga" }, { t: "Peças", v: o => o.pecas, f: "reais" }, { t: "Mão de obra", v: o => o.servicos + o.terceiros, f: "reais" },
-    { t: "Total", v: o => o.total, f: "reais" }, { t: "Custo peças", v: o => o.custo, f: "reais" },
+    { t: "Total", v: o => o.total, f: "reais" }, { t: "Custo", v: o => o.custo, f: "reais" },
     { t: "Margem", v: o => o.total ? (o.total - o.custo) / o.total * 100 : null, f: "pct" }, { t: "Situação", v: o => (situacaoOS(o) || {}).curto || o.status },
   ];
   const colsIt = [{ t: "O.S.", v: i => String(i._o.numero).padStart(5, "0") }, { t: "Data", v: i => diaDe(base === "entrega" ? i._o.entregue_em : i._o.criado_em), f: "data" }, { t: "Placa", v: i => exPlaca(i._o.placa) },

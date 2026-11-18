@@ -22,7 +22,7 @@ export function vencimentoNoTexto(texto) {
 }
 
 /** Funcionários e Documentos do RH ficam juntos no menu: abas para trocar entre as duas telas */
-export const AbasRH = ({ ativa }) => html`<${Abas} abas=${[["funcionarios", "Funcionários e folha"], ["rh", "Documentos do RH"]]} ativa=${ativa} onTroca=${k => { location.hash = "#/" + k; }} />`;
+export const AbasRH = ({ ativa }) => html`<${Abas} abas=${[["funcionarios", "Funcionários e folha"], ["comissao", "Comissão"], ["rh", "Documentos do RH"]]} ativa=${ativa} onTroca=${k => { location.hash = "#/" + k; }} />`;
 
 /** Imprime um PDF ou imagem sem sair da tela (no programa para Windows, baixa o arquivo para imprimir pelo leitor de PDF). */
 async function imprimirBlob(blob, nome) {

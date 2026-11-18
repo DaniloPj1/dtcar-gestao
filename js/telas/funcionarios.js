@@ -266,9 +266,11 @@ function MesFuncionario({ f, ymInicial }) {
     : html`<div class="tabela-rolagem"><table class="tab-rel"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Valor</th><th></th></tr></thead>
       <tbody>${m.lancs.map(l => html`<tr key=${l.id}><td>${fmtData(l.data)}</td><td>${TIPOS_LANC[l.tipo].t}</td><td>${l.descricao}</td>
         <td class="num">${Number(l.qtd) ? l.qtd + " " + (TIPOS_LANC[l.tipo].qtd || "") : ""}</td><td class="num">${TIPOS_LANC[l.tipo].sinal < 0 ? "− " : ""}${reais(r.valorDe(l))}</td>
-        <td><button type="button" class="btn-link" onClick=${() => excluirLanc(l)}>Excluir</button></td></tr>`)}</tbody></table></div>`}
+        <td>${l.tipo === "comissao" && r.comissaoLancada
+          ? html`<span class="dica">lançada na tela de Comissão</span>`
+          : html`<button type="button" class="btn-link" onClick=${() => excluirLanc(l)}>Excluir</button>`}</td></tr>`)}</tbody></table></div>`}
   </section>
-  ${m && Number(f.comissao_pct) > 0 ? html`<section class="card"><h3>O.S. entregues como mecânico (${m.os.length})</h3>
+  ${m && Number(f.comissao_pct) > 0 && !r.comissaoLancada && !r.comissaoIncerta ? html`<section class="card"><h3>O.S. entregues como mecânico (${m.os.length})</h3>
     ${!m.os.length ? html`<${Vazio}>Nenhuma O.S. entregue neste mês com ${f.apelido || f.nome} como mecânico.</${Vazio}>`
     : html`<div class="tabela-rolagem"><table class="tab-rel"><thead><tr><th>O.S.</th><th>Entrega</th><th>Cliente</th><th class="num">Mão de obra</th><th class="num">Comissão</th></tr></thead>
       <tbody>${m.os.map(o => html`<tr key=${o.id} class="clicavel" onClick=${() => ir("/os/" + o.id)}><td>${numOS(o.numero)}</td><td>${fmtData(o.entregue_em)}</td><td>${(o.cliente && o.cliente.nome) || ""}</td>

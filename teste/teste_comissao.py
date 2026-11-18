@@ -152,6 +152,33 @@ try:
     cel.screenshot(path=SAIDA + "/comissao-celular.png", full_page=True)
     chk("PC continua com 5 colunas na linha do serviço", pg.evaluate("getComputedStyle(document.querySelector('.cm-linhas li')).gridTemplateColumns.split(' ').length") == 5,
         pg.evaluate("getComputedStyle(document.querySelector('.cm-linhas li')).gridTemplateColumns"))
+    # 9. a folha NÃO soma a comissão automática por cima da já lançada, nem quando a consulta das comissões falha
+    #    (era o pior erro da 1a revisão: sem internet a tela inventava comissão)
+    HOJE_SEM = """window.__DB.funcionarios.push({ id: 'fmec9', nome: 'CARLOS MECANICO', apelido: 'Carlos', perfil_id: 'p2', comissao_pct: 40, comissao_grupos: {}, salario: 2000, horas_mes: 220, he_pct: 50, vinculo: 'clt', ativo: true, admissao: '2020-01-01', jornada: {} });
+      const hoje = new Date(), comp = hoje.getFullYear() + '-' + String(hoje.getMonth()+1).padStart(2,'0') + '-01';
+      window.__DB.ordens[2].status = 'entregue'; window.__DB.ordens[2].entregue_em = hoje.toISOString().slice(0,10);
+      window.__DB.ordens[2].mecanico_id = 'p2'; window.__DB.ordens[2].mecanico_nome = 'Carlos Mecânico';
+      window.__DB.funcionario_lanc.push({ id: 'l9', funcionario_id: 'fmec9', competencia: comp, data: hoje.toISOString().slice(0,10), tipo: 'comissao', qtd: 1, valor: 300, descricao: 'Comissão da quinzena' });
+      window.__DB.comissoes.push({ id: 'c9', funcionario_id: 'fmec9', funcionario_nome: 'Carlos', inicio: comp, fim: comp, competencia: comp, servicos: 1, total: 300, situacao: 'lancado', lanc_id: 'l9', itens: [] });"""
+    for rotulo, quebrar in [("consultando as comissões", False), ("com a consulta das comissões falhando", True)]:
+      fo = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
+      fo.on("pageerror", lambda e: erros.append("PAGEERR folha " + str(e)))
+      fo.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
+      fo.add_init_script(HOJE_SEM)
+      if quebrar: fo.add_init_script("window.__API_MOCK.comissao.lancamentos = async () => { throw new Error('TypeError: Failed to fetch'); };")
+      fo.goto(U + "#/funcionario/fmec9?aba=mes"); fo.wait_for_timeout(2600)
+      tf = txt(fo)
+      chk("folha " + rotulo + ": comissão é só a lançada (R$ 300,00), sem a automática de 40%",
+          "R$ 300,00" in tf and "R$ 540,00" not in tf and "R$ 840,00" not in tf, [l for l in tf.split("\n") if "R$" in l][:10])
+      # sabendo que foi lançada, a tela nem oferece apagar; sem saber, o botão fica (e o banco barra com mensagem clara)
+      if not quebrar:
+        chk("folha " + rotulo + ": não oferece apagar o lançamento da comissão à mão",
+            "lançada na tela de Comissão" in tf, tf[:300])
+      else:
+        chk("folha " + rotulo + ": avisa que não deu para conferir a comissão da quinzena",
+            "não foi possível conferir a comissão da quinzena" in tf, tf[:300])
+      fo.close()
+
     b.close()
 finally:
   srv.terminate()

@@ -367,11 +367,19 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   (número 5 = ORC-00005 ou id, com os ids dos itens, que são o que `itens_alterar`/`itens_remover`/`itens_fora` usam). Gravação pelo
   `agente_fazer`: ação `orcamento` (`agente_orcamento`: criar, editar, enviar, recusar com motivo, reabrir e excluir — este só administrador
   e nunca o que virou O.S.) e ação `orcamento_aprovar` (`agente_orcamento_aprovar`, que chama a `orcamento_aprovar` com `p_gravar`).
-  Itens: `itens` troca a lista inteira; `itens_incluir`/`itens_alterar`/`itens_remover` mexem no que já está lá. `validade_dias` vira data.
+  Itens: `itens` troca a lista inteira **ou** `itens_incluir`/`itens_alterar`/`itens_remover` mexem no que já está lá (nunca os dois juntos). Campo de item
+  que não existe é recusado (no zod e no banco), id de item de outro orçamento nunca entra (o `orcamento_salvar` o descartaria em silêncio e o total sairia
+  errado) e `produto_id` **não vem de fora**: a peça é ligada ao cadastro pelo `codigo` (`agente_orc_item_estoque`, regra D3 como o v21/v40 — código que não
+  existe é recusado, o custo sai do estoque e a aprovação dá a baixa de verdade; sem código é item avulso). Orçamento novo sem validade nasce com
+  `cfg.validadeDias` (`orc_validade_padrao`), como a tela. Na aprovação, cliente só digitado recebe também o CPF, o nascimento e o endereço que estavam no
+  orçamento (o mesmo `completarClienteNovo` da tela; CPF que já é de outro cliente vira `atencao` na resposta e o endereço vai assim mesmo).
+  A `orcamento_aprovar` **não levanta exceção** quando não dá para aprovar (devolve `pode_aprovar: false` com os erros): o `agente_orcamento_aprovar`
+  levanta, senão o `agente_fazer` responderia "gravado" sem ter aberto O.S. nenhuma.
   **Prévia:** o `agente_fazer` desfaz a transação, mas a sequência do número NÃO volta atrás — por isso criar na prévia não grava nada e
   devolve a conta sem número (o mesmo cuidado da venda de balcão e do recibo avulso no v50); aprovar na prévia usa o `p_gravar = false` do
   v53, que confere sem gastar número de O.S. Ferramentas: `orcamentos`, `buscar_orcamento`, `orcamento` e `aprovar_orcamento` (64 no total).
-  Publicar a função "agente" de novo (ferramentas novas). Testes: `bash teste/teste_v61.sh` (banco inteiro) e `deno run -A teste/teste_agente_mcp.ts`.
+  Publicar a função "agente" de novo (ferramentas novas). Testes: `bash teste/teste_v61.sh` (banco inteiro + **regressão do v40, v41, v42 e v50**, porque o
+  v61 redefine o `agente_fazer`) e `deno run -A teste/teste_agente_mcp.ts`.
   **Ainda não feito:** envio pelo WhatsApp da
   oficina com PDF (função "email": trocar o commit de `pdf.js`/`util.js`/`regras.js` em `email/site.ts`), painel e
   relatórios, backup de leitura, orçamento sem internet. Testes: `bash teste/teste_v52.sh` (banco inteiro) e `python3 teste/teste_fluxo.py`.

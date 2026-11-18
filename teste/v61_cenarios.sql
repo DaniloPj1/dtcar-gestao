@@ -117,7 +117,7 @@ do $$ declare r jsonb; id1 uuid; begin
   update public.orcamentos set validade = (now() at time zone 'America/Sao_Paulo')::date + 10 where id = id1;
 end $$;
 
--- 7. aprovar: a prévia não gasta número de O.S.; gravando vira O.S. e dá baixa no estoque
+-- 7. aprovar: a prévia não gasta número de O.S.; gravando vira O.S. (baixa de estoque: cenário 13)
 do $$ declare r jsonb; id1 uuid; seq bigint; chamada boolean; os public.ordens; begin
   select id into id1 from orc1;
   seq := (select last_value from public.os_numero_seq); chamada := (select is_called from public.os_numero_seq);
@@ -166,6 +166,131 @@ do $$ declare r jsonb; begin
   exception when others then if sqlerrm not like '%não encontrado%' then raise; end if; end;
   begin r := public.agente_fazer('orcamento', '{"acao": "criar", "numero": 7, "cliente": {"nome": "X"}}'::jsonb, true); raise exception 'FALHOU 10b: criar com número';
   exception when others then if sqlerrm not like '%não se informa número%' then raise; end if; end;
+end $$;
+
+-- 11. aprovar que NÃO pode: nunca responde "gravado" (a orcamento_aprovar devolve erros em vez de levantar)
+do $$ declare r jsonb; id3 uuid; n int; begin
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "SEM TELEFONE"},
+    "itens": [{"tipo": "servico", "descricao": "REVISAO", "qtd": 1, "valor_unit": 100}]}'::jsonb, true);
+  id3 := (r->>'id')::uuid;
+  n := (select count(*) from public.ordens);
+  begin
+    r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id3), true);
+    raise exception 'FALHOU 11: aprovar sem telefone/placa devia ser recusado, veio %', r;
+  exception when others then
+    if sqlerrm not like '%não pode virar O.S.%' then raise; end if;
+  end;
+  if (select count(*) from public.ordens) <> n then raise exception 'FALHOU 11a: abriu O.S. mesmo assim'; end if;
+  if (select situacao from public.orcamentos where id = id3) <> 'elaboracao' then raise exception 'FALHOU 11b: mexeu no orçamento'; end if;
+  -- a prévia continua mostrando os erros, sem levantar
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id3), false);
+  if (r->>'pode_aprovar')::boolean or (r->>'erros') is null then raise exception 'FALHOU 11c: a prévia deve listar os erros (%)', r; end if;
+end $$;
+
+-- 12. só o administrador grava pelo conector (o consultor usa a tela)
+do $$ declare r jsonb; begin
+  insert into auth.users (id, email) values ('88888888-8888-8888-8888-888888888888', 'consultor@oficina.test') on conflict do nothing;
+  insert into public.perfis (id, nome, papel, ativo) values ('88888888-8888-8888-8888-888888888888', 'Consultor', 'consultor', true)
+    on conflict (id) do update set papel = 'consultor', ativo = true;
+  perform set_config('request.jwt.claim.sub', '88888888-8888-8888-8888-888888888888', false);
+  begin r := public.agente_orcamento('{"acao": "criar", "cliente": {"nome": "X"}}'::jsonb); raise exception 'FALHOU 12: consultor gravou';
+  exception when others then if sqlerrm not like '%administrador%' then raise; end if; end;
+  begin r := public.agente_orcamento_aprovar('{"numero": 1}'::jsonb); raise exception 'FALHOU 12a: consultor aprovou';
+  exception when others then if sqlerrm not like '%administrador%' then raise; end if; end;
+  begin r := public.agente_orcamentos('{}'::jsonb); raise exception 'FALHOU 12b: consultor listou';
+  exception when others then if sqlerrm not like '%administrador%' then raise; end if; end;
+  perform set_config('request.jwt.claim.sub', '99999999-9999-9999-9999-999999999999', false);
+end $$;
+
+-- 13. peça com código do estoque: liga no produto, pega o custo e a aprovação dá BAIXA de verdade
+do $$ declare r jsonb; id4 uuid; cod text; saldo numeric; it jsonb; begin
+  select codigo::text into cod from public.produtos where id = '00000000-0000-0000-0000-0000000000b1';
+  saldo := (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1');
+  r := public.agente_fazer('orcamento', jsonb_build_object('acao', 'criar',
+    'cliente', jsonb_build_object('nome', 'COM ESTOQUE', 'telefone', '(27) 98888-1111'),
+    'veiculo', jsonb_build_object('placa', 'KYN9G84', 'marca', 'Chevrolet', 'modelo', 'ONIX', 'ano', '2018'),
+    'itens', jsonb_build_array(jsonb_build_object('tipo', 'peca', 'descricao', 'BIELETA', 'codigo', cod, 'qtd', 2, 'valor_unit', 80))), true);
+  id4 := (r->>'id')::uuid;
+  select to_jsonb(i) into it from public.orcamento_itens i where i.orcamento_id = id4;
+  if (it->>'produto_id') is null then raise exception 'FALHOU 13: o código devia ligar no produto do estoque'; end if;
+  if (it->>'custo_unit')::numeric <> 30 then raise exception 'FALHOU 13a: devia pegar o custo do estoque (%)', it->>'custo_unit'; end if;
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id4, 'por', 'Cliente'), true);
+  if not (r->>'gravado')::boolean then raise exception 'FALHOU 13b: não aprovou (%)', r; end if;
+  if (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1') <> saldo - 2 then
+    raise exception 'FALHOU 13c: a aprovação tinha de baixar 2 do estoque (de % para %)', saldo,
+      (select estoque_atual from public.produtos where id = '00000000-0000-0000-0000-0000000000b1'); end if;
+  -- código que não existe é recusado, em vez de virar item solto
+  begin r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "X"},
+    "itens": [{"tipo": "peca", "descricao": "NADA", "codigo": "999999", "qtd": 1, "valor_unit": 10}]}'::jsonb, true);
+    raise exception 'FALHOU 13d: código inexistente devia ser recusado';
+  exception when others then if sqlerrm not like '%não existe no estoque%' then raise; end if; end;
+end $$;
+
+-- 14. produto_id não vem de fora e campo errado não passa calado
+do $$ declare r jsonb; id1 uuid; it text; begin
+  select id into id1 from orc1;
+  begin r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "X"},
+    "itens": [{"tipo": "peca", "descricao": "Y", "qtd": 1, "valor_unit": 10, "produto_id": "00000000-0000-0000-0000-0000000000b1"}]}'::jsonb, true);
+    raise exception 'FALHOU 14: produto_id não pode vir de fora';
+  exception when others then if sqlerrm not like '%pelo "codigo"%' then raise; end if; end;
+  select e->>'id' into it from jsonb_array_elements(public.agente_buscar_orcamento(jsonb_build_object('id', id1))->'itens') e limit 1;
+  begin r := public.agente_fazer('orcamento', jsonb_build_object('id', id1,
+      'itens_alterar', jsonb_build_array(jsonb_build_object('id', it, 'preco', 250))), true);
+    raise exception 'FALHOU 14a: campo inventado devia ser recusado';
+  exception when others then if sqlerrm not like '%não existe. Campos%' then raise; end if; end;
+end $$;
+
+-- 15. orçamento novo nasce com a validade padrão dos Ajustes (como a tela)
+do $$ declare r jsonb; o public.orcamentos; begin
+  update public.config set dados = coalesce(dados, '{}'::jsonb) || '{"validadeDias": 7}'::jsonb where id = 1;
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "VALIDADE"},
+    "itens": [{"tipo": "servico", "descricao": "REVISAO", "qtd": 1, "valor_unit": 50}]}'::jsonb, true);
+  select * into o from public.orcamentos where id = (r->>'id')::uuid;
+  if o.validade is distinct from public.agente_hoje() + 7 then raise exception 'FALHOU 15: validade padrão (%)', o.validade; end if;
+end $$;
+
+-- 16. aprovação leva o CPF e o endereço do orçamento para a ficha do cliente novo
+do $$ declare r jsonb; id5 uuid; c public.clientes; begin
+  r := public.agente_fazer('orcamento', '{"acao": "criar",
+    "cliente": {"nome": "MARIA DO CPF", "telefone": "(27) 98888-2222", "doc": "529.982.247-25", "cep": "29705-390",
+                "rua": "Rod. Gether Lopes de Farias", "bairro": "Sao Silvano", "cidade": "Colatina", "uf": "ES"},
+    "veiculo": {"placa": "KYN9G85", "marca": "Fiat", "modelo": "UNO", "ano": "2015"},
+    "itens": [{"tipo": "servico", "descricao": "REVISAO", "qtd": 1, "valor_unit": 100}]}'::jsonb, true);
+  id5 := (r->>'id')::uuid;
+  r := public.agente_fazer('orcamento_aprovar', jsonb_build_object('id', id5, 'por', 'Maria'), true);
+  if not (r->>'cliente_novo')::boolean then raise exception 'FALHOU 16: devia cadastrar cliente novo'; end if;
+  select c2.* into c from public.clientes c2 where c2.id = (select cliente_id from public.ordens where id = (r->>'ordem_id')::uuid);
+  if c.doc <> '52998224725' then raise exception 'FALHOU 16a: CPF não foi para o cadastro (%)', c.doc; end if;
+  if c.cep <> '29705-390' or c.rua = '' or c.bairro = '' then raise exception 'FALHOU 16b: endereço não foi (% % %)', c.cep, c.rua, c.bairro; end if;
+end $$;
+
+-- 17. buscar pelo telefone do cliente não derruba a ferramenta (número grande demais para int)
+do $$ declare r jsonb; begin
+  r := public.agente_orcamentos('{"busca": "27997696545"}'::jsonb);
+  if (r->>'quantidade') is null then raise exception 'FALHOU 17: busca com muitos dígitos'; end if;
+  r := public.agente_orcamentos('{"busca": "MARIA"}'::jsonb);
+  if (r->>'quantidade')::int < 1 then raise exception 'FALHOU 17a: busca por nome'; end if;
+end $$;
+
+-- 18. item de outro orçamento nunca entra pela lista inteira (o total sairia errado), nem id repetido
+do $$ declare r jsonb; id1 uuid; outro uuid; begin
+  select id into id1 from orc1;
+  r := public.agente_fazer('orcamento', '{"acao": "criar", "cliente": {"nome": "OUTRO"},
+    "itens": [{"tipo": "servico", "descricao": "LAVAGEM", "qtd": 1, "valor_unit": 50}]}'::jsonb, true);
+  select i.id into outro from public.orcamento_itens i where i.orcamento_id = (r->>'id')::uuid limit 1;
+  begin r := public.agente_fazer('orcamento', jsonb_build_object('id', id1,
+      'itens', jsonb_build_array(jsonb_build_object('id', outro, 'tipo', 'servico', 'descricao', 'ROUBADO', 'qtd', 1, 'valor_unit', 999))), true);
+    raise exception 'FALHOU 18: item de outro orçamento não pode entrar';
+  exception when others then if sqlerrm not like '%não é deste orçamento%' then raise; end if; end;
+end $$;
+
+-- 19. itens junto com itens_incluir é recusado (um ou outro, nunca os dois calados)
+do $$ declare r jsonb; id1 uuid; begin
+  select id into id1 from orc1;
+  begin r := public.agente_fazer('orcamento', jsonb_build_object('id', id1, 'itens', '[]'::jsonb,
+      'itens_incluir', jsonb_build_array(jsonb_build_object('tipo', 'servico', 'descricao', 'X', 'qtd', 1, 'valor_unit', 1))), true);
+    raise exception 'FALHOU 19: devia recusar os dois juntos';
+  exception when others then if sqlerrm not like '%OU as mexidas%' then raise; end if; end;
 end $$;
 
 select 'v61 OK' as resultado;

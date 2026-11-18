@@ -269,6 +269,10 @@ confere("orcamento confirmado grava e leva os ids dos itens", c.fn === "agente_f
   && JSON.stringify((c.args?.p as Record<string, unknown>)?.itens_remover) === '["11111111-1111-4111-8111-111111111111"]', JSON.stringify(c.args));
 c = await chama("orcamento", { acao: "mandar_email", numero: 5 });
 confere("orcamento com ação inválida: erro sem ir ao banco", c.r?.isError === true && !c.fn);
+c = await chama("orcamento", { numero: 5, itens_alterar: [{ id: "11111111-1111-4111-8111-111111111111", preco: 250 }], confirmar: true });
+confere("orcamento: campo de item inventado não passa calado", c.r?.isError === true && !c.fn);
+c = await chama("orcamento", { acao: "criar", cliente: { nome: "X" }, itens: [{ tipo: "peca", descricao: "Y", qtd: 1, valor_unit: 10, produto_id: "11111111-1111-4111-8111-111111111111" }] });
+confere("orcamento: produto_id não vem de fora (só o codigo)", c.r?.isError === true && !c.fn);
 c = await chama("aprovar_orcamento", { numero: 5, itens_fora: ["22222222-2222-4222-8222-222222222222"], por: "José", forma: "WhatsApp" });
 confere("aprovar_orcamento sem confirmar = prévia (não gasta número de O.S.)", c.fn === "agente_fazer" && c.args?.p_acao === "orcamento_aprovar"
   && c.args?.p_gravar === false && (c.args?.p as Record<string, unknown>)?.por === "José", JSON.stringify(c.args));

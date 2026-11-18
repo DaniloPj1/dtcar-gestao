@@ -350,20 +350,33 @@ export function criarServidor(db: Banco): McpServer {
     (r) => r.id ? { abrir_no_sistema: SITE + "/#/os/" + r.id } : {}));
 
   // v61: o orçamento ORC pelo conector — as mesmas funções da tela (orcamento_salvar e orcamento_aprovar)
-  const itemOrc = z.object({
-    tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2), qtd: z.number().positive().default(1),
-    valor_unit: z.number().nonnegative(), custo_unit: z.number().nonnegative().optional(), codigo: z.string().optional(),
-    desconto: z.number().nonnegative().optional(), fornecida_cliente: z.boolean().optional(), qualidade: z.string().optional(),
-  });
+  const campoItemOrc = {
+    tipo: z.enum(["servico", "peca", "terceiro"]), descricao: z.string().min(2), qtd: z.number().positive(),
+    valor_unit: z.number().nonnegative().describe("Preço de venda unitário. Nunca invente: use o do cadastro (consultar_estoque) ou o que o Danilo passou"),
+    custo_unit: z.number().nonnegative().optional().describe("Só se o Danilo informou (peça com código usa o custo do estoque)"),
+    codigo: z.string().optional().describe("Código da peça no estoque: liga no produto do cadastro e a aprovação dá baixa. Sem código é item avulso"),
+    desconto: z.number().nonnegative().optional(), peca_do_cliente: z.boolean().optional(), qualidade: z.string().optional(),
+  };
+  const itemOrc = z.object({ ...campoItemOrc, qtd: campoItemOrc.qtd.default(1) }).strict();
+  // alterar: só o id é obrigatório; campo que não existe é recusado aqui e no banco (nada muda calado)
+  const itemOrcAlterar = z.object({
+    id: z.string().uuid().describe("Id do item (veja buscar_orcamento)"),
+    tipo: campoItemOrc.tipo.optional(), descricao: campoItemOrc.descricao.optional(), qtd: campoItemOrc.qtd.optional(),
+    valor_unit: campoItemOrc.valor_unit.optional(), custo_unit: campoItemOrc.custo_unit, codigo: campoItemOrc.codigo,
+    desconto: campoItemOrc.desconto, peca_do_cliente: campoItemOrc.peca_do_cliente, qualidade: campoItemOrc.qualidade,
+    aprovado: z.boolean().optional().describe("false = o cliente não quis este item (não entra no total)"),
+  }).strict();
 
   s.registerTool("orcamento", {
     title: "Orçamento (ORC): criar, editar, enviar, recusar, reabrir, excluir",
     description: "Orçamento para quem pediu preço e NÃO deixou o carro. Não gasta número de O.S. e não mexe em estoque nem em financeiro: " +
       "só vira O.S. com aprovar_orcamento. acao: criar (padrão quando não vem número), editar, enviar (cliente recebeu), recusar (motivo obrigatório), " +
       "reabrir (volta para em elaboração) e excluir (só administrador, e nunca o que já virou O.S.). Localize por numero (5 = ORC-00005) ou id. " +
-      "Cliente e veículo: do cadastro (cliente_id/veiculo_id) ou só digitados (cliente {nome, telefone}, veiculo {placa, marca, modelo, ano}) — o cadastro é feito na aprovação. " +
-      "Itens: itens troca a lista inteira; itens_incluir, itens_alterar [{id, qtd, valor_unit...}] e itens_remover [id] mexem no que já está lá (os ids vêm de buscar_orcamento). " +
-      "validade (AAAA-MM-DD) ou validade_dias (padrão dos Ajustes: 10 dias). Ordem clara do Danilo: confirmar=true; excluir sempre com prévia e sim. " +
+      "Cliente e veículo: do cadastro (cliente_id/veiculo_id) ou só digitados (cliente {nome, telefone, doc, cep, rua, bairro}, veiculo {placa, marca, modelo, ano}) — " +
+      "o cadastro é feito na aprovação, com o CPF e o endereço que estiverem aqui. " +
+      "Itens: itens troca a lista inteira OU itens_incluir, itens_alterar [{id, qtd, valor_unit...}] e itens_remover [id] mexem no que já está lá (nunca os dois juntos; os ids vêm de buscar_orcamento). " +
+      "Peça com codigo do estoque dá baixa na aprovação; sem código é item avulso. Nunca invente preço: use o do cadastro ou o que o Danilo passou. " +
+      "validade (AAAA-MM-DD) ou validade_dias; sem nada, vale o padrão dos Ajustes. Ordem clara do Danilo: confirmar=true; excluir sempre com prévia e sim. " +
       "Na prévia de criar nada é gravado e o número ORC só sai na gravação.",
     inputSchema: z.object({
       acao: z.enum(["criar", "editar", "enviar", "recusar", "reabrir", "excluir"]).optional(),
@@ -376,8 +389,7 @@ export function criarServidor(db: Banco): McpServer {
       tabela_preco: z.enum(["vista", "prazo", "atacado"]).optional(), condicoes_pagamento: z.string().optional(),
       desconto: z.number().nonnegative().optional(), validade: data.optional(), validade_dias: z.number().int().positive().optional(),
       itens: z.array(itemOrc).max(60).optional(), itens_incluir: z.array(itemOrc).max(40).optional(),
-      itens_alterar: z.array(z.object({ id: z.string().uuid() }).catchall(z.unknown())).max(60).optional(),
-      itens_remover: z.array(z.string().uuid()).max(60).optional(),
+      itens_alterar: z.array(itemOrcAlterar).max(60).optional(), itens_remover: z.array(z.string().uuid()).max(60).optional(),
       motivo: z.string().optional().describe("Por que o cliente recusou"), pedido, confirmar,
     }),
     annotations: GRAVA,
@@ -385,7 +397,8 @@ export function criarServidor(db: Banco): McpServer {
 
   s.registerTool("aprovar_orcamento", {
     title: "Orçamento aprovado: virar O.S.",
-    description: "O cliente aprovou: o orçamento vira O.S. com o próximo número, já em \"Aprovado · em execução\", e a peça sai do estoque (é aqui que a baixa acontece). " +
+    description: "O cliente aprovou: o orçamento vira O.S. com o próximo número, já em \"Aprovado · em execução\"; a peça com código do estoque sai do estoque aqui (é a única baixa do orçamento). " +
+      "Cliente ou veículo só digitados são cadastrados agora, com o CPF e o endereço do orçamento (telefone com DDD e placa são exigidos aí). " +
       "Regra do Danilo: o que não for tirado segue para a O.S.; o que for tirado (itens_fora, com os ids de buscar_orcamento) NÃO segue e fica registrado como " +
       "\"apontado pela oficina e não aprovado pelo cliente\", no orçamento e numa observação que sai na impressão da O.S. " +
       "por = quem aprovou; forma = como (telefone, WhatsApp, balcão). O carro ainda não chegou: a O.S. nasce sem KM e a tela pede \"Registrar chegada\". " +

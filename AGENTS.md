@@ -659,7 +659,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   (1) **Quem decide o que aparece é o CARRO.** A lista que ele responde em `0100`/`0120`/`0140` é a palavra final: nenhuma consulta de placa sabe
   quais sensores aquele módulo expõe. A placa serve para outra coisa — `tipoDeMotor` (do combustível do cadastro) só ORDENA os grupos e evita
   oferecer, antes de ligar, o que não existe naquele motor (num flex não se oferece rail nem DPF; num diesel não se oferece sonda nem cânister).
-  (2) **Grupos** (`GRUPOS` em `js/obd.js`, campo `grupo` em cada PID): Motor, Ar e admissão, Combustível, Sondas, Catalisador, Diesel e turbo,
+  (2) **Grupos** (`GRUPOS` em `js/obd.js`, campo `grupo` em cada PID): Motor, Ar e admissão, Combustível, Sondas, Catalisador, Injeção/EGR/turbo,
   Tanque e cânister, Elétrico, Contadores. `leiturasPara(suportados, escolhidos)` e `gruposPara(suportados, combustivel)` resolvem tudo num lugar só.
   (3) **Filtro com caixas** (`#obd-escolha`): marcar o que ver agora ou "TODAS AS QUE O CARRO TIVER". A escolha fica **por placa** no aparelho
   (`localStorage`, `obd_leituras_<PLACA>`), junto com o que aquele carro respondeu (`obd_suportados_<PLACA>`, só para montar o filtro antes de ligar).
@@ -671,6 +671,20 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   "FALHA NOVA AGORA". A referência é a leitura de falhas anterior, se houve; senão a primeira olhada vira a referência. Falha que nasce com o motor
   trabalhando é justamente a que interessa, e antes ela só apareceria se alguém lembrasse de abrir a tela de falhas.
   Teste: o adaptador de mentira ganha `window.__obd.falhaNova` e o teste confere o botão ficando vermelho, o código aparecendo e o botão voltando ao normal.
+- **40 LEITURAS NOVAS (19/11/2026, pedido do Danilo: "quero todas as leituras possíveis").** De 15 para 55. Todas com a fórmula conferida contra a
+  tabela do J1979 e com um teste de valor que um mecânico reconhece (rail a 500 bar, catalisador a 450 °C, odômetro em 150.000 km), para conta
+  errada doer no teste e não no laudo. As que entraram: **velocidade**; carga absoluta; temperatura do óleo; torque pedido, entregue e de
+  referência; borboleta relativa, absoluta B e C, comandada pelo módulo, pedais D, E, F e relativo; pressão barométrica; temperatura do ar de fora;
+  **ajuste curto e longo do banco 2** (só havia o banco 1); mistura comandada (lambda); pressão de combustível; nível do tanque; **etanol no
+  tanque**; **temperatura do catalisador nos quatro pontos**; **pressão do rail** (gauge, absoluta e sobre o vácuo); **tempo de injeção** (não
+  confundir com o avanço de ignição, que já havia); consumo em L/h; EGR comandada e erro da EGR; purga do cânister; pressão de vapor do tanque
+  (duas escalas, **com sinal** — vácuo é negativo); tempo com a luz acesa e desde o apagamento; **odômetro do módulo** (4 bytes).
+  **FAIXAS ATÉ $C0:** `FAIXAS_PID` passou de `[00,20,40,60]` para `[00,20,40,60,80,A0,C0]`, senão o odômetro ($A6) nunca apareceria. Andar não
+  custa: a varredura para na primeira faixa que não avisa a seguinte.
+  **O grupo "diesel" virou "Injeção, EGR e turbo", sem restrição de combustível:** o PID da pressão do rail é "diesel OU gasolina de injeção
+  direta", e EGR e turbo existem nos dois. Restringir por combustível esconderia leitura que o carro tem.
+  Conferências novas no `teste_obd.mjs`: a conta de cada PID tem de caber nos bytes que ele declara (ler `d[2]` num PID de 2 bytes daria NaN no
+  carro e a leitura sumiria da tela sem motivo aparente), escala completa ou ausente, fim maior que o começo e nenhum rótulo repetido.
 - **Lista de dados ao vivo redesenhada (19/11/2026):** a visão LISTA deixou de ser "rótulo: valor" e virou `LinhaViva` — separada por grupo, com o
   valor grande à direita e uma barra fina mostrando a posição na escala (a mesma `de`/`ate` do mostrador; continua sem dizer se é bom ou ruim).
 - **Serviço 06, honestidade e sinal:** na tabela de escalas do J1979 os identificadores de **$80 em diante são valores COM SINAL** — lendo tudo como sem sinal, um valor negativo virava ~65000 e o passou/não passou **invertia**. `comSinal`/`inteiro16` tratam isso. A escala para mostrar em unidade de verdade só existe onde está conferida (`ESCALAS`); o resto aparece como número cru, sem unidade inventada, e pode crescer conferindo contra o Raven. Mesma regra nos nomes: `nomeMid` só nomeia sonda ($01–$08) e catalisador ($21–$24).
@@ -678,7 +692,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (98, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (290, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (129, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (300, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
 
 ## Como trabalhar

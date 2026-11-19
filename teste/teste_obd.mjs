@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, leiturasPara, gruposPara, tipoDeMotor } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -67,7 +67,26 @@ chk("MAF de dois bytes", valorPid("4110013A", 0x10).valor === 3.14);
 chk("PID de um byte com resposta curta demais devolve null", valorPid("4105", 0x05) === null);
 chk("PID que não é o pedido devolve null", valorPid("41051E", 0x0c) === null);
 chk("foto da falha (serviço 02) pula o número da foto", valorPid("420C001AF8", 0x0c, 0x02).valor === 1726);
-chk("todo PID da lista tem rótulo, conta e nº de bytes", PIDS.every(p => typeof p.rotulo === "string" && p.rotulo && typeof p.conta === "function" && (p.bytes === 1 || p.bytes === 2)));
+chk("todo PID da lista tem rótulo, conta e nº de bytes", PIDS.every(p => typeof p.rotulo === "string" && p.rotulo && typeof p.conta === "function" && p.bytes >= 1 && p.bytes <= 4));
+{
+  // A conta de cada PID só pode usar os bytes que ele declara: ler d[2] num PID de 2 bytes daria
+  // NaN no carro de verdade e a leitura sumiria da tela sem ninguém entender por quê.
+  const erradas = PIDS.filter(p => {
+    for (const b of [0x00, 0x7f, 0xff]) {
+      const d = new Array(p.bytes).fill(b);
+      const v = p.conta(d);
+      if (typeof v !== "number" || !isFinite(v)) return true;
+    }
+    return false;
+  });
+  chk("a conta de cada PID cabe nos bytes que ele declara", !erradas.length, erradas.map(p => p.rotulo));
+  const semEscala = PIDS.filter(p => (typeof p.de === "number") !== (typeof p.ate === "number"));
+  chk("escala do mostrador vem completa ou não vem", !semEscala.length, semEscala.map(p => p.rotulo));
+  const escalaTorta = PIDS.filter(p => typeof p.de === "number" && p.ate <= p.de);
+  chk("fim da escala sempre maior que o começo", !escalaTorta.length, escalaTorta.map(p => p.rotulo));
+  const rotuloRepetido = PIDS.map(p => p.rotulo).filter((r, i, a) => a.indexOf(r) !== i);
+  chk("nenhum rótulo repetido (o mecânico tem de saber qual é qual)", !rotuloRepetido.length, rotuloRepetido);
+}
 
 /* ---------------- prontidão dos monitores ---------------- */
 {
@@ -185,6 +204,39 @@ chk("os PIDs altos da lista existem nas faixas certas", [0x21, 0x30, 0x31].every
 chk("a última posição de cada faixa é o aviso da faixa seguinte", suportados("4100" + "00000001", 0x01, 0x00).join() === "32" && suportados("4120" + "00000001", 0x01, 0x20).join() === "64");
 
 
+/* ---------------- leituras novas (19/11/2026) ----------------
+ * Valores conferidos contra a tabela de fórmulas do J1979. Cada um com um número que um mecânico
+ * reconhece no carro, para a conta estar errada doer aqui e não no laudo.
+ */
+const vp = (pid, dados) => valorPid("41" + pid + dados, parseInt(pid, 16), 0x01);
+chk("velocidade", vp("0D", "50").valor === 80);
+chk("pressão do rail: 5000 x 10 = 50.000 kPa (500 bar, diesel)", vp("23", "1388").valor === 50000);
+chk("pressão do rail absoluta usa a mesma escala", vp("59", "1388").valor === 50000);
+chk("pressão do rail sobre o vácuo é outra escala (x0,079)", vp("22", "1388").valor === 395);
+chk("tempo de injeção: 2,5° (não é o avanço de ignição)", vp("5D", "6A40").valor === 2.5 && vp("5D", "6A40").rotulo.includes("injeção"));
+chk("tempo de injeção negativo (atrasado)", vp("5D", "6540").valor === -7.5);
+chk("consumo instantâneo 3,5 L/h", vp("5E", "0046").valor === 3.5);
+chk("EGR comandada 50%", vp("2C", "80").valor === 50);
+chk("erro da EGR zero quando vem 128", vp("2D", "80").valor === 0);
+chk("temperatura do catalisador 450 °C", vp("3C", "1324").valor === 450);
+chk("os quatro pontos do catalisador existem e têm nomes diferentes", [0x3c, 0x3d, 0x3e, 0x3f].every(p => PIDS.some(x => x.pid === p)) && new Set([0x3c, 0x3d, 0x3e, 0x3f].map(p => PIDS.find(x => x.pid === p).rotulo)).size === 4);
+chk("etanol no tanque 27%", vp("52", "45").valor === 27);
+chk("nível do tanque 50%", vp("2F", "80").valor === 50);
+chk("mistura comandada = 1,000 quando vem 0x8000", vp("44", "8000").valor === 1);
+chk("temperatura do óleo 90 °C", vp("5C", "82").valor === 90);
+chk("torque entregue zero quando vem 125", vp("62", "7D").valor === 0);
+chk("torque de referência 300 Nm", vp("63", "012C").valor === 300);
+chk("pressão de vapor do tanque é NEGATIVA quando é vácuo", vp("32", "FFFC").valor === -1);
+chk("pressão de vapor ampla também tem sinal", vp("54", "FFFF").valor === -1);
+chk("odômetro do módulo: 1.500.000 ÷ 10 = 150.000 km", vp("A6", "0016E360").valor === 150000);
+chk("odômetro é de 4 bytes", PIDS.find(p => p.pid === 0xa6).bytes === 4);
+chk("ajuste de combustível do banco 2 existe, separado do banco 1", [0x06, 0x07, 0x08, 0x09].every(p => PIDS.some(x => x.pid === p)) && vp("08", "80").valor === 0);
+chk("pressão barométrica em kPa", vp("33", "65").valor === 101);
+chk("pedal e borboleta: todas as tomadas do padrão", [0x45, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x5a].every(p => PIDS.some(x => x.pid === p)));
+chk("tempo com a luz acesa em minutos", vp("4D", "003C").valor === 60);
+chk("dado de PID errado não vira leitura (resposta de outro PID)", valorPid("410D50", 0x23, 0x01) === null);
+chk("faixas andam até $C0, senão o odômetro ($A6) nunca sairia", FAIXAS_PID[FAIXAS_PID.length - 1] >= 0xa0);
+
 /* ---------------- escolher o que aparece (19/11/2026) ----------------
  * Quem manda é o CARRO: a lista que ele responde. A placa só serve para ordenar e para não
  * oferecer, antes de ligar, grupo que não existe naquele motor.
@@ -198,7 +250,8 @@ chk("marcar nada = todas as que o carro tiver", leiturasPara([0x0c, 0x05, 0x42],
 chk("sai na ordem dos grupos, não na ordem em que foi marcado",
   leiturasPara([0x42, 0x0c], [0x42, 0x0c]).map(p => p.grupo).join() === "motor,eletrico");
 chk("diesel não recebe grupo de sonda nem de cânister", !gruposPara(null, "DIESEL").some(g => ["sondas", "catalisador", "evap"].includes(g.id)));
-chk("flex não recebe o grupo do diesel", !gruposPara(null, "Álcool/Gasolina").some(g => g.id === "diesel"));
+chk("injeção/EGR/turbo vale nos dois: rail e tempo de injeção também existem em gasolina de injeção direta",
+  ["DIESEL", "Álcool/Gasolina"].every(c => gruposPara(null, c).some(g => g.id === "injecao")));
 chk("sem saber o combustível, oferece tudo o que o carro tem", gruposPara(null, "").length >= gruposPara(null, "DIESEL").length);
 chk("grupo sem nenhuma leitura no carro não aparece no filtro", gruposPara([0x0c], "").map(g => g.id).join() === "motor");
 chk("cada grupo do filtro vem com as leituras dele", gruposPara([0x0c, 0x42], "").every(g => g.leituras.length > 0));

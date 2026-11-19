@@ -158,6 +158,8 @@ export function vinDe(hex) {
 /* ---- dados ao vivo (serviço 01) ---- */
 
 const arred = (n, casas) => Math.round(n * Math.pow(10, casas)) / Math.pow(10, casas);
+/** 16 bits em complemento de dois (pressão de vapor do tanque pode ser negativa: é vácuo) */
+const sinal16 = v => (v > 0x7fff ? v - 0x10000 : v);
 
 /**
  * Grupos das leituras, na ordem em que aparecem na escolha. `so` diz para qual tipo de motor o
@@ -172,7 +174,9 @@ export const GRUPOS = [
   { id: "combustivel", nome: "Combustível", so: null },
   { id: "sondas", nome: "Sondas", so: "otto" },
   { id: "catalisador", nome: "Catalisador", so: "otto" },
-  { id: "diesel", nome: "Diesel e turbo", so: "diesel" },
+  // Não é "diesel": o PID da pressão do rail é "diesel OU gasolina de injeção direta", e EGR e
+  // turbo existem nos dois. Quem decide continua sendo o carro — por isso aqui não há `so`.
+  { id: "injecao", nome: "Injeção, EGR e turbo", so: null },
   { id: "evap", nome: "Tanque e cânister", so: "otto" },
   { id: "eletrico", nome: "Elétrico", so: null },
   { id: "contadores", nome: "Contadores", so: null },
@@ -200,6 +204,46 @@ export const PIDS = [
   { pid: 0x21, rotulo: "Distância com a luz acesa", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
   { pid: 0x31, rotulo: "Distância desde o apagamento", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
   { pid: 0x30, rotulo: "Aquecimentos desde o apagamento", unidade: "", bytes: 1, conta: d => d[0], casas: 0, vivo: false, grupo: "contadores" },
+  { pid: 0x0d, rotulo: "Velocidade", unidade: "km/h", bytes: 1, conta: d => d[0], casas: 0, vivo: true, de: 0, ate: 200, grupo: "motor" },
+  { pid: 0x43, rotulo: "Carga absoluta", unidade: "%", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "motor" },
+  { pid: 0x5c, rotulo: "Temperatura do óleo", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 150, grupo: "motor" },
+  { pid: 0x61, rotulo: "Torque pedido ao motor", unidade: "%", bytes: 1, conta: d => d[0] - 125, casas: 0, vivo: true, de: -25, ate: 100, grupo: "motor" },
+  { pid: 0x62, rotulo: "Torque entregue pelo motor", unidade: "%", bytes: 1, conta: d => d[0] - 125, casas: 0, vivo: true, de: -25, ate: 100, grupo: "motor" },
+  { pid: 0x63, rotulo: "Torque de referência do motor", unidade: "Nm", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "motor" },
+  { pid: 0x45, rotulo: "Borboleta relativa", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x47, rotulo: "Borboleta absoluta B", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x48, rotulo: "Borboleta absoluta C", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x4c, rotulo: "Borboleta comandada pelo módulo", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x49, rotulo: "Pedal do acelerador D", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x4a, rotulo: "Pedal do acelerador E", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x4b, rotulo: "Pedal do acelerador F", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x5a, rotulo: "Pedal relativo", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x33, rotulo: "Pressão do ar (barométrica)", unidade: "kPa", bytes: 1, conta: d => d[0], casas: 0, vivo: true, de: 0, ate: 110, grupo: "ar" },
+  { pid: 0x46, rotulo: "Temperatura do ar de fora", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 60, grupo: "ar" },
+  { pid: 0x08, rotulo: "Ajuste curto de combustível (banco 2)", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
+  { pid: 0x09, rotulo: "Ajuste longo de combustível (banco 2)", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
+  { pid: 0x44, rotulo: "Mistura comandada (lambda)", unidade: "", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, vivo: true, de: 0.7, ate: 1.3, grupo: "combustivel" },
+  { pid: 0x0a, rotulo: "Pressão de combustível", unidade: "kPa", bytes: 1, conta: d => d[0] * 3, casas: 0, vivo: true, de: 0, ate: 765, grupo: "combustivel" },
+  { pid: 0x2f, rotulo: "Nível do tanque", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: false, de: 0, ate: 100, grupo: "combustivel" },
+  { pid: 0x52, rotulo: "Etanol no tanque", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: false, de: 0, ate: 100, grupo: "combustivel" },
+  { pid: 0x3c, rotulo: "Temperatura do catalisador (banco 1, sonda 1)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
+  { pid: 0x3d, rotulo: "Temperatura do catalisador (banco 2, sonda 1)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
+  { pid: 0x3e, rotulo: "Temperatura do catalisador (banco 1, sonda 2)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
+  { pid: 0x3f, rotulo: "Temperatura do catalisador (banco 2, sonda 2)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
+  { pid: 0x23, rotulo: "Pressão do rail", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 10, casas: 0, vivo: true, de: 0, ate: 200000, grupo: "injecao" },
+  { pid: 0x59, rotulo: "Pressão do rail (absoluta)", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 10, casas: 0, vivo: true, de: 0, ate: 200000, grupo: "injecao" },
+  { pid: 0x22, rotulo: "Pressão do rail (sobre o vácuo do coletor)", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 0.079, casas: 1, vivo: true, de: 0, ate: 5177, grupo: "injecao" },
+  { pid: 0x5d, rotulo: "Tempo de injeção", unidade: "°", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 128) - 210, casas: 1, vivo: true, de: -30, ate: 30, grupo: "injecao" },
+  { pid: 0x5e, rotulo: "Consumo de combustível", unidade: "L/h", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 20, casas: 2, vivo: true, de: 0, ate: 40, grupo: "injecao" },
+  { pid: 0x2c, rotulo: "EGR comandada", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "injecao" },
+  { pid: 0x2d, rotulo: "Erro da EGR", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -100, ate: 100, grupo: "injecao" },
+  { pid: 0x2e, rotulo: "Purga do cânister comandada", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "evap" },
+  { pid: 0x32, rotulo: "Pressão de vapor do tanque", unidade: "Pa", bytes: 2, conta: d => sinal16((d[0] * 256) + d[1]) / 4, casas: 1, vivo: true, de: -2000, ate: 2000, grupo: "evap" },
+  { pid: 0x53, rotulo: "Pressão de vapor do tanque (absoluta)", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 200, casas: 2, vivo: true, de: 0, ate: 328, grupo: "evap" },
+  { pid: 0x54, rotulo: "Pressão de vapor do tanque (ampla)", unidade: "Pa", bytes: 2, conta: d => sinal16((d[0] * 256) + d[1]), casas: 0, vivo: true, de: -32767, ate: 32768, grupo: "evap" },
+  { pid: 0x4d, rotulo: "Tempo com a luz acesa", unidade: "min", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
+  { pid: 0x4e, rotulo: "Tempo desde o apagamento", unidade: "min", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
+  { pid: 0xa6, rotulo: "Odômetro do módulo", unidade: "km", bytes: 4, conta: d => (((d[0] * 16777216) + (d[1] * 65536) + (d[2] * 256) + d[3]) / 10), casas: 0, vivo: false, grupo: "contadores" },
 ];
 
 /** Resposta de um PID do serviço 01 (ou 02, a foto da falha) → { rotulo, valor, unidade } */
@@ -386,7 +430,10 @@ export const pedir = (cmd, esperaMs) => comando(cmd, esperaMs).then(juntarLinhas
 const INICIO = [["ATZ", 3000], ["ATE0", 2000], ["ATL0", 2000], ["ATS0", 2000], ["ATH0", 2000], ["ATSP0", 2000]];
 
 /** Faixas de PID e de MID: a última posição de cada faixa avisa que existe a faixa seguinte. */
-const FAIXAS_PID = [0x00, 0x20, 0x40, 0x60];
+// As faixas vão até $C0 porque o odômetro do módulo é o PID $A6: sem andar até lá ele nunca
+// apareceria. Andar não custa nada em carro que não tem — a varredura para na primeira faixa que
+// não avisa a seguinte.
+export const FAIXAS_PID = [0x00, 0x20, 0x40, 0x60, 0x80, 0xa0, 0xc0];
 const FAIXAS_MID = [0x00, 0x20, 0x40, 0x60];
 
 /**

@@ -17,6 +17,7 @@ import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
 import { acessoApp, foraDoHorario } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
+import * as obd from "../js/obd.js";
 
 const LS_VISTOS = "dtcar-app-avisos-vistos";   // ids dos orçamentos aprovados/recusados que a pessoa já viu (avisos do app)
 const ABERTA = o => !["entregue", "cancelado", "recusado"].includes(o.status);   // O.S. em andamento (orçamento, execução ou aguardando pagamento)
@@ -48,6 +49,7 @@ const P = {
   clip: '<path d="M9 4h6v3H9z"/><path d="M7 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"/><path d="M8 12h8M8 16h5"/>',
   hist: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  obd: '<rect x="4" y="7" width="16" height="10" rx="3"/><path d="M8 17v3M16 17v3M9 11h.01M12 11h.01M15 11h.01"/>',
   zap: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z"/><path d="M9 8.5c0 3 2.5 5.5 5.5 6.5l1.5-1.5 2 1-.5 1.8c-4.5.6-9.4-4.3-8.8-8.8L10.5 7l1 2z"/>',
 };
 const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width=${sw} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0" dangerouslySetInnerHTML=${{ __html: P[n] }}></svg>`;
@@ -63,8 +65,9 @@ const TELAS = [
   { r: "historico", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
   { r: "meus", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
   { r: "osconsulta", ic: "clip", barra: "CONSULTAR O.S.", aba: "Consultar O.S.", titulo: "CONSULTAR O.S." },
+  { r: "obd", ic: "obd", barra: "DIAGNÓSTICO OBD", aba: "Diagnóstico OBD", titulo: "DIAGNÓSTICO OBD" },
 ];
-const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta)$/;
+const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta|obd)$/;
 const ir = r => { location.hash = "#/" + r; };
 const rotaAtual = () => { const m = /^#\/([a-z]+)/.exec(location.hash || ""); return m ? m[1] : "inicio"; };
 
@@ -847,8 +850,163 @@ function Ajuda() {
   </main><${Rodape} tela="ajuda" /></div>`;
 }
 
+/* ---------------- DIAGNÓSTICO OBD (18/11/2026) ----------------
+ * Etapa 1: só LEITURA. Nada é gravado no banco e nada é escrito no carro (não apaga falha).
+ * O adaptador é lido pelo plugin nativo do APK (app/plugins/obd/); quem entende de OBD é o js/obd.js.
+ * Serve para triagem na recepção e para conferir o reparo na entrega: é só motor e emissões.
+ * ABS, airbag, câmbio e imobilizador NÃO saem por aqui (protocolo próprio de cada montadora) e o
+ * OBD-II não tem quilometragem de painel. Isso está escrito na tela, para ninguém esperar o que não vem.
+ */
+const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
+
+function Obd() {
+  const { dados } = useApp();
+  const pl = usarPlaca();
+  const [aparelhos, setAparelhos] = useState(null);
+  const [lig, setLig] = useState(null);          // { nome, endereco, protocolo, pidsSuportados }
+  const [ocupado, setOcupado] = useState("");
+  const [erro, setErro] = useState("");
+  const [res, setRes] = useState({});            // falhas, vivo, conf, testes, foto
+  const temPlugin = obd.disponivel();
+
+  // sair da tela fecha a conexão: o adaptador não aceita duas conversas e a bateria do carro agradece
+  useEffect(() => () => { if (obd.disponivel()) obd.desconectar(); }, []);
+
+  async function rodar(aviso, fn) {
+    setErro(""); setOcupado(aviso);
+    try { await fn(); } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
+  }
+
+  const procurar = () => rodar("Procurando o adaptador…", async () => {
+    const p = await obd.permissao();
+    if (!p.concedida) {
+      const q = await obd.pedirPermissao();
+      if (!q.concedida) throw new Error("sem-permissao");
+    }
+    const lista = await obd.listar();
+    setAparelhos(lista);
+  });
+
+  const ligar = ap => rodar("Conectando em " + ap.nome + "…", async () => {
+    await obd.conectar(ap.endereco);
+    const i = await obd.iniciar();
+    setLig({ nome: ap.nome, endereco: ap.endereco, protocolo: i.protocolo, pidsSuportados: i.pidsSuportados });
+    setRes({});
+  });
+
+  const desligar = () => rodar("Desconectando…", async () => {
+    await obd.desconectar();
+    setLig(null); setRes({}); setAparelhos(null);
+  });
+
+  const guardar = (chave, valor) => setRes(x => Object.assign({}, x, { [chave]: valor }));
+
+  const lerFalhas = () => rodar("Lendo as falhas…", async () => guardar("falhas", await obd.lerFalhas()));
+  const lerVivo = () => rodar("Lendo os dados ao vivo…", async () => guardar("vivo", await obd.lerAoVivo(lig.pidsSuportados)));
+  const lerFoto = () => rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados)));
+  const lerTestes = () => rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes()));
+  const lerConf = () => rodar("Lendo chassi e monitores…", async () => {
+    const monitores = await obd.lerMonitores();
+    const chassi = await obd.lerChassi();
+    guardar("conf", { monitores, chassi });
+  });
+
+  const v = pl.veic;
+  // o chassi do cadastro vem da ficha do veículo (a busca por placa não carrega esse campo)
+  const noBanco = v && v.id ? dados.veiculos.find(x => x.id === v.id) : null;
+  const chassiCadastro = String((noBanco && noBanco.chassi) || (v && v.chassi) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+
+  return html`<${Tela} tela="obd" ajuda="Encaixe o adaptador na tomada do carro, ligue a ignição (chave na posição 2) e conecte. O app lê o módulo do MOTOR: códigos de falha, dados ao vivo, chassi, prontidão dos monitores, a foto do momento da falha e os testes de bordo. ABS, airbag e câmbio não saem por aqui: isso continua no scanner da oficina. Nesta etapa nada é gravado e nenhuma falha é apagada.">
+
+    ${!temPlugin ? html`<${Cartao} titulo="Precisa do APK novo">
+      <p class="nota" style="font-size:13.5px">A leitura OBD é a primeira coisa do app que depende de uma parte nativa: o Bluetooth do adaptador não existe dentro das telas do site. Gere o APK novo em GitHub › Actions › "App DTCar (gerar APK)", desinstale o app antigo do celular e instale o novo. Depois disso as telas voltam a chegar sozinhas, como sempre.</p>
+    </${Cartao}>` : null}
+
+    ${temPlugin ? html`
+      <${BuscaPlaca} id="obd-placa" titulo="Placa do carro (opcional)" pl=${pl} />
+      ${v ? html`<${Veiculo} v=${v} />` : null}
+
+      <${Cartao} titulo="Adaptador" id="obd-adaptador">
+        ${!lig ? html`
+          <p class="nota" style="margin-bottom:8px">Encaixe o adaptador na tomada do carro e ligue a ignição (chave na posição 2). Com o motor desligado e a chave fora, o módulo não responde.</p>
+          <button type="button" class="btn-barra" id="obd-procurar" onClick=${procurar} disabled=${!!ocupado}><${Ic} n="obd" t=${22} />PROCURAR ADAPTADOR</button>
+          ${aparelhos && !aparelhos.length ? html`<div class="vazio">Nenhum aparelho pareado. Pareie o adaptador uma vez nos Ajustes do Android (Bluetooth) e volte aqui.</div>` : null}
+          ${aparelhos && aparelhos.length ? html`<div class="sec"><h3>Aparelhos pareados</h3>
+            ${aparelhos.map(ap => html`<button key=${ap.endereco} type="button" class="obd-ap" onClick=${() => ligar(ap)} disabled=${!!ocupado}>
+              <b>${ap.nome}</b><span>${ap.endereco}</span></button>`)}
+            <div class="nota">Toque no seu adaptador para conectar.</div></div>` : null}
+        ` : html`
+          <div class="kv"><span>Situação:</span><i></i><b><span class="selo">CONECTADO</span>${lig.nome}</b></div>
+          ${lig.protocolo ? html`<${KV} a="Protocolo" b=${lig.protocolo} p />` : null}
+          <button type="button" class="btn-barra claro" id="obd-desligar" style="justify-content:center" onClick=${desligar} disabled=${!!ocupado}>DESCONECTAR</button>
+        `}
+      </${Cartao}>
+
+      ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
+      ${erro ? html`<div class="erro">${erro}</div>` : null}
+
+      ${lig && !ocupado ? html`<${Cartao} titulo="Ler do carro" id="obd-acoes">
+        <button type="button" class="btn-barra" id="obd-falhas" onClick=${lerFalhas}><${Ic} n="obd" t=${22} />LER FALHAS</button>
+        <button type="button" class="btn-barra claro" id="obd-vivo" onClick=${lerVivo}>DADOS AO VIVO</button>
+        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI E MONITORES</button>
+        <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto}>FOTO DO MOMENTO DA FALHA</button>
+        <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
+        <div class="nota">Nada é gravado e nenhuma falha é apagada nesta etapa.</div>
+      </${Cartao}>` : null}
+
+      ${res.falhas ? html`<${Cartao} titulo=${"Falhas do motor" + (res.falhas.falhas.length ? " (" + res.falhas.falhas.length + ")" : "")} id="obd-r-falhas">
+        ${!res.falhas.falhas.length ? html`<div class="vazio">Nenhuma falha gravada no módulo do motor.</div>` : null}
+        ${res.falhas.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc">
+          <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}
+        ${res.falhas.falhas.length ? html`<div class="nota">O código é o que o módulo gravou; a descrição de código de montadora (P1 em diante) não é pública. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
+        ${res.falhas.variosModulos ? html`<div class="nota">Mais de um módulo do carro respondeu: a lista junta os códigos de todos. Sem o cabeçalho ligado não dá para dizer qual código é de qual módulo.</div>` : null}
+        ${res.falhas.erros.length ? html`<div class="nota">Não respondeu: ${res.falhas.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
+      </${Cartao}>` : null}
+
+      ${res.vivo ? html`<${Cartao} titulo="Dados ao vivo" id="obd-r-vivo">
+        ${!res.vivo.length ? html`<div class="vazio">O módulo não respondeu nenhum dado ao vivo.</div>` : null}
+        ${res.vivo.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}
+      </${Cartao}>` : null}
+
+      ${res.conf ? html`<${Cartao} titulo="Chassi e monitores" id="obd-r-conf">
+        ${res.conf.chassi ? html`<${KV} a="Chassi lido no módulo" b=${res.conf.chassi} p />` : html`<div class="nota">O módulo não informou o chassi (comum em carro mais antigo).</div>`}
+        ${res.conf.chassi && chassiCadastro ? html`<div class="kv"><span>Confronto:</span><i></i><b>${res.conf.chassi === chassiCadastro
+          ? html`<span class="selo">CONFERE</span>igual ao cadastro`
+          : html`<span class="selo ruim">DIVERGE</span>cadastro: ${chassiCadastro}`}</b></div>` : null}
+        <div class="kv"><span>Luz de injeção:</span><i></i><b>${res.conf.monitores.luzAcesa ? html`<span class="selo ruim">ACESA</span>` : html`<span class="selo">APAGADA</span>`}${res.conf.monitores.quantidade} código(s) no módulo</b></div>
+        <div class="sec"><h3>Monitores de emissão (${res.conf.monitores.prontos} de ${res.conf.monitores.total} prontos)</h3>
+          ${res.conf.monitores.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto ? html`<span class="selo">PRONTO</span>` : html`<span class="selo atencao">NÃO PRONTO</span>`}</b></div>`)}
+          ${res.conf.monitores.prontos < res.conf.monitores.total ? html`<div class="nota">Monitor não pronto quer dizer que o módulo foi zerado há pouco e ainda não terminou os próprios testes: a falha foi apagada antes de o carro chegar. Confira a distância desde o apagamento em "Dados ao vivo".</div>` : null}
+          ${res.conf.monitores.diesel ? html`<div class="nota">Motor a diesel: o padrão não define quais monitores existem além dos três de base, então só esses aparecem.</div>` : null}
+        </div>
+      </${Cartao}>` : null}
+
+      ${res.foto ? html`<${Cartao} titulo="Foto do momento da falha" id="obd-r-foto">
+        ${!res.foto.length ? html`<div class="vazio">O módulo não guardou a foto do momento da falha.</div>` : null}
+        ${res.foto.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}
+        ${res.foto.length ? html`<div class="nota">Como o carro estava no instante em que a falha gravou: diz se deu com o motor frio, em carga ou em marcha lenta.</div>` : null}
+      </${Cartao}>` : null}
+
+      ${res.testes ? html`<${Cartao} titulo="Testes de bordo" id="obd-r-testes">
+        ${res.testes.erro ? html`<div class="nota">${res.testes.erro}</div>` : null}
+        ${!res.testes.testes.length && !res.testes.erro ? html`<div class="vazio">Este carro não devolveu resultado de teste de bordo.</div>` : null}
+        ${res.testes.testes.map((t, i) => html`<div key=${i} class="obd-teste">
+          <div class="obd-teste-n">${t.nome}${t.tid ? " · teste " + t.tid : ""}</div>
+          <div class="obd-teste-v"><b>${t.valor}${t.unidade ? " " + t.unidade : ""}</b>
+            <span>limite ${t.minimo} a ${t.maximo}${t.unidade ? " " + t.unidade : ""}</span>
+            ${t.passou ? html`<span class="selo">PASSOU</span>` : html`<span class="selo ruim">FORA DO LIMITE</span>`}</div>
+          ${!t.escalaConhecida ? html`<div class="nota">Número cru: a escala deste teste não está conferida, então não inventamos unidade. O passou/não passou vem da comparação com o limite do próprio módulo e vale do mesmo jeito.</div>` : null}
+        </div>`)}
+        ${res.testes.testes.length ? html`<div class="nota">É aqui que o catalisador e a sonda aparecem piorando ANTES de dar código: veja quanta margem sobra até o limite.</div>` : null}
+      </${Cartao}>` : null}
+
+      <div class="nota" style="padding:0 2px 4px">Leitura de motor e emissões. ABS, airbag, câmbio e imobilizador exigem o scanner da oficina. O OBD-II não informa a quilometragem do painel.</div>
+    ` : null}
+  </${Tela}>`;
+}
+
 /* ---------------- raiz: dados, rota, aviso ---------------- */
-const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta };
+const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta, obd: Obd };
 // quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
 const quadros = [];
 /** Pilha das telas visitadas: o botão Voltar do celular volta para a tela anterior, uma por vez, e só sai do app no Início

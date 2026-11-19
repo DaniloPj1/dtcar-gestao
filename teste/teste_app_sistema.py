@@ -58,6 +58,7 @@ window.Capacitor.Plugins.DtcarObd = {
     var c = String(o.cmd || '').toUpperCase();
     window.__obd.cmds.push(c);
     if (!window.__obd.conectado) return Promise.reject(new Error('sem-conexao'));
+    if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
     if (c === '010C') {   // rotação sobe a cada leitura: é assim que o teste vê a tela se mexer
       window.__obd.rpm = (window.__obd.rpm || 800) + 100;
       var cru = window.__obd.rpm * 4;
@@ -523,11 +524,10 @@ try:
         # dados ao vivo, foto da falha e testes de bordo
         # DADOS AO VIVO DE VERDADE (pedido do Danilo em 19/11/2026): tem de ir mudando sozinho
         def rpm_na_tela():                       # serve nos dois jeitos: mostrador e lista
-            alvo = '#obd-r-vivo [data-pid="12"] .mostrador-num b'
-            if pg.query_selector(alvo):
-                return pg.inner_text(alvo).strip()
-            m = re.search(r'Rota\u00e7\u00e3o:\s*([\d.,]+)', pg.inner_text('#obd-r-vivo'))
-            return m.group(1) if m else None
+            for alvo in ('#obd-r-vivo [data-pid="12"] .mostrador-num b', '#obd-r-vivo [data-pid="12"] .linha-viva-num'):
+                if pg.query_selector(alvo):
+                    return re.sub(r'[^\d.,]', '', pg.inner_text(alvo)).strip()
+            return None
         pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo', timeout=20000)
         pg.wait_for_selector('#obd-r-vivo .selo.vivo', timeout=10000)
         t('AO VIVO' in pg.inner_text('#obd-r-vivo'), 'mostra que está ao vivo')
@@ -536,7 +536,7 @@ try:
         t(re.search(r'\d+ volta', pg.inner_text('#obd-r-vivo')), 'mostra quantas voltas já deu')
         pg.eval_on_selector('#obd-r-vivo', "e => e.scrollIntoView({block:'start'})"); pg.wait_for_timeout(400)
         pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'obd-painel-celular.png'))
-        t(not pg.is_enabled('#obd-falhas'), 'enquanto a roda gira, as outras leituras ficam travadas (o adaptador atende um por vez)')
+        t(pg.is_enabled('#obd-falhas'), 'as outras leituras continuam clicáveis durante a roda (elas a interrompem)')
         tx = pg.inner_text('#obd-r-vivo')
         t('14,1' in tx or '14.1' in tx, 'a tensão do módulo aparece na tela: %s' % tx.replace('\n', ' ')[:160])
         t('83' in tx, 'a temperatura do motor aparece na tela')
@@ -550,7 +550,41 @@ try:
         t('PARADO' in pg.inner_text('#obd-r-vivo'), 'tocar de novo para a roda')
         parado = rpm_na_tela(); pg.wait_for_timeout(1200)
         t(rpm_na_tela() == parado, 'parado fica parado: o valor não muda mais')
-        t(pg.is_enabled('#obd-falhas'), 'com a roda parada as outras leituras voltam')
+        # FILTRO DAS LEITURAS (pedido do Danilo em 19/11/2026)
+        pg.click('#obd-escolher'); pg.wait_for_timeout(300)
+        t(pg.query_selector('#obd-todas'), 'tem a opção "todas as que o carro tiver"')
+        t(pg.locator('#obd-escolha .obd-cx').count() >= 10, 'lista as leituras deste carro para marcar: %d' % pg.locator('#obd-escolha .obd-cx').count())
+        t(pg.locator('#obd-escolha .sec h3').count() >= 3, 'separadas por grupo')
+        t(pg.locator('#obd-escolha input:checked').count() == pg.locator('#obd-escolha .obd-cx').count(), 'começa com todas marcadas')
+        pg.uncheck('#obd-escolha input[data-pid="5"]'); pg.wait_for_timeout(300)
+        t('13 de 15' in pg.inner_text('#obd-escolher') or '14 de 15' in pg.inner_text('#obd-escolher'), 'desmarcar reduz a conta: %s' % pg.inner_text('#obd-escolher'))
+        chaves = pg.evaluate("Object.keys(window.localStorage).filter(k => k.indexOf('obd_leituras') === 0)")
+        t(len(chaves) == 1, 'a escolha é guardada numa chave por carro: %s' % chaves)
+        guardadas = pg.evaluate("JSON.parse(window.localStorage.getItem(%r))" % chaves[0]) if chaves else None
+        t(isinstance(guardadas, list) and 5 not in guardadas, 'e guardada sem o que foi desmarcado: %s' % guardadas)
+        pg.click('#obd-todas'); pg.wait_for_timeout(300)
+        t(pg.locator('#obd-escolha input:checked').count() == pg.locator('#obd-escolha .obd-cx').count(), '"todas" remarca tudo')
+        pg.click('#obd-escolher'); pg.wait_for_timeout(200)
+
+        # FALHA QUE NASCE DURANTE A LEITURA AO VIVO: a barra tem de ficar vermelha
+        pg.evaluate("window.__obd.falhaNova = '0301'")       # P0301
+        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-falhas.alerta', timeout=30000)
+        t('FALHA' in pg.inner_text('#obd-falhas'), 'o botão de falhas avisa durante a leitura: %s' % pg.inner_text('#obd-falhas'))
+        pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=20000)
+        t('P0301' in pg.inner_text('#obd-r-falhas'), 'e o código aparece ao abrir')
+        t('alerta' not in (pg.get_attribute('#obd-falhas', 'class') or ''), 'visto o código, o botão volta ao normal')
+        pg.evaluate("window.__obd.falhaNova = null")
+
+        # UMA LEITURA POR VEZ (pedido do Danilo em 19/11/2026)
+        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo .selo.vivo', timeout=10000)
+        pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=20000)
+        t(not pg.query_selector('#obd-r-vivo'), 'abrir as falhas tira os dados ao vivo da tela')
+        t('PARAR' not in pg.inner_text('#obd-vivo'), 'e para a roda junto')
+        pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=20000)
+        t(not pg.query_selector('#obd-r-falhas'), 'cada leitura nova troca a anterior, não empilha')
+        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo', timeout=20000)
+        t(not pg.query_selector('#obd-r-conf'), 'voltar aos dados ao vivo tira o cartão anterior')
+        pg.click('#obd-vivo'); pg.wait_for_timeout(800)
         # OS DOIS JEITOS COM FILTRO (pedido do Danilo em 19/11/2026)
         t(pg.query_selector('#obd-r-vivo .painel-obd'), 'começa no painel de mostradores')
         t(pg.query_selector('#obd-r-vivo [data-pid="12"] .mostrador-arco .cheio'), 'o mostrador da rotação tem o arco desenhado')
@@ -560,6 +594,11 @@ try:
         pg.click('#obd-jeito-lista'); pg.wait_for_timeout(300)
         t(not pg.query_selector('#obd-r-vivo .painel-obd'), 'o filtro LISTA troca o painel pela lista')
         t('Rota' in pg.inner_text('#obd-r-vivo') and 'rpm' in pg.inner_text('#obd-r-vivo'), 'na lista os nomes e as unidades continuam escritos')
+        t(pg.query_selector('#obd-r-vivo .lista-viva-grupo h3'), 'a lista vem separada por grupo')
+        pg.eval_on_selector('#obd-r-vivo', "e => e.scrollIntoView({block:'start'})"); pg.wait_for_timeout(400)
+        pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'obd-lista-celular.png'))
+        t(pg.query_selector('#obd-r-vivo [data-pid="12"] .linha-viva-barra i'), 'cada linha da lista mostra a posição na escala')
+        t(rpm_na_tela(), 'o valor da rotação aparece na lista: %s' % rpm_na_tela())
         t(pg.evaluate("window.localStorage.getItem('obd_jeito')") == 'lista', 'a escolha do jeito fica guardada')
         pg.click('#obd-jeito-painel'); pg.wait_for_timeout(300)
         t(pg.query_selector('#obd-r-vivo .painel-obd'), 'o filtro PAINEL volta aos mostradores')

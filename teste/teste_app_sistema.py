@@ -621,6 +621,21 @@ try:
         t('alerta' not in (pg.get_attribute('#obd-falhas', 'class') or ''), 'visto o código, o botão volta ao normal')
         pg.evaluate("window.__obd.falhaNova = null")
 
+        # LEITURA DE COMBUSTÍVEL (pedido do Danilo em 19/11/2026): a do primeiro contato
+        pg.click('#obd-combustivel'); pg.wait_for_selector('#obd-comb', timeout=30000)
+        tc = pg.inner_text('#obd-comb')
+        t('Combustível' in pg.inner_text('#obd-r-vivo'), 'o cartão troca de nome no modo combustível')
+        t('PONDO' in tc or 'TIRANDO' in tc or 'ordem' in tc, 'diz quanto o módulo está corrigindo: %s' % tc.replace('\n', ' ')[:120])
+        t(pg.locator('#obd-comb .comb-banco').count() == 2, 'mostra os dois bancos separados')
+        t('27' in tc and 'etanol' in tc, 'e o etanol do tanque: %s' % [l for l in tc.split('\n') if 'etanol' in l][:1])
+        t('montadora publica' in tc or not pg.query_selector('#obd-comb .comb-causas'), 'quando lista causas, avisa que é lista geral e não diagnóstico')
+        cmdsc = pg.evaluate("window.__obd.cmds.slice(-40)")
+        t(not [c for c in cmdsc if c in ('0121', '0131', '01A6')], 'no modo combustível não pede o que não interessa (distâncias, odômetro)')
+        t('0106' in pg.evaluate("window.__obd.cmds") and '0152' in pg.evaluate("window.__obd.cmds"), 'pede o ajuste e o etanol')
+        pg.eval_on_selector('#obd-r-vivo', "e => e.scrollIntoView({block:'start'})"); pg.wait_for_timeout(400)
+        pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'obd-combustivel-celular.png'))
+        pg.click('#obd-combustivel'); pg.wait_for_timeout(600)
+
         # UMA LEITURA POR VEZ (pedido do Danilo em 19/11/2026)
         pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo .selo.vivo', timeout=10000)
         pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=20000)

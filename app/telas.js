@@ -898,6 +898,31 @@ function LinhaViva({ l }) {
   </div>`;
 }
 
+// A conversa da leitura de combustível: o quanto o módulo está corrigindo, em português, com as
+// causas que costumam explicar aquilo. NUNCA dá veredito — faixa de normalidade por motor só a
+// montadora publica, e quem decide é o mecânico com o carro na frente.
+function Combustivel({ v }) {
+  const r = obd.leituraCombustivel(v);
+  const cor = r.situacao === "grave" ? "ruim" : r.situacao === "atencao" ? "atencao" : r.situacao === "normal" ? "" : "atencao";
+  const selo = r.situacao === "grave" ? "NO LIMITE" : r.situacao === "atencao" ? "CORRIGINDO" : r.situacao === "normal" ? "EM ORDEM" : "SEM DADOS";
+  return html`<div class="comb" id="obd-comb">
+    <div class="comb-topo"><span class=${"selo " + cor}>${selo}</span></div>
+    ${r.bancos.length ? html`<div class="comb-bancos">
+      ${r.bancos.map(b => html`<div key=${b.nome} class="comb-banco" data-banco=${b.nome}>
+        <span class="comb-banco-n">${b.nome}</span>
+        <b>${String(b.total).replace(".", ",")}<i>%</i></b>
+        <span class="comb-banco-p">curto ${b.curto === null ? "—" : String(b.curto).replace(".", ",")} · longo ${b.longo === null ? "—" : String(b.longo).replace(".", ",")}</span>
+      </div>`)}
+    </div>` : null}
+    ${r.frases.map((f, i) => html`<p key=${i} class="comb-frase">${f}</p>`)}
+    ${r.causas.length ? html`<div class="comb-causas">
+      <h3>O que costuma explicar isso</h3>
+      <ul>${r.causas.map(c => html`<li key=${c}>${c}</li>`)}</ul>
+      <div class="nota">Lista geral do OBD, não é diagnóstico deste motor: a faixa de normalidade de cada modelo só a montadora publica. Confira com o carro na frente.</div>
+    </div>` : null}
+  </div>`;
+}
+
 function Obd() {
   const { dados } = useApp();
   const pl = usarPlaca();
@@ -928,7 +953,7 @@ function Obd() {
     setJeito(j);
     try { window.localStorage.setItem("obd_jeito", j); } catch (e) { /* sem espaço: segue sem guardar */ }
   };
-  const [vivo, setVivo] = useState(null);       // { valores: {pid: leitura}, volta, rodando }
+  const [vivo, setVivo] = useState(null);       // { valores: {chave: leitura}, volta, rodando, modo }
   // Falhas vigiadas DURANTE a leitura ao vivo: a roda pergunta de tempos em tempos e, se o módulo
   // gravar código com o motor trabalhando, o botão de falhas fica vermelho na hora.
   const [falhasVivo, setFalhasVivo] = useState(null);   // { codigos: [], novas: [] }
@@ -1012,13 +1037,18 @@ function Obd() {
     setFalhasVivo(null);                                            // já está na tela: o aviso cumpriu o papel
     guardar("falhas", f);
   }); };
-  async function alternarVivo() {
-    if (rodada.current) { rodada.current = 0; return; }             // tocar de novo para parar
+  async function alternarVivo(modo = "todos") {
+    if (rodada.current) {                                           // tocar de novo para parar…
+      const mesmo = vivo && vivo.modo === modo;
+      rodada.current = 0;
+      if (mesmo) return;                                            // …mas trocar de modo recomeça
+      await new Promise(r => setTimeout(r, 120));
+    }
     const minha = ++contador.current;
     rodada.current = minha;
     setErro("");
     setRes(null);                                                   // uma leitura por vez na tela
-    setVivo({ valores: {}, volta: 0, rodando: true });
+    setVivo({ valores: {}, volta: 0, rodando: true, modo });
     // Referência das falhas: o que já estava gravado quando a roda começou. Só o que aparecer
     // DEPOIS disso é "falha nova". Sem leitura de falhas antes, a primeira olhada vira a referência.
     baseFalhas.current = res && res.o === "falhas"
@@ -1028,10 +1058,10 @@ function Obd() {
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true })); },
+        (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
         () => rodada.current === minha,
         {
-          escolhidos: escolhidas,
+          escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : escolhidas,
           aoFalhas: codigos => {
             if (rodada.current !== minha) return;
             if (baseFalhas.current === null) baseFalhas.current = codigos.slice();
@@ -1089,8 +1119,10 @@ function Obd() {
       ${erro ? html`<div class="erro">${erro}</div>` : null}
 
       ${lig && !ocupado ? html`<${Cartao} titulo="Ler do carro" id="obd-acoes">
-        <button type="button" class=${"btn-barra" + (vivo && vivo.rodando ? " claro" : "")} id="obd-vivo" onClick=${alternarVivo}>
-          <${Ic} n="obd" t=${22} />${vivo && vivo.rodando ? "PARAR OS DADOS AO VIVO" : "DADOS AO VIVO"}</button>
+        <button type="button" class=${"btn-barra" + (vivo && vivo.rodando && vivo.modo === "combustivel" ? " claro" : "")} id="obd-combustivel" onClick=${() => alternarVivo("combustivel")}>
+          <${Ic} n="obd" t=${22} />${vivo && vivo.rodando && vivo.modo === "combustivel" ? "PARAR A LEITURA DE COMBUSTÍVEL" : "LEITURA DE COMBUSTÍVEL"}</button>
+        <button type="button" class=${"btn-barra" + (vivo && vivo.rodando && vivo.modo !== "combustivel" ? " claro" : "")} id="obd-vivo" onClick=${() => alternarVivo("todos")}>
+          ${vivo && vivo.rodando && vivo.modo !== "combustivel" ? "PARAR OS DADOS AO VIVO" : "DADOS AO VIVO"}</button>
         <button type="button" class=${"btn-barra" + (falhasVivo && falhasVivo.codigos.length ? " alerta" : "")} id="obd-falhas" onClick=${lerFalhas}>
           ${falhasVivo && falhasVivo.novas.length ? "FALHA NOVA AGORA (" + falhasVivo.novas.length + ") · VER"
             : falhasVivo && falhasVivo.codigos.length ? "FALHA NO MÓDULO (" + falhasVivo.codigos.length + ") · VER"
@@ -1128,12 +1160,13 @@ function Obd() {
         ${res.d.erros.length ? html`<div class="nota">Não respondeu: ${res.d.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
       </${Cartao}>` : null}
 
-      ${vivo ? html`<${Cartao} titulo="Dados ao vivo" id="obd-r-vivo">
+      ${vivo ? html`<${Cartao} titulo=${vivo.modo === "combustivel" ? "Combustível" : "Dados ao vivo"} id="obd-r-vivo">
         <div class="obd-vivo-topo">
           ${vivo.rodando ? html`<span class="selo vivo">AO VIVO</span><span class="nota">atualizando sem parar · ${vivo.volta} volta${vivo.volta === 1 ? "" : "s"}</span>`
             : html`<span class="selo atencao">PARADO</span><span class="nota">valores da última leitura · toque em DADOS AO VIVO para voltar a girar</span>`}
         </div>
         ${!Object.keys(vivo.valores).length ? html`<div class="carregando">${vivo.rodando ? "Lendo o motor…" : "O módulo não respondeu nenhum dado ao vivo."}</div>` : null}
+        ${vivo.modo === "combustivel" && Object.keys(vivo.valores).length ? html`<${Combustivel} v=${vivo.valores} />` : null}
         ${(() => {
           const lidos = Object.keys(vivo.valores).map(k => vivo.valores[k]).sort((a, b) => obd.ordemDaLeitura(a) - obd.ordemDaLeitura(b));
           if (!lidos.length) return null;

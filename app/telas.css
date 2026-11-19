@@ -294,3 +294,17 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .linha-viva-barra{height:4px;border-radius:2px;background:#dfe3e8;margin-top:5px;overflow:hidden}
 .linha-viva-barra i{display:block;height:100%;background:var(--azul);border-radius:2px;transition:width .25s linear}
 @media (prefers-reduced-motion: reduce){.linha-viva-barra i{transition:none}}
+/* Leitura de combustível: a conversa em cima dos mostradores. */
+.comb{border:1.5px solid var(--azul-suave);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:#f7f9fc}
+.comb-topo{margin-bottom:8px}
+.comb-bancos{display:flex;gap:8px;margin-bottom:8px}
+.comb-banco{flex:1;background:#fff;border:1px solid var(--cinza-linha);border-radius:10px;padding:7px 9px;display:flex;flex-direction:column;gap:2px}
+.comb-banco-n{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--cinza-texto)}
+.comb-banco b{font-size:23px;font-weight:800;color:var(--tinta);line-height:1;font-variant-numeric:tabular-nums}
+.comb-banco b i{font-size:12px;font-style:normal;font-weight:700;color:var(--cinza-nota);margin-left:2px}
+.comb-banco-p{font-size:11px;color:var(--cinza-nota);font-variant-numeric:tabular-nums}
+.comb-frase{margin:0 0 6px;font-size:14px;line-height:1.35;color:var(--tinta)}
+.comb-causas{margin-top:8px;padding-top:8px;border-top:1px solid var(--cinza-linha)}
+.comb-causas h3{margin:0 0 5px;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--azul)}
+.comb-causas ul{margin:0 0 6px;padding-left:18px}
+.comb-causas li{font-size:13.5px;line-height:1.4;color:var(--tinta)}

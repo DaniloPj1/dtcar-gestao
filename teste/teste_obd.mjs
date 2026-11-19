@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -298,6 +298,41 @@ chk("sem saber o combustível, oferece tudo o que o carro tem", gruposPara(null,
 chk("grupo sem nenhuma leitura no carro não aparece no filtro", gruposPara([0x0c], "").map(g => g.id).join() === "motor");
 chk("cada grupo do filtro vem com as leituras dele", gruposPara([0x0c, 0x42], "").every(g => g.leituras.length > 0));
 chk("tipo de motor pelo combustível do cadastro", [tipoDeMotor("DIESEL"), tipoDeMotor("Diesel S10"), tipoDeMotor("Álcool/Gasolina"), tipoDeMotor("FLEX"), tipoDeMotor("Gasolina"), tipoDeMotor(""), tipoDeMotor(null)].join() === "diesel,diesel,otto,otto,otto,,");
+
+/* ---------------- leitura de combustível (19/11/2026) ----------------
+ * O que importa é a SOMA do ajuste curto com o longo. A tela mostra o número e as causas
+ * possíveis; nunca dá veredito, porque faixa de normalidade por motor só a montadora publica.
+ */
+{
+  const leitura = (c1, l1, c2, l2, etanol) => {
+    const v = {};
+    if (c1 !== null) v[0x06 * 100] = { valor: c1 };
+    if (l1 !== null) v[0x07 * 100] = { valor: l1 };
+    if (c2 !== null) v[0x08 * 100] = { valor: c2 };
+    if (l2 !== null) v[0x09 * 100] = { valor: l2 };
+    if (etanol !== undefined) v[0x52 * 100] = { valor: etanol };
+    return leituraCombustivel(v);
+  };
+  const ok = leitura(1.5, 2.0, null, null);
+  chk("motor em ordem: soma pequena, nenhuma causa listada", ok.situacao === "normal" && !ok.causas.length && ok.bancos[0].total === 3.5);
+  const pobre = leitura(6, 12, null, null);
+  chk("somando 18%: o módulo está PONDO combustível", pobre.situacao === "atencao" && pobre.frases[0].includes("PONDO") && pobre.frases[0].includes("18"));
+  chk("mistura pobre lista entrada de ar falsa entre as causas", pobre.causas.some(c => c.toLowerCase().includes("ar falsa")));
+  chk("e lista combustível com MAIS álcool do que o módulo calculou", pobre.causas.some(c => c.includes("MAIS álcool")));
+  const rica = leitura(-5, -25, null, null);
+  chk("somando -30%: está TIRANDO combustível e passou do limite", rica.situacao === "grave" && rica.frases[0].includes("TIRANDO") && rica.frases[1].includes("limite"));
+  chk("mistura rica lista bico vazando e MENOS álcool", rica.causas.some(c => c.includes("vazando")) && rica.causas.some(c => c.includes("MENOS álcool")));
+  const doisBancos = leitura(2, 1, 6, 12, 27);
+  chk("com dois bancos, manda procurar do lado que corrige mais", doisBancos.pior.nome === "Banco 2" && doisBancos.frases.some(f => f.includes("longe um do outro")));
+  chk("o etanol do tanque entra na conversa", doisBancos.frases.some(f => f.includes("27") && f.includes("etanol")));
+  const semEtanol = leitura(0, 0, null, null);
+  chk("carro que não informa etanol: diz isso em vez de inventar", semEtanol.frases.some(f => f.includes("não informa")));
+  const nada = leituraCombustivel({});
+  chk("módulo sem ajuste: diz que não dá para afirmar nada", nada.situacao === "sem_dados" && !nada.bancos.length);
+  chk("a lista do combustível tem os dois bancos, o etanol e o lambda", [0x06, 0x07, 0x08, 0x09, 0x52, 0x44].every(p => PIDS_COMBUSTIVEL.includes(p)));
+  chk("e só pede o que existe na tabela de leituras", PIDS_COMBUSTIVEL.every(p => PIDS.some(x => x.pid === p)));
+  chk("nenhuma frase dá veredito de defeito", [ok, pobre, rica].every(r => !r.frases.join(" ").toLowerCase().includes("o problema é")));
+}
 
 /* ---------------- frases de erro ---------------- */
 chk("motivo em português para cada recusa do plugin", ["sem-permissao", "bluetooth-desligado", "nao-conectou", "sem-conexao"].every(e => motivoDe(new Error(e)).length > 10 && !motivoDe(new Error(e)).includes("-")));

@@ -61,6 +61,9 @@ function AcessoApp({ p, cfg, salvar }) {
       <button type="button" role="switch" aria-checked=${ligado ? "true" : "false"} aria-label=${"Entra no app: " + p.nome} class=${"chave" + (ligado ? " on" : "")} onClick=${() => gravar(!ligado, ligado ? a.telas : TELAS_APP.map(t => t[0]))}><i></i></button></div>
     ${ligado ? html`<div class="chips">${TELAS_APP.map(([id, nome]) => html`<button type="button" key=${id} class="chip-btn" disabled=${!telasDoPapel(p.papel).includes(id)} title=${telasDoPapel(p.papel).includes(id) ? "" : "Só administrador e consultor fazem orçamento"} aria-pressed=${a.telas.includes(id) ? "true" : "false"} onClick=${() => alternarTela(id)}>${nome}</button>`)}</div>
       ${!a.telas.length ? html`<span class="dica">Nenhuma tela marcada: a pessoa entra e vê só o Início e a Ajuda.</span>` : null}
+      ${a.telas.includes("obd") && p.papel !== "admin" ? html`<div class="chave-linha chave-obd" data-obd=${p.id}><span><b>Pode apagar falha no OBD</b><span class="sub"> · fica registrado quem apagou, de qual carro</span></span>
+        <button type="button" role="switch" aria-checked=${atual.obd_apagar === true ? "true" : "false"} aria-label=${"Apagar falha no OBD: " + p.nome} class=${"chave" + (atual.obd_apagar === true ? " on" : "")}
+          onClick=${() => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { ...atual, entra: true, telas: a.telas, obd_apagar: atual.obd_apagar !== true } } })}><i></i></button></div>` : null}
       ${p.papel !== "admin" ? html`<div class="horario-uso" data-horario=${p.id}><span class="horario-rotulo"><b>Horário de uso</b><span class="sub"> · fora dele o app não entra</span></span>
         <div class="horario-linha"><button type="button" class="chip-btn" aria-pressed=${h ? "false" : "true"} onClick=${() => { if (h) semLimite(); }}>Sem limite</button>
           <button type="button" class="chip-btn" aria-pressed=${h ? "true" : "false"} onClick=${() => { if (!h) mudarHorario({ ...HORARIO_PADRAO }); }}>Só no horário de trabalho</button></div>
@@ -156,7 +159,7 @@ export function Equipe() {
       <li><b>Administrador</b>: tudo, inclusive ajustes, catálogo, equipe e exclusões.</li>
       <li><b>Consultor</b>: entrada, orçamento, aprovação, entrega, cadastros e valores.</li>
       <li><b>Mecânico</b>: entrada e execução (marca serviços feitos, fotos e observações). Não vê valores na tela.</li></ul>
-      <p class="dica"><b>App do celular:</b> em cada pessoa, ligue “App do celular” e marque as telas que ela vê. Sem mexer, administrador e consultor entram com todas as telas e o mecânico não entra. Mecânico liberado consulta sem ver valores e não faz orçamento. No app, O.S. que já existe só é alterada no login do administrador.</p></section>
+      <p class="dica"><b>App do celular:</b> em cada pessoa, ligue “App do celular” e marque as telas que ela vê. Sem mexer, administrador e consultor entram com todas as telas e o mecânico não entra. Mecânico liberado consulta sem ver valores e não faz orçamento. No app, O.S. que já existe só é alterada no login do administrador. Apagar falha no OBD é do administrador: para liberar alguém, marque a tela do OBD e ligue “Pode apagar falha no OBD”.</p></section>
   </div>`;
 }
 

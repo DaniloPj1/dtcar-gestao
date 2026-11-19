@@ -303,8 +303,25 @@ public class ObdPlugin extends Plugin {
             call.reject("comando-recusado");
             return;
         }
-        final String limpo = normalizar(cmd);
-        int pedida = call.getInt("esperaMs", ESPERA_PADRAO);
+        enviar(call, normalizar(cmd), call.getInt("esperaMs", ESPERA_PADRAO));
+    }
+
+    /**
+     * Apaga as falhas do carro (serviço 04). MÉTODO PRÓPRIO, de propósito.
+     *
+     * O app abre um SITE, então todo método do plugin fica ao alcance de qualquer script daquela página. Por isso o 04
+     * NÃO entra na lista branca do comando(): assim continua valendo a regra de que nada que passa por comando() escreve
+     * no carro, e o único jeito de apagar é esta chamada, que tem nome, aparece sozinha no código e se acha numa busca.
+     * Quem pode apagar é decidido no sistema (Sistema › Equipe, por pessoa) e o apagamento fica registrado no banco:
+     * aqui embaixo não há como saber quem está segurando o celular.
+     */
+    @PluginMethod
+    public void apagar(final PluginCall call) {
+        enviar(call, "04", call.getInt("esperaMs", 10000));
+    }
+
+    /** Manda a linha já conferida e devolve o que o adaptador respondeu. */
+    private void enviar(final PluginCall call, final String limpo, final int pedida) {
         final int espera = Math.max(500, Math.min(pedida, ESPERA_MAXIMA));
         naFila(call, new Runnable() {
             @Override

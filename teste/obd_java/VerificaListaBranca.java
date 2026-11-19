@@ -19,6 +19,15 @@ public class VerificaListaBranca {
     for (String c : new String[]{"", "   ", "ZZ", "011", "0", "01020304050607080910", "01;04", "01\r04", "01\n04"})
       chk("RECUSA lixo '" + c.replace("\r","\\r").replace("\n","\\n") + "'", !ObdPlugin.permitido(c));
     chk("nulo não explode", !ObdPlugin.permitido(null));
+    // Apagar (v62): existe como método PRÓPRIO, com @PluginMethod, e NÃO passa pela lista branca do comando().
+    // É assim que continua valendo a regra "nada que passa por comando() escreve no carro".
+    try {
+      java.lang.reflect.Method m = ObdPlugin.class.getMethod("apagar", com.getcapacitor.PluginCall.class);
+      chk("apagar existe como método do plugin", m != null);
+      chk("apagar está marcado com @PluginMethod", m.getAnnotation(com.getcapacitor.PluginMethod.class) != null);
+      chk("apagar não recebe o comando de fora (só PluginCall)", m.getParameterCount() == 1);
+    } catch (NoSuchMethodException e) { chk("apagar existe como método do plugin", false); }
+    chk("o 04 continua fora da lista branca do comando()", !ObdPlugin.permitido("04"));
     System.out.println(falhas == 0 ? ok + " conferências da lista branca passaram." : ok + " ok, " + falhas + " FALHARAM");
     if (falhas > 0) System.exit(1);
   }

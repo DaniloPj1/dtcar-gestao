@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, respostaApagar, resultadoApagar, registroApagar, AVISOS_APAGAR, PIDS_AJUSTE } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -339,6 +339,37 @@ chk("motivo em português para cada recusa do plugin", ["sem-permissao", "blueto
 chk("motivo desconhecido não fica em branco", motivoDe(new Error("coisa-nova")).length > 10);
 chk("comando recusado pelo nativo tem frase própria", motivoDe(new Error("comando-recusado")).includes("não escreve no carro"));
 chk("demora tem frase própria", motivoDe(new Error("demorou")).includes("tempo"));
+
+/* ---------------- apagar a falha, com registro (v62, 19/11/2026) ---------------- */
+chk("44 é apagou", respostaApagar(["44"]).ok && respostaApagar(["44 00"]).ok);
+chk("um módulo que aceita basta", respostaApagar(["7F 04 22", "44"]).ok);
+chk("7F 04 22 com o motor ligado manda desligar o motor", !respostaApagar(["7F0422"]).ok && respostaApagar(["7F0422"]).erro.includes("MOTOR DESLIGADO"));
+chk("7F 04 11 diz que o módulo não aceita", respostaApagar(["7F 04 11"]).erro.includes("não aceita"));
+chk("recusa desconhecida mostra o código, sem inventar motivo", respostaApagar(["7F 04 99"]).erro.includes("99"));
+chk("sem resposta nenhuma não vira 'apagou'", !respostaApagar([]).ok && !respostaApagar(null).ok);
+chk("resposta estranha avisa que NADA foi apagado", respostaApagar(["41 0C 1A F8"]).erro.includes("nada foi apagado"));
+{
+  const antes = [{ codigo: "P0171", situacao: "atual" }, { codigo: "P0300", situacao: "pendente" }];
+  chk("limpou: diz que o código volta se o defeito continuar", resultadoApagar(antes, []).situacao === "limpo" && resultadoApagar(antes, []).frase.includes("volta"));
+  chk("voltou na hora = defeito acontecendo agora", resultadoApagar(antes, antes).situacao === "voltou" && resultadoApagar(antes, antes).frase.includes("agora"));
+  chk("sobrou código de outro módulo", resultadoApagar(antes, [{ codigo: "C1234", situacao: "atual" }]).situacao === "sobrou");
+  chk("não deu para conferir não vira 'limpou'", resultadoApagar(antes, null).situacao === "nao_conferido");
+  const r = registroApagar({ perfil_id: "p1", perfil_nome: "João", placa: "abc1d23", km: "152300", antes, depois: [], vin: "9BWZZZ377VT004251",
+    combustivel: { pior: { total: 18 } }, combustivel_depois: { pior: { total: 0 } }, leituras: [{ chave: 501, rotulo: "Rotação", unidade: "rpm", valor: 820, de: 0, ate: 8000 }] });
+  chk("registro: placa em maiúsculas e KM número", r.placa === "ABC1D23" && r.km === 152300, r);
+  chk("registro: tipo apagar e quem apagou", r.tipo === "apagar" && r.perfil_id === "p1" && r.perfil_nome === "João");
+  chk("registro: guarda o que estava lá antes", r.codigos.length === 2 && r.codigos[0].codigo === "P0171");
+  chk("registro: o que sobrou é lista vazia, não nulo", Array.isArray(r.codigos_depois) && !r.codigos_depois.length);
+  chk("registro: ajuste de combustível antes e depois", r.combustivel.pior.total === 18 && r.combustivel_depois.pior.total === 0);
+  chk("registro: leitura guarda só o que interessa (sem a escala)", r.leituras[0].rotulo === "Rotação" && r.leituras[0].de === undefined);
+  const sem = registroApagar({ antes: [], depois: null, km: "", placa: "" });
+  chk("registro sem KM e sem placa não inventa nada", sem.km === null && sem.placa === "" && sem.codigos_depois === null && sem.perfil_id === null, sem);
+  chk("KM bobo (0 ou texto) não entra", registroApagar({ antes: [], km: "0" }).km === null && registroApagar({ antes: [], km: "abc" }).km === null);
+}
+chk("os avisos de apagar dizem que NÃO conserta", AVISOS_APAGAR.some(a => a.includes("NÃO conserta")));
+chk("os avisos falam do aprendizado de combustível e da prontidão", AVISOS_APAGAR.some(a => a.toLowerCase().includes("combustível")) && AVISOS_APAGAR.some(a => a.toLowerCase().includes("prontidão")));
+chk("nenhum aviso promete conserto ou dá veredito", !AVISOS_APAGAR.some(a => /resolve|conserta o|arruma/i.test(a)));
+chk("a passada curta do ajuste é curta mesmo (5 pedidos)", PIDS_AJUSTE.length === 5 && PIDS_AJUSTE.every(p => PIDS_COMBUSTIVEL.includes(p)));
 
 console.log(falhas.length ? ok.length + " verificações passaram; " + falhas.length + " FALHARAM:\n  ✗ " + falhas.join("\n  ✗ ") : ok.length + " verificações passaram.");
 process.exit(falhas.length ? 1 : 0);

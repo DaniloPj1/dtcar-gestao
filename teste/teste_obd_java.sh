@@ -37,4 +37,9 @@ cp "$RAIZ/teste/obd_java/VerificaListaBranca.java" "$TMP/src/br/com/dtcarcentroa
 echo "Compilando o plugin…"
 javac -nowarn -d "$TMP/out" $(find "$TMP/src" -name '*.java')
 echo "Compilou sem erro."
+# o apagar manda o 04 escrito no próprio código, nunca o que vier do JavaScript
+grep -q 'enviar(call, "04"' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
+  || { echo "FALHOU: o método apagar deveria mandar o 04 escrito no código."; exit 1; }
+grep -q '"04"' <(grep -A3 'SERVICOS_LEITURA = ' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java") \
+  && { echo "FALHOU: o 04 não pode entrar na lista branca do comando()."; exit 1; }
 java -cp "$TMP/out" br.com.dtcarcentroautomotivo.obd.VerificaListaBranca

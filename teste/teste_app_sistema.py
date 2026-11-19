@@ -68,10 +68,20 @@ window.Capacitor.Plugins.DtcarObd = {
   situacao: function () { return Promise.resolve({ conectado: window.__obd.conectado, nome: 'vLinker FS', endereco: 'AA:BB:CC:DD:EE:FF' }); },
   conectar: function (o) { window.__obd.chamadas.push('conectar'); window.__obd.conectado = true; return Promise.resolve({ conectado: true, nome: 'vLinker FS', endereco: o.endereco }); },
   desconectar: function () { window.__obd.chamadas.push('desconectar'); window.__obd.conectado = false; return Promise.resolve({ conectado: false }); },
+  // apagar tem método PRÓPRIO no plugin (nunca passa pelo comando): é assim no APK de verdade
+  apagar: function () {
+    window.__obd.apagados = (window.__obd.apagados || 0) + 1;
+    if (!window.__obd.conectado) return Promise.reject(new Error('sem-conexao'));
+    if (window.__obd.recusaApagar) return Promise.resolve({ resposta: '7F 04 22\\r\\r>' });
+    window.__obd.limpo = true;            // módulo de verdade: os códigos somem e as adaptações zeram
+    return Promise.resolve({ resposta: '44\\r\\r>' });
+  },
   comando: function (o) {
     var c = String(o.cmd || '').toUpperCase();
     window.__obd.cmds.push(c);
     if (!window.__obd.conectado) return Promise.reject(new Error('sem-conexao'));
+    if (window.__obd.limpo && (c === '03' || c === '07' || c === '0A')) return Promise.resolve({ resposta: (c === '03' ? '4300' : c === '07' ? '4700' : '4A00') + '\\r\\r>' });
+    if (window.__obd.limpo && (c === '0106' || c === '0107')) return Promise.resolve({ resposta: '41' + c.slice(2) + '80\\r\\r>' });   // ajuste zerado: o módulo recomeça
     if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
     if (c === '010C') {   // rotação sobe a cada leitura: é assim que o teste vê a tela se mexer
       window.__obd.rpm = (window.__obd.rpm || 800) + 100;
@@ -216,7 +226,7 @@ try:
             t(pg.evaluate('document.documentElement.scrollWidth') <= 390, 'tela %s sem rolagem lateral' % rota)
             t(pg.evaluate("getComputedStyle(document.querySelector('.rodape')).position") == 'fixed' and pg.evaluate("getComputedStyle(document.querySelector('.rodape')).borderTopColor") == 'rgb(47, 111, 181)', 'tela %s: rodapé fixo com a linha azul' % rota)
             t(pg.locator('#os').count() == 0 and '+ O.S.' not in pg.locator('.abas').inner_text(), 'tela %s sem a aba + O.S.' % rota)
-        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.5.0' in textos(pg), 'ajuda mostra o acesso e a versão')
+        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.5.1' in textos(pg), 'ajuda mostra o acesso e a versão')
         t(pg.locator('#bloco-digital').count() == 0, 'sem plugin o interruptor da digital não aparece')
         # recarregar mantém a sessão (sem digital)
         pg.reload(); pg.wait_for_selector('.nav', timeout=10000); pg.wait_for_timeout(300); t('AJUDA' in textos(pg), 'recarregar mantém a sessão e a rota')
@@ -677,17 +687,68 @@ try:
         pg.click('#obd-testes'); pg.wait_for_selector('#obd-r-testes', timeout=25000); tx = pg.inner_text('#obd-r-testes')
         t('Catalisador' in tx and 'PASSOU' in tx, 'testes de bordo chegam até o catalisador (faixa $21): %s' % tx.replace('\n', ' ')[:140])
         t('limite' in tx, 'mostra a margem que sobra até o limite')
+        # APAGAR A FALHA, COM REGISTRO (v62, decisão do Danilo em 19/11/2026)
+        t(pg.query_selector('#obd-apagar'), 'o administrador tem o botão de apagar falhas')
+        t('REGISTRADO' in pg.inner_text('#obd-apagar'), 'e o botão já avisa que fica registrado: %s' % pg.inner_text('#obd-apagar'))
+        pg.click('#obd-apagar'); pg.wait_for_selector('#obd-apagar-cx', timeout=25000)
+        cx = pg.inner_text('#obd-apagar-cx')
+        t('P0171' in cx, 'a confirmação mostra o que vai ser apagado: %s' % cx.replace('\n', ' ')[:90])
+        t(pg.locator('#obd-apagar-cx .apg-avisos li').count() >= 4, 'e os avisos antes do botão')
+        t('NÃO conserta' in cx, 'o primeiro aviso é que apagar não conserta')
+        t('prontidão' in cx.lower() and 'combustível' in cx.lower(), 'avisa que zera a prontidão e o aprendizado de combustível')
+        t('ABC1D23' in cx and 'Fulano' in cx, 'diz quem vai apagar e de qual carro: %s' % [l for l in cx.split('\n') if 'Fulano' in l][:1])
+        t(pg.query_selector('#obd-km'), 'pede o KM do painel para o registro')
+        pg.fill('#obd-km', '152300')
+        t(not pg.evaluate("window.__obd.apagados || 0"), 'até aqui NADA foi apagado no carro')
+        pg.click('#obd-apagar-ok'); pg.wait_for_selector('#obd-apagar-feito', timeout=30000)
+        fe = pg.inner_text('#obd-apagar-feito')
+        t(pg.evaluate("window.__obd.apagados") == 1, 'apagou uma vez só')
+        t('LIMPOU' in fe, 'diz o que sobrou: %s' % fe.replace('\n', ' ')[:90])
+        t('volta' in fe, 'e repete que o código volta se o defeito continuar')
+        t('Ajuste depois' in fe, 'mostra o ajuste de combustível antes e depois')
+        reg = f.tabela('obd_leituras')
+        t(len(reg) == 1, 'gravou UM registro do apagamento: %d' % len(reg))
+        r0 = reg[0] if reg else {}
+        t(r0.get('tipo') == 'apagar' and r0.get('perfil_nome') == 'Fulano de Teste', 'registro diz quem apagou: %s' % r0.get('perfil_nome'))
+        t(r0.get('placa') == 'ABC1D23' and r0.get('km') == 152300, 'com a placa e o KM: %s / %s' % (r0.get('placa'), r0.get('km')))
+        t([c['codigo'] for c in r0.get('codigos') or []] and 'P0171' in [c['codigo'] for c in r0.get('codigos') or []], 'e os códigos que estavam lá: %s' % r0.get('codigos'))
+        t(r0.get('codigos_depois') == [], 'e o que sobrou depois (lista vazia, não nulo)')
+        t(r0.get('vin'), 'o chassi lido entra no registro: %s' % r0.get('vin'))
+        t('04' not in pg.evaluate("window.__obd.cmds"), 'o 04 NÃO passou pelo comando: foi pelo método próprio do plugin')
+        pg.click('#obd-apagar-fim'); pg.wait_for_timeout(300)
+        # módulo que recusa (motor ligado): avisa e não inventa que apagou
+        pg.evaluate("window.__obd.recusaApagar = true; window.__obd.limpo = false")
+        pg.click('#obd-apagar'); pg.wait_for_selector('#obd-apagar-cx', timeout=25000)
+        pg.click('#obd-apagar-ok'); pg.wait_for_timeout(2500)
+        t(not pg.query_selector('#obd-apagar-feito'), 'módulo que recusa não vira "apagou"')
+        t('MOTOR DESLIGADO' in pg.inner_text('#obd-apagar-cx'), 'e a tela diz o que fazer: %s' % [l for l in pg.inner_text('#obd-apagar-cx').split('\n') if 'MOTOR' in l][:1])
+        t(len(f.tabela('obd_leituras')) == 1, 'recusa não grava registro novo')
+        pg.click('#obd-apagar-nao'); pg.evaluate("window.__obd.recusaApagar = false"); pg.wait_for_timeout(300)
+
         # o que esta etapa NÃO faz
         cmds = pg.evaluate("window.__obd.cmds")
         t('04' not in cmds and not [c for c in cmds if c.startswith('04')], 'nenhum comando de apagar falha (04) é enviado ao carro')
         t(not [c for c in cmds if c.startswith('2E') or c.startswith('34') or c.startswith('27')], 'nenhum comando de escrita no carro é enviado')
-        t(not f.escritas(), 'leitura OBD não grava nada no banco: %s' % f.escritas())
+        outras = [p for p in f.escritas() if 'obd_leituras' not in p[1]]
+        t(not outras, 'a tela do OBD só grava o registro do apagamento, mais nada: %s' % outras)
         t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
         # sair da tela fecha a conexão com o adaptador
         pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.wait_for_timeout(300)
         t(pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'sair da tela desconecta o adaptador')
-        ctx.close(); del VEI[0]['chassi']
+        ctx.close()
+        # MECÂNICO LIBERADO PARA O OBD, MAS SEM PERMISSÃO DE APAGAR (decisão do Danilo: apagar é do administrador,
+        # que libera por pessoa em Sistema › Equipe). Sem a chave ligada, o botão nem existe na tela dele.
+        f2 = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['obd']}}); ctx2, pg2, er2 = abrir(br, f2, URL, plugin=False, antes=FAKE_OBD); entrar(pg2); tela(pg2, 'obd')
+        pg2.click('#obd-procurar'); pg2.wait_for_selector('.obd-ap', timeout=20000); pg2.click('.obd-ap'); pg2.wait_for_selector('#obd-acoes', timeout=30000)
+        t(pg2.query_selector('#obd-falhas'), 'o mecânico liberado lê as falhas')
+        t(not pg2.query_selector('#obd-apagar'), 'mas NÃO tem o botão de apagar sem o administrador liberar')
+        ctx2.close()
+        f2 = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['obd'], 'obd_apagar': True}}); ctx2, pg2, er2 = abrir(br, f2, URL, plugin=False, antes=FAKE_OBD); entrar(pg2); tela(pg2, 'obd')
+        pg2.click('#obd-procurar'); pg2.wait_for_selector('.obd-ap', timeout=20000); pg2.click('.obd-ap'); pg2.wait_for_selector('#obd-acoes', timeout=30000)
+        t(pg2.query_selector('#obd-apagar'), 'liberado por pessoa, o botão aparece para ele')
+        ctx2.close()
+        del VEI[0]['chassi']
 
         # 9) a tela "Sem internet" que vai dentro do APK (app/www): abre sozinha, com a logo, e tem o botão de tentar de novo
         f = Fake(); ctx, pg, er = abrir(br, f, 'http://localhost:8766/app/www/index.html', plugin=False)
@@ -697,7 +758,7 @@ try:
         # 10) configuração do Capacitor: abre o app direto do site
         cfg = json.load(open(os.path.join(raiz, 'app', 'capacitor.config.json')))
         t(cfg['server']['url'] == 'https://gestao.dtcarcentroautomotivo.com.br/app/' and cfg['server']['errorPath'] == 'index.html', 'Capacitor abre o app do site e usa a tela offline em caso de erro')
-        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.5.0', 'plugin App (botão Voltar) no APK e versão 1.5.0')
+        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.5.1', 'plugin App (botão Voltar) no APK e versão 1.5.1')
         t(pk['dependencies'].get('dtcar-obd') == 'file:plugins/obd', 'plugin local do OBD declarado como dependência do APK')
         pl = json.load(open(os.path.join(raiz, 'app', 'plugins', 'obd', 'package.json'))); t(pl['capacitor']['android']['src'] == 'android', 'o plugin do OBD se apresenta ao Capacitor como módulo Android')
         mf = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'AndroidManifest.xml')).read()
@@ -707,7 +768,9 @@ try:
         t(not [x for x in pedidas if 'LOCATION' in x], 'nenhuma permissão de localização: %s' % pedidas)
         t(sorted(pedidas) == ['BLUETOOTH', 'BLUETOOTH_ADMIN', 'BLUETOOTH_CONNECT'], 'só as permissões de Bluetooth necessárias: %s' % sorted(pedidas))
         jv = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'java', 'br', 'com', 'dtcarcentroautomotivo', 'obd', 'ObdPlugin.java')).read()
-        t('SERVICOS_LEITURA' in jv and '"04"' not in jv, 'a lista branca do nativo não tem o serviço 04 (apagar falha)')
+        lista_branca = jv.split('SERVICOS_LEITURA')[1].split(';')[0]
+        t('SERVICOS_LEITURA' in jv and '"04"' not in lista_branca, 'a lista branca do comando() continua sem o serviço 04: %s' % lista_branca.replace('\n', ' ')[-70:])
+        t('public void apagar(' in jv and 'enviar(call, "04"' in jv, 'apagar é método próprio do plugin, com o 04 escrito no código')
         t('comando-recusado' in jv, 'o nativo recusa comando fora da lista branca')
         br.close()
     print('OK: %d conferências' % ok)

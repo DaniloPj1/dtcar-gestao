@@ -846,3 +846,93 @@ export async function lerTestes() {
   }
   return { testes, erro: "" };
 }
+
+/* ------------------------------------------------------------------ Apagar as falhas (serviço 04)
+ * Pedido do Danilo em 19/11/2026. É o ÚNICO comando que o app manda PARA o carro: tudo o mais aqui é leitura.
+ * Três coisas que o mecânico precisa saber, e que a tela escreve antes de perguntar "apagar?":
+ *   1. Apagar não conserta. Se o defeito continuar, o código volta — às vezes antes de o carro sair da rampa.
+ *   2. Some a foto do momento da falha (serviço 02) e os contadores de quando ela apareceu: anote ANTES, não depois.
+ *   3. Zera as adaptações do módulo, incluindo o aprendizado de combustível, e a prontidão dos monitores volta para
+ *      "não terminou" — o carro precisa rodar um ciclo para voltar. Carro que vai para a inspeção reprova até lá.
+ * A conversa de "declarar o combustível e mandar o módulo reaprender" (o que o Raven faz) é outra coisa, de montadora,
+ * com senha e contra-senha conferidas no servidor do fabricante; não sai por aqui e não se contorna. O que sai é este 04,
+ * que zera e obriga o módulo a refazer a conta com o que está no tanque agora. */
+export const AVISOS_APAGAR = [
+  "Apagar NÃO conserta: se o defeito continuar, o código volta.",
+  "Some a foto do momento da falha e os contadores: anote antes.",
+  "Zera as adaptações, inclusive o aprendizado de combustível.",
+  "A prontidão dos monitores volta a zero: o carro precisa rodar para voltar.",
+];
+/** Motivos de recusa do módulo (resposta negativa 7F 04 xx). O mais comum é o 22 com o motor ligado. */
+const RECUSA_APAGAR = {
+  0x11: "O módulo não aceita apagar por aqui.", 0x12: "O módulo não aceita apagar por aqui.",
+  0x22: "O módulo recusou agora: ligue a chave com o MOTOR DESLIGADO e tente de novo.",
+  0x31: "O módulo recusou o pedido.", 0x33: "O módulo pede liberação que o OBD comum não tem.",
+  0x78: "O módulo pediu para esperar e não respondeu a tempo.",
+};
+/** Lê a resposta do 04: { ok } ou { erro } — sem decidir nada, para dar para testar sem carro. */
+export function respostaApagar(respostas) {
+  const linhas = (respostas || []).map(r => String(r).replace(/\s/g, "").toUpperCase()).filter(Boolean);
+  if (!linhas.length) return { ok: false, erro: "O carro não respondeu ao pedido de apagar." };
+  const neg = linhas.map(l => /7F04([0-9A-F]{2})/.exec(l)).find(Boolean);
+  if (linhas.some(l => l.startsWith("44"))) return { ok: true };
+  if (neg) return { ok: false, erro: RECUSA_APAGAR[parseInt(neg[1], 16)] || "O módulo recusou apagar (código " + neg[1] + ")." };
+  return { ok: false, erro: "O carro respondeu de um jeito que não reconheço: nada foi apagado." };
+}
+/** O apagar tem método PRÓPRIO na parte nativa (não passa pelo comando(), que só deixa passar leitura). */
+export const podeApagarAqui = () => { const p = plugin(); return !!(p && typeof p.apagar === "function"); };
+/** Manda o 04. Devolve { ok } ou { erro } — nunca joga, porque quem chama precisa registrar mesmo quando dá errado. */
+export async function apagarFalhas() {
+  const p = plugin();
+  if (!p || typeof p.apagar !== "function") return { ok: false, erro: "Este APK ainda não sabe apagar falha: instale a versão nova do app." };
+  let texto;
+  try {
+    const pedido = p.apagar({ esperaMs: 10000 }).then(r => (r && r.resposta) || "");
+    const relogio = new Promise((_, falhar) => setTimeout(() => falhar(new Error("demorou")), 14000));
+    texto = await Promise.race([pedido, relogio]);
+  } catch (e) { return { ok: false, erro: motivoDe(e) }; }
+  const r = juntarLinhas(texto);
+  if (r.erro) return { ok: false, erro: r.erro };
+  return respostaApagar(r.respostas);
+}
+/** O registro que vai para o banco (tabela obd_leituras, v62). Montado aqui para dar para conferir sem tela e sem carro. */
+export function registroApagar(d) {
+  const codigos = (d.antes || []).map(f => ({ codigo: f.codigo, situacao: f.situacao }));
+  const depois = d.depois === null || d.depois === undefined ? null : d.depois.map(f => ({ codigo: f.codigo, situacao: f.situacao }));
+  const leituras = (d.leituras || []).map(l => ({ chave: l.chave, rotulo: l.rotulo, unidade: l.unidade, valor: l.valor }));
+  return {
+    tipo: "apagar",
+    perfil_id: d.perfil_id || null, perfil_nome: d.perfil_nome || "",
+    placa: String(d.placa || "").toUpperCase(), veiculo_id: d.veiculo_id || null,
+    ordem_id: d.ordem_id || null, os_numero: d.os_numero || null,
+    km: Number.isFinite(Number(d.km)) && Number(d.km) > 0 ? Math.round(Number(d.km)) : null,
+    vin: d.vin || "",
+    codigos, codigos_depois: depois,
+    combustivel: d.combustivel || null, combustivel_depois: d.combustivel_depois || null,
+    leituras, prontidao: d.prontidao || null,
+    obs: d.obs || "",
+  };
+}
+/** O que escrever depois de apagar: o que sobrou é o que interessa. */
+export function resultadoApagar(antes, depois) {
+  if (depois === null || depois === undefined) return { situacao: "nao_conferido", frase: "Apagou, mas não deu para conferir o que sobrou: leia as falhas de novo." };
+  const quantos = depois.length;
+  if (!quantos) return { situacao: "limpo", frase: "Apagou e não sobrou nenhum código. Se o defeito continuar, ele volta." };
+  const voltaram = depois.filter(f => (antes || []).some(a => a.codigo === f.codigo));
+  if (voltaram.length === quantos) return { situacao: "voltou", frase: "O código voltou na hora: o defeito está acontecendo agora, não era falha antiga." };
+  return { situacao: "sobrou", frase: "Sobrou código no carro: veja a lista de falhas antes de entregar." };
+}
+
+/** Ajuste de combustível numa passada curta (5 pedidos), para comparar ANTES e DEPOIS do apagar sem
+ *  segurar o mecânico na rampa: só os dois bancos e o etanol. Devolve o mesmo formato de leituraCombustivel. */
+export const PIDS_AJUSTE = [0x06, 0x07, 0x08, 0x09, 0x52];
+export async function lerCombustivelRapido(pidsSuportados) {
+  const quais = PIDS_AJUSTE.filter(p => !pidsSuportados || !pidsSuportados.length || pidsSuportados.includes(p));
+  const valores = {};
+  for (const pid of quais) {
+    const r = await pedir("01" + pid.toString(16).toUpperCase().padStart(2, "0"), 3000);
+    if (r.erro) continue;
+    for (const v of valorPid(primeiraDe(r.respostas, 0x01), pid, 0x01)) valores[v.chave] = v;
+  }
+  return Object.keys(valores).length ? leituraCombustivel(valores) : null;
+}

@@ -14,7 +14,7 @@ def t(c, m):
     assert c, m; ok += 1
 UID = '22222222-2222-2222-2222-222222222222'
 import datetime; HOJE = datetime.date.today().isoformat()
-ROTULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
+ROTULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.', 'DIAGNÓSTICO OBD']
 # plugin da digital de mentira: o "cofre" (window.__cofre) sobrevive a recarregar a página; __ok controla se a leitura passa
 PLUGIN = """
 ['__cofre', '__ok'].forEach(function (k) { Object.defineProperty(window, k, { configurable: true,
@@ -28,6 +28,40 @@ window.Capacitor = { Plugins: { App: { addListener: (ev, fn) => { if (ev === 'ba
   getCredentials: (o) => window.__cofre ? Promise.resolve(window.__cofre) : Promise.reject(new Error('vazio')),
   deleteCredentials: (o) => { window.__chamadas.push('del'); window.__cofre = null; return Promise.resolve(); } } } };
 """
+# adaptador ELM327 de mentira: responde como um de verdade, inclusive "NO DATA" no que o carro não tem
+FAKE_OBD = """
+window.__obd = { cmds: [], chamadas: [], conectado: false };
+window.Capacitor = window.Capacitor || { Plugins: {} };
+window.Capacitor.Plugins = window.Capacitor.Plugins || {};
+var R = {
+  'ATZ': 'ELM327 v1.5', 'ATE0': 'OK', 'ATL0': 'OK', 'ATS0': 'OK', 'ATH0': 'OK', 'ATSP0': 'OK',
+  'ATDP': 'ISO 15765-4 (CAN 11/500)',
+  '0100': '4100BE3EB811',
+  '03': '430201710300', '07': '47010130', '0A': '4A00',
+  '0101': '410183076121',
+  '0902': '490201__VIN__',
+  '010C': '410C1AF8', '0105': '41057B', '0104': '41043C', '0111': '41111A', '0106': '410697',
+  '0107': '41078A', '010E': '410E88', '010F': '410F46', '010B': '410B62', '0110': '4110013A',
+  '0142': '41423714', '011F': '411F0384', '0121': '41210026', '0131': '41310026', '0130': '41300006',
+  '020C00': '420C001AF8', '020500': '42050050', '021100': '42110030',
+  '0600': '4600FF000001', '0620': '4620F0000000',
+  '0621': '4621010100640000012C'
+};
+window.Capacitor.Plugins.DtcarObd = {
+  permissao: function () { window.__obd.chamadas.push('permissao'); return Promise.resolve({ concedida: true, pedeNaHora: true }); },
+  pedirPermissao: function () { window.__obd.chamadas.push('pedirPermissao'); return Promise.resolve({ concedida: true }); },
+  listar: function () { window.__obd.chamadas.push('listar'); return Promise.resolve({ aparelhos: [{ nome: 'vLinker FS', endereco: 'AA:BB:CC:DD:EE:FF' }] }); },
+  situacao: function () { return Promise.resolve({ conectado: window.__obd.conectado, nome: 'vLinker FS', endereco: 'AA:BB:CC:DD:EE:FF' }); },
+  conectar: function (o) { window.__obd.chamadas.push('conectar'); window.__obd.conectado = true; return Promise.resolve({ conectado: true, nome: 'vLinker FS', endereco: o.endereco }); },
+  desconectar: function () { window.__obd.chamadas.push('desconectar'); window.__obd.conectado = false; return Promise.resolve({ conectado: false }); },
+  comando: function (o) {
+    var c = String(o.cmd || '').toUpperCase();
+    window.__obd.cmds.push(c);
+    if (!window.__obd.conectado) return Promise.reject(new Error('sem-conexao'));
+    return Promise.resolve({ resposta: (R[c] === undefined ? 'NO DATA' : R[c]) + '\\r\\r>' });
+  }
+};
+""".replace('__VIN__', '3942575A5A5A3337375654303034323531')
 CLI = [{'id': 'c1', 'nome': 'JOÃO DA SILVA', 'telefone': '27999990000', 'doc': '12345678909', 'cep': '29700-000', 'cidade': 'Colatina', 'uf': 'ES', 'rua': 'RUA EXEMPLO, 100', 'bairro': 'CENTRO', 'situacao': 'liberado'}]
 VEI = [{'id': 'v1', 'placa': 'ABC1D23', 'marca': 'Volkswagen', 'modelo': 'GOL 1.0', 'ano': '2014/2015', 'ano_fab': 2014, 'ano_mod': 2015, 'cor': 'PRATA', 'cliente_id': 'c1', 'km_atual': 80000}]
 PROD = [{'id': 'p1', 'codigo': 1, 'tipo': 'produto', 'descricao': 'FILTRO OLEO TECFIL PSL560', 'referencia': 'PSL560', 'categoria': 'Filtros', 'ativo': True, 'estoque_atual': 4, 'preco_vista': 35}]
@@ -148,13 +182,13 @@ try:
         pg.click('.ver'); t(pg.get_attribute('#lg-senha', 'type') == 'text', 'botão Mostrar revela a senha')
         # 2) login certo como administrador, sem plugin (navegador): sem oferta de digital
         entrar(pg); t('Olá, Fulano' in textos(pg) and 'Administrador' in textos(pg), 'entra como administrador')
-        barras = rotulos(pg); t(barras == ROTULOS, 'nove botões na ordem combinada, sem + O.S.: %s' % barras)
+        barras = rotulos(pg); t(barras == ROTULOS, 'dez botões na ordem combinada, sem + O.S.: %s' % barras)
         t(pg.locator('.quadro').count() == 0, 'sem plugin não oferece a digital')
         t(not f.escritas(), 'não grava nada no banco: %s' % f.escritas())
         # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
         # cada botão abre a tela do app correspondente (desenho do protótipo), sem sair do app
-        TITULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
-        ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta']
+        TITULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.', 'DIAGNÓSTICO OBD']
+        ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta', 'obd']
         for i, rota in enumerate(ROTAS):
             pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i); pg.wait_for_selector('.titulo b', timeout=10000)
             t(pg.url.endswith('#/' + rota) and pg.inner_text('.titulo b') == TITULOS[i], 'botão %d abre %s: %s / %s' % (i + 1, rota, pg.url, pg.inner_text('.titulo b')))
@@ -162,7 +196,7 @@ try:
             t(pg.evaluate('document.documentElement.scrollWidth') <= 390, 'tela %s sem rolagem lateral' % rota)
             t(pg.evaluate("getComputedStyle(document.querySelector('.rodape')).position") == 'fixed' and pg.evaluate("getComputedStyle(document.querySelector('.rodape')).borderTopColor") == 'rgb(47, 111, 181)', 'tela %s: rodapé fixo com a linha azul' % rota)
             t(pg.locator('#os').count() == 0 and '+ O.S.' not in pg.locator('.abas').inner_text(), 'tela %s sem a aba + O.S.' % rota)
-        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.4.0' in textos(pg), 'ajuda mostra o acesso e a versão')
+        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.5.0' in textos(pg), 'ajuda mostra o acesso e a versão')
         t(pg.locator('#bloco-digital').count() == 0, 'sem plugin o interruptor da digital não aparece')
         # recarregar mantém a sessão (sem digital)
         pg.reload(); pg.wait_for_selector('.nav', timeout=10000); pg.wait_for_timeout(300); t('AJUDA' in textos(pg), 'recarregar mantém a sessão e a rota')
@@ -172,7 +206,7 @@ try:
         t(not er, 'sem erro de script: %s' % er); ctx.close()
         # 3) consultor entra; mecânico, pendente e inativo não
         f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 9, 'consultor entra'); ctx.close()
+        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 10, 'consultor entra'); ctx.close()
         for papel, ativo in (('mecanico', True), ('pendente', True), ('admin', False)):
             f = Fake(papel, ativo); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
             t(('não está liberado' in textos(pg) or 'acesso liberado pelo administrador' in textos(pg)) and pg.locator('.barra').count() == 0, 'recusa %s ativo=%s (padrão do papel)' % (papel, ativo))
@@ -442,6 +476,61 @@ try:
 
         ctx.close()
         del ORD[1]['mecanico_id']; del ORD[1]['mecanico_nome']
+        # 8-B) DIAGNÓSTICO OBD (18/11/2026): leitura pelo adaptador ELM327, com um adaptador de mentira.
+        # Etapa 1: só leitura. Confere que nada é gravado no banco e que nenhuma falha é apagada no carro.
+        ctx.close()
+        # sem o plugin nativo (APK antigo ou navegador comum): a tela explica em vez de quebrar
+        f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'obd')
+        t('Precisa do APK novo' in textos(pg), 'sem o plugin nativo a tela manda gerar o APK novo')
+        t(pg.locator('#obd-procurar').count() == 0, 'sem o plugin não oferece procurar adaptador')
+        t(not er, 'tela do OBD sem plugin não dá erro de página: %s' % er); ctx.close()
+        # com o adaptador de mentira
+        VEI[0]['chassi'] = '9BWZZZ377VT004251'
+        f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False, antes=FAKE_OBD); entrar(pg); tela(pg, 'obd')
+        t(pg.is_visible('#obd-procurar'), 'com o plugin a tela oferece procurar o adaptador')
+        pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
+        pg.click('#obd-procurar'); pg.wait_for_selector('.obd-ap', timeout=10000)
+        t('vLinker FS' in textos(pg), 'lista o adaptador pareado')
+        t(pg.evaluate("window.__obd.chamadas.includes('permissao')"), 'confere a permissão de Bluetooth antes de listar')
+        pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000); tx = textos(pg)
+        t('CONECTADO' in tx and 'ISO 15765-4' in tx, 'conecta e mostra o protocolo do carro: %s' % ('ISO 15765-4' in tx))
+        cmds = pg.evaluate("window.__obd.cmds")
+        t(cmds[:6] == ['ATZ', 'ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATSP0'], 'prepara o adaptador na ordem certa: %s' % cmds[:6])
+        # falhas
+        pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=15000); tx = pg.inner_text('#obd-r-falhas')
+        t('P0171' in tx and 'P0300' in tx and 'P0130' in tx, 'lê as falhas das três situações: %s' % tx.replace('\n', ' ')[:120])
+        t('ATUAL' in tx and 'PENDENTE' in tx, 'mostra a situação de cada falha escrita, não só a cor')
+        t(pg.locator('#obd-r-falhas .selo.ruim').count() == 2, 'as duas confirmadas vêm com o selo vermelho')
+        # chassi e monitores
+        pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=15000); tx = pg.inner_text('#obd-r-conf')
+        t('9BWZZZ377VT004251' in tx and 'CONFERE' in tx, 'confronta o chassi do módulo com o do cadastro: %s' % tx.replace('\n', ' ')[:120])
+        t('ACESA' in tx, 'diz que a luz de injeção está acesa')
+        t('NÃO PRONTO' in tx and 'apagada antes de o carro chegar' in tx, 'monitor não pronto avisa que a falha foi apagada há pouco')
+        # chassi diferente do cadastro: a tela acusa
+        VEI[0]['chassi'] = '9BWZZZ377VT999999'
+        ctx.close(); f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False, antes=FAKE_OBD); entrar(pg); tela(pg, 'obd')
+        pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
+        pg.click('#obd-procurar'); pg.wait_for_selector('.obd-ap', timeout=10000); pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000)
+        pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=15000)
+        t('DIVERGE' in pg.inner_text('#obd-r-conf'), 'chassi diferente do cadastro aparece como DIVERGE')
+        # dados ao vivo, foto da falha e testes de bordo
+        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo', timeout=20000); tx = pg.inner_text('#obd-r-vivo')
+        t('1726' in tx and '83' in tx, 'dados ao vivo com rotação e temperatura: %s' % tx.replace('\n', ' ')[:100])
+        pg.click('#obd-foto'); pg.wait_for_selector('#obd-r-foto', timeout=20000)
+        t('instante em que a falha gravou' in pg.inner_text('#obd-r-foto'), 'foto do momento da falha explica para que serve')
+        pg.click('#obd-testes'); pg.wait_for_selector('#obd-r-testes', timeout=25000); tx = pg.inner_text('#obd-r-testes')
+        t('Catalisador' in tx and 'PASSOU' in tx, 'testes de bordo chegam até o catalisador (faixa $21): %s' % tx.replace('\n', ' ')[:140])
+        t('limite' in tx, 'mostra a margem que sobra até o limite')
+        # o que esta etapa NÃO faz
+        t('04' not in pg.evaluate("window.__obd.cmds"), 'nenhum comando de apagar falha (04) é enviado ao carro')
+        t(not f.escritas(), 'leitura OBD não grava nada no banco: %s' % f.escritas())
+        t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
+        t(not er, 'tela do OBD sem erro de página: %s' % er)
+        # sair da tela fecha a conexão com o adaptador
+        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.wait_for_timeout(300)
+        t(pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'sair da tela desconecta o adaptador')
+        ctx.close(); del VEI[0]['chassi']
+
         # 9) a tela "Sem internet" que vai dentro do APK (app/www): abre sozinha, com a logo, e tem o botão de tentar de novo
         f = Fake(); ctx, pg, er = abrir(br, f, 'http://localhost:8766/app/www/index.html', plugin=False)
         t('Sem internet' in textos(pg) and pg.is_visible('text=Tentar de novo'), 'app/www mostra a tela Sem internet')
@@ -450,7 +539,11 @@ try:
         # 10) configuração do Capacitor: abre o app direto do site
         cfg = json.load(open(os.path.join(raiz, 'app', 'capacitor.config.json')))
         t(cfg['server']['url'] == 'https://gestao.dtcarcentroautomotivo.com.br/app/' and cfg['server']['errorPath'] == 'index.html', 'Capacitor abre o app do site e usa a tela offline em caso de erro')
-        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.4.0', 'plugin App (botão Voltar) no APK e versão 1.4.0')
+        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.5.0', 'plugin App (botão Voltar) no APK e versão 1.5.0')
+        t(pk['dependencies'].get('dtcar-obd') == 'file:plugins/obd', 'plugin local do OBD declarado como dependência do APK')
+        pl = json.load(open(os.path.join(raiz, 'app', 'plugins', 'obd', 'package.json'))); t(pl['capacitor']['android']['src'] == 'android', 'o plugin do OBD se apresenta ao Capacitor como módulo Android')
+        mf = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'AndroidManifest.xml')).read()
+        t('BLUETOOTH_CONNECT' in mf and 'BLUETOOTH_SCAN' in mf and 'neverForLocation' in mf, 'permissões de Bluetooth no manifesto do plugin, sem exigir localização')
         br.close()
     print('OK: %d conferências' % ok)
 finally:

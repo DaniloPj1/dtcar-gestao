@@ -1,0 +1,15 @@
+{
+  "name": "dtcar-obd",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plugin do Capacitor que liga o app ao adaptador OBD (ELM327) por Bluetooth clássico. A parte nativa só abre a conexão e troca linhas de texto com o adaptador; quem entende de OBD é o js/obd.js do site.",
+  "capacitor": {
+    "android": {
+      "src": "android"
+    }
+  },
+  "files": [
+    "android/"
+  ],
+  "license": "UNLICENSED"
+}

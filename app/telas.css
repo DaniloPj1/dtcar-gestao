@@ -238,3 +238,17 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .peca-q button,.peca-pos button{min-height:38px;min-width:42px;padding:0 10px;border-radius:19px;border:1.5px solid #9aa1ab;background:#fff;color:var(--tinta);font:inherit;font-weight:600}
 .peca-q button[aria-pressed=true],.peca-pos button[aria-pressed=true]{background:var(--azul);border-color:var(--azul);color:#fff}
 .lista-marcados{display:flex;flex-direction:column;gap:2px;margin-top:8px;padding:8px 10px;border-radius:10px;background:#f4f6f8;font-size:14px}.lista-marcados b{font-size:13px;color:var(--azul)}.lista-marcados .falta{color:#b3261e}
+
+/* ---- Diagnóstico OBD (18/11/2026) ---- */
+.selo.ruim{background:#8a2d2d}
+.obd-ap{display:flex;flex-direction:column;align-items:flex-start;gap:2px;width:100%;min-height:52px;margin-top:6px;padding:8px 12px;border:1.5px solid #9aa1ab;border-radius:10px;background:#fff;color:var(--tinta);font:inherit;text-align:left}
+.obd-ap b{font-size:15px;font-weight:600}.obd-ap span{font-size:12px;color:var(--cinza-nota)}
+.obd-ap:disabled{opacity:.5}
+.obd-dtc{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #e7eaee}
+.obd-dtc:last-child{border-bottom:0}
+.obd-dtc b{font-size:19px;font-weight:700;letter-spacing:.5px}
+.obd-teste{padding:8px 0;border-bottom:1px solid #e7eaee}
+.obd-teste:last-child{border-bottom:0}
+.obd-teste-n{font-size:14px;font-weight:600}
+.obd-teste-v{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:3px}
+.obd-teste-v b{font-size:16px}.obd-teste-v span:not(.selo){font-size:12px;color:var(--cinza-nota)}

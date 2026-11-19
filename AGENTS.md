@@ -685,6 +685,21 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   direta", e EGR e turbo existem nos dois. Restringir por combustível esconderia leitura que o carro tem.
   Conferências novas no `teste_obd.mjs`: a conta de cada PID tem de caber nos bytes que ele declara (ler `d[2]` num PID de 2 bytes daria NaN no
   carro e a leitura sumiria da tela sem motivo aparente), escala completa ou ausente, fim maior que o começo e nenhum rótulo repetido.
+- **UM PEDIDO, VÁRIOS NÚMEROS — sondas e temperatura do escape (19/11/2026).** A sonda manda lambda E tensão na mesma resposta, e a temperatura do
+  escape manda até quatro sensores. Por isso `valorPid` passou a devolver uma **LISTA** de leituras em vez de uma só, e a tabela aceita `partes`;
+  cada leitura ganha `chave` (pid × 100 + a posição), que é por onde a tela identifica cada mostrador. PID simples devolve lista de um.
+  `partes` aceita `quando(dados)`: a parte só existe se o próprio carro disser que existe — é assim que a sonda com `0xFF` no segundo byte (não
+  entra na conta do ajuste) e o sensor de escape ausente **somem em vez de virar zero**.
+  O que entrou: **sondas de banda estreita** ($14–$1B: tensão A÷200 e o ajuste daquela sonda), **sondas de banda larga** ($24–$2B: lambda e
+  tensão) e a **temperatura dos gases de escape** ($78/$79, 9 bytes, o primeiro é o mapa de quais dos quatro sensores existem). Plantas de bytes
+  conferidas contra o J1979. Total: 73 PIDs, 95 leituras possíveis.
+  **O QUE NÃO ENTROU, E POR QUÊ:** rotação do turbo ($74), pressão de escape ($73), temperatura do intercooler ($77), pressão do DPF ($7A/$7B),
+  temperatura do DPF ($7C) e NOx ($83). A fonte pública dá só o tamanho em bytes, **sem a planta de bytes nem a fórmula** — e o $7C tem 9 bytes
+  como o escape, onde o primeiro byte é mapa de sensores, então aplicar "(256A+B)/10−40" daria temperatura errada. Inventar aqui é pior que não
+  mostrar: entram quando conferirmos contra o Raven num carro que os tenha.
+  **Vírgula decimal:** os valores saíam com ponto ("3.14 g/s"). `numBR` no `app/telas.js` escreve do jeito daqui, no mostrador, na lista e na
+  foto da falha.
+  **Escala do lambda comandado corrigida:** ia de 0,7 a 1,3, e um valor de corte (1,5) encostaria no fim do arco como se fosse o máximo. Agora 0 a 2.
 - **Lista de dados ao vivo redesenhada (19/11/2026):** a visão LISTA deixou de ser "rótulo: valor" e virou `LinhaViva` — separada por grupo, com o
   valor grande à direita e uma barra fina mostrando a posição na escala (a mesma `de`/`ate` do mostrador; continua sem dizer se é bom ou ruim).
 - **Serviço 06, honestidade e sinal:** na tabela de escalas do J1979 os identificadores de **$80 em diante são valores COM SINAL** — lendo tudo como sem sinal, um valor negativo virava ~65000 e o passou/não passou **invertia**. `comSinal`/`inteiro16` tratam isso. A escala para mostrar em unidade de verdade só existe onde está conferida (`ESCALAS`); o resto aparece como número cru, sem unidade inventada, e pode crescer conferindo contra o Raven. Mesma regra nos nomes: `nomeMid` só nomeia sonda ($01–$08) e catalisador ($21–$24).
@@ -692,7 +707,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (129, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (300, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (145, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (309, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
 
 ## Como trabalhar

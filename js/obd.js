@@ -222,7 +222,7 @@ export const PIDS = [
   { pid: 0x46, rotulo: "Temperatura do ar de fora", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 60, grupo: "ar" },
   { pid: 0x08, rotulo: "Ajuste curto de combustível (banco 2)", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
   { pid: 0x09, rotulo: "Ajuste longo de combustível (banco 2)", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
-  { pid: 0x44, rotulo: "Mistura comandada (lambda)", unidade: "", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, vivo: true, de: 0.7, ate: 1.3, grupo: "combustivel" },
+  { pid: 0x44, rotulo: "Mistura comandada (lambda)", unidade: "", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, vivo: true, de: 0, ate: 2, grupo: "combustivel" },
   { pid: 0x0a, rotulo: "Pressão de combustível", unidade: "kPa", bytes: 1, conta: d => d[0] * 3, casas: 0, vivo: true, de: 0, ate: 765, grupo: "combustivel" },
   { pid: 0x2f, rotulo: "Nível do tanque", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: false, de: 0, ate: 100, grupo: "combustivel" },
   { pid: 0x52, rotulo: "Etanol no tanque", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: false, de: 0, ate: 100, grupo: "combustivel" },
@@ -244,20 +244,136 @@ export const PIDS = [
   { pid: 0x4d, rotulo: "Tempo com a luz acesa", unidade: "min", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
   { pid: 0x4e, rotulo: "Tempo desde o apagamento", unidade: "min", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
   { pid: 0xa6, rotulo: "Odômetro do módulo", unidade: "km", bytes: 4, conta: d => (((d[0] * 16777216) + (d[1] * 65536) + (d[2] * 256) + d[3]) / 10), casas: 0, vivo: false, grupo: "contadores" },
+
+  // SONDAS (19/11/2026). Cada PID de sonda traz DOIS números no mesmo pedido, por isso a tabela
+  // aceita `partes`. Banda estreita (0x14–0x1B): tensão e o ajuste que aquela sonda provoca —
+  // quando o segundo byte vem 0xFF, aquela sonda não entra na conta do ajuste e a parte some.
+  // Banda larga (0x24–0x2B): lambda de verdade e tensão. Planta dos bytes conferida no J1979.
+  { pid: 0x14, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 1 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 1 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x15, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 2 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 2 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x16, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 3 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 3 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x17, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 4 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 4 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x18, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 5 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 5 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x19, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 6 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 6 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x1a, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 7 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 7 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x1b, bytes: 2, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda 8 (tensão)", unidade: "V", conta: d => d[0] / 200, casas: 3, de: 0, ate: 1.275 },
+    { rotulo: "Sonda 8 (ajuste pela sonda)", unidade: "%", conta: d => (d[1] * 100 / 128) - 100, casas: 1, de: -25, ate: 25,
+      quando: d => d[1] !== 0xff },
+  ] },
+  { pid: 0x24, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 1 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 1 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x25, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 2 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 2 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x26, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 3 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 3 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x27, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 4 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 4 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x28, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 5 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 5 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x29, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 6 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 6 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x2a, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 7 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 7 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  { pid: 0x2b, bytes: 4, grupo: "sondas", vivo: true, partes: [
+    { rotulo: "Sonda larga 8 (lambda)", unidade: "", conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, de: 0, ate: 2 },
+    { rotulo: "Sonda larga 8 (tensão)", unidade: "V", conta: d => ((d[2] * 256) + d[3]) * 8 / 65536, casas: 3, de: 0, ate: 8 },
+  ] },
+  // TEMPERATURA DO ESCAPE: 9 bytes, o primeiro é o mapa de quais dos quatro sensores existem;
+  // só aparece o sensor que o próprio carro marcou como presente.
+  { pid: 0x78, bytes: 9, grupo: "injecao", vivo: true, partes: [
+    { rotulo: "Temperatura do escape (banco 1, sensor 1)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[1] * 256) + d[2]) / 10) - 40, quando: d => (d[0] & (1 << 0)) !== 0 },
+    { rotulo: "Temperatura do escape (banco 1, sensor 2)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[3] * 256) + d[4]) / 10) - 40, quando: d => (d[0] & (1 << 1)) !== 0 },
+    { rotulo: "Temperatura do escape (banco 1, sensor 3)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[5] * 256) + d[6]) / 10) - 40, quando: d => (d[0] & (1 << 2)) !== 0 },
+    { rotulo: "Temperatura do escape (banco 1, sensor 4)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[7] * 256) + d[8]) / 10) - 40, quando: d => (d[0] & (1 << 3)) !== 0 },
+  ] },
+  { pid: 0x79, bytes: 9, grupo: "injecao", vivo: true, partes: [
+    { rotulo: "Temperatura do escape (banco 2, sensor 1)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[1] * 256) + d[2]) / 10) - 40, quando: d => (d[0] & (1 << 0)) !== 0 },
+    { rotulo: "Temperatura do escape (banco 2, sensor 2)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[3] * 256) + d[4]) / 10) - 40, quando: d => (d[0] & (1 << 1)) !== 0 },
+    { rotulo: "Temperatura do escape (banco 2, sensor 3)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[5] * 256) + d[6]) / 10) - 40, quando: d => (d[0] & (1 << 2)) !== 0 },
+    { rotulo: "Temperatura do escape (banco 2, sensor 4)", unidade: "°C", casas: 0, de: -40, ate: 1000,
+      conta: d => (((d[7] * 256) + d[8]) / 10) - 40, quando: d => (d[0] & (1 << 3)) !== 0 },
+  ] },
 ];
 
-/** Resposta de um PID do serviço 01 (ou 02, a foto da falha) → { rotulo, valor, unidade } */
+/**
+ * Resposta de um PID do serviço 01 (ou 02, a foto da falha) → LISTA de leituras.
+ * É lista porque um PID pode trazer mais de um número: a sonda manda lambda E tensão no mesmo
+ * pedido, e a temperatura do escape manda até quatro sensores. Cada leitura ganha uma `chave`
+ * própria (pid + a posição dentro dele), que é por onde a tela identifica cada mostrador.
+ * PID simples devolve uma lista de um só.
+ */
 export function valorPid(hex, pid, servico = 0x01) {
   const linha = PIDS.find(p => p.pid === pid);
-  if (!linha) return null;
+  if (!linha) return [];
   const d = dadosDa(hex, servico);
-  if (!d || d.length < 2 || d[0] !== pid) return null;
+  if (!d || d.length < 2 || d[0] !== pid) return [];
   const dados = servico === 0x02 ? d.slice(2) : d.slice(1);           // o serviço 02 traz o nº da foto
-  if (dados.length < linha.bytes) return null;
-  let valor;
-  try { valor = linha.conta(dados); } catch (e) { return null; }
-  if (!isFinite(valor)) return null;
-  return { pid, rotulo: linha.rotulo, unidade: linha.unidade, valor: arred(valor, linha.casas), de: linha.de, ate: linha.ate };
+  if (dados.length < linha.bytes) return [];
+  const partes = linha.partes || [linha];
+  const saida = [];
+  partes.forEach((parte, i) => {
+    // `quando` deixa a parte dizer que não existe neste carro (sonda ausente, sensor fora do mapa)
+    if (parte.quando) { try { if (!parte.quando(dados)) return; } catch (e) { return; } }
+    let valor;
+    try { valor = parte.conta(dados); } catch (e) { return; }
+    if (typeof valor !== "number" || !isFinite(valor)) return;
+    saida.push({
+      pid, parte: i, chave: pid * 100 + i,
+      rotulo: parte.rotulo, unidade: parte.unidade,
+      valor: arred(valor, parte.casas), de: parte.de, ate: parte.ate,
+    });
+  });
+  return saida;
 }
 
 /* ---- prontidão dos monitores (serviço 01, PID 01) ----
@@ -495,8 +611,7 @@ export async function lerAoVivo(pidsSuportados) {
   for (const pid of quais) {
     const r = await pedir("01" + pid.toString(16).toUpperCase().padStart(2, "0"), 4000);
     if (r.erro) continue;
-    const v = valorPid(primeiraDe(r.respostas, 0x01), pid, 0x01);
-    if (v) linhas.push(v);
+    for (const v of valorPid(primeiraDe(r.respostas, 0x01), pid, 0x01)) linhas.push(v);
   }
   return linhas;
 }
@@ -514,6 +629,18 @@ export function leiturasPara(suportados, escolhidos) {
     .filter(p => (!temLista || suportados.includes(p.pid)) && (!marcou || escolhidos.includes(p.pid)))
     .slice()
     .sort((a, b) => ordem.indexOf(a.grupo) - ordem.indexOf(b.grupo));
+}
+
+/** O grupo de uma leitura já lida (a tela usa para separar painel e lista por assunto). */
+export function grupoDaLeitura(l) {
+  const linha = PIDS.find(p => p.pid === l.pid);
+  return linha ? linha.grupo : "";
+}
+
+/** Onde a leitura entra na ordem da tela: pela posição do PID na tabela e depois pela parte. */
+export function ordemDaLeitura(l) {
+  const i = PIDS.findIndex(p => p.pid === l.pid);
+  return (i < 0 ? 999 : i) * 100 + (l.parte || 0);
 }
 
 /** Os grupos que têm pelo menos uma leitura neste carro, para montar o filtro. */
@@ -572,11 +699,11 @@ export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc =
       if ((mudos[p.pid] || 0) >= PACIENCIA) continue;                 // já não responde: fora da roda
       if (volta > 1 && !p.vivo) continue;                             // não muda: lido só na 1ª volta
       const r = await pedir("01" + p.pid.toString(16).toUpperCase().padStart(2, "0"), ESPERA_VIVO);
-      const v = r.erro ? null : valorPid(primeiraDe(r.respostas, 0x01), p.pid, 0x01);
-      if (v) {
+      const lidos = r.erro ? [] : valorPid(primeiraDe(r.respostas, 0x01), p.pid, 0x01);
+      if (lidos.length) {
         mudos[p.pid] = 0;
         leuAlgo = true;
-        aoValor(v, volta);
+        for (const v of lidos) aoValor(v, volta);
       } else {
         mudos[p.pid] = (mudos[p.pid] || 0) + 1;
       }
@@ -611,8 +738,7 @@ export async function lerFoto(pidsSuportados) {
   for (const pid of quais) {
     const r = await pedir("02" + pid.toString(16).toUpperCase().padStart(2, "0") + "00", 4000);
     if (r.erro) continue;
-    const v = valorPid(primeiraDe(r.respostas, 0x02), pid, 0x02);
-    if (v) linhas.push(v);
+    for (const v of valorPid(primeiraDe(r.respostas, 0x02), pid, 0x02)) linhas.push(v);
   }
   return linhas;
 }

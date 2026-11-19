@@ -863,10 +863,12 @@ const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], 
 // O rótulo é SEMPRE escrito (quem lê está embaixo do carro, com pressa: ponteiro sozinho não informa).
 // R e as voltas do arco são fixos para o desenho não depender de medir a tela.
 const M_R = 34, M_VOLTA = 2 * Math.PI * M_R, M_ARCO = M_VOLTA * 0.75;
+/** número do jeito que se escreve aqui: vírgula decimal */
+const numBR = n => String(n).replace(".", ",");
 function Mostrador({ l }) {
   const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
-  return html`<div class="mostrador" data-pid=${l.pid}>
+  return html`<div class="mostrador" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="mostrador-rot">${l.rotulo}</div>
     ${tem ? html`<svg class="mostrador-arco" viewBox="0 0 86 86" aria-hidden="true">
       <g transform="rotate(135 43 43)">
@@ -875,9 +877,9 @@ function Mostrador({ l }) {
       </g>
     </svg>` : null}
     <div class=${"mostrador-num" + (tem ? " dentro" : "")}>
-      <b>${l.valor}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}
+      <b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}
     </div>
-    ${tem ? html`<div class="mostrador-pes"><span>${l.de}</span><span>${l.ate}</span></div>` : null}
+    ${tem ? html`<div class="mostrador-pes"><span>${numBR(l.de)}</span><span>${numBR(l.ate)}</span></div>` : null}
   </div>`;
 }
 
@@ -887,10 +889,10 @@ function Mostrador({ l }) {
 function LinhaViva({ l }) {
   const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
-  return html`<div class="linha-viva" data-pid=${l.pid}>
+  return html`<div class="linha-viva" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="linha-viva-topo">
       <span class="linha-viva-rot">${l.rotulo}</span>
-      <b class="linha-viva-num">${l.valor}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
+      <b class="linha-viva-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
     </div>
     ${tem ? html`<div class="linha-viva-barra"><i style=${"width:" + (parte * 100).toFixed(1) + "%"}></i></div>` : null}
   </div>`;
@@ -1026,7 +1028,7 @@ function Obd() {
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.pid]: v }), volta, rodando: true })); },
+        (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true })); },
         () => rodada.current === minha,
         {
           escolhidos: escolhidas,
@@ -1133,7 +1135,7 @@ function Obd() {
         </div>
         ${!Object.keys(vivo.valores).length ? html`<div class="carregando">${vivo.rodando ? "Lendo o motor…" : "O módulo não respondeu nenhum dado ao vivo."}</div>` : null}
         ${(() => {
-          const lidos = obd.PIDS.map(p => vivo.valores[p.pid]).filter(Boolean);
+          const lidos = Object.keys(vivo.valores).map(k => vivo.valores[k]).sort((a, b) => obd.ordemDaLeitura(a) - obd.ordemDaLeitura(b));
           if (!lidos.length) return null;
           const comFaixa = lidos.filter(l => typeof l.de === "number");
           const resto = lidos.filter(l => typeof l.de !== "number");
@@ -1143,15 +1145,15 @@ function Obd() {
               <button type="button" id="obd-jeito-lista" class=${jeito === "lista" ? "esc" : ""} aria-pressed=${jeito === "lista"} onClick=${() => trocarJeito("lista")}>LISTA</button>
             </div>
             ${jeito === "painel" ? html`
-              ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.pid} l=${l} />`)}</div>` : null}
-              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${LinhaViva} key=${l.pid} l=${l} />`)}</div>` : null}`
+              ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.chave} l=${l} />`)}</div>` : null}
+              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${LinhaViva} key=${l.chave} l=${l} />`)}</div>` : null}`
             : html`<div class="lista-viva">
                 ${obd.GRUPOS.map(g => {
-                  const doGrupo = lidos.filter(l => (obd.PIDS.find(p => p.pid === l.pid) || {}).grupo === g.id);
+                  const doGrupo = lidos.filter(l => obd.grupoDaLeitura(l) === g.id);
                   if (!doGrupo.length) return null;
                   return html`<div key=${g.id} class="lista-viva-grupo">
                     <h3>${g.nome}</h3>
-                    ${doGrupo.map(l => html`<${LinhaViva} key=${l.pid} l=${l} />`)}
+                    ${doGrupo.map(l => html`<${LinhaViva} key=${l.chave} l=${l} />`)}
                   </div>`;
                 })}
               </div>`}`;
@@ -1173,7 +1175,7 @@ function Obd() {
 
       ${res && res.o === "foto" ? html`<${Cartao} titulo="Foto do momento da falha" id="obd-r-foto">
         ${!res.d.length ? html`<div class="vazio">O módulo não guardou a foto do momento da falha.</div>` : null}
-        ${res.d.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}
+        ${res.d.map(l => html`<${KV} key=${l.chave} a=${l.rotulo} b=${numBR(l.valor) + (l.unidade ? " " + l.unidade : "")} />`)}
         ${res.d.length ? html`<div class="nota">Como o carro estava no instante em que a falha gravou: diz se deu com o motor frio, em carga ou em marcha lenta.</div>` : null}
       </${Cartao}>` : null}
 

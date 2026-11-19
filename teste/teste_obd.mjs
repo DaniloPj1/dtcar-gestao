@@ -54,38 +54,46 @@ chk("resposta de outro serviço devolve null (a tela avisa em vez de mentir)", c
 }
 
 /* ---------------- dados ao vivo ---------------- */
-chk("rotação: 1A F8 = 1726 rpm", valorPid("410C1AF8", 0x0c).valor === 1726);
-chk("temperatura do motor: 7B = 83 °C", valorPid("41057B", 0x05).valor === 83);
-chk("temperatura abaixo de zero (A-40 negativo)", valorPid("410514", 0x05).valor === -20);
-chk("carga do motor: FF = 100%", valorPid("4104FF", 0x04).valor === 100);
-chk("ajuste de combustível: 128 = 0%, 151 = +18%", valorPid("410680", 0x06).valor === 0 && valorPid("410697", 0x06).valor === 18);
-chk("ajuste de combustível negativo", valorPid("410670", 0x06).valor === -12.5);
-chk("avanço de ignição: 80 = 0°", valorPid("410E80", 0x0e).valor === 0);
-chk("tensão do módulo: 14100 mV = 14,1 V", valorPid("41423714", 0x42).valor === 14.1);
-chk("tensão do módulo baixa (bateria fraca): 3729 mV = 3,7 V", valorPid("41420E91", 0x42).valor === 3.7);
-chk("MAF de dois bytes", valorPid("4110013A", 0x10).valor === 3.14);
-chk("PID de um byte com resposta curta demais devolve null", valorPid("4105", 0x05) === null);
-chk("PID que não é o pedido devolve null", valorPid("41051E", 0x0c) === null);
-chk("foto da falha (serviço 02) pula o número da foto", valorPid("420C001AF8", 0x0c, 0x02).valor === 1726);
-chk("todo PID da lista tem rótulo, conta e nº de bytes", PIDS.every(p => typeof p.rotulo === "string" && p.rotulo && typeof p.conta === "function" && p.bytes >= 1 && p.bytes <= 4));
+chk("rotação: 1A F8 = 1726 rpm", valorPid("410C1AF8", 0x0c)[0].valor === 1726);
+chk("temperatura do motor: 7B = 83 °C", valorPid("41057B", 0x05)[0].valor === 83);
+chk("temperatura abaixo de zero (A-40 negativo)", valorPid("410514", 0x05)[0].valor === -20);
+chk("carga do motor: FF = 100%", valorPid("4104FF", 0x04)[0].valor === 100);
+chk("ajuste de combustível: 128 = 0%, 151 = +18%", valorPid("410680", 0x06)[0].valor === 0 && valorPid("410697", 0x06)[0].valor === 18);
+chk("ajuste de combustível negativo", valorPid("410670", 0x06)[0].valor === -12.5);
+chk("avanço de ignição: 80 = 0°", valorPid("410E80", 0x0e)[0].valor === 0);
+chk("tensão do módulo: 14100 mV = 14,1 V", valorPid("41423714", 0x42)[0].valor === 14.1);
+chk("tensão do módulo baixa (bateria fraca): 3729 mV = 3,7 V", valorPid("41420E91", 0x42)[0].valor === 3.7);
+chk("MAF de dois bytes", valorPid("4110013A", 0x10)[0].valor === 3.14);
+chk("PID de um byte com resposta curta demais não vira leitura", valorPid("4105", 0x05).length === 0);
+chk("PID que não é o pedido não vira leitura", valorPid("41051E", 0x0c).length === 0);
+chk("foto da falha (serviço 02) pula o número da foto", valorPid("420C001AF8", 0x0c, 0x02)[0].valor === 1726);
 {
-  // A conta de cada PID só pode usar os bytes que ele declara: ler d[2] num PID de 2 bytes daria
-  // NaN no carro de verdade e a leitura sumiria da tela sem ninguém entender por quê.
-  const erradas = PIDS.filter(p => {
+  // Um PID pode trazer vários números (sonda: lambda e tensão). `partes` é a lista deles; o PID
+  // simples é a sua própria parte única. Estas conferências valem para TODA parte.
+  const partesDe = p => p.partes || [p];
+  const todas = PIDS.flatMap(p => partesDe(p).map(parte => ({ p, parte })));
+  chk("toda leitura tem rótulo, conta e nº de bytes",
+    PIDS.every(p => p.bytes >= 1 && p.bytes <= 9 && partesDe(p).every(x => typeof x.rotulo === "string" && x.rotulo && typeof x.conta === "function")));
+  // A conta só pode usar os bytes que o PID declara: ler d[2] num PID de 2 bytes daria NaN no
+  // carro de verdade e a leitura sumiria da tela sem ninguém entender por quê.
+  const erradas = todas.filter(({ p, parte }) => {
     for (const b of [0x00, 0x7f, 0xff]) {
       const d = new Array(p.bytes).fill(b);
-      const v = p.conta(d);
+      try { if (parte.quando && !parte.quando(d)) continue; } catch (e) { return true; }
+      const v = parte.conta(d);
       if (typeof v !== "number" || !isFinite(v)) return true;
     }
     return false;
   });
-  chk("a conta de cada PID cabe nos bytes que ele declara", !erradas.length, erradas.map(p => p.rotulo));
-  const semEscala = PIDS.filter(p => (typeof p.de === "number") !== (typeof p.ate === "number"));
-  chk("escala do mostrador vem completa ou não vem", !semEscala.length, semEscala.map(p => p.rotulo));
-  const escalaTorta = PIDS.filter(p => typeof p.de === "number" && p.ate <= p.de);
-  chk("fim da escala sempre maior que o começo", !escalaTorta.length, escalaTorta.map(p => p.rotulo));
-  const rotuloRepetido = PIDS.map(p => p.rotulo).filter((r, i, a) => a.indexOf(r) !== i);
+  chk("a conta de cada leitura cabe nos bytes que o PID declara", !erradas.length, erradas.map(x => x.parte.rotulo));
+  const semEscala = todas.filter(({ parte }) => (typeof parte.de === "number") !== (typeof parte.ate === "number"));
+  chk("escala do mostrador vem completa ou não vem", !semEscala.length, semEscala.map(x => x.parte.rotulo));
+  const escalaTorta = todas.filter(({ parte }) => typeof parte.de === "number" && parte.ate <= parte.de);
+  chk("fim da escala sempre maior que o começo", !escalaTorta.length, escalaTorta.map(x => x.parte.rotulo));
+  const rotuloRepetido = todas.map(x => x.parte.rotulo).filter((r, i, a) => a.indexOf(r) !== i);
   chk("nenhum rótulo repetido (o mecânico tem de saber qual é qual)", !rotuloRepetido.length, rotuloRepetido);
+  const chaveRepetida = todas.map(({ p, parte }) => p.pid * 100 + partesDe(p).indexOf(parte)).filter((c, i, a) => a.indexOf(c) !== i);
+  chk("cada leitura tem chave própria", !chaveRepetida.length, chaveRepetida);
 }
 
 /* ---------------- prontidão dos monitores ---------------- */
@@ -208,7 +216,10 @@ chk("a última posição de cada faixa é o aviso da faixa seguinte", suportados
  * Valores conferidos contra a tabela de fórmulas do J1979. Cada um com um número que um mecânico
  * reconhece no carro, para a conta estar errada doer aqui e não no laudo.
  */
-const vp = (pid, dados) => valorPid("41" + pid + dados, parseInt(pid, 16), 0x01);
+// valorPid devolve LISTA (um PID pode trazer vários números); `vp` pega a primeira leitura e
+// `vps` a lista inteira, para os PIDs de sonda e de temperatura do escape.
+const vps = (pid, dados) => valorPid("41" + pid + dados, parseInt(pid, 16), 0x01);
+const vp = (pid, dados) => vps(pid, dados)[0] || null;
 chk("velocidade", vp("0D", "50").valor === 80);
 chk("pressão do rail: 5000 x 10 = 50.000 kPa (500 bar, diesel)", vp("23", "1388").valor === 50000);
 chk("pressão do rail absoluta usa a mesma escala", vp("59", "1388").valor === 50000);
@@ -234,8 +245,39 @@ chk("ajuste de combustível do banco 2 existe, separado do banco 1", [0x06, 0x07
 chk("pressão barométrica em kPa", vp("33", "65").valor === 101);
 chk("pedal e borboleta: todas as tomadas do padrão", [0x45, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x5a].every(p => PIDS.some(x => x.pid === p)));
 chk("tempo com a luz acesa em minutos", vp("4D", "003C").valor === 60);
-chk("dado de PID errado não vira leitura (resposta de outro PID)", valorPid("410D50", 0x23, 0x01) === null);
+chk("dado de PID errado não vira leitura (resposta de outro PID)", valorPid("410D50", 0x23, 0x01).length === 0);
 chk("faixas andam até $C0, senão o odômetro ($A6) nunca sairia", FAIXAS_PID[FAIXAS_PID.length - 1] >= 0xa0);
+
+/* ---------------- sondas e temperatura do escape (19/11/2026) ----------------
+ * Estes PIDs trazem MAIS DE UM número no mesmo pedido. Valores conferidos contra a planta de
+ * bytes do J1979.
+ */
+{
+  // Banda estreita: tensão (A/200) e o ajuste que a sonda provoca ((100/128)B - 100).
+  const sonda1 = vps("14", "99" + "80");
+  chk("sonda banda larga… não: banda estreita devolve DOIS números", sonda1.length === 2);
+  chk("tensão da sonda: 0x99 ÷ 200 = 0,765 V", sonda1[0].valor === 0.765 && sonda1[0].unidade === "V");
+  chk("ajuste da sonda zero quando vem 128", sonda1[1].valor === 0);
+  chk("as duas leituras do mesmo PID têm chaves diferentes", sonda1[0].chave !== sonda1[1].chave);
+  const semAjuste = vps("14", "99" + "FF");
+  chk("segundo byte 0xFF: esta sonda não entra na conta do ajuste e some da tela", semAjuste.length === 1 && semAjuste[0].unidade === "V");
+
+  // Banda larga: lambda ((2/65536)(256A+B)) e tensão ((8/65536)(256C+D)).
+  const larga = vps("24", "8000" + "4000");
+  chk("sonda banda larga: lambda 1,000 com 0x8000", larga.length === 2 && larga[0].valor === 1);
+  chk("sonda banda larga: tensão 2,000 V com 0x4000", larga[1].valor === 2 && larga[1].unidade === "V");
+  chk("lambda pobre aparece acima de 1", vps("24", "C0004000")[0].valor === 1.5);
+  chk("as oito sondas de cada tipo existem", [0x14, 0x1b, 0x24, 0x2b].every(p => PIDS.some(x => x.pid === p)));
+
+  // Escape: 9 bytes, o primeiro diz quais dos quatro sensores existem.
+  const doisSensores = vps("78", "03" + "1324" + "16A8" + "0000" + "0000");
+  chk("temperatura do escape: só saem os sensores que o carro marcou como presentes", doisSensores.length === 2);
+  chk("escape sensor 1 = 450 °C", doisSensores[0].valor === 450);
+  chk("escape sensor 2 = 540 °C", doisSensores[1].valor === 540);
+  chk("nenhum sensor marcado: nenhuma leitura (não inventa 0 °C)", vps("78", "00" + "1324" + "00000000000000").length === 0);
+  chk("o quarto sensor também sai quando marcado", vps("78", "08" + "0000" + "0000" + "0000" + "1324")[0].valor === 450);
+  chk("escape dos dois bancos", [0x78, 0x79].every(p => PIDS.some(x => x.pid === p)));
+}
 
 /* ---------------- escolher o que aparece (19/11/2026) ----------------
  * Quem manda é o CARRO: a lista que ele responde. A placa só serve para ordenar e para não

@@ -36,13 +36,23 @@ window.Capacitor.Plugins = window.Capacitor.Plugins || {};
 var R = {
   'ATZ': 'ELM327 v1.5', 'ATE0': 'OK', 'ATL0': 'OK', 'ATS0': 'OK', 'ATH0': 'OK', 'ATSP0': 'OK',
   'ATDP': 'ISO 15765-4 (CAN 11/500)',
-  '0100': '4100FFFFFFFF', '0120': '412080018001', '0140': '414040000000',
+  '0100': '4100FFFFFFFF', '0120': '4120A01FE01F', '0140': '41407E9C70DD',
+  '0160': '4160E0000001', '0180': '418000000001', '01A0': '41A004000000',
   '03': '4300\\r430201710300', '07': '47010130', '0A': '4A00',   // duas linhas: motor e câmbio respondendo
   '0101': '410183076121',
   '0902': '490201__VIN__',
   '010C': '410C1AF8', '0105': '41057B', '0104': '41043C', '0111': '41111A', '0106': '410697',
   '0107': '41078A', '010E': '410E88', '010F': '410F46', '010B': '410B62', '0110': '4110013A',
   '0142': '41423714', '011F': '411F0384', '0121': '41210026', '0131': '41310026', '0130': '41300006',
+  // leituras novas de 19/11/2026
+  '010D': '410D50', '010A': '410A32', '0108': '41088A', '0109': '41097A',
+  '0123': '41231388', '0159': '41591388', '0122': '41221388', '015D': '415D6A40', '015E': '415E0046',
+  '012C': '412C80', '012D': '412D80', '012E': '412E20', '012F': '412F80', '0132': '4132FFFC',
+  '0133': '413365', '013C': '413C1324', '013D': '413D1324', '013E': '413E1194', '013F': '413F1194',
+  '0143': '414300B4', '0144': '41448000', '0145': '41451A', '0146': '41464A', '0147': '41471A',
+  '0149': '41491A', '014C': '414C1A', '014D': '414D003C', '014E': '414E0078',
+  '0152': '415245', '0153': '41530BB8', '0154': '4154FFFF', '015A': '415A1A', '015C': '415C82',
+  '0161': '41617D', '0162': '41627D', '0163': '4163012C', '01A6': '41A60016E360',
   '020C00': '420C001AF8', '020500': '42050050', '021100': '42110030',
   '0600': '4600FF000001', '0620': '4620F0000000',
   '0621': '4621010100640000012C'
@@ -539,6 +549,20 @@ try:
         t(pg.is_enabled('#obd-falhas'), 'as outras leituras continuam clicáveis durante a roda (elas a interrompem)')
         tx = pg.inner_text('#obd-r-vivo')
         t('14,1' in tx or '14.1' in tx, 'a tensão do módulo aparece na tela: %s' % tx.replace('\n', ' ')[:160])
+        # AS LEITURAS NOVAS CHEGAM NA TELA (pedido do Danilo em 19/11/2026)
+        def na_tela(pid):
+            e = pg.query_selector('#obd-r-vivo [data-pid="%d"]' % pid)
+            return e.inner_text().replace('\n', ' ') if e else None
+        t('80' in (na_tela(0x0d) or ''), 'velocidade: %s' % na_tela(0x0d))
+        t('50000' in (na_tela(0x23) or '').replace('.', ''), 'pressão do rail (500 bar): %s' % na_tela(0x23))
+        t('2,5' in (na_tela(0x5d) or '') or '2.5' in (na_tela(0x5d) or ''), 'tempo de injeção: %s' % na_tela(0x5d))
+        t('27' in (na_tela(0x52) or ''), 'etanol no tanque: %s' % na_tela(0x52))
+        t('90' in (na_tela(0x5c) or ''), 'temperatura do óleo: %s' % na_tela(0x5c))
+        t('450' in (na_tela(0x3c) or ''), 'temperatura do catalisador: %s' % na_tela(0x3c))
+        t(na_tela(0xa6) and '150000' in na_tela(0xa6).replace('.', ''), 'odômetro do módulo: %s' % na_tela(0xa6))
+        cmds0 = pg.evaluate("window.__obd.cmds")
+        t('0160' in cmds0 and '01A0' in cmds0, 'anda nas faixas altas, senão o odômetro ($A6) nunca sairia')
+        t(pg.locator('#obd-r-vivo .mostrador, #obd-r-vivo .linha-viva').count() >= 30, 'o painel mostra as dezenas de leituras: %d' % pg.locator('#obd-r-vivo .mostrador, #obd-r-vivo .linha-viva').count())
         t('83' in tx, 'a temperatura do motor aparece na tela')
         cmds = pg.evaluate("window.__obd.cmds")
         t('0120' in cmds and '0140' in cmds, 'anda nas faixas de PID ($20 e $40), senão os PIDs altos nunca sairiam: %s' % [c for c in cmds if c.startswith('01')][:8])
@@ -553,11 +577,16 @@ try:
         # FILTRO DAS LEITURAS (pedido do Danilo em 19/11/2026)
         pg.click('#obd-escolher'); pg.wait_for_timeout(300)
         t(pg.query_selector('#obd-todas'), 'tem a opção "todas as que o carro tiver"')
-        t(pg.locator('#obd-escolha .obd-cx').count() >= 10, 'lista as leituras deste carro para marcar: %d' % pg.locator('#obd-escolha .obd-cx').count())
+        t(pg.locator('#obd-escolha .obd-cx').count() >= 30, 'lista as leituras deste carro para marcar: %d' % pg.locator('#obd-escolha .obd-cx').count())
         t(pg.locator('#obd-escolha .sec h3').count() >= 3, 'separadas por grupo')
         t(pg.locator('#obd-escolha input:checked').count() == pg.locator('#obd-escolha .obd-cx').count(), 'começa com todas marcadas')
+        def conta_filtro():
+            m = re.search(r'\((\d+) de (\d+)\)', pg.inner_text('#obd-escolher'))
+            return (int(m.group(1)), int(m.group(2))) if m else (None, None)
+        antes_n, total_n = conta_filtro()
+        t(antes_n == total_n and total_n >= 30, 'começa valendo todas as %s leituras deste carro' % total_n)
         pg.uncheck('#obd-escolha input[data-pid="5"]'); pg.wait_for_timeout(300)
-        t('13 de 15' in pg.inner_text('#obd-escolher') or '14 de 15' in pg.inner_text('#obd-escolher'), 'desmarcar reduz a conta: %s' % pg.inner_text('#obd-escolher'))
+        t(conta_filtro() == (total_n - 1, total_n), 'desmarcar reduz a conta: %s' % str(conta_filtro()))
         chaves = pg.evaluate("Object.keys(window.localStorage).filter(k => k.indexOf('obd_leituras') === 0)")
         t(len(chaves) == 1, 'a escolha é guardada numa chave por carro: %s' % chaves)
         guardadas = pg.evaluate("JSON.parse(window.localStorage.getItem(%r))" % chaves[0]) if chaves else None

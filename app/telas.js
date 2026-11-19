@@ -1144,7 +1144,7 @@ function Obd() {
             </div>
             ${jeito === "painel" ? html`
               ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.pid} l=${l} />`)}</div>` : null}
-              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}</div>` : null}`
+              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${LinhaViva} key=${l.pid} l=${l} />`)}</div>` : null}`
             : html`<div class="lista-viva">
                 ${obd.GRUPOS.map(g => {
                   const doGrupo = lidos.filter(l => (obd.PIDS.find(p => p.pid === l.pid) || {}).grupo === g.id);

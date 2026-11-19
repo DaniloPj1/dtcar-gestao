@@ -36,8 +36,8 @@ window.Capacitor.Plugins = window.Capacitor.Plugins || {};
 var R = {
   'ATZ': 'ELM327 v1.5', 'ATE0': 'OK', 'ATL0': 'OK', 'ATS0': 'OK', 'ATH0': 'OK', 'ATSP0': 'OK',
   'ATDP': 'ISO 15765-4 (CAN 11/500)',
-  '0100': '4100FFFFFFFF', '0120': '4120A01FE01F', '0140': '41407E9C70DD',
-  '0160': '4160E0000001', '0180': '418000000001', '01A0': '41A004000000',
+  '0100': '4100BFFF9803', '0120': '4120B81FE01F', '0140': '41407E9C70DD',
+  '0160': '4160E0000101', '0180': '418000000001', '01A0': '41A004000000',
   '03': '4300\\r430201710300', '07': '47010130', '0A': '4A00',   // duas linhas: motor e câmbio respondendo
   '0101': '410183076121',
   '0902': '490201__VIN__',
@@ -53,6 +53,10 @@ var R = {
   '0149': '41491A', '014C': '414C1A', '014D': '414D003C', '014E': '414E0078',
   '0152': '415245', '0153': '41530BB8', '0154': '4154FFFF', '015A': '415A1A', '015C': '415C82',
   '0161': '41617D', '0162': '41627D', '0163': '4163012C', '01A6': '41A60016E360',
+  // sondas e temperatura do escape (dois números no mesmo pedido)
+  '0114': '41149980', '0115': '411566FF',
+  '0124': '412480004000', '0125': '41258CCC4000',
+  '0178': '4178031324 16A8 0000 0000'.replace(/ /g, ''),
   '020C00': '420C001AF8', '020500': '42050050', '021100': '42110030',
   '0600': '4600FF000001', '0620': '4620F0000000',
   '0621': '4621010100640000012C'
@@ -563,6 +567,19 @@ try:
         cmds0 = pg.evaluate("window.__obd.cmds")
         t('0160' in cmds0 and '01A0' in cmds0, 'anda nas faixas altas, senão o odômetro ($A6) nunca sairia')
         t(pg.locator('#obd-r-vivo .mostrador, #obd-r-vivo .linha-viva').count() >= 30, 'o painel mostra as dezenas de leituras: %d' % pg.locator('#obd-r-vivo .mostrador, #obd-r-vivo .linha-viva').count())
+        # UM PEDIDO, DOIS NÚMEROS: sonda e temperatura do escape (pedido do Danilo em 19/11/2026)
+        def chave(c):
+            e = pg.query_selector('#obd-r-vivo [data-chave="%d"]' % c)
+            return e.inner_text().replace('\n', ' ') if e else None
+        t(chave(0x14 * 100 + 0) and '0,765' in chave(0x14 * 100 + 0), 'tensão da sonda 1: %s' % chave(0x14 * 100 + 0))
+        t(chave(0x14 * 100 + 1), 'e o ajuste daquela sonda, do MESMO pedido: %s' % chave(0x14 * 100 + 1))
+        t(chave(0x15 * 100 + 0) and not chave(0x15 * 100 + 1), 'sonda 2 veio com 0xFF no ajuste: só a tensão aparece')
+        t(chave(0x24 * 100 + 0) and '1' in chave(0x24 * 100 + 0), 'sonda banda larga, lambda: %s' % chave(0x24 * 100 + 0))
+        t(chave(0x24 * 100 + 1), 'e a tensão dela')
+        t(chave(0x78 * 100 + 0) and '450' in chave(0x78 * 100 + 0), 'escape sensor 1: %s' % chave(0x78 * 100 + 0))
+        t(chave(0x78 * 100 + 1) and '540' in chave(0x78 * 100 + 1), 'escape sensor 2: %s' % chave(0x78 * 100 + 1))
+        t(not chave(0x78 * 100 + 2) and not chave(0x78 * 100 + 3), 'os sensores de escape que o carro não tem não aparecem')
+        t('0178' in pg.evaluate("window.__obd.cmds"), 'a temperatura do escape é pedida de verdade')
         t('83' in tx, 'a temperatura do motor aparece na tela')
         cmds = pg.evaluate("window.__obd.cmds")
         t('0120' in cmds and '0140' in cmds, 'anda nas faixas de PID ($20 e $40), senão os PIDs altos nunca sairiam: %s' % [c for c in cmds if c.startswith('01')][:8])

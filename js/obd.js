@@ -631,6 +631,78 @@ export function leiturasPara(suportados, escolhidos) {
     .sort((a, b) => ordem.indexOf(a.grupo) - ordem.indexOf(b.grupo));
 }
 
+/* ---- LEITURA DE COMBUSTÍVEL (pedido do Danilo, 19/11/2026) ----
+ * O que mais chega na oficina é carro com a injeção perdida no reconhecimento do combustível: a
+ * qualidade do que se vende varia e o módulo leva tempo para reaprender. Esta é a leitura do
+ * primeiro contato — quanto o módulo está CORRIGINDO para o motor andar.
+ *
+ * O número que importa é a soma do ajuste curto com o longo: é a correção que vale agora.
+ * Positivo = o módulo está PONDO combustível (a mistura estava pobre). Negativo = está TIRANDO
+ * (estava rica). As faixas abaixo são as gerais do OBD, as mesmas que qualquer scanner usa —
+ * NÃO são a faixa de normalidade daquele motor, que só a montadora publica. A tela mostra os
+ * números e as causas possíveis; quem decide é o mecânico.
+ */
+export const PIDS_COMBUSTIVEL = [0x06, 0x07, 0x08, 0x09, 0x52, 0x44, 0x0a, 0x23, 0x59, 0x22, 0x5d,
+  0x5e, 0x2f, 0x04, 0x0c, 0x05, 0x10, 0x14, 0x15, 0x16, 0x17, 0x24, 0x25, 0x26, 0x27];
+/** daqui para cima o ajuste merece olhada; daqui para cima está no limite */
+export const AJUSTE_ATENCAO = 10, AJUSTE_GRAVE = 25;
+
+/** A correção de um banco a partir dos valores já lidos (chave = pid * 100 + parte). */
+function bancoDe(v, pidCurto, pidLongo, nome) {
+  const c = v[pidCurto * 100], l = v[pidLongo * 100];
+  if (!c && !l) return null;
+  const curto = c ? c.valor : null, longo = l ? l.valor : null;
+  return { nome, curto, longo, total: arred((curto || 0) + (longo || 0), 1) };
+}
+
+const umaCasa = n => String(arred(n, 1)).replace(".", ",");
+
+/**
+ * Lê o que já veio dos dados ao vivo e devolve a conversa pronta.
+ * `valores` = { chave: leitura }, do jeito que a tela guarda.
+ */
+export function leituraCombustivel(valores) {
+  const v = valores || {};
+  const bancos = [bancoDe(v, 0x06, 0x07, "Banco 1"), bancoDe(v, 0x08, 0x09, "Banco 2")].filter(Boolean);
+  const etanol = v[0x52 * 100] ? v[0x52 * 100].valor : null;
+  const frases = [], causas = [];
+  let situacao = "sem_dados", pior = null;
+
+  if (!bancos.length) {
+    frases.push("Este módulo não informou o ajuste de combustível, então não dá para dizer quanto ele está corrigindo.");
+  } else {
+    pior = bancos.reduce((a, b) => (!a || Math.abs(b.total) > Math.abs(a.total) ? b : a), null);
+    const t = pior.total, abs = Math.abs(t);
+    const onde = bancos.length > 1 ? " no " + pior.nome.toLowerCase() : "";
+    if (abs < AJUSTE_ATENCAO) {
+      situacao = "normal";
+      frases.push("O módulo está corrigindo " + umaCasa(t) + "%" + onde + " — dentro do que se espera de um motor em ordem.");
+    } else {
+      situacao = abs >= AJUSTE_GRAVE ? "grave" : "atencao";
+      frases.push("O módulo está " + (t > 0 ? "PONDO" : "TIRANDO") + " " + umaCasa(abs) + "% de combustível" + onde +
+        ": sozinha, a mistura estava " + (t > 0 ? "pobre" : "rica") + ".");
+      if (abs >= AJUSTE_GRAVE) frases.push("Passou de " + AJUSTE_GRAVE + "%: é correção no limite, e costuma vir junto com luz acesa.");
+      (t > 0
+        ? ["Entrada de ar falsa (mangueira, junta, respiro)", "Medidor de ar (MAF) sujo ou lendo baixo",
+           "Pressão de combustível baixa: bomba ou filtro", "Bico entupido", "Sonda lenta ou envenenada",
+           "Combustível com MAIS álcool do que o módulo calculou"]
+        : ["Bico vazando ou com vazão alta", "Pressão de combustível alta: regulador",
+           "Medidor de ar (MAF) lendo alto", "Sonda presa em rica", "Cânister empurrando vapor para o motor",
+           "Combustível com MENOS álcool do que o módulo calculou"]).forEach(c => causas.push(c));
+    }
+    if (bancos.length > 1) {
+      const dif = Math.abs(bancos[0].total - bancos[1].total);
+      if (dif >= AJUSTE_ATENCAO) frases.push("Os dois bancos estão longe um do outro (" + umaCasa(dif) +
+        "% de diferença): procure do lado que corrige mais, não no que é comum aos dois.");
+    }
+  }
+
+  if (etanol !== null) frases.push("Combustível no tanque, pela conta do módulo: " + umaCasa(etanol) + "% de etanol — o resto é gasolina.");
+  else frases.push("Este carro não informa a porcentagem de etanol: a maioria dos flex calcula pela sonda e nem todo módulo publica essa conta.");
+
+  return { situacao, bancos, pior, etanol, frases, causas, atencao: AJUSTE_ATENCAO, grave: AJUSTE_GRAVE };
+}
+
 /** O grupo de uma leitura já lida (a tela usa para separar painel e lista por assunto). */
 export function grupoDaLeitura(l) {
   const linha = PIDS.find(p => p.pid === l.pid);

@@ -700,6 +700,20 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   **Vírgula decimal:** os valores saíam com ponto ("3.14 g/s"). `numBR` no `app/telas.js` escreve do jeito daqui, no mostrador, na lista e na
   foto da falha.
   **Escala do lambda comandado corrigida:** ia de 0,7 a 1,3, e um valor de corte (1,5) encostaria no fim do arco como se fosse o máximo. Agora 0 a 2.
+- **LEITURA DE COMBUSTÍVEL — a leitura do primeiro contato (19/11/2026).** Pedido do Danilo: *"a maioria dos carros chega com falha de
+  reconhecimento do combustível pela má qualidade no Brasil e já ter essa ideia no primeiro contato com o carro ajuda muito"*.
+  Botão próprio `#obd-combustivel`, na frente de "Dados ao vivo": a roda gira só com `PIDS_COMBUSTIVEL` (ajuste dos dois bancos, etanol, lambda
+  comandado, sondas, pressão de combustível e de rail, tempo de injeção, consumo, nível, carga, MAF, rotação, temperatura) e o cartão troca de
+  nome para "Combustível".
+  `leituraCombustivel(valores)` em `js/obd.js` (função pura, testada sem carro) devolve a conversa pronta: **o número que importa é a SOMA do
+  ajuste curto com o longo** — positivo = o módulo está PONDO combustível (mistura pobre), negativo = TIRANDO (rica). Faixas gerais do OBD
+  (`AJUSTE_ATENCAO` 10%, `AJUSTE_GRAVE` 25%), **não** faixa de normalidade do motor. Com dois bancos, avisa a diferença entre eles e manda
+  procurar do lado que corrige mais. Lista as causas que costumam explicar cada lado, **incluindo combustível com mais/menos álcool do que o
+  módulo calculou**, sempre marcadas como lista geral — a tela **nunca dá veredito**, porque isso depende do motor e quem decide é o mecânico.
+  Carro que não informa o etanol recebe a frase explicando (a maioria dos flex calcula pela sonda e nem todo módulo publica a conta).
+  **O que o OBD genérico NÃO faz, conferido em 19/11/2026:** declarar o combustível e mandar o módulo reaprender (o que o Raven faz) é rotina de
+  montadora com **troca de desafio e resposta validada no servidor do fabricante do aparelho** — a conta não sai de capturas, então não dá para
+  replicar. O que dá é o serviço 04, que zera as adaptações e obriga o módulo a refazer a conta com o que está no tanque (PR seguinte).
 - **Lista de dados ao vivo redesenhada (19/11/2026):** a visão LISTA deixou de ser "rótulo: valor" e virou `LinhaViva` — separada por grupo, com o
   valor grande à direita e uma barra fina mostrando a posição na escala (a mesma `de`/`ate` do mostrador; continua sem dizer se é bom ou ruim).
 - **Serviço 06, honestidade e sinal:** na tabela de escalas do J1979 os identificadores de **$80 em diante são valores COM SINAL** — lendo tudo como sem sinal, um valor negativo virava ~65000 e o passou/não passou **invertia**. `comSinal`/`inteiro16` tratam isso. A escala para mostrar em unidade de verdade só existe onde está conferida (`ESCALAS`); o resto aparece como número cru, sem unidade inventada, e pode crescer conferindo contra o Raven. Mesma regra nos nomes: `nomeMid` só nomeia sonda ($01–$08) e catalisador ($21–$24).
@@ -707,7 +721,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (145, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (309, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (158, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (316, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
 
 ## Como trabalhar

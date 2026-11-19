@@ -7,7 +7,7 @@ import { useApp, Campo, Texto, Seg, Modal } from "../ui.js";
 import { SISTEMAS_PADRAO, ICONES, ICONE_D, TIPOS, pecasDoSistema, novoId } from "../appmecanico.js";
 
 const Icone = ({ nome, tam = 28 }) => html`<svg aria-hidden="true" width=${tam} height=${tam} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d=${ICONE_D[nome] || ICONE_D.chave}></path></svg>`;
-const ARQUIVO_APP = "app/download/DTCar-app.apk", VERSAO_APP = "1.4.0"; // troque junto com o arquivo quando sair uma versão nova
+const ARQUIVO_APP = "app/download/DTCar-app.apk", VERSAO_APP = "1.5.0"; // troque junto com o arquivo quando sair uma versão nova
 const POS = [["Nenhuma", "none"], ["Diant. | Tras. | Os 2", "chips"], ["Minhas opções", "opcoes"]];
 const lista = t => String(t || "").split(/[,;]/).map(x => x.trim()).filter(Boolean);
 const descPos = p => p.pm === "chips" ? "Diant. | Tras. | Os 2" : p.pm === "chips2" ? "Dianteira | Traseira | As 2" : Array.isArray(p.pm) ? p.pm.join(" | ") + " (pode marcar mais de uma)" : "";
@@ -49,7 +49,7 @@ export function AppMecanico() {
     <section class="card" id="baixar-app"><h2>App do sistema para celular</h2>
       <span class="dica">App DTCar para o administrador e o consultor (Android). Versão ${VERSAO_APP}. Entra com o mesmo e-mail e a mesma senha do sistema; depois do primeiro login pode entrar com a digital.</span>
       <div class="acoes"><a class="btn btn-pri" href=${ARQUIVO_APP} download="DTCar-app.apk">Baixar o app (APK)</a></div>
-      <span class="dica">Para instalar: abra o arquivo no celular e, se o Android pedir, permita "instalar apps desconhecidos" para o navegador. Desinstale a versão anterior antes de instalar esta (a 1.3.0 traz o botão Voltar do celular). As telas novas chegam sozinhas, sem instalar de novo.</span>
+      <span class="dica">Para instalar: abra o arquivo no celular e, se o Android pedir, permita "instalar apps desconhecidos" para o navegador. Desinstale a versão anterior antes de instalar esta (a 1.5.0 traz o Diagnóstico OBD pelo adaptador ELM327); sem desinstalar, o Android recusa a instalação. As telas novas chegam sozinhas, sem instalar de novo.</span>
     </section>
     <section class="card"><h2>App do mecânico · itens da lista</h2>
       <span class="dica">É o que o mecânico vê para marcar ao receber um veículo, separado por sistema. Cada mudança vale na hora; o app pega na próxima vez que for aberto.</span>

@@ -859,6 +859,28 @@ function Ajuda() {
  */
 const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
 
+// Mostrador do painel de dados ao vivo: arco de 270° com o número grande no meio, como num scanner.
+// O rótulo é SEMPRE escrito (quem lê está embaixo do carro, com pressa: ponteiro sozinho não informa).
+// R e as voltas do arco são fixos para o desenho não depender de medir a tela.
+const M_R = 34, M_VOLTA = 2 * Math.PI * M_R, M_ARCO = M_VOLTA * 0.75;
+function Mostrador({ l }) {
+  const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
+  const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
+  return html`<div class="mostrador" data-pid=${l.pid}>
+    <div class="mostrador-rot">${l.rotulo}</div>
+    ${tem ? html`<svg class="mostrador-arco" viewBox="0 0 86 86" aria-hidden="true">
+      <g transform="rotate(135 43 43)">
+        <circle cx="43" cy="43" r=${M_R} class="trilho" stroke-dasharray=${M_ARCO + " " + M_VOLTA} />
+        <circle cx="43" cy="43" r=${M_R} class="cheio" stroke-dasharray=${(M_ARCO * parte) + " " + M_VOLTA} />
+      </g>
+    </svg>` : null}
+    <div class=${"mostrador-num" + (tem ? " dentro" : "")}>
+      <b>${l.valor}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}
+    </div>
+    ${tem ? html`<div class="mostrador-pes"><span>${l.de}</span><span>${l.ate}</span></div>` : null}
+  </div>`;
+}
+
 function Obd() {
   const { dados } = useApp();
   const pl = usarPlaca();
@@ -869,13 +891,27 @@ function Obd() {
   const [res, setRes] = useState({});            // falhas, conf, testes, foto
   const temPlugin = obd.disponivel();
   // Dados ao vivo DE VERDADE: uma roda que fica girando e atualizando a tela a cada valor que chega.
-  // `rodando` é uma caixa (não estado) porque a roda precisa enxergar o valor NOVO a cada volta;
+  // `rodada` é uma caixa (não estado) porque a roda precisa enxergar o valor NOVO a cada volta;
   // estado dentro de função que já começou continuaria valendo o antigo e ela nunca pararia.
-  const rodando = useRef(false);
+  // Guarda o NÚMERO da rodada que pode girar (0 = parar tudo), não um sim/não: se o mecânico
+  // parar e ligar de novo antes de a leitura em andamento voltar (até 1,5 s), a roda velha
+  // continuaria girando junto com a nova, ou desligaria a nova ao terminar. Cada roda só
+  // obedece e só se desliga se o número ainda for o dela.
+  const rodada = useRef(0);
+  const contador = useRef(0);
+  // Painel de mostradores ou lista: o Danilo pediu as duas, escolhidas por filtro (19/11/2026).
+  // A escolha fica guardada: quem gosta de uma não quer trocar a cada carro.
+  const [jeito, setJeito] = useState(() => {
+    try { return window.localStorage.getItem("obd_jeito") === "lista" ? "lista" : "painel"; } catch (e) { return "painel"; }
+  });
+  const trocarJeito = j => {
+    setJeito(j);
+    try { window.localStorage.setItem("obd_jeito", j); } catch (e) { /* sem espaço: segue sem guardar */ }
+  };
   const [vivo, setVivo] = useState(null);       // { valores: {pid: leitura}, volta, rodando }
 
   // sair da tela fecha a conexão: o adaptador não aceita duas conversas e a bateria do carro agradece
-  useEffect(() => () => { rodando.current = false; if (obd.disponivel()) obd.desconectar(); }, []);
+  useEffect(() => () => { rodada.current = 0; if (obd.disponivel()) obd.desconectar(); }, []);
 
   async function rodar(aviso, fn) {
     setErro(""); setOcupado(aviso);
@@ -900,7 +936,7 @@ function Obd() {
   });
 
   const desligar = () => rodar("Desconectando…", async () => {
-    rodando.current = false;
+    rodada.current = 0;
     await obd.desconectar();
     setLig(null); setRes({}); setAparelhos(null); setVivo(null);
   });
@@ -909,21 +945,22 @@ function Obd() {
 
   const lerFalhas = () => rodar("Lendo as falhas…", async () => guardar("falhas", await obd.lerFalhas()));
   async function alternarVivo() {
-    if (rodando.current) { rodando.current = false; return; }       // tocar de novo para parar
+    if (rodada.current) { rodada.current = 0; return; }             // tocar de novo para parar
+    const minha = ++contador.current;
+    rodada.current = minha;
     setErro("");
     setVivo({ valores: {}, volta: 0, rodando: true });
-    rodando.current = true;
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.pid]: v }), volta, rodando: true })),
-        () => rodando.current,
+        (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.pid]: v }), volta, rodando: true })); },
+        () => rodada.current === minha,
       );
     } catch (e) {
-      setErro(obd.motivoDe(e));
+      if (rodada.current === minha) setErro(obd.motivoDe(e));
     } finally {
-      rodando.current = false;
-      setVivo(x => (x ? Object.assign({}, x, { rodando: false }) : x));
+      if (rodada.current === minha) rodada.current = 0;              // não desliga a roda de outra rodada
+      setVivo(x => (x && x.rodando && !rodada.current ? Object.assign({}, x, { rodando: false }) : x));
     }
   }
   const lerFoto = () => rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados)));
@@ -993,7 +1030,21 @@ function Obd() {
             : html`<span class="selo atencao">PARADO</span><span class="nota">valores da última leitura · toque em DADOS AO VIVO para voltar a girar</span>`}
         </div>
         ${!Object.keys(vivo.valores).length ? html`<div class="carregando">${vivo.rodando ? "Lendo o motor…" : "O módulo não respondeu nenhum dado ao vivo."}</div>` : null}
-        ${obd.PIDS.map(p => vivo.valores[p.pid]).filter(Boolean).map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}
+        ${(() => {
+          const lidos = obd.PIDS.map(p => vivo.valores[p.pid]).filter(Boolean);
+          if (!lidos.length) return null;
+          const comFaixa = lidos.filter(l => typeof l.de === "number");
+          const resto = lidos.filter(l => typeof l.de !== "number");
+          return html`
+            <div class="obd-filtro" role="group" aria-label="Como mostrar os dados ao vivo">
+              <button type="button" id="obd-jeito-painel" class=${jeito === "painel" ? "esc" : ""} aria-pressed=${jeito === "painel"} onClick=${() => trocarJeito("painel")}>PAINEL</button>
+              <button type="button" id="obd-jeito-lista" class=${jeito === "lista" ? "esc" : ""} aria-pressed=${jeito === "lista"} onClick=${() => trocarJeito("lista")}>LISTA</button>
+            </div>
+            ${jeito === "painel" ? html`
+              ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.pid} l=${l} />`)}</div>` : null}
+              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}</div>` : null}`
+            : html`<div class="painel-resto lista">${lidos.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}</div>`}`;
+        })()}
       </${Cartao}>` : null}
 
       ${res.conf ? html`<${Cartao} titulo="Chassi e monitores" id="obd-r-conf">

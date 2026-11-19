@@ -166,17 +166,17 @@ const arred = (n, casas) => Math.round(n * Math.pow(10, casas)) / Math.pow(10, c
  * elevador: lê uma vez e pronto, para a roda não gastar tempo com eles.
  */
 export const PIDS = [
-  { pid: 0x0c, rotulo: "Rotação", unidade: "rpm", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 4, casas: 0, vivo: true },
-  { pid: 0x05, rotulo: "Temperatura do motor", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true },
-  { pid: 0x04, rotulo: "Carga do motor", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true },
-  { pid: 0x11, rotulo: "Borboleta", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true },
-  { pid: 0x06, rotulo: "Ajuste curto de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true },
-  { pid: 0x07, rotulo: "Ajuste longo de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true },
-  { pid: 0x0e, rotulo: "Avanço de ignição", unidade: "°", bytes: 1, conta: d => (d[0] / 2) - 64, casas: 1, vivo: true },
-  { pid: 0x0f, rotulo: "Temperatura do ar admitido", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true },
-  { pid: 0x0b, rotulo: "Pressão no coletor", unidade: "kPa", bytes: 1, conta: d => d[0], casas: 0, vivo: true },
-  { pid: 0x10, rotulo: "Fluxo de ar (MAF)", unidade: "g/s", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 100, casas: 2, vivo: true },
-  { pid: 0x42, rotulo: "Tensão do módulo", unidade: "V", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 1000, casas: 1, vivo: true },
+  { pid: 0x0c, rotulo: "Rotação", unidade: "rpm", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 4, casas: 0, vivo: true, de: 0, ate: 8000 },
+  { pid: 0x05, rotulo: "Temperatura do motor", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 150 },
+  { pid: 0x04, rotulo: "Carga do motor", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100 },
+  { pid: 0x11, rotulo: "Borboleta", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100 },
+  { pid: 0x06, rotulo: "Ajuste curto de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true, de: -25, ate: 25 },
+  { pid: 0x07, rotulo: "Ajuste longo de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true, de: -25, ate: 25 },
+  { pid: 0x0e, rotulo: "Avanço de ignição", unidade: "°", bytes: 1, conta: d => (d[0] / 2) - 64, casas: 1, vivo: true, de: -30, ate: 60 },
+  { pid: 0x0f, rotulo: "Temperatura do ar admitido", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 100 },
+  { pid: 0x0b, rotulo: "Pressão no coletor", unidade: "kPa", bytes: 1, conta: d => d[0], casas: 0, vivo: true, de: 0, ate: 255 },
+  { pid: 0x10, rotulo: "Fluxo de ar (MAF)", unidade: "g/s", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 100, casas: 2, vivo: true, de: 0, ate: 200 },
+  { pid: 0x42, rotulo: "Tensão do módulo", unidade: "V", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 1000, casas: 1, vivo: true, de: 0, ate: 16 },
   { pid: 0x1f, rotulo: "Motor ligado há", unidade: "s", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: true },
   { pid: 0x21, rotulo: "Distância com a luz acesa", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false },
   { pid: 0x31, rotulo: "Distância desde o apagamento", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false },
@@ -194,7 +194,7 @@ export function valorPid(hex, pid, servico = 0x01) {
   let valor;
   try { valor = linha.conta(dados); } catch (e) { return null; }
   if (!isFinite(valor)) return null;
-  return { pid, rotulo: linha.rotulo, unidade: linha.unidade, valor: arred(valor, linha.casas) };
+  return { pid, rotulo: linha.rotulo, unidade: linha.unidade, valor: arred(valor, linha.casas), de: linha.de, ate: linha.ate };
 }
 
 /* ---- prontidão dos monitores (serviço 01, PID 01) ----

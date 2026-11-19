@@ -58,6 +58,11 @@ window.Capacitor.Plugins.DtcarObd = {
     var c = String(o.cmd || '').toUpperCase();
     window.__obd.cmds.push(c);
     if (!window.__obd.conectado) return Promise.reject(new Error('sem-conexao'));
+    if (c === '010C') {   // rotação sobe a cada leitura: é assim que o teste vê a tela se mexer
+      window.__obd.rpm = (window.__obd.rpm || 800) + 100;
+      var cru = window.__obd.rpm * 4;
+      return Promise.resolve({ resposta: '410C' + ('000' + cru.toString(16).toUpperCase()).slice(-4) + '\\r\\r>' });
+    }
     return Promise.resolve({ resposta: (R[c] === undefined ? 'NO DATA' : R[c]) + '\\r\\r>' });
   }
 };
@@ -516,12 +521,31 @@ try:
         pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=15000)
         t('DIVERGE' in pg.inner_text('#obd-r-conf'), 'chassi diferente do cadastro aparece como DIVERGE')
         # dados ao vivo, foto da falha e testes de bordo
-        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo', timeout=20000); tx = pg.inner_text('#obd-r-vivo')
-        t('1726' in tx and '83' in tx, 'dados ao vivo com rotação e temperatura: %s' % tx.replace('\n', ' ')[:100])
+        # DADOS AO VIVO DE VERDADE (pedido do Danilo em 19/11/2026): tem de ir mudando sozinho
+        def rpm_na_tela():
+            m = re.search(r'Rota\u00e7\u00e3o:\s*([\d.,]+)', pg.inner_text('#obd-r-vivo'))
+            return m.group(1) if m else None
+        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo', timeout=20000)
+        pg.wait_for_selector('#obd-r-vivo .selo.vivo', timeout=10000)
+        t('AO VIVO' in pg.inner_text('#obd-r-vivo'), 'mostra que está ao vivo')
+        a = rpm_na_tela(); pg.wait_for_timeout(1500); b = rpm_na_tela()
+        t(a and b and a != b, 'o valor muda SOZINHO, sem tocar em nada: %s -> %s' % (a, b))
+        t(re.search(r'\d+ volta', pg.inner_text('#obd-r-vivo')), 'mostra quantas voltas já deu')
+        t(not pg.is_enabled('#obd-falhas'), 'enquanto a roda gira, as outras leituras ficam travadas (o adaptador atende um por vez)')
+        tx = pg.inner_text('#obd-r-vivo')
+        t('14,1' in tx or '14.1' in tx, 'a tensão do módulo aparece na tela: %s' % tx.replace('\n', ' ')[:160])
+        t('83' in tx, 'a temperatura do motor aparece na tela')
         cmds = pg.evaluate("window.__obd.cmds")
         t('0120' in cmds and '0140' in cmds, 'anda nas faixas de PID ($20 e $40), senão os PIDs altos nunca sairiam: %s' % [c for c in cmds if c.startswith('01')][:8])
         t('0142' in cmds and '0131' in cmds, 'pede a tensão do módulo ($42) e a distância desde o apagamento ($31)')
-        t('14,1' in tx or '14.1' in tx, 'a tensão do módulo aparece na tela: %s' % tx.replace('\n', ' ')[:160])
+        t(cmds.count('0131') <= 2, 'o que não muda (distância desde o apagamento) é lido uma vez, não a cada volta: %d vezes' % cmds.count('0131'))
+        t(cmds.count('010C') > 3, 'o que muda é relido a cada volta: rotação pedida %d vezes' % cmds.count('010C'))
+        # tocar de novo para a roda
+        pg.click('#obd-vivo'); pg.wait_for_timeout(1000)
+        t('PARADO' in pg.inner_text('#obd-r-vivo'), 'tocar de novo para a roda')
+        parado = rpm_na_tela(); pg.wait_for_timeout(1200)
+        t(rpm_na_tela() == parado, 'parado fica parado: o valor não muda mais')
+        t(pg.is_enabled('#obd-falhas'), 'com a roda parada as outras leituras voltam')
         pg.click('#obd-foto'); pg.wait_for_selector('#obd-r-foto', timeout=20000)
         t('instante em que a falha gravou' in pg.inner_text('#obd-r-foto'), 'foto do momento da falha explica para que serve')
         pg.click('#obd-testes'); pg.wait_for_selector('#obd-r-testes', timeout=25000); tx = pg.inner_text('#obd-r-testes')

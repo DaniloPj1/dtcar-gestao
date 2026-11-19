@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -127,9 +127,69 @@ chk("suportados: nada disponível = lista vazia", suportados("4100" + "00000000"
 }
 chk("resposta de testes fora do padrão devolve lista vazia", testesDe("410C1AF8").length === 0);
 
+/* ---------------- dois módulos respondendo: o defeito mais grave ----------------
+ * Num carro com motor e câmbio no barramento o ELM327 imprime uma linha por módulo. Colar tudo num
+ * hex só fazia o começo da resposta do segundo módulo virar dado do primeiro, e saíam CÓDIGOS QUE
+ * NÃO EXISTEM NO CARRO. Estes testes fecham essa porta.
+ */
+{
+  const r = juntarLinhas("4300\r430201710300\r>");
+  chk("duas linhas = duas respostas separadas, não um hex colado", r.respostas.length === 2 && r.respostas[0] === "4300" && r.respostas[1] === "430201710300", r);
+  const { codigos, modulos } = codigosDeTodas(r.respostas, 0x03);
+  chk("dois módulos: junta os códigos de verdade dos dois", codigos.join() === "P0171,P0300" && modulos === 2, { codigos, modulos });
+  chk("NÃO inventa P0043/P0201/C3103 (o que o hex colado produzia)", !codigos.includes("P0043") && !codigos.includes("P0201") && !codigos.includes("C3103"), codigos);
+}
+{
+  // o hex colado, se alguém voltar a juntar as linhas, não pode mais ser aceito: o serviço tem de
+  // estar no COMEÇO da resposta, nunca encontrado no meio do texto
+  chk("dado só é lido quando o serviço está no começo da resposta", dadosDa("4300430201710300", 0x03).length === 7 && dadosDa("FF4300", 0x03) === null);
+  chk("resposta de outro módulo não é 'aproveitada' por quem procura outro serviço", primeiraDe(["4300", "410C1AF8"], 0x01) === "410C1AF8" && primeiraDe(["4300"], 0x01) === "");
+}
+{
+  const r = juntarLinhas("430201710300\r>");
+  chk("um módulo só continua com uma resposta", r.respostas.length === 1 && r.hex === "430201710300");
+  chk("codigosDeTodas com um módulo", codigosDeTodas(r.respostas, 0x03).modulos === 1);
+}
+{
+  // resposta longa de um módulo (pedaços numerados) NÃO pode ser confundida com vários módulos
+  const r = juntarLinhas("014\r0: 49 02 01 39 42 57\r1: 5A 5A 5A 33 37 37 56\r2: 54 30 30 34 32 35 31\r>");
+  chk("resposta longa continua sendo UMA resposta", r.respostas.length === 1, r.respostas);
+  chk("chassi sai certo da resposta longa", vinDe(r.hex) === "9BWZZZ377VT004251");
+}
+chk("chassi com enchimento 00 nos quadros é lido", vinDe("490201" + "00".repeat(3) + "3942575A5A5A3337375654303034323531") === "9BWZZZ377VT004251");
+
+/* ---------------- serviço 06 com valor negativo ----------------
+ * Na tabela de escalas do J1979 os identificadores de $80 em diante são COM SINAL. Lendo tudo como
+ * sem sinal, um valor negativo virava ~65000 e o "passou" INVERTIA — veredito errado é pior que
+ * número cru.
+ */
+{
+  // valor -100 (0xFF9C), limites -200 (0xFF38) a +200 (0x00C8), escala $80 (com sinal): passou
+  const t = testesDe("46" + "2101" + "80" + "FF9C" + "FF38" + "00C8");
+  chk("escala com sinal: valor negativo é negativo", t[0].valor === -100 && t[0].minimo === -200, t[0]);
+  chk("escala com sinal: veredito certo (passou)", t[0].passou === true && t[0].comSinal === true, t[0]);
+}
+{
+  // mesmo registro lido como sem sinal daria 65436, acima do limite: o veredito mudaria
+  const t = testesDe("46" + "2101" + "01" + "FF9C" + "FF38" + "00C8");
+  chk("escala sem sinal continua sem sinal", t[0].valor === 65436 && t[0].comSinal === false, t[0]);
+}
+
+/* ---------------- faixas de PID ----------------
+ * Só o pedido 0100 cobre os PIDs $01 a $20. Sem andar nas faixas, a tensão do módulo ($42) e as
+ * distâncias desde o apagamento ($21 e $31) NUNCA apareceriam, mesmo o carro tendo.
+ */
+chk("faixa $20 lê os PIDs de $21 a $40", suportados("4120" + "80018001", 0x01, 0x20).join() === "33,48,49,64");
+chk("faixa $40 lê os PIDs de $41 a $60", suportados("4140" + "40000000", 0x01, 0x40).join() === "66");
+chk("os PIDs altos da lista existem nas faixas certas", [0x21, 0x30, 0x31].every(p => p > 0x20 && p <= 0x40) && 0x42 > 0x40);
+chk("a última posição de cada faixa é o aviso da faixa seguinte", suportados("4100" + "00000001", 0x01, 0x00).join() === "32" && suportados("4120" + "00000001", 0x01, 0x20).join() === "64");
+
+
 /* ---------------- frases de erro ---------------- */
 chk("motivo em português para cada recusa do plugin", ["sem-permissao", "bluetooth-desligado", "nao-conectou", "sem-conexao"].every(e => motivoDe(new Error(e)).length > 10 && !motivoDe(new Error(e)).includes("-")));
 chk("motivo desconhecido não fica em branco", motivoDe(new Error("coisa-nova")).length > 10);
+chk("comando recusado pelo nativo tem frase própria", motivoDe(new Error("comando-recusado")).includes("não escreve no carro"));
+chk("demora tem frase própria", motivoDe(new Error("demorou")).includes("tempo"));
 
 console.log(falhas.length ? ok.length + " verificações passaram; " + falhas.length + " FALHARAM:\n  ✗ " + falhas.join("\n  ✗ ") : ok.length + " verificações passaram.");
 process.exit(falhas.length ? 1 : 0);

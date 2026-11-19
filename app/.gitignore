@@ -1,4 +1,4 @@
 # gerados na montagem do APK (não vão para o repositório)
 www/
 node_modules/
-android/
+/android/

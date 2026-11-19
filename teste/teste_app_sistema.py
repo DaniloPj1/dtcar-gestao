@@ -36,8 +36,8 @@ window.Capacitor.Plugins = window.Capacitor.Plugins || {};
 var R = {
   'ATZ': 'ELM327 v1.5', 'ATE0': 'OK', 'ATL0': 'OK', 'ATS0': 'OK', 'ATH0': 'OK', 'ATSP0': 'OK',
   'ATDP': 'ISO 15765-4 (CAN 11/500)',
-  '0100': '4100BE3EB811',
-  '03': '430201710300', '07': '47010130', '0A': '4A00',
+  '0100': '4100FFFFFFFF', '0120': '412080018001', '0140': '414040000000',
+  '03': '4300\\r430201710300', '07': '47010130', '0A': '4A00',   // duas linhas: motor e câmbio respondendo
   '0101': '410183076121',
   '0902': '490201__VIN__',
   '010C': '410C1AF8', '0105': '41057B', '0104': '41043C', '0111': '41111A', '0106': '410697',
@@ -501,6 +501,8 @@ try:
         t('P0171' in tx and 'P0300' in tx and 'P0130' in tx, 'lê as falhas das três situações: %s' % tx.replace('\n', ' ')[:120])
         t('ATUAL' in tx and 'PENDENTE' in tx, 'mostra a situação de cada falha escrita, não só a cor')
         t(pg.locator('#obd-r-falhas .selo.ruim').count() == 2, 'as duas confirmadas vêm com o selo vermelho')
+        t('P0043' not in tx and 'C3103' not in tx and 'P0201' not in tx, 'com dois módulos respondendo NÃO inventa código: %s' % tx.replace('\n', ' ')[:140])
+        t('Mais de um módulo' in tx, 'avisa que mais de um módulo respondeu')
         # chassi e monitores
         pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=15000); tx = pg.inner_text('#obd-r-conf')
         t('9BWZZZ377VT004251' in tx and 'CONFERE' in tx, 'confronta o chassi do módulo com o do cadastro: %s' % tx.replace('\n', ' ')[:120])
@@ -516,13 +518,19 @@ try:
         # dados ao vivo, foto da falha e testes de bordo
         pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo', timeout=20000); tx = pg.inner_text('#obd-r-vivo')
         t('1726' in tx and '83' in tx, 'dados ao vivo com rotação e temperatura: %s' % tx.replace('\n', ' ')[:100])
+        cmds = pg.evaluate("window.__obd.cmds")
+        t('0120' in cmds and '0140' in cmds, 'anda nas faixas de PID ($20 e $40), senão os PIDs altos nunca sairiam: %s' % [c for c in cmds if c.startswith('01')][:8])
+        t('0142' in cmds and '0131' in cmds, 'pede a tensão do módulo ($42) e a distância desde o apagamento ($31)')
+        t('14,1' in tx or '14.1' in tx, 'a tensão do módulo aparece na tela: %s' % tx.replace('\n', ' ')[:160])
         pg.click('#obd-foto'); pg.wait_for_selector('#obd-r-foto', timeout=20000)
         t('instante em que a falha gravou' in pg.inner_text('#obd-r-foto'), 'foto do momento da falha explica para que serve')
         pg.click('#obd-testes'); pg.wait_for_selector('#obd-r-testes', timeout=25000); tx = pg.inner_text('#obd-r-testes')
         t('Catalisador' in tx and 'PASSOU' in tx, 'testes de bordo chegam até o catalisador (faixa $21): %s' % tx.replace('\n', ' ')[:140])
         t('limite' in tx, 'mostra a margem que sobra até o limite')
         # o que esta etapa NÃO faz
-        t('04' not in pg.evaluate("window.__obd.cmds"), 'nenhum comando de apagar falha (04) é enviado ao carro')
+        cmds = pg.evaluate("window.__obd.cmds")
+        t('04' not in cmds and not [c for c in cmds if c.startswith('04')], 'nenhum comando de apagar falha (04) é enviado ao carro')
+        t(not [c for c in cmds if c.startswith('2E') or c.startswith('34') or c.startswith('27')], 'nenhum comando de escrita no carro é enviado')
         t(not f.escritas(), 'leitura OBD não grava nada no banco: %s' % f.escritas())
         t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
@@ -543,7 +551,14 @@ try:
         t(pk['dependencies'].get('dtcar-obd') == 'file:plugins/obd', 'plugin local do OBD declarado como dependência do APK')
         pl = json.load(open(os.path.join(raiz, 'app', 'plugins', 'obd', 'package.json'))); t(pl['capacitor']['android']['src'] == 'android', 'o plugin do OBD se apresenta ao Capacitor como módulo Android')
         mf = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'AndroidManifest.xml')).read()
-        t('BLUETOOTH_CONNECT' in mf and 'BLUETOOTH_SCAN' in mf and 'neverForLocation' in mf, 'permissões de Bluetooth no manifesto do plugin, sem exigir localização')
+        pedidas = re.findall(r'<uses-permission[^>]*android:name="android\.permission\.([A-Z_]+)"', mf)
+        t('BLUETOOTH_CONNECT' in pedidas, 'permissão de Bluetooth no manifesto do plugin: %s' % pedidas)
+        t('BLUETOOTH_SCAN' not in pedidas, 'NÃO pede BLUETOOTH_SCAN: o app só usa aparelho já pareado, e pedir isso escreveria "posição de aparelhos próximos" no aviso do Android: %s' % pedidas)
+        t(not [x for x in pedidas if 'LOCATION' in x], 'nenhuma permissão de localização: %s' % pedidas)
+        t(sorted(pedidas) == ['BLUETOOTH', 'BLUETOOTH_ADMIN', 'BLUETOOTH_CONNECT'], 'só as permissões de Bluetooth necessárias: %s' % sorted(pedidas))
+        jv = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'java', 'br', 'com', 'dtcarcentroautomotivo', 'obd', 'ObdPlugin.java')).read()
+        t('SERVICOS_LEITURA' in jv and '"04"' not in jv, 'a lista branca do nativo não tem o serviço 04 (apagar falha)')
+        t('comando-recusado' in jv, 'o nativo recusa comando fora da lista branca')
         br.close()
     print('OK: %d conferências' % ok)
 finally:

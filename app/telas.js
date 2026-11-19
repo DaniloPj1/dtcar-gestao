@@ -903,7 +903,7 @@ function Obd() {
 
   const lerFalhas = () => rodar("Lendo as falhas…", async () => guardar("falhas", await obd.lerFalhas()));
   const lerVivo = () => rodar("Lendo os dados ao vivo…", async () => guardar("vivo", await obd.lerAoVivo(lig.pidsSuportados)));
-  const lerFoto = () => rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto()));
+  const lerFoto = () => rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados)));
   const lerTestes = () => rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes()));
   const lerConf = () => rodar("Lendo chassi e monitores…", async () => {
     const monitores = await obd.lerMonitores();
@@ -959,6 +959,7 @@ function Obd() {
         ${res.falhas.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc">
           <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}
         ${res.falhas.falhas.length ? html`<div class="nota">O código é o que o módulo gravou; a descrição de código de montadora (P1 em diante) não é pública. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
+        ${res.falhas.variosModulos ? html`<div class="nota">Mais de um módulo do carro respondeu: a lista junta os códigos de todos. Sem o cabeçalho ligado não dá para dizer qual código é de qual módulo.</div>` : null}
         ${res.falhas.erros.length ? html`<div class="nota">Não respondeu: ${res.falhas.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
       </${Cartao}>` : null}
 

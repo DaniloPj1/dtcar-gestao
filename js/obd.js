@@ -31,29 +31,48 @@ const RECUSAS = [
   ["?", "O adaptador não entendeu o comando."],
 ];
 
-/** Texto cru do adaptador → { hex, erro }. Junta as linhas de resposta longa ("0:", "1:"…) e tira o enfeite. */
+const soHex = t => String(t).replace(/[^0-9A-Fa-f]/g, "").toUpperCase();
+const parear = h => (h.length % 2 ? h.slice(0, -1) : h);   // meio byte no fim: descarta
+
+/**
+ * Texto cru do adaptador → { respostas: [hex, …], hex, erro }.
+ *
+ * ATENÇÃO, a parte que mais importa: num carro com mais de um módulo no barramento (motor e
+ * câmbio, comum em VW e GM), o ELM327 imprime UMA LINHA POR MÓDULO. Colar tudo num hex só faz o
+ * começo da resposta do segundo módulo ser lido como dado do primeiro, e aí saem **códigos de
+ * falha que não existem no carro**. Num laudo de oficina isso é o pior defeito possível.
+ * Por isso cada resposta fica separada em `respostas`. Só os pedaços numerados ("0:", "1:"…), que
+ * são uma resposta longa de um mesmo módulo, são juntados.
+ * `hex` continua sendo a primeira resposta, que é o caso normal (um módulo só).
+ */
 export function juntarLinhas(texto) {
   const bruto = String(texto == null ? "" : texto);
   const linhas = bruto.split(/[\r\n]+/).map(l => l.trim()).filter(Boolean)
     .filter(l => !/^SEARCHING/i.test(l) && l !== ">");
-  if (!linhas.length) return { hex: "", erro: "O adaptador não respondeu." };
+  if (!linhas.length) return { respostas: [], hex: "", erro: "O adaptador não respondeu." };
   const juntas = linhas.join(" ").toUpperCase();
   for (const [marca, motivo] of RECUSAS) {
     // "?" só vale quando é a resposta inteira; dentro de outra frase não quer dizer nada
-    if (marca === "?" ? linhas.some(l => l === "?") : juntas.includes(marca)) return { hex: "", erro: motivo };
+    if (marca === "?" ? linhas.some(l => l === "?") : juntas.includes(marca)) return { respostas: [], hex: "", erro: motivo };
   }
-  const comPrefixo = linhas.some(l => /^[0-9A-F]:/i.test(l));
-  let hex = "";
+  const blocos = [];
+  let longa = null;                                        // resposta longa em construção
   for (const l of linhas) {
-    let p = l;
-    if (/^[0-9A-F]:/i.test(p)) p = p.slice(2);                       // pedaço de resposta longa
-    else if (comPrefixo && /^[0-9A-F]{3}$/i.test(p.replace(/\s/g, ""))) continue; // tamanho total, não é dado
-    hex += p.replace(/[^0-9A-Fa-f]/g, "");
+    if (/^[0-9A-F]:/i.test(l)) {                           // pedaço numerado: mesma resposta
+      if (!longa) { longa = { hex: "" }; blocos.push(longa); }
+      longa.hex += soHex(l.slice(2));
+      continue;
+    }
+    if (/^[0-9A-F]{3}$/i.test(soHex(l))) {                 // tamanho total: começa uma resposta longa
+      longa = { hex: "" }; blocos.push(longa);
+      continue;
+    }
+    blocos.push({ hex: soHex(l) });                        // resposta de um quadro: é dela mesma
+    longa = null;
   }
-  hex = hex.toUpperCase();
-  if (hex.length % 2) hex = hex.slice(0, -1);                         // meio byte no fim: descarta
-  if (!hex) return { hex: "", erro: "A resposta veio sem dado." };
-  return { hex, erro: "" };
+  const respostas = blocos.map(b => parear(b.hex)).filter(Boolean);
+  if (!respostas.length) return { respostas: [], hex: "", erro: "A resposta veio sem dado." };
+  return { respostas, hex: respostas[0], erro: "" };
 }
 
 /** hex em texto → lista de números */
@@ -64,14 +83,15 @@ export function bytesDe(hex) {
 }
 
 /**
- * Tira a "casca" da resposta: confere o serviço que voltou e devolve só os dados.
+ * Tira a "casca" de UMA resposta e devolve só os dados.
  * No OBD-II a resposta do serviço 01 volta como 41, a do 03 como 43, e assim por diante (+0x40).
+ * A resposta tem de COMEÇAR com esse byte: procurar no meio do texto é o que fazia dado de um
+ * módulo ser lido como se fosse de outro.
  */
 export function dadosDa(hex, servico) {
   const esperado = (servico + 0x40).toString(16).toUpperCase().padStart(2, "0");
-  const i = hex.indexOf(esperado);
-  if (i < 0 || i % 2) return null;
-  return bytesDe(hex.slice(i + 2));
+  if (!hex.startsWith(esperado)) return null;
+  return bytesDe(hex.slice(2));
 }
 
 /** Dois bytes → código de falha no jeito que a oficina lê (P0171, U0100…). */
@@ -83,7 +103,7 @@ export function dtcDe(a, b) {
 }
 
 /**
- * Resposta dos serviços 03 (confirmadas), 07 (pendentes) e 0A (permanentes) → lista de códigos.
+ * UMA resposta dos serviços 03 (confirmadas), 07 (pendentes) ou 0A (permanentes) → lista de códigos.
  * Alguns carros mandam a quantidade antes dos códigos e outros não; os dois casos são aceitos.
  */
 export function codigosDa(hex, servico) {
@@ -101,12 +121,35 @@ export function codigosDa(hex, servico) {
   return codigos;
 }
 
+/**
+ * TODAS as respostas de um pedido de falha → { codigos, modulos }.
+ * Com mais de um módulo respondendo, os códigos de cada um entram na lista (um scanner faz o
+ * mesmo). Resposta que não começa com o serviço certo é descartada, nunca "aproveitada".
+ */
+export function codigosDeTodas(respostas, servico) {
+  const codigos = [];
+  let modulos = 0;
+  for (const hex of respostas || []) {
+    const c = codigosDa(hex, servico);
+    if (!c) continue;
+    modulos++;
+    for (const x of c) if (!codigos.includes(x)) codigos.push(x);
+  }
+  return { codigos, modulos };
+}
+
+/** A primeira resposta que serve para o serviço pedido (o resto é de outro módulo). */
+export function primeiraDe(respostas, servico) {
+  for (const hex of respostas || []) if (dadosDa(hex, servico)) return hex;
+  return "";
+}
+
 /** Serviço 09 PID 02 → chassi (VIN). */
 export function vinDe(hex) {
   const d = dadosDa(hex, 0x09);
   if (!d || d.length < 2 || d[0] !== 0x02) return "";
-  let dados = d.slice(1);
-  if (dados.length === 18 || dados.length > 17) dados = dados.slice(dados.length - 17); // tira a contagem da frente
+  let dados = d.slice(1).filter(b => b !== 0x00);                     // tira o enchimento dos quadros
+  if (dados.length > 17) dados = dados.slice(dados.length - 17);      // tira a contagem da frente
   const txt = dados.map(b => String.fromCharCode(b)).join("");
   const limpo = txt.replace(/[^A-HJ-NPR-Z0-9]/gi, "").toUpperCase();
   return limpo.length === 17 ? limpo : "";
@@ -190,13 +233,19 @@ export function monitoresDe(hex) {
 
 /* ---- resultados dos testes de bordo (serviço 06) ----
  * Mostra o catalisador e a sonda PIORANDO antes de dar código: cada teste vem com o valor medido e
- * o limite, então dá para ver a margem que sobra. O "passou/não passou" sai da comparação do valor
- * com o limite, que é padronizada. A escala para mostrar em unidade de verdade NÃO é: a tabela
- * abaixo tem só o que é certo, e o que não está nela aparece como número cru, sem unidade inventada.
+ * o limite, então dá para ver a margem que sobra. A escala para mostrar em unidade de verdade só
+ * existe aqui onde está conferida; o que não está aparece como número cru, sem unidade inventada.
  * Dá para crescer conferindo contra o Raven, aos poucos.
  */
 const ESCALAS = {
   0x01: [1, ""], 0x07: [0.25, "rpm"], 0x09: [1, "km/h"], 0x0b: [0.001, "V"], 0x12: [1, "s"],
+};
+
+/** Na tabela de escalas do J1979 os identificadores de $80 em diante são valores COM SINAL. */
+const comSinal = uas => uas >= 0x80;
+const inteiro16 = (alto, baixo, sinal) => {
+  const v = (alto << 8) | baixo;
+  return sinal && v > 0x7fff ? v - 0x10000 : v;
 };
 
 /** Nomes que o padrão define. O resto fica como "Monitor $XX": melhor sem nome que com nome errado. */
@@ -215,9 +264,10 @@ export function testesDe(hex) {
   for (let i = 0; i + 8 < d.length; i += 9) {
     const mid = d[i], tid = d[i + 1], uas = d[i + 2];
     if (!mid) continue;
-    const cru = (d[i + 3] << 8) | d[i + 4];
-    const minimo = (d[i + 5] << 8) | d[i + 6];
-    const maximo = (d[i + 7] << 8) | d[i + 8];
+    const sinal = comSinal(uas);
+    const cru = inteiro16(d[i + 3], d[i + 4], sinal);
+    const minimo = inteiro16(d[i + 5], d[i + 6], sinal);
+    const maximo = inteiro16(d[i + 7], d[i + 8], sinal);
     const escala = ESCALAS[uas];
     const conv = v => escala ? arred(v * escala[0], 3) : v;
     testes.push({
@@ -225,6 +275,7 @@ export function testesDe(hex) {
       valor: conv(cru), minimo: conv(minimo), maximo: conv(maximo),
       unidade: escala ? escala[1] : "",
       escalaConhecida: !!escala,
+      comSinal: sinal,
       passou: cru >= minimo && cru <= maximo,
     });
   }
@@ -270,6 +321,9 @@ const MOTIVOS = {
   "sem-conexao": "A conexão com o adaptador caiu. Conecte de novo.",
   "conexao-caiu": "A conexão com o adaptador caiu no meio da leitura. Conecte de novo.",
   "sem-comando": "Comando vazio.",
+  "comando-recusado": "Este comando não é permitido nesta etapa (a leitura não escreve no carro).",
+  "falhou": "O adaptador respondeu de um jeito que o app não esperava.",
+  "demorou": "O adaptador não respondeu no tempo. Confira o encaixe na tomada e tente de novo.",
 };
 export const motivoDe = e => MOTIVOS[e && (e.message || e.code || e)] || "Não deu para falar com o adaptador.";
 
@@ -286,10 +340,19 @@ export const situacao = () => P().situacao();
 export const conectar = endereco => P().conectar({ endereco });
 export const desconectar = () => P().desconectar().catch(() => ({ conectado: false }));
 
-/** Manda um comando e devolve o texto cru. */
-export const comando = (cmd, esperaMs) => P().comando({ cmd, esperaMs: esperaMs || 5000 }).then(r => (r && r.resposta) || "");
+/**
+ * Manda um comando e devolve o texto cru.
+ * O tempo-limite daqui é a rede de segurança: se a parte nativa parar de responder por qualquer
+ * motivo, a tela mostra o aviso em vez de ficar em "Lendo…" para sempre.
+ */
+export function comando(cmd, esperaMs) {
+  const espera = esperaMs || 5000;
+  const pedido = P().comando({ cmd, esperaMs: espera }).then(r => (r && r.resposta) || "");
+  const relogio = new Promise((_, falhar) => setTimeout(() => falhar(new Error("demorou")), espera + 4000));
+  return Promise.race([pedido, relogio]);
+}
 
-/** Manda um comando de OBD e já devolve { hex, erro }. */
+/** Manda um comando de OBD e já devolve { respostas, hex, erro }. */
 export const pedir = (cmd, esperaMs) => comando(cmd, esperaMs).then(juntarLinhas);
 
 /* ---- preparar o adaptador ----
@@ -298,6 +361,30 @@ export const pedir = (cmd, esperaMs) => comando(cmd, esperaMs).then(juntarLinhas
  */
 const INICIO = [["ATZ", 3000], ["ATE0", 2000], ["ATL0", 2000], ["ATS0", 2000], ["ATH0", 2000], ["ATSP0", 2000]];
 
+/** Faixas de PID e de MID: a última posição de cada faixa avisa que existe a faixa seguinte. */
+const FAIXAS_PID = [0x00, 0x20, 0x40, 0x60];
+const FAIXAS_MID = [0x00, 0x20, 0x40, 0x60];
+
+/**
+ * Anda nas faixas de um serviço e junta tudo o que o carro informa que tem.
+ * Sem andar nas faixas, o serviço 01 só devolveria os PIDs de $01 a $20 — e aí a tensão do módulo
+ * ($42) e as distâncias desde o apagamento ($21 e $31) nunca apareceriam na tela.
+ */
+async function suportadosEmFaixas(servico, faixas) {
+  const todos = [];
+  const sv = servico.toString(16).toUpperCase().padStart(2, "0");
+  for (const base of faixas) {
+    const r = await pedir(sv + base.toString(16).toUpperCase().padStart(2, "0"), 6000);
+    if (r.erro) break;
+    const hex = primeiraDe(r.respostas, servico);
+    if (!hex) break;
+    const achados = suportados(hex, servico, base);
+    for (const x of achados) if (!todos.includes(x)) todos.push(x);
+    if (!achados.includes(base + 0x20)) break;                        // sem aviso de faixa seguinte: para aqui
+  }
+  return todos;
+}
+
 /** Prepara o adaptador e descobre o protocolo. Devolve { protocolo, pidsSuportados }. */
 export async function iniciar() {
   for (const [cmd, espera] of INICIO) await comando(cmd, espera);
@@ -305,24 +392,29 @@ export async function iniciar() {
   const primeiro = await pedir("0100", 12000);
   if (primeiro.erro) throw new Error(primeiro.erro);
   const protocolo = (await comando("ATDP", 3000)).replace(/[\r\n>]/g, "").trim();
-  return { protocolo, pidsSuportados: suportados(primeiro.hex, 0x01, 0x00) };
+  const base = suportados(primeiraDe(primeiro.respostas, 0x01), 0x01, 0x00);
+  const resto = base.includes(0x20) ? await suportadosEmFaixas(0x01, FAIXAS_PID.slice(1)) : [];
+  const pidsSuportados = base.concat(resto.filter(p => !base.includes(p)));
+  return { protocolo, pidsSuportados };
 }
 
 /* ---- leituras de alto nível ---- */
 
 /** Códigos de falha, com a situação de cada um. */
 export async function lerFalhas() {
-  const pedidos = [["03", "atual"], ["07", "pendente"], ["0A", "permanente"]];
+  const pedidos = [["03", 0x03, "atual"], ["07", 0x07, "pendente"], ["0A", 0x0a, "permanente"]];
   const falhas = [];
   const erros = [];
-  for (const [cmd, situacao] of pedidos) {
+  let variosModulos = false;
+  for (const [cmd, servico, situacao] of pedidos) {
     const r = await pedir(cmd, 8000);
     if (r.erro) { erros.push({ situacao, erro: r.erro }); continue; }
-    const codigos = codigosDa(r.hex, parseInt(cmd, 16));
-    if (!codigos) { erros.push({ situacao, erro: "Resposta fora do padrão." }); continue; }
+    const { codigos, modulos } = codigosDeTodas(r.respostas, servico);
+    if (!modulos) { erros.push({ situacao, erro: "Resposta fora do padrão." }); continue; }
+    if (modulos > 1) variosModulos = true;
     for (const c of codigos) if (!falhas.some(f => f.codigo === c && f.situacao === situacao)) falhas.push({ codigo: c, situacao });
   }
-  return { falhas, erros };
+  return { falhas, erros, variosModulos };
 }
 
 /** Dados ao vivo: só os PIDs que o carro disse que tem. */
@@ -332,19 +424,24 @@ export async function lerAoVivo(pidsSuportados) {
   for (const pid of quais) {
     const r = await pedir("01" + pid.toString(16).toUpperCase().padStart(2, "0"), 4000);
     if (r.erro) continue;
-    const v = valorPid(r.hex, pid, 0x01);
+    const v = valorPid(primeiraDe(r.respostas, 0x01), pid, 0x01);
     if (v) linhas.push(v);
   }
   return linhas;
 }
 
-/** A foto do momento em que a falha gravou (serviço 02): diz se deu com o motor frio, em carga, etc. */
-export async function lerFoto() {
+/**
+ * A foto do momento em que a falha gravou (serviço 02): diz se deu com o motor frio, em carga, etc.
+ * Só pede os PIDs que o carro informou ter, senão são 15 pedidos de 4 s num carro que responde
+ * NO DATA à maioria — perto de um minuto de espera para nada.
+ */
+export async function lerFoto(pidsSuportados) {
+  const quais = PIDS.map(p => p.pid).filter(p => !pidsSuportados || !pidsSuportados.length || pidsSuportados.includes(p));
   const linhas = [];
-  for (const { pid } of PIDS) {
+  for (const pid of quais) {
     const r = await pedir("02" + pid.toString(16).toUpperCase().padStart(2, "0") + "00", 4000);
     if (r.erro) continue;
-    const v = valorPid(r.hex, pid, 0x02);
+    const v = valorPid(primeiraDe(r.respostas, 0x02), pid, 0x02);
     if (v) linhas.push(v);
   }
   return linhas;
@@ -354,7 +451,7 @@ export async function lerFoto() {
 export async function lerMonitores() {
   const r = await pedir("0101", 5000);
   if (r.erro) throw new Error(r.erro);
-  const m = monitoresDe(r.hex);
+  const m = monitoresDe(primeiraDe(r.respostas, 0x01));
   if (!m) throw new Error("Resposta fora do padrão.");
   return m;
 }
@@ -363,36 +460,21 @@ export async function lerMonitores() {
 export async function lerChassi() {
   const r = await pedir("0902", 8000);
   if (r.erro) return "";
-  return vinDe(r.hex);
+  return vinDe(primeiraDe(r.respostas, 0x09));
 }
 
-/**
- * Resultados dos testes de bordo (serviço 06), MID por MID.
- * Os MIDs vêm em faixas: o pedido 0600 diz quais existem de $01 a $20, o 0620 de $21 a $40, e assim
- * por diante. Sem andar nas faixas o catalisador (de $21 em diante) nunca apareceria.
- */
-const FAIXAS_MID = [0x00, 0x20, 0x40, 0x60];
-
+/** Resultados dos testes de bordo (serviço 06), MID por MID. */
 export async function lerTestes() {
-  const mids = [];
-  let erroPrimeira = "";
-  for (const base of FAIXAS_MID) {
-    const r = await pedir("06" + base.toString(16).toUpperCase().padStart(2, "0"), 6000);
-    if (r.erro) {
-      if (base === 0x00) erroPrimeira = r.erro;
-      break;                                                          // faixa que não responde encerra a busca
-    }
-    const achados = suportados(r.hex, 0x06, base);
-    for (const m of achados) if (!mids.includes(m)) mids.push(m);
-    // a última posição de cada faixa é o aviso de que existe a faixa seguinte; sem ela, para aqui
-    if (!achados.includes(base + 0x20)) break;
-  }
-  if (erroPrimeira) return { testes: [], erro: erroPrimeira };
+  const base = await pedir("0600", 6000);
+  if (base.erro) return { testes: [], erro: base.erro };
+  const primeira = suportados(primeiraDe(base.respostas, 0x06), 0x06, 0x00);
+  const resto = primeira.includes(0x20) ? await suportadosEmFaixas(0x06, FAIXAS_MID.slice(1)) : [];
+  const mids = primeira.concat(resto.filter(m => !primeira.includes(m)));
   const testes = [];
-  for (const mid of mids.filter(m => !FAIXAS_MID.includes(m)).slice(0, 32)) {   // trava: nunca varre tudo
+  for (const mid of mids.filter(m => m % 0x20 !== 0).slice(0, 32)) {  // trava: nunca varre tudo
     const r = await pedir("06" + mid.toString(16).toUpperCase().padStart(2, "0"), 5000);
     if (r.erro) continue;
-    for (const t of testesDe(r.hex)) testes.push(t);
+    for (const t of testesDe(primeiraDe(r.respostas, 0x06))) testes.push(t);
   }
   return { testes, erro: "" };
 }

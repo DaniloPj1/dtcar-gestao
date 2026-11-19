@@ -717,12 +717,41 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Lista de dados ao vivo redesenhada (19/11/2026):** a visão LISTA deixou de ser "rótulo: valor" e virou `LinhaViva` — separada por grupo, com o
   valor grande à direita e uma barra fina mostrando a posição na escala (a mesma `de`/`ate` do mostrador; continua sem dizer se é bom ou ruim).
 - **Serviço 06, honestidade e sinal:** na tabela de escalas do J1979 os identificadores de **$80 em diante são valores COM SINAL** — lendo tudo como sem sinal, um valor negativo virava ~65000 e o passou/não passou **invertia**. `comSinal`/`inteiro16` tratam isso. A escala para mostrar em unidade de verdade só existe onde está conferida (`ESCALAS`); o resto aparece como número cru, sem unidade inventada, e pode crescer conferindo contra o Raven. Mesma regra nos nomes: `nomeMid` só nomeia sonda ($01–$08) e catalisador ($21–$24).
+- **APAGAR A FALHA, COM REGISTRO (19/11/2026, `supabase/v62.sql`, APK 1.5.1) — etapa 2.** Decisão do Danilo: *"deixar essas
+  opções reservadas para o adm e no painel do sistema o adm permite ou não o acesso por mecânico"*.
+  **Quem pode:** o administrador sempre; qualquer outra pessoa só com a chave "Pode apagar falha no OBD" ligada nela em
+  Sistema › Equipe (`cfg.appAcessos[id].obd_apagar`, tabela config, sem SQL; `podeApagarObd` em `js/appacesso.js`). Sem a tela
+  do OBD liberada não existe a chave. Sem a chave, o botão **não aparece** — não é botão que avisa "você não pode".
+  **O 04 NÃO entrou na lista branca do `comando()`.** Ele ganhou **método próprio no nativo** (`apagar` em `ObdPlugin.java`,
+  com o `"04"` escrito no código). Assim continua valendo a regra que vale desde a etapa 1: **nada que passa pelo `comando()`
+  escreve no carro**, e o único jeito de apagar tem nome, aparece sozinho no código e se acha numa busca. APK antigo não tem o
+  método: a tela diz para instalar o novo, em vez de falhar sem explicação.
+  **A ordem do fluxo é o que dá valor ao registro:** lê as falhas → lê o ajuste de combustível (passada curta,
+  `lerCombustivelRapido`, 5 pedidos) → mostra a confirmação com os `AVISOS_APAGAR` e o campo de KM → apaga → espera 1,5 s →
+  lê falhas e ajuste **de novo** → grava. O "depois" é o que mostra se o código voltou na hora (defeito acontecendo agora, não
+  falha antiga) e o módulo recomeçando a aprender o combustível do zero.
+  **A tela avisa antes, não depois:** apagar não conserta; a foto do momento da falha some junto (anote ANTES); zera as
+  adaptações, inclusive o aprendizado de combustível; a prontidão dos monitores volta a zero e o carro precisa rodar para
+  voltar (quem vai para a inspeção reprova até lá).
+  **Módulo que recusa** (resposta negativa `7F 04 xx`) não vira "apagou": o 0x22, o mais comum, manda ligar a chave com o
+  **motor desligado**. `respostaApagar` lê isso; um módulo que aceita entre dois já basta.
+  **Registro (`obd_leituras`, v62):** quem, quando, placa, veículo, KM digitado, chassi lido, os códigos de ANTES, os de
+  DEPOIS e o ajuste de combustível antes e depois. **Ninguém altera** (o banco não tem política de update); cada um grava o
+  seu; a equipe toda lê (o mecânico precisa saber se este carro já foi apagado antes — monitor "não terminou" costuma ser
+  disto, e a tela mostra os últimos 5 apagamentos da placa); só o administrador apaga. Preservada pelo espelho; entra em
+  backup, banco do PC e exclusões. A mesma tabela vai guardar a LEITURA gravada na O.S. (etapa 3), por isso o campo `tipo`.
+  **Apagou e a internet caiu:** o registro fica no aparelho (`localStorage`, `obd_pendentes`) e sobe sozinho na próxima vez
+  que a tela abrir com internet — a tela diz, em vermelho, que apagou e ainda não registrou. Apagamento sem registro é
+  justamente o que não pode sobrar; por isso `api.obd.registrar` também é `soOnline`.
+  Testes: `bash teste/teste_v62.sh` (banco inteiro, Postgres local: RLS, registro que não muda, exclusões e espelho),
+  `node teste/teste_obd.mjs`, `bash teste/teste_obd_java.sh` e `python3 teste/teste_app_sistema.py` (apaga no adaptador de
+  mentira, confere o registro gravado, a recusa do módulo e o mecânico sem permissão).
 - **O que NÃO sai por aqui, escrito na tela:** ABS, airbag, câmbio e imobilizador (protocolo próprio de montadora), quilometragem de painel (não existe no OBD-II) e qualquer atuação ou programação.
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (158, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (316, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
-- **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
+- Testes: `node teste/teste_obd.mjs` (181, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (59, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (343, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- **Ainda não feito:** ligar o registro do OBD à O.S. e ao histórico do veículo e mostrá-lo no sistema (hoje a tabela já guarda `ordem_id`/`os_numero`, mas só o app grava); leitura de entrada e de saída como prova do reparo, impressa no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4).
 
 ## Como trabalhar
 1. Crie uma branch (`codex/assunto` ou `claude/assunto`) e abra um Pull Request para a `main` explicando em português o que muda para a oficina.

@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, leiturasPara, gruposPara, tipoDeMotor } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -184,6 +184,25 @@ chk("faixa $40 lê os PIDs de $41 a $60", suportados("4140" + "40000000", 0x01, 
 chk("os PIDs altos da lista existem nas faixas certas", [0x21, 0x30, 0x31].every(p => p > 0x20 && p <= 0x40) && 0x42 > 0x40);
 chk("a última posição de cada faixa é o aviso da faixa seguinte", suportados("4100" + "00000001", 0x01, 0x00).join() === "32" && suportados("4120" + "00000001", 0x01, 0x20).join() === "64");
 
+
+/* ---------------- escolher o que aparece (19/11/2026) ----------------
+ * Quem manda é o CARRO: a lista que ele responde. A placa só serve para ordenar e para não
+ * oferecer, antes de ligar, grupo que não existe naquele motor.
+ */
+chk("toda leitura tem grupo, e grupo que existe", PIDS.every(p => p.grupo && GRUPOS.some(g => g.id === p.grupo)));
+chk("sem lista do carro, mostra todas", leiturasPara(null, null).length === PIDS.length);
+chk("o carro manda: PID fora da lista dele não aparece", leiturasPara([0x0c, 0x05], null).map(p => p.pid).join() === "12,5");
+chk("marcar no filtro reduz, mas nunca acrescenta o que o carro não tem",
+  leiturasPara([0x0c, 0x05], [0x0c, 0x42]).map(p => p.pid).join() === "12");
+chk("marcar nada = todas as que o carro tiver", leiturasPara([0x0c, 0x05, 0x42], []).length === 3);
+chk("sai na ordem dos grupos, não na ordem em que foi marcado",
+  leiturasPara([0x42, 0x0c], [0x42, 0x0c]).map(p => p.grupo).join() === "motor,eletrico");
+chk("diesel não recebe grupo de sonda nem de cânister", !gruposPara(null, "DIESEL").some(g => ["sondas", "catalisador", "evap"].includes(g.id)));
+chk("flex não recebe o grupo do diesel", !gruposPara(null, "Álcool/Gasolina").some(g => g.id === "diesel"));
+chk("sem saber o combustível, oferece tudo o que o carro tem", gruposPara(null, "").length >= gruposPara(null, "DIESEL").length);
+chk("grupo sem nenhuma leitura no carro não aparece no filtro", gruposPara([0x0c], "").map(g => g.id).join() === "motor");
+chk("cada grupo do filtro vem com as leituras dele", gruposPara([0x0c, 0x42], "").every(g => g.leituras.length > 0));
+chk("tipo de motor pelo combustível do cadastro", [tipoDeMotor("DIESEL"), tipoDeMotor("Diesel S10"), tipoDeMotor("Álcool/Gasolina"), tipoDeMotor("FLEX"), tipoDeMotor("Gasolina"), tipoDeMotor(""), tipoDeMotor(null)].join() === "diesel,diesel,otto,otto,otto,,");
 
 /* ---------------- frases de erro ---------------- */
 chk("motivo em português para cada recusa do plugin", ["sem-permissao", "bluetooth-desligado", "nao-conectou", "sem-conexao"].every(e => motivoDe(new Error(e)).length > 10 && !motivoDe(new Error(e)).includes("-")));

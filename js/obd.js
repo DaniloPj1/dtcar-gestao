@@ -160,27 +160,46 @@ export function vinDe(hex) {
 const arred = (n, casas) => Math.round(n * Math.pow(10, casas)) / Math.pow(10, casas);
 
 /**
+ * Grupos das leituras, na ordem em que aparecem na escolha. `so` diz para qual tipo de motor o
+ * grupo interessa: a tela usa isso só para ORDENAR e para não oferecer, antes de ligar no carro, o
+ * que não faz sentido nele (num flex não adianta oferecer rail nem DPF). Quem decide de verdade o
+ * que aparece continua sendo o CARRO: a lista que ele responde em 0100/0120/0140 é a palavra final,
+ * porque nenhuma consulta de placa sabe quais sensores aquele módulo expõe.
+ */
+export const GRUPOS = [
+  { id: "motor", nome: "Motor", so: null },
+  { id: "ar", nome: "Ar e admissão", so: null },
+  { id: "combustivel", nome: "Combustível", so: null },
+  { id: "sondas", nome: "Sondas", so: "otto" },
+  { id: "catalisador", nome: "Catalisador", so: "otto" },
+  { id: "diesel", nome: "Diesel e turbo", so: "diesel" },
+  { id: "evap", nome: "Tanque e cânister", so: "otto" },
+  { id: "eletrico", nome: "Elétrico", so: null },
+  { id: "contadores", nome: "Contadores", so: null },
+];
+
+/**
  * bytes = quantos bytes de dado o PID devolve; casas = casas depois da vírgula ao mostrar;
  * vivo = muda o tempo todo com o motor (entra em toda volta da leitura contínua). Os de `vivo: false`
  * (distâncias e aquecimentos desde o apagamento) praticamente não mudam enquanto o carro está no
  * elevador: lê uma vez e pronto, para a roda não gastar tempo com eles.
  */
 export const PIDS = [
-  { pid: 0x0c, rotulo: "Rotação", unidade: "rpm", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 4, casas: 0, vivo: true, de: 0, ate: 8000 },
-  { pid: 0x05, rotulo: "Temperatura do motor", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 150 },
-  { pid: 0x04, rotulo: "Carga do motor", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100 },
-  { pid: 0x11, rotulo: "Borboleta", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100 },
-  { pid: 0x06, rotulo: "Ajuste curto de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true, de: -25, ate: 25 },
-  { pid: 0x07, rotulo: "Ajuste longo de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true, de: -25, ate: 25 },
-  { pid: 0x0e, rotulo: "Avanço de ignição", unidade: "°", bytes: 1, conta: d => (d[0] / 2) - 64, casas: 1, vivo: true, de: -30, ate: 60 },
-  { pid: 0x0f, rotulo: "Temperatura do ar admitido", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 100 },
-  { pid: 0x0b, rotulo: "Pressão no coletor", unidade: "kPa", bytes: 1, conta: d => d[0], casas: 0, vivo: true, de: 0, ate: 255 },
-  { pid: 0x10, rotulo: "Fluxo de ar (MAF)", unidade: "g/s", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 100, casas: 2, vivo: true, de: 0, ate: 200 },
-  { pid: 0x42, rotulo: "Tensão do módulo", unidade: "V", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 1000, casas: 1, vivo: true, de: 0, ate: 16 },
-  { pid: 0x1f, rotulo: "Motor ligado há", unidade: "s", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: true },
-  { pid: 0x21, rotulo: "Distância com a luz acesa", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false },
-  { pid: 0x31, rotulo: "Distância desde o apagamento", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false },
-  { pid: 0x30, rotulo: "Aquecimentos desde o apagamento", unidade: "", bytes: 1, conta: d => d[0], casas: 0, vivo: false },
+  { pid: 0x0c, rotulo: "Rotação", unidade: "rpm", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 4, casas: 0, vivo: true, de: 0, ate: 8000, grupo: "motor" },
+  { pid: 0x05, rotulo: "Temperatura do motor", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 150, grupo: "motor" },
+  { pid: 0x04, rotulo: "Carga do motor", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "motor" },
+  { pid: 0x11, rotulo: "Borboleta", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "ar" },
+  { pid: 0x06, rotulo: "Ajuste curto de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
+  { pid: 0x07, rotulo: "Ajuste longo de combustível", unidade: "%", bytes: 1, conta: d => (d[0] - 128) * 100 / 128, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
+  { pid: 0x0e, rotulo: "Avanço de ignição", unidade: "°", bytes: 1, conta: d => (d[0] / 2) - 64, casas: 1, vivo: true, de: -30, ate: 60, grupo: "motor" },
+  { pid: 0x0f, rotulo: "Temperatura do ar admitido", unidade: "°C", bytes: 1, conta: d => d[0] - 40, casas: 0, vivo: true, de: -40, ate: 100, grupo: "ar" },
+  { pid: 0x0b, rotulo: "Pressão no coletor", unidade: "kPa", bytes: 1, conta: d => d[0], casas: 0, vivo: true, de: 0, ate: 255, grupo: "ar" },
+  { pid: 0x10, rotulo: "Fluxo de ar (MAF)", unidade: "g/s", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 100, casas: 2, vivo: true, de: 0, ate: 200, grupo: "ar" },
+  { pid: 0x42, rotulo: "Tensão do módulo", unidade: "V", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 1000, casas: 1, vivo: true, de: 0, ate: 16, grupo: "eletrico" },
+  { pid: 0x1f, rotulo: "Motor ligado há", unidade: "s", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: true, grupo: "contadores" },
+  { pid: 0x21, rotulo: "Distância com a luz acesa", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
+  { pid: 0x31, rotulo: "Distância desde o apagamento", unidade: "km", bytes: 2, conta: d => (d[0] * 256) + d[1], casas: 0, vivo: false, grupo: "contadores" },
+  { pid: 0x30, rotulo: "Aquecimentos desde o apagamento", unidade: "", bytes: 1, conta: d => d[0], casas: 0, vivo: false, grupo: "contadores" },
 ];
 
 /** Resposta de um PID do serviço 01 (ou 02, a foto da falha) → { rotulo, valor, unidade } */
@@ -435,12 +454,48 @@ export async function lerAoVivo(pidsSuportados) {
   return linhas;
 }
 
+/**
+ * As leituras que valem para este carro, na ordem dos grupos.
+ * `suportados` é o que o CARRO respondeu (manda sempre); `escolhidos` é o que o mecânico marcou no
+ * filtro (vazio = todas as que o carro tiver).
+ */
+export function leiturasPara(suportados, escolhidos) {
+  const temLista = suportados && suportados.length;
+  const marcou = escolhidos && escolhidos.length;
+  const ordem = GRUPOS.map(g => g.id);
+  return PIDS
+    .filter(p => (!temLista || suportados.includes(p.pid)) && (!marcou || escolhidos.includes(p.pid)))
+    .slice()
+    .sort((a, b) => ordem.indexOf(a.grupo) - ordem.indexOf(b.grupo));
+}
+
+/** Os grupos que têm pelo menos uma leitura neste carro, para montar o filtro. */
+export function gruposPara(suportados, combustivel) {
+  const lista = leiturasPara(suportados, null);
+  const tipo = tipoDeMotor(combustivel);
+  return GRUPOS
+    .filter(g => !g.so || !tipo || g.so === tipo)
+    .map(g => Object.assign({}, g, { leituras: lista.filter(p => p.grupo === g.id) }))
+    .filter(g => g.leituras.length);
+}
+
+/** "DIESEL", "Álcool/Gasolina", "Flex"… → "diesel" | "otto" | null (quando não dá para saber) */
+export function tipoDeMotor(combustivel) {
+  const t = String(combustivel || "").toUpperCase();
+  if (!t) return null;
+  if (t.includes("DIESEL")) return "diesel";
+  if (/ALCOOL|ÁLCOOL|GASOLINA|FLEX|ETANOL|GNV|HIBRIDO|HÍBRIDO/.test(t)) return "otto";
+  return null;
+}
+
 /** quantas vezes um PID pode não responder antes de sair da roda */
 const PACIENCIA = 2;
 /** tempo de espera de cada leitura da roda: curto, para um PID mudo não travar o ritmo */
 const ESPERA_VIVO = 1500;
 /** respiro entre uma volta e outra, para a roda não monopolizar o aparelho */
 const PAUSA_VOLTA = 60;
+/** de quantas em quantas voltas a roda dá uma olhada nas falhas */
+const VOLTAS_ATE_FALHA = 8;
 
 /**
  * Dados ao vivo DE VERDADE: fica girando e avisando a cada valor que chega, até mandarem parar.
@@ -457,8 +512,8 @@ const PAUSA_VOLTA = 60;
  * `aoValor(valor, volta)` é chamado a cada leitura boa. `continuar()` é perguntado o tempo todo:
  * devolveu falso, a roda para. Devolve o número de voltas completadas.
  */
-export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar) {
-  const quais = PIDS.filter(p => !pidsSuportados || !pidsSuportados.length || pidsSuportados.includes(p.pid));
+export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc = {}) {
+  const quais = leiturasPara(pidsSuportados, opc.escolhidos);
   if (!quais.length) return 0;
   const mudos = {};
   let volta = 0;
@@ -482,6 +537,17 @@ export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar) {
     // volta inteira sem ninguém responder: o carro desligou ou o adaptador saiu. Parar é melhor que
     // girar à toa gastando bateria e deixando a tela mentindo que está lendo.
     if (!leuAlgo) return volta;
+    // De vez em quando dá uma olhada nas falhas SEM parar a roda: falha que nasce com o motor
+    // trabalhando (o mecânico acelerando, mexendo num chicote) é justamente a que interessa pegar,
+    // e ela não apareceria até alguém lembrar de abrir a tela de falhas. Um pedido a cada
+    // VOLTAS_ATE_FALHA voltas custa quase nada perto das 12 leituras de cada volta.
+    if (opc.aoFalhas && volta % VOLTAS_ATE_FALHA === 0 && continuar()) {
+      const r = await pedir("03", ESPERA_VIVO);
+      if (!r.erro) {
+        const { codigos, modulos } = codigosDeTodas(r.respostas, 0x03);
+        if (modulos) opc.aoFalhas(codigos);
+      }
+    }
     await new Promise(r => setTimeout(r, PAUSA_VOLTA));
   }
   return volta;

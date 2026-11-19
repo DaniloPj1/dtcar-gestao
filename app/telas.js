@@ -881,6 +881,21 @@ function Mostrador({ l }) {
   </div>`;
 }
 
+// Uma leitura na visão LISTA: cabe mais na tela que o mostrador e continua mostrando a posição
+// na escala, numa barra fina. O rótulo é sempre escrito e o valor fica grande, porque quem lê
+// está embaixo do carro.
+function LinhaViva({ l }) {
+  const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
+  const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
+  return html`<div class="linha-viva" data-pid=${l.pid}>
+    <div class="linha-viva-topo">
+      <span class="linha-viva-rot">${l.rotulo}</span>
+      <b class="linha-viva-num">${l.valor}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
+    </div>
+    ${tem ? html`<div class="linha-viva-barra"><i style=${"width:" + (parte * 100).toFixed(1) + "%"}></i></div>` : null}
+  </div>`;
+}
+
 function Obd() {
   const { dados } = useApp();
   const pl = usarPlaca();
@@ -888,7 +903,10 @@ function Obd() {
   const [lig, setLig] = useState(null);          // { nome, endereco, protocolo, pidsSuportados }
   const [ocupado, setOcupado] = useState("");
   const [erro, setErro] = useState("");
-  const [res, setRes] = useState({});            // falhas, conf, testes, foto
+  // UMA leitura por vez na tela (pedido do Danilo, 19/11/2026): abrir falhas tira os dados ao vivo
+  // da frente. Empilhar cartão em cima de cartão faz o mecânico rolar a tela procurando o que
+  // acabou de pedir, e no celular isso é pior que não mostrar.
+  const [res, setRes] = useState(null);         // { o: "falhas"|"conf"|"foto"|"testes", d: ... }
   const temPlugin = obd.disponivel();
   // Dados ao vivo DE VERDADE: uma roda que fica girando e atualizando a tela a cada valor que chega.
   // `rodada` é uma caixa (não estado) porque a roda precisa enxergar o valor NOVO a cada volta;
@@ -909,9 +927,49 @@ function Obd() {
     try { window.localStorage.setItem("obd_jeito", j); } catch (e) { /* sem espaço: segue sem guardar */ }
   };
   const [vivo, setVivo] = useState(null);       // { valores: {pid: leitura}, volta, rodando }
+  // Falhas vigiadas DURANTE a leitura ao vivo: a roda pergunta de tempos em tempos e, se o módulo
+  // gravar código com o motor trabalhando, o botão de falhas fica vermelho na hora.
+  const [falhasVivo, setFalhasVivo] = useState(null);   // { codigos: [], novas: [] }
+  const baseFalhas = useRef(null);              // os códigos que já existiam quando a roda começou
+  // Quais leituras mostrar. Vazio = todas as que o carro tiver. Fica guardado POR PLACA: cada carro
+  // tem o seu conjunto, e quem lê um Hilux não quer a mesma lista de um Gol.
+  const [escolhidas, setEscolhidas] = useState([]);
+  const [abrirEscolha, setAbrirEscolha] = useState(false);
 
   // sair da tela fecha a conexão: o adaptador não aceita duas conversas e a bateria do carro agradece
   useEffect(() => () => { rodada.current = 0; if (obd.disponivel()) obd.desconectar(); }, []);
+
+  const placa = String((pl.veic && pl.veic.placa) || pl.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const guardado = (chave, valor) => {
+    const k = "obd_" + chave + (placa ? "_" + placa : "");
+    try {
+      if (valor === undefined) { const t = window.localStorage.getItem(k); return t ? JSON.parse(t) : null; }
+      window.localStorage.setItem(k, JSON.stringify(valor));
+    } catch (e) { /* sem espaço ou JSON estragado: segue sem memória */ }
+    return null;
+  };
+  // Ao trocar de placa, recupera o que foi marcado naquele carro e o que ele respondeu da última vez.
+  useEffect(() => {
+    const m = guardado("leituras");
+    setEscolhidas(Array.isArray(m) ? m : []);
+  }, [placa]);
+  // O que o carro tem: a lista que ELE respondeu manda. Enquanto não há conexão, vale a da última
+  // vez (só para o mecânico já poder marcar o que quer antes de encaixar o adaptador).
+  const antesDeLigar = guardado("suportados");
+  const suportados = (lig && lig.pidsSuportados) || (Array.isArray(antesDeLigar) ? antesDeLigar : null);
+  const combustivel = (pl.veic && (pl.veic.combustivel || pl.veic.combustivel_descricao)) || "";
+  const gruposDoCarro = obd.gruposPara(suportados, combustivel);
+  const disponiveis = obd.leiturasPara(suportados, null);
+  const valendo = obd.leiturasPara(suportados, escolhidas);
+
+  const marcar = (pid, marcado) => {
+    const base = escolhidas.length ? escolhidas : disponiveis.map(l => l.pid);
+    const nova = marcado ? base.concat([pid]).filter((x, i, a) => a.indexOf(x) === i) : base.filter(x => x !== pid);
+    const todas = nova.length === disponiveis.length && disponiveis.every(l => nova.includes(l.pid));
+    setEscolhidas(todas ? [] : nova);
+    guardado("leituras", todas ? [] : nova);
+  };
+  const marcarTodas = () => { setEscolhidas([]); guardado("leituras", []); };
 
   async function rodar(aviso, fn) {
     setErro(""); setOcupado(aviso);
@@ -932,29 +990,52 @@ function Obd() {
     await obd.conectar(ap.endereco);
     const i = await obd.iniciar();
     setLig({ nome: ap.nome, endereco: ap.endereco, protocolo: i.protocolo, pidsSuportados: i.pidsSuportados });
-    setRes({});
+    if (placa && i.pidsSuportados && i.pidsSuportados.length) guardado("suportados", i.pidsSuportados);
+    setRes(null); setVivo(null); setFalhasVivo(null);
   });
 
   const desligar = () => rodar("Desconectando…", async () => {
     rodada.current = 0;
     await obd.desconectar();
-    setLig(null); setRes({}); setAparelhos(null); setVivo(null);
+    setLig(null); setRes(null); setAparelhos(null); setVivo(null); setFalhasVivo(null);
   });
 
-  const guardar = (chave, valor) => setRes(x => Object.assign({}, x, { [chave]: valor }));
+  // Guardar uma leitura TROCA o que está na tela: é o "uma de cada vez". E qualquer leitura nova
+  // para a roda antes, porque o adaptador atende um pedido por vez.
+  const guardar = (o, d) => { setVivo(null); setRes({ o, d }); };
+  const pararVivo = () => { rodada.current = 0; };
 
-  const lerFalhas = () => rodar("Lendo as falhas…", async () => guardar("falhas", await obd.lerFalhas()));
+  const lerFalhas = () => { pararVivo(); return rodar("Lendo as falhas…", async () => {
+    const f = await obd.lerFalhas();
+    setFalhasVivo(null);                                            // já está na tela: o aviso cumpriu o papel
+    guardar("falhas", f);
+  }); };
   async function alternarVivo() {
     if (rodada.current) { rodada.current = 0; return; }             // tocar de novo para parar
     const minha = ++contador.current;
     rodada.current = minha;
     setErro("");
+    setRes(null);                                                   // uma leitura por vez na tela
     setVivo({ valores: {}, volta: 0, rodando: true });
+    // Referência das falhas: o que já estava gravado quando a roda começou. Só o que aparecer
+    // DEPOIS disso é "falha nova". Sem leitura de falhas antes, a primeira olhada vira a referência.
+    baseFalhas.current = res && res.o === "falhas"
+      ? res.d.falhas.filter(f => f.situacao === "atual").map(f => f.codigo)
+      : null;
+    setFalhasVivo(null);
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
         (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.pid]: v }), volta, rodando: true })); },
         () => rodada.current === minha,
+        {
+          escolhidos: escolhidas,
+          aoFalhas: codigos => {
+            if (rodada.current !== minha) return;
+            if (baseFalhas.current === null) baseFalhas.current = codigos.slice();
+            setFalhasVivo({ codigos, novas: codigos.filter(c => !baseFalhas.current.includes(c)) });
+          },
+        },
       );
     } catch (e) {
       if (rodada.current === minha) setErro(obd.motivoDe(e));
@@ -963,13 +1044,13 @@ function Obd() {
       setVivo(x => (x && x.rodando && !rodada.current ? Object.assign({}, x, { rodando: false }) : x));
     }
   }
-  const lerFoto = () => rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados)));
-  const lerTestes = () => rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes()));
-  const lerConf = () => rodar("Lendo chassi e monitores…", async () => {
+  const lerFoto = () => { pararVivo(); return rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados))); };
+  const lerTestes = () => { pararVivo(); return rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes())); };
+  const lerConf = () => { pararVivo(); return rodar("Lendo chassi e monitores…", async () => {
     const monitores = await obd.lerMonitores();
     const chassi = await obd.lerChassi();
     guardar("conf", { monitores, chassi });
-  });
+  }); };
 
   const v = pl.veic;
   // o chassi do cadastro vem da ficha do veículo (a busca por placa não carrega esse campo)
@@ -1008,20 +1089,41 @@ function Obd() {
       ${lig && !ocupado ? html`<${Cartao} titulo="Ler do carro" id="obd-acoes">
         <button type="button" class=${"btn-barra" + (vivo && vivo.rodando ? " claro" : "")} id="obd-vivo" onClick=${alternarVivo}>
           <${Ic} n="obd" t=${22} />${vivo && vivo.rodando ? "PARAR OS DADOS AO VIVO" : "DADOS AO VIVO"}</button>
-        <button type="button" class="btn-barra" id="obd-falhas" onClick=${lerFalhas} disabled=${!!(vivo && vivo.rodando)}>LER FALHAS</button>
-        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf} disabled=${!!(vivo && vivo.rodando)}>CHASSI E MONITORES</button>
-        <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto} disabled=${!!(vivo && vivo.rodando)}>FOTO DO MOMENTO DA FALHA</button>
-        <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes} disabled=${!!(vivo && vivo.rodando)}>TESTES DE BORDO</button>
-        <div class="nota">${vivo && vivo.rodando ? "Enquanto os dados ao vivo rodam, as outras leituras esperam: o adaptador atende um pedido por vez." : "Nada é gravado e nenhuma falha é apagada nesta etapa."}</div>
+        <button type="button" class=${"btn-barra" + (falhasVivo && falhasVivo.codigos.length ? " alerta" : "")} id="obd-falhas" onClick=${lerFalhas}>
+          ${falhasVivo && falhasVivo.novas.length ? "FALHA NOVA AGORA (" + falhasVivo.novas.length + ") · VER"
+            : falhasVivo && falhasVivo.codigos.length ? "FALHA NO MÓDULO (" + falhasVivo.codigos.length + ") · VER"
+            : "LER FALHAS"}</button>
+        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI E MONITORES</button>
+        <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto}>FOTO DO MOMENTO DA FALHA</button>
+        <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
+        <div class="nota">${falhasVivo && falhasVivo.novas.length ? "Apareceu código com o motor trabalhando. Toque no botão vermelho para ver quais."
+          : vivo && vivo.rodando ? "Pedir outra leitura para os dados ao vivo: o adaptador atende um pedido por vez."
+          : "Nada é gravado e nenhuma falha é apagada nesta etapa."}</div>
       </${Cartao}>` : null}
 
-      ${res.falhas ? html`<${Cartao} titulo=${"Falhas do motor" + (res.falhas.falhas.length ? " (" + res.falhas.falhas.length + ")" : "")} id="obd-r-falhas">
-        ${!res.falhas.falhas.length ? html`<div class="vazio">Nenhuma falha gravada no módulo do motor.</div>` : null}
-        ${res.falhas.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc">
+      ${lig && !ocupado && disponiveis.length ? html`<${Cartao} titulo="Quais leituras mostrar" id="obd-escolha">
+        <button type="button" class="btn-barra claro" id="obd-escolher" onClick=${() => setAbrirEscolha(x => !x)}>
+          ${(abrirEscolha ? "FECHAR A ESCOLHA" : "ESCOLHER LEITURAS") + " (" + valendo.length + " de " + disponiveis.length + ")"}</button>
+        ${abrirEscolha ? html`
+          <button type="button" class=${"btn-barra" + (escolhidas.length ? " claro" : "")} id="obd-todas" onClick=${marcarTodas}>
+            TODAS AS QUE O CARRO TIVER</button>
+          ${gruposDoCarro.map(g => html`<div key=${g.id} class="sec"><h3>${g.nome}</h3>
+            ${g.leituras.map(l => html`<label key=${l.pid} class="obd-cx">
+              <input type="checkbox" data-pid=${l.pid} checked=${!escolhidas.length || escolhidas.includes(l.pid)}
+                onChange=${e => marcar(l.pid, e.target.checked)} />
+              <span>${l.rotulo}${l.unidade ? " (" + l.unidade + ")" : ""}</span></label>`)}
+          </div>`)}
+          <div class="nota">A lista acima é a que ESTE carro respondeu — o que ele não tem nunca aparece aqui, por mais que o modelo costume ter. A escolha fica guardada${placa ? " para a placa " + placa : ""}.</div>
+        ` : null}
+      </${Cartao}>` : null}
+
+      ${res && res.o === "falhas" ? html`<${Cartao} titulo=${"Falhas do motor" + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">
+        ${!res.d.falhas.length ? html`<div class="vazio">Nenhuma falha gravada no módulo do motor.</div>` : null}
+        ${res.d.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc">
           <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}
-        ${res.falhas.falhas.length ? html`<div class="nota">O código é o que o módulo gravou; a descrição de código de montadora (P1 em diante) não é pública. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
-        ${res.falhas.variosModulos ? html`<div class="nota">Mais de um módulo do carro respondeu: a lista junta os códigos de todos. Sem o cabeçalho ligado não dá para dizer qual código é de qual módulo.</div>` : null}
-        ${res.falhas.erros.length ? html`<div class="nota">Não respondeu: ${res.falhas.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
+        ${res.d.falhas.length ? html`<div class="nota">O código é o que o módulo gravou; a descrição de código de montadora (P1 em diante) não é pública. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
+        ${res.d.variosModulos ? html`<div class="nota">Mais de um módulo do carro respondeu: a lista junta os códigos de todos. Sem o cabeçalho ligado não dá para dizer qual código é de qual módulo.</div>` : null}
+        ${res.d.erros.length ? html`<div class="nota">Não respondeu: ${res.d.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
       </${Cartao}>` : null}
 
       ${vivo ? html`<${Cartao} titulo="Dados ao vivo" id="obd-r-vivo">
@@ -1043,40 +1145,49 @@ function Obd() {
             ${jeito === "painel" ? html`
               ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.pid} l=${l} />`)}</div>` : null}
               ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}</div>` : null}`
-            : html`<div class="painel-resto lista">${lidos.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}</div>`}`;
+            : html`<div class="lista-viva">
+                ${obd.GRUPOS.map(g => {
+                  const doGrupo = lidos.filter(l => (obd.PIDS.find(p => p.pid === l.pid) || {}).grupo === g.id);
+                  if (!doGrupo.length) return null;
+                  return html`<div key=${g.id} class="lista-viva-grupo">
+                    <h3>${g.nome}</h3>
+                    ${doGrupo.map(l => html`<${LinhaViva} key=${l.pid} l=${l} />`)}
+                  </div>`;
+                })}
+              </div>`}`;
         })()}
       </${Cartao}>` : null}
 
-      ${res.conf ? html`<${Cartao} titulo="Chassi e monitores" id="obd-r-conf">
-        ${res.conf.chassi ? html`<${KV} a="Chassi lido no módulo" b=${res.conf.chassi} p />` : html`<div class="nota">O módulo não informou o chassi (comum em carro mais antigo).</div>`}
-        ${res.conf.chassi && chassiCadastro ? html`<div class="kv"><span>Confronto:</span><i></i><b>${res.conf.chassi === chassiCadastro
+      ${res && res.o === "conf" ? html`<${Cartao} titulo="Chassi e monitores" id="obd-r-conf">
+        ${res.d.chassi ? html`<${KV} a="Chassi lido no módulo" b=${res.d.chassi} p />` : html`<div class="nota">O módulo não informou o chassi (comum em carro mais antigo).</div>`}
+        ${res.d.chassi && chassiCadastro ? html`<div class="kv"><span>Confronto:</span><i></i><b>${res.d.chassi === chassiCadastro
           ? html`<span class="selo">CONFERE</span>igual ao cadastro`
           : html`<span class="selo ruim">DIVERGE</span>cadastro: ${chassiCadastro}`}</b></div>` : null}
-        <div class="kv"><span>Luz de injeção:</span><i></i><b>${res.conf.monitores.luzAcesa ? html`<span class="selo ruim">ACESA</span>` : html`<span class="selo">APAGADA</span>`}${res.conf.monitores.quantidade} código(s) no módulo</b></div>
-        <div class="sec"><h3>Monitores de emissão (${res.conf.monitores.prontos} de ${res.conf.monitores.total} prontos)</h3>
-          ${res.conf.monitores.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto ? html`<span class="selo">PRONTO</span>` : html`<span class="selo atencao">NÃO PRONTO</span>`}</b></div>`)}
-          ${res.conf.monitores.prontos < res.conf.monitores.total ? html`<div class="nota">Monitor não pronto quer dizer que o módulo foi zerado há pouco e ainda não terminou os próprios testes: a falha foi apagada antes de o carro chegar. Confira a distância desde o apagamento em "Dados ao vivo".</div>` : null}
-          ${res.conf.monitores.diesel ? html`<div class="nota">Motor a diesel: o padrão não define quais monitores existem além dos três de base, então só esses aparecem.</div>` : null}
+        <div class="kv"><span>Luz de injeção:</span><i></i><b>${res.d.monitores.luzAcesa ? html`<span class="selo ruim">ACESA</span>` : html`<span class="selo">APAGADA</span>`}${res.d.monitores.quantidade} código(s) no módulo</b></div>
+        <div class="sec"><h3>Monitores de emissão (${res.d.monitores.prontos} de ${res.d.monitores.total} prontos)</h3>
+          ${res.d.monitores.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto ? html`<span class="selo">PRONTO</span>` : html`<span class="selo atencao">NÃO PRONTO</span>`}</b></div>`)}
+          ${res.d.monitores.prontos < res.d.monitores.total ? html`<div class="nota">Monitor não pronto quer dizer que o módulo foi zerado há pouco e ainda não terminou os próprios testes: a falha foi apagada antes de o carro chegar. Confira a distância desde o apagamento em "Dados ao vivo".</div>` : null}
+          ${res.d.monitores.diesel ? html`<div class="nota">Motor a diesel: o padrão não define quais monitores existem além dos três de base, então só esses aparecem.</div>` : null}
         </div>
       </${Cartao}>` : null}
 
-      ${res.foto ? html`<${Cartao} titulo="Foto do momento da falha" id="obd-r-foto">
-        ${!res.foto.length ? html`<div class="vazio">O módulo não guardou a foto do momento da falha.</div>` : null}
-        ${res.foto.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}
-        ${res.foto.length ? html`<div class="nota">Como o carro estava no instante em que a falha gravou: diz se deu com o motor frio, em carga ou em marcha lenta.</div>` : null}
+      ${res && res.o === "foto" ? html`<${Cartao} titulo="Foto do momento da falha" id="obd-r-foto">
+        ${!res.d.length ? html`<div class="vazio">O módulo não guardou a foto do momento da falha.</div>` : null}
+        ${res.d.map(l => html`<${KV} key=${l.pid} a=${l.rotulo} b=${l.valor + (l.unidade ? " " + l.unidade : "")} />`)}
+        ${res.d.length ? html`<div class="nota">Como o carro estava no instante em que a falha gravou: diz se deu com o motor frio, em carga ou em marcha lenta.</div>` : null}
       </${Cartao}>` : null}
 
-      ${res.testes ? html`<${Cartao} titulo="Testes de bordo" id="obd-r-testes">
-        ${res.testes.erro ? html`<div class="nota">${res.testes.erro}</div>` : null}
-        ${!res.testes.testes.length && !res.testes.erro ? html`<div class="vazio">Este carro não devolveu resultado de teste de bordo.</div>` : null}
-        ${res.testes.testes.map((t, i) => html`<div key=${i} class="obd-teste">
+      ${res && res.o === "testes" ? html`<${Cartao} titulo="Testes de bordo" id="obd-r-testes">
+        ${res.d.erro ? html`<div class="nota">${res.d.erro}</div>` : null}
+        ${!res.d.testes.length && !res.d.erro ? html`<div class="vazio">Este carro não devolveu resultado de teste de bordo.</div>` : null}
+        ${res.d.testes.map((t, i) => html`<div key=${i} class="obd-teste">
           <div class="obd-teste-n">${t.nome}${t.tid ? " · teste " + t.tid : ""}</div>
           <div class="obd-teste-v"><b>${t.valor}${t.unidade ? " " + t.unidade : ""}</b>
             <span>limite ${t.minimo} a ${t.maximo}${t.unidade ? " " + t.unidade : ""}</span>
             ${t.passou ? html`<span class="selo">PASSOU</span>` : html`<span class="selo ruim">FORA DO LIMITE</span>`}</div>
           ${!t.escalaConhecida ? html`<div class="nota">Número cru: a escala deste teste não está conferida, então não inventamos unidade. O passou/não passou vem da comparação com o limite do próprio módulo e vale do mesmo jeito.</div>` : null}
         </div>`)}
-        ${res.testes.testes.length ? html`<div class="nota">É aqui que o catalisador e a sonda aparecem piorando ANTES de dar código: veja quanta margem sobra até o limite.</div>` : null}
+        ${res.d.testes.length ? html`<div class="nota">É aqui que o catalisador e a sonda aparecem piorando ANTES de dar código: veja quanta margem sobra até o limite.</div>` : null}
       </${Cartao}>` : null}
 
       <div class="nota" style="padding:0 2px 4px">Leitura de motor e emissões. ABS, airbag, câmbio e imobilizador exigem o scanner da oficina. O OBD-II não informa a quilometragem do painel.</div>

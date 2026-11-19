@@ -276,3 +276,21 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .selo.vivo{background:#1b7a3d;animation:obd-pisca 1.6s ease-in-out infinite}
 @keyframes obd-pisca{0%,100%{opacity:1}50%{opacity:.45}}
 @media (prefers-reduced-motion: reduce){.selo.vivo{animation:none}}
+/* Botão de falhas em alerta: código apareceu durante a leitura ao vivo. */
+.btn-barra.alerta{background:#8a2d2d;border-color:#8a2d2d;color:#fff;animation:obd-pisca 1.6s ease-in-out infinite}
+@media (prefers-reduced-motion: reduce){.btn-barra.alerta{animation:none}}
+/* Caixas de escolha das leituras. */
+.obd-cx{display:flex;align-items:center;gap:10px;min-height:38px;font-size:14px;color:var(--tinta)}
+.obd-cx input{width:20px;height:20px;flex-shrink:0;accent-color:var(--azul)}
+/* Visão LISTA dos dados ao vivo: cabe mais na tela que o painel e mostra a mesma escala. */
+.lista-viva{display:flex;flex-direction:column;gap:12px}
+.lista-viva-grupo>h3{margin:0 0 4px;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--azul)}
+.linha-viva{padding:5px 0;border-bottom:1px solid #eef0f3}
+.lista-viva-grupo>.linha-viva:last-child{border-bottom:0}
+.linha-viva-topo{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.linha-viva-rot{font-size:13.5px;font-weight:600;color:var(--cinza-texto);line-height:1.2}
+.linha-viva-num{font-size:19px;font-weight:800;color:var(--tinta);white-space:nowrap;font-variant-numeric:tabular-nums}
+.linha-viva-num span{font-size:11px;font-weight:700;color:var(--cinza-nota);margin-left:3px}
+.linha-viva-barra{height:4px;border-radius:2px;background:#dfe3e8;margin-top:5px;overflow:hidden}
+.linha-viva-barra i{display:block;height:100%;background:var(--azul);border-radius:2px;transition:width .25s linear}
+@media (prefers-reduced-motion: reduce){.linha-viva-barra i{transition:none}}

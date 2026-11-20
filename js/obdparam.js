@@ -7,7 +7,10 @@
 // mais alto e passa a valer. Com o tempo, a referência dos motores daqui sai dos próprios carros da
 // oficina, que é o que não existe publicado em lugar nenhum.
 //
-// Onde fica o ajuste: cfg.obdParametros (tabela config, sem SQL). { [id]: { valor, de, ate, em, carro, obs } }.
+// QUEM CORRIGE É O CLAUDE, AQUI NO ARQUIVO (decisão do Danilo, 20/11/2026): ele confere no Raven, manda a
+// foto no chat e o valor entra como `conferido` no parâmetro, com o carro e a data. Não há formulário no
+// app: a tela é só de leitura. Assim cada correção fica no histórico do repositório, dá para rever de onde
+// veio e some o risco de alguém digitar errado no celular com o carro ligado na frente.
 
 /** Do mais forte para o mais fraco. A tela mostra tonalidade + a palavra escrita (nunca só a cor). */
 export const NIVEIS = [
@@ -103,59 +106,48 @@ export const PARAMETROS = [
 
 export const porId = id => PARAMETROS.find(p => p.id === id) || null;
 
-/** O que o Danilo conferiu, guardado em cfg.obdParametros. */
-const ajuste = (cfg, id) => (((cfg && cfg.obdParametros) || {})[id]) || null;
+/** O que o Danilo conferiu no Raven, gravado no próprio parâmetro (campo `conferido`). */
+const conferido = p => (p && p.conferido) || null;
 
 /** Valor que vale agora: o conferido, se houver; senão o de referência. */
-export function valorDe(cfg, id) {
+export function valorDe(id) {
   const p = porId(id);
   if (!p) return null;
-  const a = ajuste(cfg, id);
-  if (a && typeof a.valor === "number") return a.valor;
+  const c = conferido(p);
+  if (c && typeof c.valor === "number") return c.valor;
   return typeof p.valor === "number" ? p.valor : null;
 }
 /** Faixa (de/ate) que vale agora, para os parâmetros que são faixa. */
-export function faixaDe(cfg, id) {
+export function faixaDe(id) {
   const p = porId(id);
   if (!p) return null;
-  const a = ajuste(cfg, id);
-  const de = a && typeof a.de === "number" ? a.de : p.de;
-  const ate = a && typeof a.ate === "number" ? a.ate : p.ate;
+  const c = conferido(p);
+  const de = c && typeof c.de === "number" ? c.de : p.de;
+  const ate = c && typeof c.ate === "number" ? c.ate : p.ate;
   return typeof de === "number" && typeof ate === "number" ? { de, ate } : null;
 }
-/** Nível que vale agora: quem conferiu sobe para "conferido aqui". */
-export function nivelDe(cfg, id) {
-  const a = ajuste(cfg, id);
-  if (a && (typeof a.valor === "number" || typeof a.de === "number")) return "conferido";
+/** Nível que vale agora: o que foi conferido no Raven sobe para o nível mais alto. */
+export function nivelDe(id) {
   const p = porId(id);
-  return p ? p.nivel : "suposto";
+  if (!p) return "suposto";
+  return conferido(p) ? "conferido" : p.nivel;
 }
-/** A lista inteira com o que vale agora — é o que a aba de ajuste mostra. */
-export function comAjustes(cfg) {
-  return PARAMETROS.map(p => {
-    const a = ajuste(cfg, p.id);
-    return Object.assign({}, p, {
-      valorAtual: valorDe(cfg, p.id),
-      faixaAtual: faixaDe(cfg, p.id),
-      nivelAtual: nivelDe(cfg, p.id),
-      conferencia: a || null,
-    });
-  });
+/** A lista inteira com o que vale agora — é o que a tela mostra. */
+export function lista() {
+  return PARAMETROS.map(p => Object.assign({}, p, {
+    valorAtual: valorDe(p.id),
+    faixaAtual: faixaDe(p.id),
+    nivelAtual: nivelDe(p.id),
+    conferencia: conferido(p),
+  }));
 }
-/** Grava a conferência de um parâmetro. Devolve o cfg novo (quem chama é que salva). */
-export function comConferencia(cfg, id, dados) {
-  const atual = (cfg && cfg.obdParametros) || {};
-  const limpo = {};
-  if (typeof dados.valor === "number" && isFinite(dados.valor)) limpo.valor = dados.valor;
-  if (typeof dados.de === "number" && isFinite(dados.de)) limpo.de = dados.de;
-  if (typeof dados.ate === "number" && isFinite(dados.ate)) limpo.ate = dados.ate;
-  if (dados.carro) limpo.carro = String(dados.carro).slice(0, 60);
-  if (dados.obs) limpo.obs = String(dados.obs).slice(0, 200);
-  limpo.em = dados.em || new Date().toISOString();
-  const novos = Object.assign({}, atual);
-  if (!Object.keys(limpo).some(k => k !== "em")) delete novos[id];      // sem número: volta à referência
-  else novos[id] = limpo;
-  return Object.assign({}, cfg, { obdParametros: novos });
+/** Os limites que o app usa para decidir, já com o que foi conferido. */
+export function limites() {
+  return {
+    atencao: valorDe("ajuste_atencao"), grave: valorDe("ajuste_grave"),
+    minima: valorDe("falha_minima"), destaque: valorDe("falha_destaque"),
+    razao: valorDe("razao_ipt"),
+  };
 }
 /** Texto curto para a tela: "300 a 400 bar" ou "25 %". */
 export function textoDe(p) {
@@ -163,4 +155,13 @@ export function textoDe(p) {
   if (p.faixaAtual) return n(p.faixaAtual.de) + " a " + n(p.faixaAtual.ate) + (p.unidade ? " " + p.unidade : "");
   if (typeof p.valorAtual === "number") return n(p.valorAtual) + (p.unidade ? " " + p.unidade : "");
   return "—";
+}
+/** Como escrever a procedência de um valor conferido, na tela. */
+export function textoConferencia(c) {
+  if (!c) return "";
+  const partes = [];
+  if (c.carro) partes.push(c.carro);
+  if (c.obs) partes.push(c.obs);
+  if (c.em) partes.push(c.em);
+  return partes.length ? "Conferido no Raven: " + partes.join(" · ") : "Conferido no Raven.";
 }

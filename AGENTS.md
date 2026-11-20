@@ -791,8 +791,11 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   (Ford, GM, Toyota — documentado) e `suposto` (reparação, sem documento; entra JUSTAMENTE para ser conferido no Raven).
   25 parâmetros; 5 o app usa para decidir (ajuste de combustível atenção/grave, falha por cilindro mínima/destaque, razão dos
   contadores) e o resto é referência. `leituraCombustivel` e `falhaPorCilindro` aceitam os limites de fora.
-  Ajuste em `cfg.obdParametros` (tabela config, sem SQL), pela aba `#obd-parametros` no app, **só administrador**: valor ou
-  faixa, em qual carro conferiu e observação. Conferido sobe o nível e passa a valer; apagar volta à referência.
+  **QUEM CORRIGE É O CLAUDE, NO ARQUIVO (decisão do Danilo, 20/11/2026 à tarde):** *"eu confiro no Raven e te envio aqui no
+  chat para que você corrija"*. Não há formulário no app — a aba `#obd-parametros` é só de LEITURA. O valor conferido entra no
+  campo `conferido` do próprio parâmetro (`{ valor | de/ate, carro, em, obs }`), com a procedência escrita, e `nivelDe` o sobe
+  para "conferido". Assim cada correção fica no histórico do repositório, dá para rever de onde veio, e ninguém digita número
+  errado no celular com o carro ligado na frente. `limites()` entrega ao app os cinco valores que ele usa para decidir.
   **Visual (pedido do Danilo):** a distinção é **discreta** — tonalidade de cinza do mais firme (conferido) ao mais apagado
   (suposto), com o nível **sempre escrito** miúdo ao lado (a regra da casa é nunca deixar só a cor falando) e uma legenda
   pequena no rodapé. **Não existe tabela pública de faixa normal para motor flex brasileiro** — nem GM, nem Fiat, nem VW, nem
@@ -830,7 +833,7 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (257, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (59, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (396, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (259, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (59, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (395, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** ligar o registro do OBD à O.S. e ao histórico do veículo e mostrá-lo no sistema (hoje a tabela já guarda `ordem_id`/`os_numero`, mas só o app grava); leitura de entrada e de saída como prova do reparo, impressa no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4).
 
 ## Como trabalhar

@@ -783,7 +783,7 @@ try:
         t(pg.query_selector('#obd-clone'), 'adaptador que se diz v1.5 é denunciado como clone')
         t('nunca existiu' in pg.inner_text('#obd-clone'), 'com o motivo escrito: %s' % pg.inner_text('#obd-clone')[:80])
 
-        # PARÂMETROS DE REFERÊNCIA, com nível de confiança (20/11/2026)
+        # PARÂMETROS DE REFERÊNCIA (20/11/2026): tela só de LEITURA — quem corrige é o Claude, no arquivo
         t(pg.query_selector('#obd-parametros'), 'tem a aba de parâmetros')
         pg.click('#obd-param-abrir'); pg.wait_for_timeout(400)
         tpar = pg.inner_text('#obd-parametros')
@@ -793,16 +793,11 @@ try:
         t('SUPOSTO, A CONFERIR' in tpar.upper(), 'o nível vem ESCRITO, não só na cor')
         t(pg.query_selector('#obd-parametros .par-legenda'), 'e tem legenda discreta')
         t('Ford' in tpar and 'CARB' in tpar, 'cada número mostra a fonte: %s' % [l for l in tpar.split('\n') if 'Ford' in l][:1])
-        t('250 a 550 bar' in tpar, 'os valores sem documento entram marcados como suposto, para conferir no Raven')
-        pg.click('[data-conferir="rail_lenta_geral"]'); pg.wait_for_timeout(300)
-        pg.fill('[data-param="rail_lenta_geral"] .par-campos input >> nth=0', '280')
-        pg.fill('[data-param="rail_lenta_geral"] .par-campos input >> nth=1', '420')
-        pg.fill('[data-param="rail_lenta_geral"] input[placeholder^="Em qual carro"]', 'S10 2.8 2019')
-        pg.click('[data-gravar="rail_lenta_geral"]'); pg.wait_for_timeout(800)
-        grav = [c for tb, c in f.gravados if tb == 'config']
-        t(grav and grav[-1]['dados']['obdParametros']['rail_lenta_geral']['de'] == 280, 'a conferência é gravada na configuração: %s' % (grav[-1]['dados']['obdParametros'] if grav else None))
-        t('280 a 420 bar' in pg.inner_text('#obd-parametros'), 'e passa a valer na tela')
-        t('CONFERIDO AQUI' in pg.inner_text('[data-param="rail_lenta_geral"]').upper(), 'subindo para o nível conferido')
+        t('250 a 550 bar' in tpar, 'os valores sem documento aparecem marcados como suposto')
+        t(not pg.query_selector('[data-conferir]') and not pg.query_selector('[data-gravar]'),
+          'NÃO tem formulário: a correção vem pelo chat, não digitada no celular')
+        t('mande a foto no chat' in tpar, 'e a tela explica como se corrige: %s' % [l for l in tpar.split('\n') if 'chat' in l][:1])
+
         # APAGAR A FALHA, COM REGISTRO (v62, decisão do Danilo em 19/11/2026)
         t(pg.query_selector('#obd-apagar'), 'o administrador tem o botão de apagar falhas')
         t('REGISTRADO' in pg.inner_text('#obd-apagar'), 'e o botão já avisa que fica registrado: %s' % pg.inner_text('#obd-apagar'))
@@ -847,8 +842,8 @@ try:
         t(not [c for c in cmds if c.startswith('2E') or c.startswith('34') or c.startswith('27')], 'nenhum comando de escrita no carro é enviado')
         # a leitura em si não grava nada: os únicos POST permitidos são o registro do apagamento e a
         # conferência de parâmetro, os dois gravados de propósito pelo próprio teste
-        outras = [p for p in f.escritas() if '/config' not in p[1] and 'obd_leituras' not in p[1]]
-        t(not outras, 'a leitura OBD não grava nada no banco além do registro e da conferência: %s' % outras)
+        outras = [p for p in f.escritas() if 'obd_leituras' not in p[1]]
+        t(not outras, 'a tela do OBD só grava o registro do apagamento, mais nada: %s' % outras)
         t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
         # sair da tela fecha a conexão com o adaptador

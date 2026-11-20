@@ -1,7 +1,8 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, PIDS_PADRAO, PIDS_PADRAO_DIESEL, padraoPara, tipoPeloModulo, escolhaGuardada, pidsDaEscolha, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
+import * as param from "../js/obdparam.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, PIDS_PADRAO, PIDS_PADRAO_DIESEL, padraoPara, tipoPeloModulo, escolhaGuardada, pidsDaEscolha, calidDe, cvnDe, contadoresDe, compararCalibracao, adaptadorSuspeito, avisoMidDaMarca, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -410,6 +411,54 @@ chk("o formato antigo (lista de PIDs) continua valendo", escolhaGuardada([1, 2])
 chk("'todas' não filtra nada", pidsDaEscolha({ modo: "todas", pids: [] }, [1, 2], "") === null);
 chk("'padrao' devolve as padrão do carro", pidsDaEscolha({ modo: "padrao" }, [0x0c, 0x23], "flex").join() === "12");
 chk("'escolha' devolve exatamente o que foi marcado", pidsDaEscolha({ modo: "escolha", pids: [0x23] }, null, "").join() === "35");
+
+/* -------- serviços avançados (20/11/2026) -------- */
+chk("calibração do módulo sai como texto", calidDe("49040141424331323344454634353647484937")[0] === "ABC123DEF456GHI7");
+chk("CVN sai em hexadecimal", cvnDe("4906011A2B3C4D")[0] === "1A2B3C4D");
+chk("resposta de outro PID não vira calibração", calidDe("4906011A2B3C4D").length === 0 && cvnDe("49040141").length === 0);
+{
+  const c = contadoresDe("490808" + "0100" + "0050" + "0014" + "0064" + "0005" + "0064", 0x08);
+  chk("contadores: ciclos e partidas na frente", c.ciclos === 256 && c.ignicoes === 80, c);
+  chk("e os pares viram razão", c.itens.length === 2 && c.itens[0].razao === 0.2 && c.itens[1].razao === 0.05, c.itens);
+  chk("cada par leva o nome E a posição, porque a ordem não veio de fonte primária",
+    c.itens[0].nome.includes("Catalisador") && c.itens[0].posicao === 1);
+  chk("denominador zero não vira divisão por zero", contadoresDe("490804" + "0100" + "0050" + "0005" + "0000", 0x08).itens[0].razao === null);
+}
+chk("mesma calibração e mesmo CVN: sem mudança",
+  compararCalibracao({ calid: ["A"], cvn: ["1"] }, { calid: ["A"], cvn: ["1"] }).situacao === "igual");
+chk("CVN diferente com a mesma calibração aponta reprogramação",
+  compararCalibracao({ calid: ["A"], cvn: ["1"] }, { calid: ["A"], cvn: ["2"] }).frase.toLowerCase().includes("remap"));
+chk("sem leitura anterior não compara", compararCalibracao(null, { calid: ["A"], cvn: ["1"] }) === null);
+chk("adaptador v1.5 é denunciado (versão que nunca existiu)", adaptadorSuspeito("ELM327 v1.5").includes("nunca existiu"));
+chk("versão de verdade não vira alarme", adaptadorSuspeito("ELM327 v2.2") === "" && adaptadorSuspeito("") === "");
+chk("carro GM recebe o aviso dos MIDs trocados", avisoMidDaMarca("Chevrolet").includes("TROCADOS") && avisoMidDaMarca("GM").length > 0);
+chk("outra marca não recebe aviso que não é dela", avisoMidDaMarca("Volkswagen") === "" && avisoMidDaMarca("") === "");
+
+/* -------- parâmetros de referência, com nível de confiança -------- */
+chk("todo parâmetro tem nome, fonte e nível", param.PARAMETROS.every(p => p.nome && p.fonte && p.nivel));
+chk("todo nível declarado existe na lista de níveis", param.PARAMETROS.every(p => param.NIVEIS.some(n => n.id === p.nivel)));
+chk("todo parâmetro tem valor ou faixa", param.PARAMETROS.every(p => typeof p.valor === "number" || (typeof p.de === "number" && typeof p.ate === "number")));
+chk("faixa sempre do menor para o maior", param.PARAMETROS.every(p => p.de === undefined || p.de < p.ate));
+chk("parâmetro de modelo diz de qual motor é", param.PARAMETROS.filter(p => p.onde === "modelo").every(p => !!p.modelo));
+chk("os que o app usa de verdade estão marcados", param.PARAMETROS.filter(p => p.usado).length >= 4);
+chk("nenhum id repetido", new Set(param.PARAMETROS.map(p => p.id)).size === param.PARAMETROS.length);
+chk("o que não tem documento de montadora entra como suposto, não como verdade",
+  param.porId("rail_lenta_geral").nivel === "suposto" && param.porId("maf_por_litro").nivel === "suposto");
+chk("e diz na fonte que não há documento", param.porId("rail_lenta_geral").fonte.includes("NÃO há documento"));
+{
+  const vazio = {};
+  chk("sem conferência vale a referência", param.valorDe(vazio, "ajuste_grave") === 25 && param.nivelDe(vazio, "ajuste_grave") === "montadora");
+  const c1 = param.comConferencia(vazio, "ajuste_grave", { valor: 18, carro: "Onix 1.0 2019" });
+  chk("conferido passa a valer", param.valorDe(c1, "ajuste_grave") === 18);
+  chk("e sobe para o nível mais alto", param.nivelDe(c1, "ajuste_grave") === "conferido");
+  chk("guarda em qual carro foi conferido", c1.obdParametros.ajuste_grave.carro === "Onix 1.0 2019" && !!c1.obdParametros.ajuste_grave.em);
+  const c2 = param.comConferencia(c1, "ajuste_grave", {});
+  chk("apagar a conferência volta à referência", param.valorDe(c2, "ajuste_grave") === 25 && param.nivelDe(c2, "ajuste_grave") === "montadora");
+  const c3 = param.comConferencia(vazio, "rail_lenta_geral", { de: 280, ate: 420 });
+  chk("faixa conferida também vale", param.faixaDe(c3, "rail_lenta_geral").de === 280);
+  chk("texto da faixa sai no jeito daqui", param.textoDe(param.comAjustes(c3).find(p => p.id === "rail_lenta_geral")) === "280 a 420 bar");
+  chk("valor que não é número é recusado", !param.comConferencia(vazio, "ajuste_grave", { valor: NaN }).obdParametros.ajuste_grave);
+}
 
 console.log(falhas.length ? ok.length + " verificações passaram; " + falhas.length + " FALHARAM:\n  ✗ " + falhas.join("\n  ✗ ") : ok.length + " verificações passaram.");
 process.exit(falhas.length ? 1 : 0);

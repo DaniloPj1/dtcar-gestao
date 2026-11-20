@@ -960,7 +960,7 @@ export function conferirOdometro(kmModulo, kmCadastro) {
 }
 
 /** Só as contagens de falha de combustão (13 MIDs em vez de varrer o serviço 06 inteiro). */
-export async function lerFalhaCilindros() {
+export async function lerFalhaCilindros(limites) {
   const base = await pedir("0600", 6000);
   if (base.erro) return { testes: [], cilindros: null, erro: base.erro };
   const primeira = suportados(primeiraDe(base.respostas, 0x06), 0x06, 0x00);
@@ -972,7 +972,7 @@ export async function lerFalhaCilindros() {
     if (r.erro) continue;
     for (const t of testesDe(primeiraDe(r.respostas, 0x06))) testes.push(t);
   }
-  return { testes, cilindros: falhaPorCilindro(testes), erro: "" };
+  return { testes, cilindros: falhaPorCilindro(testes, limites), erro: "" };
 }
 
 /** Odômetro do módulo (PID $A6), em km. Devolve null quando o carro não informa. */

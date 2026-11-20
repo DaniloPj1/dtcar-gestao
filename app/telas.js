@@ -903,7 +903,7 @@ function LinhaViva({ l }) {
 // causas que costumam explicar aquilo. NUNCA dá veredito — faixa de normalidade por motor só a
 // montadora publica, e quem decide é o mecânico com o carro na frente.
 function Combustivel({ v }) {
-  const r = obd.leituraCombustivel(v);
+  const r = obd.leituraCombustivel(v, param.limites());
   const cor = r.situacao === "grave" ? "ruim" : r.situacao === "atencao" ? "atencao" : r.situacao === "normal" ? "" : "atencao";
   const selo = r.situacao === "grave" ? "NO LIMITE" : r.situacao === "atencao" ? "CORRIGINDO" : r.situacao === "normal" ? "EM ORDEM" : "SEM DADOS";
   return html`<div class="comb" id="obd-comb">
@@ -925,83 +925,34 @@ function Combustivel({ v }) {
 }
 
 /**
- * Parâmetros de referência (pedido do Danilo, 20/11/2026). Caderno de bancada, não tela de
- * configuração: cada número aparece com o NÍVEL DE CONFIANÇA e com um campo para o valor que ele
- * conferiu no Raven. O conferido sobe para o nível mais alto e passa a valer.
- * Distinção DISCRETA, como ele pediu: tonalidade do texto + a palavra escrita miúda ao lado
- * (a regra da casa é nunca deixar só a cor falando) e uma legenda pequena no rodapé.
+ * Parâmetros de referência (pedido do Danilo, 20/11/2026). Tela de LEITURA, sem formulário:
+ * quem corrige é o Claude, no arquivo `js/obdparam.js` — o Danilo confere no Raven, manda a foto no chat
+ * e o valor entra como conferido, com o carro e a data (decisão dele em 20/11/2026, à tarde).
+ * Assim cada correção fica no histórico do repositório e ninguém digita número errado no celular.
+ * A distinção entre o conferido e o suposto é DISCRETA, como ele pediu: tonalidade de cinza + a palavra
+ * escrita miúda ao lado (a regra da casa é nunca deixar só a cor falando) e uma legenda no rodapé.
  */
 function Parametros() {
-  const { cfg, setCfg, perfil, avisar } = useApp();
-  const admin = perfil.papel === "admin";
   const [abrir, setAbrir] = useState(false);
-  const [editando, setEditando] = useState(null);     // id do parâmetro aberto para conferir
-  const [f, setF] = useState({ valor: "", de: "", ate: "", carro: "", obs: "" });
-  const [salvando, setSalvando] = useState(false);
-  const lista = param.comAjustes(cfg);
-  const num = t => { const n = Number(String(t).replace(",", ".")); return isFinite(n) ? n : undefined; };
-
-  const abrirEdicao = p => {
-    setEditando(p.id);
-    setF({
-      valor: typeof p.valorAtual === "number" && !p.faixaAtual ? String(p.valorAtual).replace(".", ",") : "",
-      de: p.faixaAtual ? String(p.faixaAtual.de).replace(".", ",") : "",
-      ate: p.faixaAtual ? String(p.faixaAtual.ate).replace(".", ",") : "",
-      carro: (p.conferencia && p.conferencia.carro) || "", obs: (p.conferencia && p.conferencia.obs) || "",
-    });
-  };
-  const gravar = async (id, limpar) => {
-    setSalvando(true);
-    try {
-      const novo = limpar
-        ? param.comConferencia(cfg, id, {})
-        : param.comConferencia(cfg, id, { valor: num(f.valor), de: num(f.de), ate: num(f.ate), carro: f.carro, obs: f.obs });
-      await api.salvarConfig(novo);
-      setCfg(novo);
-      setEditando(null);
-      avisar(limpar ? "Voltou para o valor de referência." : "Conferência gravada.");
-    } catch (e) { avisar("Não deu para gravar: " + (e.message || "sem internet"), true); }
-    finally { setSalvando(false); }
-  };
-
-  const Linha = ({ p }) => {
-    const n = param.nivel(p.nivelAtual);
-    return html`<div class=${"par-linha nv-" + p.nivelAtual} data-param=${p.id}>
-      <div class="par-topo">
-        <span class="par-nome">${p.nome}</span>
-        <b class="par-valor">${param.textoDe(p)}</b>
-      </div>
-      <div class="par-pe">
-        <span class="par-nivel">${n.nome}</span>
-        ${p.onde === "modelo" ? html`<span class="par-modelo">${p.modelo}</span>` : null}
-        ${p.usado ? html`<span class="par-usado">o app usa</span>` : null}
-        ${admin ? html`<button type="button" class="par-btn" data-conferir=${p.id} onClick=${() => abrirEdicao(p)}>Conferir</button>` : null}
-      </div>
-      <div class="par-fonte">${p.fonte}</div>
-      ${p.conferencia && p.conferencia.em ? html`<div class="par-fonte">Conferido em ${fmtData(p.conferencia.em)}${p.conferencia.carro ? " · " + p.conferencia.carro : ""}${p.conferencia.obs ? " · " + p.conferencia.obs : ""}</div>` : null}
-      ${editando === p.id ? html`<div class="par-edita">
-        ${p.faixaAtual || (p.de !== undefined) ? html`
-          <div class="par-campos">
-            <label>de <input class="inp" inputmode="decimal" value=${f.de} onInput=${e => setF(x => ({ ...x, de: e.target.value }))} /></label>
-            <label>até <input class="inp" inputmode="decimal" value=${f.ate} onInput=${e => setF(x => ({ ...x, ate: e.target.value }))} /></label>
-          </div>`
-        : html`<div class="par-campos"><label>valor <input class="inp" inputmode="decimal" value=${f.valor} onInput=${e => setF(x => ({ ...x, valor: e.target.value }))} /></label></div>`}
-        <input class="inp" placeholder="Em qual carro conferiu (modelo, motor, ano)" value=${f.carro} onInput=${e => setF(x => ({ ...x, carro: e.target.value }))} />
-        <input class="inp" placeholder="Observação (marcha lenta, acelerando…)" value=${f.obs} onInput=${e => setF(x => ({ ...x, obs: e.target.value }))} />
-        <div class="par-acoes">
-          <button type="button" class="btn-barra curto" data-gravar=${p.id} disabled=${salvando} onClick=${() => gravar(p.id, false)}>GRAVAR</button>
-          <button type="button" class="btn-barra curto claro" disabled=${salvando} onClick=${() => setEditando(null)}>Cancelar</button>
-          ${p.conferencia ? html`<button type="button" class="btn-barra curto claro" data-limpar=${p.id} disabled=${salvando} onClick=${() => gravar(p.id, true)}>Voltar à referência</button>` : null}
-        </div>
-      </div>` : null}
-    </div>`;
-  };
-
+  const lista = param.lista();
+  const Linha = ({ p }) => html`<div class=${"par-linha nv-" + p.nivelAtual} data-param=${p.id}>
+    <div class="par-topo">
+      <span class="par-nome">${p.nome}</span>
+      <b class="par-valor">${param.textoDe(p)}</b>
+    </div>
+    <div class="par-pe">
+      <span class="par-nivel">${param.nivel(p.nivelAtual).nome}</span>
+      ${p.onde === "modelo" ? html`<span class="par-modelo">${p.modelo}</span>` : null}
+      ${p.usado ? html`<span class="par-usado">o app usa</span>` : null}
+    </div>
+    ${p.conferencia ? html`<div class="par-fonte">${param.textoConferencia(p.conferencia)}</div>` : null}
+    <div class="par-fonte">${p.fonte}</div>
+  </div>`;
   const usados = lista.filter(p => p.usado);
   const resto = lista.filter(p => !p.usado);
   return html`<${Cartao} titulo="Parâmetros de referência" id="obd-parametros">
     <button type="button" class="btn-barra claro" id="obd-param-abrir" onClick=${() => setAbrir(x => !x)}>
-      ${abrir ? "FECHAR OS PARÂMETROS" : "VER E CONFERIR PARÂMETROS (" + lista.length + ")"}</button>
+      ${abrir ? "FECHAR OS PARÂMETROS" : "VER PARÂMETROS (" + lista.length + ")"}</button>
     ${abrir ? html`
       <div class="sec"><h3>O app decide por estes</h3>${usados.map(p => html`<${Linha} key=${p.id} p=${p} />`)}</div>
       <div class="sec"><h3>Referência, só para comparar</h3>${resto.map(p => html`<${Linha} key=${p.id} p=${p} />`)}</div>
@@ -1011,8 +962,7 @@ function Parametros() {
         <span class="nv-montadora">montadora</span>
         <span class="nv-suposto">suposto, a conferir</span>
       </div>
-      <div class="par-fonte">Não existe tabela pública de faixa normal para motor flex brasileiro — nem GM, nem Fiat, nem VW, nem Honda. O que você conferir no Raven vira a referência desta oficina.</div>
-      ${!admin ? html`<div class="nota">Só o administrador altera.</div>` : null}
+      <div class="par-fonte">Não existe tabela pública de faixa normal para motor flex brasileiro — nem GM, nem Fiat, nem VW, nem Honda. Confira no Raven e mande a foto no chat: o valor entra aqui com o carro e a data, e sobe para "conferido aqui".</div>
     ` : null}
   </${Cartao}>`;
 }
@@ -1248,7 +1198,7 @@ function Obd() {
 
   const lerFoto = () => { pararVivo(); return rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados))); };
   const lerTestes = () => { pararVivo(); return rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes())); };
-  const lerCilindros = () => { pararVivo(); return rodar("Contando falha por cilindro…", async () => guardar("cilindros", await obd.lerFalhaCilindros())); };
+  const lerCilindros = () => { pararVivo(); return rodar("Contando falha por cilindro…", async () => guardar("cilindros", await obd.lerFalhaCilindros(param.limites()))); };
   // SERVIÇOS AVANÇADOS (20/11/2026): calibração do módulo, teste drive e contadores de uso.
   // Tudo leitura, tudo pelo mesmo adaptador genérico — nada aqui precisa de APK novo.
   const lerCalib = () => { pararVivo(); return rodar("Lendo a calibração do módulo…", async () => {
@@ -1494,7 +1444,7 @@ function Obd() {
           <${KV} a="Ciclos contados pelo módulo" b=${numBR(res.d.ciclos)} p />
           <${KV} a="Partidas" b=${numBR(res.d.ignicoes)} p />
           ${res.d.itens.map(i => html`<div key=${i.posicao} class="kv"><span>${i.nome}:</span><i></i><b>${
-            i.razao === null ? "—" : html`${numBR(i.razao)}${i.razao < obd.RAZAO_MINIMA ? html` <span class="selo atencao">RODA POUCO</span>` : ""}`} <span class="sub">(${numBR(i.numerador)}/${numBR(i.denominador)})</span></b></div>`)}
+            i.razao === null ? "—" : html`${numBR(i.razao)}${i.razao < (param.limites().razao || obd.RAZAO_MINIMA) ? html` <span class="selo atencao">RODA POUCO</span>` : ""}`} <span class="sub">(${numBR(i.numerador)}/${numBR(i.denominador)})</span></b></div>`)}
           <div class="nota">Quantas vezes cada monitor rodou contra quantas vezes poderia ter rodado. Razão baixa explica o carro que "nunca fica pronto" para inspeção. A referência de 0,336 é a mínima exigida pela CARB e pela regra europeia — <b>é referência, não reprovação</b>.</div>
           <div class="nota">A ordem dos campos desta resposta foi conferida só em fonte secundária, então cada linha mostra também a posição. Confira o nome antes de pôr num laudo.</div>`}
       </${Cartao}>` : null}
@@ -1603,7 +1553,7 @@ function App({ usuario, nativo }) {
     <main class="folha inicio"><div class="vazio" id="fora-horario"><b>Fora do horário de uso.</b><br />${fora}</div></main></div>`;
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
   const telas = cfgOk ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
-  const ctx = { perfil: usuario, dados, cfg, setCfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
+  const ctx = { perfil: usuario, dados, cfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
     ${dados.erro && !semAviso ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px" onClick=${() => setSemAviso(true)}>

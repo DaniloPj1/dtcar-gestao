@@ -470,25 +470,29 @@ chk("todo nível declarado existe na lista de níveis", param.PARAMETROS.every(p
 chk("todo parâmetro tem valor ou faixa", param.PARAMETROS.every(p => typeof p.valor === "number" || (typeof p.de === "number" && typeof p.ate === "number")));
 chk("faixa sempre do menor para o maior", param.PARAMETROS.every(p => p.de === undefined || p.de < p.ate));
 chk("parâmetro de modelo diz de qual motor é", param.PARAMETROS.filter(p => p.onde === "modelo").every(p => !!p.modelo));
-chk("os que o app usa de verdade estão marcados", param.PARAMETROS.filter(p => p.usado).length >= 4);
 chk("nenhum id repetido", new Set(param.PARAMETROS.map(p => p.id)).size === param.PARAMETROS.length);
 chk("o que não tem documento de montadora entra como suposto, não como verdade",
   param.porId("rail_lenta_geral").nivel === "suposto" && param.porId("maf_por_litro").nivel === "suposto");
 chk("e diz na fonte que não há documento", param.porId("rail_lenta_geral").fonte.includes("NÃO há documento"));
+chk("os cinco que o app usa para decidir estão todos marcados e com valor",
+  param.PARAMETROS.filter(p => p.usado).length === 5 && Object.values(param.limites()).every(v => typeof v === "number"));
+chk("sem conferência vale a referência", param.valorDe("ajuste_grave") === 25 && param.nivelDe("ajuste_grave") === "montadora");
+chk("parâmetro de faixa devolve a faixa", param.faixaDe("rail_lenta_geral").de === 250);
+chk("valor inexistente não explode", param.valorDe("nao_existe") === null && param.nivelDe("nao_existe") === "suposto");
 {
-  const vazio = {};
-  chk("sem conferência vale a referência", param.valorDe(vazio, "ajuste_grave") === 25 && param.nivelDe(vazio, "ajuste_grave") === "montadora");
-  const c1 = param.comConferencia(vazio, "ajuste_grave", { valor: 18, carro: "Onix 1.0 2019" });
-  chk("conferido passa a valer", param.valorDe(c1, "ajuste_grave") === 18);
-  chk("e sobe para o nível mais alto", param.nivelDe(c1, "ajuste_grave") === "conferido");
-  chk("guarda em qual carro foi conferido", c1.obdParametros.ajuste_grave.carro === "Onix 1.0 2019" && !!c1.obdParametros.ajuste_grave.em);
-  const c2 = param.comConferencia(c1, "ajuste_grave", {});
-  chk("apagar a conferência volta à referência", param.valorDe(c2, "ajuste_grave") === 25 && param.nivelDe(c2, "ajuste_grave") === "montadora");
-  const c3 = param.comConferencia(vazio, "rail_lenta_geral", { de: 280, ate: 420 });
-  chk("faixa conferida também vale", param.faixaDe(c3, "rail_lenta_geral").de === 280);
-  chk("texto da faixa sai no jeito daqui", param.textoDe(param.comAjustes(c3).find(p => p.id === "rail_lenta_geral")) === "280 a 420 bar");
-  chk("valor que não é número é recusado", !param.comConferencia(vazio, "ajuste_grave", { valor: NaN }).obdParametros.ajuste_grave);
+  // conferido no Raven: entra no próprio parâmetro, no arquivo, e sobe para o nível mais alto
+  const antes = param.porId("ajuste_grave");
+  const copia = Object.assign({}, antes, { conferido: { valor: 18, carro: "Onix 1.0 2019", em: "20/11/2026" } });
+  param.PARAMETROS[param.PARAMETROS.indexOf(antes)] = copia;
+  chk("conferido passa a valer", param.valorDe("ajuste_grave") === 18);
+  chk("e sobe para o nível mais alto", param.nivelDe("ajuste_grave") === "conferido");
+  chk("os limites que o app usa acompanham", param.limites().grave === 18);
+  chk("a procedência é escrita na tela", param.textoConferencia(copia.conferido).includes("Onix 1.0 2019") && param.textoConferencia(copia.conferido).includes("Raven"));
+  param.PARAMETROS[param.PARAMETROS.indexOf(copia)] = antes;        // devolve como estava
+  chk("voltou à referência", param.valorDe("ajuste_grave") === 25);
 }
+chk("texto da faixa sai no jeito daqui", param.textoDe(param.lista().find(p => p.id === "rail_lenta_geral")) === "250 a 550 bar");
+chk("a tela recebe a lista inteira, com nível e procedência", param.lista().length === param.PARAMETROS.length && param.lista().every(p => !!p.nivelAtual));
 
 console.log(falhas.length ? ok.length + " verificações passaram; " + falhas.length + " FALHARAM:\n  ✗ " + falhas.join("\n  ✗ ") : ok.length + " verificações passaram.");
 process.exit(falhas.length ? 1 : 0);

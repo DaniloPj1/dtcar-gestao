@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, PIDS_PADRAO, padraoPara, escolhaGuardada, pidsDaEscolha, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, PIDS_PADRAO, PIDS_PADRAO_DIESEL, padraoPara, tipoPeloModulo, escolhaGuardada, pidsDaEscolha, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -396,6 +396,15 @@ chk("padrão que o carro não tem não aparece", padraoPara([0x0c, 0x05], "flex"
 chk("sem saber o que o carro tem, devolve as padrão mesmo", padraoPara(null, "flex").length === PIDS_PADRAO.length);
 chk("no diesel não oferece ajuste de combustível e oferece o rail",
   !padraoPara(null, "Diesel").includes(0x06) && padraoPara(null, "Diesel").includes(0x23));
+chk("o rail entra nas duas formas que o módulo pode publicar ($23 e $59)",
+  PIDS_PADRAO_DIESEL.includes(0x23) && PIDS_PADRAO_DIESEL.includes(0x59));
+chk("rail sem ajuste de combustível é diesel", tipoPeloModulo([0x0c, 0x23]) === "diesel" && tipoPeloModulo([0x0c, 0x59]) === "diesel");
+chk("rail COM ajuste é injeção direta a gasolina, não diesel", tipoPeloModulo([0x0c, 0x23, 0x06]) === "otto");
+chk("sem rail e sem ajuste não chuta", tipoPeloModulo([0x0c, 0x05]) === null && tipoPeloModulo([]) === null && tipoPeloModulo(null) === null);
+chk("cadastro sem combustível: o padrão sai do que o MÓDULO publica",
+  padraoPara([0x0c, 0x05, 0x23, 0x59], "").includes(0x23) && !padraoPara([0x0c, 0x05, 0x23, 0x59], "").includes(0x06));
+chk("o cadastro manda quando diz diesel, mesmo que o módulo confunda",
+  padraoPara([0x0c, 0x23, 0x06], "Diesel").includes(0x23));
 chk("sem nada guardado, vale o padrão", escolhaGuardada(null).modo === "padrao" && escolhaGuardada(undefined).modo === "padrao");
 chk("o formato antigo (lista de PIDs) continua valendo", escolhaGuardada([1, 2]).modo === "escolha" && escolhaGuardada([]).modo === "todas");
 chk("'todas' não filtra nada", pidsDaEscolha({ modo: "todas", pids: [] }, [1, 2], "") === null);

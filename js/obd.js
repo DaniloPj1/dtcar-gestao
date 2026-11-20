@@ -986,11 +986,28 @@ export const PIDS_PADRAO = [
   0x0d,  // velocidade
   0x42,  // tensão do módulo
 ];
-/** No diesel, ajuste de combustível não existe e a pressão do rail é o que se olha primeiro. */
-export const PIDS_PADRAO_DIESEL = [0x0c, 0x05, 0x04, 0x11, 0x0e, 0x0f, 0x0b, 0x10, 0x0d, 0x42, 0x23, 0x5c];
+/* No diesel, ajuste de combustível não existe e a PRESSÃO DO RAIL é o que se olha primeiro — é ela que
+ * diz se a bomba de alta está entregando. O módulo publica num PID ou no outro ($23 medida, $59 absoluta),
+ * então os dois entram: o que o carro não tiver some sozinho. Não há PID genérico para a pressão
+ * PEDIDA pelo módulo nem para o comando do regulador da bomba: isso é dado de montadora. */
+export const PIDS_PADRAO_DIESEL = [0x0c, 0x05, 0x04, 0x11, 0x0e, 0x0f, 0x0b, 0x10, 0x0d, 0x42, 0x23, 0x59, 0x5c];
+/**
+ * Diesel ou ciclo Otto pelo que o MÓDULO publica, quando o cadastro não diz (carro novo na oficina,
+ * cadastro sem combustível, placa não consultada). Rail sem ajuste de combustível é diesel; rail COM
+ * ajuste é injeção direta a gasolina, que também tem rail. Na dúvida, devolve null e vale o cadastro.
+ */
+export function tipoPeloModulo(suportados) {
+  if (!suportados || !suportados.length) return null;
+  const temRail = suportados.includes(0x23) || suportados.includes(0x59);
+  const temAjuste = suportados.includes(0x06) || suportados.includes(0x07);
+  if (temRail && !temAjuste) return "diesel";
+  if (temAjuste) return "otto";
+  return null;
+}
 /** As padrão que ESTE carro tem. Sem lista do carro, devolve as padrão mesmo (a tela avisa de onde veio). */
 export function padraoPara(suportados, combustivel) {
-  const base = tipoDeMotor(combustivel) === "diesel" ? PIDS_PADRAO_DIESEL : PIDS_PADRAO;
+  const tipo = tipoDeMotor(combustivel) || tipoPeloModulo(suportados);
+  const base = tipo === "diesel" ? PIDS_PADRAO_DIESEL : PIDS_PADRAO;
   const tem = suportados && suportados.length;
   return base.filter(p => !tem || suportados.includes(p));
 }

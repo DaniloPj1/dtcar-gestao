@@ -351,6 +351,23 @@ function criarApiSupabase() {
       excluir: async id => { ok(await sb.from("orcamentos").delete().eq("id", id)); },
     },
     // agenda da oficina (v54). A tela grava direto na tabela (regras de acesso e gatilho do v54 decidem remarcação e quem criou)
+    /** Diagnóstico OBD pelo app (v62, pedido do Danilo em 19/11/2026): registro de quem apagou a falha de qual carro.
+     *  Linha gravada não muda mais (o banco não tem política de update). Sem o v62 rodado, listar devolve vazio e
+     *  registrar avisa com todas as letras — apagar sem registrar é justamente o que não pode acontecer. */
+    obd: {
+      listar: async ({ placa, desde, limite = 20 } = {}) => {
+        let q = sb.from("obd_leituras").select("*").order("criado_em", { ascending: false }).limit(limite);
+        if (placa) q = q.eq("placa", String(placa).toUpperCase());
+        if (desde) q = q.gte("criado_em", desde);
+        const r = await q;
+        if (r.error && /obd_leituras|schema cache|PGRST205/i.test(r.error.message || "")) return [];
+        return ok(r);
+      },
+      registrar: async linha => { const r = await sb.from("obd_leituras").insert(linha).select().single();
+        if (r.error && /obd_leituras|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("O registro do OBD ainda não foi ligado no banco: falta rodar o supabase/v62.sql.");
+        return ok(r); },
+    },
+
     /** Serviço pelo mecânico no app (v60, pedido do Danilo em 16/11/2026 à noite): apontamentos de início, pausa, fim, itens executados e
      *  indicações de responsável. Só online. Sem o v60 no banco, "listar" devolve [] (a tela avisa) e as gravações explicam. */
     apontamentos: {
@@ -788,6 +805,7 @@ function comBancoDoPC(a) {
       aprovar: soOnline(a.orcamentos.aprovar, "Sem conexão com a internet: aprovar o orçamento cria a O.S. no servidor e precisa de internet."),
       excluir: soOnline(a.orcamentos.excluir, "Sem conexão com a internet: o orçamento só pode ser excluído com internet.") },
     // agenda: sem internet, só consulta (do banco do PC); gravar precisa de internet
+    obd: { ...a.obd, registrar: soOnline(a.obd.registrar, "Sem conexão com a internet: o apagamento precisa ficar registrado, então só com internet.") },
     apontamentos: { ...a.apontamentos, abrir: soOnline(a.apontamentos.abrir, "Sem conexão com a internet: o serviço só pode ser iniciado com internet."),
       atualizar: soOnline(a.apontamentos.atualizar, "Sem conexão com a internet: tente de novo quando a internet voltar."), visto: soOnline(a.apontamentos.visto, "Sem conexão com a internet.") },
     agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),

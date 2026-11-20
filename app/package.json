@@ -1,7 +1,7 @@
 {
   "name": "dtcar-app",
   "private": true,
-  "version": "1.5.0",
+  "version": "1.5.1",
   "description": "App do sistema da DTCar Centro Automotivo (APK). As telas ficam em app/; o APK é gerado pelo GitHub Actions (app-apk.yml). O plugin local plugins/obd liga o app ao adaptador OBD por Bluetooth.",
   "dependencies": {
     "@capacitor/android": "6.2.1",

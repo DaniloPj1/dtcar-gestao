@@ -41,6 +41,17 @@ export function foraDoHorario(h, agora = new Date()) {
   return "";
 }
 
+/* ---- Apagar falha no OBD (v62, decisão do Danilo em 19/11/2026) ----
+ * "deixar essas opções reservadas para o adm e no painel do sistema o adm permite ou não o acesso por mecânico".
+ * Apagar é o único comando que o app manda PARA o carro: o administrador sempre pode; qualquer outra pessoa só com
+ * cfg.appAcessos[id].obd_apagar === true, marcado por ele em Sistema › Equipe. Quem não tem a tela do OBD não apaga nada. */
+export function podeApagarObd(cfg, perfil) {
+  const a = acessoApp(cfg, perfil);
+  if (!a.entra || !a.telas.includes("obd")) return false;
+  if (perfil.papel === "admin") return true;
+  return ((cfg && cfg.appAcessos) || {})[perfil.id] ? ((cfg.appAcessos || {})[perfil.id].obd_apagar === true) : false;
+}
+
 /** { entra, telas: [ids], padrao: true quando nada foi gravado para a pessoa, horario: {de, ate, dias} | null (nunca para o administrador) } */
 export function acessoApp(cfg, perfil) {
   if (!perfil || perfil.ativo === false || !perfil.papel || perfil.papel === "pendente") return { entra: false, telas: [], padrao: true, horario: null };

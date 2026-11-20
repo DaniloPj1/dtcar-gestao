@@ -15,7 +15,7 @@ import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conve
 import { copiaClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
-import { acessoApp, foraDoHorario } from "../js/appacesso.js";
+import { acessoApp, foraDoHorario, podeApagarObd } from "../js/appacesso.js";
 import * as param from "../js/obdparam.js";
 import { MAIUSC } from "../js/maiusculas.js";
 import * as obd from "../js/obd.js";
@@ -1018,7 +1018,7 @@ function Parametros() {
 }
 
 function Obd() {
-  const { dados } = useApp();
+  const { dados, cfg, perfil } = useApp();
   const pl = usarPlaca();
   const [aparelhos, setAparelhos] = useState(null);
   const [lig, setLig] = useState(null);          // { nome, endereco, protocolo, pidsSuportados }
@@ -1058,6 +1058,13 @@ function Obd() {
   // acrescentar, e há um botão que põe todas. Guardado por placa como { modo, pids }.
   const [escolha, setEscolha] = useState({ modo: "padrao", pids: [] });
   const [abrirEscolha, setAbrirEscolha] = useState(false);
+  // Apagar a falha, com registro (v62, decisão do Danilo em 19/11/2026). Quem apaga é decidido no sistema
+  // (Sistema › Equipe, por pessoa); aqui a tela só mostra o botão para quem pode. O passo "confirmar" existe
+  // porque apagar é o único comando que sai daqui PARA o carro, e não tem volta: a foto do momento da falha
+  // some junto.
+  const [apagar, setApagar] = useState(null);   // { passo: "confirmar"|"feito", km, antes, comb, r, depois, combDepois, registro }
+  const [antesApagados, setAntesApagados] = useState(null);   // apagamentos anteriores DESTE carro
+  const podeApagar = podeApagarObd(cfg, perfil);
 
   // sair da tela fecha a conexão: o adaptador não aceita duas conversas e a bateria do carro agradece
   useEffect(() => () => { rodada.current = 0; if (obd.disponivel()) obd.desconectar(); }, []);
@@ -1071,8 +1078,25 @@ function Obd() {
     } catch (e) { /* sem espaço ou JSON estragado: segue sem memória */ }
     return null;
   };
+  // Registro de apagamento que ficou no aparelho (sem internet na hora): sobe sozinho quando a tela abre.
+  useEffect(() => { (async () => {
+    let l = [];
+    try { l = JSON.parse(window.localStorage.getItem("obd_pendentes") || "[]"); } catch (e) { return; }
+    if (!l.length) return;
+    const restam = [];
+    for (const reg of l) {
+      const { guardado_em, ...linha } = reg;
+      try { await api.obd.registrar(linha); } catch (e) { restam.push(reg); }
+    }
+    try { window.localStorage.setItem("obd_pendentes", JSON.stringify(restam)); } catch (e) { /* segue */ }
+  })(); }, []);
+
   // Ao trocar de placa, recupera o que foi marcado naquele carro e o que ele respondeu da última vez.
-  useEffect(() => { setEscolha(obd.escolhaGuardada(guardado("leituras"))); }, [placa]);
+  useEffect(() => {
+    setEscolha(obd.escolhaGuardada(guardado("leituras")));
+    setAntesApagados(null);
+    if (placa && podeApagar) carregarAnteriores();
+  }, [placa]);
   // O que o carro tem: a lista que ELE respondeu manda. Enquanto não há conexão, vale a da última
   // vez (só para o mecânico já poder marcar o que quer antes de encaixar o adaptador).
   const antesDeLigar = guardado("suportados");
@@ -1176,6 +1200,52 @@ function Obd() {
       setVivo(x => (x && x.rodando && !rodada.current ? Object.assign({}, x, { rodando: false }) : x));
     }
   }
+  /* ---- Apagar a falha, com registro (v62) ----
+   * A ordem importa: lê o que está lá, lê o ajuste de combustível, apaga, e lê os dois de novo. O "depois"
+   * é o que dá valor ao registro: mostra se o código voltou na hora (defeito acontecendo agora) e o módulo
+   * recomeçando a aprender o combustível do zero. */
+  const abrirApagar = () => { pararVivo(); return rodar("Lendo o que está gravado…", async () => {
+    const f = await obd.lerFalhas();
+    const comb = await obd.lerCombustivelRapido(lig.pidsSuportados);
+    setRes(null); setVivo(null);
+    setApagar({ passo: "confirmar", km: "", antes: f.falhas, comb });
+  }); };
+  const apagarAgora = () => rodar("Apagando as falhas…", async () => {
+    const antes = apagar.antes || [], comb = apagar.comb || null, km = apagar.km;
+    const r = await obd.apagarFalhas();
+    if (!r.ok) { setApagar(a => Object.assign({}, a, { passo: "confirmar", erro: r.erro })); return; }
+    // o módulo precisa de um instante para refazer a lista antes de valer a pena perguntar de novo
+    await new Promise(x => setTimeout(x, 1500));
+    let depois = null, combDepois = null;
+    try { depois = (await obd.lerFalhas()).falhas; } catch (e) { depois = null; }
+    try { combDepois = await obd.lerCombustivelRapido(lig.pidsSuportados); } catch (e) { combDepois = null; }
+    const chassi = await obd.lerChassi().catch(() => "");
+    const registro = obd.registroApagar({
+      perfil_id: perfil.id, perfil_nome: perfil.nome,
+      placa, veiculo_id: (v && v.id) || null, km, vin: chassi,
+      antes, depois, combustivel: comb, combustivel_depois: combDepois,
+      leituras: vivo ? Object.keys(vivo.valores).map(k => vivo.valores[k]) : [],
+    });
+    let gravado = "";
+    try { await api.obd.registrar(registro); gravado = "ok"; }
+    catch (e) { gravado = e.message || "não deu para registrar"; guardarPendente(registro); }
+    setApagar({ passo: "feito", antes, comb, depois, combDepois, km, resultado: obd.resultadoApagar(antes, depois), gravado });
+    setFalhasVivo(null); baseFalhas.current = null;
+    if (placa) carregarAnteriores();
+  });
+  // Apagou e a internet caiu na hora de registrar: o registro fica guardado no aparelho e sobe sozinho na
+  // próxima vez que a tela abrir com internet. Apagamento sem registro é exatamente o que não pode sobrar.
+  const guardarPendente = reg => {
+    try {
+      const l = JSON.parse(window.localStorage.getItem("obd_pendentes") || "[]");
+      l.push(Object.assign({ guardado_em: new Date().toISOString() }, reg));
+      window.localStorage.setItem("obd_pendentes", JSON.stringify(l.slice(-20)));
+    } catch (e) { /* sem espaço: o aviso na tela é o que resta */ }
+  };
+  const carregarAnteriores = async () => {
+    try { setAntesApagados(await api.obd.listar({ placa, limite: 5 })); } catch (e) { setAntesApagados(null); }
+  };
+
   const lerFoto = () => { pararVivo(); return rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados))); };
   const lerTestes = () => { pararVivo(); return rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes())); };
   const lerCilindros = () => { pararVivo(); return rodar("Contando falha por cilindro…", async () => guardar("cilindros", await obd.lerFalhaCilindros())); };
@@ -1253,6 +1323,7 @@ function Obd() {
         <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto}>FOTO DO MOMENTO DA FALHA</button>
         <button type="button" class="btn-barra claro" id="obd-cilindros" onClick=${lerCilindros}>FALHA POR CILINDRO</button>
         <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
+        ${podeApagar ? html`<button type="button" class="btn-barra apagar" id="obd-apagar" onClick=${abrirApagar}>APAGAR FALHAS (FICA REGISTRADO)</button>` : null}
         <div class="nota">${falhasVivo && falhasVivo.novas.length ? "Apareceu código com o motor trabalhando. Toque no botão vermelho para ver quais."
           : vivo && vivo.rodando ? "Pedir outra leitura para os dados ao vivo: o adaptador atende um pedido por vez."
           : "Nada é gravado e nenhuma falha é apagada nesta etapa."}</div>
@@ -1318,6 +1389,43 @@ function Obd() {
           <div class="sec"><h3>Como o módulo respondeu</h3>
             ${res.d.testes.map(t => html`<div key=${t.mid + "-" + t.tid} class="kv"><span>${t.nome}${t.teste ? " · " + t.teste : ""}</span><i></i><b>${numBR(t.valor)}${t.unidade ? " " + t.unidade : ""}</b></div>`)}
           </div>`}
+      </${Cartao}>` : null}
+
+      ${apagar && apagar.passo === "confirmar" ? html`<${Cartao} titulo="Apagar as falhas?" id="obd-apagar-cx">
+        ${apagar.erro ? html`<div class="erro">${apagar.erro}</div>` : null}
+        <div class="apg-antes">
+          ${!apagar.antes.length ? html`<div class="vazio">Não há código gravado agora. Apagar vai zerar as adaptações e a prontidão do mesmo jeito.</div>`
+            : html`<div class="nota" style="margin-bottom:6px">Vai apagar ${apagar.antes.length} código${apagar.antes.length === 1 ? "" : "s"}:</div>
+              ${apagar.antes.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc"><b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}`}
+        </div>
+        ${apagar.comb && apagar.comb.pior ? html`<div class="nota">Ajuste de combustível agora: ${numBR(apagar.comb.pior.total)}% — some com o apagamento e o módulo recomeça a aprender.</div>` : null}
+        <ul class="apg-avisos">${obd.AVISOS_APAGAR.map(a => html`<li key=${a}>${a}</li>`)}</ul>
+        <${Campo} id="obd-km" rotulo="KM do painel (ajuda no registro)">
+          <input id="obd-km" class="inp" type="number" inputmode="numeric" value=${apagar.km}
+            onInput=${e => setApagar(a => Object.assign({}, a, { km: e.target.value }))} /></${Campo}>
+        <div class="nota">Fica registrado quem apagou, de qual carro, com que KM e quais códigos estavam lá. ${perfil.nome}, ${placa ? "placa " + placa : "sem placa informada"}.</div>
+        <button type="button" class="btn-barra apagar" id="obd-apagar-ok" onClick=${apagarAgora}>APAGAR AGORA</button>
+        <button type="button" class="btn-barra claro" id="obd-apagar-nao" style="justify-content:center" onClick=${() => setApagar(null)}>Não apagar</button>
+      </${Cartao}>` : null}
+
+      ${apagar && apagar.passo === "feito" ? html`<${Cartao} titulo="Falhas apagadas" id="obd-apagar-feito">
+        <div class="kv"><span>Resultado:</span><i></i><b><span class=${"selo " + (apagar.resultado.situacao === "limpo" ? "" : apagar.resultado.situacao === "voltou" ? "ruim" : "atencao")}>${
+          apagar.resultado.situacao === "limpo" ? "LIMPOU" : apagar.resultado.situacao === "voltou" ? "O CÓDIGO VOLTOU" : apagar.resultado.situacao === "sobrou" ? "SOBROU CÓDIGO" : "NÃO CONFERIDO"}</span></b></div>
+        <div class="nota">${apagar.resultado.frase}</div>
+        ${apagar.depois && apagar.depois.length ? html`<div class="sec"><h3>O que ficou no módulo</h3>
+          ${apagar.depois.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc"><b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}</div>` : null}
+        ${apagar.comb && apagar.comb.pior ? html`<div class="kv"><span>Ajuste antes:</span><i></i><b>${numBR(apagar.comb.pior.total)}%</b></div>` : null}
+        ${apagar.combDepois && apagar.combDepois.pior ? html`<div class="kv"><span>Ajuste depois:</span><i></i><b>${numBR(apagar.combDepois.pior.total)}%</b></div>` : null}
+        ${apagar.combDepois ? html`<div class="nota">O módulo recomeçou a aprender: o ajuste só volta a dizer alguma coisa depois de o carro rodar. A prontidão dos monitores também zerou.</div>` : null}
+        <div class=${apagar.gravado === "ok" ? "nota" : "erro"}>${apagar.gravado === "ok"
+          ? "Registrado: " + perfil.nome + (placa ? " · " + placa : "") + (apagar.km ? " · " + apagar.km + " km" : "")
+          : "APAGOU, MAS NÃO REGISTROU (" + apagar.gravado + "). O registro ficou guardado no celular e sobe sozinho quando este app abrir com internet."}</div>
+        <button type="button" class="btn-barra claro" id="obd-apagar-fim" style="justify-content:center" onClick=${() => setApagar(null)}>Pronto</button>
+      </${Cartao}>` : null}
+
+      ${podeApagar && antesApagados && antesApagados.length && !apagar ? html`<${Cartao} titulo="Já foi apagado neste carro" id="obd-apagados">
+        ${antesApagados.map(a => html`<div key=${a.id} class="kv"><span>${fmtData(a.criado_em)}</span><i></i><b>${a.perfil_nome || "—"}${a.km ? " · " + a.km + " km" : ""}${(a.codigos || []).length ? " · " + (a.codigos || []).map(c => c.codigo).join(", ") : ""}</b></div>`)}
+        <div class="nota">Monitor que ainda não terminou e falha que "não existia" podem ser disto: o carro ainda não rodou o bastante depois do apagamento.</div>
       </${Cartao}>` : null}
 
       ${res && res.o === "falhas" ? html`<${Cartao} titulo=${"Falhas do motor" + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">

@@ -309,6 +309,17 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .comb-causas ul{margin:0 0 6px;padding-left:18px}
 .comb-causas li{font-size:13.5px;line-height:1.4;color:var(--tinta)}
 
+/* Falha de combustão por cilindro: barra por cilindro, comparada com o maior do próprio carro
+   (não com faixa de normalidade: o que vale é um cilindro destoar dos outros). */
+.cil-lista { margin: 8px 0 4px }
+.cil-linha { display: flex; align-items: center; gap: 10px; min-height: 34px }
+.cil-nome { flex: 0 0 92px; font-size: 13.5px; color: #4a515a }
+.cil-barra { flex: 1; height: 10px; border-radius: 5px; background: #e6e9ec; overflow: hidden }
+.cil-barra i { display: block; height: 100%; background: var(--azul); border-radius: 5px }
+.cil-linha.pior .cil-barra i { background: #8a2d2d }
+.cil-linha.pior .cil-nome, .cil-linha.pior .cil-num { color: #8a2d2d; font-weight: 700 }
+.cil-num { flex: 0 0 64px; text-align: right; font-size: 17px; font-weight: 700; color: var(--tinta) }
+.cil-frase { margin: 8px 0 0; font-size: 14px; line-height: 1.45; color: var(--tinta) }
 /* Apagar falha, com registro (v62): o cartão de confirmação é o único lugar do app que manda algo PARA o carro,
    então os avisos vêm antes do botão e o botão é vermelho, como o de falha. */
 .btn-barra.apagar { background: #8a2d2d; border-color: #8a2d2d; color: #fff }   /* vermelho, mas NÃO pisca: piscar é do aviso de falha */

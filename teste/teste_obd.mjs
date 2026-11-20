@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, respostaApagar, resultadoApagar, registroApagar, AVISOS_APAGAR, PIDS_AJUSTE } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, respostaApagar, resultadoApagar, registroApagar, AVISOS_APAGAR, PIDS_AJUSTE, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -144,9 +144,10 @@ chk("suportados: nada disponível = lista vazia", suportados("4100" + "00000000"
 }
 {
   // escala que não está na tabela: mostra o número cru, sem unidade inventada
-  const t = testesDe("46" + "A101" + "9A" + "0064" + "0000" + "00C8");
+  const t = testesDe("46" + "7101" + "9A" + "0064" + "0000" + "00C8");
   chk("escala desconhecida: número cru, sem unidade, e ainda diz se passou", t[0].escalaConhecida === false && t[0].unidade === "" && t[0].valor === 100 && t[0].passou === true, t[0]);
-  chk("MID sem nome padronizado vira 'Monitor $A1'", t[0].nome === "Monitor $A1", t[0]);
+  chk("MID sem nome padronizado vira 'Monitor $71'", t[0].nome === "Monitor $71", t[0]);
+  chk("o monitor de falha de combustão, esse tem nome", testesDe("46" + "A10B" + "24" + "0000" + "0000" + "FFFF")[0].nome.includes("Falha de combustão"));
 }
 {
   const t = testesDe("46" + "2101010064000000C8" + "2102010032000000C8");
@@ -340,6 +341,49 @@ chk("motivo desconhecido não fica em branco", motivoDe(new Error("coisa-nova"))
 chk("comando recusado pelo nativo tem frase própria", motivoDe(new Error("comando-recusado")).includes("não escreve no carro"));
 chk("demora tem frase própria", motivoDe(new Error("demorou")).includes("tempo"));
 
+/* -------- falha de combustão por cilindro (serviço 06, MIDs $A1-$AD) -------- */
+chk("$A2 é o cilindro 1 e $AD é o 12", cilindroDoMid(0xa2) === 1 && cilindroDoMid(0xad) === 12);
+chk("$A1 é o monitor geral, não um cilindro", cilindroDoMid(0xa1) === 0);
+chk("MID fora da faixa não vira cilindro", cilindroDoMid(0x21) === 0 && cilindroDoMid(0xae) === 0);
+chk("os dois testes de cada cilindro têm nome", nomeTeste(0xa4, 0x0c).includes("ciclo") && nomeTeste(0xa4, 0x0b).includes("10 ciclos"));
+chk("TID desconhecido não ganha nome inventado", nomeTeste(0xa4, 0x77) === "" && nomeTeste(0x21, 0x0c) === "");
+chk("a lista de MIDs de falha tem o geral e os 12 cilindros", MIDS_FALHA.length === 13 && MIDS_FALHA[0] === 0xa1);
+{
+  const t = (mid, tid, valor) => ({ mid, tid, valor });
+  const quatro = [t(0xa2, 0x0c, 2), t(0xa3, 0x0c, 1), t(0xa4, 0x0c, 340), t(0xa5, 0x0c, 0)];
+  const r = falhaPorCilindro(quatro);
+  chk("junta um cilindro por MID", r.cilindros.length === 4 && r.cilindros[0].cilindro === 1);
+  chk("aponta o cilindro que destoa", r.situacao === "um_cilindro" && r.destacado.cilindro === 3, r.frases);
+  chk("e diz onde procurar naquele cilindro", r.frases[0].includes("ignição") && r.frases[0].includes("compressão"));
+  const zerado = falhaPorCilindro([t(0xa2, 0x0c, 0), t(0xa3, 0x0c, 0)]);
+  chk("tudo zero é 'nenhuma', sem alarde", zerado.situacao === "limpo" && zerado.total === 0);
+  const parelho = falhaPorCilindro([t(0xa2, 0x0c, 40), t(0xa3, 0x0c, 38), t(0xa4, 0x0c, 44), t(0xa5, 0x0c, 41)]);
+  chk("contagem parelha não acusa cilindro nenhum", parelho.situacao === "espalhado" && !parelho.destacado, parelho.frases);
+  chk("falha espalhada aponta causa comum a todos", parelho.frases[0].includes("comum"));
+  const ruido = falhaPorCilindro([t(0xa2, 0x0c, 3), t(0xa3, 0x0c, 0), t(0xa4, 0x0c, 0)]);
+  chk("contagem miúda é ruído: não aponta ninguém", !ruido.destacado, ruido);
+  const quase = falhaPorCilindro([t(0xa2, 0x0c, 30), t(0xa3, 0x0c, 20)]);
+  chk("o dobro não basta para apontar (a trava é " + FALHA_DESTAQUE + "x)", !quase.destacado);
+  chk("sem contagem nenhuma devolve nada, em vez de inventar zero", falhaPorCilindro([]) === null && falhaPorCilindro([t(0x21, 0x0c, 5)]) === null);
+  chk("usa o ciclo atual quando existe e a média quando só ela existe",
+    falhaPorCilindro([t(0xa2, 0x0b, 99), t(0xa2, 0x0c, 7)]).cilindros[0].ciclo === 7 && falhaPorCilindro([t(0xa3, 0x0b, 5)]).cilindros[0].media === 5);
+  chk("os avisos dizem que se compara entre cilindros e desde o apagamento",
+    r.avisos.some(a => a.includes("entre si")) && r.avisos.some(a => a.includes("apagamento")));
+  chk("avisa da ordem de ignição e do cilindro que não existe", r.avisos.some(a => a.includes("ordem de ignição")));
+  chk("nenhuma frase dá veredito de peça", !r.frases.concat(r.avisos).some(f => /troque|substitua|está queimad/i.test(f)));
+}
+
+/* -------- odômetro do módulo contra o KM do cadastro -------- */
+chk("módulo acima do cadastro é o normal: diz quanto andou", conferirOdometro(150000, 148000).situacao === "acima" && conferirOdometro(150000, 148000).frase.includes("2.000"));
+chk("igual ao cadastro bate", conferirOdometro(148000, 148000).diferenca === 0);
+chk("pouco abaixo é arredondamento, não alarme", conferirOdometro(147500, 148000).situacao === "perto");
+{
+  const r = conferirOdometro(140000, 148000);
+  chk("muito abaixo manda conferir", r.situacao === "abaixo" && r.frase.includes("8.000"));
+  chk("mas NÃO acusa ninguém: lista as explicações inocentes", r.frase.includes("não acusa") && r.frase.toLowerCase().includes("painel trocado"));
+}
+chk("carro que não informa odômetro devolve nada", conferirOdometro(null, 148000) === null && conferirOdometro(0, 148000) === null);
+chk("sem KM no cadastro não compara", conferirOdometro(150000, 0).situacao === "sem_cadastro");
 /* ---------------- apagar a falha, com registro (v62, 19/11/2026) ---------------- */
 chk("44 é apagou", respostaApagar(["44"]).ok && respostaApagar(["44 00"]).ok);
 chk("um módulo que aceita basta", respostaApagar(["7F 04 22", "44"]).ok);

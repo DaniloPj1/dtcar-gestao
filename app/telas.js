@@ -1146,10 +1146,12 @@ function Obd() {
 
   const lerFoto = () => { pararVivo(); return rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados))); };
   const lerTestes = () => { pararVivo(); return rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes())); };
-  const lerConf = () => { pararVivo(); return rodar("Lendo chassi e monitores…", async () => {
+  const lerCilindros = () => { pararVivo(); return rodar("Contando falha por cilindro…", async () => guardar("cilindros", await obd.lerFalhaCilindros())); };
+  const lerConf = () => { pararVivo(); return rodar("Lendo chassi, monitores e odômetro…", async () => {
     const monitores = await obd.lerMonitores();
     const chassi = await obd.lerChassi();
-    guardar("conf", { monitores, chassi });
+    const odometro = await obd.lerOdometro(lig.pidsSuportados);
+    guardar("conf", { monitores, chassi, odometro });
   }); };
 
   const v = pl.veic;
@@ -1197,6 +1199,7 @@ function Obd() {
             : "LER FALHAS"}</button>
         <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI E MONITORES</button>
         <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto}>FOTO DO MOMENTO DA FALHA</button>
+        <button type="button" class="btn-barra claro" id="obd-cilindros" onClick=${lerCilindros}>FALHA POR CILINDRO</button>
         <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
         ${podeApagar ? html`<button type="button" class="btn-barra apagar" id="obd-apagar" onClick=${abrirApagar}>APAGAR FALHAS (FICA REGISTRADO)</button>` : null}
         <div class="nota">${falhasVivo && falhasVivo.novas.length ? "Apareceu código com o motor trabalhando. Toque no botão vermelho para ver quais."
@@ -1218,6 +1221,32 @@ function Obd() {
           </div>`)}
           <div class="nota">A lista acima é a que ESTE carro respondeu — o que ele não tem nunca aparece aqui, por mais que o modelo costume ter. A escolha fica guardada${placa ? " para a placa " + placa : ""}.</div>
         ` : null}
+      </${Cartao}>` : null}
+
+      ${res && res.o === "cilindros" ? html`<${Cartao} titulo="Falha de combustão por cilindro" id="obd-r-cilindros">
+        ${!res.d.cilindros ? html`<div class="vazio">Este módulo não publica a contagem por cilindro.${res.d.erro ? " (" + res.d.erro + ")" : ""}</div>` : html`
+          <div class="kv"><span>Situação:</span><i></i><b><span class=${"selo " + (res.d.cilindros.situacao === "limpo" ? "" : res.d.cilindros.situacao === "um_cilindro" ? "ruim" : "atencao")}>${
+            res.d.cilindros.situacao === "limpo" ? "NENHUMA" : res.d.cilindros.situacao === "um_cilindro" ? "CILINDRO " + res.d.cilindros.destacado.cilindro : "ESPALHADA"}</span></b></div>
+          <div class="cil-lista">
+            ${(() => {
+              const maior = Math.max.apply(null, res.d.cilindros.cilindros.map(c => (typeof c.ciclo === "number" ? c.ciclo : c.media)).concat([1]));
+              return res.d.cilindros.cilindros.map(c => {
+                const n = typeof c.ciclo === "number" ? c.ciclo : c.media;
+                const destaque = res.d.cilindros.destacado && res.d.cilindros.destacado.cilindro === c.cilindro;
+                return html`<div key=${c.cilindro} class=${"cil-linha" + (destaque ? " pior" : "")} data-cilindro=${c.cilindro}>
+                  <span class="cil-nome">Cilindro ${c.cilindro}</span>
+                  <div class="cil-barra"><i style=${"width:" + Math.max(2, Math.round((n / maior) * 100)) + "%"}></i></div>
+                  <b class="cil-num">${numBR(n)}</b>
+                </div>`;
+              });
+            })()}
+          </div>
+          ${res.d.cilindros.cilindros.some(c => typeof c.media === "number" && typeof c.ciclo === "number") ? html`<div class="nota">Número grande = falhas neste ciclo de condução. A média dos últimos 10 ciclos está nos detalhes abaixo.</div>` : null}
+          ${res.d.cilindros.frases.map(f => html`<p key=${f} class="cil-frase">${f}</p>`)}
+          <ul class="apg-avisos">${res.d.cilindros.avisos.map(a => html`<li key=${a}>${a}</li>`)}</ul>
+          <div class="sec"><h3>Como o módulo respondeu</h3>
+            ${res.d.testes.map(t => html`<div key=${t.mid + "-" + t.tid} class="kv"><span>${t.nome}${t.teste ? " · " + t.teste : ""}</span><i></i><b>${numBR(t.valor)}${t.unidade ? " " + t.unidade : ""}</b></div>`)}
+          </div>`}
       </${Cartao}>` : null}
 
       ${apagar && apagar.passo === "confirmar" ? html`<${Cartao} titulo="Apagar as falhas?" id="obd-apagar-cx">
@@ -1299,11 +1328,22 @@ function Obd() {
         })()}
       </${Cartao}>` : null}
 
-      ${res && res.o === "conf" ? html`<${Cartao} titulo="Chassi e monitores" id="obd-r-conf">
+      ${res && res.o === "conf" ? html`<${Cartao} titulo="Chassi, monitores e odômetro" id="obd-r-conf">
         ${res.d.chassi ? html`<${KV} a="Chassi lido no módulo" b=${res.d.chassi} p />` : html`<div class="nota">O módulo não informou o chassi (comum em carro mais antigo).</div>`}
         ${res.d.chassi && chassiCadastro ? html`<div class="kv"><span>Confronto:</span><i></i><b>${res.d.chassi === chassiCadastro
           ? html`<span class="selo">CONFERE</span>igual ao cadastro`
           : html`<span class="selo ruim">DIVERGE</span>cadastro: ${chassiCadastro}`}</b></div>` : null}
+        ${(() => {
+          // Odômetro do módulo contra o KM do cadastro (pedido do Danilo, 19/11/2026). Poucos carros publicam.
+          if (res.d.odometro === null || res.d.odometro === undefined) return html`<div class="nota">Este módulo não publica o odômetro (a maioria não publica: o KM do painel não existe no OBD-II).</div>`;
+          const conf = obd.conferirOdometro(res.d.odometro, noBanco && noBanco.km_atual);
+          const ruim = conf && conf.situacao === "abaixo";
+          return html`<div id="obd-odometro">
+            <${KV} a="Odômetro do módulo" b=${fmtKm(res.d.odometro) + " km"} p />
+            ${conf && conf.cadastro ? html`<div class="kv"><span>KM do cadastro:</span><i></i><b>${fmtKm(conf.cadastro)} km ${ruim ? html`<span class="selo ruim">CONFIRA</span>` : html`<span class="selo">BATE</span>`}</b></div>` : null}
+            ${conf ? html`<div class=${ruim ? "erro" : "nota"}>${conf.frase}</div>` : null}
+          </div>`;
+        })()}
         <div class="kv"><span>Luz de injeção:</span><i></i><b>${res.d.monitores.luzAcesa ? html`<span class="selo ruim">ACESA</span>` : html`<span class="selo">APAGADA</span>`}${res.d.monitores.quantidade} código(s) no módulo</b></div>
         <div class="sec"><h3>Monitores de emissão (${res.d.monitores.prontos} de ${res.d.monitores.total} prontos)</h3>
           ${res.d.monitores.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto ? html`<span class="selo">PRONTO</span>` : html`<span class="selo atencao">NÃO PRONTO</span>`}</b></div>`)}

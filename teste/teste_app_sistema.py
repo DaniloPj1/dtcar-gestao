@@ -58,8 +58,15 @@ var R = {
   '0124': '412480004000', '0125': '41258CCC4000',
   '0178': '4178031324 16A8 0000 0000'.replace(/ /g, ''),
   '020C00': '420C001AF8', '020500': '42050050', '021100': '42110030',
-  '0600': '4600FF000001', '0620': '4620F0000000',
-  '0621': '4621010100640000012C'
+  '0600': '4600FF000001', '0620': '4620F0000001', '0640': '464000000001', '0660': '466000000001',
+  '0680': '468000000001', '06A0': '46A0F8000000',
+  '0621': '4621010100640000012C',
+  // contagem de falha de combustão por cilindro: MID $A2 = cilindro 1, TID $0B média de 10 ciclos, $0C ciclo atual
+  '06A1': '46A10B2400000000FFFF',
+  '06A2': '46A20B2400010000FFFFA20C2400020000FFFF',
+  '06A3': '46A30B2400010000FFFFA30C2400010000FFFF',
+  '06A4': '46A40B2400B40000FFFFA40C2401540000FFFF',
+  '06A5': '46A50B2400000000FFFFA50C2400000000FFFF'
 };
 window.Capacitor.Plugins.DtcarObd = {
   permissao: function () { window.__obd.chamadas.push('permissao'); return Promise.resolve({ concedida: true, pedeNaHora: true }); },
@@ -687,6 +694,32 @@ try:
         pg.click('#obd-testes'); pg.wait_for_selector('#obd-r-testes', timeout=25000); tx = pg.inner_text('#obd-r-testes')
         t('Catalisador' in tx and 'PASSOU' in tx, 'testes de bordo chegam até o catalisador (faixa $21): %s' % tx.replace('\n', ' ')[:140])
         t('limite' in tx, 'mostra a margem que sobra até o limite')
+
+        # FALHA DE COMBUSTÃO POR CILINDRO (pedido do Danilo em 19/11/2026): o que o corte de bico procura,
+        # sem cortar nada — o próprio módulo conta.
+        n_antes = len(pg.evaluate("window.__obd.cmds"))
+        pg.click('#obd-cilindros'); pg.wait_for_selector('#obd-r-cilindros', timeout=25000)
+        so_cil = pg.evaluate("window.__obd.cmds")[n_antes:]
+        tc2 = pg.inner_text('#obd-r-cilindros')
+        t(pg.locator('#obd-r-cilindros .cil-linha').count() == 4, 'mostra um cilindro por linha: %d' % pg.locator('#obd-r-cilindros .cil-linha').count())
+        t('CILINDRO 3' in tc2, 'aponta o cilindro que destoa: %s' % [l for l in tc2.split('\n') if 'ilindro 3' in l][:1])
+        t('340' in tc2, 'com a contagem do módulo')
+        t('ignição' in tc2 and 'compressão' in tc2, 'e diz onde procurar naquele cilindro')
+        t('pior' in (pg.get_attribute('#obd-r-cilindros [data-cilindro="3"]', 'class') or ''), 'a barra do cilindro 3 vem marcada')
+        t('Compare os cilindros entre si' in tc2, 'avisa que a comparação é entre cilindros, não com número fixo')
+        t('apagamento' in tc2, 'e que a contagem é desde o último apagamento')
+        t('ordem de ignição' in tc2, 'avisa que alguns módulos mandam na ordem de ignição')
+        t('06A4' in pg.evaluate("window.__obd.cmds"), 'pede os MIDs de falha de combustão de verdade')
+        t('06A4' in so_cil and not [c for c in so_cil if c in ('0621', '0601')], 'o botão só lê o que precisa, não varre o serviço 06 inteiro: %s' % so_cil)
+
+        # ODÔMETRO DO MÓDULO CONTRA O KM DO CADASTRO (pedido do Danilo em 19/11/2026)
+        pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=25000)
+        to = pg.inner_text('#obd-r-conf')
+        t(pg.query_selector('#obd-odometro'), 'o cartão traz o odômetro do módulo')
+        t('150.000' in to, 'com o número lido no módulo: %s' % [l for l in to.split('\n') if '150' in l][:1])
+        t('80.000' in to, 'e o KM do cadastro ao lado')
+        t('a mais' in to, 'módulo acima do cadastro é o normal, e a tela explica: %s' % [l for l in to.split('\n') if 'a mais' in l][:1])
+        t('01A6' in pg.evaluate("window.__obd.cmds"), 'o odômetro é pedido de verdade')
         # APAGAR A FALHA, COM REGISTRO (v62, decisão do Danilo em 19/11/2026)
         t(pg.query_selector('#obd-apagar'), 'o administrador tem o botão de apagar falhas')
         t('REGISTRADO' in pg.inner_text('#obd-apagar'), 'e o botão já avisa que fica registrado: %s' % pg.inner_text('#obd-apagar'))

@@ -423,6 +423,7 @@ export function monitoresDe(hex) {
  */
 const ESCALAS = {
   0x01: [1, ""], 0x07: [0.25, "rpm"], 0x09: [1, "km/h"], 0x0b: [0.001, "V"], 0x12: [1, "s"],
+  0x24: [1, "contagens"],   // "counts, 1 count/bit" — é a escala das contagens de falha de combustão
 };
 
 /** Na tabela de escalas do J1979 os identificadores de $80 em diante são valores COM SINAL. */
@@ -437,7 +438,27 @@ function nomeMid(mid) {
   if (mid >= 0x01 && mid <= 0x04) return "Sonda lambda · banco 1, sensor " + mid;
   if (mid >= 0x05 && mid <= 0x08) return "Sonda lambda · banco 2, sensor " + (mid - 4);
   if (mid >= 0x21 && mid <= 0x24) return "Catalisador · banco " + (mid - 0x20);
+  if (mid === MID_FALHA_GERAL) return "Falha de combustão · geral";
+  if (cilindroDoMid(mid)) return "Falha de combustão · cilindro " + cilindroDoMid(mid);
   return "Monitor $" + mid.toString(16).toUpperCase().padStart(2, "0");
+}
+
+/* ---- Falha de combustão por cilindro (serviço 06) ----
+ * O módulo CONTA cada falha de combustão por cilindro. É o número que o corte de bico procura, só que
+ * sem cortar nada: o próprio carro diz quantas vezes o cilindro 3 falhou.
+ * $A1 é o monitor geral e $A2 em diante é um por cilindro ($A2 = cilindro 1). Em cada um:
+ * TID $0B = média dos últimos 10 ciclos de condução; TID $0C = o ciclo atual. Contagem de 0 a 65.535. */
+export const MID_FALHA_GERAL = 0xa1, MID_CILINDRO_1 = 0xa2, CILINDROS_MAX = 12;
+export const TID_MEDIA_10 = 0x0b, TID_CICLO = 0x0c;
+/** $A2 → 1, $A3 → 2 … $AD → 12. Qualquer outro MID devolve 0. */
+export const cilindroDoMid = mid => (mid >= MID_CILINDRO_1 && mid < MID_CILINDRO_1 + CILINDROS_MAX ? mid - MID_CILINDRO_1 + 1 : 0);
+export const MIDS_FALHA = [MID_FALHA_GERAL].concat(Array.from({ length: CILINDROS_MAX }, (_, i) => MID_CILINDRO_1 + i));
+export function nomeTeste(mid, tid) {
+  if (cilindroDoMid(mid) || mid === MID_FALHA_GERAL) {
+    if (tid === TID_MEDIA_10) return "Média dos últimos 10 ciclos";
+    if (tid === TID_CICLO) return "Neste ciclo de condução";
+  }
+  return "";
 }
 
 /** Resposta de um MID do serviço 06 → lista de testes com valor, limites e passou/não passou */
@@ -455,7 +476,7 @@ export function testesDe(hex) {
     const escala = ESCALAS[uas];
     const conv = v => escala ? arred(v * escala[0], 3) : v;
     testes.push({
-      mid, tid, nome: nomeMid(mid),
+      mid, tid, nome: nomeMid(mid), teste: nomeTeste(mid, tid),
       valor: conv(cru), minimo: conv(minimo), maximo: conv(maximo),
       unidade: escala ? escala[1] : "",
       escalaConhecida: !!escala,
@@ -550,7 +571,9 @@ const INICIO = [["ATZ", 3000], ["ATE0", 2000], ["ATL0", 2000], ["ATS0", 2000], [
 // apareceria. Andar não custa nada em carro que não tem — a varredura para na primeira faixa que
 // não avisa a seguinte.
 export const FAIXAS_PID = [0x00, 0x20, 0x40, 0x60, 0x80, 0xa0, 0xc0];
-const FAIXAS_MID = [0x00, 0x20, 0x40, 0x60];
+// Até $C0 como as faixas de PID: as contagens de falha de combustão por cilindro são os MIDs $A1-$AD e,
+// sem andar até lá, nenhuma delas apareceria.
+const FAIXAS_MID = [0x00, 0x20, 0x40, 0x60, 0x80, 0xa0, 0xc0];
 
 /**
  * Anda nas faixas de um serviço e junta tudo o que o carro informa que tem.
@@ -839,12 +862,107 @@ export async function lerTestes() {
   const resto = primeira.includes(0x20) ? await suportadosEmFaixas(0x06, FAIXAS_MID.slice(1)) : [];
   const mids = primeira.concat(resto.filter(m => !primeira.includes(m)));
   const testes = [];
-  for (const mid of mids.filter(m => m % 0x20 !== 0).slice(0, 32)) {  // trava: nunca varre tudo
+  // As contagens de falha de combustão vêm no fim da lista ($A1-$AD) e eram justamente as que a trava
+  // de 32 cortava. Elas vão na frente; o resto vem depois, com a trava inteira.
+  const deFalha = mids.filter(m => MIDS_FALHA.includes(m));
+  const demais = mids.filter(m => m % 0x20 !== 0 && !deFalha.includes(m));
+  for (const mid of deFalha.concat(demais).slice(0, 48)) {  // trava: nunca varre tudo
     const r = await pedir("06" + mid.toString(16).toUpperCase().padStart(2, "0"), 5000);
     if (r.erro) continue;
     for (const t of testesDe(primeiraDe(r.respostas, 0x06))) testes.push(t);
   }
   return { testes, erro: "" };
+}
+
+/* ---- Falha de combustão por cilindro: o que o corte de bico procura, sem cortar nada ----
+ * O módulo já conta cada falha por cilindro. A regra de leitura é COMPARAR OS CILINDROS ENTRE SI:
+ * número absoluto não diz nada (depende do motor e de quanto o carro andou desde o apagamento);
+ * um cilindro destoando dos outros é que aponta ignição, combustível ou compressão daquele cilindro.
+ * A tela não dá veredito — mostra as contagens e diz onde procurar. */
+export const FALHA_DESTAQUE = 3;      // quantas vezes acima do segundo pior para apontar um cilindro
+export const FALHA_MINIMA = 10;       // abaixo disso é ruído: não aponta ninguém
+export function falhaPorCilindro(testes) {
+  const porCil = new Map();
+  for (const t of testes || []) {
+    const cil = cilindroDoMid(t.mid);
+    if (!cil || typeof t.valor !== "number") continue;
+    const e = porCil.get(cil) || { cilindro: cil };
+    if (t.tid === TID_CICLO) e.ciclo = t.valor;
+    else if (t.tid === TID_MEDIA_10) e.media = t.valor;
+    porCil.set(cil, e);
+  }
+  const cilindros = Array.from(porCil.values()).filter(c => typeof c.ciclo === "number" || typeof c.media === "number")
+    .sort((a, b) => a.cilindro - b.cilindro);
+  if (!cilindros.length) return null;                 // carro que não informa: a tela diz isso, não inventa zero
+  const conta = c => (typeof c.ciclo === "number" ? c.ciclo : c.media);
+  const total = cilindros.reduce((soma, c) => soma + conta(c), 0);
+  const ordem = cilindros.slice().sort((a, b) => conta(b) - conta(a));
+  const pior = ordem[0], segundo = ordem[1];
+  const destacado = total && conta(pior) >= FALHA_MINIMA && (!segundo || conta(pior) >= FALHA_DESTAQUE * Math.max(conta(segundo), 1)) ? pior : null;
+  const frases = [];
+  let situacao;
+  if (!total) {
+    situacao = "limpo";
+    frases.push("Nenhuma falha de combustão contada nos cilindros desde o último apagamento.");
+  } else if (destacado) {
+    situacao = "um_cilindro";
+    frases.push("O cilindro " + destacado.cilindro + " conta muito mais que os outros (" + conta(destacado) +
+      (segundo ? " contra " + conta(segundo) + " do segundo" : "") + "). É nele que se procura: ignição, combustível ou compressão.");
+  } else {
+    situacao = "espalhado";
+    frases.push("As contagens estão parecidas entre os cilindros (" + total + " no total). Falha espalhada costuma ser de algo comum a todos: combustível, pressão, admissão falsa ou compressão geral.");
+  }
+  const avisos = [
+    "Compare os cilindros entre si, não com um número fixo: o que vale é um destoar dos outros.",
+    "O módulo conta desde o último apagamento; carro apagado há pouco mostra contagem baixa mesmo com defeito.",
+  ];
+  if (cilindros.length > 1) avisos.push("Alguns módulos mandam esta lista na ordem de ignição, não na ordem dos cilindros, e há motor que lista cilindro que não existe. Confira o número no carro antes de abrir.");
+  return { cilindros, total, pior, segundo, destacado, situacao, frases, avisos };
+}
+
+/* ---- Odômetro do módulo contra o KM do cadastro (PID $A6) ----
+ * Poucos carros publicam, mas onde publica dá para confrontar. A tela NUNCA acusa: módulo trocado,
+ * painel trocado e módulo que conta a própria distância explicam divergência sem ninguém ter mexido. */
+export const ODOMETRO_TOLERANCIA = 1000;   // km a menos que ainda cabe em arredondamento e troca de painel
+const kmBR = n => Math.round(n).toLocaleString("pt-BR");
+export function conferirOdometro(kmModulo, kmCadastro) {
+  const m = Number(kmModulo), c = Number(kmCadastro);
+  if (!isFinite(m) || m <= 0) return null;
+  if (!isFinite(c) || c <= 0) return { situacao: "sem_cadastro", modulo: m, frase: "O cadastro não tem KM para comparar com o do módulo." };
+  const dif = Math.round(m - c);
+  if (dif === 0) return { situacao: "acima", modulo: m, cadastro: c, diferenca: 0, frase: "Bate com o KM do cadastro." };
+  if (dif > 0) return { situacao: "acima", modulo: m, cadastro: c, diferenca: dif,
+    frase: "O módulo conta " + kmBR(dif) + " km a mais que o último KM registrado aqui — é o que o carro andou desde então." };
+  const falta = -dif;
+  if (falta <= ODOMETRO_TOLERANCIA) return { situacao: "perto", modulo: m, cadastro: c, diferenca: dif,
+    frase: "O módulo conta " + kmBR(falta) + " km a menos que o cadastro — diferença pequena, cabe em arredondamento." };
+  return { situacao: "abaixo", modulo: m, cadastro: c, diferenca: dif,
+    frase: "O módulo conta " + kmBR(falta) + " km A MENOS que o último KM registrado aqui. Isso não acusa ninguém: módulo ou painel trocado dá nisso, e há módulo que conta a própria distância. Mas é para conferir antes de fechar a O.S." };
+}
+
+/** Só as contagens de falha de combustão (13 MIDs em vez de varrer o serviço 06 inteiro). */
+export async function lerFalhaCilindros() {
+  const base = await pedir("0600", 6000);
+  if (base.erro) return { testes: [], cilindros: null, erro: base.erro };
+  const primeira = suportados(primeiraDe(base.respostas, 0x06), 0x06, 0x00);
+  const resto = primeira.includes(0x20) ? await suportadosEmFaixas(0x06, FAIXAS_MID.slice(1)) : [];
+  const tem = primeira.concat(resto.filter(m => !primeira.includes(m))).filter(m => MIDS_FALHA.includes(m));
+  const testes = [];
+  for (const mid of tem) {
+    const r = await pedir("06" + mid.toString(16).toUpperCase().padStart(2, "0"), 5000);
+    if (r.erro) continue;
+    for (const t of testesDe(primeiraDe(r.respostas, 0x06))) testes.push(t);
+  }
+  return { testes, cilindros: falhaPorCilindro(testes), erro: "" };
+}
+
+/** Odômetro do módulo (PID $A6), em km. Devolve null quando o carro não informa. */
+export async function lerOdometro(pidsSuportados) {
+  if (pidsSuportados && pidsSuportados.length && !pidsSuportados.includes(0xa6)) return null;
+  const r = await pedir("01A6", 4000);
+  if (r.erro) return null;
+  const v = valorPid(primeiraDe(r.respostas, 0x01), 0xa6, 0x01);
+  return v.length ? v[0].valor : null;
 }
 
 /* ------------------------------------------------------------------ Apagar as falhas (serviço 04)

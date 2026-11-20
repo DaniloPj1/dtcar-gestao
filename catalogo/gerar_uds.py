@@ -189,6 +189,58 @@ def modulos_do_ovms(pasta_ovms):
     return fora
 
 
+def campos_do_canze(pasta_canze):
+    """TODAS as definições de campo, por veículo e por módulo.
+
+    Cada linha do CanZE é um sinal completo: endereço do módulo, primeiro e
+    último bit dentro da resposta, multiplicador, offset, unidade, o pedido em
+    hexa, a resposta esperada, a sessão e, quando o valor é enumerado, a lista
+    com o texto de cada valor. Nada é filtrado por marca nem por relevância.
+    """
+    fora = {}
+    for veiculo, modulo, cols in _linhas_campos(pasta_canze):
+        if len(cols) < 12:
+            continue
+        reg = {
+            "endereco": cols[1].strip(),
+            "bit_de": cols[2].strip(),
+            "bit_ate": cols[3].strip(),
+            "mult": cols[4].strip(),
+            "offset": cols[5].strip(),
+            "divisor": cols[6].strip(),
+            "unidade": cols[7].strip(),
+            "pedido": cols[8].strip(),
+            "resposta": cols[9].strip(),
+            "sessao": cols[10].strip(),
+            "nome": cols[11].strip(),
+        }
+        e = _enum(cols)
+        if e:
+            reg["valores"] = {str(k): v for k, v in e.items()}
+        fora.setdefault(veiculo, {}).setdefault(modulo, []).append(reg)
+    return fora
+
+
+def codigos_do_canze(pasta_canze):
+    """As tabelas de código de falha e de tipo de teste, por veículo e módulo."""
+    fora = {}
+    for raiz, _, arquivos in os.walk(pasta_canze):
+        veiculo = os.path.basename(raiz)
+        for a in sorted(arquivos):
+            for sufixo, chave in (("_Dtcs.csv", "codigos"), ("_Tests.csv", "testes")):
+                if not a.endswith(sufixo):
+                    continue
+                modulo = a[: -len(sufixo)]
+                linhas = {}
+                with open(os.path.join(raiz, a), encoding="utf-8", errors="replace") as f:
+                    for cols in csv.reader(f):
+                        if len(cols) >= 2 and cols[0].strip() and not cols[0].startswith("#"):
+                            linhas[cols[0].strip()] = cols[1].strip()
+                if linhas:
+                    fora.setdefault(veiculo, {}).setdefault(chave, {})[modulo] = linhas
+    return fora
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit("uso: gerar_uds.py <pasta do CanZE> [<pasta do OVMS>]")
@@ -196,10 +248,15 @@ def main():
     destino = os.path.join(os.path.dirname(os.path.abspath(__file__)), "uds")
     os.makedirs(destino, exist_ok=True)
 
-    def grava(nome, dados):
+    def grava(nome, dados, legivel=True):
+        # As tabelas pequenas ficam legíveis, para dar para conferir no diff.
+        # As grandes vão compactas: são dado de máquina, e indentar triplica.
         caminho = os.path.join(destino, nome + ".json")
         with open(caminho, "w", encoding="utf-8") as f:
-            json.dump(dados, f, ensure_ascii=False, indent=1, sort_keys=True)
+            if legivel:
+                json.dump(dados, f, ensure_ascii=False, indent=1, sort_keys=True)
+            else:
+                json.dump(dados, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         return os.path.getsize(caminho)
 
     normas, situacao = tabelas_da_norma(canze)
@@ -213,14 +270,32 @@ def main():
 
     mods = modulos_do_canze(canze)
     n3 = grava("modulos_renault", mods)
-    print("\nMAPA DE MÓDULOS — CanZE (Renault)")
+    print("\nMAPA DE MÓDULOS — CanZE")
     for v, l in sorted(mods.items()):
         print("  %-18s %d módulos" % (v, len(l)))
     print("  arquivo: %.0f KB" % (n3 / 1024))
 
+    campos = campos_do_canze(canze)
+    n5 = grava("campos_canze", campos, legivel=False)
+    print("\nDEFINIÇÕES DE CAMPO — CanZE (tudo)")
+    for v, m in sorted(campos.items()):
+        tot = sum(len(x) for x in m.values())
+        enums = sum(1 for x in m.values() for r in x if "valores" in r)
+        print("  %-18s %6d campos em %2d módulos (%d com valor escrito)" % (v, tot, len(m), enums))
+    print("  arquivo: %.1f MB" % (n5 / 1048576))
+
+    cods = codigos_do_canze(canze)
+    n6 = grava("codigos_canze", cods)
+    print("\nCÓDIGOS E TIPOS DE TESTE — CanZE (tudo)")
+    for v, d in sorted(cods.items()):
+        c = sum(len(x) for x in d.get("codigos", {}).values())
+        t = sum(len(x) for x in d.get("testes", {}).values())
+        print("  %-18s %5d códigos, %5d tipos de teste" % (v, c, t))
+    print("  arquivo: %.0f KB" % (n6 / 1024))
+
     if len(sys.argv) > 2:
         ov = modulos_do_ovms(sys.argv[2])
-        n4 = grava("modulos_ovms", ov)
+        n4 = grava("modulos_ovms", ov, legivel=False)
         tot = sum(len(v) for v in ov.values())
         print("\nMAPA DE MÓDULOS — OVMS (%d veículos, %d consultas)" % (len(ov), tot))
         for v, l in sorted(ov.items(), key=lambda kv: -len(kv[1]))[:12]:

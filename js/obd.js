@@ -389,9 +389,9 @@ const MONITORES_OTTO = [
 ];
 
 /** Resposta do PID 01 → { luzAcesa, quantidade, diesel, monitores: [{nome, pronto}] } */
-export function monitoresDe(hex) {
+export function monitoresDe(hex, pid = 0x01) {
   const d = dadosDa(hex, 0x01);
-  if (!d || d.length < 5 || d[0] !== 0x01) return null;
+  if (!d || d.length < 5 || d[0] !== pid) return null;
   const [, a, b, c, e] = d;
   const diesel = ((b >> 3) & 1) === 1;
   const monitores = [];
@@ -602,10 +602,13 @@ export async function iniciar() {
   const primeiro = await pedir("0100", 12000);
   if (primeiro.erro) throw new Error(primeiro.erro);
   const protocolo = (await comando("ATDP", 3000)).replace(/[\r\n>]/g, "").trim();
+  // ATI diz como o adaptador se identifica. "v1.5" é versão que nunca existiu: denuncia clone.
+  let versao = "";
+  try { versao = (await comando("ATI", 3000)).replace(/[\r\n>]/g, "").trim(); } catch (e) { versao = ""; }
   const base = suportados(primeiraDe(primeiro.respostas, 0x01), 0x01, 0x00);
   const resto = base.includes(0x20) ? await suportadosEmFaixas(0x01, FAIXAS_PID.slice(1)) : [];
   const pidsSuportados = base.concat(resto.filter(p => !base.includes(p)));
-  return { protocolo, pidsSuportados };
+  return { protocolo, versao, aviso: adaptadorSuspeito(versao), pidsSuportados };
 }
 
 /* ---- leituras de alto nível ---- */
@@ -684,7 +687,9 @@ const umaCasa = n => String(arred(n, 1)).replace(".", ",");
  * Lê o que já veio dos dados ao vivo e devolve a conversa pronta.
  * `valores` = { chave: leitura }, do jeito que a tela guarda.
  */
-export function leituraCombustivel(valores) {
+export function leituraCombustivel(valores, limites) {
+  const ATENCAO = limites && typeof limites.atencao === "number" ? limites.atencao : AJUSTE_ATENCAO;
+  const GRAVE = limites && typeof limites.grave === "number" ? limites.grave : AJUSTE_GRAVE;
   const v = valores || {};
   const bancos = [bancoDe(v, 0x06, 0x07, "Banco 1"), bancoDe(v, 0x08, 0x09, "Banco 2")].filter(Boolean);
   const etanol = v[0x52 * 100] ? v[0x52 * 100].valor : null;
@@ -697,14 +702,14 @@ export function leituraCombustivel(valores) {
     pior = bancos.reduce((a, b) => (!a || Math.abs(b.total) > Math.abs(a.total) ? b : a), null);
     const t = pior.total, abs = Math.abs(t);
     const onde = bancos.length > 1 ? " no " + pior.nome.toLowerCase() : "";
-    if (abs < AJUSTE_ATENCAO) {
+    if (abs < ATENCAO) {
       situacao = "normal";
       frases.push("O módulo está corrigindo " + umaCasa(t) + "%" + onde + " — dentro do que se espera de um motor em ordem.");
     } else {
-      situacao = abs >= AJUSTE_GRAVE ? "grave" : "atencao";
+      situacao = abs >= GRAVE ? "grave" : "atencao";
       frases.push("O módulo está " + (t > 0 ? "PONDO" : "TIRANDO") + " " + umaCasa(abs) + "% de combustível" + onde +
         ": sozinha, a mistura estava " + (t > 0 ? "pobre" : "rica") + ".");
-      if (abs >= AJUSTE_GRAVE) frases.push("Passou de " + AJUSTE_GRAVE + "%: é correção no limite, e costuma vir junto com luz acesa.");
+      if (abs >= GRAVE) frases.push("Passou de " + GRAVE + "%: é correção no limite, e costuma vir junto com luz acesa.");
       (t > 0
         ? ["Entrada de ar falsa (mangueira, junta, respiro)", "Medidor de ar (MAF) sujo ou lendo baixo",
            "Pressão de combustível baixa: bomba ou filtro", "Bico entupido", "Sonda lenta ou envenenada",
@@ -715,7 +720,7 @@ export function leituraCombustivel(valores) {
     }
     if (bancos.length > 1) {
       const dif = Math.abs(bancos[0].total - bancos[1].total);
-      if (dif >= AJUSTE_ATENCAO) frases.push("Os dois bancos estão longe um do outro (" + umaCasa(dif) +
+      if (dif >= ATENCAO) frases.push("Os dois bancos estão longe um do outro (" + umaCasa(dif) +
         "% de diferença): procure do lado que corrige mais, não no que é comum aos dois.");
     }
   }
@@ -723,7 +728,7 @@ export function leituraCombustivel(valores) {
   if (etanol !== null) frases.push("Combustível no tanque, pela conta do módulo: " + umaCasa(etanol) + "% de etanol — o resto é gasolina.");
   else frases.push("Este carro não informa a porcentagem de etanol: a maioria dos flex calcula pela sonda e nem todo módulo publica essa conta.");
 
-  return { situacao, bancos, pior, etanol, frases, causas, atencao: AJUSTE_ATENCAO, grave: AJUSTE_GRAVE };
+  return { situacao, bancos, pior, etanol, frases, causas, atencao: ATENCAO, grave: GRAVE };
 }
 
 /** O grupo de uma leitura já lida (a tela usa para separar painel e lista por assunto). */
@@ -881,7 +886,9 @@ export async function lerTestes() {
  * A tela não dá veredito — mostra as contagens e diz onde procurar. */
 export const FALHA_DESTAQUE = 3;      // quantas vezes acima do segundo pior para apontar um cilindro
 export const FALHA_MINIMA = 10;       // abaixo disso é ruído: não aponta ninguém
-export function falhaPorCilindro(testes) {
+export function falhaPorCilindro(testes, limites) {
+  const MINIMA = limites && typeof limites.minima === "number" ? limites.minima : FALHA_MINIMA;
+  const DESTAQUE = limites && typeof limites.destaque === "number" ? limites.destaque : FALHA_DESTAQUE;
   const porCil = new Map();
   for (const t of testes || []) {
     const cil = cilindroDoMid(t.mid);
@@ -898,7 +905,7 @@ export function falhaPorCilindro(testes) {
   const total = cilindros.reduce((soma, c) => soma + conta(c), 0);
   const ordem = cilindros.slice().sort((a, b) => conta(b) - conta(a));
   const pior = ordem[0], segundo = ordem[1];
-  const destacado = total && conta(pior) >= FALHA_MINIMA && (!segundo || conta(pior) >= FALHA_DESTAQUE * Math.max(conta(segundo), 1)) ? pior : null;
+  const destacado = total && conta(pior) >= MINIMA && (!segundo || conta(pior) >= DESTAQUE * Math.max(conta(segundo), 1)) ? pior : null;
   const frases = [];
   let situacao;
   if (!total) {
@@ -918,6 +925,18 @@ export function falhaPorCilindro(testes) {
   ];
   if (cilindros.length > 1) avisos.push("Alguns módulos mandam esta lista na ordem de ignição, não na ordem dos cilindros, e há motor que lista cilindro que não existe. Confira o número no carro antes de abrir.");
   return { cilindros, total, pior, segundo, destacado, situacao, frases, avisos };
+}
+
+/* A GM publica, nas tabelas do serviço 06 por motor, duas correções que mudam o laudo e que nenhum
+ * adaptador aplica sozinho: em alguns motores o valor do TID $0B sai dividido por 10, e em outros os
+ * MIDs vêm com os cilindros TROCADOS ($A3 traz o cilindro 3, $A4 o 4 e $A5 o 2). Como isso varia por
+ * motor e por ano, aplicar automático seria pior: o app AVISA e manda conferir na tabela do motor.
+ * Chevrolet é um terço do pátio da oficina, então este aviso não é detalhe. */
+export const MARCAS_AVISO_MID = ["CHEVROLET", "GM", "GENERAL MOTORS"];
+export function avisoMidDaMarca(marca) {
+  const m = String(marca || "").toUpperCase();
+  if (!MARCAS_AVISO_MID.some(x => m.includes(x))) return "";
+  return "Carro GM: a própria GM publica que, em parte dos motores, estes contadores vêm com os cilindros TROCADOS (o $A3 é o cilindro 3, o $A4 o 4 e o $A5 o 2) e que a média de 10 ciclos pode sair dividida por 10. Confira na tabela do motor antes de abrir o cilindro que a tela apontou.";
 }
 
 /* ---- Odômetro do módulo contra o KM do cadastro (PID $A6) ----
@@ -1027,4 +1046,112 @@ export function pidsDaEscolha(escolha, suportados, combustivel) {
   if (e.modo === "todas") return null;
   if (e.modo === "escolha") return e.pids;
   return padraoPara(suportados, combustivel);
+}
+
+/* ============================================================== SERVIÇOS AVANÇADOS
+ * Tudo aqui é leitura e sai do mesmo adaptador genérico — nada precisa de APK novo.
+ * As três coisas que entram: a impressão digital do software do módulo (CALID e CVN), os monitores
+ * DESTE ciclo de condução (PID $41, o teste drive) e os contadores de uso dos monitores (serviço 09).
+ */
+
+/** Calibração do módulo (serviço 09 PID $04): texto, 16 bytes por calibração. */
+export function calidDe(hex) {
+  const d = dadosDa(hex, 0x09);
+  if (!d || d[0] !== 0x04 || d.length < 3) return [];
+  const dados = d.slice(2);                       // d[1] é a quantidade
+  const nomes = [];
+  for (let i = 0; i + 15 < dados.length; i += 16) {
+    const txt = dados.slice(i, i + 16).map(b => (b >= 32 && b < 127 ? String.fromCharCode(b) : "")).join("").trim();
+    if (txt) nomes.push(txt);
+  }
+  return nomes;
+}
+/** CVN (serviço 09 PID $06): 4 bytes por calibração, em hexadecimal. O cálculo é da montadora. */
+export function cvnDe(hex) {
+  const d = dadosDa(hex, 0x09);
+  if (!d || d[0] !== 0x06 || d.length < 3) return [];
+  const dados = d.slice(2);
+  const saida = [];
+  for (let i = 0; i + 3 < dados.length; i += 4) {
+    saida.push(dados.slice(i, i + 4).map(b => b.toString(16).toUpperCase().padStart(2, "0")).join(""));
+  }
+  return saida;
+}
+/**
+ * Contadores de uso dos monitores (serviço 09 PID $08 no ciclo Otto, $0B no diesel): pares de
+ * numerador (quantas vezes o monitor rodou) e denominador (quantas vezes poderia ter rodado).
+ * ATENÇÃO, e está escrito na tela: a ORDEM dos campos foi conferida só em fonte secundária. Por isso
+ * cada par sai com o nome E com a posição, para dar para conferir contra a norma depois.
+ */
+export const NOMES_CONTADORES = [
+  "Catalisador · banco 1", "Catalisador · banco 2", "Sonda · banco 1", "Sonda · banco 2",
+  "EGR e/ou VVT", "Ar secundário", "EVAP (vazamento 0,020\")", "Aquecedor da sonda · banco 1",
+  "Aquecedor da sonda · banco 2", "Partida a frio",
+];
+export function contadoresDe(hex, pid = 0x08) {
+  const d = dadosDa(hex, 0x09);
+  if (!d || d[0] !== pid || d.length < 4) return null;
+  const dados = d.slice(2);
+  const palavras = [];
+  for (let i = 0; i + 1 < dados.length; i += 2) palavras.push((dados[i] << 8) | dados[i + 1]);
+  if (palavras.length < 2) return null;
+  const ciclos = palavras[0], ignicoes = palavras[1];      // OBDCOND e IGNCNTR
+  const itens = [];
+  for (let i = 2; i + 1 < palavras.length; i += 2) {
+    const n = palavras[i], de = palavras[i + 1];
+    itens.push({
+      nome: NOMES_CONTADORES[(i - 2) / 2] || "Monitor " + ((i - 2) / 2 + 1),
+      posicao: (i - 2) / 2 + 1, numerador: n, denominador: de,
+      razao: de > 0 ? arred(n / de, 3) : null,
+    });
+  }
+  return { ciclos, ignicoes, itens };
+}
+/** Razão mínima exigida pela CARB e pela regra europeia. Serve de referência, não de reprovação. */
+export const RAZAO_MINIMA = 0.336;
+
+/** Calibração e CVN lidos do módulo. */
+export async function lerCalibracao() {
+  const r = await pedir("0904", 8000);
+  const calid = r.erro ? [] : calidDe(primeiraDe(r.respostas, 0x09));
+  const r2 = await pedir("0906", 8000);
+  const cvn = r2.erro ? [] : cvnDe(primeiraDe(r2.respostas, 0x09));
+  return { calid, cvn, erro: r.erro && r2.erro ? r.erro : "" };
+}
+/** Contadores de uso: $08 no ciclo Otto, $0B no diesel. Tenta o que casa com o motor e cai no outro. */
+export async function lerContadores(diesel) {
+  const ordem = diesel ? [0x0b, 0x08] : [0x08, 0x0b];
+  for (const pid of ordem) {
+    const r = await pedir("09" + pid.toString(16).toUpperCase().padStart(2, "0"), 8000);
+    if (r.erro) continue;
+    const c = contadoresDe(primeiraDe(r.respostas, 0x09), pid);
+    if (c && c.itens.length) return Object.assign({ pid }, c);
+  }
+  return null;
+}
+/** Monitores DESTE ciclo de condução (PID $41). O primeiro byte vem zerado: não há luz nem contagem aqui. */
+export async function lerMonitoresCiclo() {
+  const r = await pedir("0141", 5000);
+  if (r.erro) throw new Error(r.erro);
+  const m = monitoresDe(primeiraDe(r.respostas, 0x01), 0x41);
+  if (!m) throw new Error("Resposta fora do padrão.");
+  return { monitores: m.monitores, prontos: m.prontos, total: m.total, diesel: m.diesel };
+}
+/** Comparação da calibração com a da visita anterior do mesmo carro. */
+export function compararCalibracao(antes, agora) {
+  if (!antes || !antes.cvn || !antes.cvn.length || !agora.cvn.length) return null;
+  const mesmoCalid = JSON.stringify(antes.calid || []) === JSON.stringify(agora.calid || []);
+  const mesmoCvn = JSON.stringify(antes.cvn) === JSON.stringify(agora.cvn);
+  if (mesmoCvn && mesmoCalid) return { situacao: "igual", frase: "A calibração é a mesma da última leitura deste carro." };
+  if (mesmoCalid) return { situacao: "mudou", frase: "MESMA calibração, CVN DIFERENTE: o conteúdo gravado no módulo mudou desde a última leitura. Reprogramação ou remap dão nisso." };
+  return { situacao: "outra", frase: "A calibração mudou desde a última leitura: o módulo foi reprogramado ou é outro módulo." };
+}
+/* O "v1.5" nunca existiu: a ELM Electronics lançou 1.0 a 1.4b e 2.0 a 2.3. Adaptador que se anuncia
+ * como v1.5 é clone, e clone perde quadro e responde comando pela metade. Avisar é honesto; travar não,
+ * porque o clone lê a maior parte das coisas. */
+export function adaptadorSuspeito(versao) {
+  const v = String(versao || "").toUpperCase();
+  if (!v) return "";
+  if (/V ?1\.5/.test(v)) return "Este adaptador se anuncia como ELM327 v1.5, versão que nunca existiu (a fabricante lançou até a 1.4b e depois 2.0 a 2.3). É clone: pode perder resposta e ler errado. Para laudo, use vLinker ou OBDLink.";
+  return "";
 }

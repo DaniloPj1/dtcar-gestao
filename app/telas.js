@@ -960,7 +960,9 @@ function Obd() {
   const baseFalhas = useRef(null);              // os códigos que já existiam quando a roda começou
   // Quais leituras mostrar. Vazio = todas as que o carro tiver. Fica guardado POR PLACA: cada carro
   // tem o seu conjunto, e quem lê um Hilux não quer a mesma lista de um Gol.
-  const [escolhidas, setEscolhidas] = useState([]);
+  // Regra do Danilo (20/11/2026): a tela abre com as leituras PADRÃO; o resto fica no filtro, para
+  // acrescentar, e há um botão que põe todas. Guardado por placa como { modo, pids }.
+  const [escolha, setEscolha] = useState({ modo: "padrao", pids: [] });
   const [abrirEscolha, setAbrirEscolha] = useState(false);
 
   // sair da tela fecha a conexão: o adaptador não aceita duas conversas e a bateria do carro agradece
@@ -976,10 +978,7 @@ function Obd() {
     return null;
   };
   // Ao trocar de placa, recupera o que foi marcado naquele carro e o que ele respondeu da última vez.
-  useEffect(() => {
-    const m = guardado("leituras");
-    setEscolhidas(Array.isArray(m) ? m : []);
-  }, [placa]);
+  useEffect(() => { setEscolha(obd.escolhaGuardada(guardado("leituras"))); }, [placa]);
   // O que o carro tem: a lista que ELE respondeu manda. Enquanto não há conexão, vale a da última
   // vez (só para o mecânico já poder marcar o que quer antes de encaixar o adaptador).
   const antesDeLigar = guardado("suportados");
@@ -990,16 +989,20 @@ function Obd() {
   const combustivel = (pl.veic && (pl.veic.combustivel || pl.veic.combustivel_descricao)) || "";
   const gruposDoCarro = obd.gruposPara(suportados, combustivel);
   const disponiveis = obd.leiturasPara(suportados, null);
+  // Os PIDs que valem agora: null quando é "todas" (sem filtro nenhum).
+  const escolhidas = obd.pidsDaEscolha(escolha, suportados, combustivel);
   const valendo = obd.leiturasPara(suportados, escolhidas);
 
+  const guardarEscolha = e => { setEscolha(e); guardado("leituras", e); };
+  // Marcar ou desmarcar uma leitura parte do que está na tela AGORA (padrão ou todas) e vira escolha à mão.
   const marcar = (pid, marcado) => {
-    const base = escolhidas.length ? escolhidas : disponiveis.map(l => l.pid);
+    const base = valendo.map(l => l.pid);
     const nova = marcado ? base.concat([pid]).filter((x, i, a) => a.indexOf(x) === i) : base.filter(x => x !== pid);
     const todas = nova.length === disponiveis.length && disponiveis.every(l => nova.includes(l.pid));
-    setEscolhidas(todas ? [] : nova);
-    guardado("leituras", todas ? [] : nova);
+    guardarEscolha(todas ? { modo: "todas", pids: [] } : { modo: "escolha", pids: nova });
   };
-  const marcarTodas = () => { setEscolhidas([]); guardado("leituras", []); };
+  const marcarTodas = () => guardarEscolha({ modo: "todas", pids: [] });
+  const marcarPadrao = () => guardarEscolha({ modo: "padrao", pids: [] });
 
   async function rodar(aviso, fn) {
     setErro(""); setOcupado(aviso);
@@ -1145,11 +1148,16 @@ function Obd() {
         <button type="button" class="btn-barra claro" id="obd-escolher" onClick=${() => setAbrirEscolha(x => !x)}>
           ${(abrirEscolha ? "FECHAR A ESCOLHA" : "ESCOLHER LEITURAS") + " (" + valendo.length + " de " + disponiveis.length + ")"}</button>
         ${abrirEscolha ? html`
-          <button type="button" class=${"btn-barra" + (escolhidas.length ? " claro" : "")} id="obd-todas" onClick=${marcarTodas}>
-            TODAS AS QUE O CARRO TIVER</button>
+          <div class="obd-filtro" role="group" aria-label="Quais leituras ficam na tela">
+            <button type="button" id="obd-padrao" class=${escolha.modo === "padrao" ? "esc" : ""} aria-pressed=${escolha.modo === "padrao"} onClick=${marcarPadrao}>SÓ AS PADRÃO</button>
+            <button type="button" id="obd-todas" class=${escolha.modo === "todas" ? "esc" : ""} aria-pressed=${escolha.modo === "todas"} onClick=${marcarTodas}>TODAS DO CARRO</button>
+          </div>
+          <div class="nota">${escolha.modo === "padrao" ? "Na tela estão as leituras padrão, as que se olha primeiro em qualquer carro. Marque abaixo para acrescentar as outras."
+            : escolha.modo === "todas" ? "Na tela estão TODAS as que este carro tem. Quanto mais leitura, mais devagar cada uma atualiza."
+            : "Você escolheu à mão o que fica na tela."}</div>
           ${gruposDoCarro.map(g => html`<div key=${g.id} class="sec"><h3>${g.nome}</h3>
             ${g.leituras.map(l => html`<label key=${l.pid} class="obd-cx">
-              <input type="checkbox" data-pid=${l.pid} checked=${!escolhidas.length || escolhidas.includes(l.pid)}
+              <input type="checkbox" data-pid=${l.pid} checked=${!escolhidas || escolhidas.includes(l.pid)}
                 onChange=${e => marcar(l.pid, e.target.checked)} />
               <span>${l.rotulo}${l.unidade ? " (" + l.unidade + ")" : ""}</span></label>`)}
           </div>`)}

@@ -964,3 +964,50 @@ export async function lerOdometro(pidsSuportados) {
   const v = valorPid(primeiraDe(r.respostas, 0x01), 0xa6, 0x01);
   return v.length ? v[0].valor : null;
 }
+
+/* ---- O que entra na tela sem ninguém pedir (regra do Danilo, 20/11/2026) ----
+ * "colocar na tela as leituras padrões e deixar em filtro as outras leituras disponíveis para poder
+ * adicionar, e uma opção no filtro de adicionar todas."
+ * Mostrar 40 mostradores de uma vez é o mesmo que não mostrar nenhum: ninguém acha o que procura com o
+ * carro ligado na frente. Estas são as que o mecânico olha primeiro em qualquer carro; o resto continua
+ * a um toque, no filtro. A lista do CARRO manda sempre: padrão que o carro não tem não aparece.
+ * Cada volta a menos também deixa as que ficaram atualizarem mais rápido. */
+export const PIDS_PADRAO = [
+  0x0c,  // rotação
+  0x05,  // temperatura do motor
+  0x04,  // carga do motor
+  0x11,  // borboleta
+  0x06,  // ajuste curto
+  0x07,  // ajuste longo
+  0x0e,  // avanço de ignição
+  0x0f,  // temperatura do ar admitido
+  0x0b,  // pressão no coletor
+  0x10,  // fluxo de ar (MAF)
+  0x0d,  // velocidade
+  0x42,  // tensão do módulo
+];
+/** No diesel, ajuste de combustível não existe e a pressão do rail é o que se olha primeiro. */
+export const PIDS_PADRAO_DIESEL = [0x0c, 0x05, 0x04, 0x11, 0x0e, 0x0f, 0x0b, 0x10, 0x0d, 0x42, 0x23, 0x5c];
+/** As padrão que ESTE carro tem. Sem lista do carro, devolve as padrão mesmo (a tela avisa de onde veio). */
+export function padraoPara(suportados, combustivel) {
+  const base = tipoDeMotor(combustivel) === "diesel" ? PIDS_PADRAO_DIESEL : PIDS_PADRAO;
+  const tem = suportados && suportados.length;
+  return base.filter(p => !tem || suportados.includes(p));
+}
+/**
+ * Como a escolha fica guardada no aparelho, em um lugar só (e aceitando o formato antigo, que era só
+ * uma lista de PIDs): "padrao" | "todas" | lista de PIDs.
+ */
+export function escolhaGuardada(valor) {
+  if (valor === "todas") return { modo: "todas", pids: [] };
+  if (Array.isArray(valor)) return valor.length ? { modo: "escolha", pids: valor.slice() } : { modo: "todas", pids: [] };
+  if (valor && typeof valor === "object" && valor.modo) return { modo: valor.modo, pids: Array.isArray(valor.pids) ? valor.pids.slice() : [] };
+  return { modo: "padrao", pids: [] };
+}
+/** Os PIDs que valem agora, a partir do modo escolhido. Devolve null quando é "todas" (= sem filtro). */
+export function pidsDaEscolha(escolha, suportados, combustivel) {
+  const e = escolhaGuardada(escolha);
+  if (e.modo === "todas") return null;
+  if (e.modo === "escolha") return e.pids;
+  return padraoPara(suportados, combustivel);
+}

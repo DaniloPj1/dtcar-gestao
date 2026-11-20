@@ -748,11 +748,22 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **O aviso de "sem internet" não pode cobrir a leitura (20/11/2026).** O toast vermelho de `dados.erro` ficava fixo no topo,
   em cima dos mostradores. Agora fecha com um toque (`semAviso`) e, na rota `obd`, troca o texto: a leitura do carro sai do
   adaptador e não passa pelo servidor; sem internet só as buscas do sistema ficam incompletas.
+- **PADRÃO NA TELA, O RESTO NO FILTRO (regra do Danilo, 20/11/2026).** *"colocar na tela as leituras padrões e deixar em
+  filtro as outras leituras disponíveis para poder adicionar, e uma opção no filtro de adicionar todas."* Quarenta mostradores
+  de uma vez é o mesmo que nenhum: ninguém acha o que procura com o carro ligado na frente. E cada leitura a menos na roda faz
+  as que ficaram atualizarem mais rápido.
+  `PIDS_PADRAO` (12): rotação, temperatura do motor, carga, borboleta, ajuste curto e longo, avanço, temperatura do ar,
+  pressão no coletor, MAF, velocidade e tensão do módulo. `PIDS_PADRAO_DIESEL` troca os ajustes (que não existem no diesel)
+  por pressão do rail e temperatura do óleo. `padraoPara(suportados, combustivel)` corta o que o carro não tem — **a lista do
+  carro manda sempre**, como na etapa 1.
+  Filtro com dois botões, `#obd-padrao` ("SÓ AS PADRÃO") e `#obd-todas` ("TODAS DO CARRO"), mais as caixas uma a uma; marcar
+  ou desmarcar parte do que está na tela agora e vira escolha à mão. Guardado por placa como `{ modo, pids }`
+  (`escolhaGuardada` aceita o formato antigo, que era só a lista de PIDs: lista vazia era "todas").
 - **O que NÃO sai por aqui, escrito na tela:** ABS, airbag, câmbio e imobilizador (protocolo próprio de montadora), quilometragem de painel (não existe no OBD-II) e qualquer atuação ou programação.
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (185, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (332, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (197, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (342, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
 
 ## Como trabalhar

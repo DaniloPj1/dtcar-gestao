@@ -1,7 +1,7 @@
 // Leitura OBD pelo ELM327 (18/11/2026): a parte do js/obd.js que interpreta a resposta do adaptador.
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, PIDS_PADRAO, padraoPara, escolhaGuardada, pidsDaEscolha, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -384,6 +384,23 @@ chk("pouco abaixo é arredondamento, não alarme", conferirOdometro(147500, 1480
 }
 chk("carro que não informa odômetro devolve nada", conferirOdometro(null, 148000) === null && conferirOdometro(0, 148000) === null);
 chk("sem KM no cadastro não compara", conferirOdometro(150000, 0).situacao === "sem_cadastro");
+
+/* -------- leituras padrão na tela, o resto no filtro (regra do Danilo, 20/11/2026) -------- */
+chk("a lista padrão é curta: cabe na tela sem rolar muito", PIDS_PADRAO.length >= 8 && PIDS_PADRAO.length <= 14, PIDS_PADRAO.length);
+chk("todo PID padrão existe na tabela de leituras", PIDS_PADRAO.every(p => PIDS.some(x => x.pid === p)));
+chk("as padrão são as que se olha primeiro: rotação, temperatura, carga, borboleta e os ajustes",
+  [0x0c, 0x05, 0x04, 0x11, 0x06, 0x07].every(p => PIDS_PADRAO.includes(p)));
+chk("o que é de carro específico fica de fora do padrão (rail, DPF, odômetro, etanol)",
+  ![0x23, 0xa6, 0x52, 0x78].some(p => PIDS_PADRAO.includes(p)));
+chk("padrão que o carro não tem não aparece", padraoPara([0x0c, 0x05], "flex").join() === "12,5");
+chk("sem saber o que o carro tem, devolve as padrão mesmo", padraoPara(null, "flex").length === PIDS_PADRAO.length);
+chk("no diesel não oferece ajuste de combustível e oferece o rail",
+  !padraoPara(null, "Diesel").includes(0x06) && padraoPara(null, "Diesel").includes(0x23));
+chk("sem nada guardado, vale o padrão", escolhaGuardada(null).modo === "padrao" && escolhaGuardada(undefined).modo === "padrao");
+chk("o formato antigo (lista de PIDs) continua valendo", escolhaGuardada([1, 2]).modo === "escolha" && escolhaGuardada([]).modo === "todas");
+chk("'todas' não filtra nada", pidsDaEscolha({ modo: "todas", pids: [] }, [1, 2], "") === null);
+chk("'padrao' devolve as padrão do carro", pidsDaEscolha({ modo: "padrao" }, [0x0c, 0x23], "flex").join() === "12");
+chk("'escolha' devolve exatamente o que foi marcado", pidsDaEscolha({ modo: "escolha", pids: [0x23] }, null, "").join() === "35");
 
 console.log(falhas.length ? ok.length + " verificações passaram; " + falhas.length + " FALHARAM:\n  ✗ " + falhas.join("\n  ✗ ") : ok.length + " verificações passaram.");
 process.exit(falhas.length ? 1 : 0);

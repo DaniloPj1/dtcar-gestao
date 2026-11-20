@@ -2,3 +2,6 @@
 node_modules/
 worker/node_modules/
 teste/telas/
+
+# Extrato cru da base do HDS: entra no repositório só o que for traduzido e reescrito.
+catalogo/falhas/_extrato.json

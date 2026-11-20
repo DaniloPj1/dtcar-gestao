@@ -58,6 +58,12 @@ var R = {
   '0124': '412480004000', '0125': '41258CCC4000',
   '0178': '4178031324 16A8 0000 0000'.replace(/ /g, ''),
   '020C00': '420C001AF8', '020500': '42050050', '021100': '42110030',
+  // serviços avançados: calibração, CVN, contadores de uso e monitores deste ciclo
+  'ATI': 'ELM327 v1.5',                       // versão que nunca existiu: o app tem de avisar que é clone
+  '0904': '49040141424331323344454634353647484937',
+  '0906': '490601' + '1A2B3C4D',
+  '0908': '490808' + '0100' + '0050' + '0014' + '0064' + '0005' + '0064',
+  '0141': '414100076101',
   '0600': '4600FF000001', '0620': '4620F0000001', '0640': '464000000001', '0660': '466000000001',
   '0680': '468000000001', '06A0': '46A0F8000000',
   '0621': '4621010100640000012C',
@@ -568,6 +574,17 @@ try:
         pg.eval_on_selector('#obd-r-vivo', "e => e.scrollIntoView({block:'start'})"); pg.wait_for_timeout(400)
         pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'obd-painel-celular.png'))
         t(pg.is_enabled('#obd-falhas'), 'as outras leituras continuam clicáveis durante a roda (elas a interrompem)')
+        # REGRA DO DANILO (20/11/2026): a tela abre com as leituras PADRÃO, não com tudo
+        padrao_n = pg.locator('#obd-r-vivo [data-pid]').count()
+        t(5 <= padrao_n <= 14, 'o painel abre só com as padrão: %d mostradores' % padrao_n)
+        t(pg.query_selector('#obd-r-vivo [data-pid="12"]') and pg.query_selector('#obd-r-vivo [data-pid="5"]'), 'rotação e temperatura do motor entre elas')
+        t(not pg.query_selector('#obd-r-vivo [data-pid="35"]'), 'pressão do rail NÃO entra sozinha num carro flex')
+        pg.click('#obd-vivo'); pg.wait_for_timeout(500)                     # para a roda para mexer no filtro
+        pg.click('#obd-escolher'); pg.wait_for_timeout(300)
+        pg.click('#obd-todas'); pg.wait_for_timeout(300)
+        pg.click('#obd-escolher'); pg.wait_for_timeout(200)
+        pg.click('#obd-vivo'); pg.wait_for_selector('#obd-r-vivo .selo.vivo', timeout=20000); pg.wait_for_timeout(2500)
+        t(pg.locator('#obd-r-vivo [data-pid]').count() > padrao_n, 'com "todas do carro" o painel cresce: %d' % pg.locator('#obd-r-vivo [data-pid]').count())
         tx = pg.inner_text('#obd-r-vivo')
         t('14,1' in tx or '14.1' in tx, 'a tensão do módulo aparece na tela: %s' % tx.replace('\n', ' ')[:160])
         # AS LEITURAS NOVAS CHEGAM NA TELA (pedido do Danilo em 19/11/2026)
@@ -610,21 +627,35 @@ try:
         t(rpm_na_tela() == parado, 'parado fica parado: o valor não muda mais')
         # FILTRO DAS LEITURAS (pedido do Danilo em 19/11/2026)
         pg.click('#obd-escolher'); pg.wait_for_timeout(300)
-        t(pg.query_selector('#obd-todas'), 'tem a opção "todas as que o carro tiver"')
+        t(pg.query_selector('#obd-todas') and pg.query_selector('#obd-padrao'), 'o filtro tem "só as padrão" e "todas do carro"')
+        t('respondeu agora' in pg.inner_text('#obd-escolha'), 'conectado, a tela diz que a lista é a que ESTE carro respondeu: %s' % [l for l in pg.inner_text('#obd-escolha').split('\n') if 'lista' in l][:1])
         t(pg.locator('#obd-escolha .obd-cx').count() >= 30, 'lista as leituras deste carro para marcar: %d' % pg.locator('#obd-escolha .obd-cx').count())
         t(pg.locator('#obd-escolha .sec h3').count() >= 3, 'separadas por grupo')
-        t(pg.locator('#obd-escolha input:checked').count() == pg.locator('#obd-escolha .obd-cx').count(), 'começa com todas marcadas')
+        # REGRA DO DANILO (20/11/2026): padrão na tela, o resto no filtro, e um botão que põe todas
+        total_cx = pg.locator('#obd-escolha .obd-cx').count()
+        t(pg.locator('#obd-escolha input:checked').count() == total_cx and pg.get_attribute('#obd-todas', 'aria-pressed') == 'true', '"todas do carro" deixa tudo marcado')
+        pg.click('#obd-padrao'); pg.wait_for_timeout(300)
+        marcadas = pg.locator('#obd-escolha input:checked').count()
+        t(5 <= marcadas <= 14 and marcadas < total_cx, '"só as padrão" volta para as padrão: %d de %d' % (marcadas, total_cx))
+        t(pg.get_attribute('#obd-padrao', 'aria-pressed') == 'true', 'e o filtro mostra em que modo está')
+        t(pg.is_checked('#obd-escolha input[data-pid="12"]') and pg.is_checked('#obd-escolha input[data-pid="5"]'), 'rotação e temperatura do motor estão entre as padrão')
+        t(not pg.is_checked('#obd-escolha input[data-pid="166"]'), 'odômetro NÃO é padrão: fica para quem quiser acrescentar')
+        guard = pg.evaluate("JSON.parse(window.localStorage.getItem(Object.keys(window.localStorage).filter(k => k.indexOf('obd_leituras') === 0)[0]))")
+        t(isinstance(guard, dict) and guard.get('modo') == 'padrao', 'a escolha fica guardada por carro, com o modo: %s' % guard)
         def conta_filtro():
             m = re.search(r'\((\d+) de (\d+)\)', pg.inner_text('#obd-escolher'))
             return (int(m.group(1)), int(m.group(2))) if m else (None, None)
         antes_n, total_n = conta_filtro()
-        t(antes_n == total_n and total_n >= 30, 'começa valendo todas as %s leituras deste carro' % total_n)
+        t(antes_n == marcadas and total_n >= 30, 'a conta do botão bate com o que está na tela: %s de %s' % (antes_n, total_n))
         pg.uncheck('#obd-escolha input[data-pid="5"]'); pg.wait_for_timeout(300)
-        t(conta_filtro() == (total_n - 1, total_n), 'desmarcar reduz a conta: %s' % str(conta_filtro()))
+        t(conta_filtro() == (marcadas - 1, total_n), 'desmarcar reduz a conta: %s' % str(conta_filtro()))
+        pg.check('#obd-escolha input[data-pid="166"]'); pg.wait_for_timeout(300)
+        t(conta_filtro() == (marcadas, total_n), 'e marcar uma do filtro acrescenta na tela: %s' % str(conta_filtro()))
         chaves = pg.evaluate("Object.keys(window.localStorage).filter(k => k.indexOf('obd_leituras') === 0)")
         t(len(chaves) == 1, 'a escolha é guardada numa chave por carro: %s' % chaves)
         guardadas = pg.evaluate("JSON.parse(window.localStorage.getItem(%r))" % chaves[0]) if chaves else None
-        t(isinstance(guardadas, list) and 5 not in guardadas, 'e guardada sem o que foi desmarcado: %s' % guardadas)
+        t(isinstance(guardadas, dict) and guardadas.get('modo') == 'escolha' and 5 not in guardadas.get('pids', []) and 166 in guardadas.get('pids', []),
+          'guardada como escolha à mão, sem o que saiu e com o que entrou: %s' % str(guardadas)[:120])
         pg.click('#obd-todas'); pg.wait_for_timeout(300)
         t(pg.locator('#obd-escolha input:checked').count() == pg.locator('#obd-escolha .obd-cx').count(), '"todas" remarca tudo')
         pg.click('#obd-escolher'); pg.wait_for_timeout(200)
@@ -720,6 +751,58 @@ try:
         t('80.000' in to, 'e o KM do cadastro ao lado')
         t('a mais' in to, 'módulo acima do cadastro é o normal, e a tela explica: %s' % [l for l in to.split('\n') if 'a mais' in l][:1])
         t('01A6' in pg.evaluate("window.__obd.cmds"), 'o odômetro é pedido de verdade')
+        # SERVIÇOS AVANÇADOS (20/11/2026): calibração, teste drive e contadores de uso
+        t(pg.query_selector('#obd-avancado'), 'tem o quadro de serviços avançados')
+        t(pg.query_selector('#obd-conf') and pg.query_selector('#obd-calib') and pg.query_selector('#obd-ciclo') and pg.query_selector('#obd-contadores'),
+          'com chassi, calibração, teste drive e contadores')
+        pg.click('#obd-calib'); pg.wait_for_selector('#obd-r-calib', timeout=25000)
+        tcal = pg.inner_text('#obd-r-calib')
+        t('ABC123DEF456GHI7' in tcal, 'lê a calibração do módulo: %s' % [l for l in tcal.split('\n') if 'ABC' in l][:1])
+        t('1A2B3C4D' in tcal, 'e o CVN')
+        t('Primeira leitura' in tcal, 'primeira vez: guarda para comparar depois')
+        t('lista pública' in tcal, 'e avisa que não existe lista pública do CVN certo')
+        pg.click('#obd-calib'); pg.wait_for_selector('#obd-r-calib', timeout=25000); pg.wait_for_timeout(300)
+        t('SEM MUDANÇA' in pg.inner_text('#obd-r-calib'), 'lendo de novo, compara com a anterior: %s' % [l for l in pg.inner_text('#obd-r-calib').split('\n') if 'MUDAN' in l][:1])
+        pg.evaluate("const k = Object.keys(window.localStorage).find(x => x.indexOf('obd_calib') === 0); const v = JSON.parse(window.localStorage.getItem(k)); v.cvn = ['99999999']; window.localStorage.setItem(k, JSON.stringify(v))")
+        pg.click('#obd-calib'); pg.wait_for_selector('#obd-r-calib', timeout=25000); pg.wait_for_timeout(300)
+        t('MUDOU' in pg.inner_text('#obd-r-calib') and 'remap' in pg.inner_text('#obd-r-calib'),
+          'CVN diferente com a mesma calibração aponta reprogramação: %s' % [l for l in pg.inner_text('#obd-r-calib').split('\n') if 'MUDOU' in l][:1])
+        pg.click('#obd-ciclo'); pg.wait_for_selector('#obd-r-ciclo', timeout=25000)
+        tcic = pg.inner_text('#obd-r-ciclo')
+        t('COMPLETOU' in tcic or 'NÃO RODOU' in tcic, 'teste drive lista os monitores deste ciclo')
+        t('provar o reparo' in tcic, 'e explica para que serve: %s' % [l for l in tcic.split('\n') if 'provar' in l][:1])
+        t('0141' in pg.evaluate("window.__obd.cmds"), 'pede o PID $41 de verdade')
+        pg.click('#obd-contadores'); pg.wait_for_selector('#obd-r-contadores', timeout=25000)
+        tcon = pg.inner_text('#obd-r-contadores')
+        t('Catalisador' in tcon and '0,2' in tcon, 'contadores mostram a razão de cada monitor: %s' % [l for l in tcon.split('\n') if 'Catalisador' in l][:1])
+        t('RODA POUCO' in tcon, 'e marcam o que roda pouco (razão abaixo da mínima da CARB)')
+        t('fonte secundária' in tcon, 'avisando que a ordem dos campos não veio de fonte primária')
+        t('0908' in pg.evaluate("window.__obd.cmds"), 'pede os contadores de verdade')
+
+        # CLONE: "v1.5" nunca existiu
+        t(pg.query_selector('#obd-clone'), 'adaptador que se diz v1.5 é denunciado como clone')
+        t('nunca existiu' in pg.inner_text('#obd-clone'), 'com o motivo escrito: %s' % pg.inner_text('#obd-clone')[:80])
+
+        # PARÂMETROS DE REFERÊNCIA, com nível de confiança (20/11/2026)
+        t(pg.query_selector('#obd-parametros'), 'tem a aba de parâmetros')
+        pg.click('#obd-param-abrir'); pg.wait_for_timeout(400)
+        tpar = pg.inner_text('#obd-parametros')
+        t(pg.locator('#obd-parametros .par-linha').count() >= 20, 'lista os parâmetros: %d' % pg.locator('#obd-parametros .par-linha').count())
+        t(pg.locator('#obd-parametros .nv-montadora').count() > 0 and pg.locator('#obd-parametros .nv-suposto').count() > 0 and pg.locator('#obd-parametros .nv-norma').count() > 0,
+          'com as tonalidades por nível de confiança')
+        t('SUPOSTO, A CONFERIR' in tpar.upper(), 'o nível vem ESCRITO, não só na cor')
+        t(pg.query_selector('#obd-parametros .par-legenda'), 'e tem legenda discreta')
+        t('Ford' in tpar and 'CARB' in tpar, 'cada número mostra a fonte: %s' % [l for l in tpar.split('\n') if 'Ford' in l][:1])
+        t('250 a 550 bar' in tpar, 'os valores sem documento entram marcados como suposto, para conferir no Raven')
+        pg.click('[data-conferir="rail_lenta_geral"]'); pg.wait_for_timeout(300)
+        pg.fill('[data-param="rail_lenta_geral"] .par-campos input >> nth=0', '280')
+        pg.fill('[data-param="rail_lenta_geral"] .par-campos input >> nth=1', '420')
+        pg.fill('[data-param="rail_lenta_geral"] input[placeholder^="Em qual carro"]', 'S10 2.8 2019')
+        pg.click('[data-gravar="rail_lenta_geral"]'); pg.wait_for_timeout(800)
+        grav = [c for tb, c in f.gravados if tb == 'config']
+        t(grav and grav[-1]['dados']['obdParametros']['rail_lenta_geral']['de'] == 280, 'a conferência é gravada na configuração: %s' % (grav[-1]['dados']['obdParametros'] if grav else None))
+        t('280 a 420 bar' in pg.inner_text('#obd-parametros'), 'e passa a valer na tela')
+        t('CONFERIDO AQUI' in pg.inner_text('[data-param="rail_lenta_geral"]').upper(), 'subindo para o nível conferido')
         # APAGAR A FALHA, COM REGISTRO (v62, decisão do Danilo em 19/11/2026)
         t(pg.query_selector('#obd-apagar'), 'o administrador tem o botão de apagar falhas')
         t('REGISTRADO' in pg.inner_text('#obd-apagar'), 'e o botão já avisa que fica registrado: %s' % pg.inner_text('#obd-apagar'))
@@ -762,8 +845,10 @@ try:
         cmds = pg.evaluate("window.__obd.cmds")
         t('04' not in cmds and not [c for c in cmds if c.startswith('04')], 'nenhum comando de apagar falha (04) é enviado ao carro')
         t(not [c for c in cmds if c.startswith('2E') or c.startswith('34') or c.startswith('27')], 'nenhum comando de escrita no carro é enviado')
-        outras = [p for p in f.escritas() if 'obd_leituras' not in p[1]]
-        t(not outras, 'a tela do OBD só grava o registro do apagamento, mais nada: %s' % outras)
+        # a leitura em si não grava nada: os únicos POST permitidos são o registro do apagamento e a
+        # conferência de parâmetro, os dois gravados de propósito pelo próprio teste
+        outras = [p for p in f.escritas() if '/config' not in p[1] and 'obd_leituras' not in p[1]]
+        t(not outras, 'a leitura OBD não grava nada no banco além do registro e da conferência: %s' % outras)
         t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
         # sair da tela fecha a conexão com o adaptador

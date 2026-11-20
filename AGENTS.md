@@ -735,6 +735,68 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   desde a última visita); até `ODOMETRO_TOLERANCIA` (1.000 km) abaixo = arredondamento; mais que isso manda **conferir** — e
   **não acusa ninguém**, porque módulo trocado, painel trocado e módulo que conta a própria distância dão nisso. Carro que não
   publica recebe a frase explicando, não um zero.
+- **A LISTA DO FILTRO PRECISA SER MESMO A DO CARRO (20/11/2026, achado pelo Danilo num Honda City 2016 flex).** Ele viu EGR
+  oferecida num carro que não tem válvula de EGR. O furo: `leiturasPara(suportados)` devolve o catálogo INTEIRO quando a lista
+  vem vazia, e a tela, conectada, dizia assim mesmo "a lista acima é a que ESTE carro respondeu". Módulo que conecta mas não
+  devolve o `0100` caía nisso — catálogo geral passando por lista do carro, que é exatamente o que a etapa 1 prometeu não fazer.
+  Agora `listaDoCarro` exige lista NÃO VAZIA, e o texto diz de onde ela veio: do carro agora, do carro da última vez
+  (`obd_suportados_<PLACA>`) ou do catálogo geral — este em vermelho, mandando conectar. **O painel ao vivo nunca teve esse
+  problema** (lê pelos PIDs suportados de verdade); era só a tela de escolha.
+  Vale o registro técnico: **EGR declarada em carro sem válvula é comum** (o mesmo software roda em versões com e sem, e
+  devolve valor fixo), e o monitor do serviço 01 se chama "EGR e/ou VVT" no padrão — num motor com comando variável ele
+  aparece com razão. Nada disso é erro de leitura.
+- **O aviso de "sem internet" não pode cobrir a leitura (20/11/2026).** O toast vermelho de `dados.erro` ficava fixo no topo,
+  em cima dos mostradores. Agora fecha com um toque (`semAviso`) e, na rota `obd`, troca o texto: a leitura do carro sai do
+  adaptador e não passa pelo servidor; sem internet só as buscas do sistema ficam incompletas.
+- **PADRÃO NA TELA, O RESTO NO FILTRO (regra do Danilo, 20/11/2026).** *"colocar na tela as leituras padrões e deixar em
+  filtro as outras leituras disponíveis para poder adicionar, e uma opção no filtro de adicionar todas."* Quarenta mostradores
+  de uma vez é o mesmo que nenhum: ninguém acha o que procura com o carro ligado na frente. E cada leitura a menos na roda faz
+  as que ficaram atualizarem mais rápido.
+  `PIDS_PADRAO` (12): rotação, temperatura do motor, carga, borboleta, ajuste curto e longo, avanço, temperatura do ar,
+  pressão no coletor, MAF, velocidade e tensão do módulo. `PIDS_PADRAO_DIESEL` troca os ajustes (que não existem no diesel)
+  pela **pressão do rail nas duas formas que o módulo pode publicar** ($23 medida e $59 absoluta — o carro tem uma ou outra,
+  a que faltar some sozinha) e pela temperatura do óleo. É a pressão do rail que diz se a bomba de alta está entregando;
+  **pressão PEDIDA pelo módulo e comando do regulador da bomba (IMV/MPROP) não têm PID genérico** — isso é dado de montadora.
+  `padraoPara(suportados, combustivel)` corta o que o carro não tem — **a lista do carro manda sempre**, como na etapa 1.
+  **`tipoPeloModulo` (20/11/2026):** quando o cadastro não diz o combustível (carro novo na oficina, campo vazio, placa não
+  consultada), o tipo sai do que o módulo publica — rail SEM ajuste de combustível é diesel; rail COM ajuste é injeção direta
+  a gasolina, que também tem rail; sem os dois sinais não chuta. Sem isso, diesel sem cadastro ficava com a lista de gasolina
+  e não via o rail, que é justamente a leitura que interessa. O cadastro, quando diz, manda.
+  Filtro com dois botões, `#obd-padrao` ("SÓ AS PADRÃO") e `#obd-todas` ("TODAS DO CARRO"), mais as caixas uma a uma; marcar
+  ou desmarcar parte do que está na tela agora e vira escolha à mão. Guardado por placa como `{ modo, pids }`
+  (`escolhaGuardada` aceita o formato antigo, que era só a lista de PIDs: lista vazia era "todas").
+- **SERVIÇOS AVANÇADOS (20/11/2026, sem SQL e sem APK).** Quadro próprio (`#obd-avancado`), separado do "Ler do carro",
+  com as leituras de perícia. Saíram de uma pesquisa em fontes estrangeiras (GM, Ford, Toyota, CARB, EPA, UE, datasheet da
+  ELM Electronics) — nenhuma precisa de hardware melhor:
+  (1) **Calibração do módulo** (serviço 09 $04 CALID e $06 CVN): a impressão digital do que está gravado. Guardada por placa
+  (`obd_calib_<PLACA>`) e comparada na visita seguinte — mesma calibração com CVN diferente é reprogramação ou remap.
+  **Não existe lista pública do CVN certo de cada carro** (a CARB obriga a montadora a dar a lista às autoridades, não ao
+  público), então a comparação só vale contra a leitura anterior DESTE carro, e a tela diz isso.
+  (2) **Teste drive** (PID $41): os monitores DESTE ciclo de condução, que zeram a cada vez que a chave liga. Serve para
+  provar o reparo rodando o carro, **sem apagar nada** — apagar zeraria a prontidão e o histórico. "Completou" não é "passou".
+  (3) **Contadores de uso** (serviço 09 $08 Otto / $0B diesel): quantas vezes cada monitor rodou contra quantas poderia ter
+  rodado. Razão abaixo de `RAZAO_MINIMA` (0,336 pela CARB e pela UE) explica o carro que nunca fica pronto. **A ordem dos
+  campos da resposta só foi conferida em fonte secundária**, então cada linha mostra também a posição e a tela avisa.
+- **TRÊS CORREÇÕES QUE A PESQUISA TROUXE (20/11/2026).**
+  (1) **GM, crítico:** a própria GM publica, nas tabelas do serviço 06 por motor, que em parte dos motores os MIDs de falha de
+  combustão vêm com os **cilindros trocados** ($A3 é o cilindro 3, $A4 o 4, $A5 o 2) e que o TID $0B pode sair dividido por 10.
+  Como varia por motor e ano, aplicar automático seria pior: `avisoMidDaMarca` mostra o aviso quando a marca é Chevrolet/GM —
+  um terço do pátio. (2) **Valor padrão de monitor que nunca rodou:** a Ford documenta que o EVAP não executado devolve um
+  valor de fábrica, não uma medição; a tela manda conferir a prontidão antes de usar número do serviço 06. (3) **Clone:**
+  `adaptadorSuspeito` lê o `ATI` na conexão e avisa quando o adaptador se diz **"v1.5"**, versão que a ELM Electronics nunca
+  lançou (foram 1.0 a 1.4b e 2.0 a 2.3) — é clone, perde quadro e lê errado.
+- **PARÂMETROS DE REFERÊNCIA COM NÍVEL DE CONFIANÇA (`js/obdparam.js`, 20/11/2026).** O Danilo tem o Raven como contraprova e
+  o foco dele é o desenvolvimento, então a regra deixou de ser "omitir o que não tem fonte" e passou a ser **mostrar com o
+  nível escrito**. Quatro níveis: `conferido` (o que ele conferiu, vale mais que tudo), `norma` (CARB, EPA, UE), `montadora`
+  (Ford, GM, Toyota — documentado) e `suposto` (reparação, sem documento; entra JUSTAMENTE para ser conferido no Raven).
+  25 parâmetros; 5 o app usa para decidir (ajuste de combustível atenção/grave, falha por cilindro mínima/destaque, razão dos
+  contadores) e o resto é referência. `leituraCombustivel` e `falhaPorCilindro` aceitam os limites de fora.
+  Ajuste em `cfg.obdParametros` (tabela config, sem SQL), pela aba `#obd-parametros` no app, **só administrador**: valor ou
+  faixa, em qual carro conferiu e observação. Conferido sobe o nível e passa a valer; apagar volta à referência.
+  **Visual (pedido do Danilo):** a distinção é **discreta** — tonalidade de cinza do mais firme (conferido) ao mais apagado
+  (suposto), com o nível **sempre escrito** miúdo ao lado (a regra da casa é nunca deixar só a cor falando) e uma legenda
+  pequena no rodapé. **Não existe tabela pública de faixa normal para motor flex brasileiro** — nem GM, nem Fiat, nem VW, nem
+  Honda —, então o que ele conferir vira a referência desta oficina.
 - **APAGAR A FALHA, COM REGISTRO (19/11/2026, `supabase/v62.sql`, APK 1.5.1) — etapa 2.** Decisão do Danilo: *"deixar essas
   opções reservadas para o adm e no painel do sistema o adm permite ou não o acesso por mecânico"*.
   **Quem pode:** o administrador sempre; qualquer outra pessoa só com a chave "Pode apagar falha no OBD" ligada nela em
@@ -768,8 +830,8 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
+- Testes: `node teste/teste_obd.mjs` (257, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (396, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
-- Testes: `node teste/teste_obd.mjs` (208, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (59, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (358, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** ligar o registro do OBD à O.S. e ao histórico do veículo e mostrá-lo no sistema (hoje a tabela já guarda `ordem_id`/`os_numero`, mas só o app grava); leitura de entrada e de saída como prova do reparo, impressa no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4).
 
 ## Como trabalhar

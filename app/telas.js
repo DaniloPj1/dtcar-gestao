@@ -16,6 +16,7 @@ import { copiaClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
 import { acessoApp, foraDoHorario, podeApagarObd } from "../js/appacesso.js";
+import * as param from "../js/obdparam.js";
 import { MAIUSC } from "../js/maiusculas.js";
 import * as obd from "../js/obd.js";
 
@@ -923,6 +924,99 @@ function Combustivel({ v }) {
   </div>`;
 }
 
+/**
+ * Parâmetros de referência (pedido do Danilo, 20/11/2026). Caderno de bancada, não tela de
+ * configuração: cada número aparece com o NÍVEL DE CONFIANÇA e com um campo para o valor que ele
+ * conferiu no Raven. O conferido sobe para o nível mais alto e passa a valer.
+ * Distinção DISCRETA, como ele pediu: tonalidade do texto + a palavra escrita miúda ao lado
+ * (a regra da casa é nunca deixar só a cor falando) e uma legenda pequena no rodapé.
+ */
+function Parametros() {
+  const { cfg, setCfg, perfil, avisar } = useApp();
+  const admin = perfil.papel === "admin";
+  const [abrir, setAbrir] = useState(false);
+  const [editando, setEditando] = useState(null);     // id do parâmetro aberto para conferir
+  const [f, setF] = useState({ valor: "", de: "", ate: "", carro: "", obs: "" });
+  const [salvando, setSalvando] = useState(false);
+  const lista = param.comAjustes(cfg);
+  const num = t => { const n = Number(String(t).replace(",", ".")); return isFinite(n) ? n : undefined; };
+
+  const abrirEdicao = p => {
+    setEditando(p.id);
+    setF({
+      valor: typeof p.valorAtual === "number" && !p.faixaAtual ? String(p.valorAtual).replace(".", ",") : "",
+      de: p.faixaAtual ? String(p.faixaAtual.de).replace(".", ",") : "",
+      ate: p.faixaAtual ? String(p.faixaAtual.ate).replace(".", ",") : "",
+      carro: (p.conferencia && p.conferencia.carro) || "", obs: (p.conferencia && p.conferencia.obs) || "",
+    });
+  };
+  const gravar = async (id, limpar) => {
+    setSalvando(true);
+    try {
+      const novo = limpar
+        ? param.comConferencia(cfg, id, {})
+        : param.comConferencia(cfg, id, { valor: num(f.valor), de: num(f.de), ate: num(f.ate), carro: f.carro, obs: f.obs });
+      await api.salvarConfig(novo);
+      setCfg(novo);
+      setEditando(null);
+      avisar(limpar ? "Voltou para o valor de referência." : "Conferência gravada.");
+    } catch (e) { avisar("Não deu para gravar: " + (e.message || "sem internet"), true); }
+    finally { setSalvando(false); }
+  };
+
+  const Linha = ({ p }) => {
+    const n = param.nivel(p.nivelAtual);
+    return html`<div class=${"par-linha nv-" + p.nivelAtual} data-param=${p.id}>
+      <div class="par-topo">
+        <span class="par-nome">${p.nome}</span>
+        <b class="par-valor">${param.textoDe(p)}</b>
+      </div>
+      <div class="par-pe">
+        <span class="par-nivel">${n.nome}</span>
+        ${p.onde === "modelo" ? html`<span class="par-modelo">${p.modelo}</span>` : null}
+        ${p.usado ? html`<span class="par-usado">o app usa</span>` : null}
+        ${admin ? html`<button type="button" class="par-btn" data-conferir=${p.id} onClick=${() => abrirEdicao(p)}>Conferir</button>` : null}
+      </div>
+      <div class="par-fonte">${p.fonte}</div>
+      ${p.conferencia && p.conferencia.em ? html`<div class="par-fonte">Conferido em ${fmtData(p.conferencia.em)}${p.conferencia.carro ? " · " + p.conferencia.carro : ""}${p.conferencia.obs ? " · " + p.conferencia.obs : ""}</div>` : null}
+      ${editando === p.id ? html`<div class="par-edita">
+        ${p.faixaAtual || (p.de !== undefined) ? html`
+          <div class="par-campos">
+            <label>de <input class="inp" inputmode="decimal" value=${f.de} onInput=${e => setF(x => ({ ...x, de: e.target.value }))} /></label>
+            <label>até <input class="inp" inputmode="decimal" value=${f.ate} onInput=${e => setF(x => ({ ...x, ate: e.target.value }))} /></label>
+          </div>`
+        : html`<div class="par-campos"><label>valor <input class="inp" inputmode="decimal" value=${f.valor} onInput=${e => setF(x => ({ ...x, valor: e.target.value }))} /></label></div>`}
+        <input class="inp" placeholder="Em qual carro conferiu (modelo, motor, ano)" value=${f.carro} onInput=${e => setF(x => ({ ...x, carro: e.target.value }))} />
+        <input class="inp" placeholder="Observação (marcha lenta, acelerando…)" value=${f.obs} onInput=${e => setF(x => ({ ...x, obs: e.target.value }))} />
+        <div class="par-acoes">
+          <button type="button" class="btn-barra curto" data-gravar=${p.id} disabled=${salvando} onClick=${() => gravar(p.id, false)}>GRAVAR</button>
+          <button type="button" class="btn-barra curto claro" disabled=${salvando} onClick=${() => setEditando(null)}>Cancelar</button>
+          ${p.conferencia ? html`<button type="button" class="btn-barra curto claro" data-limpar=${p.id} disabled=${salvando} onClick=${() => gravar(p.id, true)}>Voltar à referência</button>` : null}
+        </div>
+      </div>` : null}
+    </div>`;
+  };
+
+  const usados = lista.filter(p => p.usado);
+  const resto = lista.filter(p => !p.usado);
+  return html`<${Cartao} titulo="Parâmetros de referência" id="obd-parametros">
+    <button type="button" class="btn-barra claro" id="obd-param-abrir" onClick=${() => setAbrir(x => !x)}>
+      ${abrir ? "FECHAR OS PARÂMETROS" : "VER E CONFERIR PARÂMETROS (" + lista.length + ")"}</button>
+    ${abrir ? html`
+      <div class="sec"><h3>O app decide por estes</h3>${usados.map(p => html`<${Linha} key=${p.id} p=${p} />`)}</div>
+      <div class="sec"><h3>Referência, só para comparar</h3>${resto.map(p => html`<${Linha} key=${p.id} p=${p} />`)}</div>
+      <div class="par-legenda">
+        <span class="nv-conferido">conferido aqui</span>
+        <span class="nv-norma">norma</span>
+        <span class="nv-montadora">montadora</span>
+        <span class="nv-suposto">suposto, a conferir</span>
+      </div>
+      <div class="par-fonte">Não existe tabela pública de faixa normal para motor flex brasileiro — nem GM, nem Fiat, nem VW, nem Honda. O que você conferir no Raven vira a referência desta oficina.</div>
+      ${!admin ? html`<div class="nota">Só o administrador altera.</div>` : null}
+    ` : null}
+  </${Cartao}>`;
+}
+
 function Obd() {
   const { dados, cfg, perfil } = useApp();
   const pl = usarPlaca();
@@ -960,7 +1054,9 @@ function Obd() {
   const baseFalhas = useRef(null);              // os códigos que já existiam quando a roda começou
   // Quais leituras mostrar. Vazio = todas as que o carro tiver. Fica guardado POR PLACA: cada carro
   // tem o seu conjunto, e quem lê um Hilux não quer a mesma lista de um Gol.
-  const [escolhidas, setEscolhidas] = useState([]);
+  // Regra do Danilo (20/11/2026): a tela abre com as leituras PADRÃO; o resto fica no filtro, para
+  // acrescentar, e há um botão que põe todas. Guardado por placa como { modo, pids }.
+  const [escolha, setEscolha] = useState({ modo: "padrao", pids: [] });
   const [abrirEscolha, setAbrirEscolha] = useState(false);
   // Apagar a falha, com registro (v62, decisão do Danilo em 19/11/2026). Quem apaga é decidido no sistema
   // (Sistema › Equipe, por pessoa); aqui a tela só mostra o botão para quem pode. O passo "confirmar" existe
@@ -997,28 +1093,34 @@ function Obd() {
 
   // Ao trocar de placa, recupera o que foi marcado naquele carro e o que ele respondeu da última vez.
   useEffect(() => {
-    const m = guardado("leituras");
-    setEscolhidas(Array.isArray(m) ? m : []);
+    setEscolha(obd.escolhaGuardada(guardado("leituras")));
     setAntesApagados(null);
     if (placa && podeApagar) carregarAnteriores();
   }, [placa]);
   // O que o carro tem: a lista que ELE respondeu manda. Enquanto não há conexão, vale a da última
   // vez (só para o mecânico já poder marcar o que quer antes de encaixar o adaptador).
   const antesDeLigar = guardado("suportados");
-  const suportados = (lig && lig.pidsSuportados) || (Array.isArray(antesDeLigar) ? antesDeLigar : null);
+  // Conectado mas com lista vazia (o módulo não respondeu o 0100) NÃO é "a lista deste carro": seria o
+  // catálogo inteiro passando por lista do carro, e aí apareceria EGR em carro que não tem.
+  const listaDoCarro = !!(lig && Array.isArray(lig.pidsSuportados) && lig.pidsSuportados.length);
+  const suportados = (listaDoCarro && lig.pidsSuportados) || (Array.isArray(antesDeLigar) && antesDeLigar.length ? antesDeLigar : null);
   const combustivel = (pl.veic && (pl.veic.combustivel || pl.veic.combustivel_descricao)) || "";
   const gruposDoCarro = obd.gruposPara(suportados, combustivel);
   const disponiveis = obd.leiturasPara(suportados, null);
+  // Os PIDs que valem agora: null quando é "todas" (sem filtro nenhum).
+  const escolhidas = obd.pidsDaEscolha(escolha, suportados, combustivel);
   const valendo = obd.leiturasPara(suportados, escolhidas);
 
+  const guardarEscolha = e => { setEscolha(e); guardado("leituras", e); };
+  // Marcar ou desmarcar uma leitura parte do que está na tela AGORA (padrão ou todas) e vira escolha à mão.
   const marcar = (pid, marcado) => {
-    const base = escolhidas.length ? escolhidas : disponiveis.map(l => l.pid);
+    const base = valendo.map(l => l.pid);
     const nova = marcado ? base.concat([pid]).filter((x, i, a) => a.indexOf(x) === i) : base.filter(x => x !== pid);
     const todas = nova.length === disponiveis.length && disponiveis.every(l => nova.includes(l.pid));
-    setEscolhidas(todas ? [] : nova);
-    guardado("leituras", todas ? [] : nova);
+    guardarEscolha(todas ? { modo: "todas", pids: [] } : { modo: "escolha", pids: nova });
   };
-  const marcarTodas = () => { setEscolhidas([]); guardado("leituras", []); };
+  const marcarTodas = () => guardarEscolha({ modo: "todas", pids: [] });
+  const marcarPadrao = () => guardarEscolha({ modo: "padrao", pids: [] });
 
   async function rodar(aviso, fn) {
     setErro(""); setOcupado(aviso);
@@ -1038,7 +1140,7 @@ function Obd() {
   const ligar = ap => rodar("Conectando em " + ap.nome + "…", async () => {
     await obd.conectar(ap.endereco);
     const i = await obd.iniciar();
-    setLig({ nome: ap.nome, endereco: ap.endereco, protocolo: i.protocolo, pidsSuportados: i.pidsSuportados });
+    setLig({ nome: ap.nome, endereco: ap.endereco, protocolo: i.protocolo, versao: i.versao, aviso: i.aviso, pidsSuportados: i.pidsSuportados });
     if (placa && i.pidsSuportados && i.pidsSuportados.length) guardado("suportados", i.pidsSuportados);
     setRes(null); setVivo(null); setFalhasVivo(null);
   });
@@ -1147,6 +1249,25 @@ function Obd() {
   const lerFoto = () => { pararVivo(); return rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados))); };
   const lerTestes = () => { pararVivo(); return rodar("Lendo os testes de bordo…", async () => guardar("testes", await obd.lerTestes())); };
   const lerCilindros = () => { pararVivo(); return rodar("Contando falha por cilindro…", async () => guardar("cilindros", await obd.lerFalhaCilindros())); };
+  // SERVIÇOS AVANÇADOS (20/11/2026): calibração do módulo, teste drive e contadores de uso.
+  // Tudo leitura, tudo pelo mesmo adaptador genérico — nada aqui precisa de APK novo.
+  const lerCalib = () => { pararVivo(); return rodar("Lendo a calibração do módulo…", async () => {
+    const c = await obd.lerCalibracao();
+    const antes = guardado("calib");
+    const comparado = obd.compararCalibracao(antes, c);
+    if (c.cvn.length) guardado("calib", { calid: c.calid, cvn: c.cvn, em: new Date().toISOString() });
+    guardar("calib", Object.assign({}, c, { comparado, antes }));
+  }); };
+  const lerCiclo = () => { pararVivo(); return rodar("Lendo os monitores deste ciclo…", async () => {
+    const ciclo = await obd.lerMonitoresCiclo();
+    let desde = null;
+    try { desde = await obd.lerMonitores(); } catch (e) { desde = null; }
+    guardar("ciclo", { ciclo, desde });
+  }); };
+  const lerContadores = () => { pararVivo(); return rodar("Lendo os contadores de uso…", async () => {
+    const diesel = obd.tipoDeMotor(combustivel) === "diesel" || obd.tipoPeloModulo(suportados) === "diesel";
+    guardar("contadores", await obd.lerContadores(diesel));
+  }); };
   const lerConf = () => { pararVivo(); return rodar("Lendo chassi, monitores e odômetro…", async () => {
     const monitores = await obd.lerMonitores();
     const chassi = await obd.lerChassi();
@@ -1181,6 +1302,8 @@ function Obd() {
         ` : html`
           <div class="kv"><span>Situação:</span><i></i><b><span class="selo">CONECTADO</span>${lig.nome}</b></div>
           ${lig.protocolo ? html`<${KV} a="Protocolo" b=${lig.protocolo} p />` : null}
+          ${lig.versao ? html`<${KV} a="Adaptador" b=${lig.versao} p />` : null}
+          ${lig.aviso ? html`<div class="erro" id="obd-clone">${lig.aviso}</div>` : null}
           <button type="button" class="btn-barra claro" id="obd-desligar" style="justify-content:center" onClick=${desligar} disabled=${!!ocupado}>DESCONECTAR</button>
         `}
       </${Cartao}>
@@ -1197,7 +1320,6 @@ function Obd() {
           ${falhasVivo && falhasVivo.novas.length ? "FALHA NOVA AGORA (" + falhasVivo.novas.length + ") · VER"
             : falhasVivo && falhasVivo.codigos.length ? "FALHA NO MÓDULO (" + falhasVivo.codigos.length + ") · VER"
             : "LER FALHAS"}</button>
-        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI E MONITORES</button>
         <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto}>FOTO DO MOMENTO DA FALHA</button>
         <button type="button" class="btn-barra claro" id="obd-cilindros" onClick=${lerCilindros}>FALHA POR CILINDRO</button>
         <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
@@ -1207,19 +1329,38 @@ function Obd() {
           : "Nada é gravado e nenhuma falha é apagada nesta etapa."}</div>
       </${Cartao}>` : null}
 
+      ${lig && !ocupado ? html`<${Cartao} titulo="Serviços avançados" id="obd-avancado">
+        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI, MONITORES E ODÔMETRO</button>
+        <button type="button" class="btn-barra claro" id="obd-calib" onClick=${lerCalib}>CALIBRAÇÃO DO MÓDULO (REPROGRAMAÇÃO)</button>
+        <button type="button" class="btn-barra claro" id="obd-ciclo" onClick=${lerCiclo}>TESTE DRIVE: MONITORES DESTE CICLO</button>
+        <button type="button" class="btn-barra claro" id="obd-contadores" onClick=${lerContadores}>CONTADORES DE USO DOS MONITORES</button>
+        <div class="nota">Leituras de perícia, não de reparo do dia: dizem se o módulo foi reprogramado, se o reparo fechou o monitor no test-drive e se os monitores deste carro chegam a rodar no uso real.</div>
+      </${Cartao}>` : null}
+
+      ${!ocupado ? html`<${Parametros} />` : null}
+
       ${lig && !ocupado && disponiveis.length ? html`<${Cartao} titulo="Quais leituras mostrar" id="obd-escolha">
         <button type="button" class="btn-barra claro" id="obd-escolher" onClick=${() => setAbrirEscolha(x => !x)}>
           ${(abrirEscolha ? "FECHAR A ESCOLHA" : "ESCOLHER LEITURAS") + " (" + valendo.length + " de " + disponiveis.length + ")"}</button>
         ${abrirEscolha ? html`
-          <button type="button" class=${"btn-barra" + (escolhidas.length ? " claro" : "")} id="obd-todas" onClick=${marcarTodas}>
-            TODAS AS QUE O CARRO TIVER</button>
+          <div class="obd-filtro" role="group" aria-label="Quais leituras ficam na tela">
+            <button type="button" id="obd-padrao" class=${escolha.modo === "padrao" ? "esc" : ""} aria-pressed=${escolha.modo === "padrao"} onClick=${marcarPadrao}>SÓ AS PADRÃO</button>
+            <button type="button" id="obd-todas" class=${escolha.modo === "todas" ? "esc" : ""} aria-pressed=${escolha.modo === "todas"} onClick=${marcarTodas}>TODAS DO CARRO</button>
+          </div>
+          <div class="nota">${escolha.modo === "padrao" ? "Na tela estão as leituras padrão, as que se olha primeiro em qualquer carro. Marque abaixo para acrescentar as outras."
+            : escolha.modo === "todas" ? "Na tela estão TODAS as que este carro tem. Quanto mais leitura, mais devagar cada uma atualiza."
+            : "Você escolheu à mão o que fica na tela."}</div>
           ${gruposDoCarro.map(g => html`<div key=${g.id} class="sec"><h3>${g.nome}</h3>
             ${g.leituras.map(l => html`<label key=${l.pid} class="obd-cx">
-              <input type="checkbox" data-pid=${l.pid} checked=${!escolhidas.length || escolhidas.includes(l.pid)}
+              <input type="checkbox" data-pid=${l.pid} checked=${!escolhidas || escolhidas.includes(l.pid)}
                 onChange=${e => marcar(l.pid, e.target.checked)} />
               <span>${l.rotulo}${l.unidade ? " (" + l.unidade + ")" : ""}</span></label>`)}
           </div>`)}
-          <div class="nota">A lista acima é a que ESTE carro respondeu — o que ele não tem nunca aparece aqui, por mais que o modelo costume ter. A escolha fica guardada${placa ? " para a placa " + placa : ""}.</div>
+          <div class=${listaDoCarro ? "nota" : "erro"}>${listaDoCarro
+            ? "A lista acima é a que ESTE carro respondeu agora: o que ele não tem não aparece aqui, por mais que o modelo costume ter."
+            : (Array.isArray(antesDeLigar) && antesDeLigar.length
+              ? "Esta é a lista que este carro respondeu da ÚLTIMA vez. Conecte para ela valer de novo."
+              : "Ainda não sei o que este carro tem: esta é a lista GERAL do OBD, não a dele. Conecte o adaptador e ela vira a deste carro — aí some o que ele não tiver.")}${placa ? " A escolha fica guardada para a placa " + placa + "." : " A escolha fica guardada neste aparelho."}</div>
         ` : null}
       </${Cartao}>` : null}
 
@@ -1244,6 +1385,7 @@ function Obd() {
           ${res.d.cilindros.cilindros.some(c => typeof c.media === "number" && typeof c.ciclo === "number") ? html`<div class="nota">Número grande = falhas neste ciclo de condução. A média dos últimos 10 ciclos está nos detalhes abaixo.</div>` : null}
           ${res.d.cilindros.frases.map(f => html`<p key=${f} class="cil-frase">${f}</p>`)}
           <ul class="apg-avisos">${res.d.cilindros.avisos.map(a => html`<li key=${a}>${a}</li>`)}</ul>
+          ${obd.avisoMidDaMarca(v && v.marca) ? html`<div class="erro" id="obd-aviso-gm">${obd.avisoMidDaMarca(v.marca)}</div>` : null}
           <div class="sec"><h3>Como o módulo respondeu</h3>
             ${res.d.testes.map(t => html`<div key=${t.mid + "-" + t.tid} class="kv"><span>${t.nome}${t.teste ? " · " + t.teste : ""}</span><i></i><b>${numBR(t.valor)}${t.unidade ? " " + t.unidade : ""}</b></div>`)}
           </div>`}
@@ -1328,6 +1470,35 @@ function Obd() {
         })()}
       </${Cartao}>` : null}
 
+      ${res && res.o === "calib" ? html`<${Cartao} titulo="Calibração do módulo" id="obd-r-calib">
+        ${!res.d.calid.length && !res.d.cvn.length ? html`<div class="vazio">Este módulo não informa a calibração (serviço 09 $04/$06).${res.d.erro ? " " + res.d.erro : ""}</div>` : null}
+        ${res.d.calid.map((c, i) => html`<${KV} key=${"ca" + i} a=${"Calibração" + (res.d.calid.length > 1 ? " " + (i + 1) : "")} b=${c} p />`)}
+        ${res.d.cvn.map((c, i) => html`<${KV} key=${"cv" + i} a=${"CVN" + (res.d.cvn.length > 1 ? " " + (i + 1) : "")} b=${c} p />`)}
+        ${res.d.comparado ? html`<div class=${res.d.comparado.situacao === "igual" ? "nota" : "erro"}>
+          <b>${res.d.comparado.situacao === "igual" ? "SEM MUDANÇA" : "MUDOU"}</b> — ${res.d.comparado.frase}${res.d.antes && res.d.antes.em ? " (leitura anterior em " + fmtData(res.d.antes.em) + ")" : ""}</div>`
+          : res.d.cvn.length ? html`<div class="nota">Primeira leitura deste carro: guardei a calibração${placa ? " da placa " + placa : ""} para comparar na próxima vez.</div>` : null}
+        ${res.d.cvn.length ? html`<div class="nota">O CVN é a impressão digital do que está gravado no módulo: muda quando o módulo é reprogramado. <b>Não existe lista pública do CVN certo de cada carro</b> — a comparação só vale contra a leitura anterior deste mesmo carro. (Regra: CARB 13 CCR 1968.2.)</div>` : null}
+      </${Cartao}>` : null}
+
+      ${res && res.o === "ciclo" ? html`<${Cartao} titulo="Teste drive: monitores deste ciclo" id="obd-r-ciclo">
+        <div class="kv"><span>Neste ciclo:</span><i></i><b>${res.d.ciclo.prontos} de ${res.d.ciclo.total} completos</b></div>
+        ${res.d.ciclo.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto
+          ? html`<span class="selo">COMPLETOU</span>`
+          : html`<span class="selo atencao">NÃO RODOU AINDA</span>`}${res.d.desde ? (res.d.desde.monitores.find(x => x.nome === m.nome) || {}).pronto === true ? " · pronto desde o apagamento" : "" : ""}</b></div>`)}
+        <div class="nota">Esta leitura zera a cada vez que a chave liga. Serve para <b>provar o reparo no test-drive</b>: conserte, rode o carro e veja o monitor fechar — sem precisar apagar nada.</div>
+        <div class="nota">"Completou" não quer dizer "passou": o resultado está nas falhas e nos testes de bordo.</div>
+      </${Cartao}>` : null}
+
+      ${res && res.o === "contadores" ? html`<${Cartao} titulo="Contadores de uso dos monitores" id="obd-r-contadores">
+        ${!res.d ? html`<div class="vazio">Este módulo não informa os contadores de uso (serviço 09 $08/$0B).</div>` : html`
+          <${KV} a="Ciclos contados pelo módulo" b=${numBR(res.d.ciclos)} p />
+          <${KV} a="Partidas" b=${numBR(res.d.ignicoes)} p />
+          ${res.d.itens.map(i => html`<div key=${i.posicao} class="kv"><span>${i.nome}:</span><i></i><b>${
+            i.razao === null ? "—" : html`${numBR(i.razao)}${i.razao < obd.RAZAO_MINIMA ? html` <span class="selo atencao">RODA POUCO</span>` : ""}`} <span class="sub">(${numBR(i.numerador)}/${numBR(i.denominador)})</span></b></div>`)}
+          <div class="nota">Quantas vezes cada monitor rodou contra quantas vezes poderia ter rodado. Razão baixa explica o carro que "nunca fica pronto" para inspeção. A referência de 0,336 é a mínima exigida pela CARB e pela regra europeia — <b>é referência, não reprovação</b>.</div>
+          <div class="nota">A ordem dos campos desta resposta foi conferida só em fonte secundária, então cada linha mostra também a posição. Confira o nome antes de pôr num laudo.</div>`}
+      </${Cartao}>` : null}
+
       ${res && res.o === "conf" ? html`<${Cartao} titulo="Chassi, monitores e odômetro" id="obd-r-conf">
         ${res.d.chassi ? html`<${KV} a="Chassi lido no módulo" b=${res.d.chassi} p />` : html`<div class="nota">O módulo não informou o chassi (comum em carro mais antigo).</div>`}
         ${res.d.chassi && chassiCadastro ? html`<div class="kv"><span>Confronto:</span><i></i><b>${res.d.chassi === chassiCadastro
@@ -1369,6 +1540,7 @@ function Obd() {
           ${!t.escalaConhecida ? html`<div class="nota">Número cru: a escala deste teste não está conferida, então não inventamos unidade. O passou/não passou vem da comparação com o limite do próprio módulo e vale do mesmo jeito.</div>` : null}
         </div>`)}
         ${res.d.testes.length ? html`<div class="nota">É aqui que o catalisador e a sonda aparecem piorando ANTES de dar código: veja quanta margem sobra até o limite.</div>` : null}
+        ${res.d.testes.length ? html`<div class="nota">Monitor que ainda não rodou costuma devolver um <b>valor padrão de fábrica</b>, não uma medição (a Ford documenta isso para o EVAP). Antes de usar um número daqui, veja em "Teste drive" se aquele monitor completou.</div>` : null}
       </${Cartao}>` : null}
 
       <div class="nota" style="padding:0 2px 4px">Leitura de motor e emissões. ABS, airbag, câmbio e imobilizador exigem o scanner da oficina. O OBD-II não informa a quilometragem do painel.</div>
@@ -1391,6 +1563,9 @@ function usarPasso(ativo, desfazer) {
 }
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
+  // o aviso de "sem internet" some com um toque: na tela do OBD ele cobria os mostradores e assustava
+  // sem motivo, porque a leitura do carro não passa pelo servidor
+  const [semAviso, setSemAviso] = useState(false);
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], orcamentos: [], carregado: false, erro: "" });
   const [cfg, setCfg] = useState(cfgCompleta({})), [cfgOk, setCfgOk] = useState(false);
   const [placa, setPlaca] = useState({ texto: "" });
@@ -1428,10 +1603,12 @@ function App({ usuario, nativo }) {
     <main class="folha inicio"><div class="vazio" id="fora-horario"><b>Fora do horário de uso.</b><br />${fora}</div></main></div>`;
   // telas liberadas: o que veio no login e, carregados os Ajustes, o que o administrador tem gravado agora (Sistema › Equipe)
   const telas = cfgOk ? acessoApp(cfg, usuario).telas : (usuario.telas || []);
-  const ctx = { perfil: usuario, dados, cfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
+  const ctx = { perfil: usuario, dados, cfg, setCfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
-    ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}
+    ${dados.erro && !semAviso ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px" onClick=${() => setSemAviso(true)}>
+      ${rota === "obd" ? "Sem internet agora: a leitura do carro funciona do mesmo jeito (ela sai do adaptador, não do servidor). Só as buscas do sistema ficam incompletas." : dados.erro}
+      <span class="toast-fechar">toque para fechar</span></div>` : null}
     <${Tela} key=${rota} />
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}</${Ctx.Provider}>`;
 }

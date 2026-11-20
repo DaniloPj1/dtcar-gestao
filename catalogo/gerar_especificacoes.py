@@ -140,7 +140,7 @@ def main():
     sem_faixa = 0
     for atual, _, arquivos in os.walk(raiz):
         for a in sorted(arquivos):
-            if not a.lower().endswith(".lbl"):
+            if not a.lower().endswith((".lbl", ".xpl")):  # .xpl é o mesmo formato de texto
                 continue
             caminho = os.path.join(atual, a)
             try:
@@ -149,7 +149,7 @@ def main():
                 continue
             if not itens:
                 continue
-            chave = a[: -len(".lbl")]
+            chave = a[: a.rfind(".")]
             acervo[chave] = {"peca": pn, "modulo": comp, "itens": itens}
             sem_faixa += sum(1 for i in itens if "de" not in i and "cru_de" not in i)
 

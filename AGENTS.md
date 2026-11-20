@@ -717,11 +717,29 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Lista de dados ao vivo redesenhada (19/11/2026):** a visão LISTA deixou de ser "rótulo: valor" e virou `LinhaViva` — separada por grupo, com o
   valor grande à direita e uma barra fina mostrando a posição na escala (a mesma `de`/`ate` do mostrador; continua sem dizer se é bom ou ruim).
 - **Serviço 06, honestidade e sinal:** na tabela de escalas do J1979 os identificadores de **$80 em diante são valores COM SINAL** — lendo tudo como sem sinal, um valor negativo virava ~65000 e o passou/não passou **invertia**. `comSinal`/`inteiro16` tratam isso. A escala para mostrar em unidade de verdade só existe onde está conferida (`ESCALAS`); o resto aparece como número cru, sem unidade inventada, e pode crescer conferindo contra o Raven. Mesma regra nos nomes: `nomeMid` só nomeia sonda ($01–$08) e catalisador ($21–$24).
+- **FALHA DE COMBUSTÃO POR CILINDRO (19/11/2026, sem SQL e sem APK).** Pedido do Danilo depois de perguntar o que dá para fazer
+  em atuadores: **é o número que o corte de bico procura, sem cortar nada** — o próprio módulo conta. Botão `#obd-cilindros`.
+  Serviço 06, **MID $A1 geral e $A2 em diante um por cilindro** ($A2 = cilindro 1, até $AD = 12), com **TID $0B** (média dos
+  últimos 10 ciclos) e **TID $0C** (ciclo atual); escala UASID $24 = contagens. Conferido contra as tabelas de mode 06 das
+  montadoras, não de memória.
+  **Duas coisas impediam isso de aparecer e foram corrigidas:** `FAIXAS_MID` ia só até $60 (os MIDs de falha são $A1-$AD, nunca
+  chegavam) e a trava de 32 MIDs cortava justamente o fim da lista — agora os MIDs de falha são lidos **na frente** e a trava é 48.
+  O botão lê só os 13 MIDs de falha, não varre o serviço 06 inteiro.
+  **Como a tela lê (`falhaPorCilindro`):** compara os cilindros ENTRE SI. Número absoluto não diz nada (depende do motor e de
+  quanto andou desde o apagamento). Aponta um cilindro só quando ele tem pelo menos `FALHA_MINIMA` (10) contagens E é
+  `FALHA_DESTAQUE` (3) vezes o segundo pior; senão diz "espalhada" e manda procurar o que é comum a todos. Nunca receita peça.
+  Avisos fixos: comparar entre cilindros, a contagem é desde o último apagamento, e **alguns módulos mandam na ordem de ignição**
+  (não na ordem dos cilindros) e há motor que lista cilindro que não existe — por isso a tela manda conferir no carro.
+- **ODÔMETRO DO MÓDULO CONTRA O KM DO CADASTRO (19/11/2026, sem SQL e sem APK).** No cartão "Chassi, monitores e odômetro":
+  o PID $A6 (poucos carros publicam) ao lado do `km_atual` do cadastro. `conferirOdometro`: acima = normal (diz quanto andou
+  desde a última visita); até `ODOMETRO_TOLERANCIA` (1.000 km) abaixo = arredondamento; mais que isso manda **conferir** — e
+  **não acusa ninguém**, porque módulo trocado, painel trocado e módulo que conta a própria distância dão nisso. Carro que não
+  publica recebe a frase explicando, não um zero.
 - **O que NÃO sai por aqui, escrito na tela:** ABS, airbag, câmbio e imobilizador (protocolo próprio de montadora), quilometragem de painel (não existe no OBD-II) e qualquer atuação ou programação.
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (158, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (316, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (185, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (331, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
 
 ## Como trabalhar

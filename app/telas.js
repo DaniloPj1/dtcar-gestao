@@ -983,7 +983,10 @@ function Obd() {
   // O que o carro tem: a lista que ELE respondeu manda. Enquanto não há conexão, vale a da última
   // vez (só para o mecânico já poder marcar o que quer antes de encaixar o adaptador).
   const antesDeLigar = guardado("suportados");
-  const suportados = (lig && lig.pidsSuportados) || (Array.isArray(antesDeLigar) ? antesDeLigar : null);
+  // Conectado mas com lista vazia (o módulo não respondeu o 0100) NÃO é "a lista deste carro": seria o
+  // catálogo inteiro passando por lista do carro, e aí apareceria EGR em carro que não tem.
+  const listaDoCarro = !!(lig && Array.isArray(lig.pidsSuportados) && lig.pidsSuportados.length);
+  const suportados = (listaDoCarro && lig.pidsSuportados) || (Array.isArray(antesDeLigar) && antesDeLigar.length ? antesDeLigar : null);
   const combustivel = (pl.veic && (pl.veic.combustivel || pl.veic.combustivel_descricao)) || "";
   const gruposDoCarro = obd.gruposPara(suportados, combustivel);
   const disponiveis = obd.leiturasPara(suportados, null);
@@ -1150,7 +1153,11 @@ function Obd() {
                 onChange=${e => marcar(l.pid, e.target.checked)} />
               <span>${l.rotulo}${l.unidade ? " (" + l.unidade + ")" : ""}</span></label>`)}
           </div>`)}
-          <div class="nota">A lista acima é a que ESTE carro respondeu — o que ele não tem nunca aparece aqui, por mais que o modelo costume ter. A escolha fica guardada${placa ? " para a placa " + placa : ""}.</div>
+          <div class=${listaDoCarro ? "nota" : "erro"}>${listaDoCarro
+            ? "A lista acima é a que ESTE carro respondeu agora: o que ele não tem não aparece aqui, por mais que o modelo costume ter."
+            : (Array.isArray(antesDeLigar) && antesDeLigar.length
+              ? "Esta é a lista que este carro respondeu da ÚLTIMA vez. Conecte para ela valer de novo."
+              : "Ainda não sei o que este carro tem: esta é a lista GERAL do OBD, não a dele. Conecte o adaptador e ela vira a deste carro — aí some o que ele não tiver.")}${placa ? " A escolha fica guardada para a placa " + placa + "." : " A escolha fica guardada neste aparelho."}</div>
         ` : null}
       </${Cartao}>` : null}
 
@@ -1285,6 +1292,9 @@ function usarPasso(ativo, desfazer) {
 }
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
+  // o aviso de "sem internet" some com um toque: na tela do OBD ele cobria os mostradores e assustava
+  // sem motivo, porque a leitura do carro não passa pelo servidor
+  const [semAviso, setSemAviso] = useState(false);
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], orcamentos: [], carregado: false, erro: "" });
   const [cfg, setCfg] = useState(cfgCompleta({})), [cfgOk, setCfgOk] = useState(false);
   const [placa, setPlaca] = useState({ texto: "" });
@@ -1325,7 +1335,9 @@ function App({ usuario, nativo }) {
   const ctx = { perfil: usuario, dados, cfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
-    ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}
+    ${dados.erro && !semAviso ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px" onClick=${() => setSemAviso(true)}>
+      ${rota === "obd" ? "Sem internet agora: a leitura do carro funciona do mesmo jeito (ela sai do adaptador, não do servidor). Só as buscas do sistema ficam incompletas." : dados.erro}
+      <span class="toast-fechar">toque para fechar</span></div>` : null}
     <${Tela} key=${rota} />
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}</${Ctx.Provider}>`;
 }

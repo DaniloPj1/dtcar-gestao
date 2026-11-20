@@ -601,6 +601,7 @@ try:
         # FILTRO DAS LEITURAS (pedido do Danilo em 19/11/2026)
         pg.click('#obd-escolher'); pg.wait_for_timeout(300)
         t(pg.query_selector('#obd-todas'), 'tem a opção "todas as que o carro tiver"')
+        t('respondeu agora' in pg.inner_text('#obd-escolha'), 'conectado, a tela diz que a lista é a que ESTE carro respondeu: %s' % [l for l in pg.inner_text('#obd-escolha').split('\n') if 'lista' in l][:1])
         t(pg.locator('#obd-escolha .obd-cx').count() >= 30, 'lista as leituras deste carro para marcar: %d' % pg.locator('#obd-escolha .obd-cx').count())
         t(pg.locator('#obd-escolha .sec h3').count() >= 3, 'separadas por grupo')
         t(pg.locator('#obd-escolha input:checked').count() == pg.locator('#obd-escolha .obd-cx').count(), 'começa com todas marcadas')

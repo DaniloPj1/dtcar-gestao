@@ -320,3 +320,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .cil-linha.pior .cil-nome, .cil-linha.pior .cil-num { color: #8a2d2d; font-weight: 700 }
 .cil-num { flex: 0 0 64px; text-align: right; font-size: 17px; font-weight: 700; color: var(--tinta) }
 .cil-frase { margin: 8px 0 0; font-size: 14px; line-height: 1.45; color: var(--tinta) }
+
+/* Aviso de "sem internet": some com um toque (na tela do OBD ele cobria os mostradores). */
+.toast.erro { cursor: pointer }
+.toast-fechar { display: block; margin-top: 4px; font-size: 11.5px; opacity: .85; font-weight: 600 }

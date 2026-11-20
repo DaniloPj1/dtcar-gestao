@@ -735,11 +735,24 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
   desde a última visita); até `ODOMETRO_TOLERANCIA` (1.000 km) abaixo = arredondamento; mais que isso manda **conferir** — e
   **não acusa ninguém**, porque módulo trocado, painel trocado e módulo que conta a própria distância dão nisso. Carro que não
   publica recebe a frase explicando, não um zero.
+- **A LISTA DO FILTRO PRECISA SER MESMO A DO CARRO (20/11/2026, achado pelo Danilo num Honda City 2016 flex).** Ele viu EGR
+  oferecida num carro que não tem válvula de EGR. O furo: `leiturasPara(suportados)` devolve o catálogo INTEIRO quando a lista
+  vem vazia, e a tela, conectada, dizia assim mesmo "a lista acima é a que ESTE carro respondeu". Módulo que conecta mas não
+  devolve o `0100` caía nisso — catálogo geral passando por lista do carro, que é exatamente o que a etapa 1 prometeu não fazer.
+  Agora `listaDoCarro` exige lista NÃO VAZIA, e o texto diz de onde ela veio: do carro agora, do carro da última vez
+  (`obd_suportados_<PLACA>`) ou do catálogo geral — este em vermelho, mandando conectar. **O painel ao vivo nunca teve esse
+  problema** (lê pelos PIDs suportados de verdade); era só a tela de escolha.
+  Vale o registro técnico: **EGR declarada em carro sem válvula é comum** (o mesmo software roda em versões com e sem, e
+  devolve valor fixo), e o monitor do serviço 01 se chama "EGR e/ou VVT" no padrão — num motor com comando variável ele
+  aparece com razão. Nada disso é erro de leitura.
+- **O aviso de "sem internet" não pode cobrir a leitura (20/11/2026).** O toast vermelho de `dados.erro` ficava fixo no topo,
+  em cima dos mostradores. Agora fecha com um toque (`semAviso`) e, na rota `obd`, troca o texto: a leitura do carro sai do
+  adaptador e não passa pelo servidor; sem internet só as buscas do sistema ficam incompletas.
 - **O que NÃO sai por aqui, escrito na tela:** ABS, airbag, câmbio e imobilizador (protocolo próprio de montadora), quilometragem de painel (não existe no OBD-II) e qualquer atuação ou programação.
 - **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
 - **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
 - **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
-- Testes: `node teste/teste_obd.mjs` (185, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (331, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- Testes: `node teste/teste_obd.mjs` (185, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (55, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (332, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
 - **Ainda não feito:** gravar na O.S. e no histórico do veículo (etapa 2, com `obd_leituras`); leitura de entrada e de saída como prova do reparo e impressão no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4); apagar falha, com registro de quem apagou (entra junto na lista branca do nativo).
 
 ## Como trabalhar

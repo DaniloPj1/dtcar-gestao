@@ -31,7 +31,7 @@ export function usarMapa(carro) {
 
 /** Qual é o carro: mostra o que a sessão já sabe, ou pede a placa. Sem placa as telas continuam funcionando. */
 export function CarroDaVez({ st }) {
-  const pl = usarPlaca();
+  const pl = usarPlaca("carro");
   const c = st.carro || {};
   useEffect(() => {
     if (pl.veic) sessao.definirCarro({ placa: String(pl.veic.placa || "").toUpperCase(), marca: pl.veic.marca || "", modelo: pl.veic.modelo || "", ano: pl.veic.ano || "", veiculo_id: pl.veic.id || null });

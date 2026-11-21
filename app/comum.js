@@ -121,10 +121,23 @@ const lerPlacaGuardada = () => { try { const v = JSON.parse(sessionStorage.getIt
 // guarda o carro e, do dono, só id/nome/telefone (não a ficha inteira)
 const guardarPlaca = p => { try { if (p && p.veic) { const c = p.veic.cliente; sessionStorage.setItem(CH_PLACA_INICIO, JSON.stringify({ texto: p.texto, veic: { ...p.veic, cliente: c ? { id: c.id, nome: c.nome, telefone: c.telefone || "" } : null } })); } else sessionStorage.removeItem(CH_PLACA_INICIO); } catch (e) { /* sem espaço */ } };
 export const limparPlacaGuardada = () => guardarPlaca(null);
+// A PLACA DO CARRO EM DIAGNÓSTICO (pedido do Danilo, 21/11/2026): puxou a placa uma vez, ela vale em
+// todas as telas do carro (ler, módulos, atuadores, aprendizados, bico) até trocar de placa ou tirar o
+// adaptador — não se pede de novo a cada tela. Fica só na memória do app: fechar o app esquece.
+let placaDoCarro = { texto: "" };
+const ouvintesPlaca = new Set();
+const mudarPlacaDoCarro = p => { placaDoCarro = p && p.veic ? p : { texto: "" }; for (const f of [...ouvintesPlaca]) { try { f(placaDoCarro); } catch (e) { /* tela saiu */ } } };
+export const esquecerPlacaDoCarro = () => mudarPlacaDoCarro(null);
 function usarPlaca(guardar = false) {
   const { dados } = useApp();
-  const [placa, setPlacaBruto] = useState(() => guardar ? lerPlacaGuardada() : { texto: "" });
-  const setPlaca = p => { setPlacaBruto(p); if (guardar) guardarPlaca(p); };
+  const doCarro = guardar === "carro";
+  const [placa, setPlacaBruto] = useState(() => doCarro ? placaDoCarro : guardar ? lerPlacaGuardada() : { texto: "" });
+  useEffect(() => {
+    if (!doCarro) return undefined;
+    const f = p => setPlacaBruto(atual => (atual.veic || p.veic ? p : atual));   // não apaga o que a pessoa está digitando
+    ouvintesPlaca.add(f); return () => ouvintesPlaca.delete(f);
+  }, []);
+  const setPlaca = p => { setPlacaBruto(p); if (doCarro) { if (p && p.veic) mudarPlacaDoCarro(p); else if (!p || !p.texto) mudarPlacaDoCarro(null); } else if (guardar) guardarPlaca(p); };
   const buscar = async (texto) => {
     const p = normPlaca(texto);
     if (!placaValida(p)) { setPlaca({ texto, erro: "Digite a placa inteira (ABC1234 ou ABC1D23)." }); return null; }

@@ -16,7 +16,7 @@ import * as registro from "../js/obdregistro.js";
 import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
 import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
-import { HondaLista, Condicoes } from "./diaghonda.js";
+import { HondaLista } from "./diaghonda.js";
 import * as confere from "../js/obdconfere.js";
 import * as compara from "../js/obdcompara.js";
 import * as faixas from "../js/obdfaixa.js";
@@ -24,7 +24,7 @@ import * as laudo from "../js/obdlaudo.js";
 import * as falhasCat from "../js/obdfalhas.js";
 import { pdfLaudo, garantirJsPDF } from "../js/pdflaudo.js";
 import { entregarArquivo } from "../js/pdf.js";
-import { useApp, Ic, ir, Cartao, KV, Campo, Quadro, usarPlaca, BuscaPlaca, Veiculo, Tela, usarPasso } from "./comum.js";
+import { useApp, Ic, ir, Cartao, KV, Campo, Quadro, usarPlaca, BuscaPlaca, Veiculo, Tela, usarPasso, esquecerPlacaDoCarro } from "./comum.js";
 
 const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
 
@@ -176,7 +176,7 @@ function Obd() {
     { r: "aprendizados", curto: "aprendizados", rotulo: "APRENDIZADOS E CALIBRAÇÕES" },
     { r: "bico", curto: "programar bico", rotulo: "PROGRAMAR BICO" },
   ].filter(o => (minhasTelas || []).includes(o.r));
-  const pl = usarPlaca();
+  const pl = usarPlaca("carro");
   const [aparelhos, setAparelhos] = useState(null);
   // A conexão mora em js/obdsessao.js, acima das telas: trocar para a tela de atuador e voltar não
   // derruba mais o adaptador. `lig` continua com o mesmo formato de antes, montado a partir dela,
@@ -1194,12 +1194,16 @@ function Atuadores() {
     // comAcao: pega a vez, para a leitura de fundo E TRAVA O DESLIGAMENTO enquanto o teste corre.
     // Sem a trava, trocar de tela ou de módulo no meio derrubava a conexão antes de o controle da
     // saída ser devolvido ao módulo — e saída presa no comando do aparelho queima peça.
-    const r = await sessao.comAcao("o teste de atuador", () => uds.testarAtuador(did, {
-      segundos: hd ? hd.segundos : 5, ...(hd ? { valor: hd.valor } : {}),
-      pausar: sessao.pausar, retomar: sessao.retomar,
-      continuar: () => !cancelar.current,
-      aoAndar: p => setAndando({ passos: p.passos }),
-    }));
+    const r = await sessao.comAcao("o teste de atuador", async () => {
+      const nao = hd ? await conferirSozinho(hd) : "";
+      if (nao) return { ok: false, passos: [{ o: "recusou", t: nao }], texto: nao };
+      return uds.testarAtuador(did, {
+        segundos: hd ? hd.segundos : 5, ...(hd ? { valor: hd.valor } : {}),
+        pausar: sessao.pausar, retomar: sessao.retomar,
+        continuar: () => !cancelar.current,
+        aoAndar: p => setAndando({ passos: p.passos }),
+      });
+    });
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar o teste." } }));
     // Fica registrado quem acionou o quê, em que módulo e o que o módulo respondeu (Etapa 1).
     const reg = await registrarAcao("atuar", perfil, { modulo: sessao.estado().modulo, did: hex4Txt(did), ...(hd ? { honda: hd.chave, nome: hd.nome, antes } : {}), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
@@ -1239,15 +1243,37 @@ function Atuadores() {
       `}
     `}
     ${alvo ? html`<${Quadro} titulo="Acionar esta saída?" onFechar=${() => setAlvo(null)}>
-      ${alvo.honda ? html`<p><b>${alvo.honda.nome}</b> (saída ${hex4Txt(alvo.did)}), por ${alvo.honda.segundos} segundos. ${alvo.honda.ver}</p>
-        <${Condicoes} item=${alvo.honda} aoMudar=${setCondOk} />` : html`<p>O módulo vai acionar a saída <b>${hex4Txt(alvo.did)}</b> por cinco segundos. Antes de confirmar:</p>`}
-      <p class="nota">• Veja se não há ninguém com a mão perto de ventoinha, correia ou polia.<br />
-      • Saída de luz, bomba e ventoinha é segura de testar. Saída que move peça grande, não.<br />
-      • O app devolve o controle ao módulo no fim. Se não conseguir, ele avisa e aí é desligar a chave.</p>
-      <button type="button" class="btn-acao" id="atu-acionar" disabled=${!!alvo.honda && !condOk} onClick=${() => testar(alvo.did, alvo.honda || null, alvo.antes || null)}>ACIONAR AGORA</button>
+      ${alvo.honda ? html`<p><b>${alvo.honda.nome}</b> (saída ${hex4Txt(alvo.did)}), por ${alvo.honda.segundos} segundos. ${alvo.honda.ver}</p>`
+        : html`<p>O módulo vai acionar a saída <b>${hex4Txt(alvo.did)}</b> por cinco segundos.</p>`}
+      <button type="button" class="btn-acao" id="atu-acionar" onClick=${() => testar(alvo.did, alvo.honda || null, alvo.antes || null)}>ACIONAR AGORA</button>
       <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAlvo(null)}>Cancelar</button>
     </${Quadro}>` : null}
   </${Tela}>`;
+}
+// Tirou o adaptador (ou desconectou): a placa puxada deixa de valer — o próximo carro é outro.
+{ let estavaLigado = false; sessao.observar(st => { if (estavaLigado && !st.ligado) { esquecerPlacaDoCarro(); sessao.definirCarro({ placa: "", marca: "", modelo: "", ano: "", veiculo_id: null, vin: "" }); } estavaLigado = !!st.ligado; }); }
+
+/**
+ * AS CONDIÇÕES, CONFERIDAS PELO APP (pedido do Danilo, 21/11/2026): em vez de um questionário para o
+ * mecânico marcar, o app lê do carro o que dá para ler — rotação e velocidade — e só barra quando o
+ * carro diz o contrário do que o item pede. O que não dá para ler (câmbio em P, ar desligado) não é
+ * perguntado: o mecânico sabe, e o módulo recusa sozinho quando a condição não serve (resposta 22).
+ * Roda DENTRO da ação, com a vez do adaptador: solta o módulo, pergunta ao motor e aponta de novo.
+ */
+async function conferirSozinho(hd) {
+  const conds = (hd && hd.condicoes) || [];
+  const querDesligado = conds.some(c => /Motor DESLIGADO/i.test(c)), querParado = conds.some(c => /parado/i.test(c));
+  if (!querDesligado && !querParado) return "";
+  const mod = sessao.estado().modulo;
+  const ler = async (pid, bytes) => {
+    try { const r = await obd.pedir("01" + pid, 3000); const hex = r && !r.erro ? String(r.hex || "") : ""; const m = new RegExp("41" + pid + "([0-9A-F]{" + bytes * 2 + "})").exec(hex); return m ? parseInt(m[1], 16) : null; } catch (e) { return null; }
+  };
+  await uds.fechar();
+  const rpmCru = querDesligado ? await ler("0C", 2) : null, kmh = querParado ? await ler("0D", 1) : null;
+  if (mod) await uds.abrir({ pedido: mod.pedido, resposta: mod.resposta });
+  if (rpmCru !== null && rpmCru / 4 > 50) return "O motor está LIGADO (" + Math.round(rpmCru / 4) + " rpm). Este item é com o motor desligado e a ignição ligada. Nada foi acionado.";
+  if (kmh !== null && kmh > 0) return "O carro está em movimento (" + kmh + " km/h). Este item é com o carro parado. Nada foi acionado.";
+  return "";
 }
 const hex4Txt = n => (n == null ? "" : Number(n).toString(16).toUpperCase().padStart(4, "0"));
 
@@ -1309,12 +1335,16 @@ function Aprendizados() {
   useEffect(() => { setCondOk(false); }, [alvo]);
   const rodar = async (rid, hd = null, antes = null) => {
     setAlvo(null); setCondOk(false); setAndando({ passos: [] }); cancelar.current = false;
-    const r = await sessao.comAcao("o aprendizado", () => uds.rodarAprendizado(rid, {
-      segundosMax: hd ? hd.segundosMax : 120, ...(hd ? { dados: hd.dados } : {}),
-      pausar: sessao.pausar, retomar: sessao.retomar,
-      continuar: () => !cancelar.current,
-      aoAndar: p => setAndando({ passos: p.passos }),
-    }));
+    const r = await sessao.comAcao("o aprendizado", async () => {
+      const nao = hd ? await conferirSozinho(hd) : "";
+      if (nao) return { ok: false, passos: [{ o: "recusou", t: nao }], texto: nao };
+      return uds.rodarAprendizado(rid, {
+        segundosMax: hd ? hd.segundosMax : 120, ...(hd ? { dados: hd.dados } : {}),
+        pausar: sessao.pausar, retomar: sessao.retomar,
+        continuar: () => !cancelar.current,
+        aoAndar: p => setAndando({ passos: p.passos }),
+      });
+    });
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar a rotina." } }));
     const reg = await registrarAcao("aprender", perfil, { modulo: sessao.estado().modulo, rotina: hex4Txt(rid), ...(hd ? { honda: hd.chave, nome: hd.nome, antes } : {}), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
     setAndando(a => (a ? { ...a, registro: reg } : a));
@@ -1356,11 +1386,11 @@ function Aprendizados() {
     ${alvo ? html`<${Quadro} titulo="Rodar esta rotina?" onFechar=${() => setAlvo(null)}>
       ${alvo.honda ? html`<p><b>${alvo.honda.nome}</b> (rotina ${hex4Txt(alvo.rid)}). ${alvo.honda.aviso}</p>
         <p class="nota" id="honda-antes">Valor atual lido e guardado antes de rodar: <b>${alvo.antes}</b>. Fica no registro junto com quem rodou.</p>
-        <${Condicoes} item=${alvo.honda} aoMudar=${setCondOk} />` : html`<p>O módulo vai rodar a rotina <b>${hex4Txt(alvo.rid)}</b>. Aprendizado muda o jeito do módulo trabalhar, e não tem botão de desfazer.</p>`}
+        ` : html`<p>O módulo vai rodar a rotina <b>${hex4Txt(alvo.rid)}</b>. Aprendizado muda o jeito do módulo trabalhar, e não tem botão de desfazer.</p>`}
       <p class="nota">• Deixe a chave ligada e não mexa no carro enquanto a rotina corre.<br />
       • Se o módulo pedir condição (neutro, freio, temperatura), o app mostra o que falta.<br />
       • Pode levar até dois minutos.</p>
-      <button type="button" class="btn-acao" id="apr-rodar" disabled=${!!alvo.honda && !condOk} onClick=${() => rodar(alvo.rid, alvo.honda || null, alvo.antes || null)}>RODAR AGORA</button>
+      <button type="button" class="btn-acao" id="apr-rodar" onClick=${() => rodar(alvo.rid, alvo.honda || null, alvo.antes || null)}>RODAR AGORA</button>
       <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAlvo(null)}>Cancelar</button>
     </${Quadro}>` : null}
   </${Tela}>`;
@@ -1370,7 +1400,7 @@ function Aprendizados() {
 function Bico() {
   const st = usarSessao();
   const { cfg, perfil } = useApp();
-  const pl = usarPlaca();
+  const pl = usarPlaca("carro");
   // O veículo consultado AQUI é o que vai para o registro da gravação (sessao.carro()).
   useEffect(() => { if (pl.veic) sessao.definirCarro({ placa: String(pl.veic.placa || "").toUpperCase(), marca: pl.veic.marca || "", modelo: pl.veic.modelo || "", ano: pl.veic.ano || "", veiculo_id: pl.veic.id || null }); }, [pl.veic]);
   const [cilindros, setCilindros] = useState(4);

@@ -548,6 +548,10 @@ export const situacao = () => P().situacao();
 export const conectar = endereco => P().conectar({ endereco });
 export const desconectar = () => P().desconectar().catch(() => ({ conectado: false }));
 
+const ouvintesDeTroca = new Set();
+/** Assina cada troca com o adaptador: fn(comando, respostaCrua, milissegundos). Devolve o cancelar. */
+export function aoTrocar(fn) { ouvintesDeTroca.add(fn); return () => ouvintesDeTroca.delete(fn); }
+
 /**
  * Manda um comando e devolve o texto cru.
  * O tempo-limite daqui é a rede de segurança: se a parte nativa parar de responder por qualquer
@@ -555,7 +559,14 @@ export const desconectar = () => P().desconectar().catch(() => ({ conectado: fal
  */
 export function comando(cmd, esperaMs) {
   const espera = esperaMs || 5000;
-  const pedido = P().comando({ cmd, esperaMs: espera }).then(r => (r && r.resposta) || "");
+  const t0 = Date.now();
+  const pedido = P().comando({ cmd, esperaMs: espera }).then(r => {
+    const resposta = (r && r.resposta) || "";
+    // Quem quiser anotar a conversa (o caderno do carro, js/obdmapa.js) recebe o que JÁ aconteceu.
+    // Não gera pedido nenhum: é só escrever o que passou por aqui.
+    for (const f of ouvintesDeTroca) { try { f(cmd, resposta, Date.now() - t0); } catch (e) { /* quem ouve não derruba a leitura */ } }
+    return resposta;
+  });
   const relogio = new Promise((_, falhar) => setTimeout(() => falhar(new Error("demorou")), espera + 4000));
   return Promise.race([pedido, relogio]);
 }

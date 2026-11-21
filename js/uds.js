@@ -138,7 +138,9 @@ export async function abrir({ pedido, resposta, bits29 = false, esperaMs = 1000 
   const ped = String(pedido || "").toUpperCase().replace(/[^0-9A-F]/g, "");
   if (!(ped.length === 3 || ped.length === 8)) throw new Error("endereco-invalido");
   const resp = String(resposta || (ped.length === 3 ? hx(parseInt(ped, 16) + 8, 3) : "")).toUpperCase().replace(/[^0-9A-F]/g, "");
-  await comando("ATSP" + (bits29 ? "7" : "6"), 2000);   // CAN de 500 kbit, 29 ou 11 bits
+  // Endereço de 8 dígitos É de 29 bits: quem chama não precisa lembrar de avisar. (Antes dependia
+  // do parâmetro, e apontar um módulo de Honda pela tela abria o protocolo de 11 bits.)
+  await comando("ATSP" + (bits29 || ped.length === 8 ? "7" : "6"), 2000);   // CAN de 500 kbit, 29 ou 11 bits
   await comando("ATCAF1", 2000);                        // o adaptador monta e desmonta os quadros
   await comando("ATSH" + ped, 2000);
   if (resp) await comando("ATCRA" + resp, 2000);        // escuta só este módulo

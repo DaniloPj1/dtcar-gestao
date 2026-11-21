@@ -1794,7 +1794,7 @@ function Atuadores() {
   usarPasso(!!alvo, () => setAlvo(null));
 
   const escolher = async m => {
-    setErro(""); setLista(null);
+    setErro(""); setLista(null); setDuvida(false);
     const r = await sessao.apontarModulo(m);
     if (!r.ok) { setErro(r.texto || "Não deu para falar com este módulo."); return; }
     setMod(m);
@@ -1890,7 +1890,7 @@ function Aprendizados() {
   usarPasso(!!alvo, () => setAlvo(null));
 
   const escolher = async m => {
-    setErro(""); setLista(null);
+    setErro(""); setLista(null); setDuvida(false);
     const r = await sessao.apontarModulo(m);
     if (!r.ok) { setErro(r.texto || "Não deu para falar com este módulo."); return; }
     setMod(m);

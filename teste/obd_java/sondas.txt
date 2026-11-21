@@ -147,3 +147,6 @@ nao ATSH0CF00400
 nao ATSH18FEF100
 nao ATFCSH0C0
 nao ATFCSH18FEF100
+
+# --- a sonda que explica o ATCAF0: com a formatação LIGADA isto é serviço 02 (leitura) e passa ---
+sim 022EF190

@@ -657,7 +657,8 @@ public class ObdPlugin extends Plugin {
                     out.write((limpo + "\r").getBytes(StandardCharsets.US_ASCII));
                     out.flush();
                     String resposta = ler(in, espera);
-                    if (resposta.startsWith("STOPPED")) ultimoEstourou = true;
+                    // tempo estourado SEM nenhum byte também conta: a resposta pode chegar depois
+                    if (resposta.startsWith("STOPPED") || resposta.isEmpty()) ultimoEstourou = true;
                     JSObject r = new JSObject();
                     r.put("resposta", resposta);
                     call.resolve(r);

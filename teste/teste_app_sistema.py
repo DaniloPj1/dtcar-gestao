@@ -52,7 +52,7 @@ window.__portao = function (cru) {
     if (c.indexOf('ATSH') === 0) return diag(c.slice(4));
     if (c.indexOf('ATCRA') === 0) return hexN(c.slice(5), 3) || hexN(c.slice(5), 8);
     if (c.indexOf('ATFCSH') === 0) return diag(c.slice(6));
-    if (c.indexOf('ATFCSD') === 0) return parN(c.slice(6)) && c.length > 6 && c.length <= 16;
+    if (c.indexOf('ATFCSD') === 0) return c === 'ATFCSD300000';
     if (c.indexOf('ATFCSM') === 0) return c.length === 7 && c[6] >= '0' && c[6] <= '2';
     if (c.indexOf('ATST') === 0) return hexN(c.slice(4), 2);
     return false;
@@ -137,7 +137,9 @@ window.Capacitor.Plugins.DtcarObd = {
   // como o nativo: agir exige UM módulo escolhido, nunca o endereço de difusão
   __umModulo: function () {
     var c = window.__obd.cabecalho || '';
-    return !(c === '' || c === '7DF' || c === '18DB33F1');
+    if (!c) return false;
+    if (c.length === 3) { var n = parseInt(c, 16); return n !== 0x7DF && n >= 0x600 && n <= 0x7FF; }
+    return c.length === 8 && c.indexOf('18DA') === 0;
   },
   atuar: function (o) {
     window.__obd.chamadas.push('atuar:' + o.did + ':' + o.opcao);
@@ -176,6 +178,7 @@ window.Capacitor.Plugins.DtcarObd = {
     // comando() e era recusada no aparelho de verdade, passou verde aqui.
     if (!window.__portao(c)) return Promise.reject(new Error('comando-recusado'));
     if (c.indexOf('ATSH') === 0) window.__obd.cabecalho = c.slice(4);
+    else if (c.indexOf('ATSP') === 0 || c === 'ATZ' || c === 'ATD' || c === 'ATWS') window.__obd.cabecalho = '';
     if (window.__obd.limpo && (c === '03' || c === '07' || c === '0A')) return Promise.resolve({ resposta: (c === '03' ? '4300' : c === '07' ? '4700' : '4A00') + '\\r\\r>' });
     if (window.__obd.limpo && (c === '0106' || c === '0107')) return Promise.resolve({ resposta: '41' + c.slice(2) + '80\\r\\r>' });   // ajuste zerado: o módulo recomeça
     if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
@@ -1148,6 +1151,22 @@ try:
         for nome in ('AT_PERMITIDOS', 'SERVICOS_LEITURA', 'UDS_LEITURA', 'SERVICOS_PROIBIDOS'):
             j, f = lista_java(nome), lista_fake(nome)
             t(j == f, 'a lista %s do teste é igual à do Java: Java=%s teste=%s' % (nome, j, f))
+        # ---- e o que importa de verdade: a DECISÃO, sonda por sonda ----
+        # teste/obd_java/sondas.txt é a fonte única; o teste do Java confere o portão de verdade
+        # contra o MESMO arquivo. Comparar lista não basta: no caso do ATCAF0 as listas estavam
+        # iguais e a regra em volta não.
+        sondas = []
+        for linha in open(os.path.join(raiz, 'teste', 'obd_java', 'sondas.txt'), encoding='utf-8'):
+            x = linha.strip()
+            if not x or x.startswith('#'):
+                continue
+            sondas.append([x.startswith('sim'), x[4:] if len(x) > 3 else ''])
+        t(len(sondas) >= 100, 'o arquivo de sondas tem conteúdo: %d' % len(sondas))
+        # a página do teste já fechou aqui: o espelho roda numa página em branco, só com o portão
+        pp = br.new_page(); pp.add_init_script(FAKE_OBD.replace('__VIN__', '')); pp.goto('about:blank')
+        erradas = pp.evaluate('''(ss) => ss.filter(x => window.__portao(x[1]) !== x[0]).map(x => (x[0] ? 'devia aceitar ' : 'devia recusar ') + JSON.stringify(x[1]))''', sondas)
+        pp.close()
+        t(not erradas, 'o espelho em JavaScript decide igual ao Java nas %d sondas: %s' % (len(sondas), erradas[:6]))
         br.close()
     print('OK: %d conferências' % ok)
 finally:

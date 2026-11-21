@@ -302,7 +302,9 @@ function Obd() {
 
   async function rodar(aviso, fn) {
     setErro(""); setOcupado(aviso);
-    try { await fn(); } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
+    // Esta tela fala OBD-II genérico. Se a pessoa veio de Módulos com o ABS (ou outro) apontado, o
+    // adaptador ainda está com o endereço e o filtro dele: solta antes, senão o pedido vai ao módulo errado.
+    try { await sessao.soltarModulo(); await fn(); } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
   }
 
   const procurar = () => rodar("Procurando o adaptador…", async () => {
@@ -345,6 +347,7 @@ function Obd() {
       if (mesmo) return;                                            // …mas trocar de modo recomeça
       await new Promise(r => setTimeout(r, 120));
     }
+    await sessao.soltarModulo();                                    // idem: o ao vivo é OBD-II genérico
     const minha = ++contador.current;
     rodada.current = minha;
     setErro("");
@@ -1298,6 +1301,8 @@ function Bico() {
   const st = usarSessao();
   const { cfg, perfil } = useApp();
   const pl = usarPlaca();
+  // O veículo consultado AQUI é o que vai para o registro da gravação (sessao.carro()).
+  useEffect(() => { if (pl.veic) sessao.definirCarro({ placa: String(pl.veic.placa || "").toUpperCase(), marca: pl.veic.marca || "", modelo: pl.veic.modelo || "", ano: pl.veic.ano || "", veiculo_id: pl.veic.id || null }); }, [pl.veic]);
   const [cilindros, setCilindros] = useState(4);
   const [itens, setItens] = useState(() => [1, 2, 3, 4].map(c => ({ cilindro: c, codigo: "", trocado: false, campo: "" })));
   // A gravação voltou em 21/11/2026, por decisão do Danilo: só com o administrador autorizando com
@@ -1386,13 +1391,19 @@ function Bico() {
           item.texto = g.nrc === 0x33 ? "O módulo exige DESTRAVAR antes de gravar (resposta 33), e o app não tem a chave desta família. Não gravou."
             : g.texto || "O módulo recusou a gravação.";
         } else {
+          // O módulo ACEITOU: o item entra no resultado JÁ, com o valor antigo, antes da leitura de
+          // conferência. Se a conexão cair nessa leitura, a gravação continua registrada e dá para
+          // desfazer — o pior caso é uma escrita feita que ninguém sabe que foi feita.
+          item.gravou = true;
+          item.texto = "O módulo aceitou a gravação, mas a conferência NÃO foi lida de volta. Confira antes de confiar; dá para desfazer.";
+          resultado.push(item);
           const volta = await uds.lerDado(parseInt(c.campo, 16));
           const lido = volta.dados ? volta.dados.slice(2).map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("") : "";
           const cf = bico.conferirGravacao(c.codigo, lido);
           item.ok = cf.ok; item.texto = cf.t; item.depois = lido;
         }
         anota("Cilindro " + c.cilindro + ": " + item.texto);
-        resultado.push(item);
+        if (!item.gravou) resultado.push(item);
         if (!item.ok) break;                      // parou num: não segue gravando os outros no escuro
       }
       await uds.fechar();
@@ -1408,7 +1419,7 @@ function Bico() {
   };
   /** Desfazer: grava de volta o valor que estava lá. Só existe porque o valor antigo foi guardado. */
   const desfazer = async () => {
-    const voltar = (feito || []).filter(x => x.antes && x.depois !== undefined);
+    const voltar = (feito || []).filter(x => x.antes && x.gravou);
     const passos = [], anota = t => { passos.push(t); setAndando({ passos: passos.slice() }); };
     await sessao.comAcao("desfazer a gravação do bico", async () => {
       for (const m of [{ pedido: "7E0", resposta: "7E8" }, { pedido: "18DA10F1", resposta: "18DAF110" }]) {
@@ -1491,7 +1502,7 @@ function Bico() {
         ${andando.passos.map((p, i) => html`<div key=${i} class="passo">${p}</div>`)}
         ${andando.erro ? html`<div class="erro">${andando.erro}</div>` : null}
         ${andando.registro ? html`<div class="nota">${andando.registro}</div>` : null}
-        ${andando.fim && feito && feito.some(x => x.antes && x.depois !== undefined) ? html`
+        ${andando.fim && feito && feito.some(x => x.antes && x.gravou) ? html`
           <button type="button" class="btn-barra claro" id="bico-desfazer" style="justify-content:center" onClick=${desfazer} disabled=${!!st.dono}>DESFAZER: VOLTAR O VALOR QUE ESTAVA</button>
           <p class="nota">Depois de gravar, alguns módulos só passam a usar o valor novo ao desligar e ligar a ignição. Leia as falhas do módulo: gravação certa não deixa código novo.</p>` : null}
       </${Cartao}>` : null}

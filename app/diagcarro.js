@@ -201,7 +201,8 @@ export function Mapeando({ st, mapa, parado, caderno }) {
         });
         if (vivo && cad) setAnd(andamentoDo(cad));
       }
-      await sessao.tomar(sessao.DE_FUNDO, () => uds.fechar());
+      // Só fecha se ninguém assumiu um módulo enquanto isso: fechar tiraria o endereço e o filtro dele.
+      await sessao.tomar(sessao.DE_FUNDO, () => (sessao.estado().modulo ? null : uds.fechar()));
     })();
     return () => { vivo = false; };
   }, [pode]);

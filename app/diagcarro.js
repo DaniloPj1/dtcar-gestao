@@ -125,8 +125,14 @@ export function LeiturasDoModulo({ st, mod, comandos }) {
     if (gira.current) { gira.current = 0; setRodando(false); return; }
     const minha = Date.now(); gira.current = minha; setRodando(true); historia.current = {};
     // primeiro o que muda depressa (frequência do mapa), e no máximo 24 pedidos por volta
-    const fila = meus.slice().sort((a, b) => (a.q || 1) - (b.q || 1)).slice(0, 24);
+    // Módulo com mais de 24 comandos: os 12 mais rápidos vão em TODA volta e os outros se revezam de
+    // 12 em 12, para o resto do mapa também ser lido (antes ficava de fora para sempre).
+    const ordem = meus.slice().sort((a, b) => (a.q || 1) - (b.q || 1));
+    const fixos = ordem.length > 24 ? ordem.slice(0, 12) : ordem, resto = ordem.length > 24 ? ordem.slice(12) : [];
+    let pos = 0;
     while (gira.current === minha) {
+      const fila = resto.length ? fixos.concat(resto.slice(pos, pos + 12), pos + 12 > resto.length ? resto.slice(0, pos + 12 - resto.length) : []) : fixos;
+      if (resto.length) pos = (pos + 12) % resto.length;
       const r = await sessao.tomar("as leituras do módulo", () => modelo.lerModulo(fila, uds.pedir, { continuar: () => gira.current === minha }));
       if (gira.current !== minha) break;
       if (!r.ok) { setRecusa(r.texto || ""); break; }

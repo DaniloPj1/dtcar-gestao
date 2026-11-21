@@ -472,6 +472,15 @@ function Obd() {
   }, [placa]);
   // A roda parou: fecha o resumo, compara com as leituras anteriores DESTE carro e guarda sozinho.
   const rodandoAgora = !!(vivo && vivo.rodando);
+  // Saiu da tela com a leitura ao vivo ainda rodando: o resumo é guardado na saída (uma vez só —
+  // quem guarda zera sessaoCmp, então o efeito de baixo e esta limpeza nunca gravam os dois).
+  const placaRef = useRef(placa); placaRef.current = placa;
+  useEffect(() => () => {
+    const s = sessaoCmp.current; sessaoCmp.current = null;
+    if (!s || !placaRef.current) return;
+    const hoje = compara.resumo(s);
+    if (hoje) registrarAcao("sessao", perfil, hoje).catch(() => {});
+  }, []);
   useEffect(() => {
     if (rodandoAgora || !sessaoCmp.current) return;
     const s = sessaoCmp.current; sessaoCmp.current = null;
@@ -525,7 +534,14 @@ function Obd() {
   const v = pl.veic;
   // O carro da vez sobe para a sessão: as outras telas do diagnóstico (módulos, atuadores…) passam
   // a saber a marca sem pedir a placa de novo.
-  useEffect(() => { sessao.definirCarro({ placa, marca: (v && v.marca) || "", modelo: (v && v.modelo) || "", ano: (v && v.ano) || "", veiculo_id: (v && v.id) || null }); }, [placa, v && v.id, ses.ligado]);
+  // Só publica o que foi escolhido AQUI. Entrar nesta tela sem placa não pode apagar o carro que
+  // Módulos ou Programar bico já tinham identificado; limpar a placa depois de escolher, sim.
+  const publicouCarro = useRef(false);
+  useEffect(() => {
+    if (!placa && !publicouCarro.current) return;
+    publicouCarro.current = true;
+    sessao.definirCarro({ placa, marca: (v && v.marca) || "", modelo: (v && v.modelo) || "", ano: (v && v.ano) || "", veiculo_id: (v && v.id) || null });
+  }, [placa, v && v.id, ses.ligado]);
   // o chassi do cadastro vem da ficha do veículo (a busca por placa não carrega esse campo)
   const noBanco = v && v.id ? dados.veiculos.find(x => x.id === v.id) : null;
   const chassiCadastro = String((noBanco && noBanco.chassi) || (v && v.chassi) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");

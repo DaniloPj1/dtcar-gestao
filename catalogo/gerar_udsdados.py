@@ -16,6 +16,9 @@ que a tela usa de verdade:
  - os bits de situação do código (confirmada, pendente, falhou neste ciclo…).
  - o mapa de módulos: endereço de pedido e de resposta, com o nome. Sem endereço não há conversa.
  - os endereços padrão de 11 bits, que é por onde a varredura começa num carro desconhecido.
+ - o ePTI (ISO 20730): a lista de sistemas de segurança padronizada entre marcas e os
+   identificadores com que o MÓDULO informa o que ele tem, aceita rodar e aceita acionar. É a única
+   fonte em que atuador e rotina não dependem de catálogo de montadora.
 
 Uso: python3 catalogo/gerar_udsdados.py
 """
@@ -196,11 +199,17 @@ def main():
     if not os.path.isdir(UDS):
         sys.exit('Falta a pasta catalogo/uds. Rode catalogo/gerar_uds.py antes.')
     fam = modulos()
+    epti = {}
+    cam = os.path.join(UDS, 'epti.json')
+    if os.path.exists(cam):
+        e = json.load(open(cam, encoding='utf-8'))
+        epti = {k: e[k] for k in ('sistemas', 'dids', 'ordem', 'fonte', 'semAnexoCD') if k in e}
     dados = {
         'versao': '2026-11-20',
         'tipoFalha': {str(k): v for k, v in sorted(TIPO_FALHA.items())},
         'situacao': [list(s) for s in SITUACAO],
         'modulos': fam,
+        'epti': epti,
     }
     corpo = json.dumps(dados, ensure_ascii=False, separators=(',', ':'), sort_keys=False)
     texto = (
@@ -214,12 +223,18 @@ def main():
         '//   o que não está entra vazio, e a tela mostra o número cru em vez de chutar uma causa.\n'
         '// situacao: os oito bits de situação do código, na ordem da norma.\n'
         '// modulos: endereço de pedido e de resposta, com o nome, por família. Sem endereço não há conversa.\n'
+        '// epti: a norma ISO 20730 (inspeção técnica eletrônica), que é a única fonte onde a lista de\n'
+        '//   sistemas de segurança é IGUAL para todas as marcas. Os identificadores FA20 a FA23 são o\n'
+        '//   módulo dizendo o que ele tem, o que aceita rodar e o que aceita acionar — por isso o app\n'
+        '//   pergunta ao carro em vez de carregar tabela de atuador por montadora.\n'
         'export default ' + corpo + ';\n'
     )
     open(SAIDA, 'w', encoding='utf-8').write(texto)
     n = sum(len(v) for v in fam.values())
-    print('js/udsdados.js: %d tipos de falha, %d bits de situação, %d módulos em %d famílias (%.0f KB)'
-          % (len(TIPO_FALHA), len(SITUACAO), n, len(fam), len(texto) / 1024))
+    print('js/udsdados.js: %d tipos de falha, %d bits de situação, %d módulos em %d famílias, '
+          'ePTI com %d sistemas e %d identificadores (%.0f KB)'
+          % (len(TIPO_FALHA), len(SITUACAO), n, len(fam),
+             len(epti.get('sistemas') or []), len(epti.get('dids') or []), len(texto) / 1024))
 
 
 if __name__ == '__main__':

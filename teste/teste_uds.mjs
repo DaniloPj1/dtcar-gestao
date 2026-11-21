@@ -5,6 +5,8 @@ import {
   NRC, textoNrc, nomeNrc, negativaDe, respostaDe, falhasDe, vereditoDaSonda, escalaDe, TIPOS_ESCALA,
   FAIXAS_RID, faixaRid, ridDeServico, RID_DE, RID_ATE, SESSAO, SV, ATUAR, ROTINA, hex2, hex4,
   textoTipoFalha, codigoCom, situacaoDe, resumoSituacao, falhaPronta,
+  EPTI, sistemasEpti, nomeSistemaEpti, didsEpti, nomeDidEpti, eptiTemAnexoCD,
+  listaDe16, decidirRotinaAtuador,
   ENDERECOS_PADRAO, familias, modulosDa, quantosModulos, versaoAcervo,
 } from "../js/uds.js";
 const ok = [], falhas = [];
@@ -154,6 +156,54 @@ chk("a VAG está no acervo", familias().includes("VAG") && modulosDa("VAG").leng
 chk("todo módulo tem pedido e resposta", familias().every(f => modulosDa(f).every(m => m.pedido && m.resposta)));
 chk("família que não existe devolve lista vazia", modulosDa("NAO EXISTE").length === 0);
 chk("o acervo tem data", /^\d{4}-\d{2}-\d{2}$/.test(versaoAcervo()));
+
+/* ---------------- ePTI (ISO 20730): a lista igual para todas as marcas ---------------- */
+chk("57 sistemas no acervo", sistemasEpti().length === 57, sistemasEpti().length);
+chk("ABS tem o nome que a oficina usa", nomeSistemaEpti("000B") === "Freio ABS");
+chk("ESP também", nomeSistemaEpti(0x0012).includes("ESP"));
+chk("airbag fica em inglês, como se fala", nomeSistemaEpti("0005") === "Airbag");
+chk("número que a norma reserva não tem nome", nomeSistemaEpti("0000") === "" && nomeSistemaEpti("0017") === "");
+chk("sistema fora da lista devolve vazio, não palpite", nomeSistemaEpti("FFFF") === "");
+chk("todo sistema tem número, nome simbólico e nome em português",
+  sistemasEpti().every(s => /^[0-9A-F]{4}$/.test(s.id) && s.sim && s.nome));
+chk("12 identificadores de dado, 6 obrigatórios",
+  didsEpti().length === 12 && didsEpti().filter(d => d.obrigatorio).length === 6);
+// a norma PUBLICADA: FA22 rotina, FA23 atuador (no rascunho de 2020 era o contrário)
+chk("FA22 é rotina e FA23 é atuador, como na norma publicada",
+  nomeDidEpti("FA22").includes("Rotinas") && nomeDidEpti("FA23").includes("Atuadores"));
+chk("os números do ePTI estão certos", EPTI.rotinas === 0xfa22 && EPTI.atuadores === 0xfa23
+  && EPTI.sistemas === 0xfa21 && EPTI.dados === 0xfa20);
+chk("o app sabe que não tem os anexos C e D", eptiTemAnexoCD() === false);
+
+/* ---------------- a armadilha do rascunho: os dois trocaram de lugar ---------------- */
+{
+  const rotinas = [0x0200, 0xad6e, 0xa001];      // dentro da faixa de rotina do fabricante
+  const atuadores = [0xf101, 0x0150, 0xe300];    // fora dela: são identificadores de atuador
+  const certo = decidirRotinaAtuador(rotinas, atuadores);
+  chk("módulo na norma publicada: fica como veio", !certo.invertido
+    && certo.rotinas.length === 3 && certo.atuadores[0] === 0xf101, certo);
+  const trocado = decidirRotinaAtuador(atuadores, rotinas);
+  chk("módulo no jeito do rascunho: o app corrige pelo conteúdo", trocado.invertido === true, trocado);
+  chk("e as duas listas vão para o lugar certo",
+    trocado.rotinas[1] === 0xad6e && trocado.atuadores[0] === 0xf101, trocado);
+  chk("uma lista vazia não faz o app achar que está invertido",
+    decidirRotinaAtuador(rotinas, []).invertido === false
+    && decidirRotinaAtuador([], rotinas).invertido === true);
+  chk("nenhuma das duas na faixa: fica como a norma publicada manda, sem palpite",
+    decidirRotinaAtuador([0xff00], [0xff01]).invertido === false);
+  chk("listas vazias não explodem", decidirRotinaAtuador([], []).rotinas.length === 0
+    && decidirRotinaAtuador(null, null).atuadores.length === 0);
+}
+
+/* ---------------- a lista de 16 bits que o módulo devolve ---------------- */
+{
+  const l = listaDe16([0xfa, 0x22, 0x02, 0x00, 0xad, 0x6e]);
+  chk("o eco do identificador é descartado e sobram os números", l.certo && l.lista.length === 2
+    && l.lista[0] === 0x0200 && l.lista[1] === 0xad6e, l);
+  chk("byte sobrando não vira número errado: devolve o cru e avisa", listaDe16([0xfa, 0x22, 0x02]).certo === false);
+  chk("lista vazia não é tida como certa", listaDe16([0xfa, 0x22]).certo === false);
+  chk("dado nulo não explode", listaDe16(null).lista.length === 0);
+}
 
 console.log(falhas.length ? ok.length + " ok, " + falhas.length + " FALHARAM:\n  " + falhas.join("\n  ")
                           : ok.length + " conferências do UDS passaram.");

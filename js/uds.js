@@ -554,3 +554,137 @@ export const modulosDa = fam => ((acervo.modulos || {})[fam] || []).map(m => ({ 
 /** Quantos módulos o acervo conhece, no total. */
 export const quantosModulos = () => Object.values(acervo.modulos || {}).reduce((s, l) => s + l.length, 0);
 export const versaoAcervo = () => acervo.versao || "";
+
+/* ------------------------------------------------------------------ ePTI (ISO 20730) */
+
+/*
+ * O ePTI é a norma da inspeção técnica eletrônica, e faz uma coisa que nenhuma outra faz: padroniza
+ * IGUAL PARA TODAS AS MARCAS a lista dos sistemas de segurança e os identificadores com que o
+ * módulo informa o que ele tem, o que aceita rodar e o que aceita acionar.
+ *
+ * O que temos e o que não temos (conferido em 20/11/2026):
+ *  - Anexo A, a lista de sistemas: temos inteira, 57 sistemas. Está no acervo.
+ *  - Anexo B, Tabela B.1, os identificadores de dado: temos de FA19 a FA2A.
+ *  - Anexos C (rotinas) e D (atuadores): NÃO temos, e não existem em base aberta — procurei na ISO,
+ *    na UNECE, na CITA, na EGEA e em código aberto. Então o app não carrega lista de rotina nem de
+ *    atuador: ele PERGUNTA AO CARRO. É exatamente para isso que os identificadores existem, e é
+ *    mais confiável que tabela, porque a resposta é daquele módulo e não de um catálogo genérico.
+ *
+ * UMA ARMADILHA QUE CUSTARIA CARO: entre o rascunho de 2020 e a norma publicada de 2021 os dois
+ * identificadores TROCARAM DE LUGAR. No rascunho FA22 era atuador e FA23 rotina; na norma publicada
+ * FA22 é rotina e FA23 atuador. Um módulo feito na época do rascunho responde invertido. Por isso
+ * `descobrirEpti` lê os dois e decide pelo CONTEÚDO: número na faixa de rotina do fabricante
+ * (0x0200 a 0xDFFF) é rotina; o resto é identificador de atuador. Confiar no número do
+ * identificador faria o aparelho pedir rotina e receber atuador.
+ */
+export const EPTI = {
+  edicao: 0xfa19,        // edição da norma que o módulo segue
+  dados: 0xfa20,         // quais dados ele tem
+  sistemas: 0xfa21,      // quais sistemas de segurança ele cuida
+  rotinas: 0xfa22,       // publicada: rotinas · rascunho: atuadores
+  atuadores: 0xfa23,     // publicada: atuadores · rascunho: rotinas
+  situacao: 0xfa24,      // situação dos sistemas e do autoteste
+  odometro: 0xfa2a,      // valores dinâmicos de condução
+};
+
+const eptiAcervo = () => acervo.epti || {};
+/** Os sistemas de segurança que a norma lista: { id, sim, nome }. */
+export const sistemasEpti = () => (eptiAcervo().sistemas || []).map(s => ({ id: s[0], sim: s[1], nome: s[2] }));
+/** O nome em português de um sistema pelo número (aceita "000B" ou 0x000B). */
+export function nomeSistemaEpti(id) {
+  const t = typeof id === "number" ? hx(id, 4) : String(id || "").toUpperCase().padStart(4, "0");
+  const s = (eptiAcervo().sistemas || []).find(x => x[0] === t);
+  return s ? s[2] : "";
+}
+/** Os identificadores de dado da norma: { id, sim, nome, obrigatorio }. */
+export const didsEpti = () => (eptiAcervo().dids || []).map(d => ({ id: d[0], sim: d[1], nome: d[2], obrigatorio: !!d[3] }));
+export const nomeDidEpti = did => {
+  const t = typeof did === "number" ? hx(did, 4) : String(did || "").toUpperCase();
+  const d = (eptiAcervo().dids || []).find(x => x[0] === t);
+  return d ? d.nome || d[2] : "";
+};
+/** Diz se o acervo tem a lista de rotina e de atuador da norma (hoje não tem: os anexos faltam). */
+export const eptiTemAnexoCD = () => !eptiAcervo().semAnexoCD;
+
+/**
+ * Lê uma lista de números de 16 bits que o módulo devolve num identificador do ePTI.
+ * O formato exato do registro está numa cláusula que não temos, então aqui a leitura é a óbvia
+ * (pares de bytes) e o resultado é CONFERIDO: se não der número par de bytes, devolve o cru para a
+ * tela mostrar em vez de inventar uma lista.
+ */
+export function listaDe16(dados) {
+  const d = (dados || []).slice(2);               // os dois primeiros são o eco do identificador
+  if (!d.length || d.length % 2 !== 0) return { lista: [], cru: d, certo: false };
+  const lista = [];
+  for (let i = 0; i + 1 < d.length; i += 2) lista.push((d[i] << 8) | d[i + 1]);
+  return { lista, cru: d, certo: true };
+}
+
+/**
+ * Decide qual lista é de rotina e qual é de atuador pelo CONTEÚDO, não pelo número do identificador.
+ *
+ * Existe porque os dois identificadores trocaram de lugar entre o rascunho de 2020 e a norma
+ * publicada de 2021. O critério é o único confiável: número de rotina de veículo mora na faixa do
+ * fabricante (0x0200 a 0xDFFF), que a ISO 14229-1 reserva para isso. Lista inteira dentro da faixa
+ * é lista de rotina; fora dela é identificador de atuador.
+ *
+ * `la` é o que veio no FA22 e `lb` o que veio no FA23.
+ */
+export function decidirRotinaAtuador(la, lb) {
+  const A = la || [], B = lb || [];
+  const ehRotina = l => l.length > 0 && l.every(n => ridDeServico(n));
+  if (ehRotina(A)) return { rotinas: A, atuadores: B, invertido: false };
+  if (ehRotina(B)) return { rotinas: B, atuadores: A, invertido: true };
+  // nenhuma das duas cabe inteira na faixa: fica como a norma publicada manda, sem palpite
+  return { rotinas: A, atuadores: B, invertido: false };
+}
+
+/**
+ * Descobre, perguntando ao carro, o que este módulo tem — na ordem que a própria norma usa
+ * (ISO 20730-1, cláusula 15): primeiro o que ele tem, só depois se age nele.
+ *
+ * Devolve { edicao, sistemas, dados, rotinas, atuadores, situacao, invertido, avisos }.
+ * `invertido` fica verdadeiro quando o módulo respondeu no jeito do rascunho.
+ */
+export async function descobrirEpti({ aoAndar = null } = {}) {
+  const r = { edicao: null, sistemas: [], dados: [], rotinas: [], atuadores: [], situacao: null, invertido: false, avisos: [] };
+  const anota = t => { if (aoAndar) { try { aoAndar(t); } catch (e) { /* tela fechou */ } } };
+
+  anota("Perguntando a edição da norma…");
+  const ed = await lerDado(EPTI.edicao);
+  if (ed.nrc == null && ed.dados) r.edicao = ed.dados.slice(2);
+  else if (ed.nrc === 0x31) r.avisos.push("Este módulo não responde ao ePTI. A varredura segue pelo caminho comum do UDS.");
+
+  anota("Perguntando quais sistemas de segurança ele cuida…");
+  const sis = await lerDado(EPTI.sistemas);
+  if (sis.nrc == null && sis.dados) {
+    const l = listaDe16(sis.dados);
+    r.sistemas = l.lista.map(n => ({ id: hx(n, 4), nome: nomeSistemaEpti(n) }));
+    if (!l.certo) r.avisos.push("A lista de sistemas veio num formato que o app não reconheceu; mostrando o que chegou.");
+  }
+
+  anota("Perguntando quais dados ele sabe informar…");
+  const dd = await lerDado(EPTI.dados);
+  if (dd.nrc == null && dd.dados) r.dados = listaDe16(dd.dados).lista.map(n => ({ did: hx(n, 4), nome: nomeDidEpti(hx(n, 4)) }));
+
+  // Os dois que trocaram de lugar entre o rascunho e a norma: lê os dois e decide pelo conteúdo.
+  anota("Perguntando as rotinas e os atuadores que ele aceita…");
+  const a = await lerDado(EPTI.rotinas);
+  const b = await lerDado(EPTI.atuadores);
+  const la = a.nrc == null && a.dados ? listaDe16(a.dados).lista : [];
+  const lb = b.nrc == null && b.dados ? listaDe16(b.dados).lista : [];
+  const d = decidirRotinaAtuador(la, lb);
+  r.rotinas = d.rotinas; r.atuadores = d.atuadores; r.invertido = d.invertido;
+  if (d.invertido) r.avisos.push("Este módulo responde no jeito do rascunho da norma, com os dois identificadores trocados. O app corrigiu pelo conteúdo da resposta.");
+
+  anota("Perguntando como está cada sistema…");
+  const st = await lerDado(EPTI.situacao);
+  if (st.nrc == null && st.dados) r.situacao = st.dados.slice(2);
+
+  if (r.rotinas.length || r.atuadores.length) {
+    // A norma prevê autenticação do aparelho de teste antes de acionar (ISO 20730-2, grupo CTG_2).
+    // Então "o módulo lista" não quer dizer "o módulo deixa": muito provavelmente vai pedir o 0x27.
+    r.avisos.push("O módulo listou o que aceita, mas a norma prevê autenticação do aparelho antes de acionar. Se pedir chave, o app avisa e para aí.");
+  }
+  return r;
+}

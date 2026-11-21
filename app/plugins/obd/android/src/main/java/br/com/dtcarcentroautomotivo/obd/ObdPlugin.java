@@ -766,7 +766,12 @@ public class ObdPlugin extends Plugin {
      */
     static String juntarResposta(String cru) {
         if (cru == null) return "";
-        String[] linhas = cru.toUpperCase().split("[\\r\\n]+");
+        // Leitura que o adaptador INTERROMPEU não vale, mesmo que um pedaço tenha chegado: sem o valor
+        // antigo inteiro não há como desfazer, então a gravação não pode ser liberada com ele.
+        // (Achado da segunda revisão do Codex, 21/11/2026.)
+        String alto = cru.toUpperCase();
+        if (alto.contains("STOPPED") || alto.contains("ERROR") || alto.contains("UNABLE") || alto.contains("BUFFER") || alto.contains("NO DATA") || alto.contains("?")) return "";
+        String[] linhas = alto.split("[\\r\\n]+");
         StringBuilder pedacos = new StringBuilder();
         int tamanho = -1;
         boolean numerada = false;
@@ -784,8 +789,9 @@ public class ObdPlugin extends Plugin {
         }
         if (!numerada) return primeira;
         String tudo = pedacos.toString();
-        if (tamanho > 0 && tudo.length() >= tamanho * 2) tudo = tudo.substring(0, tamanho * 2);
-        return tudo;
+        // resposta em pedaços SEM o tamanho anunciado, ou com menos bytes do que ele anunciou, está incompleta
+        if (tamanho <= 0 || tudo.length() < tamanho * 2) return "";
+        return tudo.substring(0, tamanho * 2);
     }
 
     /**

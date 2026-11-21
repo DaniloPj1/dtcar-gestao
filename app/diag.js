@@ -13,12 +13,13 @@ import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
 import * as registro from "../js/obdregistro.js";
-import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, NotaDasFontes, FaixaTxt, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
 import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
 import { HondaLista, Condicoes } from "./diaghonda.js";
 import * as confere from "../js/obdconfere.js";
 import * as compara from "../js/obdcompara.js";
+import * as faixas from "../js/obdfaixa.js";
 import * as laudo from "../js/obdlaudo.js";
 import * as falhasCat from "../js/obdfalhas.js";
 import { pdfLaudo, garantirJsPDF } from "../js/pdflaudo.js";
@@ -33,36 +34,70 @@ const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], 
 const M_R = 34, M_VOLTA = 2 * Math.PI * M_R, M_ARCO = M_VOLTA * 0.75;
 /** número do jeito que se escreve aqui: vírgula decimal */
 const numBR = n => String(n).replace(".", ",");
-function Mostrador({ l }) {
+// As ZONAS da faixa de trabalho dentro da escala da leitura (pedido do Danilo, 21/11/2026: "o rail
+// trabalha de x a y — barra com uma tonalidade antes do x e outra depois do y"). Devolve as três
+// partes em fração da escala (0 a 1), ou null quando não há faixa ou ela não cabe na escala.
+function zonasDe(l, f) {
+  if (!f || !(l.ate > l.de) || !(f.ate > f.de)) return null;
+  // A barra APROXIMA: mostra uma faixa de largura igual à de trabalho para cada lado, sem sair da
+  // escala da leitura. (Na escala inteira o rail, que vai a 2.000 bar, espremia a faixa num canto.)
+  const larg = f.ate - f.de;
+  const min = Math.max(l.de, f.de - larg), max = Math.min(l.ate, f.ate + larg);
+  if (!(max > min)) return null;
+  const pos = x => Math.max(0, Math.min(1, (x - min) / (max - min)));
+  const a = pos(f.de), b = pos(f.ate);
+  return b > a ? { a, b, min, max, parte: pos(l.valor) } : null;
+}
+
+function Mostrador({ l, f }) {
   const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
+  const zs = tem ? zonasDe(l, f) : null;
   return html`<div class="mostrador" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="mostrador-rot">${l.rotulo}</div>
     ${tem ? html`<svg class="mostrador-arco" viewBox="0 0 86 86" aria-hidden="true">
       <g transform="rotate(135 43 43)">
         <circle cx="43" cy="43" r=${M_R} class="trilho" stroke-dasharray=${M_ARCO + " " + M_VOLTA} />
-        <circle cx="43" cy="43" r=${M_R} class="cheio" stroke-dasharray=${(M_ARCO * parte) + " " + M_VOLTA} />
+        ${zs ? html`
+          <circle cx="43" cy="43" r=${M_R} class="zona antes" stroke-dasharray=${(M_ARCO * zs.a) + " " + M_VOLTA} />
+          <circle cx="43" cy="43" r=${M_R} class="zona trabalho" stroke-dasharray=${(M_ARCO * (zs.b - zs.a)) + " " + M_VOLTA} stroke-dashoffset=${-M_ARCO * zs.a} />
+          <circle cx="43" cy="43" r=${M_R} class="zona depois" stroke-dasharray=${(M_ARCO * (1 - zs.b)) + " " + M_VOLTA} stroke-dashoffset=${-M_ARCO * zs.b} />
+          <circle cx="43" cy="43" r=${M_R} class="agulha" stroke-dasharray=${"3 " + M_VOLTA} stroke-dashoffset=${-(M_ARCO * zs.parte - 1.5)} />`
+        : html`<circle cx="43" cy="43" r=${M_R} class="cheio" stroke-dasharray=${(M_ARCO * parte) + " " + M_VOLTA} />`}
       </g>
     </svg>` : null}
     <div class=${"mostrador-num" + (tem ? " dentro" : "")}>
       <b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}
     </div>
-    ${tem ? html`<div class="mostrador-pes"><span>${numBR(l.de)}</span><span>${numBR(l.ate)}</span></div>` : null}
+    ${tem ? html`<div class="mostrador-pes"><span>${numBR(zs ? zs.min : l.de)}</span><span>${numBR(zs ? zs.max : l.ate)}</span></div>` : null}
+    <${FaixaTxt} f=${f} curta />
   </div>`;
 }
 
 // Uma leitura na visão LISTA: cabe mais na tela que o mostrador e continua mostrando a posição
 // na escala, numa barra fina. O rótulo é sempre escrito e o valor fica grande, porque quem lê
 // está embaixo do carro.
-function LinhaViva({ l }) {
+function LinhaViva({ l, f }) {
   const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
+  const zs = tem ? zonasDe(l, f) : null;
+  const pc = x => (x * 100).toFixed(1) + "%";
   return html`<div class="linha-viva" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="linha-viva-topo">
       <span class="linha-viva-rot">${l.rotulo}</span>
       <b class="linha-viva-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
     </div>
-    ${tem ? html`<div class="linha-viva-barra"><i style=${"width:" + (parte * 100).toFixed(1) + "%"}></i></div>` : null}
+    ${zs ? html`<div class="barra-zonas" data-de=${f.de} data-ate=${f.ate}>
+        <div class="barra-zonas-trilho">
+          <span class="zona antes" style=${"width:" + pc(zs.a)}></span>
+          <span class="zona trabalho" style=${"width:" + pc(zs.b - zs.a)}></span>
+          <span class="zona depois" style=${"width:" + pc(1 - zs.b)}></span>
+          <i class="agulha" style=${"left:" + pc(zs.parte)}></i>
+        </div>
+        <div class="barra-zonas-pes"><span class="pe-de" style=${"left:" + pc(zs.a)}>${numBR(f.de)}</span><span class="pe-ate" style=${"left:" + pc(zs.b)}>${numBR(f.ate)}</span></div>
+      </div>`
+      : tem ? html`<div class="linha-viva-barra"><i style=${"width:" + (parte * 100).toFixed(1) + "%"}></i></div>` : null}
+    <${FaixaTxt} f=${f} />
   </div>`;
 }
 
@@ -188,6 +223,9 @@ function Obd() {
   // deste carro. Precisa da placa: sem saber qual é o carro não há com quem comparar.
   const sessaoCmp = useRef(null);
   const [comparado, setComparado] = useState(null);     // { achados, sessoes, guardou } | { semPlaca } | { pouco }
+  // A FAIXA DE TRABALHO ao lado de cada leitura (pedido do Danilo, 21/11/2026): as leituras anteriores
+  // DESTE carro, carregadas quando a placa é conhecida. Sem elas vale a referência da tabela.
+  const [anteriores, setAnteriores] = useState([]);
   const [vivo, setVivo] = useState(null);       // { valores: {chave: leitura}, volta, rodando, modo }
   // Falhas vigiadas DURANTE a leitura ao vivo: a roda pergunta de tempos em tempos e, se o módulo
   // gravar código com o motor trabalhando, o botão de falhas fica vermelho na hora.
@@ -230,17 +268,7 @@ function Obd() {
     return null;
   };
   // Registro de apagamento que ficou no aparelho (sem internet na hora): sobe sozinho quando a tela abre.
-  useEffect(() => { (async () => {
-    let l = [];
-    try { l = JSON.parse(window.localStorage.getItem("obd_pendentes") || "[]"); } catch (e) { return; }
-    if (!l.length) return;
-    const restam = [];
-    for (const reg of l) {
-      const { guardado_em, ...linha } = reg;
-      try { await api.obd.registrar(linha); } catch (e) { restam.push(reg); }
-    }
-    try { window.localStorage.setItem("obd_pendentes", JSON.stringify(restam)); } catch (e) { /* segue */ }
-  })(); }, []);
+  // (o que ficou guardado no aparelho sobe por subirPendentes, um envio só por vez: ver app/diagpartes.js)
 
   // Ao trocar de placa, recupera o que foi marcado naquele carro e o que ele respondeu da última vez.
   useEffect(() => {
@@ -429,6 +457,12 @@ function Obd() {
     guardar("conf", { monitores, chassi, odometro, conferencia: confere.conferir({ avisoAdaptador: lig.aviso, versao: lig.versao, vinLido: chassi, chassiCadastro }) });
   }); };
 
+  useEffect(() => {
+    let vivoAqui = true; setAnteriores([]);
+    if (!placa) return undefined;
+    api.obd.listar({ placa, tipo: "sessao", limite: 8 }).then(l => { if (vivoAqui) setAnteriores((l || []).map(x => x.dados).filter(Boolean)); }).catch(() => {});
+    return () => { vivoAqui = false; };
+  }, [placa]);
   // A roda parou: fecha o resumo, compara com as leituras anteriores DESTE carro e guarda sozinho.
   const rodandoAgora = !!(vivo && vivo.rodando);
   useEffect(() => {
@@ -461,7 +495,7 @@ function Obd() {
     const separado = f.porModulo && f.porModulo.length > 1;
     const dados = laudo.montar({ carro, quem: perfil, oficina: (cfg && cfg.nome) || "", km: odometro && odometro.km, conferencia,
       modulos: separado ? f.porModulo.map(m => ({ nome: m.nome, endereco: m.endereco, falhas: m.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })) })) : [],
-      falhasJuntas: separado ? [] : f.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })), monitores, odometro, leituras, explicacoes });
+      falhasJuntas: separado ? [] : f.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })), monitores, odometro, leituras, explicacoes, erros: f.erros || [] });
     const selo = await registro.selar(dados);
     const linha = registro.linha("laudo", perfil, carro, dados, { km: dados.km, codigos: f.falhas });
     linha.selo = selo;
@@ -668,6 +702,11 @@ function Obd() {
         ${(() => {
           const lidos = Object.keys(vivo.valores).map(k => vivo.valores[k]).sort((a, b) => obd.ordemDaLeitura(a) - obd.ordemDaLeitura(b));
           if (!lidos.length) return null;
+          // em que regime o carro está AGORA, para escolher a faixa que se aplica
+          const ag = k => (vivo.valores[k] && typeof vivo.valores[k].valor === "number" ? vivo.valores[k].valor : undefined);
+          const estadoAgora = (sessaoCmp.current && sessaoCmp.current.estado) || { rpm: ag(0x0c * 100), velocidade: ag(0x0d * 100), temperatura: ag(0x05 * 100) };
+          const ctxFaixa = { rpm: ag(0x0c * 100), regime: vivo.rodando ? compara.regimeDe(estadoAgora) : null, sessoes: anteriores, carro: { modelo: (v && v.modelo) || "", motor: (v && v.motor) || "" } };
+          const fx = l => faixas.faixaPara(l, ctxFaixa);
           const comFaixa = lidos.filter(l => typeof l.de === "number");
           const resto = lidos.filter(l => typeof l.de !== "number");
           return html`
@@ -677,18 +716,18 @@ function Obd() {
               <button type="button" id="obd-jeito-digital" class=${jeito === "digital" ? "esc" : ""} aria-pressed=${jeito === "digital"} onClick=${() => trocarJeito("digital")}>DIGITAL</button>
               <button type="button" id="obd-jeito-grafico" class=${jeito === "grafico" ? "esc" : ""} aria-pressed=${jeito === "grafico"} onClick=${() => trocarJeito("grafico")}>GRÁFICO</button>
             </div>
-            ${jeito === "grafico" ? html`<${Grafico} lidos=${lidos} historia=${historia.current} escolha=${noGrafico} aoTrocar=${trocarGrafico} recusa=${graficoRecusa} />`
-            : jeito === "digital" ? html`<div class="digitais">${lidos.map(l => html`<${Digital} key=${l.chave} l=${l} />`)}</div>`
+            ${jeito === "grafico" ? html`<${Grafico} lidos=${lidos} historia=${historia.current} escolha=${noGrafico} aoTrocar=${trocarGrafico} recusa=${graficoRecusa} faixaDe=${fx} />`
+            : jeito === "digital" ? html`<div class="digitais">${lidos.map(l => html`<${Digital} key=${l.chave} l=${l} f=${fx(l)} />`)}</div>`
             : jeito === "painel" ? html`
-              ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.chave} l=${l} />`)}</div>` : null}
-              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${LinhaViva} key=${l.chave} l=${l} />`)}</div>` : null}`
+              ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.chave} l=${l} f=${fx(l)} />`)}</div>` : null}
+              ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${LinhaViva} key=${l.chave} l=${l} f=${fx(l)} />`)}</div>` : null}`
             : html`<div class="lista-viva">
                 ${obd.GRUPOS.map(g => {
                   const doGrupo = lidos.filter(l => obd.grupoDaLeitura(l) === g.id);
                   if (!doGrupo.length) return null;
                   return html`<div key=${g.id} class="lista-viva-grupo">
                     <h3>${g.nome}</h3>
-                    ${doGrupo.map(l => html`<${LinhaViva} key=${l.chave} l=${l} />`)}
+                    ${doGrupo.map(l => html`<${LinhaViva} key=${l.chave} l=${l} f=${fx(l)} />`)}
                   </div>`;
                 })}
               </div>`}`;
@@ -1264,7 +1303,7 @@ function Bico() {
   const [andando, setAndando] = useState(null);        // { passos: [], fim }
   const [feito, setFeito] = useState(null);            // [{ cilindro, campo, antes, ok, texto }]
   const pode = podeGravarObd(cfg, perfil);
-  usarPasso(!!autoriza, () => setAutoriza(null));
+  usarPasso(!!autoriza, () => cancelarAutorizacao());
 
   const trocarQtd = n => {
     setCilindros(n);
@@ -1307,10 +1346,17 @@ function Bico() {
     setAceite({ assinatura, modulo, erro: !r.ok ? (r.texto || "Não deu para conferir.") : !modulo ? "O módulo do motor não abriu a sessão de diagnóstico." : "", itens: itensAceite });
   };
 
-  const pedirAutorizacao = () => { setFeito(null); setAndando(null); setAutoriza({ email: "", senha: "", erro: "" }); };
+  // Cada pedido de autorização tem um número. Cancelar ou fechar o quadro troca o número, e a resposta
+  // do servidor que chegar depois é de uma tentativa que não existe mais: NÃO grava. (Antes, cancelar
+  // durante o "Conferindo…" só fechava o quadro e a gravação seguia: achado do Codex, 21/11/2026.)
+  const tentativa = useRef(0);
+  const cancelarAutorizacao = () => { tentativa.current++; setAutoriza(null); };
+  const pedirAutorizacao = () => { tentativa.current++; setFeito(null); setAndando(null); setAutoriza({ email: "", senha: "", erro: "" }); };
   const autorizarEGravar = async () => {
+    const minha = tentativa.current;
     setAutoriza(a => ({ ...a, erro: "", conferindo: true }));
     const adm = await api.auth.conferirAdmin(autoriza.email, autoriza.senha);
+    if (tentativa.current !== minha) return;
     if (!adm.ok) { setAutoriza(a => ({ ...a, senha: "", conferindo: false, erro: adm.motivo })); return; }
     setAutoriza(null);
     await gravar(adm);
@@ -1446,7 +1492,7 @@ function Bico() {
           <p class="nota">Depois de gravar, alguns módulos só passam a usar o valor novo ao desligar e ligar a ignição. Leia as falhas do módulo: gravação certa não deixa código novo.</p>` : null}
       </${Cartao}>` : null}
 
-      ${autoriza ? html`<${Quadro} titulo="Autorização do administrador" onFechar=${() => setAutoriza(null)}>
+      ${autoriza ? html`<${Quadro} titulo="Autorização do administrador" onFechar=${cancelarAutorizacao}>
         <p>Vai gravar no módulo do motor: ${paraGravar.map(c => "cilindro " + c.cilindro + " → " + c.codigo + " no campo " + c.campo).join("; ")}.</p>
         <${Campo} id="bico-adm-email" rotulo="Login do administrador (e-mail)">
           <input id="bico-adm-email" type="email" autocomplete="off" autocapitalize="none" spellcheck=${false} value=${autoriza.email} onInput=${e => setAutoriza(a => ({ ...a, email: e.target.value }))} />
@@ -1457,7 +1503,7 @@ function Bico() {
         ${autoriza.erro ? html`<div class="erro" id="bico-adm-erro">${autoriza.erro}</div>` : null}
         <p class="nota">A senha não fica guardada no aparelho. Quem está logado no app continua o mesmo.</p>
         <button type="button" class="btn-acao" id="bico-adm-ok" disabled=${!autoriza.email || !autoriza.senha || autoriza.conferindo} onClick=${autorizarEGravar}>${autoriza.conferindo ? "Conferindo…" : "AUTORIZAR E GRAVAR"}</button>
-        <button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${() => setAutoriza(null)}>Cancelar</button>
+        <button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${cancelarAutorizacao}>Cancelar</button>
       </${Quadro}>` : null}
     `}
   </${Tela}>`;

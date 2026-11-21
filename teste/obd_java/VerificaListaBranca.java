@@ -102,6 +102,8 @@ public class VerificaListaBranca {
     chk("resposta em pedaços sem espaços", ObdPlugin.juntarResposta("00A\r0:621234414243\r1:44454647000000\r>").equals("62123441424344454647"));
     chk("valor antigo de resposta longa é aceito", ObdPlugin.valorAntigoValido(longa, "1234") && ObdPlugin.podeSondarGravacao(longa, "1234"));
     chk("resposta longa de OUTRO identificador é recusada", !ObdPlugin.valorAntigoValido(longa, "1235"));
+    for (String r : new String[] {"STOPPED 00A\r0: 62 12 34 41 42 43\r", "00A\r0: 62 12 34 41 42 43\r\r>", "0: 62 12 34 41 42 43\r1: 44 45 46 47\r>", "00A\r0: 62 12 34 41 42 43\rBUFFER FULL\r>", "62 12 34 41 42 ?\r>"})
+      chk("RECUSA leitura interrompida ou incompleta como valor antigo: " + r.replace("\r", "|"), !ObdPlugin.valorAntigoValido(r, "1234") && ObdPlugin.juntarResposta(r).equals(""));
     chk("resposta curta continua igual", ObdPlugin.juntarResposta("62 26 10 41 42\r\r>").equals("6226104142") && ObdPlugin.juntarResposta("NO DATA\r>").equals("") && ObdPlugin.juntarResposta(null).equals(""));
     chk("duas respostas curtas: vale a primeira", ObdPlugin.juntarResposta("7F2231\r62261041\r>").equals("7F2231"));
     chk("valor antigo lido", ObdPlugin.valorAntigoValido("62 26 10 41 42\r\r>", "2610"));

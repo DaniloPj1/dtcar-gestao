@@ -497,3 +497,33 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .mod-foco > #mod-escolhido > h2 + div{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding:8px;scrollbar-width:none}
 .mod-foco > #mod-escolhido .btn-barra{flex:0 0 auto;width:auto;min-height:40px;height:40px;margin:0;padding:0 12px;font-size:12px;white-space:nowrap}
 .mod-foco > #mod-escolhido .btn-barra svg{display:none}
+
+/* ---- faixa de trabalho embaixo da leitura ao vivo (js/obdfaixa.js) ---- */
+.faixa-txt{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px;margin-top:3px;font-size:12.5px;line-height:1.3;color:#4a5560}
+.faixa-txt b{font-weight:800;color:var(--tinta);font-variant-numeric:tabular-nums}
+.faixa-sit{padding:0 6px;border:1.5px solid #8a949e;font-size:11px;font-weight:800;letter-spacing:.03em;color:#4a5560}
+.faixa-txt.fora .faixa-sit{border-color:var(--tinta);background:var(--tinta);color:#fff}
+.faixa-fonte{flex-basis:100%;font-size:11.5px;color:#6b747e}
+.faixa-txt.curta{justify-content:center;gap:2px 5px;font-size:11px;text-align:center}
+.faixa-txt.curta .faixa-fonte{font-size:10.5px}
+.graf-leg{flex-wrap:wrap}
+.graf-leg .faixa-txt{flex-basis:100%;margin:0 0 2px 32px}
+
+/* ---- barra com as três zonas: antes da faixa, faixa de trabalho, depois da faixa ---- */
+.barra-zonas{margin-top:7px}
+.barra-zonas-trilho{position:relative;display:flex;height:12px;border-radius:2px}
+.barra-zonas .zona{display:block;height:100%}
+.barra-zonas .zona.antes{background:#c3cad2;border-radius:2px 0 0 2px}
+.barra-zonas .zona.trabalho{background:var(--azul)}
+.barra-zonas .zona.depois{background:var(--tinta);border-radius:0 2px 2px 0}
+.barra-zonas .agulha{position:absolute;top:-4px;bottom:-4px;width:4px;margin-left:-2px;background:#fff;border:1.5px solid var(--tinta);border-radius:2px;transition:left .25s linear}
+.barra-zonas-pes{position:relative;height:15px;font-size:11px;font-weight:700;color:#4a5560;font-variant-numeric:tabular-nums}
+.barra-zonas-pes span{position:absolute;top:2px;white-space:nowrap}
+.barra-zonas-pes .pe-de{transform:translateX(-100%);padding-right:3px}
+.barra-zonas-pes .pe-ate{padding-left:3px}
+.mostrador-arco .zona{stroke-linecap:butt}
+.mostrador-arco .zona.antes{stroke:#c3cad2}
+.mostrador-arco .zona.trabalho{stroke:var(--azul)}
+.mostrador-arco .zona.depois{stroke:var(--tinta)}
+.mostrador-arco .agulha{stroke:#fff;stroke-width:13;stroke-linecap:butt;paint-order:stroke;filter:drop-shadow(0 0 0.8px #16191d) drop-shadow(0 0 0.8px #16191d);transition:stroke-dashoffset .25s linear}
+@media (prefers-reduced-motion: reduce){.barra-zonas .agulha,.mostrador-arco .agulha{transition:none}}

@@ -53,11 +53,28 @@ export function FalhaExplicada({ e }) {
 /* ---------------- dados ao vivo: DIGITAL e GRÁFICO (pedido do Danilo, 21/11/2026) ---------------- */
 const numBR = n => String(n).replace(".", ",");
 
+/**
+ * A faixa de trabalho embaixo da leitura (js/obdfaixa.js): de onde até onde, de onde veio, e onde o
+ * valor de agora está — ESCRITO (dentro, acima, abaixo), nunca só na cor. `curta` é para o mostrador
+ * e o digital, que têm pouco espaço: lá a fonte vira uma palavra.
+ */
+export function FaixaTxt({ f, curta = false }) {
+  if (!f) return null;
+  const palavra = f.situacao === "dentro" ? "DENTRO" : f.situacao === "acima" ? "ACIMA" : "ABAIXO";
+  return html`<div class=${"faixa-txt" + (curta ? " curta" : "") + (f.situacao !== "dentro" ? " fora" : "")} data-situacao=${f.situacao} title=${f.fonte}>
+    <span class="faixa-de">${curta ? "" : "Faixa de trabalho: "}<b>${f.texto}</b></span>
+    <span class="faixa-sit">${palavra}</span>
+    <span class="faixa-fonte">${curta ? (f.origem === "carro" ? "deste carro" : f.nivelNome.toLowerCase()) : f.fonte}</span>
+    ${!curta && f.outra ? html`<span class="faixa-fonte">${f.outra}</span>` : null}
+  </div>`;
+}
+
 /** Leitura em número grande, sem ponteiro: para ler de longe, com o celular apoiado no carro. */
-export function Digital({ l }) {
+export function Digital({ l, f }) {
   return html`<div class="digital" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="digital-rot">${l.rotulo}</div>
     <div class="digital-num"><b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}</div>
+    <${FaixaTxt} f=${f} curta />
   </div>`;
 }
 
@@ -68,7 +85,7 @@ const CORES = ["var(--azul)", "var(--tinta)", "#6b747e", "var(--azul)"];
 const G_L = 300, G_A = 80;   // desenho do gráfico, em unidades do viewBox
 
 /** Um gráfico: uma ou mais leituras da MESMA unidade, na mesma escala. */
-function UmGrafico({ g, historia, agora }) {
+function UmGrafico({ g, historia, agora, faixaDe }) {
   const e = grafico.escalaDe(g.leituras, historia, agora);
   const x = t => ((t - e.ini) / grafico.JANELA_MS) * G_L;
   const y = v => G_A - ((v - e.de) / (e.ate - e.de)) * G_A;
@@ -76,7 +93,8 @@ function UmGrafico({ g, historia, agora }) {
     <div class="graf-legenda">${g.leituras.map((l, i) => html`<div key=${l.chave} class="graf-leg" data-chave=${l.chave}>
       <svg class="graf-amostra" viewBox="0 0 26 8" aria-hidden="true"><line x1="0" y1="4" x2="26" y2="4" stroke=${CORES[i]} stroke-width="2.4" stroke-dasharray=${TRACOS[i]} /></svg>
       <span class="graf-rot">${l.rotulo}</span>
-      <b class="graf-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b></div>`)}</div>
+      <b class="graf-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
+      ${faixaDe && faixaDe(l) ? html`<${FaixaTxt} f=${faixaDe(l)} />` : null}</div>`)}</div>
     <div class="graf-corpo">
       <div class="graf-esc"><span>${e.max == null ? "" : numBR(Math.round(e.max * 10) / 10)}</span><span>${e.min == null ? "" : numBR(Math.round(e.min * 10) / 10)}</span></div>
       <svg viewBox=${"0 0 " + G_L + " " + G_A} preserveAspectRatio="none" role="img" aria-label=${"Gráfico do último minuto: " + g.leituras.map(l => l.rotulo).join(", ")}>
@@ -96,7 +114,7 @@ function UmGrafico({ g, historia, agora }) {
  * O gráfico dos dados ao vivo. O mecânico toca nas leituras; as da mesma unidade vão para o mesmo
  * gráfico (as 4 rodas do ABS juntas, na mesma escala), as de unidade diferente abrem outro, até 3.
  */
-export function Grafico({ lidos, historia, escolha, aoTrocar, recusa }) {
+export function Grafico({ lidos, historia, escolha, aoTrocar, recusa, faixaDe = null }) {
   const numericas = lidos.filter(l => typeof l.valor === "number");
   // Com leitura escolhida, a lista some: na tela ficam só os gráficos (pedido do Danilo, 21/11/2026).
   const [aberto, setAberto] = useState(false);
@@ -111,7 +129,7 @@ export function Grafico({ lidos, historia, escolha, aoTrocar, recusa }) {
     <div class=${"nota" + (recusa ? " graf-cheio" : "")} id="obd-grafico-aviso">${recusa || (gs.length
       ? "Último minuto. " + gs.length + " de " + grafico.GRAFICOS_MAX + " gráficos; leituras da mesma unidade ficam juntas."
       : "Toque nas leituras para ver no gráfico: até 3 gráficos; as da mesma unidade (as 4 rodas, por exemplo) ficam juntas no mesmo.")}</div>
-    ${gs.map(g => html`<${UmGrafico} key=${g.grupo} g=${g} historia=${historia} agora=${agora} />`)}
+    ${gs.map(g => html`<${UmGrafico} key=${g.grupo} g=${g} historia=${historia} agora=${agora} faixaDe=${faixaDe} />`)}
   </div>`;
 }
 
@@ -129,7 +147,14 @@ export async function registrarAcao(tipo, perfil, dados, extra) {
   return g.gravado ? FRASE.ok : g.pendente ? FRASE.pendente : FRASE.nada;
 }
 /** Sobe o que ficou guardado no aparelho. Chamado quando uma tela do diagnóstico abre. */
-export const subirPendentes = () => registro.subirPendentes(api.obd.registrar, cofre()).catch(() => ({ subiram: 0, restam: 0 }));
+// UM envio por vez: várias telas chamam isto ao abrir, e dois envios lendo a mesma fila ao mesmo tempo
+// gravariam o mesmo registro duas vezes (achado do Codex, 21/11/2026). Quem chega com um envio em
+// curso recebe a mesma promessa.
+let enviando = null;
+export function subirPendentes() {
+  if (!enviando) enviando = registro.subirPendentes(api.obd.registrar, cofre()).catch(() => ({ subiram: 0, restam: 0 })).finally(() => { enviando = null; });
+  return enviando;
+}
 
 // O CADERNO DO CARRO (Etapa 4): liga uma vez e fica ouvindo a conversa com o adaptador. Não tem
 // botão e não gera pedido: anota o que já aconteceu, e despeja no banco quando o adaptador é

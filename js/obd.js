@@ -1257,7 +1257,8 @@ export function adaptadorSuspeito(versao) {
 /* ------------------------------------------------------------------ Apagar as falhas (serviço 04)
  * Pedido do Danilo em 19/11/2026. É o ÚNICO comando que o app manda PARA o carro: tudo o mais aqui é leitura.
  * Três coisas que o mecânico precisa saber, e que a tela escreve antes de perguntar "apagar?":
- *   1. Apagar não conserta. Se o defeito continuar, o código volta — às vezes antes de o carro sair da rampa.
+ *   (O aviso "apagar não conserta" saiu em 21/11/2026, a pedido do Danilo: é óbvio para um mecânico.
+ *    Ficam só as consequências que não estão na cara: o que some e o que zera.)
  *   2. Some a foto do momento da falha (serviço 02) e os contadores de quando ela apareceu: anote ANTES, não depois.
  *   3. Zera as adaptações do módulo, incluindo o aprendizado de combustível, e a prontidão dos monitores volta para
  *      "não terminou" — o carro precisa rodar um ciclo para voltar. Carro que vai para a inspeção reprova até lá.
@@ -1265,7 +1266,6 @@ export function adaptadorSuspeito(versao) {
  * com senha e contra-senha conferidas no servidor do fabricante; não sai por aqui e não se contorna. O que sai é este 04,
  * que zera e obriga o módulo a refazer a conta com o que está no tanque agora. */
 export const AVISOS_APAGAR = [
-  "Apagar NÃO conserta: se o defeito continuar, o código volta.",
   "Some a foto do momento da falha e os contadores: anote antes.",
   "Zera as adaptações, inclusive o aprendizado de combustível.",
   "A prontidão dos monitores volta a zero: o carro precisa rodar para voltar.",
@@ -1324,7 +1324,7 @@ export function registroApagar(d) {
 export function resultadoApagar(antes, depois) {
   if (depois === null || depois === undefined) return { situacao: "nao_conferido", frase: "Apagou, mas não deu para conferir o que sobrou: leia as falhas de novo." };
   const quantos = depois.length;
-  if (!quantos) return { situacao: "limpo", frase: "Apagou e não sobrou nenhum código. Se o defeito continuar, ele volta." };
+  if (!quantos) return { situacao: "limpo", frase: "Apagou e não sobrou nenhum código." };
   const voltaram = depois.filter(f => (antes || []).some(a => a.codigo === f.codigo));
   if (voltaram.length === quantos) return { situacao: "voltou", frase: "O código voltou na hora: o defeito está acontecendo agora, não era falha antiga." };
   return { situacao: "sobrou", frase: "Sobrou código no carro: veja a lista de falhas antes de entregar." };

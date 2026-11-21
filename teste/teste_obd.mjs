@@ -395,7 +395,7 @@ chk("sem resposta nenhuma não vira 'apagou'", !respostaApagar([]).ok && !respos
 chk("resposta estranha avisa que NADA foi apagado", respostaApagar(["41 0C 1A F8"]).erro.includes("nada foi apagado"));
 {
   const antes = [{ codigo: "P0171", situacao: "atual" }, { codigo: "P0300", situacao: "pendente" }];
-  chk("limpou: diz que o código volta se o defeito continuar", resultadoApagar(antes, []).situacao === "limpo" && resultadoApagar(antes, []).frase.includes("volta"));
+  chk("limpou: diz que não sobrou código, sem sermão", resultadoApagar(antes, []).situacao === "limpo" && !/volta|conserta/.test(resultadoApagar(antes, []).frase));
   chk("voltou na hora = defeito acontecendo agora", resultadoApagar(antes, antes).situacao === "voltou" && resultadoApagar(antes, antes).frase.includes("agora"));
   chk("sobrou código de outro módulo", resultadoApagar(antes, [{ codigo: "C1234", situacao: "atual" }]).situacao === "sobrou");
   chk("não deu para conferir não vira 'limpou'", resultadoApagar(antes, null).situacao === "nao_conferido");
@@ -411,7 +411,7 @@ chk("resposta estranha avisa que NADA foi apagado", respostaApagar(["41 0C 1A F8
   chk("registro sem KM e sem placa não inventa nada", sem.km === null && sem.placa === "" && sem.codigos_depois === null && sem.perfil_id === null, sem);
   chk("KM bobo (0 ou texto) não entra", registroApagar({ antes: [], km: "0" }).km === null && registroApagar({ antes: [], km: "abc" }).km === null);
 }
-chk("os avisos de apagar dizem que NÃO conserta", AVISOS_APAGAR.some(a => a.includes("NÃO conserta")));
+chk("os avisos de apagar não repetem o óbvio para um mecânico (pedido do Danilo)", !AVISOS_APAGAR.some(a => /conserta/i.test(a)) && AVISOS_APAGAR.length === 3);
 chk("os avisos falam do aprendizado de combustível e da prontidão", AVISOS_APAGAR.some(a => a.toLowerCase().includes("combustível")) && AVISOS_APAGAR.some(a => a.toLowerCase().includes("prontidão")));
 chk("nenhum aviso promete conserto ou dá veredito", !AVISOS_APAGAR.some(a => /resolve|conserta o|arruma/i.test(a)));
 chk("a passada curta do ajuste é curta mesmo (5 pedidos)", PIDS_AJUSTE.length === 5 && PIDS_AJUSTE.every(p => PIDS_COMBUSTIVEL.includes(p)));

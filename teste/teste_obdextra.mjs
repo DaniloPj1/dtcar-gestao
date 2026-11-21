@@ -193,3 +193,29 @@ const it = n => hd.APRENDIZADOS.find(a => a.chave === "manut_" + n);
 t6(hd.habilitado(it(1), b7068) === true && hd.habilitado(it(2), b7068) === false && hd.habilitado(it(3), b7068) === true && hd.habilitado(it(1), [1, 2]) === null && hd.habilitado(hd.APRENDIZADOS[0], []) === true, "item do painel só é oferecido se o carro disser que tem");
 t6(hd.valorAntes(it(1).antes, b7068) === "0C1E" && hd.valorAntes(it(5).antes, [1, 2, 3]) === null, "o valor antigo sai do byte certo; resposta curta não vira zero");
 console.log(m6 + " conferências da Honda passaram.");
+{ const dz = ld.montar({ carro: { placa: "X" }, erros: [{ situacao: "atual", erro: "NO DATA" }] });
+  const tz = ld.linhas(dz, "").map(l => l.x).join("\n");
+  if (!/NÃO FOI LIDO/.test(tz) || /Nenhuma falha gravada/.test(tz) || !/NÃO afirma/.test(tz) || dz.erros.length !== 1) { console.error("FALHOU: laudo com leitura que falhou não pode dizer que não há falha"); process.exit(1); }
+  console.log("laudo com leitura que falhou: ok"); }
+
+/* ---- a faixa de trabalho ao lado da leitura ao vivo ---- */
+const fx = await import("../js/obdfaixa.js");
+let m7 = 0; const t7 = (c, msg) => { m7++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+const temp = { pid: 0x05, parte: 0, chave: 500, unidade: "°C", valor: 92 };
+let f1 = fx.faixaPara(temp, { rpm: 800, regime: "lenta" });
+t7(f1 && f1.origem === "referencia" && f1.de === 85 && f1.ate === 105 && f1.situacao === "dentro" && /suposto/.test(f1.fonte) && f1.texto === "85 a 105 °C", "temperatura: referência da tabela, com o nível de confiança escrito");
+t7(fx.faixaPara({ ...temp, valor: 112 }, { rpm: 800 }).situacao === "acima" && fx.faixaPara({ ...temp, valor: 60 }, { rpm: 800 }).situacao === "abaixo", "acima e abaixo");
+t7(fx.faixaPara(temp, { rpm: 0 }) === null && fx.faixaPara(temp, {}) === null, "motor desligado: faixa de trabalho não se aplica");
+const ses = [{ sinais: { 500: { r: { lenta: { n: 20, min: 88, max: 93, media: 90 } } } } }, { sinais: { 500: { r: { lenta: { n: 20, min: 87, max: 95, media: 91 } } } } }];
+f1 = fx.faixaPara(temp, { rpm: 800, regime: "lenta", sessoes: ses });
+t7(f1.origem === "carro" && f1.de === 87 && f1.ate === 95 && /este carro, em marcha lenta \(2 leituras\)/.test(f1.fonte) && /Referência \(suposto/.test(f1.outra), "com histórico, a faixa é a DESTE carro, e a referência fica ao lado");
+t7(fx.faixaPara({ ...temp, valor: 99 }, { rpm: 800, regime: "lenta", sessoes: ses }).situacao === "acima", "acima do que este carro já marcou");
+t7(fx.doCarro(temp, "lenta", ses.slice(0, 1)) === null && fx.doCarro(temp, null, ses) === null && fx.doCarro(temp, "cruzeiro", ses) === null, "uma leitura só, sem regime ou regime sem histórico: não é faixa");
+const aj = fx.faixaPara({ pid: 0x07, parte: 0, chave: 700, unidade: "%", valor: 14 }, { rpm: 900 });
+t7(aj.de === -10 && aj.ate === 10 && aj.situacao === "acima", "ajuste de combustível: de −10 a +10");
+t7(fx.faixaPara({ pid: 0x0c, parte: 0, chave: 1200, unidade: "rpm", valor: 800 }, { rpm: 800, regime: "lenta" }) === null, "leitura sem histórico e sem referência fica SEM faixa: nada inventado");
+const rail = { pid: 0x23, parte: 0, chave: 3500, unidade: "kPa", valor: 35000 };
+t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "ONIX 1.0" } }).de === 25000, "rail: a tabela está em bar e a leitura em kPa — convertido; carro qualquer usa a referência geral");
+t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).de === 30000 && /montadora/.test(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).fonte), "Hilux 3.0: vale a da montadora, não a geral");
+t7(fx.faixaPara(rail, { rpm: 2500, regime: null }) === null, "rail fora da marcha lenta: a referência de lenta não se aplica");
+console.log(m7 + " conferências da faixa de trabalho passaram.");

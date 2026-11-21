@@ -11,7 +11,7 @@
 const dataBR = iso => { const d = new Date(iso); const p = n => String(n).padStart(2, "0"); return p(d.getDate()) + "/" + p(d.getMonth() + 1) + "/" + d.getFullYear() + " " + p(d.getHours()) + ":" + p(d.getMinutes()); };
 
 /** O conteúdo que é selado. Tudo o que entra aqui entra no selo. */
-export function montar({ carro = {}, quem = {}, oficina = "", km = null, conferencia = null, modulos = [], falhasJuntas = [], monitores = null, odometro = null, leituras = [], explicacoes = {}, obs = "", em = new Date().toISOString() } = {}) {
+export function montar({ carro = {}, quem = {}, oficina = "", km = null, conferencia = null, modulos = [], falhasJuntas = [], monitores = null, odometro = null, leituras = [], explicacoes = {}, erros = [], obs = "", em = new Date().toISOString() } = {}) {
   const falha = f => { const e = explicacoes[String(f.codigo || "").split("-")[0]] || {}; return { codigo: f.rotulo || f.codigo, situacao: f.situacaoTexto || f.situacao || "", descricao: e.descricao || "", origem: e.achou ? e.origem : "" }; };
   return {
     versao: 1, em, oficina,
@@ -21,6 +21,8 @@ export function montar({ carro = {}, quem = {}, oficina = "", km = null, confere
     conferencia: conferencia ? { situacao: conferencia.situacao, frase: conferencia.frase, itens: conferencia.itens.map(i => ({ titulo: i.titulo, situacao: i.situacao, texto: i.texto })) } : null,
     modulos: modulos.map(m => ({ nome: m.nome || m.endereco || m.pedido || "", endereco: m.pedido || m.endereco || "", falhas: (m.falhas || []).map(falha) })),
     falhas: falhasJuntas.map(falha),
+    // o que NÃO deu para ler entra no conteúdo selado: laudo que esconde leitura que falhou afirma o que não sabe
+    erros: (erros || []).map(e => ({ situacao: String(e.situacao || ""), erro: String(e.erro || "") })),
     monitores: monitores || null, odometro: odometro || null,
     leituras: leituras.map(l => ({ rotulo: l.rotulo, valor: l.valor, unidade: l.unidade || "" })),
     obs: String(obs || ""),
@@ -44,7 +46,9 @@ export function linhas(d, selo) {
   }
   const n = totalDeFalhas(d);
   add("sub", n ? "FALHAS GRAVADAS (" + n + ")" : "FALHAS GRAVADAS");
-  if (!n) add("linha", "Nenhuma falha gravada nos módulos que responderam.");
+  const er = d.erros || [];
+  for (const e of er) add("linha", "NÃO FOI LIDO: falhas na situação \"" + e.situacao + "\" (" + e.erro + ").");
+  if (!n) add("linha", er.length ? "A leitura de falhas não foi concluída: este laudo NÃO afirma que o carro está sem falha." : "Nenhuma falha gravada nos módulos que responderam.");
   for (const m of d.modulos) {
     add("linha", (m.nome || "Módulo").toUpperCase() + (m.falhas.length ? "" : " — sem falha gravada"));
     for (const f of m.falhas) add("linha", "   " + f.codigo + (f.situacao ? " · " + f.situacao : "") + (f.descricao ? " — " + f.descricao : ""));

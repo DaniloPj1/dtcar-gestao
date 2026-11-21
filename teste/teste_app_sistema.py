@@ -17,7 +17,8 @@ import datetime; HOJE = datetime.date.today().isoformat()
 # Desde 20/11/2026 o Início separa por grupo: primeiro o que se faz na oficina, depois o que se faz
 # no carro (o diagnóstico, que deixou de ser uma tela e virou família de seis).
 ROTULOS_OFICINA = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
-ROTULOS_CARRO = ['LER O CARRO (OBD)', 'MÓDULOS DO CARRO', 'ATUADORES', 'APRENDIZADOS', 'PROGRAMAR BICO', 'PARÂMETROS DE REFERÊNCIA']
+# No Início, do carro aparece só LER O CARRO: as outras telas ficam dentro dele (pedido do Danilo, 21/11/2026)
+ROTULOS_CARRO = ['LER O CARRO (OBD)']
 ROTULOS = ROTULOS_OFICINA + ROTULOS_CARRO
 # plugin da digital de mentira: o "cofre" (window.__cofre) sobrevive a recarregar a página; __ok controla se a leitura passa
 PLUGIN = """
@@ -370,7 +371,7 @@ try:
         pg.click('.ver'); t(pg.get_attribute('#lg-senha', 'type') == 'text', 'botão Mostrar revela a senha')
         # 2) login certo como administrador, sem plugin (navegador): sem oferta de digital
         entrar(pg); t('Olá, Fulano' in textos(pg) and 'Administrador' in textos(pg), 'entra como administrador')
-        barras = rotulos(pg); t(barras == ROTULOS, 'quinze botões na ordem combinada, sem + O.S.: %s' % barras)
+        barras = rotulos(pg); t(barras == ROTULOS, 'dez botões na ordem combinada, sem + O.S.: %s' % barras)
         # o grupo tem título, e o do carro vem depois do da oficina: com 15 botões, lista única é parede
         titulos_grupo = [x.strip() for x in pg.locator('.grupo-t').all_inner_texts()]
         t(titulos_grupo == ['NA OFICINA', 'NO CARRO'], 'dois grupos, com título, na ordem (o CSS põe em maiúsculas): %s' % titulos_grupo)
@@ -384,7 +385,10 @@ try:
         ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta',
                  'obd', 'modulos', 'atuadores', 'aprendizados', 'bico', 'parametros']
         for i, rota in enumerate(ROTAS):
-            pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i); pg.wait_for_selector('.titulo b', timeout=10000)
+            # do carro, o Início tem só LER O CARRO (botão 10); as outras telas abrem pelas abas de dentro dele
+            if i <= 9: pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i)
+            else: pg.goto(URL + '#/obd'); pg.wait_for_selector('.abas a', timeout=10000); pg.click('.abas a[href="#/%s"]' % rota)
+            pg.wait_for_selector('.titulo b', timeout=10000); pg.wait_for_timeout(250)
             t(pg.url.endswith('#/' + rota) and pg.inner_text('.titulo b') == TITULOS[i], 'botão %d abre %s: %s / %s' % (i + 1, rota, pg.url, pg.inner_text('.titulo b')))
             t(pg.locator('.abas a[aria-current=page]').count() == 1 and pg.locator('.cab img').count() == 1, 'tela %s tem as abas e o cabeçalho azul' % rota)
             t(pg.evaluate('document.documentElement.scrollWidth') <= 390, 'tela %s sem rolagem lateral' % rota)
@@ -416,7 +420,8 @@ try:
         f = Fake('consultor', True, {UID: {'entra': True, 'telas': []}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         t(pg.locator('.barra').count() == 0 and 'Nenhuma tela liberada' in textos(pg), 'liberado sem tela: entra e vê o aviso'); ctx.close()
         f = Fake('admin', True, {UID: {'entra': True, 'telas': ['oleo', 'obd']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-        barras = rotulos(pg); t('MÓDULOS DO CARRO' in barras and 'APRENDIZADOS' in barras and 'ATUADORES' in barras and 'PROGRAMAR BICO' in barras, 'o administrador vê TODAS as telas, mesmo com lista antiga gravada: %s' % barras); ctx.close()
+        barras = rotulos(pg); t('LER O CARRO (OBD)' in barras and 'AGENDAR' in barras and 'MÓDULOS DO CARRO' not in barras and 'APRENDIZADOS' not in barras, 'o administrador vê todas as telas; do carro, o Início mostra só LER O CARRO: %s' % barras)
+        tela(pg, 'obd'); abas = pg.locator('.abas a').all_inner_texts(); t(any('Módulos' in a for a in abas) and any('Aprendizados' in a for a in abas), 'e Módulos e Aprendizados ficam dentro de Ler o carro (abas): %s' % abas); ctx.close()
         # horário de uso (Equipe): fora dele o colaborador não entra; o administrador entra sempre; a agenda do mecânico não tem o aviso do WhatsApp
         fora = {'de': '00:00', 'ate': '00:01', 'dias': [0, 1, 2, 3, 4, 5, 6]}; dentro = {'de': '00:00', 'ate': '23:59', 'dias': [0, 1, 2, 3, 4, 5, 6]}
         f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['oleo', 'agendar'], 'horario': fora}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
@@ -1266,9 +1271,19 @@ try:
         pg.goto(URL + '#/obd'); pg.wait_for_selector('.titulo b', timeout=10000)
         pg.goto(URL + '#/obd'); pg.wait_for_selector('.titulo b', timeout=10000); pg.wait_for_timeout(700)
         t(not pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'voltar para a leitura também não desconecta')
-        # sair da família, sim: aí o adaptador é liberado e a bateria do carro agradece
+        # A CONEXÃO FICA (pedido do Danilo, 21/11/2026): voltar ao Início também não desliga; só fechar o app, tirar o adaptador ou DESCONECTAR
         pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.wait_for_timeout(900)
-        t(pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'sair da família de diagnóstico desconecta o adaptador')
+        t(not pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'voltar ao Início NÃO desconecta o adaptador: a conexão fica até fechar o app')
+        # O ÚLTIMO ADAPTADOR (pedido do Danilo, 21/11/2026): CONECTAR vai direto nele, sem apontar qual
+        tela(pg, 'obd'); t(pg.evaluate("() => !!document.querySelector('#obd-adaptador-abrir')"), 'de volta do Início, a leitura continua conectada')
+        pg.click('#obd-desligar'); pg.wait_for_selector('#obd-procurar', timeout=10000)
+        t(pg.inner_text('#obd-procurar').strip() == 'CONECTAR' and pg.locator('#obd-outro').count() == 1, 'desconectado: botão CONECTAR e a opção de outro adaptador')
+        antes_c = pg.evaluate("window.__obd.chamadas.filter(c => c === 'conectar').length")
+        pg.click('#obd-procurar'); pg.wait_for_selector('#obd-acoes', timeout=15000)
+        t(pg.evaluate("window.__obd.chamadas.filter(c => c === 'conectar').length") == antes_c + 1 and pg.locator('.obd-ap').count() == 0, 'CONECTAR liga direto no último adaptador, sem mostrar a lista')
+        pg.click('#obd-desligar'); pg.wait_for_selector('#obd-outro', timeout=10000); pg.click('#obd-outro'); pg.wait_for_selector('.obd-ap', timeout=10000)
+        t(pg.locator('.obd-ap').count() >= 1 and pg.locator('#obd-acoes').count() == 0, 'OUTRO ADAPTADOR mostra a lista para escolher')
+        pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000)
 
         # ---- TELA DE PARÂMETROS (era um cartão dentro da leitura até 20/11/2026) ----
         # Só de LEITURA: quem corrige é o Claude, no arquivo. Fica em tela porque é o que se

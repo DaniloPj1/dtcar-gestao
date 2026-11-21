@@ -12,6 +12,7 @@ import * as obd from "../js/obd.js";
 import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
+import { usarExplicacoes, FalhaExplicada } from "./diagpartes.js";
 import { useApp, Ic, ir, Cartao, KV, Campo, Quadro, usarPlaca, BuscaPlaca, Veiculo, Tela, usarPasso } from "./comum.js";
 
 const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
@@ -178,6 +179,7 @@ function Obd() {
   const [apagar, setApagar] = useState(null);   // { passo: "confirmar"|"feito", km, antes, comb, r, depois, combDepois, registro }
   const [antesApagados, setAntesApagados] = useState(null);   // apagamentos anteriores DESTE carro
   const podeApagar = podeApagarObd(cfg, perfil);
+  const explicadas = usarExplicacoes(res && res.o === "falhas" ? res.d.falhas : null, ses.carro);
 
   // Sair da tela PARA a roda de leitura, mas não desliga o adaptador: quem desliga é sair de toda a
   // família de diagnóstico, e isso o js/obdsessao.js resolve (ver saindoDaTela). A roda precisa
@@ -341,6 +343,7 @@ function Obd() {
     try { depois = (await obd.lerFalhas()).falhas; } catch (e) { depois = null; }
     try { combDepois = await obd.lerCombustivelRapido(lig.pidsSuportados); } catch (e) { combDepois = null; }
     const chassi = await obd.lerChassi().catch(() => "");
+    if (chassi) sessao.definirCarro({ vin: chassi });
     const registro = obd.registroApagar({
       perfil_id: perfil.id, perfil_nome: perfil.nome,
       placa, veiculo_id: (v && v.id) || null, km, vin: chassi,
@@ -392,11 +395,15 @@ function Obd() {
   const lerConf = () => { pararVivo(); return rodar("Lendo chassi, monitores e odômetro…", async () => {
     const monitores = await obd.lerMonitores();
     const chassi = await obd.lerChassi();
+    if (chassi) sessao.definirCarro({ vin: chassi });
     const odometro = await obd.lerOdometro(lig.pidsSuportados);
     guardar("conf", { monitores, chassi, odometro });
   }); };
 
   const v = pl.veic;
+  // O carro da vez sobe para a sessão: as outras telas do diagnóstico (módulos, atuadores…) passam
+  // a saber a marca sem pedir a placa de novo.
+  useEffect(() => { sessao.definirCarro({ placa, marca: (v && v.marca) || "", modelo: (v && v.modelo) || "", ano: (v && v.ano) || "", veiculo_id: (v && v.id) || null }); }, [placa, v && v.id, ses.ligado]);
   // o chassi do cadastro vem da ficha do veículo (a busca por placa não carrega esse campo)
   const noBanco = v && v.id ? dados.veiculos.find(x => x.id === v.id) : null;
   const chassiCadastro = String((noBanco && noBanco.chassi) || (v && v.chassi) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
@@ -555,9 +562,10 @@ function Obd() {
 
       ${res && res.o === "falhas" ? html`<${Cartao} titulo=${"Falhas do motor" + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">
         ${!res.d.falhas.length ? html`<div class="vazio">Nenhuma falha gravada no módulo do motor.</div>` : null}
-        ${res.d.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc">
-          <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}
-        ${res.d.falhas.length ? html`<div class="nota">O código é o que o módulo gravou; a descrição de código de montadora (P1 em diante) não é pública. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
+        ${res.d.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc-bloco"><div class="obd-dtc">
+          <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>
+          <${FalhaExplicada} e=${explicadas[f.codigo]} /></div>`)}
+        ${res.d.falhas.length ? html`<div class="nota">O código é o que o módulo gravou. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
         ${res.d.variosModulos ? html`<div class="nota">Mais de um módulo do carro respondeu: a lista junta os códigos de todos. Sem o cabeçalho ligado não dá para dizer qual código é de qual módulo.</div>` : null}
         ${res.d.erros.length ? html`<div class="nota">Não respondeu: ${res.d.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
       </${Cartao}>` : null}
@@ -820,6 +828,7 @@ function Modulos() {
   const [ocupado, setOcupado] = useState("");
   const [erro, setErro] = useState("");
   const podeApagar = podeApagarObd(cfg, perfil);
+  const explicadasMod = usarExplicacoes(falhas, st.carro);
   usarPasso(!!mod, () => { setMod(null); setFalhas(null); setEpti(null); });
 
   const escolher = async m => {
@@ -882,6 +891,7 @@ function Modulos() {
               <div class="diag-falha-topo"><b>${f.rotulo}</b>${f.pedeLuz ? html`<span class="selo ruim">LUZ NO PAINEL</span>` : null}</div>
               ${f.causa ? html`<div class="diag-falha-causa">${f.causa}</div>` : html`<div class="nota">O tipo ${hexDoTipo(f.tipoFalha)} não está na tabela da norma que o app tem: o número fica aí, sem palpite de causa.</div>`}
               <div class="nota">${f.situacaoTexto}</div>
+              <${FalhaExplicada} e=${explicadasMod[f.codigo]} />
             </div>`)}
           ${falhas.length && podeApagar ? html`<button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${apagar} disabled=${!!ocupado || !!st.dono}>APAGAR AS FALHAS DESTE MÓDULO</button>` : null}
           ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}

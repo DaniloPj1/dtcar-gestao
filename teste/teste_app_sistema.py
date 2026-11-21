@@ -643,6 +643,10 @@ try:
         t('P0171' in tx and 'P0300' in tx and 'P0130' in tx, 'lê as falhas das três situações: %s' % tx.replace('\n', ' ')[:120])
         t('ATUAL' in tx and 'PENDENTE' in tx, 'mostra a situação de cada falha escrita, não só a cor')
         t(pg.locator('#obd-r-falhas .selo.ruim').count() == 2, 'as duas confirmadas vêm com o selo vermelho')
+        # a falha vem explicada: descrição, causas prováveis e de onde o texto veio (js/obdfalhas.js)
+        pg.wait_for_selector('#obd-r-falhas .fx-causas', timeout=15000); fx = pg.inner_text('#obd-r-falhas')
+        t('CAUSAS PROVÁVEIS' in fx.upper() and 'Honda' in fx and 'SAE' in fx, 'a falha lida vem com causas prováveis e a origem escrita: ' + fx[:200])
+        t(pg.locator('#obd-r-falhas .fx-desc').count() >= 2, 'cada código tem a descrição embaixo')
         t('P0043' not in tx and 'C3103' not in tx and 'P0201' not in tx, 'com dois módulos respondendo NÃO inventa código: %s' % tx.replace('\n', ' ')[:140])
         t('Mais de um módulo' in tx, 'avisa que mais de um módulo respondeu')
         # chassi e monitores

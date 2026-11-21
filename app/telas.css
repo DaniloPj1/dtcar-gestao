@@ -403,3 +403,21 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
   background:#fff;color:var(--tinta);font:inherit;font-size:18px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
 .bico-cod.bom{border-color:#1f7a3a}
 .bico-cod.ruim{border-color:#8a2d2d}
+
+/* ---- explicação do código de falha (app/diagpartes.js) ---- */
+.fx{margin:4px 0 2px;font-size:14px;line-height:1.35}
+.fx-desc{font-weight:600;color:var(--preto,#16191d)}
+.fx-pecas{margin-top:2px;color:#4a5560}
+.fx-t{margin-top:8px;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#5b6672}
+.fx-causas ul{margin:3px 0 0;padding:0;list-style:none}
+.fx-causas li{position:relative;padding:3px 0 3px 14px}
+.fx-causas li::before{content:"";position:absolute;left:2px;top:11px;width:5px;height:5px;background:var(--azul,#174f94)}
+.fx-causas li.sub{padding-left:28px;color:#333b44}
+.fx-causas li.sub::before{left:16px;width:5px;height:1px;top:13px;background:#8a949e}
+.fx-mais{margin-top:6px;padding:8px 0;border:0;background:none;font:inherit;font-weight:700;color:var(--azul,#174f94);text-decoration:underline;min-height:40px;cursor:pointer}
+.fx-sec{margin-top:4px}
+.fx-en{display:inline-block;padding:0 5px;border:1px solid #b9c1ca;font-size:11px;font-weight:600;color:#5b6672;white-space:nowrap}
+.fx-origem{margin-top:8px;font-size:12.5px;color:#5b6672}
+.obd-dtc-bloco{padding:8px 0;border-bottom:1px solid #e7eaee}
+.obd-dtc-bloco:last-child{border-bottom:0}
+.obd-dtc-bloco .obd-dtc{padding:0;border:0}

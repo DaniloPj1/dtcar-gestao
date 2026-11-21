@@ -37,6 +37,7 @@ const estadoInicial = () => ({
   aviso: "",
   pidsSuportados: [],
   modulo: null,            // { pedido, resposta, nome } quando está falando UDS com um módulo
+  carro: null,             // { placa, marca, modelo, ano, veiculo_id, chassiCadastro, vin } — o carro em que o adaptador está
   erro: "",
   dono: "",                // quem tem a vez agora ("" = livre)
 });
@@ -216,3 +217,19 @@ export function reiniciarParaTeste() {
   if (relogioSaida) { clearTimeout(relogioSaida); relogioSaida = null; }
   st = estadoInicial();
 }
+
+/* ------------------------------------------------------------------ o carro da vez */
+/**
+ * O carro em que o adaptador está, visto por TODAS as telas da família. Antes só a tela "Ler o
+ * carro" sabia a placa; a de módulos lia falha sem saber a marca e não tinha como explicar um
+ * código de montadora. Quem descobre um pedaço (a placa buscada, o chassi lido do módulo) junta
+ * aqui. Trocar de placa começa um carro novo: chassi lido de um carro não vale para o outro.
+ */
+export function definirCarro(parcial) {
+  const antes = st.carro || {};
+  const p = parcial || {};
+  const trocou = p.placa !== undefined && antes.placa && p.placa !== antes.placa;
+  const novo = Object.assign({}, trocou ? {} : antes, p);
+  if (JSON.stringify(novo) !== JSON.stringify(st.carro)) mexer({ carro: novo });
+}
+export const carro = () => st.carro || {};

@@ -1,0 +1,476 @@
+/**
+ * UDS (ISO 14229) pelo adaptador ELM327 — a conversa com UM módulo de cada vez.
+ *
+ * O js/obd.js fala o OBD-II, que é a língua comum: ele pergunta "qual a rotação" e QUALQUER carro
+ * responde. Só que o OBD-II é obrigatório por lei para emissão, e por isso é pequeno: não tem
+ * atuador, não tem aprendizado, não tem o câmbio, não tem o ABS, não tem o airbag. Tudo isso o
+ * carro tem, mas em outra língua — o UDS — e falando com cada módulo pelo endereço dele.
+ *
+ * O QUE MUDA NA PRÁTICA
+ * No OBD-II o adaptador grita no barramento e quem quiser responde. No UDS o pedido vai para um
+ * endereço (o "cabeçalho"), e só aquele módulo responde. Então antes de qualquer pergunta é preciso
+ * dizer ao adaptador com quem ele vai falar — é o que `abrir()` faz.
+ *
+ * O QUE ESTE ARQUIVO NÃO FAZ
+ * Não tem tabela de identificador por marca inventada aqui. O número do dado (DID) e o da rotina
+ * (RID) mudam de família para família de módulo, e chutar isso num sistema que vai rodar numa
+ * oficina é pior que não ter: um palpite errado vira um laudo errado. Aqui ficam só (a) o que a
+ * própria norma define, (b) o que o CARRO responde quando perguntado, e (c) o acervo do projeto,
+ * que fica em js/udsdados.js. O resto é descoberta, e ela é feita perguntando — ver `sondar()`.
+ */
+import { juntarLinhas, bytesDe, dtcDe, comando, plugin } from "./obd.js";
+
+/* ------------------------------------------------------------------ respostas negativas */
+
+/**
+ * Códigos de resposta negativa da ISO 14229-1, na frase que o mecânico precisa ler.
+ *
+ * Esta tabela é metade do valor do UDS numa oficina. Quando o módulo RECUSA, ele não diz só "não":
+ * ele diz POR QUE não — motor ligado, temperatura baixa, câmbio fora de neutro, freio solto, tensão
+ * caída. Isso deixa de ser erro e passa a ser instrução: o aparelho conta ao mecânico o que fazer
+ * para o teste rodar. Por isso cada código tem o nome técnico (para conferir na norma) e a frase.
+ */
+export const NRC = {
+  0x10: ["generalReject", "O módulo recusou o pedido, sem dizer o motivo."],
+  0x11: ["serviceNotSupported", "Este módulo não tem esse serviço."],
+  0x12: ["subFunctionNotSupported", "O módulo tem o serviço, mas não essa opção dele."],
+  0x13: ["incorrectMessageLengthOrInvalidFormat", "O pedido foi montado com tamanho errado."],
+  0x14: ["responseTooLong", "A resposta não cabe de uma vez."],
+  0x21: ["busyRepeatRequest", "O módulo está ocupado. Vale pedir de novo."],
+  0x22: ["conditionsNotCorrect", "O módulo TEM essa função, mas as condições do carro não permitem agora."],
+  0x24: ["requestSequenceError", "Falta um passo antes deste (abrir a sessão ou destravar)."],
+  0x25: ["noResponseFromSubnetComponent", "Um módulo da rede não respondeu."],
+  0x26: ["failurePreventsExecutionOfRequestedAction", "Existe uma falha gravada que impede esta ação."],
+  0x31: ["requestOutOfRange", "Este módulo não tem esse identificador — ou ele não vale nesta sessão."],
+  0x33: ["securityAccessDenied", "O módulo TEM essa função, mas ela é protegida: precisa destravar."],
+  0x34: ["authenticationRequired", "A função exige autenticação do aparelho."],
+  0x35: ["invalidKey", "A chave enviada não serviu."],
+  0x36: ["exceedNumberOfAttempts", "Chave errada vezes demais. O módulo travou as tentativas."],
+  0x37: ["requiredTimeDelayNotExpired", "Precisa esperar antes de tentar destravar de novo."],
+  0x70: ["uploadDownloadNotAccepted", "O módulo não aceitou transferência."],
+  0x72: ["generalProgrammingFailure", "Falhou ao gravar no módulo."],
+  0x73: ["wrongBlockSequenceCounter", "Os blocos saíram fora de ordem."],
+  0x78: ["requestCorrectlyReceivedResponsePending", "O módulo recebeu e está trabalhando. A resposta vem."],
+  0x7e: ["subFunctionNotSupportedInActiveSession", "Essa opção não vale na sessão aberta agora."],
+  0x7f: ["serviceNotSupportedInActiveSession", "Esse serviço não vale na sessão aberta agora."],
+  0x81: ["rpmTooHigh", "Rotação alta demais para este teste."],
+  0x82: ["rpmTooLow", "Rotação baixa demais para este teste."],
+  0x83: ["engineIsRunning", "Desligue o motor para este teste."],
+  0x84: ["engineIsNotRunning", "Ligue o motor para este teste."],
+  0x85: ["engineRunTimeTooLow", "O motor precisa ficar mais tempo trabalhando antes."],
+  0x86: ["temperatureTooHigh", "Temperatura alta demais. Deixe esfriar."],
+  0x87: ["temperatureTooLow", "Temperatura baixa demais. Aqueça o motor."],
+  0x88: ["vehicleSpeedTooHigh", "Velocidade alta demais. Pare o carro."],
+  0x89: ["vehicleSpeedTooLow", "O carro precisa estar andando para este teste."],
+  0x8a: ["throttlePedalTooHigh", "Solte o acelerador."],
+  0x8b: ["throttlePedalTooLow", "Pise no acelerador."],
+  0x8c: ["transmissionRangeNotInNeutral", "Ponha o câmbio em neutro."],
+  0x8d: ["transmissionRangeNotInGear", "Ponha o câmbio na marcha."],
+  0x8f: ["brakeSwitchNotClosed", "Pise no freio e segure."],
+  0x90: ["shifterLeverNotInPark", "Ponha a alavanca em P."],
+  0x91: ["torqueConverterClutchLocked", "O conversor está travado. Não dá para rodar agora."],
+  0x92: ["voltageTooHigh", "Tensão alta demais."],
+  0x93: ["voltageTooLow", "Tensão baixa demais. Confira a bateria e o alternador."],
+};
+
+/** Frase para o mecânico a partir do código de recusa. */
+export const textoNrc = n => (NRC[n] || [null, "O módulo recusou (código " + hx(n) + ")."])[1];
+/** Nome técnico, para conferir na norma. */
+export const nomeNrc = n => (NRC[n] || ["desconhecido"])[0];
+
+const hx = (n, d = 2) => Number(n).toString(16).toUpperCase().padStart(d, "0");
+export const hex2 = n => hx(n, 2);
+export const hex4 = n => hx(n, 4);
+
+/* ------------------------------------------------------------------ faixas da norma */
+
+/**
+ * Onde cada número de ROTINA mora, pela ISO 14229-1 (igual em 2013 e em 2020).
+ * Serve para a varredura não andar onde não faz sentido: a rotina de serviço de um carro está na
+ * faixa do fabricante, e é só nela que o app procura. As de programação e a de apagar memória ficam
+ * fora, e o plugin nativo também as recusa — ver rotinaNaFaixa() no ObdPlugin.java.
+ */
+export const FAIXAS_RID = [
+  { de: 0x0000, ate: 0x00ff, nome: "reservada pela norma", procurar: false },
+  { de: 0x0100, ate: 0x01ff, nome: "tacógrafo", procurar: false },
+  { de: 0x0200, ate: 0xdfff, nome: "rotina do fabricante", procurar: true },
+  { de: 0xe000, ate: 0xe1ff, nome: "teste de emissão (OBD)", procurar: false },
+  { de: 0xe200, ate: 0xe2ff, nome: "sucateamento e segurança", procurar: false },
+  { de: 0xe300, ate: 0xefff, nome: "reservada pela norma", procurar: false },
+  { de: 0xf000, ate: 0xfeff, nome: "do fornecedor do sistema", procurar: false },
+  { de: 0xff00, ate: 0xffff, nome: "programação e apagar memória", procurar: false },
+];
+export const faixaRid = n => FAIXAS_RID.find(f => n >= f.de && n <= f.ate) || null;
+/** A faixa onde o app procura rotina de serviço. É a mesma que o nativo deixa passar. */
+export const RID_DE = 0x0200, RID_ATE = 0xdfff;
+export const ridDeServico = n => n >= RID_DE && n <= RID_ATE;
+
+/* ------------------------------------------------------------------ sessões e serviços */
+
+export const SESSAO = { comum: 0x01, programacao: 0x02, estendida: 0x03 };
+export const SV = {
+  sessao: 0x10, reiniciar: 0x11, apagar: 0x14, falhas: 0x19, lerDado: 0x22,
+  lerEscala: 0x24, destravar: 0x27, gravar: 0x2e, atuar: 0x2f, rotina: 0x31, presenca: 0x3e,
+};
+/** Opções do controle de atuador (0x2F), como a norma numera. */
+export const ATUAR = { devolver: 0x00, comoCongelado: 0x01, comoPadrao: 0x02, ajustar: 0x03 };
+/** Subfunções da rotina (0x31). */
+export const ROTINA = { comecar: 0x01, parar: 0x02, resultado: 0x03 };
+
+/* ------------------------------------------------------------------ a conversa */
+
+const P = () => { const p = plugin(); if (!p) throw new Error("sem-plugin"); return p; };
+
+/**
+ * Prepara o adaptador para falar com UM módulo.
+ *
+ * `pedido` é o endereço para onde a pergunta vai e `resposta` o que o módulo usa para responder.
+ * Em 11 bits a conta é quase sempre resposta = pedido + 8 (o motor pede em 7E0 e responde em 7E8),
+ * e é esse o padrão quando só o pedido é informado. Em 29 bits os dois são escritos por extenso.
+ *
+ * O controle de fluxo (ATFC*) é o que faz resposta comprida chegar inteira: sem ele, o módulo manda
+ * o primeiro quadro, fica esperando a autorização para continuar e a leitura volta pela metade.
+ */
+export async function abrir({ pedido, resposta, bits29 = false, esperaMs = 1000 } = {}) {
+  const ped = String(pedido || "").toUpperCase().replace(/[^0-9A-F]/g, "");
+  if (!(ped.length === 3 || ped.length === 8)) throw new Error("endereco-invalido");
+  const resp = String(resposta || (ped.length === 3 ? hx(parseInt(ped, 16) + 8, 3) : "")).toUpperCase().replace(/[^0-9A-F]/g, "");
+  await comando("ATSP" + (bits29 ? "7" : "6"), 2000);   // CAN de 500 kbit, 29 ou 11 bits
+  await comando("ATCAF1", 2000);                        // o adaptador monta e desmonta os quadros
+  await comando("ATSH" + ped, 2000);
+  if (resp) await comando("ATCRA" + resp, 2000);        // escuta só este módulo
+  await comando("ATFCSH" + ped, 2000);
+  await comando("ATFCSD300000", 2000);                  // "pode mandar o resto, sem pausa"
+  await comando("ATFCSM1", 2000);
+  await comando("ATST" + hx(Math.max(1, Math.min(255, Math.round(esperaMs / 4))), 2), 2000);
+  return { pedido: ped, resposta: resp };
+}
+
+/** Volta o adaptador ao jeito do OBD-II comum (sem cabeçalho fixo, sem filtro). */
+export async function fechar() {
+  try { await comando("ATCRA", 2000); } catch (e) { /* adaptador que não aceita: segue */ }
+  try { await comando("ATSP0", 2000); } catch (e) { /* segue */ }
+}
+
+/**
+ * Manda um pedido de UDS e devolve { dados, nrc, nomeNrc, texto, hex, erro }.
+ *
+ * Duas coisas que todo aparelho de verdade trata e que é tentador esquecer:
+ *  - 0x78 "recebi e estou trabalhando": o módulo pede mais tempo. Não é erro. Rotina de aprendizado
+ *    manda isso várias vezes seguidas, e quem trata como erro conclui que o carro não tem a função.
+ *  - a resposta tem de COMEÇAR com o serviço + 0x40. Procurar no meio do texto é o que faz dado de
+ *    um módulo ser lido como se fosse de outro (a mesma armadilha que o js/obd.js descreve).
+ */
+export async function pedir(cmd, servico, esperaMs = 5000, tentativasPendente = 6) {
+  const cru = await comando(cmd, esperaMs);
+  let r = juntarLinhas(cru);
+  if (r.erro) return { dados: null, nrc: null, texto: r.erro, hex: "", erro: r.erro };
+  for (let i = 0; i < tentativasPendente; i++) {
+    const n = negativaDe(r.hex, servico);
+    if (n !== 0x78) break;
+    // o módulo pediu mais tempo: espera e lê de novo, sem mandar o pedido outra vez
+    await new Promise(f => setTimeout(f, 300));
+    const outra = await comando("ATRV", 1500).then(() => comando(cmd, esperaMs)).catch(() => "");
+    const nova = juntarLinhas(outra);
+    if (nova.erro) break;
+    r = nova;
+  }
+  const n = negativaDe(r.hex, servico);
+  if (n != null) {
+    return { dados: null, nrc: n, nomeNrc: nomeNrc(n), texto: textoNrc(n), hex: r.hex, erro: "" };
+  }
+  const esperado = hx(servico + 0x40, 2);
+  if (!r.hex.startsWith(esperado)) {
+    return { dados: null, nrc: null, texto: "O módulo respondeu outra coisa.", hex: r.hex, erro: "resposta-inesperada" };
+  }
+  return { dados: bytesDe(r.hex.slice(2)), nrc: null, texto: "", hex: r.hex, erro: "" };
+}
+
+/** Se a resposta for negativa (7F <serviço> <código>), devolve o código. Senão, null. */
+export function negativaDe(hex, servico) {
+  const b = bytesDe(String(hex || ""));
+  if (b.length < 3 || b[0] !== 0x7f) return null;
+  if (servico != null && b[1] !== servico) return null;
+  return b[2];
+}
+
+/* ------------------------------------------------------------------ leitura */
+
+export const sessao = tipo => pedir(hx(SV.sessao, 2) + hx(tipo, 2), SV.sessao, 5000);
+export const presenca = () => pedir(hx(SV.presenca, 2) + "80", SV.presenca, 2000);
+export const lerDado = did => pedir(hx(SV.lerDado, 2) + hx(did, 4), SV.lerDado, 6000);
+
+/**
+ * Lê a ESCALA de um dado (0x24).
+ *
+ * Achado da pesquisa de 20/11/2026, e resolve de verdade um problema que vinha sendo contornado por
+ * catálogo: o próprio módulo informa em que unidade e em que faixa aquele valor vem. Até aqui a
+ * escala era adivinhada ou lida de arquivo de rótulo; com isto, quando o módulo responde, quem
+ * manda é ele. Continua valendo a distinção que o projeto já fazia: ESCALA é o tamanho do
+ * mostrador, não a faixa de normalidade do motor — quem diz o que é normal é a especificação.
+ */
+export const lerEscala = did => pedir(hx(SV.lerEscala, 2) + hx(did, 4), SV.lerEscala, 6000)
+  .then(r => ({ ...r, escala: r.dados ? escalaDe(r.dados) : null }));
+
+/**
+ * Lê o byte de escala do 0x24: os 4 bits de cima dizem o TIPO e os 4 de baixo o TAMANHO em bytes.
+ * Os tipos são os da ISO 14229-1. O que a oficina ganha com isto é não precisar adivinhar como
+ * desmontar o valor: o módulo diz se é número sem sinal, com sinal, bit, BCD ou texto.
+ */
+export const TIPOS_ESCALA = {
+  0x0: "número sem sinal", 0x1: "número com sinal", 0x2: "bit", 0x3: "BCD compactado",
+  0x4: "BCD por byte", 0x5: "texto", 0x6: "vírgula flutuante", 0x7: "lista",
+  0x8: "campo de bits", 0x9: "estendido", 0xa: "fórmula", 0xb: "unidade", 0xc: "data",
+};
+export function escalaDe(dados) {
+  // dados: [DID alto, DID baixo, byte de escala, ...]
+  const d = (dados || []).slice(2);
+  return d.map(b => ({ tipo: (b >> 4) & 0x0f, nomeTipo: TIPOS_ESCALA[(b >> 4) & 0x0f] || "desconhecido", tamanho: b & 0x0f }));
+}
+
+/** Falhas do módulo, por situação (0x19 subfunção 02). A máscara 0xFF pede todas. */
+export async function lerFalhas(mascara = 0xff) {
+  const r = await pedir(hx(SV.falhas, 2) + "02" + hx(mascara, 2), SV.falhas, 8000);
+  if (r.dados == null) return { codigos: [], ...r };
+  return { codigos: falhasDe(r.dados), ...r };
+}
+
+/**
+ * Interpreta o corpo da resposta de falhas do UDS (0x19 02).
+ * Vem a máscara de disponibilidade e, depois, QUATRO bytes por falha: três do código e um da
+ * situação. São quatro, e não dois como no OBD-II, porque o terceiro byte do código é o TIPO DE
+ * FALHA — é ele que o Honda escreve como o "-2B" do B0001-2B, e a tabela da ISO 14229-1 que o
+ * acervo do projeto já tem (113 entradas, achada dentro do CanZE) é o que traduz esse byte.
+ */
+export function falhasDe(dados) {
+  const d = (dados || []).slice(1);
+  const codigos = [];
+  for (let i = 0; i + 3 < d.length; i += 4) {
+    codigos.push({ codigo: dtcDe(d[i], d[i + 1]), tipoFalha: d[i + 2], situacao: d[i + 3] });
+  }
+  return codigos;
+}
+
+/* ------------------------------------------------------------------ descoberta por recusa */
+
+/**
+ * Pergunta se uma rotina existe SEM rodar nada.
+ *
+ * O jeito é pedir o RESULTADO dela (subfunção 03), que não aciona nem aprende: o que interessa é
+ * como o módulo recusa. A norma separa os motivos, e cada um conta uma coisa diferente:
+ *   requestOutOfRange (0x31) → o módulo não conhece esse número (ou ele não vale nesta sessão)
+ *   conditionsNotCorrect (0x22) → EXISTE, e o carro só não está do jeito que ela pede
+ *   securityAccessDenied (0x33) → EXISTE, e é protegida: precisa de chave
+ *   subFunction…InActiveSession (0x7E/0x7F) → EXISTE, e pede outra sessão
+ * Com isso dá para mapear um módulo inteiro sem executar uma única rotina.
+ *
+ * Um cuidado que o AUTOSAR deixa claro e que é fácil errar: ao receber a rotina o módulo confere se
+ * a permissão vale na sessão ABERTA e, se não valer, responde o mesmo 0x31 de "não existe". Então
+ * 0x31 sozinho não prova ausência — prova ausência NAQUELA sessão. Por isso `existe` fica em
+ * "talvez" quando a sessão é a comum, e a varredura roda na sessão estendida.
+ */
+export async function sondar(rid, { sessaoAtual = SESSAO.estendida } = {}) {
+  if (!ridDeServico(rid)) return { rid, existe: false, motivo: "fora-da-faixa", texto: "Fora da faixa de rotina de veículo." };
+  const r = await pedir(hx(SV.rotina, 2) + hx(ROTINA.resultado, 2) + hx(rid, 4), SV.rotina, 5000);
+  return { rid, ...vereditoDaSonda(r, sessaoAtual) };
+}
+
+/**
+ * O veredito da sondagem, separado do pedido para poder ser testado sem carro.
+ * É aqui que mora o raciocínio: cada motivo de recusa conta uma coisa diferente sobre o módulo.
+ */
+export function vereditoDaSonda(r, sessaoAtual = SESSAO.estendida) {
+  if (!r || r.erro) return { existe: null, motivo: "sem-resposta", texto: (r && r.texto) || "Sem resposta." };
+  if (r.nrc == null) return { existe: true, motivo: "respondeu", texto: "Existe e respondeu o resultado.", dados: r.dados };
+  if (r.nrc === 0x31) {
+    // 0x31 na sessão comum NÃO prova ausência: o AUTOSAR manda o módulo responder exatamente isso
+    // quando a permissão não vale na sessão aberta. Prova ausência só na sessão de diagnóstico.
+    const certo = sessaoAtual !== SESSAO.comum;
+    return { existe: certo ? false : null, motivo: "nao-conhece", nrc: r.nrc,
+      texto: certo ? "Este módulo não tem esta rotina."
+                   : "Não respondeu nesta sessão. Abra a sessão de diagnóstico e pergunte de novo." };
+  }
+  if (r.nrc === 0x22) return { existe: true, motivo: "falta-condicao", nrc: r.nrc, texto: r.texto };
+  if (r.nrc === 0x33 || r.nrc === 0x34) return { existe: true, motivo: "protegida", nrc: r.nrc, texto: r.texto };
+  if (r.nrc === 0x7e || r.nrc === 0x7f) return { existe: true, motivo: "outra-sessao", nrc: r.nrc, texto: r.texto };
+  if (r.nrc === 0x12 || r.nrc === 0x13) return { existe: true, motivo: "outra-opcao", nrc: r.nrc, texto: r.texto };
+  return { existe: null, motivo: "recusou", nrc: r.nrc, texto: r.texto };
+}
+
+/** O mesmo, para um dado (0x22): aqui pedir já é ler, então a resposta vale por si. */
+export async function sondarDado(did) {
+  const r = await lerDado(did);
+  if (r.erro) return { did, existe: null, motivo: "sem-resposta", texto: r.texto || "Sem resposta." };
+  if (r.nrc == null) return { did, existe: true, motivo: "respondeu", valor: r.dados ? r.dados.slice(2) : [], texto: "" };
+  if (r.nrc === 0x31) return { did, existe: false, motivo: "nao-conhece", nrc: r.nrc, texto: r.texto };
+  if (r.nrc === 0x33 || r.nrc === 0x34) return { did, existe: true, motivo: "protegida", nrc: r.nrc, texto: r.texto };
+  return { did, existe: null, motivo: "recusou", nrc: r.nrc, texto: r.texto };
+}
+
+/* ------------------------------------------------------------------ o que age no carro */
+
+/*
+ * Tudo daqui para baixo passa pelos métodos PRÓPRIOS do plugin nativo (atuar, rotina, gravar,
+ * destravar, reiniciarModulo), nunca pelo comando(). Quem confere o formato e a faixa é o nativo;
+ * aqui fica a sequência, que é o que não pode sair errado.
+ */
+
+/** Diz se o APK instalado tem a camada que age no carro (APK antigo não tem). */
+export const podeAgir = () => { const p = plugin(); return !!(p && typeof p.atuar === "function" && typeof p.rotina === "function"); };
+export const podeGravar = () => { const p = plugin(); return !!(p && typeof p.gravar === "function"); };
+
+export const respostaDe = (r, servico) => {
+  const j = juntarLinhas((r && r.resposta) || "");
+  if (j.erro) return { dados: null, nrc: null, texto: j.erro, hex: "", erro: j.erro };
+  const n = negativaDe(j.hex, servico);
+  if (n != null) return { dados: null, nrc: n, nomeNrc: nomeNrc(n), texto: textoNrc(n), hex: j.hex, erro: "" };
+  const esperado = hx(servico + 0x40, 2);
+  if (!j.hex.startsWith(esperado)) return { dados: null, nrc: null, texto: "O módulo respondeu outra coisa.", hex: j.hex, erro: "resposta-inesperada" };
+  return { dados: bytesDe(j.hex.slice(2)), nrc: null, texto: "", hex: j.hex, erro: "" };
+};
+
+/** Aciona uma saída do módulo (0x2F, opção 03 = ajuste de curta duração). */
+export const acionar = (did, valor = "", esperaMs = 8000) =>
+  P().atuar({ did: hx(did, 4), opcao: hx(ATUAR.ajustar, 2), valor: String(valor || "").toUpperCase(), esperaMs })
+    .then(r => respostaDe(r, SV.atuar));
+
+/** Devolve o controle da saída ao módulo (0x2F, opção 00). É o passo que NUNCA pode faltar. */
+export const devolver = (did, esperaMs = 6000) =>
+  P().atuar({ did: hx(did, 4), opcao: hx(ATUAR.devolver, 2), valor: "", esperaMs })
+    .then(r => respostaDe(r, SV.atuar));
+
+/** Rotina de serviço (0x31). */
+export const rodarRotina = (rid, sub = ROTINA.comecar, dados = "", esperaMs = 15000) =>
+  P().rotina({ sub: hx(sub, 2), rotina: hx(rid, 4), dados: String(dados || "").toUpperCase(), esperaMs })
+    .then(r => respostaDe(r, SV.rotina));
+
+/** Grava um dado no módulo (0x2E). */
+export const gravarDado = (did, valorHex, esperaMs = 10000) =>
+  P().gravar({ did: hx(did, 4), valor: String(valorHex || "").toUpperCase(), esperaMs })
+    .then(r => respostaDe(r, SV.gravar));
+
+/** Pede a semente (subfunção ímpar) ou manda a chave (par) — 0x27. */
+export const pedirSemente = (sub = 0x01, esperaMs = 8000) =>
+  P().destravar({ sub: hx(sub, 2), chave: "", esperaMs }).then(r => respostaDe(r, SV.destravar));
+export const mandarChave = (sub, chaveHex, esperaMs = 8000) =>
+  P().destravar({ sub: hx(sub, 2), chave: String(chaveHex || "").toUpperCase(), esperaMs }).then(r => respostaDe(r, SV.destravar));
+
+/** Reinicia o módulo (0x11): vários só passam a valer o dado gravado depois disto. */
+export const reiniciarModulo = (tipo = "01", esperaMs = 10000) =>
+  P().reiniciarModulo({ tipo, esperaMs }).then(r => respostaDe(r, SV.reiniciar));
+
+/** Apaga as falhas de UM módulo (0x14 FF FF FF), pelo método próprio do nativo. */
+export const apagarDoModulo = (esperaMs = 10000) =>
+  P().apagar({ modo: "uds", esperaMs }).then(r => respostaDe(r, SV.apagar));
+
+/* ------------------------------------------------------------------ o teste de atuador */
+
+/**
+ * Teste de atuador do começo ao fim, com a volta garantida.
+ *
+ * A ordem é a que os dois projetos abertos que fazem isto de verdade usam, e cada passo existe por
+ * um motivo que já custou caro a alguém:
+ *
+ *  1. PARAR a leitura de fundo. O ELM327 atende um pedido por vez; se a roda de dados ao vivo
+ *     continuar perguntando, o comando de acionamento entra no meio e a resposta volta trocada.
+ *     (É assim que o projeto do MG elétrico faz, e por isso o `pausar` é obrigatório aqui.)
+ *  2. Abrir a sessão de diagnóstico: fora dela a maioria dos módulos recusa o 0x2F.
+ *  3. Acionar, e repetir o acionamento mais ou menos uma vez por segundo. Isso não é capricho: o
+ *     "ajuste de curta duração" é curto DE PROPÓSITO — o módulo devolve a saída sozinho se o
+ *     aparelho calar. É a trava de segurança da própria norma, e o jeito de manter o atuador
+ *     acionado é continuar pedindo.
+ *  4. DEVOLVER o controle ao módulo, sempre: no fim, no erro, no cancelamento e se a conexão cair.
+ *     Tenta duas vezes. Atuador que fica preso no comando do aparelho é atuador que queima.
+ *  5. Voltar para a sessão comum.
+ */
+export async function testarAtuador(did, {
+  valor = "", segundos = 5, intervaloMs = 1000, pausar = null, retomar = null,
+  aoAndar = null, continuar = () => true,
+} = {}) {
+  const passos = [];
+  const anota = (o, t) => { passos.push({ o, t }); if (aoAndar) { try { aoAndar({ o, t, passos: passos.slice() }); } catch (e) { /* tela fechou */ } } };
+  let pausou = false;
+  try {
+    if (pausar) { await pausar(); pausou = true; anota("pausa", "Leitura ao vivo parada para o comando não se atropelar."); }
+    const s = await sessao(SESSAO.estendida);
+    if (s.nrc != null) return { ok: false, passos, texto: s.texto, nrc: s.nrc };
+    anota("sessao", "Sessão de diagnóstico aberta.");
+    const primeira = await acionar(did, valor);
+    if (primeira.nrc != null || primeira.erro) {
+      anota("recusou", primeira.texto || "O módulo não aceitou o comando.");
+      return { ok: false, passos, texto: primeira.texto, nrc: primeira.nrc };
+    }
+    anota("acionou", "Acionado. Confira no carro.");
+    const fim = Date.now() + Math.max(1, segundos) * 1000;
+    while (Date.now() < fim && continuar()) {
+      await new Promise(f => setTimeout(f, intervaloMs));
+      if (!continuar()) break;
+      const r = await acionar(did, valor, 4000).catch(() => ({ erro: "conexao-caiu" }));
+      if (r.erro || r.nrc != null) { anota("parou", r.texto || "O módulo interrompeu o teste."); break; }
+    }
+    return { ok: true, passos, texto: "Teste terminado." };
+  } catch (e) {
+    anota("erro", "Deu problema no meio do teste. O controle está sendo devolvido ao módulo.");
+    return { ok: false, passos, texto: "Deu problema no meio do teste.", erro: (e && e.message) || "falhou" };
+  } finally {
+    // devolver o controle é o passo que não pode falhar: duas tentativas, aconteça o que acontecer
+    let devolveu = false;
+    for (let i = 0; i < 2 && !devolveu; i++) {
+      try { const d = await devolver(did); devolveu = !d.erro && d.nrc == null; } catch (e) { devolveu = false; }
+      if (!devolveu) await new Promise(f => setTimeout(f, 400));
+    }
+    anota(devolveu ? "devolveu" : "nao-devolveu", devolveu
+      ? "Controle devolvido ao módulo."
+      : "NÃO deu para devolver o controle. Desligue a chave para o módulo reassumir a saída.");
+    try { await sessao(SESSAO.comum); } catch (e) { /* já caiu: a chave desligada resolve */ }
+    if (pausou && retomar) { try { await retomar(); } catch (e) { /* tela fechou */ } }
+  }
+}
+
+/**
+ * Roda uma rotina de aprendizado ou calibração e acompanha até terminar.
+ *
+ * Diferente do atuador, aqui o módulo trabalha sozinho depois do "começar": o aparelho só pergunta
+ * o resultado (subfunção 03) de tempos em tempos. O 0x78 "estou trabalhando" é tratado como
+ * andamento, não como erro — rotina de aprendizado manda isso por vários segundos.
+ */
+export async function rodarAprendizado(rid, {
+  dados = "", segundosMax = 120, intervaloMs = 1500, pausar = null, retomar = null,
+  aoAndar = null, continuar = () => true,
+} = {}) {
+  const passos = [];
+  const anota = (o, t) => { passos.push({ o, t }); if (aoAndar) { try { aoAndar({ o, t, passos: passos.slice() }); } catch (e) { /* tela fechou */ } } };
+  let pausou = false;
+  try {
+    if (pausar) { await pausar(); pausou = true; anota("pausa", "Leitura ao vivo parada."); }
+    const s = await sessao(SESSAO.estendida);
+    if (s.nrc != null) return { ok: false, passos, texto: s.texto, nrc: s.nrc };
+    anota("sessao", "Sessão de diagnóstico aberta.");
+    const c = await rodarRotina(rid, ROTINA.comecar, dados);
+    if (c.nrc != null || c.erro) {
+      anota("recusou", c.texto || "O módulo não aceitou começar.");
+      return { ok: false, passos, texto: c.texto, nrc: c.nrc };
+    }
+    anota("comecou", "Rotina começou. Não desligue a chave.");
+    const fim = Date.now() + Math.max(1, segundosMax) * 1000;
+    while (Date.now() < fim && continuar()) {
+      await new Promise(f => setTimeout(f, intervaloMs));
+      if (!continuar()) break;
+      const r = await rodarRotina(rid, ROTINA.resultado, "", 8000).catch(() => ({ erro: "conexao-caiu" }));
+      if (r.erro) { anota("sem-resposta", "O módulo parou de responder."); return { ok: false, passos, texto: "O módulo parou de responder." }; }
+      if (r.nrc === 0x78 || r.nrc === 0x21) { anota("andando", "Trabalhando…"); continue; }
+      if (r.nrc != null) { anota("recusou", r.texto); return { ok: false, passos, texto: r.texto, nrc: r.nrc }; }
+      anota("pronto", "Rotina concluída.");
+      return { ok: true, passos, texto: "Rotina concluída.", dados: r.dados };
+    }
+    // acabou o tempo com o módulo ainda trabalhando: parar é mais seguro que deixar correndo solto
+    try { await rodarRotina(rid, ROTINA.parar, "", 6000); } catch (e) { /* segue */ }
+    anota("tempo", "Passou do tempo e a rotina foi interrompida.");
+    return { ok: false, passos, texto: "Passou do tempo e a rotina foi interrompida." };
+  } catch (e) {
+    return { ok: false, passos, texto: "Deu problema no meio da rotina.", erro: (e && e.message) || "falhou" };
+  } finally {
+    try { await sessao(SESSAO.comum); } catch (e) { /* segue */ }
+    if (pausou && retomar) { try { await retomar(); } catch (e) { /* tela fechou */ } }
+  }
+}

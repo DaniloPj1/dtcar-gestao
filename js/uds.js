@@ -19,6 +19,7 @@
  * que fica em js/udsdados.js. O resto é descoberta, e ela é feita perguntando — ver `sondar()`.
  */
 import { juntarLinhas, bytesDe, dtcDe, comando, plugin } from "./obd.js";
+import acervo from "./udsdados.js";
 
 /* ------------------------------------------------------------------ respostas negativas */
 
@@ -239,8 +240,9 @@ export async function lerFalhas(mascara = 0xff) {
  * Interpreta o corpo da resposta de falhas do UDS (0x19 02).
  * Vem a máscara de disponibilidade e, depois, QUATRO bytes por falha: três do código e um da
  * situação. São quatro, e não dois como no OBD-II, porque o terceiro byte do código é o TIPO DE
- * FALHA — é ele que o Honda escreve como o "-2B" do B0001-2B, e a tabela da ISO 14229-1 que o
- * acervo do projeto já tem (113 entradas, achada dentro do CanZE) é o que traduz esse byte.
+ * FALHA — o número que aparece depois do traço quando a falha é escrita por extenso (no catálogo do
+ * Honda, por exemplo, o 49 de um U3000-49). A tabela da ISO 14229-1 que o acervo já tem, achada
+ * dentro do CanZE, é o que traduz esse byte.
  */
 export function falhasDe(dados) {
   const d = (dados || []).slice(1);
@@ -474,3 +476,81 @@ export async function rodarAprendizado(rid, {
     if (pausou && retomar) { try { await retomar(); } catch (e) { /* tela fechou */ } }
   }
 }
+
+/* ------------------------------------------------------------------ o acervo do projeto */
+
+/**
+ * O byte de tipo de falha, em palavra.
+ *
+ * É a peça que completa o código. Um P0171 sozinho diz "mistura pobre no banco 1"; um P0171 com o
+ * tipo 0x13 diz "mistura pobre no banco 1, circuito aberto". A primeira frase manda procurar; a
+ * segunda manda onde procurar. E isto vale para QUALQUER carro que fale UDS, sem catálogo de marca.
+ *
+ * A tabela cobre 111 dos 256 valores possíveis do byte: é o que a fonte aberta trouxe, não a norma
+ * inteira. Valor que não está nela devolve texto vazio DE PROPÓSITO, e a tela mostra o número cru —
+ * "P0171-2B" sem causa é informação honesta; "P0171-2B, circuito aberto" chutado é laudo errado.
+ */
+export const textoTipoFalha = n => (acervo.tipoFalha || {})[String(n)] || "";
+
+/** O código do jeito que a oficina escreve, com o sufixo do tipo: P0171-13. */
+export function codigoCom(codigo, tipoFalha) {
+  if (tipoFalha == null) return codigo;
+  return codigo + "-" + hx(tipoFalha, 2);
+}
+
+/** Os bits de situação que estão ligados, em palavra. */
+export function situacaoDe(byte) {
+  const bits = acervo.situacao || [];
+  const ligados = [];
+  for (let i = 0; i < bits.length; i++) if ((byte >> i) & 1) ligados.push({ nome: bits[i][0], t: bits[i][1] });
+  return ligados;
+}
+/** Resumo curto da situação, para caber na linha da tela. */
+export function resumoSituacao(byte) {
+  const l = situacaoDe(byte);
+  if (!l.length) return "sem situação informada";
+  const ordem = ["confirmada", "pendente", "falhou agora", "pede luz no painel"];
+  const fortes = l.filter(x => ordem.includes(x.t)).sort((a, b) => ordem.indexOf(a.t) - ordem.indexOf(b.t));
+  return (fortes.length ? fortes : l).map(x => x.t).join(" · ");
+}
+
+/** Uma falha do UDS, pronta para a tela. */
+export function falhaPronta(f) {
+  return {
+    ...f,
+    rotulo: codigoCom(f.codigo, f.tipoFalha),
+    causa: textoTipoFalha(f.tipoFalha),
+    situacaoTexto: resumoSituacao(f.situacao),
+    pedeLuz: situacaoDe(f.situacao).some(x => x.nome === "warningIndicatorRequested"),
+  };
+}
+
+/* ------------------------------------------------------------------ onde os módulos ficam */
+
+/**
+ * Os endereços de 11 bits que a norma reserva para diagnóstico: o pedido vai em 7E0 a 7E7 e a
+ * resposta volta no mesmo número mais 8 (7E8 a 7EF). É por aqui que a varredura de um carro
+ * desconhecido começa, porque não depende de saber a marca.
+ *
+ * Os três primeiros têm lugar conhecido e aparecem no mapa da VAG tirado do ODIS: 7E0 é o motor,
+ * 7E1 o câmbio e 7E2 um segundo módulo de motor. Do 7E3 em diante o nome varia, e o app mostra o
+ * endereço em vez de chutar quem é.
+ */
+export const ENDERECOS_PADRAO = [
+  { pedido: "7E0", resposta: "7E8", nome: "Motor" },
+  { pedido: "7E1", resposta: "7E9", nome: "Câmbio" },
+  { pedido: "7E2", resposta: "7EA", nome: "Motor (segundo módulo)" },
+  { pedido: "7E3", resposta: "7EB", nome: "" },
+  { pedido: "7E4", resposta: "7EC", nome: "" },
+  { pedido: "7E5", resposta: "7ED", nome: "" },
+  { pedido: "7E6", resposta: "7EE", nome: "" },
+  { pedido: "7E7", resposta: "7EF", nome: "" },
+];
+
+/** As famílias de módulo que o acervo tem, para a tela listar. */
+export const familias = () => Object.keys(acervo.modulos || {}).sort();
+/** Os módulos de uma família: { pedido, resposta, nome }. */
+export const modulosDa = fam => ((acervo.modulos || {})[fam] || []).map(m => ({ pedido: m[0], resposta: m[1], nome: m[2] }));
+/** Quantos módulos o acervo conhece, no total. */
+export const quantosModulos = () => Object.values(acervo.modulos || {}).reduce((s, l) => s + l.length, 0);
+export const versaoAcervo = () => acervo.versao || "";

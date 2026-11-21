@@ -4,6 +4,8 @@
 import {
   NRC, textoNrc, nomeNrc, negativaDe, respostaDe, falhasDe, vereditoDaSonda, escalaDe, TIPOS_ESCALA,
   FAIXAS_RID, faixaRid, ridDeServico, RID_DE, RID_ATE, SESSAO, SV, ATUAR, ROTINA, hex2, hex4,
+  textoTipoFalha, codigoCom, situacaoDe, resumoSituacao, falhaPronta,
+  ENDERECOS_PADRAO, familias, modulosDa, quantosModulos, versaoAcervo,
 } from "../js/uds.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
@@ -107,6 +109,51 @@ chk("serviços", SV.sessao === 0x10 && SV.falhas === 0x19 && SV.lerDado === 0x22
 chk("devolver o controle é a opção 00 e acionar é a 03", ATUAR.devolver === 0x00 && ATUAR.ajustar === 0x03);
 chk("rotina: 01 começa, 02 para, 03 resultado", ROTINA.comecar === 1 && ROTINA.parar === 2 && ROTINA.resultado === 3);
 chk("a sessão de programação é a 02 — e o nativo não deixa passar", SESSAO.programacao === 0x02);
+
+/* ---------------- o byte de tipo de falha: o código ganha a causa elétrica ---------------- */
+chk("0x13 é circuito aberto", textoTipoFalha(0x13) === "circuito aberto");
+chk("0x11 é curto com a massa", textoTipoFalha(0x11).includes("massa"));
+chk("0x12 é curto com o positivo", textoTipoFalha(0x12).includes("positivo"));
+chk("0x71 é atuador travado", textoTipoFalha(0x71) === "atuador travado");
+chk("0x49 decodifica o U3000-49 que está no catálogo", textoTipoFalha(0x49) === "falha eletrônica interna");
+// a tabela cobre 111 dos 256 valores: o que falta devolve VAZIO, para a tela mostrar o número cru.
+chk("valor que não está na tabela devolve vazio, não palpite", textoTipoFalha(0x2b) === "" && textoTipoFalha(0xaa) === "");
+chk("termo que a oficina fala em inglês fica em inglês", textoTipoFalha(0x41).includes("checksum")
+  && textoTipoFalha(0x47).includes("watchdog") && textoTipoFalha(0x88).includes("bus off")
+  && textoTipoFalha(0xf9).includes("limp home"));
+chk("o rótulo sai com o sufixo", codigoCom("U3000", 0x49) === "U3000-49" && codigoCom("P0171", 0x13) === "P0171-13");
+chk("sem tipo de falha, o código fica como está", codigoCom("P0171", null) === "P0171");
+
+/* ---------------- os bits de situação ---------------- */
+chk("oito bits, na ordem da norma", situacaoDe(0xff).length === 8);
+chk("bit 0 é 'falhou agora'", situacaoDe(0x01)[0].t === "falhou agora");
+chk("bit 3 é 'confirmada'", situacaoDe(0x08)[0].nome === "confirmedDTC");
+chk("bit 7 é a luz do painel", situacaoDe(0x80)[0].nome === "warningIndicatorRequested");
+chk("byte zero não inventa situação", situacaoDe(0).length === 0 && resumoSituacao(0).includes("sem situação"));
+chk("o resumo põe o que importa na frente", resumoSituacao(0x0f).startsWith("confirmada"), resumoSituacao(0x0f));
+
+/* ---------------- a falha pronta para a tela ---------------- */
+{
+  const f = falhaPronta({ codigo: "U3000", tipoFalha: 0x49, situacao: 0x88 });
+  chk("rótulo com sufixo", f.rotulo === "U3000-49", f);
+  chk("causa elétrica em palavra", f.causa === "falha eletrônica interna", f);
+  chk("a luz do painel é apontada", f.pedeLuz === true, f);
+  const g = falhaPronta({ codigo: "P0171", tipoFalha: 0x2b, situacao: 0x08 });
+  chk("tipo fora da tabela: rótulo sai, causa fica vazia", g.rotulo === "P0171-2B" && g.causa === "", g);
+  chk("sem pedido de luz não aponta luz", g.pedeLuz === false);
+}
+
+/* ---------------- onde os módulos ficam ---------------- */
+chk("oito endereços padrão de 11 bits", ENDERECOS_PADRAO.length === 8);
+chk("a resposta é o pedido + 8", ENDERECOS_PADRAO.every(e => parseInt(e.resposta, 16) === parseInt(e.pedido, 16) + 8));
+chk("7E0 é o motor e 7E1 o câmbio", ENDERECOS_PADRAO[0].nome === "Motor" && ENDERECOS_PADRAO[1].nome === "Câmbio");
+chk("do 7E3 em diante o nome fica vazio em vez de chutado",
+  ENDERECOS_PADRAO.slice(3).every(e => e.nome === ""));
+chk("o acervo tem famílias e módulos", familias().length >= 20 && quantosModulos() >= 200, { f: familias().length, m: quantosModulos() });
+chk("a VAG está no acervo", familias().includes("VAG") && modulosDa("VAG").length === 90, modulosDa("VAG").length);
+chk("todo módulo tem pedido e resposta", familias().every(f => modulosDa(f).every(m => m.pedido && m.resposta)));
+chk("família que não existe devolve lista vazia", modulosDa("NAO EXISTE").length === 0);
+chk("o acervo tem data", /^\d{4}-\d{2}-\d{2}$/.test(versaoAcervo()));
 
 console.log(falhas.length ? ok.length + " ok, " + falhas.length + " FALHARAM:\n  " + falhas.join("\n  ")
                           : ok.length + " conferências do UDS passaram.");

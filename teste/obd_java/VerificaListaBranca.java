@@ -96,6 +96,14 @@ public class VerificaListaBranca {
     for (String d : new String[] {"F190", "F180", "F1FF", "F18C", "F1", "XYZW", ""}) chk("RECUSA gravar identificação ou torto: " + d, !ObdPlugin.didGravavel(d));
     chk("pode perguntar se aceita gravar: dado de 2 bytes ou mais", ObdPlugin.podeSondarGravacao("62 26 10 41 42", "2610") && ObdPlugin.podeSondarGravacao("622610414243444546", "2610"));
     for (String r : new String[] {"62261041", "7F2231", "", "NO DATA", "62261141 42", "622610"}) chk("NÃO pergunta (dado de 1 byte seria gravação, ou não leu): " + r, !ObdPlugin.podeSondarGravacao(r, "2610"));
+    // resposta longa (código de bico de 7 caracteres = 10 bytes) vem em pedaços numerados: achado do Codex
+    String longa = "00A\r0: 62 12 34 41 42 43\r1: 44 45 46 47 00 00 00\r\r>";
+    chk("resposta em pedaços é juntada sem o tamanho nem os números das linhas", ObdPlugin.juntarResposta(longa).equals("62123441424344454647"));
+    chk("resposta em pedaços sem espaços", ObdPlugin.juntarResposta("00A\r0:621234414243\r1:44454647000000\r>").equals("62123441424344454647"));
+    chk("valor antigo de resposta longa é aceito", ObdPlugin.valorAntigoValido(longa, "1234") && ObdPlugin.podeSondarGravacao(longa, "1234"));
+    chk("resposta longa de OUTRO identificador é recusada", !ObdPlugin.valorAntigoValido(longa, "1235"));
+    chk("resposta curta continua igual", ObdPlugin.juntarResposta("62 26 10 41 42\r\r>").equals("6226104142") && ObdPlugin.juntarResposta("NO DATA\r>").equals("") && ObdPlugin.juntarResposta(null).equals(""));
+    chk("duas respostas curtas: vale a primeira", ObdPlugin.juntarResposta("7F2231\r62261041\r>").equals("7F2231"));
     chk("valor antigo lido", ObdPlugin.valorAntigoValido("62 26 10 41 42\r\r>", "2610"));
     for (String r : new String[] {"7F2231", "", "NO DATA", "STOPPED", "62261141", "622610", "6226"}) chk("RECUSA gravar sem valor antigo: " + r, !ObdPlugin.valorAntigoValido(r, "2610"));
       try {

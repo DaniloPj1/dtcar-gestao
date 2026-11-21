@@ -121,7 +121,8 @@ function criarApiSupabase() {
        * A senha não é guardada em lugar nenhum: vai do campo para o Supabase e some.
        */
       conferirAdmin: async (email, senha) => {
-        const outro = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "dtcar-autoriza" } });
+        const outro = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "dtcar-autoriza" },
+          global: { fetch: fetchComLimite } });   // mesma regra de rede do resto: tempo-limite, nunca fica pendurado (Codex, 21/11/2026)
         try {
           const r = await outro.auth.signInWithPassword({ email: String(email || "").trim(), password: senha });
           if (r.error || !r.data || !r.data.user) return { ok: false, motivo: "Login ou senha não conferem." };
@@ -130,7 +131,7 @@ function criarApiSupabase() {
           if (p.data.papel !== "admin" || p.data.ativo === false) return { ok: false, motivo: "Este login não é de administrador." };
           return { ok: true, id: p.data.id, nome: p.data.nome || "" };
         } catch (e) { return { ok: false, motivo: "Sem internet: a autorização do administrador precisa de conexão." }; }
-        finally { try { await outro.auth.signOut({ scope: "local" }); } catch (e) { /* sessão à parte: some sozinha */ } }
+        finally { outro.auth.signOut({ scope: "local" }).catch(() => {}); }   // não espera: a sessão à parte não é guardada e some sozinha
       },
       cadastrar: async (nome, email, senha) => ok(await sb.auth.signUp({ email, password: senha, options: { data: { nome }, emailRedirectTo: location.origin + location.pathname } })),
       recuperar: async email => ok(await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname })),

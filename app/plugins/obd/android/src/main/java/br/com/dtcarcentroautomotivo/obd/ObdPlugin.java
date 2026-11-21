@@ -748,8 +748,44 @@ public class ObdPlugin extends Plugin {
      */
     static boolean podeSondarGravacao(String respostaDaLeitura, String did) {
         if (!valorAntigoValido(respostaDaLeitura, did)) return false;
-        String r = respostaDaLeitura.toUpperCase().replaceAll("[^0-9A-F]", "");
+        String r = juntarResposta(respostaDaLeitura);
         return r.length() >= 6 + 4;   // 62 + identificador (2 bytes) + pelo menos 2 bytes de dado
+    }
+
+    /**
+     * Junta a resposta do adaptador num hexadecimal só, do jeito que o módulo mandou.
+     *
+     * Resposta curta vem numa linha. Resposta LONGA (mais de 7 bytes — e um código de bico de sete
+     * caracteres dá dez) o ELM327 imprime em pedaços numerados: uma linha com o tamanho ("00A") e
+     * depois "0: ...", "1: ...". Tirar só o que não é hexadecimal deixaria o tamanho e os números das
+     * linhas no meio do dado, e uma leitura válida seria recusada justamente na programação de bico
+     * (achado da revisão do Codex, 21/11/2026). Aqui os pedaços são juntados na ordem, sem os
+     * números, e cortados no tamanho que o próprio adaptador informou.
+     * Se vier mais de uma resposta de linha única (dois módulos), vale só a primeira: o chamador
+     * confere o começo dela.
+     */
+    static String juntarResposta(String cru) {
+        if (cru == null) return "";
+        String[] linhas = cru.toUpperCase().split("[\\r\\n]+");
+        StringBuilder pedacos = new StringBuilder();
+        int tamanho = -1;
+        boolean numerada = false;
+        String primeira = "";
+        for (String bruta : linhas) {
+            String l = bruta.replaceAll("[\\s>]", "");
+            if (l.isEmpty()) continue;
+            if (l.matches("[0-9A-F]:[0-9A-F]*")) {
+                numerada = true;
+                pedacos.append(l.substring(2));
+            } else if (l.matches("[0-9A-F]+")) {
+                if (l.length() == 3 && tamanho < 0 && pedacos.length() == 0) tamanho = Integer.parseInt(l, 16);
+                else if (primeira.isEmpty()) primeira = l;
+            }
+        }
+        if (!numerada) return primeira;
+        String tudo = pedacos.toString();
+        if (tamanho > 0 && tudo.length() >= tamanho * 2) tudo = tudo.substring(0, tamanho * 2);
+        return tudo;
     }
 
     /**
@@ -758,7 +794,7 @@ public class ObdPlugin extends Plugin {
      * silêncio ou resposta de outro identificador não servem — e sem valor antigo não se grava.
      */
     static boolean valorAntigoValido(String resposta, String did) {
-        String r = resposta == null ? "" : resposta.toUpperCase().replaceAll("[^0-9A-F]", "");
+        String r = juntarResposta(resposta);
         String d = normalizar(did);
         return hexExato(d, 4) && r.startsWith("62" + d) && r.length() >= 8;
     }

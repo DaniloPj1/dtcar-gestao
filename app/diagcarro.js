@@ -174,30 +174,32 @@ export function Mapeando({ st, mapa, parado, caderno }) {
     if (!pode) return undefined;
     let vivo = true;
     (async () => {
-      // Só com o carro PARADO, e isso é perguntado ao carro (velocidade, PID 0D), não presumido.
-      const v = await sessao.tomar(sessao.DE_FUNDO, async () => { await uds.fechar(); return obd.pedir("010D", 3000); });
-      const hex = v.ok && v.r && !v.r.erro ? String(v.r.hex || "") : "";
-      const kmh = /^410D[0-9A-F]{2}/.test(hex) ? parseInt(hex.slice(4, 6), 16) : null;
-      if (kmh === null) { if (vivo) setMotivo("O carro não informou a velocidade: sem a certeza de que está parado, o app não mapeia."); return; }
-      if (kmh > 0) { if (vivo) setMotivo("Carro andando: o mapeamento só roda com o carro parado."); return; }
-      let n = 0;
+      // Só com o carro PARADO, e isso é perguntado ao carro (velocidade, PID 0D) ANTES DE CADA PERGUNTA,
+      // não só no começo: se o carro sair do lugar, a pergunta seguinte já não é feita. (Antes a
+      // conferência era a cada 25 passos, o que deixava mais de 16 s de perguntas com o carro
+      // andando: achado da revisão do Codex, 21/11/2026.)
+      const velocidade = async () => {
+        const v = await sessao.tomar(sessao.DE_FUNDO, async () => { await uds.fechar(); return obd.pedir("010D", 3000); });
+        const hex = v.ok && v.r && !v.r.erro ? String(v.r.hex || "") : "";
+        return /^410D[0-9A-F]{2}/.test(hex) ? parseInt(hex.slice(4, 6), 16) : null;
+      };
+      let primeira = true;
       while (vivo) {
         await new Promise(f => setTimeout(f, 700));                     // a folga: a tela e a pessoa vêm primeiro
         if (!vivo) break;
         if (sessao.estado().dono || sessao.estado().modulo || sessao.estado().acaoCorrendo) continue;
         const cad = caderno(); const p = cad && modeloDoPasso(cad);
         if (!p) { if (vivo) setAnd(a => ({ ...(a || {}), acabou: true })); break; }
+        const kmh = await velocidade();
+        if (!vivo) break;
+        if (kmh === null) { setMotivo(primeira ? "O carro não informou a velocidade: sem a certeza de que está parado, o app não mapeia." : "O carro parou de informar a velocidade: mapeamento interrompido."); break; }
+        if (kmh > 0) { setMotivo(primeira ? "Carro andando: o mapeamento só roda com o carro parado." : "O carro saiu do lugar: mapeamento interrompido."); break; }
+        primeira = false;
         await sessao.tomar(sessao.DE_FUNDO, async () => {
           await uds.abrir({ pedido: p.pedido, resposta: p.resposta, esperaMs: 300 });
           if (p.tipo === "endereco") await uds.sessao(uds.SESSAO.comum); else await uds.lerDado(parseInt(p.did, 16));
         });
         if (vivo && cad) setAnd(andamentoDo(cad));
-        // de tempos em tempos confere se o carro continua parado
-        if (++n % 25 === 0) {
-          const vv = await sessao.tomar(sessao.DE_FUNDO, async () => { await uds.fechar(); return obd.pedir("010D", 3000); });
-          const h2 = vv.ok && vv.r && !vv.r.erro ? String(vv.r.hex || "") : "";
-          if (!/^410D00/.test(h2)) { if (vivo) setMotivo("O carro saiu do lugar (ou parou de informar a velocidade): mapeamento interrompido."); break; }
-        }
       }
       await sessao.tomar(sessao.DE_FUNDO, () => uds.fechar());
     })();

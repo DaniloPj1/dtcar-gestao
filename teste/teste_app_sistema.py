@@ -367,7 +367,7 @@ try:
             t(pg.evaluate('document.documentElement.scrollWidth') <= 390, 'tela %s sem rolagem lateral' % rota)
             t(pg.evaluate("getComputedStyle(document.querySelector('.rodape')).position") == 'fixed' and pg.evaluate("getComputedStyle(document.querySelector('.rodape')).borderTopColor") == 'rgb(47, 111, 181)', 'tela %s: rodapé fixo com a linha azul' % rota)
             t(pg.locator('#os').count() == 0 and '+ O.S.' not in pg.locator('.abas').inner_text(), 'tela %s sem a aba + O.S.' % rota)
-        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.5.1' in textos(pg), 'ajuda mostra o acesso e a versão')
+        pg.click('.nav >> text=Ajuda'); pg.wait_for_timeout(400); t('Seu acesso' in textos(pg) and 'teste@dtcar.com' in textos(pg) and '1.6.0' in textos(pg), 'ajuda mostra o acesso e a versão')
         t(pg.locator('#bloco-digital').count() == 0, 'sem plugin o interruptor da digital não aparece')
         # recarregar mantém a sessão (sem digital)
         pg.reload(); pg.wait_for_selector('.nav', timeout=10000); pg.wait_for_timeout(300); t('AJUDA' in textos(pg), 'recarregar mantém a sessão e a rota')
@@ -1248,7 +1248,7 @@ try:
         # 10) configuração do Capacitor: abre o app direto do site
         cfg = json.load(open(os.path.join(raiz, 'app', 'capacitor.config.json')))
         t(cfg['server']['url'] == 'https://gestao.dtcarcentroautomotivo.com.br/app/' and cfg['server']['errorPath'] == 'index.html', 'Capacitor abre o app do site e usa a tela offline em caso de erro')
-        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.5.1', 'plugin App (botão Voltar) no APK e versão 1.5.1')
+        pk = json.load(open(os.path.join(raiz, 'app', 'package.json'))); t('@capacitor/app' in pk['dependencies'] and pk['version'] == '1.6.0', 'plugin App (botão Voltar) no APK e versão 1.6.0')
         t(pk['dependencies'].get('dtcar-obd') == 'file:plugins/obd', 'plugin local do OBD declarado como dependência do APK')
         pl = json.load(open(os.path.join(raiz, 'app', 'plugins', 'obd', 'package.json'))); t(pl['capacitor']['android']['src'] == 'android', 'o plugin do OBD se apresenta ao Capacitor como módulo Android')
         mf = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'AndroidManifest.xml')).read()

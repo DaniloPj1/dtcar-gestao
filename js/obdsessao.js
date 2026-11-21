@@ -100,7 +100,7 @@ export const temAcaoCorrendo = () => emAcao > 0;
  * enquanto corre e devolve tudo no fim, aconteça o que acontecer.
  */
 export async function comAcao(quem, tarefa) {
-  if (st.dono && st.dono !== quem) {
+  if (st.dono) {
     return { ok: false, ocupado: st.dono, texto: "O adaptador está ocupado com " + st.dono + ". Espere terminar." };
   }
   emAcao++;
@@ -178,7 +178,10 @@ export async function tomar(quem, tarefa, { pausaFundo = false } = {}) {
   // Se quem está com a vez é o trabalho de fundo, o pedido da pessoa espera a pergunta em curso
   // terminar (uma só, de até uns 2 s) em vez de ser recusado: o que a pessoa toca tem prioridade.
   for (let i = 0; st.dono === DE_FUNDO && quem !== DE_FUNDO && i < 40; i++) await new Promise(f => setTimeout(f, 100));
-  if (st.dono && st.dono !== quem) {
+  // A vez é de UMA tarefa, não de um nome: duas tarefas com o mesmo nome (dois toques seguidos em
+  // dois módulos) não podem correr juntas — os comandos se intercalariam e a primeira a terminar
+  // soltaria a vez com a outra ainda falando.
+  if (st.dono) {
     return { ok: false, ocupado: st.dono, texto: "O adaptador está ocupado com " + st.dono + ". Espere terminar." };
   }
   mexer({ dono: quem });

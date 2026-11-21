@@ -51,7 +51,7 @@ sessao.reiniciarParaTeste();
   const a = sessao.tomar("a leitura", () => presa);
   await espera(10);
   const b = await sessao.tomar("a leitura", async () => "segunda vez");
-  chk("quem já tem a vez não é recusado", b.ok === true && b.r === "segunda vez", b);
+  chk("duas tarefas com o MESMO nome não correm juntas: a segunda é recusada (revisão do Codex)", b.ok === false && b.ocupado === "a leitura", b);
   soltar("fim"); await a;
 }
 

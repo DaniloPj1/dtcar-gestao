@@ -407,7 +407,7 @@ export async function gravarDado(did, valorHex, esperaMs = 8000) {
   // (tempo estourado, STOPPED). O módulo pode ter gravado. `incerto` mantém o valor antigo na mão de
   // quem chamou, para dar para desfazer.
   const antes = lido.dados ? lido.dados.slice(2) : [];
-  if (g.nrc == null && g.erro) return { gravou: false, incerto: true, antes, nrc: null, texto: "O pedido de gravação foi enviado, mas a resposta do módulo se perdeu (" + g.erro + "). Pode ter gravado ou não." };
+  if (r.caiu || (g.nrc == null && (g.erro || !g.dados))) return { gravou: false, incerto: true, antes, nrc: null, texto: "O pedido de gravação foi enviado, mas a resposta do módulo se perdeu (" + (r.caiu ? "a conexão caiu" : g.erro || "sem resposta") + "). Pode ter gravado ou não." };
   return { gravou: g.nrc == null, antes, nrc: g.nrc, texto: g.texto || "" };
 }
 

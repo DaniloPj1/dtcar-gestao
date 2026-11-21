@@ -654,9 +654,25 @@ public class ObdPlugin extends Plugin {
                         call.resolve(r);
                         return;
                     }
-                    out.write(("2E" + did + valor + "\r").getBytes(StandardCharsets.US_ASCII));
-                    out.flush();
-                    String resposta = ler(in, espera);
+                    // Daqui para a frente o pedido de escrita PODE ter chegado ao módulo. Se a conexão
+                    // cair (no envio ou na leitura da resposta), o valor antigo NÃO se perde: devolve
+                    // "gravou" com a resposta vazia, que o app trata como resultado incerto e mantém
+                    // no registro e no DESFAZER. Rejeitar aqui apagaria a única cópia do valor antigo.
+                    String resposta;
+                    try {
+                        out.write(("2E" + did + valor + "\r").getBytes(StandardCharsets.US_ASCII));
+                        out.flush();
+                        resposta = ler(in, espera);
+                    } catch (IOException depoisDeEnviar) {
+                        fechar();
+                        JSObject r = new JSObject();
+                        r.put("gravou", true);
+                        r.put("antes", antes);
+                        r.put("resposta", "");
+                        r.put("caiu", true);
+                        call.resolve(r);
+                        return;
+                    }
                     if (resposta.startsWith("STOPPED") || resposta.isEmpty()) ultimoEstourou = true;
                     JSObject r = new JSObject();
                     r.put("gravou", true);

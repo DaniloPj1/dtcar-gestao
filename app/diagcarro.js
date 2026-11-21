@@ -62,6 +62,8 @@ export function CarroInteiro({ st, mapa, aoAbrir, aoVarrer }) {
   const disponiveis = (lista || []).filter(m => m.respondeu);
   const calados = (lista || []).filter(m => !m.respondeu && m.doMapa);
   const explicadas = usarExplicacoes(disponiveis.flatMap(m => m.falhas), st.carro);
+  // Saiu da tela no meio da varredura: para depois da consulta em curso e solta o adaptador.
+  useEffect(() => () => { parar.current = true; }, []);
   const varrer = async () => {
     setErro(""); setLista(null); parar.current = false;
     const alvos = alvosDe(mapa);

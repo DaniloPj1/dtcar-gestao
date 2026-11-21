@@ -28,6 +28,8 @@ chk("enchimento não entra nos dados", L.analisa("7E8 05 62 F1 90 41 42 AA AA","
 chk("multiquadro truncado é marcado incompleto", L.analisa("7E8 10 0A 62 F1 90 41 42 43","7E8","22").incompleto===true);
 chk("quadro fora de sequência quebra a mensagem", L.mensagens("7E8 10 0A 62 F1 90 41 42 43 | 7E8 22 44 45 46 47","7E8")[0].completo===false);
 chk("aguarde (78) seguido da positiva = positiva", (a=>a.tipo==="pos"&&a.dados==="F1904142"&&a.pendente)(L.analisa("7E8 03 7F 22 78 | 7E8 05 62 F1 90 41 42","7E8","22")));
+chk("positiva de OUTRO identificador = fora de ordem", L.analisa("7E8 05 62 F1 8C 41 42","7E8","22","F190").tipo==="fora-de-ordem");
+chk("positiva com o eco certo = positiva", L.analisa("7E8 05 62 F1 90 41 42","7E8","22","F190").tipo==="pos");
 chk("só aguarde = pendente", L.analisa("7E8 03 7F 22 78","7E8","22").tipo==="pendente");
 chk("recusa guarda o código cru, sem 'existe'", (a=>a.tipo==="neg"&&a.nrc==="31"&&!("existe" in a))(L.analisa("7E8 03 7F 22 31","7E8","22")));
 chk("31 explicado com a ressalva do GMLAN", /GMLAN/.test(L.NRC["31"]));
@@ -53,7 +55,7 @@ function elm({ ignoraSH=false, ignoraCRA=false }={}){
   };
   return { enviados, Plug:{
     permissao:async()=>({concedida:true}), listar:async()=>({aparelhos:[]}),
-    comando:async({cmd})=>({ resposta: responde(cmd) }) } };
+    comando:async({cmd})=>({ resposta: responde(cmd), completo:true }) } };
   function responde(cmd){ enviados.push(cmd);
       if(cmd==="ATAR"||cmd==="ATCRA"){ st.cra=null; return "OK"; }
       if(cmd.startsWith("ATSH")){ st.sh=cmd.slice(4); return "OK"; }

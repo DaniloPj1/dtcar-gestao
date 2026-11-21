@@ -106,10 +106,13 @@ const semApp = !Plug;
 let bruto=[], t0=0, gravarBruto=true, ultimoMs=0, ultimoErro=null;
 async function cmd(c, esperaMs=3000){
   const ini=Date.now(); let resp="", erro=null;
-  try{ const r=await Plug.comando({cmd:c,esperaMs}); resp=(r&&r.resposta)||""; }
+  try{ const r=await Plug.comando({cmd:c,esperaMs}); resp=(r&&r.resposta)||"";
+       // sem o sinal de fim ('>') o adaptador ainda está ocupado: a resposta não é confiável para ESTE pedido
+       if(r && r.completo===false) erro="sem-pronto"; }
   catch(e){ erro=(e&&(e.message||e.code||e.errorMessage))||String(e); }
   const r=limpa(resp); ultimoMs=Date.now()-ini; ultimoErro=erro;
   if(gravarBruto) bruto.push({t:ini-t0, ms:ultimoMs, req:c, resp:r, erro});
+  if(erro==="sem-pronto") await new Promise(ok=>setTimeout(ok,500)); // deixa o adaptador terminar; o nativo esvazia antes do próximo
   return r;
 }
 const limpa = s => (s||"").replace(/\r/g,"\n").split("\n").map(x=>x.trim()).filter(Boolean).join(" | ");
@@ -139,7 +142,7 @@ function isotp(raw,hdr){ const m=mensagens(raw,hdr); return m.length?m[0].dados:
 
 /* Classifica a resposta de UM módulo a UM serviço. A recusa vai CRUA (código), sem virar
    "existe/não existe": no GMLAN e no UDS o mesmo código pode significar coisas diferentes. */
-function analisa(raw, hdr, serv){
+function analisa(raw, hdr, serv, eco){
   const todas=mensagens(raw,hdr);
   const pend=todas.some(m=>m.dados.startsWith("7F"+serv+"78"));
   const ms=todas.filter(m=>!m.dados.startsWith("7F"+serv+"78"));
@@ -147,7 +150,11 @@ function analisa(raw, hdr, serv){
   const m=ms[0], d=m.dados, pos=(parseInt(serv,16)+0x40).toString(16).toUpperCase().padStart(2,"0");
   const extra={}; if(!m.completo) extra.incompleto=true; if(pend) extra.pendente=true;
   if(d.startsWith("7F"+serv)) return {tipo:"neg", nrc:d.substr(4,2), ...extra};
-  if(d.startsWith(pos)) return {tipo:"pos", dados:d.slice(2), ...extra};
+  if(d.startsWith(pos)){
+    // a positiva tem de ecoar o que foi pedido (ex.: 62 F1 90 para 22 F1 90); senão é resposta de outro pedido
+    if(eco && !d.slice(2).startsWith(eco)) return {tipo:"fora-de-ordem", dados:d, ...extra};
+    return {tipo:"pos", dados:d.slice(2), ...extra};
+  }
   return {tipo:"outro", dados:d, ...extra};
 }
 const NRC={ "10":"recusado","11":"serviço não suportado","12":"subfunção não suportada / formato (GMLAN: tamanho)",
@@ -156,14 +163,14 @@ const NRC={ "10":"recusado","11":"serviço não suportado","12":"subfunção nã
   "33":"exige segurança","78":"aguarde (pendente)","7E":"não nesta sessão","7F":"serviço não nesta sessão" };
 
 /* pede uma leitura; se vier só "aguarde", repete UMA vez com espera maior */
-async function pede(req, resp, serv, espera=1200){
+async function pede(req, resp, serv, espera=1200, eco){
   let r=await cmd(req,espera);
   if(ultimoErro) return {tipo:"erro", erro:ultimoErro, ms:ultimoMs};
-  let a=analisa(r,resp,serv); a.ms=ultimoMs;
+  let a=analisa(r,resp,serv,eco); a.ms=ultimoMs;
   if(a.tipo==="pendente"){
     r=await cmd(req,6000);
     if(ultimoErro) return {tipo:"erro", erro:ultimoErro, pendente:true, ms:ultimoMs};
-    a=analisa(r,resp,serv); a.pendente=true; a.ms=ultimoMs;
+    a=analisa(r,resp,serv,eco); a.pendente=true; a.ms=ultimoMs;
   }
   return a;
 }
@@ -197,7 +204,7 @@ async function varre(M, chave, serv, ids, resp, rotulo){
   for(const id of ids){
     if(cancelar) break;
     if(++n%40===0){ await cmd("3E00",800); passo(`Módulo ${M.endereco}: ${rotulo} ${id}`); }
-    const a=await pede(serv+id, resp, serv);
+    const a=await pede(serv+id, resp, serv, 1200, id);
     S.tentados++; S.ultimo=id;
     if(a.tipo==="nada") S.silenciosos.push(id);
     else if(a.tipo==="erro") S.erros.push({id, erro:a.erro});
@@ -284,7 +291,7 @@ async function clonar(completo){
     for(const s of ["1001","1003"]) M.sessoes[s]=await pede(s,resp,"10",2500);
     const s3=M.sessoes["1003"];
     M.protocolo = s3.tipo==="pos" ? (s3.dados===""?"GMLAN provável (positiva sem eco)":"UDS (positiva com eco "+s3.dados.slice(0,2)+")") : "indefinido";
-    M.falhas=await pede("1902FF",resp,"19",3500);
+    M.falhas=await pede("1902FF",resp,"19",3500,"02");
     M.memoria=await pede("23140000000001",resp,"23",3000);
     gravarBruto=false; // varreduras: tudo vai para o mapa do módulo, em forma compacta
     await varre(M,"leitura22","22",lista,resp,"lendo");

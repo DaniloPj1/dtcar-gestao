@@ -12,7 +12,7 @@ import * as obd from "../js/obd.js";
 import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
-import { usarExplicacoes, FalhaExplicada } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, Digital, Grafico, anotarPonto, trocarNoGrafico, GRAFICO_MAX } from "./diagpartes.js";
 import { useApp, Ic, ir, Cartao, KV, Campo, Quadro, usarPlaca, BuscaPlaca, Veiculo, Tela, usarPasso } from "./comum.js";
 
 const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
@@ -155,11 +155,23 @@ function Obd() {
   // Painel de mostradores ou lista: o Danilo pediu as duas, escolhidas por filtro (19/11/2026).
   // A escolha fica guardada: quem gosta de uma não quer trocar a cada carro.
   const [jeito, setJeito] = useState(() => {
-    try { return window.localStorage.getItem("obd_jeito") === "lista" ? "lista" : "painel"; } catch (e) { return "painel"; }
+    try { const j = window.localStorage.getItem("obd_jeito"); return ["lista", "digital", "grafico"].includes(j) ? j : "painel"; } catch (e) { return "painel"; }
   });
   const trocarJeito = j => {
     setJeito(j);
     try { window.localStorage.setItem("obd_jeito", j); } catch (e) { /* sem espaço: segue sem guardar */ }
+  };
+  // GRÁFICO (pedido do Danilo, 21/11/2026): até 3 leituras ao mesmo tempo. A história de cada leitura
+  // fica numa caixa (não em estado): quem redesenha a tela é o valor novo chegando, e guardar ponto
+  // não pode custar um desenho a mais. A escolha fica guardada: quem acompanha rotação e sonda num
+  // carro quer as mesmas no próximo.
+  const historia = useRef({});
+  const [noGrafico, setNoGrafico] = useState(() => { try { const l = JSON.parse(window.localStorage.getItem("obd_grafico") || "[]"); return Array.isArray(l) ? l.slice(0, GRAFICO_MAX) : []; } catch (e) { return []; } });
+  const [graficoCheio, setGraficoCheio] = useState(false);
+  const trocarGrafico = chave => {
+    const r = trocarNoGrafico(noGrafico, chave);
+    setGraficoCheio(r.cheio); setNoGrafico(r.lista);
+    try { window.localStorage.setItem("obd_grafico", JSON.stringify(r.lista)); } catch (e) { /* segue sem guardar */ }
   };
   const [vivo, setVivo] = useState(null);       // { valores: {chave: leitura}, volta, rodando, modo }
   // Falhas vigiadas DURANTE a leitura ao vivo: a roda pergunta de tempos em tempos e, se o módulo
@@ -295,6 +307,7 @@ function Obd() {
     rodada.current = minha;
     setErro("");
     setRes(null);                                                   // uma leitura por vez na tela
+    historia.current = {};
     setVivo({ valores: {}, volta: 0, rodando: true, modo });
     // Referência das falhas: o que já estava gravado quando a roda começou. Só o que aparecer
     // DEPOIS disso é "falha nova". Sem leitura de falhas antes, a primeira olhada vira a referência.
@@ -305,7 +318,7 @@ function Obd() {
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => { if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
+        (v, volta) => { if (rodada.current === minha) { anotarPonto(historia.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
         () => rodada.current === minha,
         {
           escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : escolhidas,
@@ -584,10 +597,14 @@ function Obd() {
           const resto = lidos.filter(l => typeof l.de !== "number");
           return html`
             <div class="obd-filtro" role="group" aria-label="Como mostrar os dados ao vivo">
-              <button type="button" id="obd-jeito-painel" class=${jeito === "painel" ? "esc" : ""} aria-pressed=${jeito === "painel"} onClick=${() => trocarJeito("painel")}>PAINEL</button>
               <button type="button" id="obd-jeito-lista" class=${jeito === "lista" ? "esc" : ""} aria-pressed=${jeito === "lista"} onClick=${() => trocarJeito("lista")}>LISTA</button>
+              <button type="button" id="obd-jeito-painel" class=${jeito === "painel" ? "esc" : ""} aria-pressed=${jeito === "painel"} onClick=${() => trocarJeito("painel")}>PONTEIRO</button>
+              <button type="button" id="obd-jeito-digital" class=${jeito === "digital" ? "esc" : ""} aria-pressed=${jeito === "digital"} onClick=${() => trocarJeito("digital")}>DIGITAL</button>
+              <button type="button" id="obd-jeito-grafico" class=${jeito === "grafico" ? "esc" : ""} aria-pressed=${jeito === "grafico"} onClick=${() => trocarJeito("grafico")}>GRÁFICO</button>
             </div>
-            ${jeito === "painel" ? html`
+            ${jeito === "grafico" ? html`<${Grafico} lidos=${lidos} historia=${historia.current} escolha=${noGrafico} aoTrocar=${trocarGrafico} cheio=${graficoCheio} />`
+            : jeito === "digital" ? html`<div class="digitais">${lidos.map(l => html`<${Digital} key=${l.chave} l=${l} />`)}</div>`
+            : jeito === "painel" ? html`
               ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.chave} l=${l} />`)}</div>` : null}
               ${resto.length ? html`<div class="painel-resto">${resto.map(l => html`<${LinhaViva} key=${l.chave} l=${l} />`)}</div>` : null}`
             : html`<div class="lista-viva">

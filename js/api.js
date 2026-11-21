@@ -114,6 +114,25 @@ function criarApiSupabase() {
       guardadaVencida: s => !!(s && s.expires_at && s.expires_at * 1000 < Date.now() + 60000),
       aoMudar: cb => { const { data } = sb.auth.onAuthStateChange((evento, s) => cb(s, evento)); return () => data.subscription.unsubscribe(); },
       entrar: async (email, senha) => ok(await sb.auth.signInWithPassword({ email, password: senha })),
+      /**
+       * Confere se o login e a senha digitados AGORA são de um administrador ativo, sem trocar quem
+       * está logado no aparelho. Usado para autorizar a gravação de dado no módulo do carro (decisão
+       * do Danilo, 21/11/2026). Abre uma sessão à parte, que não é guardada, e a encerra em seguida.
+       * A senha não é guardada em lugar nenhum: vai do campo para o Supabase e some.
+       */
+      conferirAdmin: async (email, senha) => {
+        const outro = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "dtcar-autoriza" },
+          global: { fetch: fetchComLimite } });   // mesma regra de rede do resto: tempo-limite, nunca fica pendurado (Codex, 21/11/2026)
+        try {
+          const r = await outro.auth.signInWithPassword({ email: String(email || "").trim(), password: senha });
+          if (r.error || !r.data || !r.data.user) return { ok: false, motivo: "Login ou senha não conferem." };
+          const p = await outro.from("perfis").select("id,nome,papel,ativo").eq("id", r.data.user.id).maybeSingle();
+          if (p.error || !p.data) return { ok: false, motivo: "Não deu para conferir o perfil deste login." };
+          if (p.data.papel !== "admin" || p.data.ativo === false) return { ok: false, motivo: "Este login não é de administrador." };
+          return { ok: true, id: p.data.id, nome: p.data.nome || "" };
+        } catch (e) { return { ok: false, motivo: "Sem internet: a autorização do administrador precisa de conexão." }; }
+        finally { outro.auth.signOut({ scope: "local" }).catch(() => {}); }   // não espera: a sessão à parte não é guardada e some sozinha
+      },
       cadastrar: async (nome, email, senha) => ok(await sb.auth.signUp({ email, password: senha, options: { data: { nome }, emailRedirectTo: location.origin + location.pathname } })),
       recuperar: async email => ok(await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname })),
       novaSenha: async senha => ok(await sb.auth.updateUser({ password: senha })),
@@ -355,8 +374,9 @@ function criarApiSupabase() {
      *  Linha gravada não muda mais (o banco não tem política de update). Sem o v62 rodado, listar devolve vazio e
      *  registrar avisa com todas as letras — apagar sem registrar é justamente o que não pode acontecer. */
     obd: {
-      listar: async ({ placa, desde, limite = 20 } = {}) => {
+      listar: async ({ placa, desde, limite = 20, tipo } = {}) => {
         let q = sb.from("obd_leituras").select("*").order("criado_em", { ascending: false }).limit(limite);
+        if (tipo) q = q.eq("tipo", tipo);
         if (placa) q = q.eq("placa", String(placa).toUpperCase());
         if (desde) q = q.gte("criado_em", desde);
         const r = await q;
@@ -365,6 +385,7 @@ function criarApiSupabase() {
       },
       registrar: async linha => { const r = await sb.from("obd_leituras").insert(linha).select().single();
         if (r.error && /obd_leituras|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("O registro do OBD ainda não foi ligado no banco: falta rodar o supabase/v62.sql.");
+        if (r.error && /obd_leituras_tipo_check|column .*(dados|selo)|violates check/i.test(r.error.message || "")) throw new Error("O banco ainda não aceita este tipo de registro: falta rodar o supabase/v63.sql.");
         return ok(r); },
     },
 

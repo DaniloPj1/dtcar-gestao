@@ -5,7 +5,14 @@
 export const TELAS_APP = [
   ["servico", "Iniciar serviço"], ["oleo", "Óleo (aplicação)"], ["orcamento", "Orçamentos (pedido)"], ["agendar", "Agendar"], ["agenda", "Agenda (lista)"],
   ["peca", "Consultar peça por catálogo"], ["historico", "Histórico de serviços"], ["meus", "Meus serviços (quinzena)"], ["osconsulta", "Consultar O.S."],
+  // Diagnóstico: eram uma tela só e viraram família (20/11/2026). Cada uma é liberada por pessoa,
+  // porque o que elas fazem é muito diferente — ler o carro e ESCREVER nele não são a mesma coisa.
   ["obd", "Diagnóstico OBD (ELM327)"],
+  ["modulos", "Módulos do carro (UDS)"],
+  ["atuadores", "Atuadores (aciona saída no carro)"],
+  ["aprendizados", "Aprendizados e calibrações"],
+  ["bico", "Programar bico (grava na ECU)"],
+  ["parametros", "Parâmetros de referência"],
 ];
 const TODAS = TELAS_APP.map(t => t[0]);
 /** Telas que o papel pode usar. Desde 16/11/2026 (à tarde) o orçamento no app é só um PEDIDO (sem item e sem preço), então o mecânico
@@ -46,11 +53,42 @@ export function foraDoHorario(h, agora = new Date()) {
  * Apagar é o único comando que o app manda PARA o carro: o administrador sempre pode; qualquer outra pessoa só com
  * cfg.appAcessos[id].obd_apagar === true, marcado por ele em Sistema › Equipe. Quem não tem a tela do OBD não apaga nada. */
 export function podeApagarObd(cfg, perfil) {
-  const a = acessoApp(cfg, perfil);
-  if (!a.entra || !a.telas.includes("obd")) return false;
-  if (perfil.papel === "admin") return true;
-  return ((cfg && cfg.appAcessos) || {})[perfil.id] ? ((cfg.appAcessos || {})[perfil.id].obd_apagar === true) : false;
+  // Vale nas DUAS telas que apagam: a leitura comum (apagar do OBD-II) e Módulos do carro (apagar de
+  // um módulo). Antes exigia só "obd", então quem tinha só Módulos nunca apagava e a chave em
+  // Sistema › Equipe nem aparecia para essa pessoa — confuso de administrar, e o apagar por módulo
+  // ficava inalcançável. Achado da revisão independente de 20/11/2026.
+  return podeNoObd(cfg, perfil, "obd_apagar", ["obd", "modulos"]);
 }
+
+/* ---- O que AGE no carro (20/11/2026) ----
+ * Apagar falha era o único comando que saía do app para o carro. Agora há mais três, e cada um é
+ * mais sério que o anterior:
+ *   obd_atuar   → aciona uma saída (ventoinha, bomba, bico, lanterna). Mexe em peça que se move.
+ *   obd_aprender→ roda rotina de aprendizado e calibração. Muda o jeito do módulo trabalhar.
+ *   obd_gravar  → grava dado de calibração, como o código do bico. Fica gravado na ECU.
+ * Vale a mesma regra do apagar, que o Danilo decidiu em 19/11/2026: o administrador sempre pode;
+ * qualquer outra pessoa só com a marca dele em Sistema › Equipe. E ninguém faz nada sem ter a
+ * tela — não existe permissão solta: a permissão é sempre "esta pessoa, nesta tela".
+ */
+export function podeNoObd(cfg, perfil, marca, tela) {
+  const a = acessoApp(cfg, perfil);
+  const quais = Array.isArray(tela) ? tela : [tela];
+  if (!a.entra || !quais.some(t => a.telas.includes(t))) return false;
+  if (perfil.papel === "admin") return true;
+  const g = ((cfg && cfg.appAcessos) || {})[perfil.id];
+  return g ? g[marca] === true : false;
+}
+export const podeAtuarObd = (cfg, perfil) => podeNoObd(cfg, perfil, "obd_atuar", "atuadores");
+export const podeAprenderObd = (cfg, perfil) => podeNoObd(cfg, perfil, "obd_aprender", "aprendizados");
+export const podeGravarObd = (cfg, perfil) => podeNoObd(cfg, perfil, "obd_gravar", "bico");
+
+/** As permissões do diagnóstico, para a tela Equipe desenhar sozinha a partir daqui. */
+export const PERMISSOES_OBD = [
+  ["obd_apagar", "Apagar falha", ["obd", "modulos"], "Apaga os códigos do carro. A foto do momento da falha some junto."],
+  ["obd_atuar", "Testar atuador", "atuadores", "Aciona uma saída do carro: ventoinha, bomba, lanterna. Mexe em peça que se move."],
+  ["obd_aprender", "Rodar aprendizado", "aprendizados", "Roda calibração e aprendizado. Muda o jeito do módulo trabalhar."],
+  ["obd_gravar", "Programar bico", "bico", "Grava o código do bico na ECU. Fica gravado."],
+];
 
 /** { entra, telas: [ids], padrao: true quando nada foi gravado para a pessoa, horario: {de, ate, dias} | null (nunca para o administrador) } */
 export function acessoApp(cfg, perfil) {

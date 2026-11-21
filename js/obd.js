@@ -223,16 +223,17 @@ export const PIDS = [
   { pid: 0x08, rotulo: "Ajuste curto de combustível (banco 2)", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
   { pid: 0x09, rotulo: "Ajuste longo de combustível (banco 2)", unidade: "%", bytes: 1, conta: d => (d[0] * 100 / 128) - 100, casas: 1, vivo: true, de: -25, ate: 25, grupo: "combustivel" },
   { pid: 0x44, rotulo: "Mistura comandada (lambda)", unidade: "", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 2 / 65536, casas: 3, vivo: true, de: 0, ate: 2, grupo: "combustivel" },
-  { pid: 0x0a, rotulo: "Pressão de combustível", unidade: "kPa", bytes: 1, conta: d => d[0] * 3, casas: 0, vivo: true, de: 0, ate: 765, grupo: "combustivel" },
+  { pid: 0x0a, rotulo: "Pressão de combustível", unidade: "bar", bytes: 1, conta: d => d[0] * 3 / 100, casas: 2, vivo: true, de: 0, ate: 7.65, grupo: "combustivel" },
   { pid: 0x2f, rotulo: "Nível do tanque", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: false, de: 0, ate: 100, grupo: "combustivel" },
   { pid: 0x52, rotulo: "Etanol no tanque", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: false, de: 0, ate: 100, grupo: "combustivel" },
   { pid: 0x3c, rotulo: "Temperatura do catalisador (banco 1, sonda 1)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
   { pid: 0x3d, rotulo: "Temperatura do catalisador (banco 2, sonda 1)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
   { pid: 0x3e, rotulo: "Temperatura do catalisador (banco 1, sonda 2)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
   { pid: 0x3f, rotulo: "Temperatura do catalisador (banco 2, sonda 2)", unidade: "°C", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 10) - 40, casas: 0, vivo: true, de: 0, ate: 900, grupo: "catalisador" },
-  { pid: 0x23, rotulo: "Pressão do rail", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 10, casas: 0, vivo: true, de: 0, ate: 200000, grupo: "injecao" },
-  { pid: 0x59, rotulo: "Pressão do rail (absoluta)", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 10, casas: 0, vivo: true, de: 0, ate: 200000, grupo: "injecao" },
-  { pid: 0x22, rotulo: "Pressão do rail (sobre o vácuo do coletor)", unidade: "kPa", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 0.079, casas: 1, vivo: true, de: 0, ate: 5177, grupo: "injecao" },
+  // Rail em BAR (pedido do Danilo, 21/11/2026): o PID entrega de 10 em 10 kPa, que é 0,1 bar.
+  { pid: 0x23, rotulo: "Pressão do rail", unidade: "bar", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 10, casas: 0, vivo: true, de: 0, ate: 2000, grupo: "injecao" },
+  { pid: 0x59, rotulo: "Pressão do rail (absoluta)", unidade: "bar", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 10, casas: 0, vivo: true, de: 0, ate: 2000, grupo: "injecao" },
+  { pid: 0x22, rotulo: "Pressão do rail (sobre o vácuo do coletor)", unidade: "bar", bytes: 2, conta: d => ((d[0] * 256) + d[1]) * 0.079 / 100, casas: 2, vivo: true, de: 0, ate: 51.77, grupo: "injecao" },
   { pid: 0x5d, rotulo: "Tempo de injeção", unidade: "°", bytes: 2, conta: d => (((d[0] * 256) + d[1]) / 128) - 210, casas: 1, vivo: true, de: -30, ate: 30, grupo: "injecao" },
   { pid: 0x5e, rotulo: "Consumo de combustível", unidade: "L/h", bytes: 2, conta: d => ((d[0] * 256) + d[1]) / 20, casas: 2, vivo: true, de: 0, ate: 40, grupo: "injecao" },
   { pid: 0x2c, rotulo: "EGR comandada", unidade: "%", bytes: 1, conta: d => d[0] * 100 / 255, casas: 0, vivo: true, de: 0, ate: 100, grupo: "injecao" },
@@ -529,6 +530,10 @@ const MOTIVOS = {
   "comando-recusado": "Este comando não é permitido nesta etapa (a leitura não escreve no carro).",
   "falhou": "O adaptador respondeu de um jeito que o app não esperava.",
   "demorou": "O adaptador não respondeu no tempo. Confira o encaixe na tomada e tente de novo.",
+  "rotina-fora-da-faixa": "Esta rotina está fora da faixa que o app pode rodar. Só rotina de serviço do fabricante é permitida.",
+  "did-protegido": "Este dado é da identificação do módulo (chassi, número de peça) e o app não grava nele.",
+  "so-modulo-do-motor": "A gravação de dado só existe para o módulo do motor. Aponte o módulo do motor antes.",
+  "sem-modulo-escolhido": "Escolha UM módulo antes. Este comando não vai para todos os módulos de uma vez.",
 };
 export const motivoDe = e => MOTIVOS[e && (e.message || e.code || e)] || "Não deu para falar com o adaptador.";
 
@@ -545,6 +550,10 @@ export const situacao = () => P().situacao();
 export const conectar = endereco => P().conectar({ endereco });
 export const desconectar = () => P().desconectar().catch(() => ({ conectado: false }));
 
+const ouvintesDeTroca = new Set();
+/** Assina cada troca com o adaptador: fn(comando, respostaCrua, milissegundos). Devolve o cancelar. */
+export function aoTrocar(fn) { ouvintesDeTroca.add(fn); return () => ouvintesDeTroca.delete(fn); }
+
 /**
  * Manda um comando e devolve o texto cru.
  * O tempo-limite daqui é a rede de segurança: se a parte nativa parar de responder por qualquer
@@ -552,7 +561,14 @@ export const desconectar = () => P().desconectar().catch(() => ({ conectado: fal
  */
 export function comando(cmd, esperaMs) {
   const espera = esperaMs || 5000;
-  const pedido = P().comando({ cmd, esperaMs: espera }).then(r => (r && r.resposta) || "");
+  const t0 = Date.now();
+  const pedido = P().comando({ cmd, esperaMs: espera }).then(r => {
+    const resposta = (r && r.resposta) || "";
+    // Quem quiser anotar a conversa (o caderno do carro, js/obdmapa.js) recebe o que JÁ aconteceu.
+    // Não gera pedido nenhum: é só escrever o que passou por aqui.
+    for (const f of ouvintesDeTroca) { try { f(cmd, resposta, Date.now() - t0); } catch (e) { /* quem ouve não derruba a leitura */ } }
+    return resposta;
+  });
   const relogio = new Promise((_, falhar) => setTimeout(() => falhar(new Error("demorou")), espera + 4000));
   return Promise.race([pedido, relogio]);
 }
@@ -601,14 +617,92 @@ export async function iniciar() {
   // o primeiro pedido de verdade é o que faz o adaptador achar o protocolo do carro: pode demorar
   const primeiro = await pedir("0100", 12000);
   if (primeiro.erro) throw new Error(primeiro.erro);
-  const protocolo = (await comando("ATDP", 3000)).replace(/[\r\n>]/g, "").trim();
+  // "STOPPED" é o marcador que a parte nativa põe quando o pedido estoura o tempo. Sem filtrar,
+  // ele apareceria na tela como se fosse o nome do protocolo ou a versão do adaptador.
+  const semMarca = t => { const x = String(t || "").replace(/[\r\n>]/g, "").trim(); return /^STOPPED/i.test(x) ? "" : x; };
+  const protocolo = semMarca(await comando("ATDP", 3000));
   // ATI diz como o adaptador se identifica. "v1.5" é versão que nunca existiu: denuncia clone.
   let versao = "";
-  try { versao = (await comando("ATI", 3000)).replace(/[\r\n>]/g, "").trim(); } catch (e) { versao = ""; }
+  try { versao = semMarca(await comando("ATI", 3000)); } catch (e) { versao = ""; }
   const base = suportados(primeiraDe(primeiro.respostas, 0x01), 0x01, 0x00);
   const resto = base.includes(0x20) ? await suportadosEmFaixas(0x01, FAIXAS_PID.slice(1)) : [];
   const pidsSuportados = base.concat(resto.filter(p => !base.includes(p)));
   return { protocolo, versao, aviso: adaptadorSuspeito(versao), pidsSuportados };
+}
+
+/* ---- quem respondeu: separar a resposta por módulo ---- */
+
+/**
+ * Com o cabeçalho ligado (ATH1), cada linha da resposta vem com o endereço de QUEM respondeu na
+ * frente. Isto junta os quadros de cada módulo e devolve { endereço: "hex do conteúdo" }.
+ *
+ * Só para CAN. O tamanho da linha diz qual: endereço de 11 bits tem 3 dígitos (linha de tamanho
+ * ímpar), de 29 bits tem 8 (linha par). Depois do endereço vem o byte de controle do transporte
+ * (ISO 15765-2): 0L = quadro único de L bytes; 1L LL = primeiro quadro de uma resposta longa;
+ * 2N = continuação. Linha que não fecha nessa conta é DESCARTADA, nunca aproveitada: código de
+ * falha atribuído ao módulo errado é pior que código nenhum.
+ */
+export function quadrosPorModulo(cru) {
+  const linhas = String(cru || "").split(/[\r\n]+/).map(l => l.replace(/[\s>]/g, "").toUpperCase()).filter(l => /^[0-9A-F]+$/.test(l));
+  const montando = {}, pronto = {};
+  for (const l of linhas) {
+    const n = l.length % 2 ? 3 : 8;
+    if (l.length < n + 4) continue;
+    const end = l.slice(0, n), corpo = l.slice(n), tipo = corpo[0];
+    if (n === 3 && !(parseInt(end, 16) >= 0x7e8 && parseInt(end, 16) <= 0x7ef) && !(parseInt(end, 16) >= 0x600)) continue;
+    if (tipo === "0") {
+      const tam = parseInt(corpo[1], 16);
+      if (tam < 1 || corpo.length < 2 + tam * 2) continue;
+      pronto[end] = corpo.slice(2, 2 + tam * 2);
+    } else if (tipo === "1") {
+      const tam = parseInt(corpo.slice(1, 4), 16);
+      if (!(tam > 7)) continue;
+      montando[end] = { tam, hex: corpo.slice(4), seq: 1 };
+    } else if (tipo === "2") {
+      const m = montando[end];
+      if (!m || parseInt(corpo[1], 16) !== (m.seq & 15)) { delete montando[end]; continue; }
+      m.hex += corpo.slice(2); m.seq++;
+      if (m.hex.length >= m.tam * 2) { pronto[end] = m.hex.slice(0, m.tam * 2); delete montando[end]; }
+    }
+  }
+  return pronto;
+}
+
+/** Nome de quem respondeu num pedido de OBD-II, pelo endereço de resposta. */
+export function nomeDeQuemRespondeu(end) {
+  const e = String(end || "").toUpperCase();
+  if (e === "7E8" || e === "18DAF110") return "Motor";
+  if (e === "7E9" || e === "18DAF118") return "Câmbio";
+  return "Módulo " + (e.length === 8 ? e.slice(6) : e);
+}
+
+/**
+ * As falhas SEPARADAS POR MÓDULO (pedido do Danilo, 21/11/2026): liga o cabeçalho, repete os três
+ * pedidos e devolve [{ endereco, nome, falhas: [{ codigo, situacao }] }] — só de quem respondeu.
+ * Devolve null se a resposta não vier no formato do CAN (aí vale a lista junta, como antes).
+ * O cabeçalho é desligado no fim de qualquer jeito: o resto da leitura conta com ele desligado.
+ */
+export async function lerFalhasPorModulo() {
+  const pedidos = [["03", 0x03, "atual"], ["07", 0x07, "pendente"], ["0A", 0x0a, "permanente"]];
+  const mods = {};
+  try {
+    await comando("ATH1", 2000);
+    for (const [cmd, servico, situacao] of pedidos) {
+      let cru = "";
+      try { cru = await comando(cmd, 8000); } catch (e) { continue; }
+      const q = quadrosPorModulo(cru);
+      for (const end of Object.keys(q)) {
+        const codigos = codigosDa(q[end], servico);
+        if (codigos === null) continue;                       // não é resposta deste serviço
+        const m = mods[end] || (mods[end] = { endereco: end, nome: nomeDeQuemRespondeu(end), falhas: [] });
+        for (const c of codigos) if (!m.falhas.some(f => f.codigo === c && f.situacao === situacao)) m.falhas.push({ codigo: c, situacao });
+      }
+    }
+  } finally {
+    try { await comando("ATH0", 2000); } catch (e) { /* o iniciar() da próxima conexão desliga */ }
+  }
+  const lista = Object.keys(mods).sort().map(k => mods[k]);
+  return lista.length ? lista : null;
 }
 
 /* ---- leituras de alto nível ---- */
@@ -627,7 +721,12 @@ export async function lerFalhas() {
     if (modulos > 1) variosModulos = true;
     for (const c of codigos) if (!falhas.some(f => f.codigo === c && f.situacao === situacao)) falhas.push({ codigo: c, situacao });
   }
-  return { falhas, erros, variosModulos };
+  // Mais de um módulo respondeu: separa por módulo, para a tela dizer de quem é cada código.
+  let porModulo = null;
+  if (variosModulos) { try { porModulo = await lerFalhasPorModulo(); } catch (e) { porModulo = null; } }
+  // Só vale se a conta fecha: todo código da lista junta tem de estar em algum módulo.
+  if (porModulo && !falhas.every(f => porModulo.some(m => m.falhas.some(x => x.codigo === f.codigo && x.situacao === f.situacao)))) porModulo = null;
+  return { falhas, erros, variosModulos, porModulo };
 }
 
 /** Dados ao vivo, uma volta só: os PIDs que o carro disse que tem. */
@@ -1159,7 +1258,8 @@ export function adaptadorSuspeito(versao) {
 /* ------------------------------------------------------------------ Apagar as falhas (serviço 04)
  * Pedido do Danilo em 19/11/2026. É o ÚNICO comando que o app manda PARA o carro: tudo o mais aqui é leitura.
  * Três coisas que o mecânico precisa saber, e que a tela escreve antes de perguntar "apagar?":
- *   1. Apagar não conserta. Se o defeito continuar, o código volta — às vezes antes de o carro sair da rampa.
+ *   (O aviso "apagar não conserta" saiu em 21/11/2026, a pedido do Danilo: é óbvio para um mecânico.
+ *    Ficam só as consequências que não estão na cara: o que some e o que zera.)
  *   2. Some a foto do momento da falha (serviço 02) e os contadores de quando ela apareceu: anote ANTES, não depois.
  *   3. Zera as adaptações do módulo, incluindo o aprendizado de combustível, e a prontidão dos monitores volta para
  *      "não terminou" — o carro precisa rodar um ciclo para voltar. Carro que vai para a inspeção reprova até lá.
@@ -1167,7 +1267,6 @@ export function adaptadorSuspeito(versao) {
  * com senha e contra-senha conferidas no servidor do fabricante; não sai por aqui e não se contorna. O que sai é este 04,
  * que zera e obriga o módulo a refazer a conta com o que está no tanque agora. */
 export const AVISOS_APAGAR = [
-  "Apagar NÃO conserta: se o defeito continuar, o código volta.",
   "Some a foto do momento da falha e os contadores: anote antes.",
   "Zera as adaptações, inclusive o aprendizado de combustível.",
   "A prontidão dos monitores volta a zero: o carro precisa rodar para voltar.",
@@ -1226,7 +1325,7 @@ export function registroApagar(d) {
 export function resultadoApagar(antes, depois) {
   if (depois === null || depois === undefined) return { situacao: "nao_conferido", frase: "Apagou, mas não deu para conferir o que sobrou: leia as falhas de novo." };
   const quantos = depois.length;
-  if (!quantos) return { situacao: "limpo", frase: "Apagou e não sobrou nenhum código. Se o defeito continuar, ele volta." };
+  if (!quantos) return { situacao: "limpo", frase: "Apagou e não sobrou nenhum código." };
   const voltaram = depois.filter(f => (antes || []).some(a => a.codigo === f.codigo));
   if (voltaram.length === quantos) return { situacao: "voltou", frase: "O código voltou na hora: o defeito está acontecendo agora, não era falha antiga." };
   return { situacao: "sobrou", frase: "Sobrou código no carro: veja a lista de falhas antes de entregar." };

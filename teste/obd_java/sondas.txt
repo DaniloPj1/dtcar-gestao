@@ -135,3 +135,15 @@ nao ZZ
 nao 011
 nao 0
 nao 01;04
+
+# --- o cabeçalho só aceita endereço de diagnóstico: senão o "pedido" vira quadro forjado ---
+sim ATSH70A
+sim ATSH743
+sim ATSH18DA10F1
+nao ATSH0C0
+nao ATSH123
+nao ATSH5FF
+nao ATSH0CF00400
+nao ATSH18FEF100
+nao ATFCSH0C0
+nao ATFCSH18FEF100

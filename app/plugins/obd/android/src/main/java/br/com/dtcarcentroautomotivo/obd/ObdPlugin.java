@@ -99,9 +99,13 @@ public class ObdPlugin extends Plugin {
      * Também são ajustes do adaptador, não pedidos ao carro.
      */
     private static boolean atComValor(String c) {
-        if (c.startsWith("ATSH")) return hexExato(c.substring(4), 3) || hexExato(c.substring(4), 8);
+        // ATSH e ATFCSH dizem PARA ONDE o quadro vai, então só valem endereços de diagnóstico.
+        // Com endereço livre, um script da página mandaria um pedido de leitura para qualquer
+        // identificador do barramento — e aí o "pedido" vira um quadro forjado na rede do motor ou
+        // do freio, com o conteúdo quase à escolha. Achado na releitura de 21/11/2026.
+        if (c.startsWith("ATSH")) return enderecoDeDiagnostico(c.substring(4));
         if (c.startsWith("ATCRA")) return hexExato(c.substring(5), 3) || hexExato(c.substring(5), 8);
-        if (c.startsWith("ATFCSH")) return hexExato(c.substring(6), 3) || hexExato(c.substring(6), 8);
+        if (c.startsWith("ATFCSH")) return enderecoDeDiagnostico(c.substring(6));
         // ATFCSD é o CONTEÚDO do quadro de controle de fluxo, e esse quadro vai ao barramento para o
         // cabeçalho que o ATFCSH escolheu — SEM o adaptador acrescentar byte de controle. Ou seja, o
         // primeiro byte é o que vem do site, que é exatamente a condição que faz o permitido()
@@ -115,7 +119,18 @@ public class ObdPlugin extends Plugin {
     }
 
     /**
-     * Serviços de LEITURA do OBD-II que o app pode pedir ao carro:
+     * Endereço para onde um pedido de diagnóstico pode ir: em 11 bits, de 600 a 7FF (onde moram os
+     * módulos e o funcional 7DF); em 29 bits, os formatos 18DA (um módulo) e 18DB (funcional).
+     */
+    static boolean enderecoDeDiagnostico(String e) {
+        if (hexExato(e, 3)) { int n = Integer.parseInt(e, 16); return n >= 0x600 && n <= 0x7FF; }
+        return hexExato(e, 8) && (e.startsWith("18DA") || e.startsWith("18DB"));
+    }
+
+    /**
+     * Serviços de LEITURA que o app pode pedir ao carro pelo comando(). Os de UDS (19 falhas por
+     * módulo, 22 ler dado, 24 ler a escala do dado, 3E sinal de presença) entraram em 20/11/2026;
+     * o 10 (sessão) tem portão próprio em permitido(). Os do OBD-II:
      * 01 dados ao vivo · 02 foto do momento da falha · 03 falhas confirmadas · 06 testes de bordo ·
      * 07 falhas pendentes · 09 informação do veículo (chassi) · 0A falhas permanentes.
      *
@@ -137,7 +152,7 @@ public class ObdPlugin extends Plugin {
      * estes que se REGRAVA a memória de um módulo. Sem eles, e sem a sessão de programação (ver o
      * portão do serviço 10 em permitido()), não existe regravação por aqui — aconteça o que
      * acontecer na página que o app abre. É a promessa que esta oficina pode fazer com segurança:
-     * o app codifica bico e roda rotina de serviço, e não tem como gravar programa em módulo nenhum.
+     * o app aciona atuador e roda rotina de serviço, e não tem como gravar programa em módulo nenhum.
      */
     private static final Set<String> SERVICOS_PROIBIDOS = new HashSet<>(Arrays.asList(
         "34", "35", "36", "37"

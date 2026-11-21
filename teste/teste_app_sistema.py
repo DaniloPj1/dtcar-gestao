@@ -48,9 +48,10 @@ window.__portao = function (cru) {
   var parN = function (t) { return t.length % 2 === 0 && (t === '' || /^[0-9A-F]+$/.test(t)); };
   if (c.indexOf('AT') === 0) {
     if (window.__AT_PERMITIDOS.indexOf(c) >= 0) return true;
-    if (c.indexOf('ATSH') === 0) return hexN(c.slice(4), 3) || hexN(c.slice(4), 8);
+    var diag = function (e) { if (hexN(e, 3)) { var n = parseInt(e, 16); return n >= 0x600 && n <= 0x7FF; } return hexN(e, 8) && (e.indexOf('18DA') === 0 || e.indexOf('18DB') === 0); };
+    if (c.indexOf('ATSH') === 0) return diag(c.slice(4));
     if (c.indexOf('ATCRA') === 0) return hexN(c.slice(5), 3) || hexN(c.slice(5), 8);
-    if (c.indexOf('ATFCSH') === 0) return hexN(c.slice(6), 3) || hexN(c.slice(6), 8);
+    if (c.indexOf('ATFCSH') === 0) return diag(c.slice(6));
     if (c.indexOf('ATFCSD') === 0) return parN(c.slice(6)) && c.length > 6 && c.length <= 16;
     if (c.indexOf('ATFCSM') === 0) return c.length === 7 && c[6] >= '0' && c[6] <= '2';
     if (c.indexOf('ATST') === 0) return hexN(c.slice(4), 2);

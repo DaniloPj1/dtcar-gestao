@@ -68,7 +68,7 @@
     <button class="sec" id="bt-completo" style="margin-top:10px">CLONE COMPLETO</button>
     <div class="aviso"><b>Rápido:</b> OBD padrão + faixas conhecidas de cada módulo. Alguns minutos.<br>
     <b>Completo:</b> varre todos os identificadores de cada módulo. Mais de 1 hora por módulo — carro no carregador de bateria.</div>
-    <div class="trava" style="background:#fdf3e7;border-color:#efd3a8;color:#7a4a12">O clone também <b>mapeia as saídas</b> (ventoinha, relés…) mandando o pedido <b>incompleto</b>, que o módulo só pode recusar. Mesmo assim, faça o primeiro mapeamento num carro seu ou módulo de bancada, motor desligado — nem todo módulo confere o pedido do mesmo jeito.</div>
+    <div class="trava">O clone <b>só lê</b>: não aciona nem "testa" saída nenhuma. A lista de atuadores vem só quando o próprio módulo a informa por leitura (FA20–FA23).</div>
   </div>
 
   <div class="cartao esconde" id="c-progresso">
@@ -103,43 +103,70 @@ const $ = id => document.getElementById(id);
 const semApp = !Plug;
 
 /* ---------- ponte ---------- */
-let bruto = [], t0 = 0, gravarBruto = true;
+let bruto=[], t0=0, gravarBruto=true, ultimoMs=0, ultimoErro=null;
 async function cmd(c, esperaMs=3000){
   const ini=Date.now(); let resp="", erro=null;
   try{ const r=await Plug.comando({cmd:c,esperaMs}); resp=(r&&r.resposta)||""; }
   catch(e){ erro=(e&&(e.message||e.code||e.errorMessage))||String(e); }
-  const r=limpa(resp), ms=Date.now()-ini;
-  if(gravarBruto) bruto.push({t:ini-t0, ms, req:c, resp:r, erro});
-  ultimoMs=ms;
+  const r=limpa(resp); ultimoMs=Date.now()-ini; ultimoErro=erro;
+  if(gravarBruto) bruto.push({t:ini-t0, ms:ultimoMs, req:c, resp:r, erro});
   return r;
 }
-let ultimoMs=0;
 const limpa = s => (s||"").replace(/\r/g,"\n").split("\n").map(x=>x.trim()).filter(Boolean).join(" | ");
 const hx = s => (s||"").replace(/[^0-9A-Fa-f]/g,"").toUpperCase();
 const hex2txt = h => { let o=""; for(let i=0;i<h.length-1;i+=2){ const v=parseInt(h.substr(i,2),16); o+=(v>=32&&v<127)?String.fromCharCode(v):""; } return o; };
-const dorme = ms => new Promise(r=>setTimeout(r,ms));
+/* cabeçalhos (3 dígitos, CAN 11 bits) que abrem cada quadro da resposta */
+const cabecalhos = raw => new Set((raw||"").split("|").map(f=>hx(f)).filter(h=>/^[0-7][0-9A-F]{2}[0-9A-F]/.test(h)).map(h=>h.slice(0,3)));
 
-/* junta os quadros ISO-TP de um cabeçalho e devolve só os bytes de dados */
-function isotp(raw, hdr){
-  let out="";
-  for(const f of (raw||"").split("|")){ let h=hx(f); if(!h.startsWith(hdr)) continue; h=h.slice(hdr.length);
-    const p=h[0]; out += p==="0"?h.slice(2) : p==="1"?h.slice(4) : p==="2"?h.slice(2) : h; }
-  return out;
+/* Mensagens ISO-TP de UM cabeçalho, respeitando o tamanho que o próprio quadro declara:
+   enchimento (AA, 55, 00…) fica de fora e mensagem cortada é marcada como incompleta. */
+function mensagens(raw, hdr){
+  const msgs=[]; let atual=null;
+  for(const f of (raw||"").split("|")){
+    let h=hx(f); if(!h.startsWith(hdr)) continue; h=h.slice(hdr.length);
+    const t=h[0];
+    if(t==="0"){ const n=parseInt(h[1],16); const d=h.slice(2,2+n*2); msgs.push({dados:d, completo:d.length===n*2}); atual=null; }
+    else if(t==="1"){ const n=parseInt(h.slice(1,4),16); atual={dados:h.slice(4,16).slice(0,n*2), esperado:n, prox:1}; msgs.push(atual); }
+    else if(t==="2" && atual){
+      if(parseInt(h[1],16)!==(atual.prox&0xF)){ atual.quebra=true; continue; }
+      atual.prox++; const falta=atual.esperado*2-atual.dados.length; if(falta>0) atual.dados+=h.slice(2,2+Math.min(14,falta));
+    }
+  }
+  for(const m of msgs) if(m.esperado!==undefined){ m.completo=!m.quebra && m.dados.length===m.esperado*2; delete m.prox; delete m.quebra; }
+  return msgs;
 }
-/* classifica a resposta de UM módulo a UM serviço: positiva, negativa (com código) ou nada */
+function isotp(raw,hdr){ const m=mensagens(raw,hdr); return m.length?m[0].dados:""; }
+
+/* Classifica a resposta de UM módulo a UM serviço. A recusa vai CRUA (código), sem virar
+   "existe/não existe": no GMLAN e no UDS o mesmo código pode significar coisas diferentes. */
 function analisa(raw, hdr, serv){
-  let d=isotp(raw,hdr);
-  // "aguarde" (7F xx 78) pode vir antes da resposta de verdade: descarta e olha o que veio depois
-  while(d.startsWith("7F"+serv+"78")) d=d.slice(6);
-  if(!d) return {tipo:"nada", pendente:true};
-  const pos=(parseInt(serv,16)+0x40).toString(16).toUpperCase().padStart(2,"0");
-  if(d.startsWith("7F"+serv)) return {tipo:"neg", nrc:d.substr(4,2)};
-  if(d.startsWith(pos)) return {tipo:"pos", dados:d.slice(2)};
-  return {tipo:"outro", dados:d};
+  const todas=mensagens(raw,hdr);
+  const pend=todas.some(m=>m.dados.startsWith("7F"+serv+"78"));
+  const ms=todas.filter(m=>!m.dados.startsWith("7F"+serv+"78"));
+  if(!ms.length) return pend?{tipo:"pendente"}:{tipo:"nada"};
+  const m=ms[0], d=m.dados, pos=(parseInt(serv,16)+0x40).toString(16).toUpperCase().padStart(2,"0");
+  const extra={}; if(!m.completo) extra.incompleto=true; if(pend) extra.pendente=true;
+  if(d.startsWith("7F"+serv)) return {tipo:"neg", nrc:d.substr(4,2), ...extra};
+  if(d.startsWith(pos)) return {tipo:"pos", dados:d.slice(2), ...extra};
+  return {tipo:"outro", dados:d, ...extra};
 }
-const NRC={ "10":"recusado","11":"serviço não suportado","12":"subfunção não suportada","13":"tamanho errado (EXISTE)",
-  "22":"condição não atendida","24":"sequência errada","31":"fora da faixa (não existe)","33":"exige segurança",
-  "78":"aguarde (pendente)","7E":"não nesta sessão","7F":"serviço não nesta sessão" };
+const NRC={ "10":"recusado","11":"serviço não suportado","12":"subfunção não suportada / formato (GMLAN: tamanho)",
+  "13":"tamanho ou formato errado","22":"condição não atendida","24":"sequência errada",
+  "31":"fora da faixa (UDS: costuma ser inexistente; GMLAN: pode ser existente e bloqueado)",
+  "33":"exige segurança","78":"aguarde (pendente)","7E":"não nesta sessão","7F":"serviço não nesta sessão" };
+
+/* pede uma leitura; se vier só "aguarde", repete UMA vez com espera maior */
+async function pede(req, resp, serv, espera=1200){
+  let r=await cmd(req,espera);
+  if(ultimoErro) return {tipo:"erro", erro:ultimoErro, ms:ultimoMs};
+  let a=analisa(r,resp,serv); a.ms=ultimoMs;
+  if(a.tipo==="pendente"){
+    r=await cmd(req,6000);
+    if(ultimoErro) return {tipo:"erro", erro:ultimoErro, pendente:true, ms:ultimoMs};
+    a=analisa(r,resp,serv); a.pendente=true; a.ms=ultimoMs;
+  }
+  return a;
+}
 
 /* ---------- plano ---------- */
 const PID_BASES=["00","20","40","60","80","A0","C0"];
@@ -148,14 +175,42 @@ const FAIXAS_RAPIDAS=[ ...faixa(0xF180,0xF1FF), ...faixa(0xF400,0xF4FF), ...faix
                       ...faixa(0x0000,0x00FF), ...faixa(0x1000,0x10FF), ...faixa(0x2000,0x20FF), ...faixa(0xD000,0xD0FF) ];
 const TODAS=faixa(0x0000,0xFFFF);
 const BYTE=[...Array(256).keys()].map(i=>i.toString(16).toUpperCase().padStart(2,"0"));
+/* ["0000","0001","0002","0005"] -> ["0000-0002","0005"] */
+function faixas(ids){
+  const out=[]; let ini=null, ant=null, w=4;
+  const fmt=(a,b)=>{ const s=x=>x.toString(16).toUpperCase().padStart(w,"0"); return a===b?s(a):s(a)+"-"+s(b); };
+  for(const id of ids){ const v=parseInt(id,16); w=id.length;
+    if(ini!==null && v===ant+1){ ant=v; continue; }
+    if(ini!==null) out.push(fmt(ini,ant)); ini=v; ant=v; }
+  if(ini!==null) out.push(fmt(ini,ant));
+  return out;
+}
 
 let previstos=1, feitos=0, cancelar=false;
 function passo(t){ $("p-passo").textContent=t; }
 function avanca(n=1){ feitos+=n; const p=Math.min(99,Math.floor(feitos/Math.max(previstos,feitos)*100)); $("p-pct").textContent=p; $("p-barra").style.width=p+"%"; }
 
+/* varre um serviço de leitura e guarda TUDO: respostas, silêncio (em faixas), erros do aparelho e até onde foi */
+async function varre(M, chave, serv, ids, resp, rotulo){
+  const S={ servico:serv, previstos:ids.length, tentados:0, ultimo:null, concluido:false, respostas:{}, silenciosos:[], erros:[] };
+  M[chave]=S; let n=0;
+  for(const id of ids){
+    if(cancelar) break;
+    if(++n%40===0){ await cmd("3E00",800); passo(`Módulo ${M.endereco}: ${rotulo} ${id}`); }
+    const a=await pede(serv+id, resp, serv);
+    S.tentados++; S.ultimo=id;
+    if(a.tipo==="nada") S.silenciosos.push(id);
+    else if(a.tipo==="erro") S.erros.push({id, erro:a.erro});
+    else S.respostas[id]=a;
+    avanca(1);
+  }
+  S.concluido = S.tentados===ids.length;
+  S.silenciosos = faixas(S.silenciosos);
+}
+
 async function clonar(completo){
   bruto=[]; t0=Date.now(); feitos=0; cancelar=false; gravarBruto=true;
-  const A={ modo:completo?"completo":"rapido", adaptador:{}, enumeracao:{}, obd2:{}, obd2_lido:{}, modulos:[] };
+  const A={ modo:completo?"completo":"rapido", adaptador:{}, enumeracao:{}, obd2:{}, obd2_lido:{}, modulos:[], concluido:false };
 
   passo("Preparando o adaptador…");
   for(const c of ["ATZ","ATE0","ATL0","ATS0","ATSP0"]) await cmd(c,3000);
@@ -165,83 +220,88 @@ async function clonar(completo){
   await cmd("0100",6000);
   A.adaptador.protocolo=await cmd("ATDP"); A.adaptador.protocoloNum=await cmd("ATDPN");
 
-  // --- quem responde de verdade ---
-  passo("Procurando os módulos…");
-  await cmd("ATAR");
-  const rOBD=await cmd("0100",4000), rUDS=await cmd("1003",4000);
-  const hdrs=new Set();
-  for(const raw of [rOBD,rUDS]) for(const f of raw.split("|")){ const m=hx(f).match(/^(7E[89A-F])/); if(m) hdrs.add(m[1]); }
-  // o adaptador obedece ao endereço? pede a um endereço que quase nunca existe e vê se alguém "responde"
-  await cmd("ATSH7E7"); await cmd("ATCRA7EF");
-  const tst=await cmd("0100",2500);
-  A.adaptador.obedece_endereco = !/7E8/.test(hx(tst));
+  // --- o adaptador obedece ao endereço e ao filtro? (com controle, recepção aberta) ---
+  passo("Testando o adaptador…");
   await cmd("ATAR"); await cmd("ATSH7DF");
-  A.enumeracao={ obd_0100:rOBD, funcional_1003:rUDS, respondem:[...hdrs], teste_endereco:tst };
+  const controle=await cmd("0100",3000);
+  await cmd("ATSH7E7"); const fisico=await cmd("0100",2500);
+  await cmd("ATSH7DF"); await cmd("ATCRA7EF"); const filtro=await cmd("0100",2500);
+  await cmd("ATAR");
+  const hc=cabecalhos(controle), hf=cabecalhos(fisico), hfi=cabecalhos(filtro);
+  const temControle=[...hc].some(h=>/^7E[89A-F]$/.test(h));
+  A.adaptador.endereco = !temControle ? "indeterminado (sem resposta de controle)" : ([...hf].some(h=>/^7E[89A-E]$/.test(h)) ? "ignora ATSH" : "obedece ATSH");
+  A.adaptador.filtro = !temControle ? "indeterminado (sem resposta de controle)" : (hfi.has("7E8") ? "ignora ATCRA" : "obedece ATCRA");
+  A.adaptador.teste = { controle, fisico_7E7:fisico, filtro_7EF:filtro };
+
+  // --- quem responde: funcional E físico (com conferência do cabeçalho) ---
+  passo("Procurando os módulos…");
+  await cmd("ATSH7DF");
+  const rOBD=await cmd("0100",4000), rSes=await cmd("1003",4000);
+  const hdrs=new Set([...cabecalhos(rOBD),...cabecalhos(rSes)].filter(h=>/^7E[89A-F]$/.test(h)));
+  const fis={};
+  for(let i=0;i<8;i++){
+    const base=(0x7E0+i).toString(16).toUpperCase(), resp=(0x7E8+i).toString(16).toUpperCase();
+    await cmd("ATSH"+base); await cmd("ATCRA"+resp);
+    for(const [req,serv] of [["22F190","22"],["1A90","1A"],["1001","10"]]){
+      const a=analisa(await cmd(req,1500),resp,serv);
+      if(a.tipo!=="nada"){ hdrs.add(resp); fis[resp]=req; break; }
+    }
+  }
+  await cmd("ATAR"); await cmd("ATSH7DF");
+  A.enumeracao={ funcional_0100:rOBD, funcional_1003:rSes, fisico_respondeu:fis, respondem:[...hdrs].sort() };
 
   // --- OBD padrão ---
   passo("Lendo OBD padrão…");
   const pids=[];
   for(const b of PID_BASES){ const r=await cmd("01"+b,4000); A.obd2["sup_01"+b]=r; const bm=bitmap(r,"41",b); pids.push(...bm.pids); if(!bm.mais) break; }
   for(const p of pids) A.obd2["01"+p]=await cmd("01"+p);
-  for(const m9 of ["00","02","04","06","08","0A"]) A.obd2["09"+m9]=await cmd("09"+m9,4000);
+  for(const m9 of ["00","02","04","06","08","0A"]) A.obd2["09"+m9]=await cmd("09"+m9,6000);
   for(const s of ["03","07","0A"]) A.obd2[s]=await cmd(s,4000);
-  A.obd2["020200"]=await cmd("020200",4000); A.obd2["0600"]=await cmd("0600",4000); A.obd2["0800"]=await cmd("0800");
-  const e="7E8";
-  A.obd2_lido={ VIN:hex2txt(isotp(A.obd2["0902"],e).replace(/^4902../,"")),
-    CALID:hex2txt(isotp(A.obd2["0904"],e).replace(/^4904../,"")).trim(),
-    CVN:isotp(A.obd2["0906"],e).replace(/^4906../,""),
-    ECU:hex2txt(isotp(A.obd2["090A"],e).replace(/^490A../,"")).trim() };
+  A.obd2["020200"]=await cmd("020200",4000); A.obd2["0600"]=await cmd("0600",4000);
+  // resposta longa cortada pelo adaptador? tenta de novo com controle de fluxo explícito (BS=0, STmin=0)
+  const cortadas=["0902","0904","0906","0908","090A"].filter(k=>mensagens(A.obd2[k],"7E8").some(m=>!m.completo));
+  if(cortadas.length){
+    await cmd("ATFCSH7E0"); await cmd("ATFCSD300000"); await cmd("ATFCSM1");
+    for(const k of cortadas) A.obd2[k+"_fc"]=await cmd(k,8000);
+    await cmd("ATFCSM0");
+  }
+  const lido=(k,pre)=>{ for(const key of [k+"_fc",k]){ const m=mensagens(A.obd2[key],"7E8")[0]; if(m&&m.completo) return {hex:m.dados.replace(new RegExp("^"+pre+".."),""),completo:true,de:key}; }
+    const m=mensagens(A.obd2[k],"7E8")[0]; return {hex:m?m.dados.replace(new RegExp("^"+pre+".."),""):"",completo:false,de:k}; };
+  const vin=lido("0902","4902"), cal=lido("0904","4904"), cvn=lido("0906","4906"), ecu=lido("090A","490A");
+  A.obd2_lido={ VIN:{texto:hex2txt(vin.hex),...vin}, CALID:{texto:hex2txt(cal.hex).replace(/\s+/g," ").trim(),...cal},
+    CVN:cvn, ECU:{texto:hex2txt(ecu.hex).trim(),...ecu}, respostas_cortadas_pelo_adaptador:cortadas };
 
-  // --- cada módulo de verdade ---
+  // --- cada módulo ---
   const lista=completo?TODAS:FAIXAS_RAPIDAS;
   const presentes=[...hdrs].sort();
-  previstos = feitos + presentes.length*(lista.length + 256 + 256 + 20);
-  gravarBruto=false; // as varreduras vão para o mapa de cada módulo (o bruto ficaria gigante)
+  previstos=feitos+presentes.length*(lista.length+256);
   for(const resp of presentes){
     if(cancelar) break;
     const base=(parseInt(resp,16)-8).toString(16).toUpperCase();
-    const M={ endereco:base, resposta:resp, sessoes:{}, mapa22:{}, mapa1A:{}, saidasAE:{}, saidas2F:{}, falhas:null, memoria:null,
-              silencio:{ "22":0, "1A":0, "AE":0, "2F":0 } };
+    const M={ endereco:base, resposta:resp, protocolo:null, sessoes:{}, falhas:null, memoria:null };
+    passo(`Clonando o módulo ${base} (${resp})…`);
     await cmd("ATSH"+base); await cmd("ATCRA"+resp);
-    gravarBruto=true;
-    for(const s of ["1001","1003"]){ const r=await cmd(s,2500); M.sessoes[s]={raw:r,...analisa(r,resp,"10"),ms:ultimoMs}; }
-    M.falhas=await cmd("1902FF",3500);
-    M.memoria=await cmd("23140000000001",3000);
-    gravarBruto=false;
-    let n=0;
-    // leitura: 22 (UDS e GMLAN)
-    for(const id of lista){
-      if(cancelar) break;
-      if(++n%40===0){ await cmd("3E00",800); passo(`Módulo ${base}: lendo ${id} (${completo?"completo":"rápido"})`); }
-      const r=await cmd("22"+id,1200); const a=analisa(r,resp,"22");
-      if(a.tipo==="nada") M.silencio["22"]++; else M.mapa22[id]={...a,ms:ultimoMs};
-      avanca(1);
-    }
-    // leitura: 1A (GMLAN/KWP)
+    for(const s of ["1001","1003"]) M.sessoes[s]=await pede(s,resp,"10",2500);
+    const s3=M.sessoes["1003"];
+    M.protocolo = s3.tipo==="pos" ? (s3.dados===""?"GMLAN provável (positiva sem eco)":"UDS (positiva com eco "+s3.dados.slice(0,2)+")") : "indefinido";
+    M.falhas=await pede("1902FF",resp,"19",3500);
+    M.memoria=await pede("23140000000001",resp,"23",3000);
+    gravarBruto=false; // varreduras: tudo vai para o mapa do módulo, em forma compacta
+    await varre(M,"leitura22","22",lista,resp,"lendo");
     passo(`Módulo ${base}: identificadores GMLAN…`);
-    for(const id of BYTE){ if(cancelar) break; const r=await cmd("1A"+id,1200); const a=analisa(r,resp,"1A");
-      if(a.tipo==="nada") M.silencio["1A"]++; else M.mapa1A[id]={...a,ms:ultimoMs}; avanca(1); }
-    // saídas: AE incompleto (GMLAN device control)
-    passo(`Módulo ${base}: mapeando saídas…`);
-    await cmd("1003",2000);
-    for(const id of BYTE){ if(cancelar) break; const r=await cmd("AE"+id,1200); const a=analisa(r,resp,"AE");
-      if(a.tipo==="nada") M.silencio["AE"]++; else M.saidasAE[id]={...a,existe:a.nrc==="13",ms:ultimoMs}; avanca(1); }
-    // saídas: 2F incompleto (UDS) — nos identificadores que o módulo deixou ler
-    for(const id of Object.keys(M.mapa22).filter(k=>M.mapa22[k].tipo==="pos").slice(0,256)){
-      if(cancelar) break; const r=await cmd("2F"+id,1200); const a=analisa(r,resp,"2F");
-      if(a.tipo==="nada") M.silencio["2F"]++; else M.saidas2F[id]={...a,existe:a.nrc==="13",ms:ultimoMs};
-    }
+    await varre(M,"leitura1A","1A",BYTE,resp,"GMLAN");
+    gravarBruto=true;
     A.modulos.push(M);
   }
-  gravarBruto=true;
+  A.concluido=!cancelar;
   await cmd("ATAR"); await cmd("ATSH7DF");
   $("p-pct").textContent=100; $("p-barra").style.width="100%"; passo(cancelar?"Interrompido (o que já leu foi guardado).":"Concluído.");
   return montarArquivo(A);
 }
 
 function bitmap(resp, servResp, base){
-  const h=hx(resp); const i=h.indexOf(servResp+base); const pids=[]; let mais=false;
-  if(i>=0){ const d=h.substr(i+4,8); if(d.length===8){ const n=parseInt(d,16), ini=parseInt(base,16);
+  const d0=isotp(resp,"7E8")||hx(resp); const i=d0.indexOf(servResp+base); const pids=[]; let mais=false;
+  if(i>=0){ const d=d0.substr(i+4,8); if(d.length===8){ const n=parseInt(d,16), ini=parseInt(base,16);
     for(let b=0;b<32;b++) if(n&(1<<(31-b))){ const p=ini+1+b; if((p&0x1F)!==0) pids.push(p.toString(16).toUpperCase().padStart(2,"0")); }
     mais=(n&1)===1; } }
   return { pids, mais };
@@ -251,18 +311,20 @@ function bitmap(resp, servResp, base){
 let arquivoTexto="", arquivoNome="";
 function montarArquivo(A){
   const placa=($("f-placa").value||"SEM-PLACA").toUpperCase().replace(/[^A-Z0-9]/g,"");
-  const conta=(o,f)=>Object.values(o).filter(f).length;
+  const porNrc=S=>{ const c={}; for(const a of Object.values(S?S.respostas:{})) if(a.tipo==="neg") c[a.nrc]=(c[a.nrc]||0)+1; return c; };
+  const pos=S=>Object.values(S?S.respostas:{}).filter(a=>a.tipo==="pos").length;
   const obj={
-    formato:"dtcar-clone-obd/2", gerado_em:new Date().toISOString(), app:"DTCar Clone 0.2.0", modo:A.modo,
+    formato:"dtcar-clone-obd/2", gerado_em:new Date().toISOString(), app:"DTCar Clone 0.2.0", modo:A.modo, concluido:A.concluido,
     carro:{ placa, condicao:{ motor:$("f-motor").value, estado:$("f-estado").value, obs:$("f-obs").value||null } },
     adaptador:A.adaptador,
     resumo:{
-      vin:A.obd2_lido.VIN, calid:A.obd2_lido.CALID, ecu:A.obd2_lido.ECU,
-      adaptador_obedece_endereco:A.adaptador.obedece_endereco,
-      modulos:A.modulos.map(m=>({ endereco:m.endereco+"→"+m.resposta,
-        leitura22:conta(m.mapa22,x=>x.tipo==="pos"), leitura1A:conta(m.mapa1A,x=>x.tipo==="pos"),
-        saidasAE:conta(m.saidasAE,x=>x.existe), saidas2F:conta(m.saidas2F,x=>x.existe),
-        memoria:(m.memoria||"").slice(0,40) })),
+      vin:A.obd2_lido.VIN.texto, calid:A.obd2_lido.CALID.texto, ecu:A.obd2_lido.ECU.texto,
+      cortadas_pelo_adaptador:A.obd2_lido.respostas_cortadas_pelo_adaptador,
+      endereco:A.adaptador.endereco, filtro:A.adaptador.filtro,
+      modulos:A.modulos.map(m=>({ endereco:m.endereco+"→"+m.resposta, protocolo:m.protocolo,
+        leitura22:{ positivas:pos(m.leitura22), recusas:porNrc(m.leitura22), tentados:m.leitura22?m.leitura22.tentados:0, concluido:!!(m.leitura22&&m.leitura22.concluido) },
+        leitura1A:{ positivas:pos(m.leitura1A), recusas:porNrc(m.leitura1A), tentados:m.leitura1A?m.leitura1A.tentados:0, concluido:!!(m.leitura1A&&m.leitura1A.concluido) },
+        memoria:m.memoria })),
       total_trocas_gravadas:bruto.length
     },
     codigos_recusa:NRC, obd2_lido:A.obd2_lido, enumeracao:A.enumeracao, obd2:A.obd2, modulos:A.modulos, bruto
@@ -296,14 +358,15 @@ async function rodar(completo){
   $("c-condicao").classList.add("esconde"); $("c-progresso").classList.remove("esconde");
   try{
     const o=await clonar(completo);
-    const lin=o.resumo.modulos.map(m=>`<span>${m.endereco}: lê <b>${m.leitura22+m.leitura1A}</b> · saídas <b>${m.saidasAE+m.saidas2F}</b></span>`).join("");
-    $("r-nums").innerHTML=`<span>VIN: <b>${o.resumo.vin||"—"}</b></span><span>Endereçamento: <b>${o.resumo.adaptador_obedece_endereco?"ok":"adaptador ignora"}</b></span>${lin}`;
+    const lin=o.resumo.modulos.map(m=>`<span>${m.endereco}: <b>${m.leitura22.positivas+m.leitura1A.positivas}</b> lidos · ${m.protocolo}</span>`).join("");
+    $("r-nums").innerHTML=`<span>VIN: <b>${o.resumo.vin||"—"}</b></span><span>Adaptador: <b>${o.resumo.endereco}</b>, <b>${o.resumo.filtro}</b></span>${lin}`;
     $("r-texto").value=arquivoTexto.slice(0,3000)+(arquivoTexto.length>3000?"\n… (completo no botão Enviar)":"");
     $("c-progresso").classList.add("esconde"); $("c-fim").classList.remove("esconde");
   }catch(e){ passo("Erro: "+(e.message||e.code||e)); }
 }
 $("bt-clonar").onclick=()=>rodar(false);
 $("bt-completo").onclick=()=>{ if(confirm("Clone completo: mais de 1 hora por módulo. Carro no carregador de bateria. Continuar?")) rodar(true); };
+$("bt-parar").onclick=()=>{ cancelar=true; passo("Parando… guardando o que já leu."); };
 $("bt-compartilhar").onclick=async()=>{
   try{
     if(Fs&&Sh){ await Fs.writeFile({path:arquivoNome,data:arquivoTexto,directory:"DOCUMENTS",encoding:"utf8"}); const uri=await Fs.getUri({path:arquivoNome,directory:"DOCUMENTS"}); await Sh.share({title:"Clone OBD "+arquivoNome,url:uri.uri}); }
@@ -313,8 +376,6 @@ $("bt-compartilhar").onclick=async()=>{
 function baixar(){ const b=new Blob([arquivoTexto],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=arquivoNome; a.click(); }
 $("bt-copiar").onclick=async()=>{ try{ await navigator.clipboard.writeText(arquivoTexto); $("bt-copiar").textContent="Copiado!"; setTimeout(()=>$("bt-copiar").textContent="Copiar texto",1500);}catch(e){} };
 $("bt-novo").onclick=()=>{ $("c-fim").classList.add("esconde"); $("c-condicao").classList.remove("esconde"); $("p-pct").textContent=0; $("p-barra").style.width="0%"; };
-$("bt-parar").onclick=()=>{ cancelar=true; passo("Parando… guardando o que já leu."); };
-document.addEventListener("keydown",ev=>{ if(ev.key==="Escape") cancelar=true; });
 listar();
 </script>
 </body>

@@ -19,11 +19,10 @@ public class VerificaCloneLista {
         "ATMA","ATWS"})
       chk("RECUSA ação no carro "+c, !ObdPlugin.permitido(c));
 
-    // mapeamento de atuadores: SÓ o pedido incompleto passa
-    chk("permite sonda AE incompleta", ObdPlugin.permitido("AE12"));
-    chk("permite sonda 2F incompleta", ObdPlugin.permitido("2FF190"));
-    for(String c : new String[]{"AE1200000000","AE12FF","AE","2FF19003","2FF1900301","2FF19003FF00"})
-      chk("RECUSA acionamento completo "+c, !ObdPlugin.permitido(c));
+    // atuador: RECUSADO até incompleto (GMW3110: CPID sem bytes de controle executa; AE00 é comando)
+    for(String c : new String[]{"AE","AE00","AE12","AE1200000000","2FF190","2FF19003","2FF1900301",
+        "3B9000","A5","A501","A503","2801","1002","3DF19000"})
+      chk("RECUSA "+c, !ObdPlugin.permitido(c));
     // 10 só sessão de leitura; 3E só padrão
     chk("RECUSA sessão de programação 1002", !ObdPlugin.permitido("1002"));
     chk("permite sessão estendida 1003", ObdPlugin.permitido("1003"));

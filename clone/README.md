@@ -37,23 +37,24 @@ GitHub › Actions › **DTCar Clone (gerar APK)** › Run workflow. Baixar em *
 (`DTCar-clone-apk`). Desinstalar a versão anterior antes de instalar a nova.
 
 ## v2 (0.2.0) — matéria-prima do simulador
-Teste da v1 num Cobalt 2013: o OBD padrão veio inteiro (VIN, CALID, CVN, 36 PIDs), mas o UDS por
-módulo não trouxe nada e a contagem "8 módulos" era falsa (só o ECM respondia). A v2:
+Teste da v1 num Cobalt 2013: o OBD padrão veio (VIN, 36 PIDs), mas o UDS por módulo não trouxe
+nada, a contagem "8 módulos" era falsa (só o ECM respondia) e o adaptador **cortou o modo 09 em 5
+quadros** (o CALID tinha 8 calibrações e vieram 2). A v2, revisada pelo Codex no PR #169:
 
-- **enumera os módulos de verdade** (pedido funcional e lê quem respondeu) e testa se o adaptador
-  obedece ao endereçamento (`adaptador_obedece_endereco` no resumo);
-- **varre identificadores** no `22` (UDS e GMLAN) e no `1A` (GMLAN/KWP), gravando o dado **ou o código
-  de recusa** de cada um — o simulador só sabe o que o clone gravou, e a recusa diz o que existe;
-- **mapeia as saídas sem acionar**: `AE`+CPID (GMLAN) e `2F`+identificador (UDS) **incompletos**.
-  Saída que existe responde "tamanho errado" (13); a que não existe, "fora da faixa" (31). A trava
-  nativa só deixa sair o pedido incompleto — o comando completo continua recusado (teste);
-- tenta ler a **memória** (`23`), grava sessões aceitas, onde pede segurança, e o **tempo** de cada resposta.
+- **testa o adaptador**: se obedece ao endereço (ATSH) e ao filtro (ATCRA), com leitura de controle;
+- **acha os módulos** pelo pedido funcional **e** por endereço físico, conferindo o cabeçalho de quem respondeu;
+- **monta o ISO-TP pelo tamanho declarado**: sem enchimento, e marca resposta cortada como incompleta;
+  resposta longa cortada é pedida de novo com controle de fluxo explícito;
+- **varre identificadores** no `22` (UDS/GMLAN) e no `1A` (GMLAN/KWP), gravando o dado ou o **código
+  de recusa cru** (sem virar "existe/não existe", porque o mesmo código muda de sentido entre GMLAN e
+  UDS), o silêncio em faixas, os erros do aparelho, até onde foi e se terminou;
+- trata o "aguarde" (78) repetindo a leitura uma vez com espera maior;
+- tenta a **memória** (`23`), grava sessões, protocolo provável e o **tempo** de cada resposta.
 
-Dois botões: **Clone rápido** (faixas conhecidas, ~5 min por módulo) e **Clone completo**
-(65.536 identificadores, mais de 1 h por módulo, com botão Parar que guarda o que já leu).
+**O clone não sonda atuador.** A versão inicial mandava `AE`/`2F` "incompletos" para mapear saídas;
+o Codex mostrou que, pela GMW3110, há CPIDs que **executam sem bytes de controle** e `AE00` é comando
+válido. Os dois foram retirados da trava nativa (teste recusa qualquer forma). Mapear saída por sonda
+fica para bancada/simulador. A lista de atuadores só vem quando o módulo a informa por leitura (FA20–FA23).
 
-Cuidado: nem todo módulo confere o tamanho antes da faixa. O primeiro mapeamento de saídas deve ser
-num carro próprio ou módulo de bancada, motor desligado.
-
-O que o clone **não** traz e o simulador vai precisar depois: a reação do módulo a um comando
-**completo** de cada saída e o efeito dela no carro — isso só vem de um acionamento real.
+Dois botões: **Clone rápido** (faixas conhecidas, minutos) e **Clone completo** (65.536
+identificadores, mais de 1 h por módulo, com **Parar** que guarda o que já leu).

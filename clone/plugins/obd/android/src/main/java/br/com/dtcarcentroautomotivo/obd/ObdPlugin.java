@@ -44,7 +44,7 @@ import java.util.concurrent.Executors;
  *     10 só nas sessões 01 (padrão) e 03 (estendida), 3E (tester present).
  *
  * CONTINUA BLOQUEADO, igual ao app do pátio, tudo que ESCREVE ou AGE no carro:
- *   04/14 (apagar falha), 2E/3D (gravar), 2F/AE completos (atuador), 31 (rotina), 34-37 (transferência de bloco),
+ *   04/14 (apagar falha), 2E/3D/3B (gravar), 2F/AE (atuador, mesmo incompleto), 31 (rotina), 34-37 (transferência),
  *   27 (destravar), 11/28/85 (reiniciar/comunicação), e a sessão de programação (10 02).
  * Este app NÃO tem o método apagar(): ele só lê.
  *
@@ -133,13 +133,9 @@ public class ObdPlugin extends Plugin {
         if (servico.equals("10")) return c.equals("1001") || c.equals("1003");
         // 3E (tester present) só nas duas formas padrão.
         if (servico.equals("3E")) return c.equals("3E00") || c.equals("3E80");
-        // MAPEAR ATUADORES sem acionar: o pedido sai INCOMPLETO de propósito, então o módulo só pode recusar.
-        // Se a saída existe, ele responde "tamanho errado" (13); se não existe, "fora da faixa" (31).
-        //  - GMLAN device control: só "AE" + CPID (2 bytes). O comando de verdade leva os bytes de controle.
-        //  - UDS controle de entrada/saída: só "2F" + identificador (3 bytes). O de verdade leva o parâmetro.
-        // Qualquer coisa a mais (que poderia acionar) continua RECUSADA.
-        if (servico.equals("AE")) return c.length() == 4;
-        if (servico.equals("2F")) return c.length() == 6;
+        // AE (device control GMLAN) e 2F (controle de E/S UDS) ficam FORA, inclusive "incompletos":
+        // pela GMW3110 §8.20.6 há CPIDs que executam com ZERO bytes de controle, e AE00 é comando válido
+        // (achado da revisão do Codex no PR #169). O clone só lê; mapear saída por sonda é coisa de bancada.
         return false;
     }
 

@@ -473,6 +473,14 @@ function Obd() {
     catch (e) { setErro((e && e.message) || "Não deu para gerar o PDF."); }
   };
 
+  // UMA TELA POR VEZ (pedido do Danilo, 21/11/2026): abriu as falhas, só as falhas na tela; abriu os
+  // dados ao vivo, só eles; pôs o gráfico, só o gráfico. O menu de leituras vira uma tira de abas no
+  // alto, e o resto (placa, adaptador, avisos de outras leituras) sai da frente até voltar.
+  const foco = !!(res || vivo || apagar);
+  const vistaAtual = apagar ? "apagar" : vivo ? (vivo.modo === "combustivel" ? "combustivel" : "vivo") : res ? res.o : "";
+  const sairDoFoco = () => { pararVivo(); setRes(null); setVivo(null); setApagar(null); setAbrirEscolha(false); };
+  usarPasso(foco, sairDoFoco);
+
   const v = pl.veic;
   // O carro da vez sobe para a sessão: as outras telas do diagnóstico (módulos, atuadores…) passam
   // a saber a marca sem pedir a placa de novo.
@@ -487,7 +495,8 @@ function Obd() {
       <p class="nota" style="font-size:13.5px">A leitura OBD é a primeira coisa do app que depende de uma parte nativa: o Bluetooth do adaptador não existe dentro das telas do site. Gere o APK novo em GitHub › Actions › "App DTCar (gerar APK)", desinstale o app antigo do celular e instale o novo. Depois disso as telas voltam a chegar sozinhas, como sempre.</p>
     </${Cartao}>` : null}
 
-    ${temPlugin ? html`
+    ${temPlugin ? html`<div class=${foco ? "obd-tela obd-foco" + (vivo && jeito === "grafico" ? " obd-so-grafico" : "") : "obd-tela"} id="obd-tela" data-vista=${vistaAtual}>
+      ${foco ? html`<button type="button" class="foco-voltar" id="obd-voltar-menu" onClick=${sairDoFoco}>‹ Todas as leituras</button>` : null}
       <${BuscaPlaca} id="obd-placa" titulo="Placa do carro (opcional)" pl=${pl} />
       ${v ? html`<${Veiculo} v=${v} />` : null}
 
@@ -778,7 +787,7 @@ function Obd() {
       </${Cartao}>` : null}
 
       <div class="nota" style="padding:0 2px 4px">Leitura de motor e emissões. ABS, airbag, câmbio e imobilizador exigem o scanner da oficina. O OBD-II não informa a quilometragem do painel.</div>
-    ` : null}
+    </div>` : null}
   </${Tela}>`;
 }
 
@@ -935,7 +944,9 @@ function Modulos() {
   const explicadasMod = usarExplicacoes(falhas, st.carro);
   const mapa = usarMapa(st.carro);
   const [regApagar, setRegApagar] = useState("");
-  usarPasso(!!mod, () => { setMod(null); setFalhas(null); setEpti(null); });
+  // Uma tela por vez também aqui: falhas, leituras ao vivo ou "o que ele tem" — nunca empilhadas.
+  const [vistaMod, setVistaMod] = useState("");
+  usarPasso(!!mod, () => { setMod(null); setFalhas(null); setEpti(null); setVistaMod(""); });
 
   const escolher = async m => {
     setErro(""); setFalhas(null); setEpti(null);
@@ -953,7 +964,7 @@ function Modulos() {
     if (!r.ok) { setErro(r.texto || "Não deu para ler."); return; }
     const d = r.r;
     if (d.nrc != null) { setErro(d.texto); return; }
-    setFalhas(d.codigos.map(uds.falhaPronta));
+    setFalhas(d.codigos.map(uds.falhaPronta)); setVistaMod("falhas");
   };
   const descobrir = async () => {
     setOcupado("Perguntando ao módulo o que ele tem…"); setErro("");
@@ -963,7 +974,7 @@ function Modulos() {
     });
     setOcupado("");
     if (!r.ok) { setErro(r.texto || "Não deu para perguntar."); return; }
-    setEpti(r.r);
+    setEpti(r.r); setVistaMod("epti");
   };
   const apagar = async () => {
     setOcupado("Apagando as falhas deste módulo…"); setErro("");
@@ -986,17 +997,19 @@ function Modulos() {
       <${CarroDaVez} st=${st} />
       <${Mapeando} st=${st} mapa=${mapa} parado=${!!mod} caderno=${cadernoAtual} />
       ${!mod ? html`<${CarroInteiro} st=${st} mapa=${mapa} aoAbrir=${escolher} /><${EscolherModulo} aoEscolher=${escolher} />` : html`
+        <div class=${vistaMod ? "mod-tela mod-foco" : "mod-tela"} id="mod-tela" data-vista=${vistaMod}>
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="mod-escolhido">
           <${KV} a="Pede em" b=${mod.pedido} />
           <${KV} a="Responde em" b=${mod.resposta} />
           <button type="button" class="btn-barra" onClick=${lerFalhas} disabled=${!!ocupado || !!st.dono}><${Ic} n="obd" t=${20} />LER AS FALHAS DESTE MÓDULO</button>
+          ${mapa.comandos.some(c => c.p === mod.pedido) ? html`<button type="button" class="btn-barra claro" id="mod-ver-leituras" onClick=${() => setVistaMod("leituras")} disabled=${!!st.dono && vistaMod !== "leituras"}><${Ic} n="obd" t=${20} />LEITURAS AO VIVO</button>` : null}
           <button type="button" class="btn-barra claro" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />PERGUNTAR O QUE ELE TEM</button>
-          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setFalhas(null); setEpti(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
+          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setFalhas(null); setEpti(null); setVistaMod(""); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
         </${Cartao}>
-        <${LeiturasDoModulo} st=${st} mod=${mod} comandos=${mapa.comandos} />
+        ${vistaMod === "leituras" ? html`<${LeiturasDoModulo} st=${st} mod=${mod} comandos=${mapa.comandos} />` : null}
         ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
         ${erro ? html`<div class="erro">${erro}</div>` : null}
-        ${falhas ? html`<${Cartao} titulo=${"Falhas (" + falhas.length + ")"} id="mod-falhas">
+        ${falhas && vistaMod === "falhas" ? html`<${Cartao} titulo=${"Falhas (" + falhas.length + ")"} id="mod-falhas">
           ${!falhas.length ? html`<div class="nota">Nenhuma falha gravada neste módulo.</div>` : falhas.map(f => html`
             <div key=${f.rotulo} class="diag-falha">
               <div class="diag-falha-topo"><b>${f.rotulo}</b>${f.pedeLuz ? html`<span class="selo ruim">LUZ NO PAINEL</span>` : null}</div>
@@ -1008,7 +1021,7 @@ function Modulos() {
           ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}
           ${regApagar ? html`<p class="nota" id="mod-reg-apagar">Apagamento anterior: ${regApagar}</p>` : null}
         </${Cartao}>` : null}
-        ${epti ? html`<${Cartao} titulo="O que o módulo respondeu" id="mod-epti">
+        ${epti && vistaMod === "epti" ? html`<${Cartao} titulo="O que o módulo respondeu" id="mod-epti">
           ${epti.sistemas.length ? html`<div class="sec"><h3>Sistemas que ele cuida</h3>
             ${epti.sistemas.map(s => html`<div key=${s.id} class="kv"><span>${s.id}:</span><i></i><b>${s.nome || "não está na lista da norma"}</b></div>`)}</div>` : null}
           <${KV} a="Rotinas que aceita" b=${epti.rotinas.length ? epti.rotinas.length + " rotina(s)" : "nenhuma informada"} />
@@ -1016,6 +1029,7 @@ function Modulos() {
           ${epti.invertido ? html`<div class="nota">Este módulo responde no jeito do rascunho da norma, com os dois identificadores trocados. O app corrigiu pelo conteúdo.</div>` : null}
           ${epti.avisos.map((a, i) => html`<div key=${i} class="nota">${a}</div>`)}
         </${Cartao}>` : null}
+        </div>
       `}
     `}
   </${Tela}>`;

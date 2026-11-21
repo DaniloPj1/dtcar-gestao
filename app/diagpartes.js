@@ -98,15 +98,15 @@ function UmGrafico({ g, historia, agora }) {
  */
 export function Grafico({ lidos, historia, escolha, aoTrocar, recusa }) {
   const numericas = lidos.filter(l => typeof l.valor === "number");
-  // Com leitura escolhida, a lista inteira some: senão 40 botões empurram o gráfico para fora da tela.
+  // Com leitura escolhida, a lista some: na tela ficam só os gráficos (pedido do Danilo, 21/11/2026).
   const [aberto, setAberto] = useState(false);
   const gs = grafico.graficosDe(escolha, numericas);
   const agora = Date.now();
   return html`<div class="graf" id="obd-grafico">
     <div class="graf-escolha" role="group" aria-label="Leituras no gráfico">
-      ${(aberto || !escolha.length ? numericas : numericas.filter(l => escolha.includes(l.chave))).map(l => html`<button key=${l.chave} type="button" data-chave=${l.chave} class=${escolha.includes(l.chave) ? "esc" : ""}
+      ${(aberto || !escolha.length ? numericas : []).map(l => html`<button key=${l.chave} type="button" data-chave=${l.chave} class=${escolha.includes(l.chave) ? "esc" : ""}
         aria-pressed=${escolha.includes(l.chave)} onClick=${() => aoTrocar(l.chave)}>${l.rotulo}</button>`)}
-      ${escolha.length ? html`<button type="button" class="graf-abrir" id="graf-abrir" aria-expanded=${aberto} onClick=${() => setAberto(!aberto)}>${aberto ? "Fechar a lista" : "Pôr outra leitura"}</button>` : null}
+      ${escolha.length ? html`<button type="button" class="graf-abrir" id="graf-abrir" aria-expanded=${aberto} onClick=${() => setAberto(!aberto)}>${aberto ? "Fechar a lista" : "Escolher leituras (" + escolha.length + ")"}</button>` : null}
     </div>
     <div class=${"nota" + (recusa ? " graf-cheio" : "")} id="obd-grafico-aviso">${recusa || (gs.length
       ? "Último minuto. " + gs.length + " de " + grafico.GRAFICOS_MAX + " gráficos; leituras da mesma unidade ficam juntas."

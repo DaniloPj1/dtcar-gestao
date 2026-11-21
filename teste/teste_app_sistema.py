@@ -320,6 +320,25 @@ class Fake:
 def abrir(br, fake, url, plugin=True, disponivel=True, antes=None):
     ctx = br.new_context(viewport={'width': 390, 'height': 800}, has_touch=True, is_mobile=True)
     pg = ctx.new_page(); erros = []
+    # TELA LIMPA (21/11/2026): no menu do OBD, o que não é do dia a dia fica dentro de um botão. O teste
+    # abre o grupo antes de procurar o que está guardado nele, como a pessoa faz.
+    GRUPOS_OBD = {'#obd-mais-abrir': ('#obd-foto', '#obd-cilindros', '#obd-testes', '#obd-apagar'),
+                  '#obd-avancado-abrir': ('#obd-conf', '#obd-laudo', '#obd-calib', '#obd-ciclo', '#obd-contadores', '#obd-ir-parametros', '#obd-escolh', '#obd-padrao', '#obd-todas'),
+                  '#obd-adaptador-abrir': ('#obd-desligar',)}
+    def abre_grupo(sel):
+        if not isinstance(sel, str) or '#obd-' not in sel: return
+        for botao, dentro in GRUPOS_OBD.items():
+            if any(sel.startswith(d) for d in dentro) and not sel.startswith('#obd-apagar-'):
+                try:
+                    if pg.evaluate("b => { const e = document.querySelector(b); return !!e && e.getAttribute('aria-expanded') === 'false'; }", botao):
+                        pg.evaluate("b => document.querySelector(b).click()", botao); pg.wait_for_timeout(120)
+                except Exception: pass
+    def com_grupo(nome):
+        original = getattr(pg, nome)
+        def novo(sel, *a, **k):
+            abre_grupo(sel); return original(sel, *a, **k)
+        setattr(pg, nome, novo)
+    for nome_ in ('click', 'wait_for_selector', 'query_selector', 'inner_text', 'locator', 'is_visible', 'is_disabled', 'get_attribute', 'query_selector_all', 'check', 'uncheck'): com_grupo(nome_)
     pg.on('pageerror', lambda e: erros.append(str(e))); pg.on('dialog', lambda d: d.accept())
     fake.instalar(pg)
     if plugin: pg.add_init_script(PLUGIN + ('' if disponivel else 'window.__disp=false;'))
@@ -331,7 +350,11 @@ def entrar(pg, email='teste@dtcar.com', senha='certa'):
     if pg.locator('.barra').count(): pg.wait_for_timeout(900)  # as telas carregam os dados do sistema
 def tela(pg, r): pg.goto(URL + '#/' + r); pg.wait_for_selector('.titulo b', timeout=15000); pg.wait_for_timeout(600)
 def buscar_placa(pg, placa='abc1d23'): pg.fill('#ini-placa', placa); pg.click('button[aria-label="Buscar placa"]'); pg.wait_for_selector('#veic', timeout=5000)
-def textos(pg): return pg.inner_text('body')
+def textos(pg):
+    # os detalhes do adaptador (protocolo, versão) ficam guardados no botão "detalhes": o teste abre antes de ler
+    try: pg.evaluate("() => { const e = document.querySelector('#obd-adaptador-abrir'); if (e && e.getAttribute('aria-expanded') === 'false') e.click(); }"); pg.wait_for_timeout(60)
+    except Exception: pass
+    return pg.inner_text('body')
 def rotulos(pg): return [re.sub(r'\s*\d+$', '', b).strip() for b in pg.locator('.barra').all_inner_texts()]  # sem a bolinha de avisos
 URL = 'http://localhost:8766/app/index.html'
 try:
@@ -672,6 +695,16 @@ try:
         t(pg.evaluate("window.__obd.chamadas.includes('permissao')"), 'confere a permissão de Bluetooth antes de listar')
         pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000); tx = textos(pg)
         t('CONECTADO' in tx and 'ISO 15765-4' in tx, 'conecta e mostra o protocolo do carro: %s' % ('ISO 15765-4' in tx))
+        # TELA LIMPA (retorno do Danilo, 21/11/2026): no menu, só as três leituras do dia a dia; o resto dentro de botão
+        pg.evaluate("() => document.querySelectorAll('.grupo-abrir[aria-expanded=\"true\"]').forEach(e => e.click())"); pg.wait_for_timeout(150)
+        conta = lambda q: pg.evaluate('q => document.querySelectorAll(q).length', q)
+        t(conta('#obd-acoes .btn-barra') == 3 and conta('#obd-foto') == 0 and conta('#obd-apagar') == 0 and conta('#obd-conf') == 0 and conta('#obd-escolha') == 0 and conta('#obd-desligar') == 0, 'menu limpo: só combustível, dados ao vivo e ler falhas à vista (%d botões)' % conta('#obd-acoes .btn-barra'))
+        if os.environ.get('FOTO_MENU'): pg.screenshot(path=os.environ['FOTO_MENU'], full_page=True)
+        pg.evaluate("() => document.querySelector('#obd-mais-abrir').click()"); pg.wait_for_timeout(150)
+        t(conta('#obd-foto') == 1 and conta('#obd-cilindros') == 1 and conta('#obd-testes') == 1, 'o botão abre as outras leituras')
+        pg.evaluate("() => document.querySelector('#obd-outros-abrir').click()"); pg.wait_for_timeout(150)
+        t(conta('#obd-ir-modulos') == 1 and conta('#obd-ir-aprendizados') == 1 and conta('#obd-ir-atuadores') == 1, 'e há o caminho para Módulos (ABS), Atuadores e Aprendizados')
+        pg.evaluate("() => document.querySelectorAll('.grupo-abrir[aria-expanded=\"true\"]').forEach(e => e.click())"); pg.wait_for_timeout(150)
         cmds = pg.evaluate("window.__obd.cmds")
         t(cmds[:6] == ['ATZ', 'ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATSP0'], 'prepara o adaptador na ordem certa: %s' % cmds[:6])
         # falhas
@@ -1036,7 +1069,7 @@ try:
         # conferência de parâmetro, os dois gravados de propósito pelo próprio teste
         outras = [p for p in f.escritas() if 'obd_leituras' not in p[1]]
         t(not outras, 'a tela do OBD só grava o registro do apagamento, mais nada: %s' % outras)
-        t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
+        t('ficam em Módulos do carro' in textos(pg), 'a tela diz que ABS, câmbio e airbag ficam em Módulos do carro')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
 
         # ---- A CONEXÃO SOBREVIVE À TROCA DE TELA (20/11/2026) ----

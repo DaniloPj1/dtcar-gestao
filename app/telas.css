@@ -525,3 +525,9 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 [data-situacao="acima"] .linha-viva-num,[data-situacao="acima"] .mostrador-num b,.digital-num.acima b{color:#b3261e}
 .mostrador-pes.faixa{display:block;text-align:center;font-weight:700;color:#4a5560}
 .mostrador-num.longo b{font-size:17px}
+
+/* ---- tela limpa: o que não é do dia a dia fica guardado dentro de um botão ---- */
+.grupo-abrir{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 2px;border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:var(--tinta);text-align:left}
+.grupo-abrir i{flex:0 0 auto;font-style:normal;font-size:12.5px;font-weight:800;color:var(--azul);text-decoration:underline}
+.grupo-abrir .selo{margin-right:6px}
+#obd-acoes .nota:empty{display:none}

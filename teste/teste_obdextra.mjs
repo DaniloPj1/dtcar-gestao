@@ -229,3 +229,12 @@ console.log(m7 + " conferências da faixa de trabalho passaram.");
   if (!(r8.subiram === 1 && r8.restam === 1 && fila8.length === 1 && fila8[0].placa === "BBB2B22")) { console.error("FALHOU: o registro novo sumiu da fila: " + JSON.stringify(fila8)); process.exit(1); }
   console.log("pendente acrescentado durante a subida fica na fila.");
 }
+
+/* ---- varredura: leitura que quebra no meio não vira "sem falha" (revisão do Codex) ---- */
+{
+  const v = await import("../js/obdvarredura.js");
+  const fala = { comum: 1, estendida: 3, abrir: async () => {}, sessao: async () => ({}), lerFalhas: async () => { throw new Error("conexao-caiu"); } };
+  const r = await v.varrer([{ nome: "ABS", pedido: "760", resposta: "768" }], fala);
+  if (!(r[0].respondeu && r[0].recusou && r[0].erro === "conexao-caiu")) { console.error("FALHOU: leitura interrompida virou diagnóstico limpo: " + JSON.stringify(r[0])); process.exit(1); }
+  console.log("varredura: leitura interrompida fica como indisponível.");
+}

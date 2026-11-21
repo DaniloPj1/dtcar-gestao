@@ -26,7 +26,11 @@ export async function varrer(mods, fala, { aoAndar = null, continuar = () => tru
         if (f.nrc != null || f.erro) { item.recusou = true; item.erro = f.texto || "O módulo não entregou as falhas."; }
         else item.falhas = (f.codigos || []).map(pronta);
       }
-    } catch (e) { item.erro = (e && e.message) || "falhou"; }
+    } catch (e) {
+      item.erro = (e && e.message) || "falhou";
+      // Respondeu e a leitura quebrou no meio (conexão caiu): NÃO é "sem falha gravada", é leitura que não terminou.
+      if (item.respondeu) { item.recusou = true; item.falhas = []; }
+    }
     out.push(item);
   }
   return out;

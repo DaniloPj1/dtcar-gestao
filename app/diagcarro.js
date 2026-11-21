@@ -86,7 +86,7 @@ export function CarroInteiro({ st, mapa, aoAbrir, aoVarrer }) {
       ${lista && !disponiveis.length ? html`<div class="vazio">Nenhum módulo respondeu. Confira a ignição ligada e o adaptador.</div>` : null}
       ${disponiveis.length ? html`<div class="nota" id="carro-resumo">${disponiveis.length === 1 ? "1 módulo respondeu" : disponiveis.length + " módulos responderam"}, com ${(n => (n === 0 ? "nenhuma falha gravada" : n === 1 ? "1 falha ao todo" : n + " falhas ao todo"))(varredura.resumo(disponiveis).falhas)}.</div>` : null}
       ${disponiveis.map(m => html`<div key=${m.pedido} class="obd-mod" data-modulo=${m.pedido}>
-        <h3 class="obd-mod-t">${m.nome}<span>${m.recusou ? "não entregou as falhas" : m.falhas.length ? m.falhas.length + (m.falhas.length === 1 ? " falha" : " falhas") : "sem falha gravada"}</span></h3>
+        <h3 class="obd-mod-t">${m.nome}<span>${m.recusou ? "não entregou as falhas" + (m.erro ? " — " + m.erro : "") : m.falhas.length ? m.falhas.length + (m.falhas.length === 1 ? " falha" : " falhas") : "sem falha gravada"}</span></h3>
         ${m.falhas.map(f => html`<div key=${f.rotulo} class="diag-falha">
           <div class="diag-falha-topo"><b>${f.rotulo}</b>${f.pedeLuz ? html`<span class="selo ruim">LUZ NO PAINEL</span>` : null}</div>
           <${FalhaExplicada} e=${explicadas[f.codigo]} />

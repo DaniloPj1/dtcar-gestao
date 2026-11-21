@@ -42,8 +42,14 @@ import java.util.concurrent.Executors;
  *
  * SEGURANÇA — por que existe lista branca aqui: o app abre um SITE, então tudo o que este plugin
  * expõe fica alcançável por qualquer script daquela página. Sem a lista, um script poderia mandar
- * o serviço 04 (apagar as falhas do carro) ou escrever no barramento. A etapa 1 é só leitura, e essa
- * promessa não pode viver só no JavaScript: ela é garantida aqui.
+ * o serviço 04 (apagar as falhas do carro) ou escrever no barramento. Essa promessa não pode viver
+ * só no JavaScript: ela é garantida aqui.
+ *
+ * O que o app passou a fazer (atuador, aprendizado, codificação de bico) ESCREVE no carro, então a
+ * lista branca deixou de ser "só leitura" e virou duas listas: o que passa pelo comando() continua
+ * sendo leitura e ajuste do adaptador, e cada coisa que age no carro ganhou MÉTODO PRÓPRIO, com
+ * nome, mais abaixo. E ficou uma proibição que não tem exceção nem método: regravar memória de
+ * módulo. Sem os serviços de transferência e sem a sessão de programação, não há como.
  */
 @CapacitorPlugin(
     name = "DtcarObd",
@@ -72,8 +78,30 @@ public class ObdPlugin extends Plugin {
      * próprio ELM327 (reiniciar, tirar o eco, escolher o protocolo, dizer qual protocolo achou).
      */
     private static final Set<String> AT_PERMITIDOS = new HashSet<>(Arrays.asList(
-        "ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATH1", "ATSP0", "ATDP", "ATDPN", "ATRV", "ATI"
+        "ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATH1", "ATSP0", "ATDP", "ATDPN", "ATRV", "ATI",
+        // Para falar com UM módulo (UDS) o adaptador precisa de cabeçalho, filtro e controle de
+        // fluxo. Continua sendo ajuste do próprio ELM327: nenhum destes sai para o barramento.
+        "ATCAF0", "ATCAF1", "ATAL", "ATAR", "ATCRA", "ATSP6", "ATSP7", "ATSP8", "ATSP9"
     ));
+
+    /**
+     * Comandos de ajuste que levam valor (cabeçalho, filtro, controle de fluxo, tempo de espera).
+     * O valor é conferido um por um: só hexadecimal e no tamanho exato que aquele comando aceita.
+     * Também são ajustes do adaptador, não pedidos ao carro.
+     */
+    private static boolean atComValor(String c) {
+        if (c.startsWith("ATSH")) return hexExato(c.substring(4), 3) || hexExato(c.substring(4), 8);
+        if (c.startsWith("ATCRA")) return hexExato(c.substring(5), 3) || hexExato(c.substring(5), 8);
+        if (c.startsWith("ATFCSH")) return hexExato(c.substring(6), 3) || hexExato(c.substring(6), 8);
+        if (c.startsWith("ATFCSD")) return ehHexPar(c.substring(6)) && c.length() > 6 && c.length() <= 16;
+        if (c.startsWith("ATFCSM")) return c.length() == 7 && c.charAt(6) >= '0' && c.charAt(6) <= '2';
+        if (c.startsWith("ATST")) return hexExato(c.substring(4), 2);
+        if (c.startsWith("ATAT")) return c.length() == 5 && c.charAt(4) >= '0' && c.charAt(4) <= '2';
+        if (c.startsWith("ATCF") || c.startsWith("ATCM")) {
+            return hexExato(c.substring(4), 3) || hexExato(c.substring(4), 8);
+        }
+        return false;
+    }
 
     /**
      * Serviços de LEITURA do OBD-II que o app pode pedir ao carro:
@@ -84,7 +112,24 @@ public class ObdPlugin extends Plugin {
      * trouxer o apagar com registro de quem apagou, ele entra aqui junto com a regra de permissão.
      */
     private static final Set<String> SERVICOS_LEITURA = new HashSet<>(Arrays.asList(
-        "01", "02", "03", "06", "07", "09", "0A"
+        "01", "02", "03", "06", "07", "09", "0A",
+        "19", "22", "24", "3E"
+    ));
+
+    /** Quais dos de leitura são do UDS: só muda o tamanho de pedido que cada um aceita. */
+    private static final Set<String> UDS_LEITURA = new HashSet<>(Arrays.asList("19", "22", "24", "3E"));
+
+    /**
+     * Serviços que este plugin NUNCA manda — não estão na lista do comando() e não têm método próprio.
+     *
+     * 34 pedir download · 35 pedir upload · 36 transferir bloco · 37 encerrar transferência: é com
+     * estes que se REGRAVA a memória de um módulo. Sem eles, e sem a sessão de programação (ver o
+     * portão do serviço 10 em permitido()), não existe regravação por aqui — aconteça o que
+     * acontecer na página que o app abre. É a promessa que esta oficina pode fazer com segurança:
+     * o app codifica bico e roda rotina de serviço, e não tem como gravar programa em módulo nenhum.
+     */
+    private static final Set<String> SERVICOS_PROIBIDOS = new HashSet<>(Arrays.asList(
+        "34", "35", "36", "37"
     ));
 
     private final ExecutorService fila = Executors.newSingleThreadExecutor();
@@ -111,10 +156,43 @@ public class ObdPlugin extends Plugin {
     static boolean permitido(String cru) {
         String c = normalizar(cru);
         if (c.isEmpty()) return false;
-        if (c.startsWith("AT")) return AT_PERMITIDOS.contains(c);
-        // pedido de OBD: só hexadecimal, em bytes inteiros, e no máximo 7 bytes
-        if (!c.matches("[0-9A-F]+") || c.length() % 2 != 0 || c.length() < 2 || c.length() > 14) return false;
-        return SERVICOS_LEITURA.contains(c.substring(0, 2));
+        if (c.startsWith("AT")) return AT_PERMITIDOS.contains(c) || atComValor(c);
+        // pedido ao carro: só hexadecimal e em bytes inteiros
+        if (!c.matches("[0-9A-F]+") || c.length() % 2 != 0 || c.length() < 2) return false;
+        String sv = c.substring(0, 2);
+        if (SERVICOS_PROIBIDOS.contains(sv)) return false;
+        // Abrir sessão (10): a comum (01) e a estendida de diagnóstico (03) passam. A de PROGRAMAÇÃO
+        // (02) não passa, e é ela que a regravação exige — por isso o portão é aqui, e não no site.
+        if (sv.equals("10")) return c.equals("1001") || c.equals("1003");
+        // O tamanho é conferido por serviço, não por igual: um pedido de OBD-II cabe em 7 bytes
+        // (modo 01 aceita 6 PIDs), e passar disso é lixo. Os de UDS pedem mais, porque o
+        // identificador do dado já ocupa dois bytes e o pedido de falha leva a máscara de situação.
+        if (SERVICOS_LEITURA.contains(sv)) {
+            int maximo = UDS_LEITURA.contains(sv) ? 32 : 14;
+            return c.length() <= maximo;
+        }
+        return false;
+    }
+
+    /**
+     * Diz se o número da rotina está na faixa que o fabricante usa para rotina de veículo
+     * (0x0200 a 0xDFFF, pela ISO 14229-1). Fora dela ficam a rotina de apagar memória (0xFF00) e as
+     * de programação — e é por isso que esta conferência é aqui embaixo, e não no site.
+     */
+    static boolean rotinaNaFaixa(String rid) {
+        if (!hexExato(normalizar(rid), 4)) return false;
+        int n = Integer.parseInt(normalizar(rid), 16);
+        return n >= 0x0200 && n <= 0xDFFF;
+    }
+
+    /** Hexadecimal com exatamente este tanto de dígitos. */
+    private static boolean hexExato(String c, int quantos) {
+        return c != null && c.length() == quantos && c.matches("[0-9A-F]{" + quantos + "}");
+    }
+
+    /** Hexadecimal em bytes inteiros. Vazio conta como válido: há comando sem valor. */
+    private static boolean ehHexPar(String c) {
+        return c != null && c.length() % 2 == 0 && (c.isEmpty() || c.matches("[0-9A-F]+"));
     }
 
     /* ------------------------------------------------------------------ permissões */
@@ -317,7 +395,134 @@ public class ObdPlugin extends Plugin {
      */
     @PluginMethod
     public void apagar(final PluginCall call) {
-        enviar(call, "04", call.getInt("esperaMs", 10000));
+        final boolean porUds = "uds".equals(call.getString("modo", "obd"));
+        enviar(call, comandoApagar(porUds), call.getInt("esperaMs", 10000));
+    }
+
+    /**
+     * O comando de apagar, escrito AQUI e em nenhum outro lugar.
+     *
+     * São só dois, os dois literais: 04 é o apagar do OBD-II (chega no módulo do motor) e
+     * 14 FF FF FF é o do UDS, que apaga as falhas de UM módulo escolhido — é o que a varredura do
+     * carro inteiro usa. O site escolhe entre um e outro; o TEXTO do comando nunca vem do site.
+     */
+    static String comandoApagar(boolean porUds) {
+        return porUds ? "14FFFFFF" : "04";
+    }
+
+    /* ------------------------------------------------------------- o que AGE no carro (UDS) */
+
+    /*
+     * Daqui para baixo, cada coisa que mexe no carro tem MÉTODO PRÓPRIO e nenhuma passa pelo
+     * comando(). Vale a razão do apagar: o app abre um site, e a promessa de que uma leitura não
+     * vira um comando não pode morar no JavaScript. Quem pode fazer cada uma é decidido no sistema
+     * (Sistema › Equipe, por pessoa) e fica registrado no banco — aqui embaixo não há como saber
+     * quem está com o celular na mão.
+     *
+     * Nenhum destes métodos regrava módulo: os serviços de transferência estão proibidos lá em cima
+     * e a sessão de programação não passa do portão. O limite é de propósito: dá para codificar bico
+     * e rodar rotina de serviço, e não dá para gravar programa.
+     */
+
+    /**
+     * Teste de atuador (UDS 0x2F): manda o módulo acionar uma saída.
+     * Formato: 2F <identificador> <opção> <valor>. A opção 03 é o ajuste de curta duração, que
+     * aciona; a 00 devolve o controle ao módulo. O site sempre termina na 00, mesmo se der erro no
+     * meio — atuador que fica preso no comando do aparelho é atuador que queima.
+     */
+    @PluginMethod
+    public void atuar(final PluginCall call) {
+        final String did = normalizar(call.getString("did"));
+        final String opcao = normalizar(call.getString("opcao", "03"));
+        final String valor = normalizar(call.getString("valor", ""));
+        if (!hexExato(did, 4) || !hexExato(opcao, 2) || !ehHexPar(valor) || valor.length() > 12) {
+            call.reject("comando-recusado");
+            return;
+        }
+        if (Integer.parseInt(opcao, 16) > 0x03) {   // a norma define de 00 a 03
+            call.reject("comando-recusado");
+            return;
+        }
+        enviar(call, "2F" + did + opcao + valor, call.getInt("esperaMs", 8000));
+    }
+
+    /**
+     * Rotina de serviço (UDS 0x31): aprendizado, calibração, reset de serviço, autoteste.
+     * Subfunção 01 começa, 02 para, 03 pede o resultado.
+     *
+     * O NÚMERO da rotina é conferido aqui: só passa a faixa 0x0200 a 0xDFFF, que é onde a ISO 14229-1
+     * põe as rotinas de veículo do fabricante. Com isso a rotina de apagar memória (0xFF00) e as de
+     * programação ficam fora de alcance mesmo que a página peça por elas.
+     */
+    @PluginMethod
+    public void rotina(final PluginCall call) {
+        final String sub = normalizar(call.getString("sub", "01"));
+        final String rid = normalizar(call.getString("rotina"));
+        final String dados = normalizar(call.getString("dados", ""));
+        if (!hexExato(sub, 2) || !hexExato(rid, 4) || !ehHexPar(dados) || dados.length() > 16) {
+            call.reject("comando-recusado");
+            return;
+        }
+        if (!sub.equals("01") && !sub.equals("02") && !sub.equals("03")) {
+            call.reject("comando-recusado");
+            return;
+        }
+        if (!rotinaNaFaixa(rid)) {
+            call.reject("rotina-fora-da-faixa");
+            return;
+        }
+        enviar(call, "31" + sub + rid + dados, call.getInt("esperaMs", 15000));
+    }
+
+    /**
+     * Grava um dado no módulo (UDS 0x2E). É por aqui que o código do bico recodificado entra na ECU.
+     * O tamanho é limitado ao que um dado de calibração tem: cabe um código de bico, não cabe bloco
+     * de programa (e os serviços de transferência estão proibidos de qualquer forma).
+     */
+    @PluginMethod
+    public void gravar(final PluginCall call) {
+        final String did = normalizar(call.getString("did"));
+        final String valor = normalizar(call.getString("valor", ""));
+        if (!hexExato(did, 4) || !ehHexPar(valor) || valor.isEmpty() || valor.length() > 64) {
+            call.reject("comando-recusado");
+            return;
+        }
+        enviar(call, "2E" + did + valor, call.getInt("esperaMs", 10000));
+    }
+
+    /**
+     * Destrava a função protegida do módulo (UDS 0x27): subfunção ímpar pede a semente, par manda a
+     * chave. A CONTA da chave não acontece aqui — ela depende da família do módulo e fica no site,
+     * onde pode ser lida, conferida e corrigida sem refazer o APK.
+     */
+    @PluginMethod
+    public void destravar(final PluginCall call) {
+        final String sub = normalizar(call.getString("sub"));
+        final String chave = normalizar(call.getString("chave", ""));
+        if (!hexExato(sub, 2) || !ehHexPar(chave) || chave.length() > 64) {
+            call.reject("comando-recusado");
+            return;
+        }
+        if (Integer.parseInt(sub, 16) == 0) {
+            call.reject("comando-recusado");
+            return;
+        }
+        enviar(call, "27" + sub + chave, call.getInt("esperaMs", 8000));
+    }
+
+    /**
+     * Reinicia o módulo (UDS 0x11): 01 reinício completo, 03 leve.
+     * Vários módulos só passam a valer o dado gravado depois disto — é o último passo da codificação
+     * de bico, e por isso tem método, com nome, em vez de entrar escondido na lista do comando().
+     */
+    @PluginMethod
+    public void reiniciarModulo(final PluginCall call) {
+        final String tipo = normalizar(call.getString("tipo", "01"));
+        if (!tipo.equals("01") && !tipo.equals("03")) {
+            call.reject("comando-recusado");
+            return;
+        }
+        enviar(call, "11" + tipo, call.getInt("esperaMs", 10000));
     }
 
     /** Manda a linha já conferida e devolve o que o adaptador respondeu. */

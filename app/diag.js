@@ -431,7 +431,7 @@ function Obd() {
     } catch (e) { /* sem espaço: o aviso na tela é o que resta */ }
   };
   const carregarAnteriores = async () => {
-    try { setAntesApagados(await api.obd.listar({ placa, limite: 5 })); } catch (e) { setAntesApagados(null); }
+    try { setAntesApagados(await api.obd.listar({ placa, tipo: "apagar", limite: 5 })); } catch (e) { setAntesApagados(null); }
   };
 
   const lerFoto = () => { pararVivo(); return rodar("Lendo a foto da falha…", async () => guardar("foto", await obd.lerFoto(lig.pidsSuportados))); };
@@ -509,7 +509,7 @@ function Obd() {
     const conferencia = confere.conferir({ avisoAdaptador: lig.aviso, versao: lig.versao, vinLido: chassi, chassiCadastro });
     const explicacoes = await falhasCat.explicarTodos(f.falhas, carro);
     const separado = f.porModulo && f.porModulo.length > 1;
-    const dados = laudo.montar({ carro, quem: perfil, oficina: (cfg && cfg.nome) || "", km: odometro && odometro.km, conferencia,
+    const dados = laudo.montar({ carro, quem: perfil, oficina: (cfg && cfg.nome) || "", km: typeof odometro === "number" ? odometro : (odometro && odometro.km) || null, conferencia,
       modulos: separado ? f.porModulo.map(m => ({ nome: m.nome, endereco: m.endereco, falhas: m.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })) })) : [],
       falhasJuntas: separado ? [] : f.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })), monitores, odometro, leituras, explicacoes, erros: f.erros || [] });
     const selo = await registro.selar(dados);
@@ -1049,7 +1049,11 @@ function Modulos() {
     if (!r.ok) { setErro(r.texto || "Não deu para apagar."); return; }
     if (r.r.nrc != null) { setErro(r.r.texto); return; }
     const antes = (falhas || []).map(f => ({ codigo: f.rotulo, situacao: f.situacaoTexto }));
-    setRegApagar(await registrarAcao("apagar_modulo", perfil, { modulo: mod, antes }, { codigos: antes }));
+    // Pedido enviado e resposta perdida (STOPPED, NO DATA): pode ter apagado ou não. Fica registrado
+    // COMO INCERTO, e a tela diz isso — não vira apagamento confirmado.
+    const incerto = !!r.r.erro;
+    if (incerto) setErro("O pedido de apagar foi enviado, mas a resposta do módulo se perdeu (" + (r.r.texto || r.r.erro) + "). Pode ter apagado ou não: confira na leitura abaixo.");
+    setRegApagar(await registrarAcao("apagar_modulo", perfil, Object.assign({ modulo: mod, antes }, incerto ? { resultado: "sem-confirmacao" } : {}), { codigos: antes }));
     setFalhas(null); await lerFalhas();
   };
 

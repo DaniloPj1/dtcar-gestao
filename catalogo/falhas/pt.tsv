@@ -1,0 +1,642 @@
+"a" camshaft position - timing over-advanced or system performance bank {1}	Comando de válvulas A adiantado demais, ou sistema com desempenho ruim (banco {1})
+"b" camshaft position - timing over-advanced or system performance bank {1}	Comando de válvulas B adiantado demais, ou sistema com desempenho ruim (banco {1})
+(7dct)pcm internal malfunction	(Câmbio 7DCT) Defeito interno no módulo do motor
+(air flow tube, air cleaner)	(Tubo de fluxo de ar, filtro de ar)
+-control line open	Linha de comando aberta
+-solenoid valve failure	Válvula solenoide com defeito
+-supply line open	Linha de alimentação aberta
+a/c compressor internal circuit failure	Defeito no circuito interno do compressor do ar-condicionado
+a/f over rich/lean	Mistura (A/F) rica ou pobre demais
+a/f sensor	Sonda lambda (A/F)
+a/f sensor failure	Sonda lambda (A/F) com defeito
+a/f sensor malfunction	Defeito na sonda lambda (A/F)
+a: waste gate lift sensor	-
+abs modulater control unit	Unidade moduladora do ABS
+ac controller internal circuit malfunction	Defeito no circuito interno do controlador do ar-condicionado
+acc / cmbs indicator on	-
+acc can signal line open or short	Linha CAN do ACC aberta ou em curto
+acc indicator on	-
+acc unit failure	Defeito no módulo do ACC (piloto automático adaptativo)
+acm module internal failure	Defeito interno no módulo ACM (coxim ativo)
+acura {1}.5tl	-
+aev internal failure (the actuator is under the trunk)	Defeito interno no AEV (o atuador fica embaixo do porta-malas)
+afs sensor	Sensor AFS
+air cleaner	Filtro de ar
+air cleaner element clogged	Elemento do filtro de ar entupido
+air cleaner poor connections, damage	Filtro de ar mal encaixado ou danificado
+air duct looseness, damage	Duto de ar frouxo ou danificado
+air flow sensor	Sensor de fluxo de ar
+air flow sensor shifting	Sensor de fluxo de ar com a leitura deslocada
+air intake tube (tube off, leak, blockage)	Tubo de admissão de ar (solto, vazando ou obstruído)
+air leak from exhaust module	Vazamento de ar no módulo de escape
+air system parts clogged	Peças do sistema de ar entupidas
+air system parts installation defect	Peças do sistema de ar mal montadas
+ambient temperature sensor malfunction	Defeito no sensor de temperatura externa
+app sensor failure	Sensor de posição do pedal do acelerador (APP) com defeito
+atf cooler failure	Resfriador do óleo do câmbio (ATF) com defeito
+atf oil cooler pump failure	Bomba do resfriador do óleo do câmbio (ATF) com defeito
+b: engine control module(ecm)	-
+baro sensor range/performance problem	Sensor de pressão atmosférica fora da faixa ou com desempenho ruim
+battery condition monitor module failure	Defeito no módulo monitor da bateria
+battery condition monitor module internal circuit failure	Defeito no circuito interno do módulo monitor da bateria
+battery current sensor {1} circuit line open	Linha do circuito do sensor de corrente da bateria {1} aberta
+battery current sensor {1} circuit line short to gnd	Linha do circuito do sensor de corrente da bateria {1} em curto com a massa
+battery current sensor {1} failure	Sensor de corrente da bateria {1} com defeito
+battery current sensor {1} gnd line open	Linha de massa do sensor de corrente da bateria {1} aberta
+battery current sensor {1} vcc line open	Linha VCC (alimentação) do sensor de corrente da bateria {1} aberta
+battery ecu failure	Defeito no módulo da bateria
+battery fan {1} internal circuit failure	Defeito no circuito interno da ventoinha {1} da bateria
+battery module failure	Módulo da bateria com defeito
+battery module internal circuit failure	Defeito no circuito interno do módulo da bateria
+battery module internal failure (battery temperature sensor {1} failure)	Defeito interno no módulo da bateria (sensor de temperatura da bateria {1} com defeito)
+battery module temperature sensor sgtb line open	Linha SGTB do sensor de temperatura do módulo da bateria aberta
+battery module temperature sensor {1} gnd line open	Linha de massa do sensor de temperatura {1} do módulo da bateria aberta
+battery module temperature sensor {1} signal line open	Linha de sinal do sensor de temperatura {1} do módulo da bateria aberta
+battery module temperature sensor {1} signal line shorts to gnd	Linha de sinal do sensor de temperatura {1} do módulo da bateria em curto com a massa
+battery pack failure	Conjunto da bateria com defeito
+battery pack internal failure	Defeito interno no conjunto da bateria
+battery pack line failure	Defeito na linha do conjunto da bateria
+battery short of ewp drive signal line	Linha de sinal de acionamento da bomba d'água elétrica (EWP) em curto com o positivo
+bcm	Módulo BCM (bateria)
+bcm : battery condition monitor	-
+bcm module internal failure	Defeito interno no módulo BCM (bateria)
+between ambient temperature sensor and ac controller harness resistance short circuit	Chicote entre o sensor de temperatura externa e o controlador do ar-condicionado em curto por resistência
+between ambient temperature sensor and ac controller harness short circuit	Chicote entre o sensor de temperatura externa e o controlador do ar-condicionado em curto
+between ambient temperature sensor and ac controller harness short ground	Chicote entre o sensor de temperatura externa e o controlador do ar-condicionado em curto com a massa
+between ambient temperature sensor and ac controller harness short to ground	Chicote entre o sensor de temperatura externa e o controlador do ar-condicionado em curto com a massa
+between ambient temperature sensor and gnd harness resistance short circuit	Chicote entre o sensor de temperatura externa e a massa em curto por resistência
+between ambient temperature sensor and gnd harness short circuit	Chicote entre o sensor de temperatura externa e a massa em curto
+brake booster hose poor connections, damage	Mangueira do servofreio mal encaixada ou danificada
+brake booster pressure sensor	Sensor de pressão do servofreio
+brake pedal stroke sensor b failure	Sensor B de curso do pedal do freio com defeito
+brake warning lamp on	-
+bus bar poor connection	Mau contato no barramento
+c: gnd	-
+can communication line open or short	Linha de comunicação CAN aberta ou em curto
+canh line open circuit	Linha CAN H aberta
+canh line short circuit	Linha CAN H em curto
+canl line open circuit	Linha CAN L aberta
+canl line short circuit	Linha CAN L em curto
+carbon build-up in the intake manifold, and the exhaust line (note: this failure will not be applied by the type of egr.)	Carvão no coletor de admissão e na linha de escape (não vale para todo tipo de EGR)
+carbon deposit on valves	Carvão nas válvulas
+carbon or sludge in the egr line (note: this failure will not be applied by the type of egr.)	Carvão ou borra na linha da EGR (não vale para todo tipo de EGR)
+charge inlet failure	Tomada de recarga com defeito
+charge inlet pxd line open	Linha PXD da tomada de recarga aberta
+charger internal circuit failure	Defeito no circuito interno do carregador
+city-brake active system warning lamp on	-
+clogged intake air line	Linha de admissão de ar entupida
+clutch pedal position sensor malfunction	Defeito no sensor de posição do pedal da embreagem
+communication line open	Linha de comunicação aberta
+compression low	Compressão baixa
+connector of op {1} switch disconnected	Conector do interruptor OP {1} desconectado
+connector of tr switch disconnected	Conector do interruptor TR desconectado
+connector of vehicle speed sensor {1} disconnected	Conector do sensor de velocidade {1} desconectado
+connector of vnc sensor disconnected	Conector do sensor VNC desconectado
+control (vts) line open	Linha de comando (VTS) aberta
+control (vts) line short	Linha de comando (VTS) em curto
+control circuit failure	Defeito no circuito de comando
+control line open	Linha de comando aberta
+control line short	Linha de comando em curto
+control line short to power line	Linha de comando em curto com a linha de alimentação
+control valve failure	Válvula de controle com defeito
+coolant line water leak and air incorporation	Vazamento de água e entrada de ar na linha de arrefecimento
+coolant poor cool	Arrefecimento insuficiente
+cooling ewp relay stuck off	Relé da bomba d'água elétrica de arrefecimento preso desligado
+correspondence dtc	-
+cpc valve a stuck	Válvula CPC A presa
+cpc valve b stuck	Válvula CPC B presa
+cpc valve c stuck	Válvula CPC C presa
+cpu malfunction	Defeito no processador (CPU)
+crank position sensor backward detection	Sensor de rotação detectou giro para trás
+crank sensor	Sensor de rotação
+cvs control circuit	Circuito de comando da válvula de respiro do canister (CVS)
+cvs open clogged	Válvula de respiro do canister (CVS) entupida aberta
+cvt speed sensor failure	Sensor de rotação do CVT com defeito
+cylinder compression failure	Falha de compressão no cilindro
+d: wgl	-
+dashboard wire harness	Chicote do painel
+dc-dc converter abnormal overheat	Superaquecimento anormal do conversor DC-DC
+dc-dc converter internal circuit failure	Defeito no circuito interno do conversor DC-DC
+debris, icing or mechanical seizure in the center tailpipes	Sujeira, gelo ou travamento mecânico nas saídas centrais do escape
+dirty air cleaner element	Elemento do filtro de ar sujo
+distributor failure	Distribuidor com defeito
+dpf differential pressure sensor failure	Sensor de pressão diferencial do filtro de partículas (DPF) com defeito
+dpf differential pressure sensor harness	Chicote do sensor de pressão diferencial do filtro de partículas (DPF)
+dpf(penetration)	Filtro de partículas (DPF) furado
+e: vcc	-
+earth fault of ewp drive signal line	Linha de sinal de acionamento da bomba d'água elétrica (EWP) em curto com a massa
+ecm abnormaly heating	Módulo do motor aquecendo de forma anormal
+ecm failure	Defeito no módulo do motor
+ecm internal circuit	Circuito interno do módulo do motor
+ecm internal circuit failure	Defeito no circuito interno do módulo do motor
+ecm internal circuitry malfunction	Defeito no circuito interno do módulo do motor
+ecm internal failure	Defeito interno no módulo do motor
+ecm internal malfunction	Defeito interno no módulo do motor
+ecm malfunction	Defeito no módulo do motor
+ecm/pcm failure	Defeito no módulo do motor
+ecm/pcm internal circuit	Circuito interno do módulo do motor
+ecm/pcm internal circuit failure	Defeito no circuito interno do módulo do motor
+ecm/pcm internal circuit malfunction	Defeito no circuito interno do módulo do motor
+ect sensor failure	Sensor de temperatura do motor (ECT) com defeito
+ect sensor {1} failure	Sensor de temperatura do motor (ECT) {1} com defeito
+ecu circuit failure	Defeito no circuito do módulo
+ecu circuit malfunction	Defeito no circuito do módulo
+ecu internal circuit failure	Defeito no circuito interno do módulo
+ecu internal circuit malfunction	Defeito no circuito interno do módulo
+ecu internal failure	Defeito interno no módulo
+ecu internal malfunction	Defeito interno no módulo
+ecu to ccv harness +b short	Chicote entre o módulo e a válvula CCV em curto com o positivo
+egr clogged jet, leak to atmosphere	Passagem da EGR entupida ou vazando para a atmosfera
+egr ported clogged	Passagem da EGR entupida
+egr valve (main body stuck, reluctant and so on)	Válvula EGR (corpo preso, emperrando etc.)
+egr valve failure	Válvula EGR com defeito
+egt sensor {1} range/performance problem	Sensor de temperatura dos gases de escape (EGT) {1} fora da faixa ou com desempenho ruim
+elcm pressure sensor	Sensor de pressão do ELCM (detecção de vazamento do EVAP)
+elcm pump	Bomba do ELCM (detecção de vazamento do EVAP)
+elcm switching valve(cov)	Válvula de comutação do ELCM (COV)
+electric motor control module coolant pump failure	Bomba de líquido de arrefecimento do módulo do motor elétrico com defeito
+electric motor control module coolant pump line failure	Defeito na linha da bomba de líquido do módulo do motor elétrico
+electric motor control module coolant pump newp line open	Linha NEWP da bomba de líquido do módulo do motor elétrico aberta
+electric motor control module coolant pump newp line short to ground	Linha NEWP da bomba de líquido do módulo do motor elétrico em curto com a massa
+electric oil pump eopgnd line open	Linha EOPGND da bomba de óleo elétrica aberta
+electric oil pump eopvb line failure	Defeito na linha EOPVB da bomba de óleo elétrica
+electric oil pump failure	Bomba de óleo elétrica com defeito
+electric powertrain coolant temperature sensor failure	Sensor de temperatura do líquido do conjunto elétrico com defeito
+electric powertrain coolant temperature sensor internal circuit failure	Defeito no circuito interno do sensor de temperatura do líquido do conjunto elétrico
+electric servo brake control unit	Unidade do servofreio elétrico
+electric water pump ewpctla line short to ground	Linha EWPCTLA da bomba d'água elétrica em curto com a massa
+electric water pump internal circuit failure	Defeito no circuito interno da bomba d'água elétrica
+electric water pump power supply line short to ground	Linha de alimentação da bomba d'água elétrica em curto com a massa
+electrical	Parte elétrica
+electrical water pump lmpeller damage	Rotor da bomba d'água elétrica danificado
+electrical water pump lock	Bomba d'água elétrica travada
+engine control module (ecm)	Módulo do motor
+engine control module (ecm) internal diagnostic circuit failure	Defeito no circuito interno de diagnóstico do módulo do motor
+engine control module (ecm) internal failure (internal open)	Defeito interno no módulo do motor (circuito aberto interno)
+engine control module(ecm) internal circuit malfunction	Defeito no circuito interno do módulo do motor
+engine oil level sensor internal circuit malfunction	Defeito no circuito interno do sensor de nível de óleo do motor
+evap insufficient flow/stuck	EVAP com fluxo insuficiente ou preso
+evap purge system too much vapor	Vapor demais no sistema de purga do EVAP
+evap system leak	Vazamento no sistema EVAP
+even clutch actuator(hca)	Atuador da embreagem das marchas pares (HCA)
+ewp malfunction	Defeito na bomba d'água elétrica (EWP)
+ewp motor stuck	Motor da bomba d'água elétrica (EWP) travado
+excessive valve clearance	Folga de válvulas excessiva
+exhaust cam sensor	Sensor do comando de escape
+exhaust camshaft sensor	Sensor do comando de escape
+exhaust gas temperature (egt) sensor {1} (output large side, small side)	Sensor de temperatura dos gases de escape (EGT) {1} (saída alta ou baixa demais)
+exhaust gas temperature (egt) sensor {1} failure	Sensor de temperatura dos gases de escape (EGT) {1} com defeito
+exhaust gas temperature (egt) sensor {1} harness (short to ground)	Chicote do sensor de temperatura dos gases de escape (EGT) {1} (curto com a massa)
+exhaust pipes leaking	Vazamento nos tubos de escape
+exhaust pressure hose in front of the dpf(leakage, blockage)	Mangueira de pressão de escape antes do filtro de partículas (vazando ou obstruída)
+exhaust pressure pipe in front of the dpf(leakage, blockage)	Tubo de pressão de escape antes do filtro de partículas (vazando ou obstruído)
+exhaust system failure (exhaust gas leak)	Defeito no sistema de escape (vazamento de gases)
+exhaust temperature sensor	Sensor de temperatura do escape
+exhaust vtc	VTC do escape
+f-can circuit f-can h line open	Rede F-CAN: linha CAN H aberta
+f-can circuit f-can l line open	Rede F-CAN: linha CAN L aberta
+f: sensor voltage(v)	-
+failure of pa sensor (ic mounted on fcvscm)	Defeito no sensor de pressão atmosférica (PA), que fica no módulo FCVSCM
+fcvscm failure	Defeito no módulo FCVSCM
+fcvscm failure (sensor input-circuit)	Defeito no módulo FCVSCM (circuito de entrada do sensor)
+fi-ecu internal circuit malfunction	Defeito no circuito interno do módulo de injeção
+fi-ecu malfunction	Defeito no módulo de injeção
+fi-ecu/pcm internal circuit malfunction	Defeito no circuito interno do módulo de injeção/motor
+flexible fuel sensor malfunction	Defeito no sensor de combustível flex
+floor wire harness	Chicote do assoalho
+front a/f sensor (bank {1}, sensor {2}) circuit range/performance	Sonda lambda (A/F) dianteira (banco {1}, sensor {2}): circuito fora da faixa ou com desempenho ruim
+front a/f sensor (bank {1}, sensor {2}) malfunction/slow response	Sonda lambda (A/F) dianteira (banco {1}, sensor {2}): defeito ou resposta lenta
+front acm solenoid (a) failure	Solenoide (A) do coxim ativo dianteiro com defeito
+front secondary ho2s (bank {1}, sensor {2}) circuit high voltage	Sonda lambda secundária dianteira (banco {1}, sensor {2}): tensão alta no circuito
+front secondary ho2s (bank {1}, sensor {2}) circuit signal stuck lean	Sonda lambda secundária dianteira (banco {1}, sensor {2}): sinal preso em mistura pobre
+front secondary ho2s (bank {1}, sensor {2}) slow response	Sonda lambda secundária dianteira (banco {1}, sensor {2}): resposta lenta
+frp regulator solenoid malfunction	Defeito no solenoide do regulador de pressão do rail
+ftp sensor failure	Sensor de pressão do tanque (FTP) com defeito
+ftp sensor stuck	Sensor de pressão do tanque (FTP) preso
+fuel does not meet o/m specification	Combustível fora da especificação do manual
+fuel feed line clogged or leaking	Linha de alimentação de combustível entupida ou vazando
+fuel filter clogged	Filtro de combustível entupido
+fuel injector clogged, leaking	Bico injetor entupido ou vazando
+fuel injector harness open or short	Chicote do bico injetor aberto ou em curto
+fuel line clogged	Linha de combustível entupida
+fuel or mechanical	Combustível ou parte mecânica
+fuel pump pressure	Pressão da bomba de combustível
+fuel return pipe clogged	Tubo de retorno de combustível entupido
+fuel supply system component	Componente do sistema de alimentação de combustível
+fuel supply system problem	Problema no sistema de alimentação de combustível
+fuel system problem	Problema no sistema de combustível
+fuel system too lean	Sistema de combustível com mistura pobre demais
+fuel system too rich	Sistema de combustível com mistura rica demais
+fuel vapor containment valve leak	Vazamento na válvula de contenção de vapor de combustível
+fuse box	Caixa de fusíveis
+fuse failure	Fusível queimado
+g: ewg position	-
+gas injector harness line open	Linha do chicote do bico de gás aberta
+gas injector trouble	Problema no bico de gás
+gasoline injector failure	Bico injetor de gasolina com defeito
+gasoline injector harness line open	Linha do chicote do bico injetor de gasolina aberta
+gauge control module circuit	Circuito do módulo do painel
+gauge control module gnd line open	Linha de massa do módulo do painel aberta
+gear actuator function	Funcionamento do atuador de marchas
+gear change mechanism failure	Defeito no mecanismo de troca de marcha
+gear lock/gear idling	Engrenagem travada ou girando solta
+gear oil temperature sensor failure	Sensor de temperatura do óleo da caixa com defeito
+gear shift control actuator failure	Atuador de troca de marcha com defeito
+gearbox	Caixa de câmbio
+gearbox without tcm	Caixa de câmbio sem o módulo
+generator motor control module failure	Defeito no módulo do motor gerador
+generator motor failure	Motor gerador com defeito
+generator motor rotor position sensor failure	Sensor de posição do rotor do motor gerador com defeito
+generator motor temperature sensor internal circuit failure	Defeito no circuito interno do sensor de temperatura do motor gerador
+glow plug control module internal failure	Defeito interno no módulo das velas aquecedoras
+gnd line open circuit	Linha de massa aberta
+gnd line open of ns1 sensor	Linha de massa do sensor NS1 aberta
+gnd line open of ns2 sensor	Linha de massa do sensor NS2 aberta
+gnd line short circuit	Linha de massa em curto
+ground line open	Linha de massa aberta
+ground line open/short	Linha de massa aberta ou em curto
+ground line short	Linha de massa em curto
+h: high	-
+harness	Chicote
+harness and pressure sensor inside gearbox	Chicote e sensor de pressão dentro da caixa de câmbio
+harness and solenoid inside gearbox	Chicote e solenoide dentro da caixa de câmbio
+harness between tcm and gearbox	Chicote entre o módulo do câmbio e a caixa
+harness disconnect	Chicote desconectado
+harness problem	Problema no chicote
+hca internal malfunction	Defeito interno no atuador hidráulico da embreagem (HCA)
+heater failure	Aquecedor com defeito
+heater performance	Desempenho do aquecedor
+heater- line open	Linha (-) do aquecedor aberta
+high pressure / low pressure turbo (main body malfunction like broken shaft)	Turbo de alta ou de baixa pressão (defeito no corpo, como eixo quebrado)
+high pressure turbo vane/cbv/tbv, low pressure turbo wastegate (stack)	Palheta/CBV/TBV do turbo de alta, wastegate do turbo de baixa (presos)
+high temperature heat source near ecm	Fonte de calor forte perto do módulo do motor
+high voltage battery module fan {1} duct blocked or fell off	Duto da ventoinha {1} do módulo da bateria de alta tensão obstruído ou solto
+high voltage battery module temperature sensor {1} failure	Sensor de temperatura {1} do módulo da bateria de alta tensão com defeito
+high voltage cable open	Cabo de alta tensão aberto
+ho2s s1 deteriorated	Sonda lambda S1 deteriorada
+ho2s s1 short	Sonda lambda S1 em curto
+i: low	-
+iacv failure	Atuador de marcha lenta (IACV) com defeito
+iacv line clogged	Linha do atuador de marcha lenta (IACV) entupida
+iacv malfunction	Defeito no atuador de marcha lenta (IACV)
+iacv problem	Problema no atuador de marcha lenta (IACV)
+iat sensor (iat2)	Sensor de temperatura do ar de admissão (IAT2)
+iat sensor (iat2) harness (open)	Chicote do sensor de temperatura do ar de admissão (IAT2) aberto
+iat sensor failure	Sensor de temperatura do ar de admissão (IAT) com defeito
+iat sensor {1} (characteristic failure)	Sensor de temperatura do ar de admissão (IAT) {1} com a leitura errada
+iat sensor {1} failure	Sensor de temperatura do ar de admissão (IAT) {1} com defeito
+iat sensor1 bank2 harness gnd short circuit	Chicote do sensor IAT 1 do banco 2 em curto com a massa
+iat sensor1 bank2 sensor malfunction	Defeito no sensor IAT 1 do banco 2
+icm and coil line open	Linha entre o módulo de ignição (ICM) e a bobina aberta
+icm and ecm line open	Linha entre o módulo de ignição (ICM) e o módulo do motor aberta
+icm failure	Módulo de ignição (ICM) com defeito
+if there is malfunction, other fale code will be stored	Se houver defeito, outro código de falha estará gravado
+igniter circuit malfunction	Defeito no circuito do ignitor
+ignition coil (dli) open or failure	Bobina de ignição (sem distribuidor) aberta ou com defeito
+ignition coil gnd line open	Linha de massa da bobina de ignição aberta
+ignition system abnormality	Anormalidade no sistema de ignição
+ignition system problem	Problema no sistema de ignição
+ignition system relay failure	Relé do sistema de ignição com defeito
+ignition wire open or current leaking	Cabo de vela aberto ou com fuga de corrente
+ignition wires open or current leaking	Cabos de vela abertos ou com fuga de corrente
+igno internal circuit malfunction	Defeito no circuito interno IGNO (saída de ignição)
+igno line battery short	Linha IGNO (saída de ignição) em curto com o positivo
+igno line open malfunction	Linha IGNO (saída de ignição) aberta
+igno line short to gnd	Linha IGNO (saída de ignição) em curto com a massa
+imrc actuator	Atuador do coletor variável (IMRC)
+imrc valve position sensor ground harness open	Chicote de massa do sensor de posição da válvula do coletor variável (IMRC) aberto
+injector #{1} failure	Bico injetor nº {1} com defeito
+injector clogged or leaking air	Bico injetor entupido ou com entrada de ar
+injector failure	Bico injetor com defeito
+injector leaking	Bico injetor vazando
+injector malfunction	Defeito no bico injetor
+injector no.{1} (internal open)	Bico injetor nº {1} (aberto por dentro)
+injector no.{1} harness (high side open, low side open)	Chicote do bico injetor nº {1} (lado alto aberto, lado baixo aberto)
+injector no.{1} or no.{2} high side harness (short to power, short to ground)	Chicote do lado alto do bico injetor nº {1} ou nº {2} (curto com o positivo ou com a massa)
+injector trouble	Problema no bico injetor
+injector works out of specification	Bico injetor trabalhando fora da especificação
+input speed sensor(nm sensor)	Sensor de rotação de entrada (sensor NM)
+insufficient fuel	Combustível insuficiente
+insufficient valve clearance	Folga de válvulas insuficiente
+intake air duct poor connections, damage	Duto de admissão mal encaixado ou danificado
+intake cam sensor	Sensor do comando de admissão
+intake manifold air leak	Entrada de ar falso no coletor de admissão
+intake manifold clogged	Coletor de admissão entupido
+intake pressure control valve friction increase (poor action)	Válvula de controle de pressão de admissão com atrito (movimento ruim)
+intake pressure control valve motor failure	Motor da válvula de controle de pressão de admissão com defeito
+intake pressure control valve position sensor failure	Sensor de posição da válvula de controle de pressão de admissão com defeito
+intake pressure control valve position sensor range/performance problem (intake pressure control valve position	Sensor de posição da válvula de controle de pressão de admissão fora da faixa ou com desempenho ruim
+intake pressure control valve stuck	Válvula de controle de pressão de admissão presa
+intake shutter valve (isv) actuator control module	Módulo do atuador da válvula de fechamento de admissão (ISV)
+intake shutter valve (isv) actuator control module internal failure	Defeito interno no módulo do atuador da válvula de fechamento de admissão (ISV)
+intake shutter valve (isv) position sensor a failure	Sensor A de posição da válvula de fechamento de admissão (ISV) com defeito
+intake shutter valve (isv) position sensor b failure	Sensor B de posição da válvula de fechamento de admissão (ISV) com defeito
+intake vtc	VTC da admissão
+internal control module failure	Defeito interno no módulo
+inverter failure	Inversor com defeito
+ipu air duct blocked or fell off	Duto de ar da unidade de potência (IPU) obstruído ou solto
+iqa-code engraving mistake	Código IQA do bico gravado errado
+iqa-code incorrect	Código IQA do bico incorreto
+iqa-code is not stored in the ecm	Código IQA do bico não está gravado no módulo do motor
+isv main body (stuck, reluctant and so on)	Corpo da válvula ISV (preso, emperrando etc.)
+j: close	-
+k: full close	-
+l: open	-
+laf ia line open	Linha IA da sonda LAF aberta
+laf sensor {1}	Sonda LAF {1}
+leakage between pcs and fuel tank	Vazamento entre a válvula de purga (PCS) e o tanque de combustível
+leaking air from throttle body or intake manifold	Entrada de ar falso pelo corpo de borboleta ou pelo coletor de admissão
+lf/rf communication interference	Interferência na comunicação LF/RF (chave presencial)
+line between generator motor control module and generator motor rotor position sensor failure	Defeito na linha entre o módulo do motor gerador e o sensor de posição do rotor
+line open of ewp gnd	Linha de massa da bomba d'água elétrica (EWP) aberta
+line open or earth fault of ewp power line	Linha de alimentação da bomba d'água elétrica (EWP) aberta ou em curto com a massa
+line open or earth fault of ewp turn signal	Linha do sinal de rotação da bomba d'água elétrica (EWP) aberta ou em curto com a massa
+loose camshaft holder	Mancal do comando de válvulas frouxo
+loose connection	Mau contato
+loose fuel failure	Tampa do tanque solta
+low pressure egr valve friction increase (poor action)	Válvula EGR de baixa pressão com atrito (movimento ruim)
+low pressure egr valve motor failure	Motor da válvula EGR de baixa pressão com defeito
+low pressure egr valve position sensor failure	Sensor de posição da válvula EGR de baixa pressão com defeito
+low pressure egr valve position sensor range/performance problem (low pressure egr valve lift recognition gap to the	Sensor de posição da válvula EGR de baixa pressão fora da faixa ou com desempenho ruim
+low pressure egr valve stuck	Válvula EGR de baixa pressão presa
+lower actuator ecu internal circuit malfunction	Defeito no circuito interno do módulo do atuador inferior
+lu solenoid or lub shift valve stuck on	Solenoide LU ou válvula de troca LUB presos ligados
+maf malfunction	Defeito no sensor MAF
+maf sensor bank2 malfunction	Defeito no sensor MAF do banco 2
+maf sensor failure	Sensor MAF com defeito
+main contactor-n m/c-na line open	Linha M/C-NA do contator principal negativo aberta
+main contactor-n m/c-nb line open	Linha M/C-NB do contator principal negativo aberta
+main contactor-n m/c-nc line open	Linha M/C-NC do contator principal negativo aberta
+main contactor-n stuck off failure	Contator principal negativo preso desligado
+main contactor-p m/c-pa line open	Linha M/C-PA do contator principal positivo aberta
+main contactor-p m/c-pb line open	Linha M/C-PB do contator principal positivo aberta
+main contactor-p m/c-pc line open	Linha M/C-PC do contator principal positivo aberta
+main contactor-p stuck off failure	Contator principal positivo preso desligado
+main fuse failure	Fusível principal queimado
+management ecu internal circuit failure	Defeito no circuito interno do módulo de gerenciamento
+map or afm	Sensor MAP ou medidor de fluxo de ar
+map sensor character - istic shift	Sensor MAP com a leitura deslocada
+map sensor character-istic shift	Sensor MAP com a leitura deslocada
+map sensor characteristic shift	Sensor MAP com a leitura deslocada
+map sensor range/performance problem	Sensor MAP fora da faixa ou com desempenho ruim
+mcm and bcm have two types, separated and integrated. separated type has two ecus, mcm and bcm. integrated type has one ecu which included two cpus, mcm and bcm	-
+mcm dtc caused mil on	Um código do módulo MCM (motor elétrico) acendeu a luz de injeção
+mcm failure	Defeito no módulo MCM (motor elétrico)
+mcm internal failure	Defeito interno no módulo MCM (motor elétrico)
+mcm/bcm failure	Defeito no módulo MCM/BCM (motor elétrico/bateria)
+metering unit valve actuator internal short	Curto interno no atuador da válvula da unidade dosadora
+misfire	Falha de combustão
+motor abnormal overheat	Superaquecimento anormal do motor elétrico
+motor control module (generator) failure	Defeito no módulo do motor elétrico (gerador)
+motor control module (traction) failure	Defeito no módulo do motor elétrico (tração)
+motor control module failure	Defeito no módulo do motor elétrico
+motor drive line open/ground fault	Linha de acionamento do motor elétrico aberta ou em curto com a massa
+motor failure	Motor elétrico com defeito
+motor gate drive-wire line failure	Defeito na linha de acionamento do gate do motor elétrico
+motor malfunction	Defeito no motor elétrico
+motor phase current sensor failure	Sensor de corrente de fase do motor elétrico com defeito
+motor power cable line failure	Defeito no cabo de potência do motor elétrico
+motor rotor position sensor (tmu-r) failure	Sensor de posição do rotor do motor elétrico (TMU direito) com defeito
+motor rotor position sensor (tmu-r) line failure	Defeito na linha do sensor de posição do rotor do motor elétrico (TMU direito)
+motor rotor position sensor failure	Sensor de posição do rotor do motor elétrico com defeito
+mpi module (generator) failure	Defeito no módulo MPI (gerador)
+mpi module (mcm/bcm) failure	Defeito no módulo MPI (MCM/BCM)
+mpi module (tmu-l) failure	Defeito no módulo MPI (TMU esquerdo)
+mpi module (tmu-r) failure	Defeito no módulo MPI (TMU direito)
+mpi module (traction) failure	Defeito no módulo MPI (tração)
+mpi module abnormal overheat	Superaquecimento anormal do módulo MPI
+mpi module failure	Defeito no módulo MPI
+mpi module internal circuit failure	Defeito no circuito interno do módulo MPI
+mpi module internal failure	Defeito interno no módulo MPI
+multi-cylinder misfire	Falha de combustão em vários cilindros
+no.{1} glow plug failure	Vela aquecedora nº {1} com defeito
+no.{1} glow plug failure / coupler off	Vela aquecedora nº {1} com defeito ou conector solto
+no.{1} glow plug harness short to ground	Chicote da vela aquecedora nº {1} em curto com a massa
+note	-
+ns1 or ns2 sensor malfunction	Defeito no sensor NS1 ou NS2
+ns1 sensor malfunction	Defeito no sensor NS1
+ns2 sensor malfunction	Defeito no sensor NS2
+o2 sensor heater relay circuit failure	Defeito no circuito do relé do aquecedor da sonda lambda
+odd gear shaft speed sensor circuit short or open	Circuito do sensor de rotação do eixo das marchas ímpares em curto ou aberto
+odd gear shaft speed sensor connector disconected	Conector do sensor de rotação do eixo das marchas ímpares desconectado
+odd gear shaft speed sensor malfunction	Defeito no sensor de rotação do eixo das marchas ímpares
+oil line clogged	Linha de óleo entupida
+oil pressure switch failure	Interruptor de pressão de óleo com defeito
+oil pump failure	Bomba de óleo com defeito
+one cylinder misfire	Falha de combustão em um cilindro
+one of the interior or exterior lf antennas	Uma das antenas LF internas ou externas (chave presencial)
+op {1} switch failure (off stuck)	Interruptor OP {1} com defeito (preso desligado)
+op {1} switch failure (on stuck)	Interruptor OP {1} com defeito (preso ligado)
+op {1} switch line short to ground	Linha do interruptor OP {1} em curto com a massa
+op {1} switch line short to power line or open	Linha do interruptor OP {1} em curto com a alimentação ou aberta
+op {1} switch stuck off	Interruptor OP {1} preso desligado
+open, short to power)	-
+open-circuit of app sensor harness gnd line	Linha de massa do chicote do sensor do pedal do acelerador (APP) aberta
+out of fuel	Sem combustível
+output speed sensor(nc sensor)	Sensor de rotação de saída (sensor NC)
+over voltage (mis-replace to {1} v battery, etc.)	Sobretensão (troca errada por bateria de {1} V etc.)
+p3 sensor internal malfunction	Defeito interno no sensor P3
+p3 sensor output higher of lower than expected	Saída do sensor P3 mais alta ou mais baixa que o esperado
+pa sensor gnd pin off	Pino de massa do sensor de pressão atmosférica (PA) solto
+park lock component	Componente da trava de estacionamento (P)
+park pawl actuator driver unit internal circuit failure	Defeito no circuito interno do acionador da trava de estacionamento (P)
+park position sensor failure	Sensor da posição P com defeito
+park position sensor internal failure	Defeito interno no sensor da posição P
+park position sensor internal malfunction	Defeito interno no sensor da posição P
+park position sensor {1} line is open-circuit	Linha do sensor {1} da posição P aberta
+pcm	Módulo do motor
+pcm failure	Defeito no módulo do motor
+pcm internal circuit failure	Defeito no circuito interno do módulo do motor
+pcm internal circuit malfunction	Defeito no circuito interno do módulo do motor
+pcm internal malfunction	Defeito interno no módulo do motor
+pcs (cpv) closed stuck	Válvula de purga (PCS/CPV) presa fechada
+pcs open stuck	Válvula de purga (PCS) presa aberta
+pcv hose poor connections, damage	Mangueira do PCV (respiro do cárter) mal encaixada ou danificada
+pcv monitor	Monitor do PCV (respiro do cárter)
+pcv system problem	Problema no sistema PCV (respiro do cárter)
+pelcm sensor out of range	Sensor PELCM fora da faixa
+pelcm sensor p/snsr1 out line open	Linha P/SNSR1 OUT do sensor PELCM aberta
+pelcm sensor p/snsr1 out line short to ground	Linha P/SNSR1 OUT do sensor PELCM em curto com a massa
+pelcm sensor p/snsr1 out line short to power	Linha P/SNSR1 OUT do sensor PELCM em curto com o positivo
+pelcm sensor range/performance problem	Sensor PELCM fora da faixa ou com desempenho ruim
+pelcm sensor sg line open	Linha SG (massa de sinal) do sensor PELCM aberta
+pelcm sensor vcc line open	Linha VCC (alimentação) do sensor PELCM aberta
+pf0 sensor failure	Sensor PF0 com defeito
+pf0 sensor power line open	Linha de alimentação do sensor PF0 aberta
+pf0 sensor trouble	Problema no sensor PF0
+pf2 sensor failure	Sensor PF2 com defeito
+phase motor current sensor failure	Sensor de corrente de fase do motor elétrico com defeito
+please check another dtc	Verifique o outro código de falha gravado
+poor fuel pump flow/pressure	Vazão ou pressão baixa da bomba de combustível
+power line open	Linha de alimentação aberta
+power supply line open circuit	Linha de alimentação aberta
+pressure regulator clogged, stuck, or closed	Regulador de pressão entupido, preso ou fechado
+pressure regulator stuck open	Regulador de pressão preso aberto
+pressure sensor	Sensor de pressão
+purge (pcs) line poor connections, damage	Linha de purga (PCS) mal encaixada ou danificada
+purge control solenoid failure	Solenoide de purga do canister com defeito
+purge control solenoid valve	Válvula solenoide de purga do canister
+purge control solenoid valve (pcs) closed stuck	Válvula solenoide de purga (PCS) presa fechada
+purge line	Linha de purga
+purge line disconnected or clogged	Linha de purga desconectada ou entupida
+radiator fan failure	Eletroventilador do radiador com defeito
+rail pressure control valve	Válvula de controle de pressão do rail
+rear acm solenoid (b) failure	Solenoide (B) do coxim ativo traseiro com defeito
+recognition gap to the open side)	-
+reference orifice flow quantity is excessive	Fluxo no orifício de referência alto demais
+reference orifice flow quantity is too few	Fluxo no orifício de referência baixo demais
+reference voltage line of the sensor which connected to sensor reference	Linha de tensão de referência do sensor ligado à referência dos sensores
+rocker arm oil pressure solenoid (c) failure	Solenoide (C) de pressão de óleo do balancim com defeito
+rotor breakage	Rotor quebrado
+sae dtc : p0{1}	-
+sae dtc : p2{1}	-
+sbw shifter assembly internal failure	Defeito interno no conjunto do seletor eletrônico (SBW)
+scv main unit (main body malfunction like stuck, reluctant)	Válvula SCV (defeito no corpo: presa, emperrando)
+secondary ho2s signal line noise, loose connection	Ruído ou mau contato na linha de sinal da sonda lambda secundária
+secondary o2 sensor malfunction	Defeito na sonda lambda secundária
+sensor failure	Sensor com defeito
+sensor power harness (vehicle speed sensor)	Chicote de alimentação do sensor (sensor de velocidade)
+sensor power no.{1} (engine control module (ecm) internal)	Alimentação de sensores nº {1} (interna ao módulo do motor)
+sensor reference voltage a (engine control module (ecm) internal)	Tensão de referência A dos sensores (interna ao módulo do motor)
+sensor reference voltage b (engine control module (ecm) internal)	Tensão de referência B dos sensores (interna ao módulo do motor)
+sensor reference voltage harness (frp sensor, maf sensor, boost pressure	Chicote da tensão de referência dos sensores (pressão do rail, MAF, pressão do turbo)
+sensor wiring connection - loose contact	Conexão da fiação do sensor: mau contato
+sensor wiring connection - short circuit to battery	Conexão da fiação do sensor: curto com o positivo
+sensor wiring connection - short circuit to gnd	Conexão da fiação do sensor: curto com a massa
+sensor, app a)	-
+sensor, app b)	-
+sg line is open-circuit	Linha SG (massa de sinal) aberta
+shaft lock/shaft interference	Eixo travado ou com interferência
+shift linkage poor adjustment	Varão do câmbio mal regulado
+shift or select actuator malfunction	Defeito no atuador de engate ou de seleção
+shift valve a stuck	Válvula de troca A presa
+shift valve b stuck	Válvula de troca B presa
+shift valve c stuck	Válvula de troca C presa
+shift valve d stuck	Válvula de troca D presa
+shift valve e stuck	Válvula de troca E presa
+shifter internal malfunction	Defeito interno no seletor de marchas
+short circuit of app sensor harness power line or signal line	Curto na linha de alimentação ou de sinal do chicote do sensor do pedal do acelerador (APP)
+short circuit of ewp drive signal line	Curto na linha de sinal de acionamento da bomba d'água elétrica (EWP)
+short circuit or open circuit	Curto-circuito ou circuito aberto
+short circut ns1 signal line to ns2 signal line	Curto entre a linha de sinal do sensor NS1 e a do NS2
+short in fuse circuit	Curto no circuito do fusível
+short to ground for park position sensor {1} line	Linha do sensor {1} da posição P em curto com a massa
+short to ground for u, v, or w circuit at select side	Circuito U, V ou W em curto com a massa, no lado de seleção
+short to ground for u, v, or w circuit at shift side	Circuito U, V ou W em curto com a massa, no lado de engate
+short to ground for vcc line	Linha VCC (alimentação) em curto com a massa
+short to ground or open-circuit in local can harnes for hca external	Curto com a massa ou circuito aberto no chicote da CAN local externa do atuador da embreagem (HCA)
+short to power/ground for vcc circuit at select side	Circuito VCC em curto com o positivo ou com a massa, no lado de seleção
+short to power/ground for vcc circuit at shift side	Circuito VCC em curto com o positivo ou com a massa, no lado de engate
+sig line vb short	Linha de sinal em curto com o positivo da bateria
+signal (vtm) line open	Linha de sinal (VTM) aberta
+signal (vtm) line short	Linha de sinal (VTM) em curto
+signal and power switch line short circuit of ns1 sensor	Linha de sinal e de alimentação do sensor NS1 em curto
+signal and power switch line short circuit of ns2 sensor	Linha de sinal e de alimentação do sensor NS2 em curto
+signal disturbance	Interferência no sinal
+signal failure	Falha de sinal
+signal line intermittent short	Curto intermitente na linha de sinal
+signal line noise	Ruído na linha de sinal
+signal line open	Linha de sinal aberta
+signal line open or short	Linha de sinal aberta ou em curto
+signal line open/short	Linha de sinal aberta ou em curto
+signal line short	Linha de sinal em curto
+sol power open-circuit or short to ground	Alimentação dos solenoides aberta ou em curto com a massa
+sol system supply open or short to ground	Alimentação do sistema de solenoides aberta ou em curto com a massa
+solenoid failure	Solenoide com defeito
+solenoid gnd line open	Linha de massa do solenoide aberta
+solenoid stuck failure	Solenoide preso
+solenoid supply +line open	Linha de alimentação (+) do solenoide aberta
+solenoid supply +line short	Linha de alimentação (+) do solenoide em curto
+solenoid supply +line short to ground	Linha de alimentação (+) do solenoide em curto com a massa
+solenoid supply -line open	Linha de alimentação (-) do solenoide aberta
+solenoid supply -line short	Linha de alimentação (-) do solenoide em curto
+solenoid supply -line short to ground	Linha de alimentação (-) do solenoide em curto com a massa
+solenoid valve failure	Válvula solenoide com defeito
+solenoid wire harness	Chicote do solenoide
+solenoid wire harness failure	Chicote do solenoide com defeito
+soot sensor malfunction	Defeito no sensor de fuligem
+soot sensor unit internal malfunction	Defeito interno na unidade do sensor de fuligem
+soot sensor unit malfunction	Defeito na unidade do sensor de fuligem
+spark plug carbon deposits or fouling	Vela com carvão ou suja
+srs unit	Módulo do airbag (SRS)
+starter cut relay {1} on failure	Relé {1} de corte da partida preso ligado
+strka sensor circuit short to ground	Circuito do sensor STRKA em curto com a massa
+strka sensor malfunction	Defeito no sensor STRKA
+strkb sensor circuit short to ground	Circuito do sensor STRKB em curto com a massa
+strkb sensor malfunction	Defeito no sensor STRKB
+strkc sensor circuit short to ground	Circuito do sensor STRKC em curto com a massa
+strkc sensor malfunction	Defeito no sensor STRKC
+strkd sensor circuit short to ground	Circuito do sensor STRKD em curto com a massa
+strkd sensor malfunction	Defeito no sensor STRKD
+supply line open	Linha de alimentação aberta
+supply line open or short	Linha de alimentação aberta ou em curto
+supply line short	Linha de alimentação em curto
+switch failure	Interruptor com defeito
+switch stuck off	Interruptor preso desligado
+switch stuck on	Interruptor preso ligado
+ta sensor malfunction	Defeito no sensor de temperatura do ar (TA)
+tcm internal circuit failure	Defeito no circuito interno do módulo do câmbio
+tcm internal failure	Defeito interno no módulo do câmbio
+tcm malfunction	Defeito no módulo do câmbio
+temperature sensor	Sensor de temperatura
+temperature sensor detection line failure	Defeito na linha de leitura do sensor de temperatura
+test condition	-
+the coupler at park position sensor is disconnected	Conector do sensor da posição P desconectado
+the ga coupler at select side is disconnected	Conector GA do lado de seleção desconectado
+the ga coupler at shift side is disconnected	Conector GA do lado de engate desconectado
+third party exhaust system	Escape não original
+this dtc has been stored in accordance with the detection of another dtc	Este código foi gravado por causa de outro código detectado
+this is temporary issue and not malfunction	É uma condição passageira, não um defeito
+throttle actuator control module failure	Defeito no módulo da borboleta eletrônica
+throttle actuator control system failures	Falhas no sistema da borboleta eletrônica
+throttle actuator harness short	Chicote do atuador da borboleta em curto
+throttle body air leak	Entrada de ar falso no corpo de borboleta
+throttle body failure	Corpo de borboleta com defeito
+throttle position sensor1 bank2	Sensor 1 de posição da borboleta do banco 2
+timing belt	Correia dentada
+too little egr flow	Fluxo da EGR baixo demais
+too much egr flow	Fluxo da EGR alto demais
+tp sensor failure	Sensor de posição da borboleta (TP) com defeito
+traction motor failure	Motor de tração com defeito
+traction motor rotor position sensor failure	Sensor de posição do rotor do motor de tração com defeito
+traction motor rotor position sensor line failure	Defeito na linha do sensor de posição do rotor do motor de tração
+traction motor temperature sensor failure	Sensor de temperatura do motor de tração com defeito
+transmission change function	Mecanismo de troca do câmbio
+transmission change function (shift folk, synchronizer, hub sleeve, gear)	Mecanismo de troca do câmbio (garfo, sincronizador, luva, engrenagem)
+transmission fluid pressure sensor failure	Sensor de pressão do óleo do câmbio com defeito
+transmission fluid temperature sensor failure	Sensor de temperatura do óleo do câmbio com defeito
+transmission internal failure (two-way clutch)	Defeito interno no câmbio (embreagem de duas vias)
+transmission range switch failure	Interruptor de posição da alavanca do câmbio com defeito
+tw sensor malfunction	Defeito no sensor de temperatura do motor (TW)
+tw2 sensor malfunction	Defeito no sensor de temperatura TW2
+twin motor unit ecu (tmu-l) failure	Defeito no módulo da unidade de dois motores (TMU esquerdo)
+twin motor unit ecu (tmu-r) failure	Defeito no módulo da unidade de dois motores (TMU direito)
+twin motor unit ecu failure	Defeito no módulo da unidade de dois motores (TMU)
+u phase motor current sensor failure	Sensor de corrente da fase U do motor elétrico com defeito
+upper actuator ecu internal circuit malfunction	Defeito no circuito interno do módulo do atuador superior
+v phase motor current sensor failure	Sensor de corrente da fase V do motor elétrico com defeito
+vacuum pump (motor) failure	Bomba de vácuo (motor) com defeito
+vacuum pump failure	Bomba de vácuo com defeito
+valve body	Corpo de válvulas
+valve body assembly failure (two-way clutch actuator valve stroke sensor)	Corpo de válvulas com defeito (sensor de curso da válvula do atuador da embreagem de duas vias)
+valve clearance incorrect	Folga de válvulas incorreta
+vbsol line open	Linha VBSOL (alimentação dos solenoides) aberta
+vcu failure	Defeito no módulo VCU
+vsa ecu failure	Defeito no módulo do VSA
+vsa modulator control unit	Unidade moduladora do VSA
+vsa unit internal circuit malfunction	Defeito no circuito interno da unidade VSA
+vtc line battery short	Linha do VTC em curto com o positivo
+vtc line open circuit	Linha do VTC aberta
+vtc line short to gnd	Linha do VTC em curto com a massa
+vtc malfunction	Defeito no VTC (comando variável)
+vtc solenoid failure	Solenoide do VTC com defeito
+vtec pin stuck	Pino do VTEC preso
+vts control line/vtm signal line open/short	Linha de comando VTS ou linha de sinal VTM aberta ou em curto
+w phase motor current sensor failure	Sensor de corrente da fase W do motor elétrico com defeito
+warning indicator status	-
+waste gate actuator malfunction	Defeito no atuador da wastegate
+waste gate lift sensor bank2 malfunction	Defeito no sensor de curso da wastegate do banco 2
+waste gate lift sensor malfunction	Defeito no sensor de curso da wastegate
+water pipe clogged	Tubo de água entupido
+water pipe leak	Vazamento no tubo de água
+{1} volt battery failure	Bateria de {1} V com defeito

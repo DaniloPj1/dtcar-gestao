@@ -19,6 +19,8 @@ import os
 import re
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 RAIZ = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CAT = os.path.join(RAIZ, "catalogo")
 SAIDA = os.path.join(RAIZ, "js", "falhas")
@@ -62,11 +64,18 @@ def carregar_pt():
     return pt
 
 
-def traduz(texto, pt, faltam):
+import traduz_sae
+COMPONENTES = traduz_sae.carregar_componentes()
+
+
+def traduz(texto, pt, faltam, sae=False):
     """(texto para a tela, 1 se está em português conferido / 0 se ficou em inglês)."""
     limpo = re.sub(r"\s+", " ", str(texto or "")).strip()
     k, nums = chave(limpo)
     br = pt.get(k)
+    # texto da norma (SAE): componente traduzido à mão + modo de falha por regra (catalogo/traduz_sae.py)
+    if br is None and sae:
+        br = traduz_sae.traduzir(k, COMPONENTES)
     if br is None:
         faltam[k] = faltam.get(k, 0) + 1
         return limpo, 0
@@ -97,7 +106,7 @@ def main():
 
     gen = {}
     for cod, desc in sae.items():
-        d, p = traduz(desc, pt, faltam)
+        d, p = traduz(desc, pt, faltam, sae=True)
         gen[cod] = {"d": d, "p": p, "o": "s"}
     com_causa = 0
     for e in extrato:
@@ -109,12 +118,14 @@ def main():
             if LIXO_TITULO.match(tit):
                 v = {"d": "", "p": 0, "o": "h"}
             else:
-                d, p = traduz(tit, pt, faltam)
+                d, p = traduz(tit, pt, faltam, sae=True)
                 v = {"d": d, "p": p, "o": "h"}
             gen[cod] = v
         causas = []
         for c in e.get("causas", []):
             t, p = traduz(c["t"], pt, faltam)
+            if t == "-":
+                continue            # linha que a tradução marcou como NÃO sendo causa (cabeçalho, nota solta, pedaço de tabela)
             causas.append([c.get("nivel", 0), t, p])
         if causas:
             v["c"] = causas

@@ -102,7 +102,13 @@ public class ObdPlugin extends Plugin {
         if (c.startsWith("ATSH")) return hexExato(c.substring(4), 3) || hexExato(c.substring(4), 8);
         if (c.startsWith("ATCRA")) return hexExato(c.substring(5), 3) || hexExato(c.substring(5), 8);
         if (c.startsWith("ATFCSH")) return hexExato(c.substring(6), 3) || hexExato(c.substring(6), 8);
-        if (c.startsWith("ATFCSD")) return ehHexPar(c.substring(6)) && c.length() > 6 && c.length() <= 16;
+        // ATFCSD é o CONTEÚDO do quadro de controle de fluxo, e esse quadro vai ao barramento para o
+        // cabeçalho que o ATFCSH escolheu — SEM o adaptador acrescentar byte de controle. Ou seja, o
+        // primeiro byte é o que vem do site, que é exatamente a condição que faz o permitido()
+        // valer para os outros pedidos e NÃO vale para este. Com valor livre, o site escolheria os
+        // bytes de um quadro e o endereço de destino: é o mesmo furo do ATCAF0 por outra porta.
+        // Então aqui vale UM valor só, o que o app usa: 30 00 00 = "pode mandar o resto, sem pausa".
+        if (c.startsWith("ATFCSD")) return c.equals("ATFCSD300000");
         if (c.startsWith("ATFCSM")) return c.length() == 7 && c.charAt(6) >= '0' && c.charAt(6) <= '2';
         if (c.startsWith("ATST")) return hexExato(c.substring(4), 2);
         return false;
@@ -147,6 +153,8 @@ public class ObdPlugin extends Plugin {
     private volatile String conectadoNome;
     /** O último cabeçalho aceito (ATSH): para quem o pedido está indo agora. */
     private volatile String cabecalho = "";
+    /** O pedido anterior estourou o tempo? Então a resposta dele pode chegar com atraso. */
+    private volatile boolean ultimoEstourou = false;
 
     /* ------------------------------------------------------------------ comandos permitidos */
 
@@ -202,7 +210,7 @@ public class ObdPlugin extends Plugin {
      *
      * O que a gravação existe para fazer (código de bico) não está nessa faixa.
      */
-    static boolean didGravavel(String did) {
+    static boolean didGravavel(String did) {   // guardada para quando o gravar voltar
         if (!hexExato(normalizar(did), 4)) return false;
         int n = Integer.parseInt(normalizar(did), 16);
         return n < 0xF180 || n > 0xF1FF;
@@ -386,6 +394,7 @@ public class ObdPlugin extends Plugin {
         conectadoEm = null;
         conectadoNome = null;
         cabecalho = "";
+        ultimoEstourou = false;
     }
 
     /* ------------------------------------------------------------------ comandos */
@@ -407,7 +416,15 @@ public class ObdPlugin extends Plugin {
         }
         final String limpo = normalizar(cmd);
         // Guarda para onde os pedidos estão indo: os métodos que AGEM conferem isso antes de sair.
+        //
+        // E ZERA quando o adaptador volta ao padrão. ATZ reinicia o ELM327 e qualquer ATSP troca o
+        // protocolo — nos dois casos o cabeçalho de transmissão volta ao padrão, que nos protocolos
+        // do ISO 15765-4 é justamente o endereço de DIFUSÃO. Sem zerar, a variável continuaria
+        // dizendo "um módulo" com o adaptador já em difusão, e a trava dos métodos que agem
+        // deixaria passar. Não é teórico: o uds.fechar() manda ATSP0, então o fluxo normal do app
+        // já dessincronizava. Achado na reconferência da revisão independente, 20/11/2026.
         if (limpo.startsWith("ATSH")) cabecalho = limpo.substring(4);
+        else if (limpo.startsWith("ATSP") || limpo.equals("ATZ") || limpo.equals("ATD") || limpo.equals("ATWS")) cabecalho = "";
         enviar(call, limpo, call.getInt("esperaMs", ESPERA_PADRAO));
     }
 
@@ -422,7 +439,23 @@ public class ObdPlugin extends Plugin {
      */
     private boolean emDifusao() {
         String c = cabecalho == null ? "" : cabecalho;
-        return c.isEmpty() || c.equals("7DF") || c.equals("18DB33F1");
+        if (c.isEmpty()) return true;
+        if (c.length() == 3) {
+            // 11 bits: o que não pode é o endereço FUNCIONAL, 7DF, em que quem responde é quem
+            // quiser — agir ali vai para todos os módulos de uma vez. Fora dele, o endereço é de um
+            // módulo, e a faixa de diagnóstico vai de 600 a 7FF: a VAG usa 70A, a Renault 743 e
+            // 747, e prender isto a 7E0-7E7 (os endereços do OBD-II) barraria módulo legítimo.
+            int n;
+            try { n = Integer.parseInt(c, 16); } catch (NumberFormatException e) { return true; }
+            return n == 0x7DF || n < 0x600 || n > 0x7FF;
+        }
+        if (c.length() == 8) {
+            // 29 bits: o formato físico (um módulo) tem 18DA como prefixo; o funcional é 18DB.
+            // Por regra, e não por lista: um funcional com outro endereço de origem passaria numa
+            // lista de dois valores. Reparo pedido na reconferência da revisão, 20/11/2026.
+            return !c.startsWith("18DA");
+        }
+        return true;
     }
 
     /**
@@ -533,53 +566,23 @@ public class ObdPlugin extends Plugin {
         enviar(call, "31" + sub + rid + dados, call.getInt("esperaMs", 15000));
     }
 
-    /**
-     * Grava um dado no módulo (UDS 0x2E). É por aqui que o código do bico recodificado entra na ECU.
-     * O tamanho é limitado ao que um dado de calibração tem: cabe um código de bico, não cabe bloco
-     * de programa (e os serviços de transferência estão proibidos de qualquer forma).
+    /*
+     * NÃO EXISTEM AQUI, de propósito: gravar (0x2E) e destravar (0x27).
+     *
+     * Eles chegaram a existir e saíram na reconferência da revisão independente de 20/11/2026, por
+     * um motivo simples: NENHUMA tela os usa. A tela de programar bico monta o plano e confere o
+     * código, mas o botão de gravar está desligado porque o app ainda não sabe o número do campo de
+     * cada família de ECU. Método publicado que ninguém chama é superfície de ataque de graça — e
+     * o 0x2E é escrita de calibração: é por ele que se mexe em codificação de variante, canal de
+     * adaptação, imobilizador e configuração de airbag, que é onde mora o perigo de verdade.
+     *
+     * Então a promessa deste APK é mais forte do que "não regrava módulo": ele NÃO ESCREVE NADA de
+     * calibração em módulo nenhum. O que ele faz é acionar atuador, rodar rotina de serviço,
+     * reiniciar módulo e apagar falha.
+     *
+     * Quando a gravação de bico tiver o número do campo, estes métodos voltam — com lista de
+     * identificadores permitidos por família, e não com escrita livre como estavam.
      */
-    @PluginMethod
-    public void gravar(final PluginCall call) {
-        final String did = normalizar(call.getString("did"));
-        final String valor = normalizar(call.getString("valor", ""));
-        if (!hexExato(did, 4) || !ehHexPar(valor) || valor.isEmpty() || valor.length() > 64) {
-            call.reject("comando-recusado");
-            return;
-        }
-        if (!didGravavel(did)) {
-            call.reject("did-protegido");
-            return;
-        }
-        if (emDifusao()) {
-            call.reject("sem-modulo-escolhido");
-            return;
-        }
-        enviar(call, "2E" + did + valor, call.getInt("esperaMs", 10000));
-    }
-
-    /**
-     * Destrava a função protegida do módulo (UDS 0x27): subfunção ímpar pede a semente, par manda a
-     * chave. A CONTA da chave não acontece aqui — ela depende da família do módulo e fica no site,
-     * onde pode ser lida, conferida e corrigida sem refazer o APK.
-     */
-    @PluginMethod
-    public void destravar(final PluginCall call) {
-        final String sub = normalizar(call.getString("sub"));
-        final String chave = normalizar(call.getString("chave", ""));
-        if (!hexExato(sub, 2) || !ehHexPar(chave) || chave.length() > 64) {
-            call.reject("comando-recusado");
-            return;
-        }
-        if (Integer.parseInt(sub, 16) == 0) {
-            call.reject("comando-recusado");
-            return;
-        }
-        if (emDifusao()) {
-            call.reject("sem-modulo-escolhido");
-            return;
-        }
-        enviar(call, "27" + sub + chave, call.getInt("esperaMs", 8000));
-    }
 
     /**
      * Reinicia o módulo (UDS 0x11): 01 reinício completo, 03 leve.
@@ -627,9 +630,19 @@ public class ObdPlugin extends Plugin {
                     // pior defeito possível, e com o UDS, que fala com um módulo de cada vez, a
                     // chance de acontecer é muito maior do que no OBD-II.
                     descartarAtrasado(in);
+                    // Se o pedido ANTERIOR estourou o tempo, a resposta dele pode ainda estar no
+                    // caminho: esvaziar uma vez só não pega o que chega depois do esvaziamento.
+                    // Então espera um instante e esvazia de novo. Reparo pedido na reconferência da
+                    // revisão independente, 20/11/2026.
+                    if (ultimoEstourou) {
+                        try { Thread.sleep(120); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                        descartarAtrasado(in);
+                        ultimoEstourou = false;
+                    }
                     out.write((limpo + "\r").getBytes(StandardCharsets.US_ASCII));
                     out.flush();
                     String resposta = ler(in, espera);
+                    if (resposta.startsWith("STOPPED")) ultimoEstourou = true;
                     JSObject r = new JSObject();
                     r.put("resposta", resposta);
                     call.resolve(r);

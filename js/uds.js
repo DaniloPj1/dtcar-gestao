@@ -353,6 +353,7 @@ export async function sondarDado(did) {
 
 /** Diz se o APK instalado tem a camada que age no carro (APK antigo não tem). */
 export const podeAgir = () => { const p = plugin(); return !!(p && typeof p.atuar === "function" && typeof p.rotina === "function"); };
+/** Hoje é sempre falso: o nativo não expõe gravação de calibração (ver o bloco acima). */
 export const podeGravar = () => { const p = plugin(); return !!(p && typeof p.gravar === "function"); };
 
 export const respostaDe = (r, servico) => {
@@ -380,16 +381,21 @@ export const rodarRotina = (rid, sub = ROTINA.comecar, dados = "", esperaMs = 15
   P().rotina({ sub: hx(sub, 2), rotina: hx(rid, 4), dados: String(dados || "").toUpperCase(), esperaMs })
     .then(r => respostaDe(r, SV.rotina));
 
-/** Grava um dado no módulo (0x2E). */
-export const gravarDado = (did, valorHex, esperaMs = 10000) =>
-  P().gravar({ did: hx(did, 4), valor: String(valorHex || "").toUpperCase(), esperaMs })
-    .then(r => respostaDe(r, SV.gravar));
-
-/** Pede a semente (subfunção ímpar) ou manda a chave (par) — 0x27. */
-export const pedirSemente = (sub = 0x01, esperaMs = 8000) =>
-  P().destravar({ sub: hx(sub, 2), chave: "", esperaMs }).then(r => respostaDe(r, SV.destravar));
-export const mandarChave = (sub, chaveHex, esperaMs = 8000) =>
-  P().destravar({ sub: hx(sub, 2), chave: String(chaveHex || "").toUpperCase(), esperaMs }).then(r => respostaDe(r, SV.destravar));
+/*
+ * NÃO EXISTEM, de propósito: gravar (0x2E) e destravar (0x27).
+ *
+ * O plugin nativo não expõe mais esses dois métodos — saíram na reconferência da revisão
+ * independente de 20/11/2026, porque nenhuma tela os usava. Método publicado que ninguém chama é
+ * superfície de ataque de graça, e o 0x2E é escrita de CALIBRAÇÃO: é por ele que se mexe em
+ * codificação de variante, canal de adaptação, imobilizador e configuração de airbag.
+ *
+ * Então a promessa deste APK é mais forte do que "não regrava módulo": ele não escreve nada de
+ * calibração em módulo nenhum. Ele aciona atuador, roda rotina de serviço, reinicia módulo e apaga
+ * falha — e é só isso.
+ *
+ * Quando a programação de bico tiver o número do campo por família de ECU, os dois voltam, com
+ * lista de identificadores permitidos em vez de escrita livre.
+ */
 
 /** Reinicia o módulo (0x11): vários só passam a valer o dado gravado depois disto. */
 export const reiniciarModulo = (tipo = "01", esperaMs = 10000) =>

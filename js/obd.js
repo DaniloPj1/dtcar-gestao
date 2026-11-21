@@ -604,10 +604,13 @@ export async function iniciar() {
   // o primeiro pedido de verdade é o que faz o adaptador achar o protocolo do carro: pode demorar
   const primeiro = await pedir("0100", 12000);
   if (primeiro.erro) throw new Error(primeiro.erro);
-  const protocolo = (await comando("ATDP", 3000)).replace(/[\r\n>]/g, "").trim();
+  // "STOPPED" é o marcador que a parte nativa põe quando o pedido estoura o tempo. Sem filtrar,
+  // ele apareceria na tela como se fosse o nome do protocolo ou a versão do adaptador.
+  const semMarca = t => { const x = String(t || "").replace(/[\r\n>]/g, "").trim(); return /^STOPPED/i.test(x) ? "" : x; };
+  const protocolo = semMarca(await comando("ATDP", 3000));
   // ATI diz como o adaptador se identifica. "v1.5" é versão que nunca existiu: denuncia clone.
   let versao = "";
-  try { versao = (await comando("ATI", 3000)).replace(/[\r\n>]/g, "").trim(); } catch (e) { versao = ""; }
+  try { versao = semMarca(await comando("ATI", 3000)); } catch (e) { versao = ""; }
   const base = suportados(primeiraDe(primeiro.respostas, 0x01), 0x01, 0x00);
   const resto = base.includes(0x20) ? await suportadosEmFaixas(0x01, FAIXAS_PID.slice(1)) : [];
   const pidsSuportados = base.concat(resto.filter(p => !base.includes(p)));

@@ -40,16 +40,22 @@ echo "Compilou sem erro."
 # O texto de todo comando que AGE no carro é montado no próprio código, nunca colado do JavaScript:
 # o site escolhe o quê, e manda só os valores (identificador, opção, chave) — já conferidos um por um.
 # Se algum destes métodos passar a enviar texto vindo de fora, este teste reprova.
-for m in atuar rotina gravar destravar reiniciarModulo; do
+for m in atuar rotina reiniciarModulo; do
   sed -n "/public void $m(/,/^    }/p" "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
     | grep -q 'enviar(call, "' \
     || { echo "FALHOU: o método $m deveria montar o comando a partir de um literal escrito no código."; exit 1; }
 done
 grep -q 'return porUds ? "14FFFFFF" : "04";' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
   || { echo "FALHOU: o comando de apagar deveria ser literal, no comandoApagar."; exit 1; }
+# gravar (0x2E) e destravar (0x27) NÃO podem existir enquanto nenhuma tela os usa: método publicado
+# que ninguém chama é superfície de ataque de graça, e o 0x2E é escrita de calibração.
+for m in gravar destravar; do
+  grep -q "public void $m(" "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
+    && { echo "FALHOU: o método $m não deveria existir enquanto nenhuma tela o usa."; exit 1; }
+done
 # Regravar memória de módulo não pode existir de jeito nenhum: nem serviço, nem método.
 grep -qE '"3[4567]"' <(sed -n '/SERVICOS_PROIBIDOS = /,/));/p' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java") \
   || { echo "FALHOU: os serviços de transferência (34/35/36/37) deveriam estar na lista de proibidos."; exit 1; }
 grep -q '"04"' <(grep -A3 'SERVICOS_LEITURA = ' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java") \
   && { echo "FALHOU: o 04 não pode entrar na lista branca do comando()."; exit 1; }
-java -cp "$TMP/out" br.com.dtcarcentroautomotivo.obd.VerificaListaBranca
+java -cp "$TMP/out" br.com.dtcarcentroautomotivo.obd.VerificaListaBranca "$RAIZ/teste/obd_java/sondas.txt"

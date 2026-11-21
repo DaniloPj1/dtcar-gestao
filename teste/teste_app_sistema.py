@@ -117,12 +117,13 @@ var R = {
   '22FA21': '62FA21000B0012',                             // cuida do ABS e do controle de estabilidade
   '22FA20': '62FA20FA19FA20FA21FA22FA23FA24',             // os dados que ele tem
   '22FA22': '62FA220200AD6E',                             // rotinas: dentro da faixa do fabricante
-  '22FA23': '62FA23F101E300',                             // atuadores: fora dessa faixa
+  '22FA23': '62FA23F101FA30',                             // atuadores: identificador de dado, parte alta
   '22FA24': '62FA240100',
   // falha por módulo: QUATRO bytes por falha (o terceiro é o tipo, que dá a causa elétrica)
   '1902FF': '5902FF0171132F' + 'C021490A',
   '14FFFFFF': '54'
 };
+window.__R = R;
 window.Capacitor.Plugins.DtcarObd = {
   permissao: function () { window.__obd.chamadas.push('permissao'); return Promise.resolve({ concedida: true, pedeNaHora: true }); },
   pedirPermissao: function () { window.__obd.chamadas.push('pedirPermissao'); return Promise.resolve({ concedida: true }); },
@@ -153,8 +154,8 @@ window.Capacitor.Plugins.DtcarObd = {
     }
     return Promise.resolve({ resposta: '71' + o.sub + o.rotina + '\\r\\r>' });
   },
-  gravar: function (o) { window.__obd.chamadas.push('gravar:' + o.did); return Promise.resolve({ resposta: '6E' + o.did + '\\r\\r>' }); },
-  destravar: function (o) { window.__obd.chamadas.push('destravar:' + o.sub); return Promise.resolve({ resposta: '7F2733\\r\\r>' }); },
+  // gravar (0x2E) e destravar (0x27) NÃO existem no plugin de verdade enquanto nenhuma tela
+  // os usa, então também não existem aqui. O teste confere que o Java não os tem.
   reiniciarModulo: function (o) { window.__obd.chamadas.push('reiniciarModulo'); return Promise.resolve({ resposta: '5101\\r\\r>' }); },
   // apagar tem método PRÓPRIO no plugin (nunca passa pelo comando): é assim no APK de verdade
   apagar: function () {
@@ -966,6 +967,20 @@ try:
         pg.click('#atu-modulo .btn-barra >> nth=0'); pg.wait_for_selector('#atu-lista', timeout=15000)
         t('F101' in pg.inner_text('#atu-lista'), 'lista os atuadores que o MÓDULO informou: %s' % pg.inner_text('#atu-lista')[:90])
         t('não o nome dela' in pg.inner_text('#atu-lista'), 'e diz que o nome está em anexo que o app não tem')
+        # ---- a trava da DÚVIDA ----
+        # Quando o módulo responde números que cabem nas duas leituras, o app não sabe se a lista é
+        # de atuador ou de rotina. Aviso sozinho não protege: o acionamento fica TRAVADO até o
+        # mecânico confirmar que conferiu o número. Reparo pedido na reconferência da revisão.
+        pg.evaluate("window.__R['22FA23'] = '62FA230300'")   # número que cabe nas duas leituras
+        pg.click('#atu-modulo .btn-barra >> nth=0'); pg.wait_for_selector('#atu-duvida', timeout=15000)
+        t('não tem certeza' in pg.inner_text('#atu-duvida'), 'o app avisa que não tem certeza da lista')
+        t(pg.locator('#atu-lista .obd-ap >> nth=0').is_disabled(), 'e o acionamento fica TRAVADO')
+        pg.click('#atu-duvida .link'); pg.wait_for_timeout(400)
+        t(not pg.locator('#atu-lista .obd-ap >> nth=0').is_disabled(), 'destrava só depois de o mecânico confirmar')
+        pg.evaluate("window.__R['22FA23'] = '62FA23F101FA30'")
+        pg.click('#atu-modulo .btn-barra >> nth=0'); pg.wait_for_selector('#atu-lista', timeout=15000)
+        t(not pg.query_selector('#atu-duvida'), 'com resposta clara, não há dúvida')
+
         pg.click('#atu-lista .obd-ap >> nth=0'); pg.wait_for_selector('.quadro', timeout=10000)
         tq = pg.inner_text('.quadro')
         t('mão perto de ventoinha' in tq, 'antes de acionar, avisa do risco: %s' % tq[:70])
@@ -1091,7 +1106,7 @@ try:
           'apagar é método próprio do plugin, com o comando escrito no código (04 no OBD-II, 14 FF FF FF no UDS)')
         t('comando-recusado' in jv, 'o nativo recusa comando fora da lista branca')
         # Cada coisa que AGE no carro tem método próprio, com nome: nenhuma passa pelo comando().
-        for metodo in ('atuar', 'rotina', 'gravar', 'destravar', 'reiniciarModulo'):
+        for metodo in ('atuar', 'rotina', 'reiniciarModulo'):
             t(('public void %s(' % metodo) in jv, '%s é método próprio do plugin' % metodo)
         # E a promessa que a oficina pode fazer: este app NÃO regrava módulo.
         proibidos = jv.split('SERVICOS_PROIBIDOS')[1].split(';')[0]
@@ -1111,9 +1126,12 @@ try:
           'a entrada é esvaziada antes de cada envio')
         # Agir em DIFUSÃO (7DF) mandaria o comando para todos os módulos: um reiniciarModulo assim
         # reinicia o carro inteiro. Os métodos que agem exigem UM módulo escolhido.
-        t('emDifusao' in jv and '"7DF"' in jv and '"18DB33F1"' in jv,
-          'o nativo recusa agir no endereço de difusão')
-        for metodo in ('atuar', 'rotina', 'gravar', 'destravar', 'reiniciarModulo'):
+        # Difusão por REGRA, não por lista de dois endereços: em 29 bits, um funcional com outra
+        # origem passaria numa lista. 11 bits: barra o funcional 7DF e o que está fora de 600-7FF.
+        # 29 bits: exige o prefixo 18DA, que é o endereçamento de UM módulo.
+        t('emDifusao' in jv and '0x7DF' in jv and 'startsWith("18DA")' in jv,
+          'o nativo recusa agir em difusão, por regra e não por lista')
+        for metodo in ('atuar', 'rotina', 'reiniciarModulo'):
             corpo = jv.split('public void %s(' % metodo)[1].split('\n    }')[0]
             t('emDifusao()' in corpo, '%s confere se há UM módulo escolhido' % metodo)
         # ---- as listas do adaptador de mentira são AS MESMAS do Java ----

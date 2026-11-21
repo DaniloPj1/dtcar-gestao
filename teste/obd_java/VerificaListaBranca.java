@@ -2,6 +2,7 @@ package br.com.dtcarcentroautomotivo.obd;
 public class VerificaListaBranca {
   static int ok = 0, falhas = 0;
   static void chk(String nome, boolean cond) { if (cond) ok++; else { falhas++; System.out.println("  FALHOU: " + nome); } }
+  static void chk(String nome, boolean cond, Object extra) { if (cond) ok++; else { falhas++; System.out.println("  FALHOU: " + nome + " :: " + extra); } }
   public static void main(String[] a) {
     // o que o app usa tem de passar
     for (String c : new String[]{"ATZ","ATE0","ATL0","ATS0","ATH0","ATSP0","ATDP","0100","0101","010C","03","07","0A","0902","0600","0620","0621","020C00"})
@@ -42,6 +43,12 @@ public class VerificaListaBranca {
     // Valor torto no ajuste não passa: nem letra fora do hexadecimal, nem tamanho errado, nem modo inexistente.
     for (String c : new String[]{"ATSHZZZ","ATSH7E","ATSH7E00","ATCRAZZZ","ATFCSM3","ATSTZZ","ATSH"})
       chk("RECUSA ajuste torto " + c, !ObdPlugin.permitido(c));
+    /* ATFCSD é o CONTEÚDO de um quadro que vai ao barramento, para o cabeçalho que o ATFCSH
+     * escolheu, e SEM o adaptador acrescentar byte de controle: o primeiro byte é o que vem do
+     * site. É o mesmo furo do ATCAF0 por outra porta, então vale UM valor só, o que o app manda. */
+    chk("permite o ATFCSD que o app usa", ObdPlugin.permitido("ATFCSD300000"));
+    for (String c : new String[]{"ATFCSD2EF190","ATFCSD00","ATFCSD3000","ATFCSD30000000","ATFCSDZZ","ATFCSD"})
+      chk("RECUSA ATFCSD com valor livre: " + c, !ObdPlugin.permitido(c));
     /* Faixa de identificação do módulo (F180-F1FF): chassi, número de peça, número de programa.
      * Nada ali é dado de calibração, e gravar chassi é coisa que só se faz com má intenção. */
     for (String d : new String[]{"F190","F180","F1FF","F18C","F1A2"})
@@ -81,15 +88,19 @@ public class VerificaListaBranca {
       chk("RECUSA rotina torta: " + r, !ObdPlugin.rotinaNaFaixa(r));
 
     /* ---------------- cada coisa que age tem método próprio, com nome ---------------- */
-    for (String nome : new String[]{"atuar","rotina","gravar","destravar","reiniciarModulo","apagar"}) {
+    for (String nome : new String[]{"atuar","rotina","reiniciarModulo","apagar"}) {
       try {
         java.lang.reflect.Method m = ObdPlugin.class.getMethod(nome, com.getcapacitor.PluginCall.class);
         chk(nome + " está marcado com @PluginMethod", m.getAnnotation(com.getcapacitor.PluginMethod.class) != null);
         chk(nome + " não recebe o comando de fora (só PluginCall)", m.getParameterCount() == 1);
       } catch (NoSuchMethodException e) { chk(nome + " existe como método do plugin", false); }
     }
-    // Regravar módulo não tem método nenhum, de propósito.
-    for (String nome : new String[]{"transferir","baixarPrograma","flash","programar","regravar"}) {
+    /* gravar (0x2E) e destravar (0x27) NÃO existem enquanto nenhuma tela os usa. O 0x2E é escrita de
+     * CALIBRAÇÃO — codificação de variante, canal de adaptação, imobilizador, airbag — e método
+     * publicado que ninguém chama é superfície de ataque de graça. Saíram na reconferência da
+     * revisão independente de 20/11/2026. Voltam com lista de identificadores permitidos. */
+    // Regravar módulo não tem método nenhum, de propósito. E escrever calibração, por ora, também não.
+    for (String nome : new String[]{"transferir","baixarPrograma","flash","programar","regravar","gravar","destravar"}) {
       boolean existe = true;
       try { ObdPlugin.class.getMethod(nome, com.getcapacitor.PluginCall.class); }
       catch (NoSuchMethodException e) { existe = false; }
@@ -107,6 +118,29 @@ public class VerificaListaBranca {
     // O texto do comando de apagar sai do próprio código: são dois literais, e nada mais.
     chk("apagar do OBD-II é exatamente 04", ObdPlugin.comandoApagar(false).equals("04"));
     chk("apagar do UDS é exatamente 14FFFFFF", ObdPlugin.comandoApagar(true).equals("14FFFFFF"));
+    /* ---------------- as sondas do arquivo compartilhado ----------------
+     * teste/obd_java/sondas.txt é a FONTE ÚNICA da decisão do portão, e o teste em Python confere o
+     * espelho em JavaScript contra o MESMO arquivo. Comparar decisão, e não lista, é o que fecha o
+     * buraco que deixou o ATCAF0 passar: as listas estavam iguais, a regra em volta não.
+     * Pedido na reconferência da revisão independente, 20/11/2026. */
+    try {
+      java.util.List<String> linhas = java.nio.file.Files.readAllLines(
+        java.nio.file.Paths.get(a.length > 0 ? a[0] : "teste/obd_java/sondas.txt"),
+        java.nio.charset.StandardCharsets.UTF_8);
+      int sondas = 0;
+      for (String l : linhas) {
+        String t = l.trim();
+        if (t.isEmpty() || t.startsWith("#")) continue;
+        boolean esperado = t.startsWith("sim");
+        String cmd = t.length() > 3 ? t.substring(4) : "";
+        sondas++;
+        chk("sonda: " + (esperado ? "aceita" : "recusa") + " '" + cmd + "'", ObdPlugin.permitido(cmd) == esperado);
+      }
+      chk("o arquivo de sondas tem conteúdo", sondas >= 80, sondas);
+    } catch (java.io.IOException e) {
+      chk("deu para ler teste/obd_java/sondas.txt", false);
+    }
+
     System.out.println(falhas == 0 ? ok + " conferências da lista branca passaram." : ok + " ok, " + falhas + " FALHARAM");
     if (falhas > 0) System.exit(1);
   }

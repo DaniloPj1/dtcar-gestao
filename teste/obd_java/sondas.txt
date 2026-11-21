@@ -1,0 +1,137 @@
+# Sondas do PORTÃO do plugin nativo: o que ele tem de aceitar e o que tem de recusar.
+#
+# Este arquivo é a FONTE ÚNICA da decisão, e dois testes o leem:
+#  - teste/obd_java/VerificaListaBranca.java confere o portão de verdade (ObdPlugin.permitido);
+#  - teste/teste_app_sistema.py confere o espelho em JavaScript do adaptador de mentira.
+# Se alguém mudar um lado só, um dos dois reprova. Comparar DECISÃO, e não lista, é o que fecha o
+# buraco que deixou o ATCAF0 passar: as listas estavam iguais, a regra em volta não.
+#
+# Formato: "sim" ou "nao", um espaço, o comando. Linha vazia e linha com # são ignoradas.
+
+# --- ajuste do adaptador que o app manda ---
+sim ATZ
+sim ATE0
+sim ATL0
+sim ATS0
+sim ATH0
+sim ATH1
+sim ATSP0
+sim ATSP6
+sim ATSP7
+sim ATDP
+sim ATDPN
+sim ATRV
+sim ATI
+sim ATCAF1
+sim ATCRA
+sim ATCRA7E8
+sim ATCRA18DAF110
+sim ATSH7E0
+sim ATSH18DB33F1
+sim ATFCSH7E0
+sim ATFCSD300000
+sim ATFCSM1
+sim ATST64
+
+# --- o furo que derrubava o portão inteiro: desligar a formatação desloca o byte do serviço ---
+nao ATCAF0
+nao AT CAF 0
+
+# --- o mesmo furo por outra porta: o conteúdo de um quadro que vai ao barramento ---
+nao ATFCSD2EF190
+nao ATFCSD00
+nao ATFCSD3000
+nao ATFCSD30000000
+nao ATFCSDZZ
+nao ATFCSD
+
+# --- ajuste que o app não manda: lista branca é só o que se usa ---
+nao ATAL
+nao ATAR
+nao ATAT1
+nao ATCF7E0
+nao ATCM7FF
+nao ATSP8
+nao ATSP9
+nao ATMA
+nao ATD
+nao ATWS
+nao ATBRD23
+nao ATPP0CSV19
+
+# --- valor torto no ajuste ---
+nao ATSHZZZ
+nao ATSH7E
+nao ATSH7E00
+nao ATSH
+nao ATCRAZZZ
+nao ATFCSM3
+nao ATSTZZ
+
+# --- leitura do OBD-II ---
+sim 0100
+sim 010C
+sim 03
+sim 07
+sim 0A
+sim 0902
+sim 0600
+sim 020C00
+sim 01 0c
+sim atz
+
+# --- leitura do UDS ---
+sim 1902FF
+sim 190A
+sim 22F190
+sim 24F190
+sim 3E00
+sim 3E80
+sim 1001
+sim 1003
+
+# --- a sessão de PROGRAMAÇÃO, que a regravação exige ---
+nao 1002
+nao 10 02
+nao 1000
+nao 1004
+nao 10
+
+# --- transferência de bloco: regravar módulo não existe por aqui ---
+nao 34
+nao 3400
+nao 340011
+nao 35
+nao 3501
+nao 36
+nao 3601
+nao 37
+nao 3700
+
+# --- o que AGE no carro só vai por método próprio, nunca pelo comando() ---
+nao 04
+nao 0401
+nao 0 4
+nao 2F010003
+nao 2EF19000
+nao 2E F190 00
+nao 3101AD6E
+nao 2701
+nao 270212345678
+nao 1101
+nao 1103
+nao 14FFFFFF
+
+# --- tamanho por serviço: pedido comprido de OBD-II é lixo, o de UDS cabe ---
+nao 01020304050607080910
+nao 0101020304050607
+nao 03FFFFFFFFFFFFFF
+sim 22F190F1A0F1B0F1C0F1D0F1E0F1F0
+nao 22F190F1A0F1B0F1C0F1D0F1E0F1F0F200
+
+# --- lixo ---
+nao
+nao ZZ
+nao 011
+nao 0
+nao 01;04

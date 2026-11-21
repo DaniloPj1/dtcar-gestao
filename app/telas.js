@@ -1786,6 +1786,7 @@ function Atuadores() {
   const [mod, setMod] = useState(null);
   const [lista, setLista] = useState(null);
   const [alvo, setAlvo] = useState(null);       // { did } a confirmar
+  const [duvida, setDuvida] = useState(false);  // o módulo respondeu de forma ambígua: trava até confirmar
   const [andando, setAndando] = useState(null); // { passos: [] }
   const [ocupado, setOcupado] = useState("");
   const [erro, setErro] = useState("");
@@ -1807,6 +1808,10 @@ function Atuadores() {
     setOcupado("");
     if (!r.ok) { setErro(r.texto || "Não deu para perguntar."); return; }
     setLista(r.r.atuadores.map(n => ({ did: n })));
+    // Dúvida TRAVA o acionamento. Quando o módulo responde números que cabem nas duas leituras, o
+    // app não sabe se a lista é de atuador ou de rotina — e acionar o número errado é mandar 2F num
+    // identificador de rotina. Aviso sozinho não protege ninguém: o mecânico tem de confirmar.
+    setDuvida(!!r.r.duvida);
     if (!r.r.atuadores.length) setErro("Este módulo não informou nenhum atuador. Isso não quer dizer que ele não tenha: quer dizer que ele não responde pela norma de inspeção, e o app não vai adivinhar o número da saída.");
   };
   // `cancelar` é uma caixa, não estado: a roda do teste precisa ver o valor NOVO a cada volta, e
@@ -1840,8 +1845,13 @@ function Atuadores() {
         ${erro ? html`<div class="erro">${erro}</div>` : null}
         ${lista && lista.length ? html`<${Cartao} titulo=${"Atuadores (" + lista.length + ")"} id="atu-lista">
           <p class="nota">O módulo informou o NÚMERO de cada saída, não o nome dela — o nome está num anexo da norma que o app não tem. Acione e confira no carro o que se moveu.</p>
-          ${lista.map(a => html`<button key=${a.did} type="button" class="obd-ap" onClick=${() => setAlvo(a)} disabled=${!!st.dono || !!andando}>
-            <b>Saída ${hex4Txt(a.did)}</b><span>toque para testar</span></button>`)}
+          ${duvida ? html`<div class="erro" id="atu-duvida">
+            <b>O app não tem certeza de que esta lista é de atuador.</b><br />
+            Este módulo respondeu números que cabem tanto na leitura de rotina quanto na de atuador, então pode ser que esta seja a lista de ROTINAS. Acionar um número de rotina como se fosse saída é mandar o comando errado.<br />
+            <button type="button" class="link" onClick=${() => setDuvida(false)}>Conferi o número no manual do módulo e quero testar mesmo assim</button>
+          </div>` : null}
+          ${lista.map(a => html`<button key=${a.did} type="button" class="obd-ap" onClick=${() => setAlvo(a)} disabled=${!!st.dono || !!andando || duvida}>
+            <b>Saída ${hex4Txt(a.did)}</b><span>${duvida ? "travado: o app não tem certeza da lista" : "toque para testar"}</span></button>`)}
         </${Cartao}>` : null}
         ${andando ? html`<${Cartao} titulo="Teste em andamento" id="atu-andando">
           ${andando.passos.map((p, i) => html`<div key=${i} class=${"passo " + (p.o === "nao-devolveu" ? "ruim" : p.o === "devolveu" || p.o === "acionou" ? "bom" : "")}>${p.t}</div>`)}
@@ -1872,6 +1882,7 @@ function Aprendizados() {
   const [mod, setMod] = useState(null);
   const [lista, setLista] = useState(null);
   const [alvo, setAlvo] = useState(null);
+  const [duvida, setDuvida] = useState(false);
   const [andando, setAndando] = useState(null);
   const [ocupado, setOcupado] = useState("");
   const [erro, setErro] = useState("");
@@ -1893,6 +1904,7 @@ function Aprendizados() {
     setOcupado("");
     if (!r.ok) { setErro(r.texto || "Não deu para perguntar."); return; }
     setLista(r.r.rotinas.map(n => ({ rid: n, sabido: true })));
+    setDuvida(!!r.r.duvida);
     if (!r.r.rotinas.length) setErro("Este módulo não informou rotina nenhuma pela norma de inspeção. Dá para sondar por faixa abaixo: a sondagem PERGUNTA sem rodar nada.");
   };
   /** Sondagem por faixa: pergunta sem executar, e lê o jeito da recusa. */
@@ -1912,6 +1924,7 @@ function Aprendizados() {
     setOcupado("");
     if (!r.ok) { setErro(r.texto || "Não deu para sondar."); return; }
     setLista((r.r || []).map(a => ({ rid: a.rid, sabido: false, motivo: a.motivo, texto: a.texto })));
+    setDuvida(false);   // a sondagem não tem dúvida: ela perguntou por número de rotina e o módulo confirmou
     if (!(r.r || []).length) setErro("Nenhuma das rotinas sondadas existe neste módulo. A sondagem olha alguns números conhecidos da faixa do fabricante, não a faixa inteira: ela não prova que o módulo não tem nenhuma.");
   };
   const cancelar = useRef(false);
@@ -1941,8 +1954,13 @@ function Aprendizados() {
         ${erro ? html`<div class="erro">${erro}</div>` : null}
         ${lista && lista.length ? html`<${Cartao} titulo=${"Rotinas (" + lista.length + ")"} id="apr-lista">
           <p class="nota">O módulo informa o NÚMERO da rotina, não o nome: o nome está num anexo da norma que o app não tem. Rode uma por vez e veja o resultado no carro.</p>
-          ${lista.map(a => html`<button key=${a.rid} type="button" class="obd-ap" onClick=${() => setAlvo(a)} disabled=${!!st.dono || !!andando}>
-            <b>Rotina ${hex4Txt(a.rid)}</b><span>${a.texto || "toque para rodar"}</span></button>`)}
+          ${duvida ? html`<div class="erro" id="apr-duvida">
+            <b>O app não tem certeza de que esta lista é de rotina.</b><br />
+            Este módulo respondeu números que cabem tanto na leitura de rotina quanto na de atuador, então pode ser que esta seja a lista de ATUADORES. Rodar um número de atuador como se fosse rotina é mandar o comando errado.<br />
+            <button type="button" class="link" onClick=${() => setDuvida(false)}>Conferi o número no manual do módulo e quero rodar mesmo assim</button>
+          </div>` : null}
+          ${lista.map(a => html`<button key=${a.rid} type="button" class="obd-ap" onClick=${() => setAlvo(a)} disabled=${!!st.dono || !!andando || duvida}>
+            <b>Rotina ${hex4Txt(a.rid)}</b><span>${duvida ? "travado: o app não tem certeza da lista" : (a.texto || "toque para rodar")}</span></button>`)}
         </${Cartao}>` : null}
         ${andando ? html`<${Cartao} titulo="Rotina em andamento" id="apr-andando">
           ${andando.passos.map((p, i) => html`<div key=${i} class=${"passo " + (p.o === "pronto" ? "bom" : p.o === "recusou" ? "ruim" : "")}>${p.t}</div>`)}

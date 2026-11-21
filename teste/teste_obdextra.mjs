@@ -214,8 +214,18 @@ t7(fx.doCarro(temp, "lenta", ses.slice(0, 1)) === null && fx.doCarro(temp, null,
 const aj = fx.faixaPara({ pid: 0x07, parte: 0, chave: 700, unidade: "%", valor: 14 }, { rpm: 900 });
 t7(aj.de === -10 && aj.ate === 10 && aj.situacao === "acima", "ajuste de combustível: de −10 a +10");
 t7(fx.faixaPara({ pid: 0x0c, parte: 0, chave: 1200, unidade: "rpm", valor: 800 }, { rpm: 800, regime: "lenta" }) === null, "leitura sem histórico e sem referência fica SEM faixa: nada inventado");
-const rail = { pid: 0x23, parte: 0, chave: 3500, unidade: "kPa", valor: 35000 };
-t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "ONIX 1.0" } }).de === 25000, "rail: a tabela está em bar e a leitura em kPa — convertido; carro qualquer usa a referência geral");
-t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).de === 30000 && /montadora/.test(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).fonte), "Hilux 3.0: vale a da montadora, não a geral");
+const rail = { pid: 0x23, parte: 0, chave: 3500, unidade: "bar", valor: 350 };
+t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "ONIX 1.0" } }).de === 250, "rail em bar: carro qualquer usa a referência geral (250 a 550)");
+t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).de === 300 && /montadora/.test(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).fonte), "Hilux 3.0: vale a da montadora, não a geral");
 t7(fx.faixaPara(rail, { rpm: 2500, regime: null }) === null, "rail fora da marcha lenta: a referência de lenta não se aplica");
 console.log(m7 + " conferências da faixa de trabalho passaram.");
+
+/* ---- pendentes: registro acrescentado DURANTE a subida não se perde (revisão do Codex) ---- */
+{
+  const reg8 = await import("../js/obdregistro.js");
+  let fila8 = [{ guardado_em: "a", placa: "AAA1A11", tipo: "apagar" }];
+  const cofre8 = { ler: () => JSON.parse(JSON.stringify(fila8)), escrever: f => { fila8 = JSON.parse(JSON.stringify(f)); } };
+  const r8 = await reg8.subirPendentes(async () => { fila8.push({ guardado_em: "b", placa: "BBB2B22", tipo: "sessao" }); }, cofre8);
+  if (!(r8.subiram === 1 && r8.restam === 1 && fila8.length === 1 && fila8[0].placa === "BBB2B22")) { console.error("FALHOU: o registro novo sumiu da fila: " + JSON.stringify(fila8)); process.exit(1); }
+  console.log("pendente acrescentado durante a subida fica na fila.");
+}

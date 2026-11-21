@@ -70,14 +70,20 @@ export async function guardar(registrar, cofre, l) {
 export async function subirPendentes(registrar, cofre) {
   let fila = [];
   try { fila = cofre.ler(); } catch (e) { return { subiram: 0, restam: 0 }; }
-  const restam = [];
+  const enviados = [];
   let subiram = 0;
   for (const reg of fila) {
     const l = Object.assign({}, reg); delete l.guardado_em;
-    try { await registrar(l); subiram++; } catch (e) { restam.push(reg); }
+    try { await registrar(l); subiram++; enviados.push(JSON.stringify(reg)); } catch (e) { /* fica na fila */ }
   }
-  try { cofre.escrever(restam); } catch (e) { /* segue */ }
-  return { subiram, restam: restam.length };
+  // Tira da fila SÓ o que subiu. A fila é lida de novo porque guardar() pode ter acrescentado um
+  // registro enquanto o servidor respondia — escrever a cópia antiga apagaria esse registro.
+  let restam = fila.length - subiram;
+  try {
+    const agora = cofre.ler().filter(reg => { const i = enviados.indexOf(JSON.stringify(reg)); if (i < 0) return true; enviados.splice(i, 1); return false; });
+    cofre.escrever(agora); restam = agora.length;
+  } catch (e) { /* segue */ }
+  return { subiram, restam };
 }
 /** O cofre padrão: o armazenamento do aparelho, na mesma chave que o apagar do OBD-II já usava. */
 export function cofreDe(armazenamento, chave = "obd_pendentes") {

@@ -13,7 +13,7 @@ import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
 import * as registro from "../js/obdregistro.js";
-import { usarExplicacoes, FalhaExplicada, NotaDasFontes, FaixaTxt, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
 import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
 import { HondaLista, Condicoes } from "./diaghonda.js";
@@ -53,11 +53,11 @@ function Mostrador({ l, f }) {
   const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
   const zs = tem ? zonasDe(l, f) : null;
-  return html`<div class="mostrador" data-pid=${l.pid} data-chave=${l.chave}>
+  return html`<div class=${"mostrador" + (zs ? " com-faixa" : "")} data-situacao=${f ? f.situacao : null} title=${f ? f.fonte : null} data-pid=${l.pid} data-chave=${l.chave}>
     <div class="mostrador-rot">${l.rotulo}</div>
     ${tem ? html`<svg class="mostrador-arco" viewBox="0 0 86 86" aria-hidden="true">
       <g transform="rotate(135 43 43)">
-        <circle cx="43" cy="43" r=${M_R} class="trilho" stroke-dasharray=${M_ARCO + " " + M_VOLTA} />
+        ${zs ? null : html`<circle cx="43" cy="43" r=${M_R} class="trilho" stroke-dasharray=${M_ARCO + " " + M_VOLTA} />`}
         ${zs ? html`
           <circle cx="43" cy="43" r=${M_R} class="zona antes" stroke-dasharray=${(M_ARCO * zs.a) + " " + M_VOLTA} />
           <circle cx="43" cy="43" r=${M_R} class="zona trabalho" stroke-dasharray=${(M_ARCO * (zs.b - zs.a)) + " " + M_VOLTA} stroke-dashoffset=${-M_ARCO * zs.a} />
@@ -66,11 +66,11 @@ function Mostrador({ l, f }) {
         : html`<circle cx="43" cy="43" r=${M_R} class="cheio" stroke-dasharray=${(M_ARCO * parte) + " " + M_VOLTA} />`}
       </g>
     </svg>` : null}
-    <div class=${"mostrador-num" + (tem ? " dentro" : "")}>
+    <div class=${"mostrador-num" + (tem ? " dentro" : "") + (String(numBR(l.valor)).length > 4 ? " longo" : "")}>
       <b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}
     </div>
-    ${tem ? html`<div class="mostrador-pes"><span>${numBR(zs ? zs.min : l.de)}</span><span>${numBR(zs ? zs.max : l.ate)}</span></div>` : null}
-    <${FaixaTxt} f=${f} curta />
+    ${zs ? html`<div class="mostrador-pes faixa">${numBR(f.de)} a ${numBR(f.ate)}</div>`
+      : tem ? html`<div class="mostrador-pes"><span>${numBR(l.de)}</span><span>${numBR(l.ate)}</span></div>` : null}
   </div>`;
 }
 
@@ -82,7 +82,7 @@ function LinhaViva({ l, f }) {
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
   const zs = tem ? zonasDe(l, f) : null;
   const pc = x => (x * 100).toFixed(1) + "%";
-  return html`<div class="linha-viva" data-pid=${l.pid} data-chave=${l.chave}>
+  return html`<div class="linha-viva" data-situacao=${f ? f.situacao : null} title=${f ? f.fonte : null} data-pid=${l.pid} data-chave=${l.chave}>
     <div class="linha-viva-topo">
       <span class="linha-viva-rot">${l.rotulo}</span>
       <b class="linha-viva-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
@@ -97,7 +97,6 @@ function LinhaViva({ l, f }) {
         <div class="barra-zonas-pes"><span class="pe-de" style=${"left:" + pc(zs.a)}>${numBR(f.de)}</span><span class="pe-ate" style=${"left:" + pc(zs.b)}>${numBR(f.ate)}</span></div>
       </div>`
       : tem ? html`<div class="linha-viva-barra"><i style=${"width:" + (parte * 100).toFixed(1) + "%"}></i></div>` : null}
-    <${FaixaTxt} f=${f} />
   </div>`;
 }
 
@@ -1002,7 +1001,8 @@ function Modulos() {
     setOcupado("");
     if (!r.ok) { setErro(r.texto || "Não deu para ler."); return; }
     const d = r.r;
-    if (d.nrc != null) { setErro(d.texto); return; }
+    // Sem resposta (NO DATA, STOPPED…) NÃO é "sem falhas": é leitura que não aconteceu.
+    if (d.nrc != null || d.erro || !Array.isArray(d.codigos)) { setErro(d.texto || "O módulo não respondeu à leitura de falhas. Nada foi lido — confira a ignição e tente de novo."); return; }
     setFalhas(d.codigos.map(uds.falhaPronta)); setVistaMod("falhas");
   };
   const descobrir = async () => {
@@ -1114,6 +1114,8 @@ function Atuadores() {
   // estado dentro de função que já começou continuaria valendo o antigo.
   const cancelar = useRef(false);
   const [condOk, setCondOk] = useState(false);
+  // Cada alvo confirma as SUAS condições: abrir ou fechar outro item zera a confirmação anterior.
+  useEffect(() => { setCondOk(false); }, [alvo]);
   const testar = async (did, hd = null, antes = null) => {
     setAlvo(null); setCondOk(false); setAndando({ passos: [] }); cancelar.current = false;
     // comAcao: pega a vez, para a leitura de fundo E TRAVA O DESLIGAMENTO enquanto o teste corre.
@@ -1230,6 +1232,8 @@ function Aprendizados() {
   };
   const cancelar = useRef(false);
   const [condOk, setCondOk] = useState(false);
+  // Cada alvo confirma as SUAS condições: abrir ou fechar outro item zera a confirmação anterior.
+  useEffect(() => { setCondOk(false); }, [alvo]);
   const rodar = async (rid, hd = null, antes = null) => {
     setAlvo(null); setCondOk(false); setAndando({ passos: [] }); cancelar.current = false;
     const r = await sessao.comAcao("o aprendizado", () => uds.rodarAprendizado(rid, {

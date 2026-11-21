@@ -223,9 +223,10 @@ chk("a última posição de cada faixa é o aviso da faixa seguinte", suportados
 const vps = (pid, dados) => valorPid("41" + pid + dados, parseInt(pid, 16), 0x01);
 const vp = (pid, dados) => vps(pid, dados)[0] || null;
 chk("velocidade", vp("0D", "50").valor === 80);
-chk("pressão do rail: 5000 x 10 = 50.000 kPa (500 bar, diesel)", vp("23", "1388").valor === 50000);
-chk("pressão do rail absoluta usa a mesma escala", vp("59", "1388").valor === 50000);
-chk("pressão do rail sobre o vácuo é outra escala (x0,079)", vp("22", "1388").valor === 395);
+chk("pressão do rail em BAR: 5000 x 0,1 = 500 bar (diesel)", vp("23", "1388").valor === 500 && vp("23", "1388").unidade === "bar");
+chk("pressão do rail absoluta usa a mesma escala", vp("59", "1388").valor === 500);
+chk("pressão do rail sobre o vácuo é outra escala (x0,079 kPa), mostrada em bar", vp("22", "1388").valor === 3.95 && vp("22", "1388").unidade === "bar");
+chk("pressão de combustível em bar: 100 x 3 kPa = 3 bar", vp("0A", "64").valor === 3 && vp("0A", "64").unidade === "bar");
 chk("tempo de injeção: 2,5° (não é o avanço de ignição)", vp("5D", "6A40").valor === 2.5 && vp("5D", "6A40").rotulo.includes("injeção"));
 chk("tempo de injeção negativo (atrasado)", vp("5D", "6540").valor === -7.5);
 chk("consumo instantâneo 3,5 L/h", vp("5E", "0046").valor === 3.5);

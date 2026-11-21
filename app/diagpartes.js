@@ -54,27 +54,21 @@ export function FalhaExplicada({ e }) {
 const numBR = n => String(n).replace(".", ",");
 
 /**
- * A faixa de trabalho embaixo da leitura (js/obdfaixa.js): de onde até onde, de onde veio, e onde o
- * valor de agora está — ESCRITO (dentro, acima, abaixo), nunca só na cor. `curta` é para o mostrador
- * e o digital, que têm pouco espaço: lá a fonte vira uma palavra.
+ * A faixa de trabalho em UMA linha curta, só os dois números (js/obdfaixa.js). Usada onde não há
+ * barra nem ponteiro para mostrar os limites (digital e gráfico). Sem "dentro/acima/abaixo" escrito:
+ * pedido do Danilo (21/11/2026) — a cor e os números já dizem. A origem da faixa fica no toque longo.
  */
-export function FaixaTxt({ f, curta = false }) {
+export function FaixaTxt({ f }) {
   if (!f) return null;
-  const palavra = f.situacao === "dentro" ? "DENTRO" : f.situacao === "acima" ? "ACIMA" : "ABAIXO";
-  return html`<div class=${"faixa-txt" + (curta ? " curta" : "") + (f.situacao !== "dentro" ? " fora" : "")} data-situacao=${f.situacao} title=${f.fonte}>
-    <span class="faixa-de">${curta ? "" : "Faixa de trabalho: "}<b>${f.texto}</b></span>
-    <span class="faixa-sit">${palavra}</span>
-    <span class="faixa-fonte">${curta ? (f.origem === "carro" ? "deste carro" : f.nivelNome.toLowerCase()) : f.fonte}</span>
-    ${!curta && f.outra ? html`<span class="faixa-fonte">${f.outra}</span>` : null}
-  </div>`;
+  return html`<div class="faixa-txt" data-situacao=${f.situacao} title=${f.fonte}>${f.texto}</div>`;
 }
 
 /** Leitura em número grande, sem ponteiro: para ler de longe, com o celular apoiado no carro. */
 export function Digital({ l, f }) {
   return html`<div class="digital" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="digital-rot">${l.rotulo}</div>
-    <div class="digital-num"><b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}</div>
-    <${FaixaTxt} f=${f} curta />
+    <div class=${"digital-num" + (f && f.situacao === "acima" ? " acima" : "")}><b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}</div>
+    <${FaixaTxt} f=${f} />
   </div>`;
 }
 

@@ -50,3 +50,17 @@ const rodas = m.comandosDoAno(polo, 2020).flatMap(c => c.z).filter(m.eRoda).map(
 if (!(rodas.some(r => r.startsWith("Roda dianteira esquerda")) && rodas.some(r => r.startsWith("Roda traseira direita")))) { console.error("FALHOU: rodas do Polo: " + rodas.join("; ")); process.exit(1); }
 if (m.nomeDaRoda({ n: "Steering wheel speed", u: "kilometersPerHour" }) || m.nomeDaRoda({ n: "Average front wheel speed", u: "kilometersPerHour" }) || m.nomeDaRoda({ n: "Front left wheel speed", u: "scalar" })) { console.error("FALHOU: volante, média e número cru não são roda"); process.exit(1); }
 console.log("rodas do ABS: " + [...new Set(rodas)].join("; "));
+
+/* ---- medidas do Brasil: o que vem em medida americana é convertido (pedido do Danilo) ---- */
+{
+  const m = await import("../js/obdmodelo.js");
+  const um = (u, cru) => m.decodificar({ b: 0, l: 8, u }, [cru]);
+  const ok = (c, msg) => { if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+  ok(um("fahrenheit", 212).valor === 100 && um("fahrenheit", 212).unidade === "°C", "212 °F = 100 °C");
+  ok(um("psi", 100).valor === 6.89 && um("psi", 100).unidade === "bar", "100 psi = 6,89 bar");
+  ok(um("miles", 100).valor === 160.93 && um("miles", 100).unidade === "km", "100 mi = 160,93 km");
+  ok(um("milesPerHour", 60).valor === 96.56 && um("milesPerHour", 60).unidade === "km/h", "60 mph = 96,56 km/h");
+  ok(um("gallons", 10).valor === 37.85 && um("gallons", 10).unidade === "L", "10 gal = 37,85 L");
+  ok(um("celsius", 90).valor === 90 && um("bars", 3).unidade === "bar", "o que já é medida nossa não muda");
+  console.log("medidas do Brasil: 6 conferências passaram.");
+}

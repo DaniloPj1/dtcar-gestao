@@ -125,7 +125,17 @@ const METRICA = { odometer: "Odômetro", speed: "Velocidade", transmissionFluidT
   pluggedIn: "Na tomada", isCharging: "Carregando", engineLoad: "Carga do motor", absoluteEngineLoad: "Carga absoluta do motor", fuelRate: "Consumo",
   shortTermFuelTrim: "Ajuste de combustível (curto)", throttlePosition: "Borboleta", o2Lambda: "Lambda", cvtDeterioration: "Desgaste do CVT" };
 
-export const unidadeDe = s => UNIDADE[s.u] || "";
+// MEDIDAS DO BRASIL (pedido do Danilo, 21/11/2026): o que a base aberta traz em medida americana é
+// convertido na hora de mostrar — °F vira °C, psi vira bar, milha vira km, mph vira km/h e galão
+// (americano) vira litro. A conta é exata; a unidade escrita na tela é sempre a convertida.
+const BRASIL = {
+  fahrenheit: { u: "°C", f: v => (v - 32) * 5 / 9 },
+  psi: { u: "bar", f: v => v * 0.0689476 },
+  miles: { u: "km", f: v => v * 1.609344 },
+  milesPerHour: { u: "km/h", f: v => v * 1.609344 },
+  gallons: { u: "L", f: v => v * 3.785412 },
+};
+export const unidadeDe = s => (BRASIL[s.u] ? BRASIL[s.u].u : UNIDADE[s.u] || "");
 // Velocidade de cada roda (módulo do ABS): o OBDb não padroniza o nome, mas escreve sempre parecido.
 const RODA = [[/\b(front left|fl|lf|left front)\b/i, "dianteira esquerda"], [/\b(front right|fr|rf|right front)\b/i, "dianteira direita"],
   [/\b(rear left|rl|lr|left rear)\b/i, "traseira esquerda"], [/\b(rear right|rr|right rear)\b/i, "traseira direita"]];
@@ -162,6 +172,7 @@ export function decodificar(s, bytes) {
   if (LIGA[s.u]) return { valor: cru, texto: LIGA[s.u][cru ? 1 : 0], unidade: "" };
   let v = cru * (s.m == null ? 1 : s.m) / (s.d == null ? 1 : s.d) + (s.a || 0);
   if ((s.nmn != null && v < s.nmn) || (s.nmx != null && v > s.nmx)) return null;
+  if (BRASIL[s.u]) v = BRASIL[s.u].f(v);
   v = Math.round(v * 100) / 100;
   if (s.u === "hex") return { valor: cru, texto: cru.toString(16).toUpperCase(), unidade: "" };
   return { valor: v, texto: String(v).replace(".", ","), unidade: unidadeDe(s), numero: true };

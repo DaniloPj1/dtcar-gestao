@@ -587,8 +587,14 @@ export async function rodarAprendizado(rid, {
       return { ok: true, passos, texto: "Rotina concluída.", dados: r.dados };
     }
     // acabou o tempo com o módulo ainda trabalhando: parar é mais seguro que deixar correndo solto
-    try { await rodarRotina(rid, ROTINA.parar, "", 6000); } catch (e) { /* segue */ }
-    terminou = true;
+    // …mas só diz que PAROU se o módulo confirmar. Recusa ou silêncio na parada não é parada.
+    const pr = await rodarRotina(rid, ROTINA.parar, "", 6000).catch(() => ({ erro: "conexao-caiu" }));
+    terminou = true;                                  // a parada já foi pedida: o finally não repete
+    if (pr.erro || pr.nrc != null) {
+      const t = "A rotina não terminou no tempo e o módulo NÃO confirmou a interrupção" + (pr.texto ? " (" + pr.texto + ")" : "") + ". Ela pode estar rodando: desligue a chave e aguarde antes de mexer no carro.";
+      anota("nao-parou", t);
+      return { ok: false, passos, texto: t, paradaNaoConfirmada: true };
+    }
     anota("tempo", "Passou do tempo e a rotina foi interrompida.");
     return { ok: false, passos, texto: "Passou do tempo e a rotina foi interrompida." };
   } catch (e) {
@@ -597,7 +603,9 @@ export async function rodarAprendizado(rid, {
     // Se a rotina COMEÇOU e não chegou ao fim, manda parar antes de sair. Deixar rotina de
     // aprendizado correndo solta dentro do módulo é o que não pode acontecer.
     if (comecou && !terminou) {
-      try { await rodarRotina(rid, ROTINA.parar, "", 6000); anota("parou", "Rotina interrompida no módulo."); } catch (e) { /* segue */ }
+      const pr = await rodarRotina(rid, ROTINA.parar, "", 6000).catch(() => ({ erro: "conexao-caiu" }));
+      if (pr.erro || pr.nrc != null) anota("nao-parou", "O módulo NÃO confirmou a interrupção da rotina. Ela pode estar rodando: desligue a chave e aguarde.");
+      else anota("parou", "Rotina interrompida no módulo.");
     }
     try { await sessao(SESSAO.comum); } catch (e) { /* segue */ }
     if (pausou && retomar) { try { await retomar(); } catch (e) { /* tela fechou */ } }

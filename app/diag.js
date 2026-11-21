@@ -1360,6 +1360,8 @@ function Bico() {
   // durante o "Conferindo…" só fechava o quadro e a gravação seguia: achado do Codex, 21/11/2026.)
   const tentativa = useRef(0);
   const cancelarAutorizacao = () => { tentativa.current++; setAutoriza(null); };
+  // Saiu da tela com a autorização ainda "Conferindo…": a tentativa morre junto. Nada grava com a tela fechada.
+  useEffect(() => () => { tentativa.current++; }, []);
   const pedirAutorizacao = () => { tentativa.current++; setFeito(null); setAndando(null); setAutoriza({ email: "", senha: "", erro: "" }); };
   const autorizarEGravar = async () => {
     const minha = tentativa.current;

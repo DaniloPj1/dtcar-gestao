@@ -357,6 +357,10 @@ function Obd() {
     setErro("");
     setRes(null);                                                   // uma leitura por vez na tela
     historia.current = {};
+    // Trocar de modo com uma leitura em curso: o resumo do que já foi lido é guardado ANTES de a
+    // sessão nova tomar o lugar (senão as amostras anteriores sumiam sem registro).
+    const anterior = sessaoCmp.current; sessaoCmp.current = null;
+    if (anterior && placa) { const h = compara.resumo(anterior); if (h) registrarAcao("sessao", perfil, h, undefined, Object.assign({}, sessao.carro())).catch(() => {}); }
     sessaoCmp.current = compara.novaSessao(); setComparado(null);
     setVivo({ valores: {}, volta: 0, rodando: true, modo });
     // Referência das falhas: o que já estava gravado quando a roda começou. Só o que aparecer
@@ -1388,7 +1392,8 @@ function Bico() {
   const cancelarAutorizacao = () => { tentativa.current++; setAutoriza(null); };
   // Saiu da tela com a autorização ainda "Conferindo…": a tentativa morre junto. Nada grava com a tela fechada.
   useEffect(() => () => { tentativa.current++; }, []);
-  const pedirAutorizacao = () => { tentativa.current++; setFeito(null); setAndando(null); setAutoriza({ email: "", senha: "", erro: "" }); };
+  // Abrir outra autorização NÃO apaga o resultado anterior: o DESFAZER só some quando a volta é confirmada.
+  const pedirAutorizacao = () => { tentativa.current++; setAutoriza({ email: "", senha: "", erro: "" }); };
   const autorizarEGravar = async () => {
     const minha = tentativa.current;
     setAutoriza(a => ({ ...a, erro: "", conferindo: true }));
@@ -1442,7 +1447,8 @@ function Bico() {
       await uds.fechar();
       return true;
     });
-    setFeito(resultado);
+    // Junta com o que já estava por desfazer de uma gravação anterior (campos que esta não regravou).
+    setFeito(ant => resultado.concat((ant || []).filter(x => x.antes && x.gravou && !resultado.some(y => y.gravou && y.campo === x.campo))));
     setAndando({ passos: passos.slice(), fim: true, erro: r.ok ? "" : (r.texto || "Não deu para gravar.") });
     if (resultado.length) {
       const reg = registro.linha("gravar_bico", perfil, sessao.carro(), { autorizado_por: { id: adm.id, nome: adm.nome }, cilindros: resultado });

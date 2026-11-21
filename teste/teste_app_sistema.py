@@ -219,6 +219,8 @@ window.Capacitor.Plugins.DtcarObd = {
     if (window.__obd.limpo && (c === '03' || c === '07' || c === '0A')) return Promise.resolve({ resposta: (c === '03' ? '4300' : c === '07' ? '4700' : '4A00') + '\\r\\r>' });
     if (window.__obd.limpo && (c === '0106' || c === '0107')) return Promise.resolve({ resposta: '41' + c.slice(2) + '80\\r\\r>' });   // ajuste zerado: o módulo recomeça
     if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
+    if (window.__obd.motorDesligado && c === '010C') return Promise.resolve({ resposta: '410C0000\\r\\r>' });   // chave ligada, motor parado
+    if (window.__obd.motorDesligado && c === '010D') return Promise.resolve({ resposta: '410D00\\r\\r>' });
     if (c === '010C') {   // rotação sobe a cada leitura: é assim que o teste vê a tela se mexer
       window.__obd.rpm = (window.__obd.rpm || 800) + 100;
       var cru = window.__obd.rpm * 4;
@@ -1131,14 +1133,20 @@ try:
         # HONDA COM NOME (Etapa 1): só aparece em Honda, pede as condições por escrito, e registra
         pg.goto(URL + '#/atuadores'); pg.wait_for_selector('#diag-modulo', timeout=10000)
         t(not pg.query_selector('#honda-lista'), 'em carro que não é Honda a lista da Honda não existe')
+        # a placa puxada vale em todas as telas do carro; o teste troca de carro direto na sessão, então esquece a placa antes
+        pg.evaluate("import('./comum.js').then(m => m.esquecerPlacaDoCarro())"); pg.wait_for_timeout(200)
         pg.evaluate("import('../js/obdsessao.js').then(m => m.definirCarro({ placa: 'HND0A00', marca: 'Honda', modelo: 'CITY EX', ano: '2016' }))"); pg.wait_for_selector('#honda-lista', timeout=5000)
         th = pg.inner_text('#honda-lista'); t('Eletroventilador' in th and 'purga' in th and 'simulado' in th, 'os atuadores da Honda vêm com NOME, e a tela diz que foram conferidos em módulo simulado')
-        pg.click('#honda-lista [data-chave="ventoinha"]'); pg.wait_for_selector('#honda-condicoes', timeout=20000)
-        t(pg.locator('#atu-acionar').is_disabled(), 'sem confirmar as condições o botão de acionar fica desligado')
-        nc = pg.locator('#honda-condicoes input').count(); t(nc == 5, 'a ventoinha tem as 5 condições da ferramenta: %d' % nc)
-        for k in range(nc - 1): pg.locator('#honda-condicoes input').nth(k).check()
-        t(pg.locator('#atu-acionar').is_disabled(), 'faltando UMA condição continua desligado')
-        pg.locator('#honda-condicoes input').nth(nc - 1).check(); pg.wait_for_timeout(200)
+        # SEM QUESTIONÁRIO (pedido do Danilo, 21/11/2026): o app lê do carro a rotação e a velocidade e só barra
+        # quando o carro diz o contrário do que o item pede. Aqui o carro simulado está com o motor LIGADO.
+        pg.click('#honda-lista [data-chave="ventoinha"]'); pg.wait_for_selector('#atu-acionar', timeout=20000)
+        t(pg.locator('#honda-condicoes').count() == 0 and not pg.locator('#atu-acionar').is_disabled(), 'não há questionário de condições: o botão de acionar já vem liberado')
+        pg.click('#atu-acionar'); pg.wait_for_selector('#atu-registro', timeout=40000)
+        t('motor está LIGADO' in textos(pg) and not any(x.startswith('atuar:013C') for x in pg.evaluate('window.__obd.chamadas')), 'com o motor ligado, o app mesmo recusa a ventoinha e NÃO aciona nada')
+        pg.evaluate("window.__obd.motorDesligado = true")
+        tela(pg, 'modulos'); pg.goto(URL + '#/atuadores'); pg.wait_for_selector('#diag-modulo', timeout=10000); pg.wait_for_timeout(300)
+        pg.evaluate("import('../js/obdsessao.js').then(m => m.definirCarro({ placa: 'HND0A00', marca: 'Honda', modelo: 'CITY EX', ano: '2016' }))"); pg.wait_for_selector('#honda-lista', timeout=10000)
+        pg.click('#honda-lista [data-chave="ventoinha"]'); pg.wait_for_selector('#atu-acionar', timeout=20000)
         na = len(f.gravados); pg.click('#atu-acionar'); pg.wait_for_selector('#atu-registro', timeout=40000)
         ch = pg.evaluate('window.__obd.chamadas'); t('atuar:013C:03' in ch and 'atuar:013C:00' in ch, 'aciona a saída 013C e devolve o controle: %s' % [x for x in ch if x.startswith('atuar:013C')][:4])
         t(pg.evaluate('window.__obd.cabecalho') in ('18DA10F1', '') and any(x == 'ATSH18DA10F1' for x in pg.evaluate('window.__obd.cmds')), 'no módulo do motor da Honda, em 29 bits')
@@ -1148,8 +1156,7 @@ try:
         pg.click('#honda-lista [data-chave="manut_1"]'); pg.wait_for_selector('#honda-erro', timeout=20000)
         t('painel' in pg.inner_text('#honda-erro').lower() or 'Painel' in pg.inner_text('#honda-erro'), 'módulo que não responde: o item não roda, e a tela diz qual módulo faltou: ' + pg.inner_text('#honda-erro')[:80])
         pg.click('#honda-lista [data-chave="vtc"]'); pg.wait_for_selector('#honda-antes', timeout=20000)
-        t('5A' in pg.inner_text('#honda-antes') and pg.locator('#apr-rodar').is_disabled(), 'o valor antigo é lido e mostrado antes, e rodar exige as condições')
-        for k in range(pg.locator('#honda-condicoes input').count()): pg.locator('#honda-condicoes input').nth(k).check()
+        t('5A' in pg.inner_text('#honda-antes') and pg.locator('#honda-condicoes').count() == 0, 'o valor antigo é lido e mostrado antes, sem questionário')
         na = len(f.gravados); pg.click('#apr-rodar'); pg.wait_for_selector('#apr-registro', timeout=60000)
         t('rotina:0218:01' in pg.evaluate('window.__obd.chamadas'), 'roda a rotina do VTC (0218)')
         rp = [c for (tab, c) in f.gravados[na:] if tab == 'obd_leituras' and c.get('tipo') == 'aprender']
@@ -1177,7 +1184,7 @@ try:
 
         pg.click('#atu-lista .obd-ap >> nth=0'); pg.wait_for_selector('.quadro', timeout=10000)
         tq = pg.inner_text('.quadro')
-        t('mão perto de ventoinha' in tq, 'antes de acionar, avisa do risco: %s' % tq[:70])
+        t('F101' in tq and 'ACIONAR AGORA' in tq and 'Confirme cada' not in tq, 'antes de acionar, só a confirmação: qual saída e o botão, sem questionário: %s' % tq[:70])
         pg.click('.quadro .btn-acao'); pg.wait_for_selector('#atu-andando', timeout=10000)
         pg.wait_for_timeout(8000)
         ta = pg.inner_text('#atu-andando')
@@ -1284,6 +1291,15 @@ try:
         pg.click('#obd-desligar'); pg.wait_for_selector('#obd-outro', timeout=10000); pg.click('#obd-outro'); pg.wait_for_selector('.obd-ap', timeout=10000)
         t(pg.locator('.obd-ap').count() >= 1 and pg.locator('#obd-acoes').count() == 0, 'OUTRO ADAPTADOR mostra a lista para escolher')
         pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000)
+        # A PLACA FICA (pedido do Danilo, 21/11/2026): puxou uma vez, vale nas outras telas do carro até trocar ou tirar o adaptador
+        pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
+        pg.goto(URL + '#/bico'); pg.wait_for_selector('#bico-placa', timeout=10000); pg.wait_for_timeout(400)
+        t(pg.input_value('#bico-placa') == 'ABC1D23' and pg.locator('#veic').count() == 1, 'em Programar bico a placa já vem puxada, sem pedir de novo: %s' % pg.input_value('#bico-placa'))
+        tela(pg, 'obd'); t(pg.input_value('#obd-placa') == 'ABC1D23', 'e de volta na leitura continua lá')
+        pg.click('#obd-desligar'); pg.wait_for_selector('#obd-procurar', timeout=10000); pg.wait_for_timeout(300)
+        t(pg.input_value('#obd-placa') == '' and pg.locator('#veic').count() == 0, 'desconectou o adaptador: a placa é esquecida')
+        pg.click('#obd-procurar'); pg.wait_for_selector('#obd-acoes', timeout=15000)
+        pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
 
         # ---- TELA DE PARÂMETROS (era um cartão dentro da leitura até 20/11/2026) ----
         # Só de LEITURA: quem corrige é o Claude, no arquivo. Fica em tela porque é o que se

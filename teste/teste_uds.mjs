@@ -71,16 +71,21 @@ chk("as faixas cobrem tudo sem buraco", (() => {
 
 /* ---------------- falhas por módulo (0x19 02): QUATRO bytes, não dois ---------------- */
 {
-  // 59 02 FF | 01 71 2B 2F | C0 21 08 A7  → P0171 tipo 2B, e U0021... conferindo:
-  const f = falhasDe([0xff, 0x01, 0x71, 0x2b, 0x2f, 0xc0, 0x21, 0x08, 0xa7]);
+  // A resposta é: eco da subfunção (02), máscara de disponibilidade (FF) e QUATRO bytes por falha.
+  // Os dois primeiros bytes são descartados — esquecer o eco desloca tudo em um byte e o aparelho
+  // passa a mostrar códigos que NÃO EXISTEM no carro, sem dar erro nenhum. Foi exatamente o que o
+  // teste do navegador pegou em 20/11/2026, com o teste de unidade passando por repetir o engano.
+  const f = falhasDe([0x02, 0xff, 0x01, 0x71, 0x2b, 0x2f, 0xc0, 0x21, 0x08, 0xa7]);
   chk("duas falhas lidas", f.length === 2, f);
   chk("o código sai no jeito da oficina", f[0].codigo === "P0171", f[0]);
-  chk("o TIPO DE FALHA é guardado (é o '-2B' do Honda)", f[0].tipoFalha === 0x2b, f[0]);
+  chk("o TIPO DE FALHA é guardado", f[0].tipoFalha === 0x2b, f[0]);
   chk("a situação é guardada", f[0].situacao === 0x2f, f[0]);
   chk("o segundo código é da família U", f[1].codigo.startsWith("U"), f[1]);
-  chk("sobra de bytes não vira falha inventada", falhasDe([0xff, 0x01, 0x71, 0x2b]).length === 0);
-  chk("módulo sem falha devolve lista vazia", falhasDe([0xff]).length === 0);
-  chk("dado vazio não explode", falhasDe([]).length === 0 && falhasDe(null).length === 0);
+  // a armadilha: um byte a mais ou a menos não pode virar código inventado
+  chk("o eco da subfunção NÃO entra no código", f[0].codigo !== "U3F01" && !f.some(x => x.codigo === "U3F01"), f);
+  chk("sobra de bytes não vira falha inventada", falhasDe([0x02, 0xff, 0x01, 0x71, 0x2b]).length === 0);
+  chk("módulo sem falha devolve lista vazia", falhasDe([0x02, 0xff]).length === 0);
+  chk("dado vazio não explode", falhasDe([]).length === 0 && falhasDe(null).length === 0 && falhasDe([0x02]).length === 0);
 }
 
 /* ---------------- escala pelo próprio módulo (0x24) ----------------

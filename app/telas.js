@@ -15,10 +15,13 @@ import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conve
 import { copiaClienteDig } from "../js/clientedig.js";
 import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
-import { acessoApp, foraDoHorario, podeApagarObd } from "../js/appacesso.js";
+import { acessoApp, foraDoHorario, podeApagarObd, podeAtuarObd, podeAprenderObd, podeGravarObd } from "../js/appacesso.js";
 import * as param from "../js/obdparam.js";
 import { MAIUSC } from "../js/maiusculas.js";
 import * as obd from "../js/obd.js";
+import * as uds from "../js/uds.js";
+import * as bico from "../js/bico.js";
+import * as sessao from "../js/obdsessao.js";
 
 const LS_VISTOS = "dtcar-app-avisos-vistos";   // ids dos orçamentos aprovados/recusados que a pessoa já viu (avisos do app)
 const ABERTA = o => !["entregue", "cancelado", "recusado"].includes(o.status);   // O.S. em andamento (orçamento, execução ou aguardando pagamento)
@@ -51,24 +54,44 @@ const P = {
   hist: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
   obd: '<rect x="4" y="7" width="16" height="10" rx="3"/><path d="M8 17v3M16 17v3M9 11h.01M12 11h.01M15 11h.01"/>',
+  modulo: '<rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/>',
+  atuador: '<path d="M13 2L5 13h5l-1 9 8-11h-5l1-9z"/>',
+  aprender: '<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/>',
+  bico: '<path d="M10 3h4v5l2 3v6a2 2 0 0 1-2 2h-4a2 2 0 0 1-2-2v-6l2-3z"/><path d="M12 19v3M9.5 11h5"/>',
   zap: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z"/><path d="M9 8.5c0 3 2.5 5.5 5.5 6.5l1.5-1.5 2 1-.5 1.8c-4.5.6-9.4-4.3-8.8-8.8L10.5 7l1 2z"/>',
 };
 const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width=${sw} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0" dangerouslySetInnerHTML=${{ __html: P[n] }}></svg>`;
 
 /* ---------------- botões do Início e abas (ordem aprovada pelo Danilo) ---------------- */
-const TELAS = [
-  { r: "servico", ic: "os", barra: "INICIAR SERVIÇO", aba: "Iniciar serviço", titulo: "INICIAR SERVIÇO" },
-  { r: "oleo", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
-  { r: "orcamento", ic: "orc", barra: "ORÇAMENTOS", aba: "Orçamentos", titulo: "ORÇAMENTOS" },
-  { r: "agendar", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
-  { r: "agenda", ic: "ag", barra: "AGENDA", aba: "Agenda", titulo: "AGENDA" },
-  { r: "peca", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
-  { r: "historico", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
-  { r: "meus", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
-  { r: "osconsulta", ic: "clip", barra: "CONSULTAR O.S.", aba: "Consultar O.S.", titulo: "CONSULTAR O.S." },
-  { r: "obd", ic: "obd", barra: "DIAGNÓSTICO OBD", aba: "Diagnóstico OBD", titulo: "DIAGNÓSTICO OBD" },
+/* ---------------- botões do Início e abas ----------------
+ * O `grupo` existe desde 20/11/2026, quando o diagnóstico deixou de ser uma tela e virou família.
+ * Com 15 telas, uma lista única no Início é uma parede de botões e a tira de abas vira uma régua
+ * que ninguém lê. Com grupo, o Início separa por título e a tira de abas mostra só as telas do
+ * grupo em que a pessoa está — na oficina ela vê as da oficina; no diagnóstico, as do carro.
+ */
+const GRUPOS = [
+  { g: "oficina", t: "Na oficina" },
+  { g: "diagnostico", t: "No carro" },
 ];
-const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta|obd)$/;
+const TELAS = [
+  { r: "servico", g: "oficina", ic: "os", barra: "INICIAR SERVIÇO", aba: "Iniciar serviço", titulo: "INICIAR SERVIÇO" },
+  { r: "oleo", g: "oficina", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
+  { r: "orcamento", g: "oficina", ic: "orc", barra: "ORÇAMENTOS", aba: "Orçamentos", titulo: "ORÇAMENTOS" },
+  { r: "agendar", g: "oficina", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
+  { r: "agenda", g: "oficina", ic: "ag", barra: "AGENDA", aba: "Agenda", titulo: "AGENDA" },
+  { r: "peca", g: "oficina", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
+  { r: "historico", g: "oficina", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
+  { r: "meus", g: "oficina", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
+  { r: "osconsulta", g: "oficina", ic: "clip", barra: "CONSULTAR O.S.", aba: "Consultar O.S.", titulo: "CONSULTAR O.S." },
+  { r: "obd", g: "diagnostico", ic: "obd", barra: "LER O CARRO (OBD)", aba: "Ler o carro", titulo: "LER O CARRO (OBD)" },
+  { r: "modulos", g: "diagnostico", ic: "modulo", barra: "MÓDULOS DO CARRO", aba: "Módulos", titulo: "MÓDULOS DO CARRO" },
+  { r: "atuadores", g: "diagnostico", ic: "atuador", barra: "ATUADORES", aba: "Atuadores", titulo: "TESTE DE ATUADOR" },
+  { r: "aprendizados", g: "diagnostico", ic: "aprender", barra: "APRENDIZADOS", aba: "Aprendizados", titulo: "APRENDIZADOS E CALIBRAÇÕES" },
+  { r: "bico", g: "diagnostico", ic: "bico", barra: "PROGRAMAR BICO", aba: "Programar bico", titulo: "PROGRAMAR BICO" },
+  { r: "parametros", g: "diagnostico", ic: "sliders", barra: "PARÂMETROS DE REFERÊNCIA", aba: "Parâmetros", titulo: "PARÂMETROS DE REFERÊNCIA" },
+];
+const grupoDa = r => (TELAS.find(t => t.r === r) || {}).g || "oficina";
+const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta|obd|modulos|atuadores|aprendizados|bico|parametros)$/;
 const ir = r => { location.hash = "#/" + r; };
 const rotaAtual = () => { const m = /^#\/([a-z]+)/.exec(location.hash || ""); return m ? m[1] : "inicio"; };
 
@@ -78,9 +101,13 @@ function Cabecalho() {
   return html`<header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" />
     <button type="button" class="sair" onClick=${sair}><${Ic} n="exit" t=${22} /> Sair</button></div></header>`;
 }
+/** A tira de abas mostra só as telas do grupo em que a pessoa está: com 15 telas, a tira inteira
+ *  deixaria de ser navegação e viraria uma régua de rolar. */
 function Abas({ ativa }) {
   const { telas, avisos, indicacoes } = useApp();
-  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : t.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</a>`)}</nav>`;
+  const g = grupoDa(ativa);
+  const minhas = TELAS.filter(t => t.g === g && telas.includes(t.r));
+  return html`<nav class="abas" aria-label="Telas">${minhas.map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : t.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</a>`)}</nav>`;
 }
 function Titulo({ tela, ajuda }) {
   const t = TELAS.find(x => x.r === tela);
@@ -204,7 +231,14 @@ function Inicio() {
           ${fechadas.length ? html`<div class="sec"><h3>Histórico de serviços</h3>${fechadas.slice(0, 5).map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => setOsAberta(o)}><span><b>${fmtData((o.criado_em || "").slice(0, 10))}</b>${o.km_entrada ? " · " + fmtKm(o.km_entrada) : ""}<br /><span class="nota">${numOS(o.numero)} · ${o.reclamacao ? String(o.reclamacao).slice(0, 70) : etapaTexto(o)}</span></span><${Ic} n="down" t=${18} /></button>`)}
             ${fechadas.length > 5 ? html`<button type="button" class="link" onClick=${() => ir("historico")}>Ver todo o histórico</button>` : null}</div>` : null}</${Cartao}>` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
-      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</button>`)}
+      ${GRUPOS.map(gr => {
+        const botoes = TELAS.filter(b => b.g === gr.g && telas.includes(b.r));
+        if (!botoes.length) return null;
+        return html`<div key=${gr.g} class="grupo">
+          ${GRUPOS.filter(x => TELAS.some(b => b.g === x.g && telas.includes(b.r))).length > 1 ? html`<h3 class="grupo-t">${gr.t}</h3>` : null}
+          ${botoes.map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</button>`)}
+        </div>`;
+      })}
       ${osAberta ? html`<${OSDetalhe} o=${osAberta} onFechar=${() => setOsAberta(null)} />` : null}
       ${!telas.length ? html`<div class="vazio">Nenhuma tela liberada para o seu login. Peça ao administrador (Sistema › Equipe).</div>` : null}
     </main>
@@ -971,7 +1005,14 @@ function Obd() {
   const { dados, cfg, perfil } = useApp();
   const pl = usarPlaca();
   const [aparelhos, setAparelhos] = useState(null);
-  const [lig, setLig] = useState(null);          // { nome, endereco, protocolo, pidsSuportados }
+  // A conexão mora em js/obdsessao.js, acima das telas: trocar para a tela de atuador e voltar não
+  // derruba mais o adaptador. `lig` continua com o mesmo formato de antes, montado a partir dela,
+  // para o resto desta tela não precisar mudar.
+  const ses = usarSessao();
+  const lig = ses.ligado ? {
+    nome: (ses.aparelho || {}).nome || "", endereco: (ses.aparelho || {}).endereco || "",
+    protocolo: ses.protocolo, versao: ses.versao, aviso: ses.aviso, pidsSuportados: ses.pidsSuportados,
+  } : null;
   const [ocupado, setOcupado] = useState("");
   const [erro, setErro] = useState("");
   // UMA leitura por vez na tela (pedido do Danilo, 19/11/2026): abrir falhas tira os dados ao vivo
@@ -1016,8 +1057,17 @@ function Obd() {
   const [antesApagados, setAntesApagados] = useState(null);   // apagamentos anteriores DESTE carro
   const podeApagar = podeApagarObd(cfg, perfil);
 
-  // sair da tela fecha a conexão: o adaptador não aceita duas conversas e a bateria do carro agradece
-  useEffect(() => () => { rodada.current = 0; if (obd.disponivel()) obd.desconectar(); }, []);
+  // Sair da tela PARA a roda de leitura, mas não desliga o adaptador: quem desliga é sair de toda a
+  // família de diagnóstico, e isso o js/obdsessao.js resolve (ver saindoDaTela). A roda precisa
+  // parar aqui porque ela é desta tela.
+  useEffect(() => () => { rodada.current = 0; }, []);
+  // A roda de leitura ao vivo se registra como leitura de fundo: qualquer comando que AJA no carro,
+  // em qualquer tela da família, para ela antes e a retoma depois. Sem isto o ELM327 atende os dois
+  // pedidos ao mesmo tempo e a resposta volta trocada.
+  useEffect(() => sessao.registrarLeituraDeFundo(
+    () => { rodada.current = 0; setVivo(v => (v ? { ...v, rodando: false } : v)); },
+    () => { /* a volta é por conta do mecânico: religar a roda sozinho assustaria */ },
+  ), []);
 
   const placa = String((pl.veic && pl.veic.placa) || pl.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const guardado = (chave, valor) => {
@@ -1088,17 +1138,16 @@ function Obd() {
   });
 
   const ligar = ap => rodar("Conectando em " + ap.nome + "…", async () => {
-    await obd.conectar(ap.endereco);
-    const i = await obd.iniciar();
-    setLig({ nome: ap.nome, endereco: ap.endereco, protocolo: i.protocolo, versao: i.versao, aviso: i.aviso, pidsSuportados: i.pidsSuportados });
-    if (placa && i.pidsSuportados && i.pidsSuportados.length) guardado("suportados", i.pidsSuportados);
+    const st = await sessao.ligar({ endereco: ap.endereco, nome: ap.nome });
+    if (st.erro) throw new Error(st.erro);
+    if (placa && st.pidsSuportados && st.pidsSuportados.length) guardado("suportados", st.pidsSuportados);
     setRes(null); setVivo(null); setFalhasVivo(null);
   });
 
   const desligar = () => rodar("Desconectando…", async () => {
     rodada.current = 0;
-    await obd.desconectar();
-    setLig(null); setRes(null); setAparelhos(null); setVivo(null); setFalhasVivo(null);
+    await sessao.desligar();
+    setRes(null); setAparelhos(null); setVivo(null); setFalhasVivo(null);
   });
 
   // Guardar uma leitura TROCA o que está na tela: é o "uma de cada vez". E qualquer leitura nova
@@ -1287,7 +1336,11 @@ function Obd() {
         <div class="nota">Leituras de perícia, não de reparo do dia: dizem se o módulo foi reprogramado, se o reparo fechou o monitor no test-drive e se os monitores deste carro chegam a rodar no uso real.</div>
       </${Cartao}>` : null}
 
-      ${!ocupado ? html`<${Parametros} />` : null}
+      ${/* Os parâmetros saíram daqui e viraram tela (20/11/2026): eram um cartão para abrir e fechar
+            no meio da leitura, e é o que se consulta para discutir um laudo — merece tela própria.
+            Aqui fica só o caminho, para quem está lendo o carro e quer conferir a referência. */
+        !ocupado ? html`<button type="button" class="btn-barra claro" id="obd-ir-parametros" onClick=${() => ir("parametros")}>
+          <${Ic} n="sliders" t=${20} />VER OS PARÂMETROS DE REFERÊNCIA</button>` : null}
 
       ${lig && !ocupado && disponiveis.length ? html`<${Cartao} titulo="Quais leituras mostrar" id="obd-escolha">
         <button type="button" class="btn-barra claro" id="obd-escolher" onClick=${() => setAbrirEscolha(x => !x)}>
@@ -1499,7 +1552,484 @@ function Obd() {
 }
 
 /* ---------------- raiz: dados, rota, aviso ---------------- */
-const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta, obd: Obd };
+/* ================================================================ FAMÍLIA DO DIAGNÓSTICO ========
+ * Até 19/11/2026 o diagnóstico era UMA tela com tudo dentro: adaptador, dados ao vivo, falhas,
+ * foto do momento, monitores, testes de bordo, falha por cilindro, odômetro, apagar e parâmetros.
+ * Ela passou de 500 linhas e já obrigava a rolar procurando o que acabou de ser pedido.
+ *
+ * Com o UDS entrando (módulos, atuadores, aprendizados, programar bico) manter uma tela só era
+ * impossível. Então virou família, e a conexão passou a viver ACIMA das telas (js/obdsessao.js):
+ * trocar de tela não derruba mais o adaptador, que é o que importa com o carro no elevador.
+ *
+ * O que cada uma faz:
+ *   Ler o carro (obd)  → o dia a dia: dados ao vivo, falhas, apagar. Não mudou de comportamento.
+ *   Módulos (modulos)  → procura quem responde no carro e lê a falha de cada módulo.
+ *   Atuadores          → aciona uma saída, com a volta garantida.
+ *   Aprendizados       → roda calibração e adaptação.
+ *   Programar bico     → grava o código que veio da retífica.
+ *   Parâmetros         → a referência, que era um cartão escondido dentro do OBD.
+ */
+
+/** Liga a tela à conexão compartilhada e devolve o estado dela. */
+function usarSessao() {
+  const [st, setSt] = useState(() => sessao.estado());
+  useEffect(() => {
+    sessao.entrandoNaTela();
+    const cancelar = sessao.assinar(setSt);
+    return () => { cancelar(); sessao.saindoDaTela(); };
+  }, []);
+  return st;
+}
+
+/** O cartão do adaptador, igual em todas as telas da família. */
+function Adaptador({ compacto = false }) {
+  const st = usarSessao();
+  const [aparelhos, setAparelhos] = useState(null);
+  const [ocupado, setOcupado] = useState("");
+  const [erro, setErro] = useState("");
+  const procurar = async () => {
+    setErro(""); setOcupado("Procurando o adaptador…");
+    try {
+      const p = await obd.permissao();
+      if (!p.concedida) { const q = await obd.pedirPermissao(); if (!q.concedida) throw new Error("sem-permissao"); }
+      setAparelhos(await obd.listar());
+    } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
+  };
+  const ligar = async ap => {
+    setErro(""); setOcupado("Conectando em " + ap.nome + "…");
+    const r = await sessao.ligar({ endereco: ap.endereco, nome: ap.nome });
+    if (r.erro) setErro(r.erro);
+    setOcupado("");
+  };
+  if (st.ligado && compacto) {
+    return html`<div class="diag-ligado">
+      <span class="selo">CONECTADO</span> ${(st.aparelho || {}).nome || "adaptador"}
+      ${st.modulo ? html` · <b>${st.modulo.nome || st.modulo.pedido}</b>` : null}
+      ${st.dono ? html` · <span class="nota">ocupado com ${st.dono}</span>` : null}
+    </div>`;
+  }
+  return html`<${Cartao} titulo="Adaptador" id="diag-adaptador">
+    ${!st.ligado ? html`
+      <p class="nota" style="margin-bottom:8px">Encaixe o adaptador na tomada do carro e ligue a ignição (chave na posição 2). Com a chave fora, o módulo não responde.</p>
+      <button type="button" class="btn-barra" id="diag-procurar" onClick=${procurar} disabled=${!!ocupado || st.ligando}><${Ic} n="obd" t=${22} />PROCURAR ADAPTADOR</button>
+      ${aparelhos && !aparelhos.length ? html`<div class="vazio">Nenhum aparelho pareado. Pareie o adaptador uma vez nos Ajustes do Android (Bluetooth) e volte aqui.</div>` : null}
+      ${aparelhos && aparelhos.length ? html`<div class="sec"><h3>Aparelhos pareados</h3>
+        ${aparelhos.map(ap => html`<button key=${ap.endereco} type="button" class="obd-ap" onClick=${() => ligar(ap)} disabled=${!!ocupado || st.ligando}><b>${ap.nome}</b><span>${ap.endereco}</span></button>`)}
+        <div class="nota">Toque no seu adaptador para conectar.</div></div>` : null}
+    ` : html`
+      <div class="kv"><span>Situação:</span><i></i><b><span class="selo">CONECTADO</span>${(st.aparelho || {}).nome || ""}</b></div>
+      ${st.protocolo ? html`<${KV} a="Protocolo" b=${st.protocolo} p />` : null}
+      ${st.modulo ? html`<${KV} a="Falando com" b=${st.modulo.nome || st.modulo.pedido} p />` : null}
+      ${st.aviso ? html`<div class="erro" id="diag-clone">${st.aviso}</div>` : null}
+      <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => sessao.desligar()} disabled=${!!st.dono}>DESCONECTAR</button>
+    `}
+    ${ocupado || st.ligando ? html`<div class="carregando">${ocupado || "Conectando…"}</div>` : null}
+    ${erro || st.erro ? html`<div class="erro">${erro || st.erro}</div>` : null}
+  </${Cartao}>`;
+}
+
+/** Aviso padrão de quem não tem permissão para aquela ação. */
+const SemPermissao = ({ o }) => html`<div class="vazio" id="diag-sem-permissao">
+  <b>${o} não está liberado para o seu login.</b><br />
+  <span class="nota">Quem libera é o administrador, em Sistema › Equipe, pessoa por pessoa.</span></div>`;
+
+/** Aviso de APK antigo: a tela existe, mas o aparelho não tem a camada que age no carro. */
+const PrecisaApk = () => html`<div class="vazio" id="diag-apk">
+  <b>Este APK ainda não tem a parte que conversa com os módulos.</b><br />
+  <span class="nota">As telas vêm do site e já estão aqui, mas falar UDS com um módulo depende da parte nativa do app. Instale o APK novo e volte.</span></div>`;
+
+/** Escolha do módulo: os endereços padrão e, depois, o que o acervo conhece. */
+function EscolherModulo({ aoEscolher }) {
+  const st = usarSessao();
+  const [fam, setFam] = useState("");
+  const [ocupado, setOcupado] = useState("");
+  const [achados, setAchados] = useState(null);
+  const procurar = async () => {
+    setOcupado("Procurando módulos no carro…"); setAchados(null);
+    const encontrados = [];
+    for (const e of uds.ENDERECOS_PADRAO) {
+      setOcupado("Perguntando em " + e.pedido + "…");
+      const r = await sessao.tomar("a procura de módulos", async () => {
+        await uds.abrir({ pedido: e.pedido, resposta: e.resposta });
+        const s = await uds.sessao(uds.SESSAO.comum);
+        if (s.erro) return null;
+        const id = await uds.lerDado(0xf190);            // chassi: quase todo módulo responde
+        return { respondeu: s.nrc == null || s.nrc != null, id };
+      });
+      if (r.ok && r.r && r.r.respondeu) encontrados.push(e);
+    }
+    setAchados(encontrados); setOcupado("");
+  };
+  return html`<${Cartao} titulo="Com qual módulo falar" id="diag-modulo">
+    ${!st.ligado ? html`<div class="nota">Conecte o adaptador primeiro.</div>` : html`
+      <button type="button" class="btn-barra" onClick=${procurar} disabled=${!!ocupado || !!st.dono}><${Ic} n="modulo" t=${22} />PROCURAR MÓDULOS NO CARRO</button>
+      ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
+      ${achados && !achados.length ? html`<div class="vazio">Nenhum módulo respondeu nos endereços padrão. Escolha a família abaixo e tente pelo endereço do acervo.</div>` : null}
+      ${achados && achados.length ? html`<div class="sec"><h3>Responderam</h3>
+        ${achados.map(m => html`<button key=${m.pedido} type="button" class="obd-ap" onClick=${() => aoEscolher(m)}>
+          <b>${m.nome || "Módulo " + m.pedido}</b><span>pede em ${m.pedido} · responde em ${m.resposta}</span></button>`)}</div>` : null}
+      <div class="sec"><h3>Ou pelo acervo (${uds.quantosModulos()} módulos)</h3>
+        <${Campo} id="diag-fam" rotulo="Família">
+          <select id="diag-fam" value=${fam} onChange=${e => setFam(e.target.value)}>
+            <option value="">Escolha a família…</option>
+            ${uds.familias().map(f => html`<option key=${f} value=${f}>${f}</option>`)}
+          </select>
+        </${Campo}>
+        ${fam ? uds.modulosDa(fam).slice(0, 40).map(m => html`<button key=${m.pedido + m.resposta} type="button" class="obd-ap" onClick=${() => aoEscolher(m)}>
+          <b>${m.nome || "Módulo " + m.pedido}</b><span>pede em ${m.pedido} · responde em ${m.resposta}</span></button>`) : null}
+        ${fam && uds.modulosDa(fam).length > 40 ? html`<div class="nota">Mostrando os 40 primeiros de ${uds.modulosDa(fam).length}.</div>` : null}
+      </div>
+      <p class="nota">O endereço do acervo é de outro carro da mesma família: se o módulo não responder, não é defeito — é que neste carro ele está em outro endereço.</p>
+    `}
+  </${Cartao}>`;
+}
+
+/* ---------------- MÓDULOS DO CARRO ---------------- */
+function Modulos() {
+  const st = usarSessao();
+  const { cfg, perfil } = useApp();
+  const [mod, setMod] = useState(null);
+  const [falhas, setFalhas] = useState(null);
+  const [epti, setEpti] = useState(null);
+  const [ocupado, setOcupado] = useState("");
+  const [erro, setErro] = useState("");
+  const podeApagar = podeApagarObd(cfg, perfil);
+  usarPasso(!!mod, () => { setMod(null); setFalhas(null); setEpti(null); });
+
+  const escolher = async m => {
+    setErro(""); setFalhas(null); setEpti(null);
+    const r = await sessao.apontarModulo(m);
+    if (!r.ok) { setErro(r.texto || "Não deu para falar com este módulo."); return; }
+    setMod(m);
+  };
+  const lerFalhas = async () => {
+    setOcupado("Lendo as falhas do módulo…"); setErro("");
+    const r = await sessao.tomar("a leitura de falhas", async () => {
+      await uds.sessao(uds.SESSAO.estendida);
+      return uds.lerFalhas(0xff);
+    });
+    setOcupado("");
+    if (!r.ok) { setErro(r.texto || "Não deu para ler."); return; }
+    const d = r.r;
+    if (d.nrc != null) { setErro(d.texto); return; }
+    setFalhas(d.codigos.map(uds.falhaPronta));
+  };
+  const descobrir = async () => {
+    setOcupado("Perguntando ao módulo o que ele tem…"); setErro("");
+    const r = await sessao.tomar("a descoberta", async () => {
+      await uds.sessao(uds.SESSAO.estendida);
+      return uds.descobrirEpti({ aoAndar: t => setOcupado(t) });
+    });
+    setOcupado("");
+    if (!r.ok) { setErro(r.texto || "Não deu para perguntar."); return; }
+    setEpti(r.r);
+  };
+  const apagar = async () => {
+    setOcupado("Apagando as falhas deste módulo…"); setErro("");
+    const r = await sessao.tomar("o apagamento", async () => {
+      await uds.sessao(uds.SESSAO.estendida);
+      return uds.apagarDoModulo();
+    }, { pausaFundo: true });
+    setOcupado("");
+    if (!r.ok) { setErro(r.texto || "Não deu para apagar."); return; }
+    if (r.r.nrc != null) { setErro(r.r.texto); return; }
+    setFalhas(null); await lerFalhas();
+  };
+
+  return html`<${Tela} tela="modulos" ajuda="Procura quem responde no carro e lê a falha de cada módulo, um por um. O OBD comum só fala com o motor e só mostra o que é de emissão; aqui aparecem câmbio, ABS, airbag e o resto — cada falha com a causa elétrica, quando o módulo informa o tipo.">
+    ${!obd.disponivel() ? html`<div class="vazio">Esta tela funciona no aplicativo instalado no celular (APK), que é quem conversa com o adaptador.</div>`
+      : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
+      <${Adaptador} compacto=${!!st.ligado} />
+      ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
+        <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="mod-escolhido">
+          <${KV} a="Pede em" b=${mod.pedido} />
+          <${KV} a="Responde em" b=${mod.resposta} />
+          <button type="button" class="btn-barra" onClick=${lerFalhas} disabled=${!!ocupado || !!st.dono}><${Ic} n="obd" t=${20} />LER AS FALHAS DESTE MÓDULO</button>
+          <button type="button" class="btn-barra claro" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />PERGUNTAR O QUE ELE TEM</button>
+          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setFalhas(null); setEpti(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
+        </${Cartao}>
+        ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
+        ${erro ? html`<div class="erro">${erro}</div>` : null}
+        ${falhas ? html`<${Cartao} titulo=${"Falhas (" + falhas.length + ")"} id="mod-falhas">
+          ${!falhas.length ? html`<div class="nota">Nenhuma falha gravada neste módulo.</div>` : falhas.map(f => html`
+            <div key=${f.rotulo} class="diag-falha">
+              <div class="diag-falha-topo"><b>${f.rotulo}</b>${f.pedeLuz ? html`<span class="selo ruim">LUZ NO PAINEL</span>` : null}</div>
+              ${f.causa ? html`<div class="diag-falha-causa">${f.causa}</div>` : html`<div class="nota">O tipo ${hexDoTipo(f.tipoFalha)} não está na tabela da norma que o app tem: o número fica aí, sem palpite de causa.</div>`}
+              <div class="nota">${f.situacaoTexto}</div>
+            </div>`)}
+          ${falhas.length && podeApagar ? html`<button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${apagar} disabled=${!!ocupado || !!st.dono}>APAGAR AS FALHAS DESTE MÓDULO</button>` : null}
+          ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}
+        </${Cartao}>` : null}
+        ${epti ? html`<${Cartao} titulo="O que o módulo respondeu" id="mod-epti">
+          ${epti.sistemas.length ? html`<div class="sec"><h3>Sistemas que ele cuida</h3>
+            ${epti.sistemas.map(s => html`<div key=${s.id} class="kv"><span>${s.id}:</span><i></i><b>${s.nome || "não está na lista da norma"}</b></div>`)}</div>` : null}
+          <${KV} a="Rotinas que aceita" b=${epti.rotinas.length ? epti.rotinas.length + " rotina(s)" : "nenhuma informada"} />
+          <${KV} a="Atuadores que aceita" b=${epti.atuadores.length ? epti.atuadores.length + " atuador(es)" : "nenhum informado"} />
+          ${epti.invertido ? html`<div class="nota">Este módulo responde no jeito do rascunho da norma, com os dois identificadores trocados. O app corrigiu pelo conteúdo.</div>` : null}
+          ${epti.avisos.map((a, i) => html`<div key=${i} class="nota">${a}</div>`)}
+        </${Cartao}>` : null}
+      `}
+    `}
+  </${Tela}>`;
+}
+const hexDoTipo = n => (n == null ? "" : Number(n).toString(16).toUpperCase().padStart(2, "0"));
+
+/* ---------------- ATUADORES ---------------- */
+function Atuadores() {
+  const st = usarSessao();
+  const { cfg, perfil } = useApp();
+  const [mod, setMod] = useState(null);
+  const [lista, setLista] = useState(null);
+  const [alvo, setAlvo] = useState(null);       // { did } a confirmar
+  const [andando, setAndando] = useState(null); // { passos: [] }
+  const [ocupado, setOcupado] = useState("");
+  const [erro, setErro] = useState("");
+  const pode = podeAtuarObd(cfg, perfil);
+  usarPasso(!!alvo, () => setAlvo(null));
+
+  const escolher = async m => {
+    setErro(""); setLista(null);
+    const r = await sessao.apontarModulo(m);
+    if (!r.ok) { setErro(r.texto || "Não deu para falar com este módulo."); return; }
+    setMod(m);
+  };
+  const descobrir = async () => {
+    setOcupado("Perguntando ao módulo quais atuadores ele aceita…"); setErro("");
+    const r = await sessao.tomar("a descoberta", async () => {
+      await uds.sessao(uds.SESSAO.estendida);
+      return uds.descobrirEpti({ aoAndar: t => setOcupado(t) });
+    });
+    setOcupado("");
+    if (!r.ok) { setErro(r.texto || "Não deu para perguntar."); return; }
+    setLista(r.r.atuadores.map(n => ({ did: n })));
+    if (!r.r.atuadores.length) setErro("Este módulo não informou nenhum atuador. Isso não quer dizer que ele não tenha: quer dizer que ele não responde pela norma de inspeção, e o app não vai adivinhar o número da saída.");
+  };
+  const testar = async did => {
+    setAlvo(null); setAndando({ passos: [] });
+    const r = await uds.testarAtuador(did, {
+      segundos: 5,
+      pausar: sessao.pausar, retomar: sessao.retomar,
+      aoAndar: p => setAndando({ passos: p.passos }),
+    });
+    setAndando(a => ({ passos: (a && a.passos) || [], fim: r }));
+  };
+
+  return html`<${Tela} tela="atuadores" ajuda="Manda o módulo acionar uma saída para você conferir no carro se a peça responde. O comando é curto de propósito, por segurança da própria norma, então o app fica repetindo enquanto o teste corre — e devolve o controle ao módulo no fim, no erro e se você sair.">
+    ${!pode ? html`<${SemPermissao} o="Teste de atuador" />`
+      : !obd.disponivel() ? html`<div class="vazio">Esta tela funciona no aplicativo instalado no celular (APK).</div>`
+      : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
+      <${Adaptador} compacto=${!!st.ligado} />
+      ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
+        <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="atu-modulo">
+          <button type="button" class="btn-barra" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />VER OS ATUADORES DESTE MÓDULO</button>
+          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
+        </${Cartao}>
+        ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
+        ${erro ? html`<div class="erro">${erro}</div>` : null}
+        ${lista && lista.length ? html`<${Cartao} titulo=${"Atuadores (" + lista.length + ")"} id="atu-lista">
+          <p class="nota">O módulo informou o NÚMERO de cada saída, não o nome dela — o nome está num anexo da norma que o app não tem. Acione e confira no carro o que se moveu.</p>
+          ${lista.map(a => html`<button key=${a.did} type="button" class="obd-ap" onClick=${() => setAlvo(a)} disabled=${!!st.dono || !!andando}>
+            <b>Saída ${hex4Txt(a.did)}</b><span>toque para testar</span></button>`)}
+        </${Cartao}>` : null}
+        ${andando ? html`<${Cartao} titulo="Teste em andamento" id="atu-andando">
+          ${andando.passos.map((p, i) => html`<div key=${i} class=${"passo " + (p.o === "nao-devolveu" ? "ruim" : p.o === "devolveu" || p.o === "acionou" ? "bom" : "")}>${p.t}</div>`)}
+          ${andando.fim ? html`<div class=${andando.fim.ok ? "nota" : "erro"}>${andando.fim.texto}</div>
+            <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>` : html`<div class="carregando">Acionando… confira no carro.</div>`}
+        </${Cartao}>` : null}
+      `}
+    `}
+    ${alvo ? html`<${Quadro} titulo="Acionar esta saída?" onFechar=${() => setAlvo(null)}>
+      <p>O módulo vai acionar a saída <b>${hex4Txt(alvo.did)}</b> por cinco segundos. Antes de confirmar:</p>
+      <p class="nota">• Veja se não há ninguém com a mão perto de ventoinha, correia ou polia.<br />
+      • Saída de luz, bomba e ventoinha é segura de testar. Saída que move peça grande, não.<br />
+      • O app devolve o controle ao módulo no fim. Se não conseguir, ele avisa e aí é desligar a chave.</p>
+      <button type="button" class="btn-acao" onClick=${() => testar(alvo.did)}>ACIONAR AGORA</button>
+      <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAlvo(null)}>Cancelar</button>
+    </${Quadro}>` : null}
+  </${Tela}>`;
+}
+const hex4Txt = n => (n == null ? "" : Number(n).toString(16).toUpperCase().padStart(4, "0"));
+
+/* ---------------- APRENDIZADOS ---------------- */
+function Aprendizados() {
+  const st = usarSessao();
+  const { cfg, perfil } = useApp();
+  const [mod, setMod] = useState(null);
+  const [lista, setLista] = useState(null);
+  const [alvo, setAlvo] = useState(null);
+  const [andando, setAndando] = useState(null);
+  const [ocupado, setOcupado] = useState("");
+  const [erro, setErro] = useState("");
+  const pode = podeAprenderObd(cfg, perfil);
+  usarPasso(!!alvo, () => setAlvo(null));
+
+  const escolher = async m => {
+    setErro(""); setLista(null);
+    const r = await sessao.apontarModulo(m);
+    if (!r.ok) { setErro(r.texto || "Não deu para falar com este módulo."); return; }
+    setMod(m);
+  };
+  const descobrir = async () => {
+    setOcupado("Perguntando ao módulo quais rotinas ele aceita…"); setErro("");
+    const r = await sessao.tomar("a descoberta", async () => {
+      await uds.sessao(uds.SESSAO.estendida);
+      return uds.descobrirEpti({ aoAndar: t => setOcupado(t) });
+    });
+    setOcupado("");
+    if (!r.ok) { setErro(r.texto || "Não deu para perguntar."); return; }
+    setLista(r.r.rotinas.map(n => ({ rid: n, sabido: true })));
+    if (!r.r.rotinas.length) setErro("Este módulo não informou rotina nenhuma pela norma de inspeção. Dá para sondar por faixa abaixo: a sondagem PERGUNTA sem rodar nada.");
+  };
+  /** Sondagem por faixa: pergunta sem executar, e lê o jeito da recusa. */
+  const sondar = async () => {
+    setErro(""); const achados = [];
+    const marcos = [0x0200, 0x0201, 0x0202, 0x0203, 0x0300, 0x0301, 0x0400, 0x0401,
+                    0xa001, 0xa002, 0xa003, 0xad6e, 0xb001, 0xc001, 0xd001];
+    const r = await sessao.tomar("a sondagem", async () => {
+      await uds.sessao(uds.SESSAO.estendida);
+      for (const rid of marcos) {
+        setOcupado("Perguntando pela rotina " + hex4Txt(rid) + "…");
+        const v = await uds.sondar(rid, { sessaoAtual: uds.SESSAO.estendida });
+        if (v.existe === true) achados.push({ rid, motivo: v.motivo, texto: v.texto });
+      }
+      return achados;
+    });
+    setOcupado("");
+    if (!r.ok) { setErro(r.texto || "Não deu para sondar."); return; }
+    setLista((r.r || []).map(a => ({ rid: a.rid, sabido: false, motivo: a.motivo, texto: a.texto })));
+    if (!(r.r || []).length) setErro("Nenhuma das rotinas sondadas existe neste módulo. A sondagem olha alguns números conhecidos da faixa do fabricante, não a faixa inteira: ela não prova que o módulo não tem nenhuma.");
+  };
+  const rodar = async rid => {
+    setAlvo(null); setAndando({ passos: [] });
+    const r = await uds.rodarAprendizado(rid, {
+      segundosMax: 120,
+      pausar: sessao.pausar, retomar: sessao.retomar,
+      aoAndar: p => setAndando({ passos: p.passos }),
+    });
+    setAndando(a => ({ passos: (a && a.passos) || [], fim: r }));
+  };
+
+  return html`<${Tela} tela="aprendizados" ajuda="Roda rotina de aprendizado e calibração no módulo: adaptação, reset de serviço, zero do sensor de ângulo. O módulo trabalha sozinho depois do começar, e o app acompanha até terminar. Se ele recusar, a frase diz o que fazer — pôr em neutro, pisar no freio, aquecer o motor.">
+    ${!pode ? html`<${SemPermissao} o="Rodar aprendizado" />`
+      : !obd.disponivel() ? html`<div class="vazio">Esta tela funciona no aplicativo instalado no celular (APK).</div>`
+      : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
+      <${Adaptador} compacto=${!!st.ligado} />
+      ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
+        <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="apr-modulo">
+          <button type="button" class="btn-barra" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />VER AS ROTINAS DESTE MÓDULO</button>
+          <button type="button" class="btn-barra claro" onClick=${sondar} disabled=${!!ocupado || !!st.dono}><${Ic} n="aprender" t=${20} />SONDAR SEM RODAR NADA</button>
+          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
+        </${Cartao}>
+        ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
+        ${erro ? html`<div class="erro">${erro}</div>` : null}
+        ${lista && lista.length ? html`<${Cartao} titulo=${"Rotinas (" + lista.length + ")"} id="apr-lista">
+          <p class="nota">O módulo informa o NÚMERO da rotina, não o nome: o nome está num anexo da norma que o app não tem. Rode uma por vez e veja o resultado no carro.</p>
+          ${lista.map(a => html`<button key=${a.rid} type="button" class="obd-ap" onClick=${() => setAlvo(a)} disabled=${!!st.dono || !!andando}>
+            <b>Rotina ${hex4Txt(a.rid)}</b><span>${a.texto || "toque para rodar"}</span></button>`)}
+        </${Cartao}>` : null}
+        ${andando ? html`<${Cartao} titulo="Rotina em andamento" id="apr-andando">
+          ${andando.passos.map((p, i) => html`<div key=${i} class=${"passo " + (p.o === "pronto" ? "bom" : p.o === "recusou" ? "ruim" : "")}>${p.t}</div>`)}
+          ${andando.fim ? html`<div class=${andando.fim.ok ? "nota" : "erro"}>${andando.fim.texto}</div>
+            <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>` : html`<div class="carregando">Trabalhando… não desligue a chave.</div>`}
+        </${Cartao}>` : null}
+      `}
+    `}
+    ${alvo ? html`<${Quadro} titulo="Rodar esta rotina?" onFechar=${() => setAlvo(null)}>
+      <p>O módulo vai rodar a rotina <b>${hex4Txt(alvo.rid)}</b>. Aprendizado muda o jeito do módulo trabalhar, e não tem botão de desfazer.</p>
+      <p class="nota">• Deixe a chave ligada e não mexa no carro enquanto a rotina corre.<br />
+      • Se o módulo pedir condição (neutro, freio, temperatura), o app mostra o que falta.<br />
+      • Pode levar até dois minutos.</p>
+      <button type="button" class="btn-acao" onClick=${() => rodar(alvo.rid)}>RODAR AGORA</button>
+      <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAlvo(null)}>Cancelar</button>
+    </${Quadro}>` : null}
+  </${Tela}>`;
+}
+
+/* ---------------- PROGRAMAR BICO ---------------- */
+function Bico() {
+  const st = usarSessao();
+  const { cfg, perfil } = useApp();
+  const pl = usarPlaca();
+  const [cilindros, setCilindros] = useState(4);
+  const [itens, setItens] = useState(() => [1, 2, 3, 4].map(c => ({ cilindro: c, codigo: "", trocado: false })));
+  const [mostrarPlano, setMostrarPlano] = useState(false);
+  const pode = podeGravarObd(cfg, perfil);
+  usarPasso(mostrarPlano, () => setMostrarPlano(false));
+
+  const trocarQtd = n => {
+    setCilindros(n);
+    setItens(anteriores => Array.from({ length: n }, (_, i) => anteriores[i] || { cilindro: i + 1, codigo: "", trocado: false }));
+  };
+  const mexer = (i, p) => setItens(l => l.map((x, j) => (j === i ? { ...x, ...p } : x)));
+  const conf = bico.conferirConjunto(itens, cilindros);
+  const plano = bico.plano({ cilindros: conf.paraGravar, temChave: false });
+
+  return html`<${Tela} tela="bico" ajuda="Grava na ECU o código que veio escrito no bico recodificado. O código IMA tem 7 caracteres e não usa 0, 9, I, J nem Q — então o app confere a digitação antes de qualquer coisa. Só grava o cilindro que você marcar como trocado.">
+    ${!pode ? html`<${SemPermissao} o="Programar bico" />` : html`
+      <${BuscaPlaca} id="bico-placa" titulo="Placa do carro (opcional)" pl=${pl} />
+      ${pl.veic ? html`<${Veiculo} v=${pl.veic} />` : null}
+
+      <${Cartao} titulo="Onde o app chega hoje" id="bico-limite">
+        <p>A gravação em si está pronta, e a conferência do código também. O que falta para fechar a corrente, e é honesto dizer antes de você digitar:</p>
+        <div class="passo">1. O número do campo de cada cilindro muda de família para família de ECU, e não existe tabela pública confiável. Sem ele o app não sabe ONDE gravar.</div>
+        <div class="passo">2. Quase toda ECU exige destravar a adaptação antes (o 0x27), e a conta da chave depende da família.</div>
+        <p class="nota">Então hoje esta tela confere o código, monta o plano e mostra onde para. Ela não grava no escuro: gravar no campo errado de uma ECU diesel é prejuízo, não é tentativa.</p>
+      </${Cartao}>
+
+      <${Cartao} titulo="Os códigos dos bicos" id="bico-codigos">
+        <${Campo} id="bico-qtd" rotulo="Quantos cilindros">
+          <select id="bico-qtd" value=${String(cilindros)} onChange=${e => trocarQtd(Number(e.target.value))}>
+            ${[3, 4, 5, 6, 8].map(n => html`<option key=${n} value=${String(n)}>${n} cilindros</option>`)}
+          </select>
+        </${Campo}>
+        ${itens.map((it, i) => {
+          const v = it.codigo ? bico.validarIma(it.codigo) : null;
+          return html`<div key=${it.cilindro} class="bico-linha">
+            <label class="bico-marca">
+              <input type="checkbox" checked=${it.trocado} onChange=${e => mexer(i, { trocado: e.target.checked })} />
+              <span>Cilindro ${it.cilindro} foi trocado</span>
+            </label>
+            <input type="text" class=${"bico-cod" + (v && !v.ok ? " ruim" : v && v.ok ? " bom" : "")} inputmode="text"
+              autocomplete="off" autocapitalize="characters" maxlength="24" placeholder="Código do bico (7 caracteres)"
+              aria-label=${"Código do bico do cilindro " + it.cilindro}
+              value=${it.codigo} onInput=${e => mexer(i, { codigo: e.target.value.toUpperCase() })} />
+            ${v && !v.ok ? html`<div class="erro">${v.erro}${v.dica ? " " + v.dica : ""}
+              ${v.corrigido ? html`<button type="button" class="link" onClick=${() => mexer(i, { codigo: v.corrigido })}>usar ${v.corrigido}</button>` : null}</div>` : null}
+            ${v && v.ok ? html`<div class="nota">Código válido. Vai gravado como ${bico.paraHex(v.codigo)}.</div>` : null}
+          </div>`;
+        })}
+        <p class="nota">O código está gravado a laser no corpo do bico. Ele não usa 0, 9, I, J nem Q: o que parece 0 é a letra O, e o que parece I é o número 1.</p>
+      </${Cartao}>
+
+      ${conf.avisos.length ? html`<${Cartao} titulo="Confira antes" id="bico-avisos">
+        ${conf.avisos.map((a, i) => html`<div key=${i} class=${a.grave ? "erro" : "nota"}>${a.t}</div>`)}
+      </${Cartao}>` : null}
+
+      ${/* O plano só aparece quando NÃO há aviso grave. Mostrar o plano com um código repetido ou
+            inválido na tela faz parecer que está pronto para gravar, e o que se lê é a sequência,
+            não o aviso. Primeiro resolve o aviso; depois aparece o que vai acontecer no carro. */
+        conf.podeGravar ? html`<${Cartao} titulo="O que vai acontecer no carro" id="bico-plano">
+        ${plano.map((p, i) => html`<div key=${i} class=${"passo" + (p.trava ? " ruim" : "")}>${i + 1}. ${p.t}</div>`)}
+        <button type="button" class="btn-barra" disabled=${true} style="justify-content:center">GRAVAR (falta o número do campo desta ECU)</button>
+        <p class="nota">O botão fica desligado de propósito enquanto o app não souber o campo certo desta família de ECU. Quando entrar, ele liga — e a sequência é essa aí, com a leitura de volta conferindo o que ficou gravado.</p>
+      </${Cartao}>` : null}
+    `}
+  </${Tela}>`;
+}
+
+/* ---------------- PARÂMETROS (era um cartão dentro do OBD) ---------------- */
+function ParametrosTela() {
+  return html`<${Tela} tela="parametros" ajuda="A referência de faixa normal que o app usa para decidir se um valor está bom ou ruim, com a fonte de cada uma. Fica aqui, e não escondida dentro da leitura, porque é o que você consulta para discutir um laudo.">
+    <${Parametros} />
+    <${Cartao} titulo="Escala e faixa normal não são a mesma coisa" id="param-escala">
+      <p>Escala é o tamanho do mostrador: de onde até onde o ponteiro anda. Faixa normal é o que aquele motor deve marcar trabalhando bem. Misturar as duas é o jeito mais fácil de dar um laudo errado.</p>
+      <p class="nota">Desde 20/11/2026 o app também sabe PEDIR a escala ao próprio módulo, pelo serviço 0x24 do UDS. Quando o módulo responde, quem manda é ele; o catálogo fica só para a faixa normal, que nenhum módulo informa.</p>
+    </${Cartao}>
+  </${Tela}>`;
+}
+
+const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta,
+  obd: Obd, modulos: Modulos, atuadores: Atuadores, aprendizados: Aprendizados, bico: Bico, parametros: ParametrosTela };
 // quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
 const quadros = [];
 /** Pilha das telas visitadas: o botão Voltar do celular volta para a tela anterior, uma por vez, e só sai do app no Início

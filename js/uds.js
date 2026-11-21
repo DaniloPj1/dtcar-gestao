@@ -238,14 +238,19 @@ export async function lerFalhas(mascara = 0xff) {
 
 /**
  * Interpreta o corpo da resposta de falhas do UDS (0x19 02).
- * Vem a máscara de disponibilidade e, depois, QUATRO bytes por falha: três do código e um da
- * situação. São quatro, e não dois como no OBD-II, porque o terceiro byte do código é o TIPO DE
- * FALHA — o número que aparece depois do traço quando a falha é escrita por extenso (no catálogo do
- * Honda, por exemplo, o 49 de um U3000-49). A tabela da ISO 14229-1 que o acervo já tem, achada
- * dentro do CanZE, é o que traduz esse byte.
+ *
+ * A resposta vem assim: o ECO DA SUBFUNÇÃO (02), a máscara de disponibilidade e, depois, QUATRO
+ * bytes por falha — três do código e um da situação. São DOIS bytes a descartar no começo, não um:
+ * o eco da subfunção é fácil de esquecer, e esquecer desloca tudo em um byte. Quando isso acontece
+ * o aparelho não dá erro: ele mostra códigos de falha que não existem no carro, e num laudo de
+ * oficina esse é o pior defeito possível (o mesmo cuidado que o js/obd.js descreve para o ELM327).
+ *
+ * São quatro bytes por falha, e não dois como no OBD-II, porque o terceiro é o TIPO DE FALHA — o
+ * número que aparece depois do traço quando a falha é escrita por extenso (no catálogo do Honda,
+ * por exemplo, o 49 de um U3000-49). A tabela da ISO 14229-1 que o acervo já tem traduz esse byte.
  */
 export function falhasDe(dados) {
-  const d = (dados || []).slice(1);
+  const d = (dados || []).slice(2);
   const codigos = [];
   for (let i = 0; i + 3 < d.length; i += 4) {
     codigos.push({ codigo: dtcDe(d[i], d[i + 1]), tipoFalha: d[i + 2], situacao: d[i + 3] });

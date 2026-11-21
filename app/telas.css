@@ -365,3 +365,41 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .apg-avisos { margin: 8px 0 10px; padding-left: 18px; color: #4a515a; font-size: 13.5px; line-height: 1.45 }
 .apg-avisos li { margin-bottom: 4px }
 #obd-apagar-cx .campo { margin-top: 2px }
+
+/* ---------------- família do diagnóstico (20/11/2026) ----------------
+ * O diagnóstico virou família de telas, então o Início passou a separar por grupo e as telas
+ * novas trouxeram quatro peças: a barra do adaptador quando ele já está ligado, o registro de
+ * passos de um teste, a linha de falha com a causa elétrica e a linha do código do bico.
+ * Tudo aqui é do app (celular). Nada neste arquivo é usado pelas telas do PC. */
+
+/* grupos de botões no Início */
+.grupo{display:flex;flex-direction:column;gap:10px}
+.grupo+.grupo{margin-top:6px}
+.grupo-t{margin:10px 6px 0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cinza-nota)}
+
+/* adaptador já ligado: uma linha, para não repetir o cartão inteiro em cada tela */
+.diag-ligado{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:8px 12px;margin-bottom:10px;
+  border:1.5px solid #cfd5dd;border-left:4px solid #1f7a3a;border-radius:10px;background:#fff;font-size:13px}
+.diag-ligado b{font-weight:600}
+
+/* registro de passos de um teste ou rotina: o mecânico acompanha o que está acontecendo */
+.passo{padding:7px 10px;margin-top:6px;border-radius:8px;background:#f2f4f7;font-size:13px;line-height:1.35}
+.passo.bom{background:#e8f3ea;border-left:3px solid #1f7a3a}
+.passo.ruim{background:#f6e9e9;border-left:3px solid #8a2d2d;font-weight:600}
+
+/* falha de um módulo, com a causa elétrica que vem do tipo de falha */
+.diag-falha{padding:9px 0;border-bottom:1px solid #e7eaee}
+.diag-falha:last-child{border-bottom:0}
+.diag-falha-topo{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.diag-falha-topo b{font-size:16px;font-weight:700;color:var(--azul)}
+.diag-falha-causa{margin-top:2px;font-size:14px;font-weight:600}
+
+/* código do bico: um por cilindro, com a conferência de digitação na hora */
+.bico-linha{padding:10px 0;border-bottom:1px solid #e7eaee}
+.bico-linha:last-child{border-bottom:0}
+.bico-marca{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:6px}
+.bico-marca input{width:22px;height:22px;flex-shrink:0}
+.bico-cod{width:100%;min-height:48px;padding:10px 12px;border:1.5px solid #9aa1ab;border-radius:10px;
+  background:#fff;color:var(--tinta);font:inherit;font-size:18px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.bico-cod.bom{border-color:#1f7a3a}
+.bico-cod.ruim{border-color:#8a2d2d}

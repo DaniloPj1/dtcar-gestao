@@ -14,7 +14,11 @@ def t(c, m):
     assert c, m; ok += 1
 UID = '22222222-2222-2222-2222-222222222222'
 import datetime; HOJE = datetime.date.today().isoformat()
-ROTULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.', 'DIAGNÓSTICO OBD']
+# Desde 20/11/2026 o Início separa por grupo: primeiro o que se faz na oficina, depois o que se faz
+# no carro (o diagnóstico, que deixou de ser uma tela e virou família de seis).
+ROTULOS_OFICINA = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
+ROTULOS_CARRO = ['LER O CARRO (OBD)', 'MÓDULOS DO CARRO', 'ATUADORES', 'APRENDIZADOS', 'PROGRAMAR BICO', 'PARÂMETROS DE REFERÊNCIA']
+ROTULOS = ROTULOS_OFICINA + ROTULOS_CARRO
 # plugin da digital de mentira: o "cofre" (window.__cofre) sobrevive a recarregar a página; __ok controla se a leitura passa
 PLUGIN = """
 ['__cofre', '__ok'].forEach(function (k) { Object.defineProperty(window, k, { configurable: true,
@@ -72,7 +76,22 @@ var R = {
   '06A2': '46A20B2400010000FFFFA20C2400020000FFFF',
   '06A3': '46A30B2400010000FFFFA30C2400010000FFFF',
   '06A4': '46A40B2400B40000FFFFA40C2401540000FFFF',
-  '06A5': '46A50B2400000000FFFFA50C2400000000FFFF'
+  '06A5': '46A50B2400000000FFFFA50C2400000000FFFF',
+  // ---- UDS (20/11/2026): ajuste do adaptador, sessão e os identificadores do ePTI ----
+  'ATCAF1': 'OK', 'ATCAF0': 'OK', 'ATSP6': 'OK', 'ATAL': 'OK', 'ATAR': 'OK', 'ATCRA': 'OK',
+  'ATSH7E0': 'OK', 'ATCRA7E8': 'OK', 'ATFCSH7E0': 'OK', 'ATFCSD300000': 'OK', 'ATFCSM1': 'OK',
+  'ATSH7E1': 'OK', 'ATCRA7E9': 'OK', 'ATFCSH7E1': 'OK', 'ATST32': 'OK', 'ATSTFA': 'OK',
+  '1001': '5001003200C8', '1003': '5003003200C8',
+  '22F190': '62F190' + '__VIN__',
+  '22FA19': '62FA1901',                                   // edição 1 da norma
+  '22FA21': '62FA21000B0012',                             // cuida do ABS e do controle de estabilidade
+  '22FA20': '62FA20FA19FA20FA21FA22FA23FA24',             // os dados que ele tem
+  '22FA22': '62FA220200AD6E',                             // rotinas: dentro da faixa do fabricante
+  '22FA23': '62FA23F101E300',                             // atuadores: fora dessa faixa
+  '22FA24': '62FA240100',
+  // falha por módulo: QUATRO bytes por falha (o terceiro é o tipo, que dá a causa elétrica)
+  '1902FF': '5902FF0171132F' + 'C021490A',
+  '14FFFFFF': '54'
 };
 window.Capacitor.Plugins.DtcarObd = {
   permissao: function () { window.__obd.chamadas.push('permissao'); return Promise.resolve({ concedida: true, pedeNaHora: true }); },
@@ -81,6 +100,25 @@ window.Capacitor.Plugins.DtcarObd = {
   situacao: function () { return Promise.resolve({ conectado: window.__obd.conectado, nome: 'vLinker FS', endereco: 'AA:BB:CC:DD:EE:FF' }); },
   conectar: function (o) { window.__obd.chamadas.push('conectar'); window.__obd.conectado = true; return Promise.resolve({ conectado: true, nome: 'vLinker FS', endereco: o.endereco }); },
   desconectar: function () { window.__obd.chamadas.push('desconectar'); window.__obd.conectado = false; return Promise.resolve({ conectado: false }); },
+  // Cada coisa que age no carro tem método PRÓPRIO no plugin, nunca o comando() — é assim no APK de
+  // verdade, e é a garantia de que uma leitura não vira comando. O teste usa os mesmos nomes.
+  atuar: function (o) {
+    window.__obd.chamadas.push('atuar:' + o.did + ':' + o.opcao);
+    return Promise.resolve({ resposta: '6F' + o.did + o.opcao + '\\r\\r>' });
+  },
+  rotina: function (o) {
+    window.__obd.chamadas.push('rotina:' + o.rotina + ':' + o.sub);
+    // a primeira pergunta do resultado diz "estou trabalhando"; a segunda diz que terminou
+    if (o.sub === '03') {
+      window.__obd.voltas = (window.__obd.voltas || 0) + 1;
+      if (window.__obd.voltas < 2) return Promise.resolve({ resposta: '7F3178\\r\\r>' });
+      return Promise.resolve({ resposta: '7103' + o.rotina + '00\\r\\r>' });
+    }
+    return Promise.resolve({ resposta: '71' + o.sub + o.rotina + '\\r\\r>' });
+  },
+  gravar: function (o) { window.__obd.chamadas.push('gravar:' + o.did); return Promise.resolve({ resposta: '6E' + o.did + '\\r\\r>' }); },
+  destravar: function (o) { window.__obd.chamadas.push('destravar:' + o.sub); return Promise.resolve({ resposta: '7F2733\\r\\r>' }); },
+  reiniciarModulo: function (o) { window.__obd.chamadas.push('reiniciarModulo'); return Promise.resolve({ resposta: '5101\\r\\r>' }); },
   // apagar tem método PRÓPRIO no plugin (nunca passa pelo comando): é assim no APK de verdade
   apagar: function () {
     window.__obd.apagados = (window.__obd.apagados || 0) + 1;
@@ -225,13 +263,19 @@ try:
         pg.click('.ver'); t(pg.get_attribute('#lg-senha', 'type') == 'text', 'botão Mostrar revela a senha')
         # 2) login certo como administrador, sem plugin (navegador): sem oferta de digital
         entrar(pg); t('Olá, Fulano' in textos(pg) and 'Administrador' in textos(pg), 'entra como administrador')
-        barras = rotulos(pg); t(barras == ROTULOS, 'dez botões na ordem combinada, sem + O.S.: %s' % barras)
+        barras = rotulos(pg); t(barras == ROTULOS, 'quinze botões na ordem combinada, sem + O.S.: %s' % barras)
+        # o grupo tem título, e o do carro vem depois do da oficina: com 15 botões, lista única é parede
+        titulos_grupo = [x.strip() for x in pg.locator('.grupo-t').all_inner_texts()]
+        t(titulos_grupo == ['NA OFICINA', 'NO CARRO'], 'dois grupos, com título, na ordem (o CSS põe em maiúsculas): %s' % titulos_grupo)
+        t(pg.locator('.grupo').count() == 2, 'os botões ficam dentro dos dois grupos')
         t(pg.locator('.quadro').count() == 0, 'sem plugin não oferece a digital')
         t(not f.escritas(), 'não grava nada no banco: %s' % f.escritas())
         # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
         # cada botão abre a tela do app correspondente (desenho do protótipo), sem sair do app
-        TITULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.', 'DIAGNÓSTICO OBD']
-        ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta', 'obd']
+        TITULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.',
+                   'LER O CARRO (OBD)', 'MÓDULOS DO CARRO', 'TESTE DE ATUADOR', 'APRENDIZADOS E CALIBRAÇÕES', 'PROGRAMAR BICO', 'PARÂMETROS DE REFERÊNCIA']
+        ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta',
+                 'obd', 'modulos', 'atuadores', 'aprendizados', 'bico', 'parametros']
         for i, rota in enumerate(ROTAS):
             pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i); pg.wait_for_selector('.titulo b', timeout=10000)
             t(pg.url.endswith('#/' + rota) and pg.inner_text('.titulo b') == TITULOS[i], 'botão %d abre %s: %s / %s' % (i + 1, rota, pg.url, pg.inner_text('.titulo b')))
@@ -249,7 +293,7 @@ try:
         t(not er, 'sem erro de script: %s' % er); ctx.close()
         # 3) consultor entra; mecânico, pendente e inativo não
         f = Fake('consultor'); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-        t('Consultor' in textos(pg) and pg.locator('.barra').count() == 10, 'consultor entra'); ctx.close()
+        t('Consultor' in textos(pg) and pg.locator('.barra').count() == len(ROTULOS), 'consultor entra com as %d telas' % len(ROTULOS)); ctx.close()
         for papel, ativo in (('mecanico', True), ('pendente', True), ('admin', False)):
             f = Fake(papel, ativo); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
             t(('não está liberado' in textos(pg) or 'acesso liberado pelo administrador' in textos(pg)) and pg.locator('.barra').count() == 0, 'recusa %s ativo=%s (padrão do papel)' % (papel, ativo))
@@ -530,6 +574,13 @@ try:
         # com o adaptador de mentira
         VEI[0]['chassi'] = '9BWZZZ377VT004251'
         f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False, antes=FAKE_OBD); entrar(pg); tela(pg, 'obd')
+        # guarda: se o plugin de mentira tiver erro de sintaxe ele simplesmente não registra, e aí
+        # TODOS os testes do OBD falhariam por um motivo que não é o do app. Falhar aqui, com esta
+        # frase, economiza a caça ao defeito errado.
+        t(pg.evaluate("!!(window.Capacitor && window.Capacitor.Plugins && window.Capacitor.Plugins.DtcarObd)"),
+          'o plugin de mentira registrou (sem erro de sintaxe no FAKE_OBD)')
+        t(pg.evaluate("typeof window.Capacitor.Plugins.DtcarObd.atuar === 'function'"),
+          'e tem a camada que age no carro, como o APK novo')
         t(pg.is_visible('#obd-procurar'), 'com o plugin a tela oferece procurar o adaptador')
         pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
         pg.click('#obd-procurar'); pg.wait_for_selector('.obd-ap', timeout=10000)
@@ -783,21 +834,10 @@ try:
         t(pg.query_selector('#obd-clone'), 'adaptador que se diz v1.5 é denunciado como clone')
         t('nunca existiu' in pg.inner_text('#obd-clone'), 'com o motivo escrito: %s' % pg.inner_text('#obd-clone')[:80])
 
-        # PARÂMETROS DE REFERÊNCIA (20/11/2026): tela só de LEITURA — quem corrige é o Claude, no arquivo
-        t(pg.query_selector('#obd-parametros'), 'tem a aba de parâmetros')
-        pg.click('#obd-param-abrir'); pg.wait_for_timeout(400)
-        tpar = pg.inner_text('#obd-parametros')
-        t(pg.locator('#obd-parametros .par-linha').count() >= 20, 'lista os parâmetros: %d' % pg.locator('#obd-parametros .par-linha').count())
-        t(pg.locator('#obd-parametros .nv-montadora').count() > 0 and pg.locator('#obd-parametros .nv-suposto').count() > 0 and pg.locator('#obd-parametros .nv-norma').count() > 0,
-          'com as tonalidades por nível de confiança')
-        t('SUPOSTO, A CONFERIR' in tpar.upper(), 'o nível vem ESCRITO, não só na cor')
-        t(pg.query_selector('#obd-parametros .par-legenda'), 'e tem legenda discreta')
-        t('Ford' in tpar and 'CARB' in tpar, 'cada número mostra a fonte: %s' % [l for l in tpar.split('\n') if 'Ford' in l][:1])
-        t('250 a 550 bar' in tpar, 'os valores sem documento aparecem marcados como suposto')
-        t(not pg.query_selector('[data-conferir]') and not pg.query_selector('[data-gravar]'),
-          'NÃO tem formulário: a correção vem pelo chat, não digitada no celular')
-        t('mande a foto no chat' in tpar, 'e a tela explica como se corrige: %s' % [l for l in tpar.split('\n') if 'chat' in l][:1])
-
+        # PARÂMETROS DE REFERÊNCIA: era um cartão escondido dentro desta tela e virou TELA (20/11/2026),
+        # porque é o que se consulta para discutir um laudo. Aqui fica só o caminho para ela.
+        t(pg.query_selector('#obd-ir-parametros'), 'a leitura tem o caminho para os parâmetros')
+        t(not pg.query_selector('#obd-parametros'), 'e o cartão não está mais duplicado aqui dentro')
         # APAGAR A FALHA, COM REGISTRO (v62, decisão do Danilo em 19/11/2026)
         t(pg.query_selector('#obd-apagar'), 'o administrador tem o botão de apagar falhas')
         t('REGISTRADO' in pg.inner_text('#obd-apagar'), 'e o botão já avisa que fica registrado: %s' % pg.inner_text('#obd-apagar'))
@@ -846,9 +886,120 @@ try:
         t(not outras, 'a tela do OBD só grava o registro do apagamento, mais nada: %s' % outras)
         t('ABS, airbag' in textos(pg), 'a tela avisa que ABS, airbag e câmbio não saem por aqui')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
-        # sair da tela fecha a conexão com o adaptador
-        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.wait_for_timeout(300)
-        t(pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'sair da tela desconecta o adaptador')
+
+        # ---- A CONEXÃO SOBREVIVE À TROCA DE TELA (20/11/2026) ----
+        # Era assim até ontem: sair da tela desconectava. Com o diagnóstico virando família de seis
+        # telas, isso passou a ser um defeito — ir da leitura para o atuador derrubava o adaptador e
+        # obrigava a conectar de novo, com o carro no elevador. Agora a conexão mora acima das telas
+        # (js/obdsessao.js) e quem desliga é sair de TODA a família.
+        pg.evaluate("window.__obd.chamadas.length = 0")
+        pg.goto(URL + '#/atuadores'); pg.wait_for_selector('.titulo b', timeout=10000); pg.wait_for_timeout(700)
+        t(not pg.evaluate("window.__obd.chamadas.includes('desconectar')"),
+          'ir da leitura para outra tela de diagnóstico NÃO desconecta: %s' % pg.evaluate("window.__obd.chamadas"))
+        t(pg.query_selector('.diag-ligado'), 'e a tela nova já aparece com o adaptador ligado')
+        t('CONECTADO' in pg.inner_text('.diag-ligado'), 'numa linha só, sem repetir o cartão inteiro')
+
+        # ---- MÓDULOS DO CARRO: a falha com a causa elétrica ----
+        pg.goto(URL + '#/modulos'); pg.wait_for_selector('.titulo b', timeout=10000)
+        t(pg.query_selector('#diag-adaptador') or pg.query_selector('.diag-ligado'), 'a tela de módulos mostra o adaptador')
+        pg.wait_for_selector('#diag-modulo', timeout=10000)
+        pg.click('#diag-modulo .btn-barra'); pg.wait_for_timeout(2500)
+        t(pg.locator('#diag-modulo .obd-ap').count() > 0, 'a procura acha módulo que responde')
+        t('7E0' in pg.inner_text('#diag-modulo'), 'e mostra o endereço de quem respondeu')
+        pg.click('#diag-modulo .obd-ap >> nth=0'); pg.wait_for_selector('#mod-escolhido', timeout=10000)
+        pg.click('#mod-escolhido .btn-barra >> nth=0'); pg.wait_for_selector('#mod-falhas', timeout=15000)
+        tf = pg.inner_text('#mod-falhas')
+        t('P0171-13' in tf, 'a falha sai com o sufixo do tipo: %s' % tf.split(chr(10))[:3])
+        t('circuito aberto' in tf, 'e o tipo vira CAUSA ELÉTRICA, que o OBD comum não dá')
+        t('confirmada' in tf, 'com a situação do código escrita')
+        # o tipo 0x49 do segundo código também está na tabela
+        t('falha eletrônica interna' in tf, 'o segundo código também ganha a causa')
+        t('APAGAR AS FALHAS DESTE MÓDULO' in tf, 'o administrador pode apagar por módulo')
+
+        # ---- ATUADORES: confirma antes, e DEVOLVE o controle ----
+        pg.goto(URL + '#/atuadores'); pg.wait_for_selector('#diag-modulo', timeout=10000)
+        pg.click('#diag-modulo .btn-barra'); pg.wait_for_timeout(2500)
+        pg.click('#diag-modulo .obd-ap >> nth=0'); pg.wait_for_selector('#atu-modulo', timeout=10000)
+        pg.click('#atu-modulo .btn-barra >> nth=0'); pg.wait_for_selector('#atu-lista', timeout=15000)
+        t('F101' in pg.inner_text('#atu-lista'), 'lista os atuadores que o MÓDULO informou: %s' % pg.inner_text('#atu-lista')[:90])
+        t('não o nome dela' in pg.inner_text('#atu-lista'), 'e diz que o nome está em anexo que o app não tem')
+        pg.click('#atu-lista .obd-ap >> nth=0'); pg.wait_for_selector('.quadro', timeout=10000)
+        tq = pg.inner_text('.quadro')
+        t('mão perto de ventoinha' in tq, 'antes de acionar, avisa do risco: %s' % tq[:70])
+        pg.click('.quadro .btn-acao'); pg.wait_for_selector('#atu-andando', timeout=10000)
+        pg.wait_for_timeout(8000)
+        ta = pg.inner_text('#atu-andando')
+        t('Controle devolvido ao módulo' in ta, 'o teste DEVOLVE o controle ao módulo no fim: %s' % ta[-90:])
+        ch = pg.evaluate("window.__obd.chamadas")
+        t(any(c.startswith('atuar:F101:03') for c in ch), 'acionou pela opção 03 (ajuste de curta duração)')
+        t(any(c.startswith('atuar:F101:00') for c in ch), 'e devolveu pela opção 00')
+        t(sum(1 for c in ch if c.startswith('atuar:F101:03')) > 1, 'repetindo o acionamento enquanto o teste corre')
+
+        # ---- APRENDIZADOS: o "estou trabalhando" não é tratado como erro ----
+        pg.goto(URL + '#/aprendizados'); pg.wait_for_selector('#diag-modulo', timeout=10000)
+        pg.click('#diag-modulo .btn-barra'); pg.wait_for_timeout(2500)
+        pg.click('#diag-modulo .obd-ap >> nth=0'); pg.wait_for_selector('#apr-modulo', timeout=10000)
+        pg.click('#apr-modulo .btn-barra >> nth=0'); pg.wait_for_selector('#apr-lista', timeout=15000)
+        t('AD6E' in pg.inner_text('#apr-lista'), 'lista as rotinas que o módulo informou')
+        pg.evaluate("window.__obd.voltas = 0")
+        pg.click('#apr-lista .obd-ap >> nth=0'); pg.wait_for_selector('.quadro', timeout=10000)
+        t('não tem botão de desfazer' in pg.inner_text('.quadro'), 'avisa que aprendizado não se desfaz')
+        pg.click('.quadro .btn-acao'); pg.wait_for_selector('#apr-andando', timeout=10000)
+        pg.wait_for_timeout(6000)
+        tap = pg.inner_text('#apr-andando')
+        t('Trabalhando' in tap, 'o 0x78 do módulo aparece como ANDAMENTO, não como erro: %s' % tap[:80])
+        t('Rotina concluída' in tap, 'e a rotina chega ao fim')
+
+        # ---- PROGRAMAR BICO: a conferência de digitação, que é o que mais vale ----
+        pg.goto(URL + '#/bico'); pg.wait_for_selector('#bico-codigos', timeout=10000)
+        t(pg.query_selector('#bico-limite'), 'a tela diz, antes de tudo, onde o app chega hoje')
+        t('não grava no escuro' in pg.inner_text('#bico-limite'), 'e que não grava sem saber o campo')
+        pg.fill('.bico-cod >> nth=0', 'C2GKLL0'); pg.wait_for_timeout(300)
+        t1 = pg.inner_text('#bico-codigos')
+        t('não usa 0' in t1, 'zero no lugar do O é pego: %s' % [l for l in t1.split(chr(10)) if 'não usa' in l][:1])
+        t('C2GKLLO' in t1, 'e o app diz qual é o código certo')
+        pg.click('#bico-codigos .link'); pg.wait_for_timeout(300)
+        t(pg.input_value('.bico-cod >> nth=0') == 'C2GKLLO', 'o atalho corrige o código digitado')
+        pg.fill('.bico-cod >> nth=0', 'AAAAAAA'); pg.wait_for_timeout(300)
+        t('fábrica' in pg.inner_text('#bico-codigos'), 'AAAAAAA é recusado como valor de fábrica')
+        pg.fill('.bico-cod >> nth=0', 'C2GKLLO')
+        pg.check('.bico-marca input >> nth=0'); pg.wait_for_timeout(400)
+        t(pg.query_selector('#bico-plano'), 'marcado o cilindro trocado, aparece o plano')
+        tp = pg.inner_text('#bico-plano')
+        t('Ler o que está gravado' in tp, 'o plano lê antes de gravar')
+        t('Ler de volta e conferir' in tp, 'e confere lendo de volta depois')
+        t(pg.locator('#bico-plano .btn-barra').is_disabled(), 'o botão de gravar fica DESLIGADO enquanto falta o campo da ECU')
+        # o cilindro não marcado não entra
+        pg.fill('.bico-cod >> nth=1', 'C2GKLLO'); pg.wait_for_timeout(300)
+        pg.check('.bico-marca input >> nth=1'); pg.wait_for_timeout(400)
+        t('mesmo código' in pg.inner_text('#bico-avisos'), 'dois cilindros com o mesmo código são barrados')
+        t(not pg.query_selector('#bico-plano'), 'e o plano não aparece enquanto houver aviso grave')
+        pg.goto(URL + '#/obd'); pg.wait_for_selector('.titulo b', timeout=10000)
+        pg.goto(URL + '#/obd'); pg.wait_for_selector('.titulo b', timeout=10000); pg.wait_for_timeout(700)
+        t(not pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'voltar para a leitura também não desconecta')
+        # sair da família, sim: aí o adaptador é liberado e a bateria do carro agradece
+        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.wait_for_timeout(900)
+        t(pg.evaluate("window.__obd.chamadas.includes('desconectar')"), 'sair da família de diagnóstico desconecta o adaptador')
+
+        # ---- TELA DE PARÂMETROS (era um cartão dentro da leitura até 20/11/2026) ----
+        # Só de LEITURA: quem corrige é o Claude, no arquivo. Fica em tela porque é o que se
+        # consulta para discutir um laudo, e cartão escondido dentro da leitura ninguém abre.
+        pg.goto(URL + '#/parametros'); pg.wait_for_selector('#obd-parametros', timeout=15000)
+        t(pg.inner_text('.titulo b').strip() == 'PARÂMETROS DE REFERÊNCIA', 'a tela de parâmetros abre')
+        t(pg.query_selector('#param-escala'), 'e explica a diferença entre escala e faixa normal')
+        t('0x24' in pg.inner_text('#param-escala'), 'citando o serviço que pede a escala ao próprio módulo')
+        pg.click('#obd-param-abrir'); pg.wait_for_timeout(400)
+        tpar = pg.inner_text('#obd-parametros')
+        t(pg.locator('#obd-parametros .par-linha').count() >= 20, 'lista os parâmetros: %d' % pg.locator('#obd-parametros .par-linha').count())
+        t(pg.locator('#obd-parametros .nv-montadora').count() > 0 and pg.locator('#obd-parametros .nv-suposto').count() > 0 and pg.locator('#obd-parametros .nv-norma').count() > 0,
+          'com as tonalidades por nível de confiança')
+        t('SUPOSTO, A CONFERIR' in tpar.upper(), 'o nível vem ESCRITO, não só na cor')
+        t(pg.query_selector('#obd-parametros .par-legenda'), 'e tem legenda discreta')
+        t('Ford' in tpar and 'CARB' in tpar, 'cada número mostra a fonte: %s' % [l for l in tpar.split('\n') if 'Ford' in l][:1])
+        t('250 a 550 bar' in tpar, 'os valores sem documento aparecem marcados como suposto')
+        t(not pg.query_selector('[data-conferir]') and not pg.query_selector('[data-gravar]'),
+          'NÃO tem formulário: a correção vem pelo chat, não digitada no celular')
+        t('mande a foto no chat' in tpar, 'e a tela explica como se corrige: %s' % [l for l in tpar.split('\n') if 'chat' in l][:1])
         ctx.close()
         # MECÂNICO LIBERADO PARA O OBD, MAS SEM PERMISSÃO DE APAGAR (decisão do Danilo: apagar é do administrador,
         # que libera por pessoa em Sistema › Equipe). Sem a chave ligada, o botão nem existe na tela dele.
@@ -883,8 +1034,20 @@ try:
         jv = open(os.path.join(raiz, 'app', 'plugins', 'obd', 'android', 'src', 'main', 'java', 'br', 'com', 'dtcarcentroautomotivo', 'obd', 'ObdPlugin.java')).read()
         lista_branca = jv.split('SERVICOS_LEITURA')[1].split(';')[0]
         t('SERVICOS_LEITURA' in jv and '"04"' not in lista_branca, 'a lista branca do comando() continua sem o serviço 04: %s' % lista_branca.replace('\n', ' ')[-70:])
-        t('public void apagar(' in jv and 'enviar(call, "04"' in jv, 'apagar é método próprio do plugin, com o 04 escrito no código')
+        t('public void apagar(' in jv and 'return porUds ? "14FFFFFF" : "04";' in jv,
+          'apagar é método próprio do plugin, com o comando escrito no código (04 no OBD-II, 14 FF FF FF no UDS)')
         t('comando-recusado' in jv, 'o nativo recusa comando fora da lista branca')
+        # Cada coisa que AGE no carro tem método próprio, com nome: nenhuma passa pelo comando().
+        for metodo in ('atuar', 'rotina', 'gravar', 'destravar', 'reiniciarModulo'):
+            t(('public void %s(' % metodo) in jv, '%s é método próprio do plugin' % metodo)
+        # E a promessa que a oficina pode fazer: este app NÃO regrava módulo.
+        proibidos = jv.split('SERVICOS_PROIBIDOS')[1].split(';')[0]
+        for sv in ('"34"', '"35"', '"36"', '"37"'):
+            t(sv in proibidos, 'serviço de transferência %s está proibido no nativo' % sv)
+        t('c.equals("1001") || c.equals("1003")' in jv,
+          'a sessão de PROGRAMAÇÃO (10 02) não passa do portão: só a comum e a estendida')
+        t('rotinaNaFaixa' in jv and '0x0200' in jv and '0xDFFF' in jv,
+          'a faixa da rotina de veículo é conferida no nativo, não no site')
         br.close()
     print('OK: %d conferências' % ok)
 finally:

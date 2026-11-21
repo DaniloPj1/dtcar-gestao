@@ -1,6 +1,6 @@
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
-import { acessoApp, TELAS_APP, telasDoPapel, usuarioValido, emailDoLogin, usuarioDoEmail, loginParaMostrar, DIAS_SEMANA, HORARIO_PADRAO, horarioValido } from "../appacesso.js";
+import { acessoApp, TELAS_APP, PERMISSOES_OBD, telasDoPapel, usuarioValido, emailDoLogin, usuarioDoEmail, loginParaMostrar, DIAS_SEMANA, HORARIO_PADRAO, horarioValido } from "../appacesso.js";
 import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
@@ -61,9 +61,14 @@ function AcessoApp({ p, cfg, salvar }) {
       <button type="button" role="switch" aria-checked=${ligado ? "true" : "false"} aria-label=${"Entra no app: " + p.nome} class=${"chave" + (ligado ? " on" : "")} onClick=${() => gravar(!ligado, ligado ? a.telas : TELAS_APP.map(t => t[0]))}><i></i></button></div>
     ${ligado ? html`<div class="chips">${TELAS_APP.map(([id, nome]) => html`<button type="button" key=${id} class="chip-btn" disabled=${!telasDoPapel(p.papel).includes(id)} title=${telasDoPapel(p.papel).includes(id) ? "" : "Só administrador e consultor fazem orçamento"} aria-pressed=${a.telas.includes(id) ? "true" : "false"} onClick=${() => alternarTela(id)}>${nome}</button>`)}</div>
       ${!a.telas.length ? html`<span class="dica">Nenhuma tela marcada: a pessoa entra e vê só o Início e a Ajuda.</span>` : null}
-      ${a.telas.includes("obd") && p.papel !== "admin" ? html`<div class="chave-linha chave-obd" data-obd=${p.id}><span><b>Pode apagar falha no OBD</b><span class="sub"> · fica registrado quem apagou, de qual carro</span></span>
-        <button type="button" role="switch" aria-checked=${atual.obd_apagar === true ? "true" : "false"} aria-label=${"Apagar falha no OBD: " + p.nome} class=${"chave" + (atual.obd_apagar === true ? " on" : "")}
-          onClick=${() => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { ...atual, entra: true, telas: a.telas, obd_apagar: atual.obd_apagar !== true } } })}><i></i></button></div>` : null}
+      ${/* O que AGE no carro, uma chave por coisa (20/11/2026). Antes era só o apagar falha; com o
+            UDS entraram testar atuador, rodar aprendizado e programar bico, e cada um é mais sério
+            que o anterior. A chave só aparece se a pessoa TEM a tela daquela ação: permissão solta,
+            sem a tela, não quer dizer nada. O administrador não aparece porque ele sempre pode. */
+        p.papel !== "admin" ? PERMISSOES_OBD.filter(([, , tela]) => a.telas.includes(tela)).map(([marca, nome, tela, aviso]) => html`
+        <div class="chave-linha chave-obd" key=${marca} data-obd=${marca + "-" + p.id}><span><b>Pode ${nome.toLowerCase()}</b><span class="sub"> · ${aviso}</span></span>
+          <button type="button" role="switch" aria-checked=${atual[marca] === true ? "true" : "false"} aria-label=${nome + ": " + p.nome} class=${"chave" + (atual[marca] === true ? " on" : "")}
+            onClick=${() => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { ...atual, entra: true, telas: a.telas, [marca]: atual[marca] !== true } } })}><i></i></button></div>`) : null}
       ${p.papel !== "admin" ? html`<div class="horario-uso" data-horario=${p.id}><span class="horario-rotulo"><b>Horário de uso</b><span class="sub"> · fora dele o app não entra</span></span>
         <div class="horario-linha"><button type="button" class="chip-btn" aria-pressed=${h ? "false" : "true"} onClick=${() => { if (h) semLimite(); }}>Sem limite</button>
           <button type="button" class="chip-btn" aria-pressed=${h ? "true" : "false"} onClick=${() => { if (!h) mudarHorario({ ...HORARIO_PADRAO }); }}>Só no horário de trabalho</button></div>

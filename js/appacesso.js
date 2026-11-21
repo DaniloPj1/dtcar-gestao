@@ -96,7 +96,9 @@ export function acessoApp(cfg, perfil) {
   const a = ((cfg && cfg.appAcessos) || {})[perfil.id];
   const padrao = perfil.papel === "admin" || perfil.papel === "consultor", doPapel = telasDoPapel(perfil.papel);
   if (!a || typeof a !== "object") return { entra: padrao, telas: padrao ? doPapel : [], padrao: true, horario: null };
-  const telas = Array.isArray(a.telas) ? doPapel.filter(t => a.telas.includes(t)) : doPapel;
+  // O ADMINISTRADOR vê todas as telas, sempre (decisão do Danilo, 21/11/2026). A lista gravada dele era de
+  // antes de Módulos, Atuadores e Aprendizados existirem, e essas telas não apareciam no app dele.
+  const telas = perfil.papel === "admin" ? doPapel : Array.isArray(a.telas) ? doPapel.filter(t => a.telas.includes(t)) : doPapel;
   const horario = perfil.papel !== "admin" && horarioValido(a.horario) ? { de: a.horario.de, ate: a.horario.ate, dias: a.horario.dias.map(Number) } : null;
   return { entra: a.entra === true, telas: a.entra === true ? telas : [], padrao: false, horario };
 }

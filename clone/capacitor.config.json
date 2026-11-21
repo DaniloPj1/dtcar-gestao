@@ -1,0 +1,9 @@
+{
+  "appId": "br.com.dtcarcentroautomotivo.clone",
+  "appName": "DTCar Clone",
+  "webDir": "www",
+  "backgroundColor": "#16191d",
+  "android": {
+    "allowMixedContent": false
+  }
+}

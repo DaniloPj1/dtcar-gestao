@@ -1,0 +1,16 @@
+{
+  "name": "dtcar-clone",
+  "private": true,
+  "version": "0.1.0",
+  "description": "App separado e autônomo (APK) só para CLONAR por OBD os dados que cada módulo expõe por diagnóstico e exportar num arquivo JSON para análise. Ferramenta de administrador. Só LÊ: nunca escreve, apaga ou regrava módulo. As telas ficam embutidas (clone/www), não vêm do site.",
+  "dependencies": {
+    "@capacitor/android": "6.2.1",
+    "@capacitor/core": "6.2.1",
+    "@capacitor/filesystem": "6.0.3",
+    "@capacitor/share": "6.0.3",
+    "dtcar-obd": "file:plugins/obd"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "6.2.1"
+  }
+}

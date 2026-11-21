@@ -1,0 +1,9 @@
+{
+  "name": "dtcar-obd",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Plugin do app DTCar Clone: liga ao adaptador OBD (ELM327) por Bluetooth e troca linhas de texto. Lista branca SÓ DE LEITURA (OBD + UDS de leitura) e endereçamento do adaptador; recusa tudo que escreve/age no carro. Sem método de apagar.",
+  "capacitor": { "android": { "src": "android" } },
+  "files": [ "android/" ],
+  "license": "UNLICENSED"
+}

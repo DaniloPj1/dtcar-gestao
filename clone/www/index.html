@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DTCar Clone</title>
+<style>
+  :root{ --preto:#16191d; --azul:#174f94; --azul2:#2f6fb5; --fundo:#eceef0; --cinza:#6b7280; --borda:#d4d8dd; --ok:#1f8a4c; --ruim:#b23b3b; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; background:var(--fundo); color:var(--preto); font-family:Barlow,system-ui,Arial,sans-serif; }
+  header{ background:var(--preto); color:#fff; padding:14px 16px; font-weight:700; letter-spacing:.3px; display:flex; align-items:center; gap:10px; }
+  header small{ font-weight:400; color:#9aa3ad; }
+  main{ padding:16px; max-width:620px; margin:0 auto; }
+  .cartao{ background:#fff; border:1px solid var(--borda); border-radius:12px; padding:14px; margin:0 0 14px; }
+  .cartao h2{ margin:0 0 10px; font-size:15px; color:var(--azul); }
+  label{ display:block; font-size:13px; color:var(--cinza); margin:10px 0 4px; }
+  select,input,textarea{ width:100%; padding:10px; border:1px solid var(--borda); border-radius:8px; font-size:15px; font-family:inherit; background:#fff; }
+  .linha{ display:flex; gap:8px; }
+  .linha > *{ flex:1; }
+  button{ width:100%; padding:14px; border:0; border-radius:10px; background:var(--azul); color:#fff; font-size:16px; font-weight:700; font-family:inherit; }
+  button.sec{ background:#fff; color:var(--azul); border:1px solid var(--azul); }
+  button:disabled{ opacity:.5; }
+  .barra{ height:16px; background:#e3e6ea; border-radius:8px; overflow:hidden; margin:12px 0 6px; }
+  .barra > div{ height:100%; width:0; background:var(--azul2); transition:width .2s; }
+  .passo{ font-size:13px; color:var(--cinza); min-height:18px; }
+  .pct{ font-weight:700; font-size:15px; }
+  .aviso{ font-size:12px; color:var(--cinza); line-height:1.4; margin-top:8px; }
+  .trava{ background:#eef4ec; border:1px solid #cfe2cf; color:#2c5c38; font-size:12px; border-radius:8px; padding:8px 10px; margin-top:10px; line-height:1.4; }
+  textarea{ height:150px; font-family:ui-monospace,Menlo,monospace; font-size:11px; white-space:pre; }
+  .nums{ display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--cinza); margin-top:8px; }
+  .nums b{ color:var(--preto); }
+  .esconde{ display:none; }
+</style>
+</head>
+<body>
+<header>🔧 DTCar Clone <small>— leitura de módulos</small></header>
+<main>
+
+  <div class="cartao" id="c-adaptador">
+    <h2>1 · Adaptador OBD</h2>
+    <div class="passo" id="bt-estado">Procurando adaptadores pareados…</div>
+    <label>Adaptador (ELM327)</label>
+    <select id="bt-lista"></select>
+    <div class="linha" style="margin-top:10px">
+      <button class="sec" id="bt-recarregar">Atualizar lista</button>
+      <button id="bt-conectar">Conectar</button>
+    </div>
+    <div class="trava">Este app só <b>lê</b>. Ele nunca apaga falha, grava ou regrava módulo — isso é barrado no próprio app, não dá para um site mandar.</div>
+  </div>
+
+  <div class="cartao esconde" id="c-condicao">
+    <h2>2 · Carro e condição da leitura</h2>
+    <label>Placa</label>
+    <input id="f-placa" placeholder="ABC1D23" autocapitalize="characters" maxlength="8">
+    <div class="linha">
+      <div>
+        <label>Motor</label>
+        <select id="f-motor"><option value="frio">Frio (parado a noite)</option><option value="quente">Quente</option></select>
+      </div>
+      <div>
+        <label>Estado</label>
+        <select id="f-estado"><option value="ligado">Ligado</option><option value="parado">Chave ligada, motor parado</option></select>
+      </div>
+    </div>
+    <label>Observação (opcional)</label>
+    <input id="f-obs" placeholder="ex.: acusando temperatura negativa">
+    <button id="bt-clonar" style="margin-top:14px">CLONAR</button>
+    <div class="aviso">A leitura varre o OBD padrão e tenta falar por UDS com cada módulo do grupo do motor. Leva alguns minutos; deixe o carro parado.</div>
+  </div>
+
+  <div class="cartao esconde" id="c-progresso">
+    <h2>3 · Clonando…</h2>
+    <div class="pct"><span id="p-pct">0</span>%</div>
+    <div class="barra"><div id="p-barra"></div></div>
+    <div class="passo" id="p-passo">—</div>
+    <div class="nums" id="p-nums"></div>
+  </div>
+
+  <div class="cartao esconde" id="c-fim">
+    <h2>4 · Clone pronto</h2>
+    <div class="nums" id="r-nums"></div>
+    <div class="linha" style="margin-top:12px">
+      <button id="bt-compartilhar">Enviar arquivo</button>
+      <button class="sec" id="bt-copiar">Copiar texto</button>
+    </div>
+    <label style="margin-top:12px">Prévia do arquivo</label>
+    <textarea id="r-texto" readonly></textarea>
+    <button class="sec" id="bt-novo" style="margin-top:10px">Clonar outro carro</button>
+  </div>
+
+</main>
+
+<script type="module">
+const Cap = window.Capacitor || {};
+const Plug = (Cap.Plugins && Cap.Plugins.DtcarObd) || (Cap.registerPlugin && Cap.registerPlugin("DtcarObd")) || null;
+const Fs = Cap.Plugins && Cap.Plugins.Filesystem;
+const Sh = Cap.Plugins && Cap.Plugins.Share;
+
+const $ = id => document.getElementById(id);
+const dorme = ms => new Promise(r => setTimeout(r, ms));
+const semApp = !Plug;
+
+/* ---------- ponte com o adaptador ---------- */
+let bruto = [];           // todo pedido/resposta, com tempo
+let t0 = 0;
+async function cmd(c, esperaMs=5000){
+  const ini = Date.now();
+  let resp = "", erro = null;
+  try{ const r = await Plug.comando({ cmd:c, esperaMs }); resp = (r && r.resposta) || ""; }
+  catch(e){ erro = (e && (e.message||e.code||e.errorMessage)) || String(e); }
+  bruto.push({ t: ini - t0, req:c, resp: limpa(resp), erro });
+  return limpa(resp);
+}
+const limpa = s => (s||"").replace(/\r/g,"\n").split("\n").map(x=>x.trim()).filter(Boolean).join(" | ");
+const temDado = s => s && !/NO DATA|ERROR|UNABLE|STOPPED|SEARCHING|\?/i.test(s) && /[0-9A-F]{2}/i.test(s);
+
+/* ---------- plano do clone ---------- */
+const PID_BASES = ["00","20","40","60","80","A0","C0"];
+const MODULOS = ["7E0","7E1","7E2","7E3","7E4","7E5","7E6","7E7"]; // grupo do motor no pino OBD (11 bits)
+const DIDS = [
+  ["F180","ID software de boot"],["F181","ID software aplicação"],["F182","ID dados aplicação"],
+  ["F186","sessão ativa"],["F187","nº de peça (montadora)"],["F188","nº software ECU"],
+  ["F189","versão software ECU"],["F18A","fornecedor do sistema"],["F18B","data de fabricação"],
+  ["F18C","nº de série da ECU"],["F190","VIN"],["F191","nº hardware ECU"],["F192","nº hardware fornecedor"],
+  ["F194","nº software fornecedor"],["F195","versão software fornecedor"],["F197","nome do sistema/motor"],
+  ["F199","data de programação"],["F19D","data de instalação"],["F18E","nº de peça manufatura"]
+];
+
+let previstos = 1, feitos = 0;
+function passo(txt){ $("p-passo").textContent = txt; }
+function avanca(n=1){ feitos+=n; const p = Math.min(99, Math.round(feitos/Math.max(previstos,feitos)*100)); $("p-pct").textContent=p; $("p-barra").style.width=p+"%"; }
+
+async function clonar(){
+  bruto = []; t0 = Date.now(); feitos = 0; previstos = PID_BASES.length + 10 + MODULOS.length;
+  const achados = { obd2:{}, modulos:[] };
+
+  // --- preparar adaptador ---
+  passo("Preparando o adaptador…");
+  for(const c of ["ATZ","ATE0","ATL0","ATS0","ATSP0"]) { await cmd(c, 3000); avanca(0); }
+  const id = (await cmd("ATI",3000)); const volt = (await cmd("ATRV",3000));
+  await cmd("ATH1",2000); await cmd("ATCAF1",2000);          // cabeçalho e montagem ISO-TP ligados
+  // primeiro pedido real: faz o adaptador achar o protocolo
+  passo("Descobrindo o protocolo do carro…");
+  await cmd("0100", 6000);
+  const proto = await cmd("ATDP",3000); const proton = await cmd("ATDPN",2000);
+  achados.adaptador = { id, voltagem:volt, protocolo:proto, protocoloNum:proton };
+  avanca(1);
+
+  // --- OBD-II no endereço de transmissão (7DF) ---
+  passo("Lendo OBD padrão (dados ao vivo)…");
+  const pidsSup = [];
+  for(const base of PID_BASES){
+    const r = await cmd("01"+base, 4000); avanca(1);
+    const bm = bitmap(r, "41", base); pidsSup.push(...bm.pids);
+    achados.obd2["supported_01"+base] = r;
+    if(!bm.mais) break;
+  }
+  for(const pid of pidsSup){ achados.obd2["01"+pid] = await cmd("01"+pid, 3000); }
+  passo("Lendo informação do veículo e falhas…");
+  for(const m9 of ["00","02","04","06","08","0A","0B"]) achados.obd2["09"+m9] = await cmd("09"+m9, 4000);
+  achados.obd2["03_confirmadas"] = await cmd("03", 4000);
+  achados.obd2["07_pendentes"]  = await cmd("07", 4000);
+  achados.obd2["0A_permanentes"]= await cmd("0A", 4000);
+  achados.obd2["0202_freeze"]   = await cmd("020200", 4000);
+  achados.obd2["0600_monitores"]= await cmd("0600", 4000);
+  avanca(3);
+
+  // --- UDS módulo por módulo ---
+  for(const base of MODULOS){
+    const resp = hexResp(base); // 7E0 -> 7E8
+    passo("Falando com o módulo "+base+"…");
+    await cmd("ATSH"+base, 1500); await cmd("ATCRA"+resp, 1500);
+    const vin = await cmd("22F190", 2500);           // sonda: existe e fala UDS?
+    const sessao = await cmd("1003", 2500);
+    const presente = temDado(vin) || temDado(sessao) || /50\s*03/i.test(sessao);
+    if(!presente){ bruto.push({t:Date.now()-t0, req:"("+base+")", resp:"ausente/sem UDS"}); avanca(1); continue; }
+
+    previstos += DIDS.length + 2;
+    const mod = { endereco:base, resposta:resp, sessao_1003:sessao, dids:{}, falhas_1902:null, calid:null, cvn:null };
+    await cmd("3E00", 1500);
+    for(const [did,nome] of DIDS){ mod.dids[did] = { nome, resp: await cmd("22"+did, 2500) }; avanca(1); }
+    mod.falhas_1902 = await cmd("1902FF", 3500); avanca(1);
+    // CALID/CVN também pelo OBD modo 09 já pegamos; aqui registramos o que o módulo dá por UDS
+    achados.modulos.push(mod); avanca(1);
+  }
+
+  await Plug.comando({cmd:"ATSH7DF",esperaMs:1000}).catch(()=>{}); // volta ao endereço geral
+
+  $("p-pct").textContent=100; $("p-barra").style.width="100%"; passo("Concluído.");
+  return montarArquivo(achados);
+}
+
+function bitmap(resp, servResp, base){
+  // procura a resposta "41 00 BE 3F B8 13" e devolve os PIDs com bit 1
+  const hx = (resp||"").replace(/[^0-9A-Fa-f]/g,"").toUpperCase();
+  const i = hx.indexOf(servResp + base);
+  const pids = []; let mais = false;
+  if(i>=0){
+    const dados = hx.substr(i+4, 8);
+    if(dados.length===8){
+      const n = parseInt(dados,16); const ini = parseInt(base,16);
+      for(let b=0;b<32;b++){ if(n & (1<<(31-b))){ const p = ini+1+b; if((p&0x1F)===0) mais=true; else pids.push(p.toString(16).toUpperCase().padStart(2,"0")); } }
+      mais = (n & 1) === 1;
+    }
+  }
+  return { pids, mais };
+}
+const hexResp = base => (parseInt(base,16)+8).toString(16).toUpperCase();
+
+/* ---------- arquivo ---------- */
+let arquivoTexto = "", arquivoNome = "";
+function montarArquivo(achados){
+  const placa = ($("f-placa").value||"SEM-PLACA").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const obj = {
+    formato: "dtcar-clone-obd/1",
+    gerado_em: new Date().toISOString(),
+    app: "DTCar Clone 0.1.0",
+    carro: {
+      placa,
+      condicao: { motor:$("f-motor").value, estado:$("f-estado").value, obs:$("f-obs").value||null }
+    },
+    adaptador: achados.adaptador,
+    resumo: {
+      pids_lidos: Object.keys(achados.obd2).filter(k=>/^01[0-9A-F]{2}$/.test(k)).length,
+      modulos_presentes: achados.modulos.length,
+      modulos_enderecos: achados.modulos.map(m=>m.endereco),
+      total_trocas: bruto.length
+    },
+    obd2: achados.obd2,
+    modulos: achados.modulos,
+    bruto // todo pedido/resposta com tempo — é o clone de verdade
+  };
+  arquivoTexto = JSON.stringify(obj, null, 1);
+  arquivoNome = "clone-"+placa+"-"+new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)+".json";
+  return obj;
+}
+
+/* ---------- UI ---------- */
+async function listar(){
+  if(semApp){ $("bt-estado").textContent = "Abra este app pelo APK (fora do APK não há Bluetooth)."; return; }
+  $("bt-estado").textContent = "Procurando adaptadores pareados…";
+  try{
+    const perm = await Plug.permissao();
+    if(!perm.concedida){ const p = await Plug.pedirPermissao(); if(!p.concedida){ $("bt-estado").textContent="Permita o Bluetooth para continuar."; return; } }
+    const r = await Plug.listar();
+    const sel = $("bt-lista"); sel.innerHTML="";
+    (r.aparelhos||[]).forEach(a=>{ const o=document.createElement("option"); o.value=a.endereco; o.textContent=a.nome; sel.appendChild(o); });
+    $("bt-estado").textContent = (r.aparelhos||[]).length ? "Escolha o adaptador e conecte." : "Nenhum adaptador pareado. Pareie o ELM327 nos Ajustes do Android.";
+  }catch(e){ $("bt-estado").textContent = "Erro: "+(e.message||e.code||e); }
+}
+
+$("bt-recarregar").onclick = listar;
+$("bt-conectar").onclick = async () => {
+  const end = $("bt-lista").value; if(!end) return;
+  $("bt-estado").textContent = "Conectando…"; $("bt-conectar").disabled=true;
+  try{ await Plug.conectar({endereco:end}); $("c-adaptador").querySelector(".trava").scrollIntoView(); $("c-condicao").classList.remove("esconde"); $("bt-estado").textContent="Conectado."; }
+  catch(e){ $("bt-estado").textContent = "Não conectou: "+(e.message||e.code||e); }
+  $("bt-conectar").disabled=false;
+};
+$("bt-clonar").onclick = async () => {
+  $("c-condicao").classList.add("esconde"); $("c-progresso").classList.remove("esconde");
+  try{
+    const obj = await clonar();
+    $("r-nums").innerHTML = `<span>PIDs lidos: <b>${obj.resumo.pids_lidos}</b></span><span>Módulos: <b>${obj.resumo.modulos_presentes}</b> (${obj.resumo.modulos_enderecos.join(", ")||"—"})</span><span>Trocas: <b>${obj.resumo.total_trocas}</b></span>`;
+    $("r-texto").value = arquivoTexto.slice(0, 4000) + (arquivoTexto.length>4000 ? "\n… (arquivo completo no botão Enviar)" : "");
+    $("c-progresso").classList.add("esconde"); $("c-fim").classList.remove("esconde");
+  }catch(e){ passo("Erro: "+(e.message||e.code||e)); }
+};
+$("bt-compartilhar").onclick = async () => {
+  try{
+    if(Fs && Sh){
+      await Fs.writeFile({ path:arquivoNome, data:arquivoTexto, directory:"DOCUMENTS", encoding:"utf8" });
+      const uri = await Fs.getUri({ path:arquivoNome, directory:"DOCUMENTS" });
+      await Sh.share({ title:"Clone OBD "+arquivoNome, url:uri.uri });
+    } else if(navigator.share){ await navigator.share({ title:arquivoNome, text:arquivoTexto }); }
+    else { baixar(); }
+  }catch(e){ baixar(); }
+};
+function baixar(){ const b=new Blob([arquivoTexto],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=arquivoNome; a.click(); }
+$("bt-copiar").onclick = async () => { try{ await navigator.clipboard.writeText(arquivoTexto); $("bt-copiar").textContent="Copiado!"; setTimeout(()=>$("bt-copiar").textContent="Copiar texto",1500);}catch(e){} };
+$("bt-novo").onclick = () => { $("c-fim").classList.add("esconde"); $("c-condicao").classList.remove("esconde"); $("p-pct").textContent=0; $("p-barra").style.width="0%"; };
+
+listar();
+</script>
+</body>
+</html>

@@ -696,15 +696,15 @@ try:
         pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000); tx = textos(pg)
         t('CONECTADO' in tx and 'ISO 15765-4' in tx, 'conecta e mostra o protocolo do carro: %s' % ('ISO 15765-4' in tx))
         # TELA LIMPA (retorno do Danilo, 21/11/2026): no menu, só as três leituras do dia a dia; o resto dentro de botão
-        pg.evaluate("() => document.querySelectorAll('.grupo-abrir[aria-expanded=\"true\"]').forEach(e => e.click())"); pg.wait_for_timeout(150)
+        pg.evaluate("() => document.querySelectorAll('#obd-tela .btn-barra[aria-expanded=\"true\"]').forEach(e => e.click())"); pg.wait_for_timeout(150)
         conta = lambda q: pg.evaluate('q => document.querySelectorAll(q).length', q)
-        t(conta('#obd-acoes .btn-barra') == 3 and conta('#obd-foto') == 0 and conta('#obd-apagar') == 0 and conta('#obd-conf') == 0 and conta('#obd-escolha') == 0 and conta('#obd-desligar') == 0, 'menu limpo: só combustível, dados ao vivo e ler falhas à vista (%d botões)' % conta('#obd-acoes .btn-barra'))
+        t(conta('#obd-acoes .btn-barra') == 6 and conta('#obd-acoes .nota:not(:empty)') == 0 and conta('#obd-avancado') == 0 and conta('#obd-foto') == 0 and conta('#obd-apagar') == 0 and conta('#obd-conf') == 0 and conta('#obd-escolha') == 0 and conta('#obd-desligar') == 0, 'menu só com botões: 3 leituras + MAIS LEITURAS, SERVIÇOS AVANÇADOS e OUTROS MÓDULOS, sem aviso embaixo (%d botões)' % conta('#obd-acoes .btn-barra'))
         if os.environ.get('FOTO_MENU'): pg.screenshot(path=os.environ['FOTO_MENU'], full_page=True)
         pg.evaluate("() => document.querySelector('#obd-mais-abrir').click()"); pg.wait_for_timeout(150)
         t(conta('#obd-foto') == 1 and conta('#obd-cilindros') == 1 and conta('#obd-testes') == 1, 'o botão abre as outras leituras')
         pg.evaluate("() => document.querySelector('#obd-outros-abrir').click()"); pg.wait_for_timeout(150)
         t(conta('#obd-ir-modulos') == 1 and conta('#obd-ir-aprendizados') == 1 and conta('#obd-ir-atuadores') == 1, 'e há o caminho para Módulos (ABS), Atuadores e Aprendizados')
-        pg.evaluate("() => document.querySelectorAll('.grupo-abrir[aria-expanded=\"true\"]').forEach(e => e.click())"); pg.wait_for_timeout(150)
+        pg.evaluate("() => document.querySelectorAll('#obd-tela .btn-barra[aria-expanded=\"true\"]').forEach(e => e.click())"); pg.wait_for_timeout(150)
         cmds = pg.evaluate("window.__obd.cmds")
         t(cmds[:6] == ['ATZ', 'ATE0', 'ATL0', 'ATS0', 'ATH0', 'ATSP0'], 'prepara o adaptador na ordem certa: %s' % cmds[:6])
         # falhas
@@ -989,7 +989,7 @@ try:
         t('a mais' in to, 'módulo acima do cadastro é o normal, e a tela explica: %s' % [l for l in to.split('\n') if 'a mais' in l][:1])
         t('01A6' in pg.evaluate("window.__obd.cmds"), 'o odômetro é pedido de verdade')
         # SERVIÇOS AVANÇADOS (20/11/2026): calibração, teste drive e contadores de uso
-        t(pg.query_selector('#obd-avancado'), 'tem o quadro de serviços avançados')
+        t(pg.evaluate("() => !!document.querySelector('#obd-avancado-abrir, #obd-avancado')"), 'tem o quadro de serviços avançados')
         t(pg.query_selector('#obd-conf') and pg.query_selector('#obd-calib') and pg.query_selector('#obd-ciclo') and pg.query_selector('#obd-contadores'),
           'com chassi, calibração, teste drive e contadores')
         pg.click('#obd-calib'); pg.wait_for_selector('#obd-r-calib', timeout=25000)
@@ -1069,7 +1069,6 @@ try:
         # conferência de parâmetro, os dois gravados de propósito pelo próprio teste
         outras = [p for p in f.escritas() if 'obd_leituras' not in p[1]]
         t(not outras, 'a tela do OBD só grava o registro do apagamento, mais nada: %s' % outras)
-        t('ficam em Módulos do carro' in textos(pg), 'a tela diz que ABS, câmbio e airbag ficam em Módulos do carro')
         t(not er, 'tela do OBD sem erro de página: %s' % er)
 
         # ---- A CONEXÃO SOBREVIVE À TROCA DE TELA (20/11/2026) ----

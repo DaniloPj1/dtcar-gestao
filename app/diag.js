@@ -562,6 +562,13 @@ function Obd() {
   const noBanco = v && v.id ? dados.veiculos.find(x => x.id === v.id) : null;
   const chassiCadastro = String((noBanco && noBanco.chassi) || (v && v.chassi) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 
+  const botoesAvancados = html`
+        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI, MONITORES E ODÔMETRO</button>
+        <button type="button" class="btn-barra claro" id="obd-laudo" onClick=${gerarLaudo}>LAUDO DO CARRO (SELADO)</button>
+        <button type="button" class="btn-barra claro" id="obd-calib" onClick=${lerCalib}>CALIBRAÇÃO DO MÓDULO (REPROGRAMAÇÃO)</button>
+        <button type="button" class="btn-barra claro" id="obd-ciclo" onClick=${lerCiclo}>TESTE DRIVE: MONITORES DESTE CICLO</button>
+        <button type="button" class="btn-barra claro" id="obd-contadores" onClick=${lerContadores}>CONTADORES DE USO DOS MONITORES</button>
+`;
   return html`<${Tela} tela="obd" ajuda="Encaixe o adaptador na tomada do carro, ligue a ignição (chave na posição 2) e conecte. O app lê o módulo do MOTOR: códigos de falha, dados ao vivo, chassi, prontidão dos monitores, a foto do momento da falha e os testes de bordo. ABS, airbag e câmbio não saem por aqui: isso continua no scanner da oficina. Nesta etapa nada é gravado e nenhuma falha é apagada.">
 
     ${!temPlugin ? html`<${Cartao} titulo="Precisa do APK novo">
@@ -583,8 +590,8 @@ function Obd() {
               <b>${ap.nome}</b><span>${ap.endereco}</span></button>`)}
             <div class="nota">Toque no seu adaptador para conectar.</div></div>` : null}
         ` : html`
-          <button type="button" class="grupo-abrir" id="obd-adaptador-abrir" aria-expanded=${aberto.adaptador} onClick=${() => abrirGrupo("adaptador")}>
-            <span><span class="selo">CONECTADO</span>${lig.nome}</span><i>${aberto.adaptador ? "fechar" : "detalhes"}</i></button>
+          <button type="button" class="btn-barra claro" id="obd-adaptador-abrir" aria-expanded=${aberto.adaptador} onClick=${() => abrirGrupo("adaptador")}>
+            <span class="selo">CONECTADO</span>${lig.nome}</button>
           ${lig.aviso ? html`<div class="erro" id="obd-clone">${lig.aviso}</div>` : null}
           ${aberto.adaptador ? html`
             ${lig.protocolo ? html`<${KV} a="Protocolo" b=${lig.protocolo} p />` : null}
@@ -605,42 +612,28 @@ function Obd() {
           ${falhasVivo && falhasVivo.novas.length ? "FALHA NOVA AGORA (" + falhasVivo.novas.length + ") · VER"
             : falhasVivo && falhasVivo.codigos.length ? "FALHA NO MÓDULO (" + falhasVivo.codigos.length + ") · VER"
             : "LER FALHAS"}</button>
-        ${!foco ? html`<button type="button" class="grupo-abrir" id="obd-mais-abrir" aria-expanded=${aberto.mais} onClick=${() => abrirGrupo("mais")}>
-          <span>Mais leituras${podeApagar ? " e apagar falhas" : ""}</span><i>${aberto.mais ? "fechar" : "abrir"}</i></button>` : null}
+        ${!foco ? html`<button type="button" class="btn-barra claro" id="obd-mais-abrir" aria-expanded=${aberto.mais} onClick=${() => abrirGrupo("mais")}>MAIS LEITURAS</button>` : null}
         ${foco || aberto.mais ? html`
         <button type="button" class="btn-barra claro" id="obd-foto" onClick=${lerFoto}>FOTO DO MOMENTO DA FALHA</button>
         <button type="button" class="btn-barra claro" id="obd-cilindros" onClick=${lerCilindros}>FALHA POR CILINDRO</button>
         <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
         ${podeApagar ? html`<button type="button" class="btn-barra apagar" id="obd-apagar" onClick=${abrirApagar}>APAGAR FALHAS (FICA REGISTRADO)</button>` : null}` : null}
+        ${!foco ? html`<button type="button" class="btn-barra claro" id="obd-avancado-abrir" aria-expanded=${aberto.avancado} onClick=${() => abrirGrupo("avancado")}>SERVIÇOS AVANÇADOS</button>` : null}
+        ${!foco && aberto.avancado ? html`${botoesAvancados}
+          <button type="button" class="btn-barra claro" id="obd-ir-parametros" onClick=${() => ir("parametros")}>PARÂMETROS DE REFERÊNCIA</button>` : null}
+        ${!foco && outrasTelas.length ? html`<button type="button" class="btn-barra claro" id="obd-outros-abrir" aria-expanded=${aberto.outros} onClick=${() => abrirGrupo("outros")}>OUTROS MÓDULOS</button>` : null}
+        ${!foco && aberto.outros ? outrasTelas.map(o => html`<button key=${o.r} type="button" class="btn-barra claro" id=${"obd-ir-" + o.r} onClick=${() => ir(o.r)}>${o.rotulo}</button>`) : null}
         <div class="nota">${falhasVivo && falhasVivo.novas.length ? "Apareceu código com o motor trabalhando. Toque no botão vermelho para ver quais."
           : vivo && vivo.rodando ? "Pedir outra leitura para os dados ao vivo: o adaptador atende um pedido por vez."
           : ""}</div>
       </${Cartao}>` : null}
 
-      ${lig && !ocupado ? html`<${Cartao} titulo="Serviços avançados" id="obd-avancado">
-        ${!foco ? html`<button type="button" class="grupo-abrir" id="obd-avancado-abrir" aria-expanded=${aberto.avancado} onClick=${() => abrirGrupo("avancado")}>
-          <span>Chassi, laudo, calibração, monitores, parâmetros e escolha das leituras</span><i>${aberto.avancado ? "fechar" : "abrir"}</i></button>` : null}
-        ${foco || aberto.avancado ? html`
-        <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI, MONITORES E ODÔMETRO</button>
-        <button type="button" class="btn-barra claro" id="obd-laudo" onClick=${gerarLaudo}>LAUDO DO CARRO (SELADO)</button>
-        <button type="button" class="btn-barra claro" id="obd-calib" onClick=${lerCalib}>CALIBRAÇÃO DO MÓDULO (REPROGRAMAÇÃO)</button>
-        <button type="button" class="btn-barra claro" id="obd-ciclo" onClick=${lerCiclo}>TESTE DRIVE: MONITORES DESTE CICLO</button>
-        <button type="button" class="btn-barra claro" id="obd-contadores" onClick=${lerContadores}>CONTADORES DE USO DOS MONITORES</button>
-        <div class="nota">Leituras de perícia, não de reparo do dia: dizem se o módulo foi reprogramado, se o reparo fechou o monitor no test-drive e se os monitores deste carro chegam a rodar no uso real.</div>` : null}
-      </${Cartao}>` : null}
-
-      ${/* O caminho para o resto do carro: quem está lendo o motor não achava ABS, câmbio nem aprendizado
-            (retorno do Danilo, 21/11/2026). Só aparecem as telas que a pessoa tem liberadas. */
-        !foco && !ocupado && outrasTelas.length ? html`<${Cartao} titulo="Outros módulos e funções" id="obd-outros">
-        <button type="button" class="grupo-abrir" id="obd-outros-abrir" aria-expanded=${aberto.outros} onClick=${() => abrirGrupo("outros")}>
-          <span>${outrasTelas.map(o => o.curto).join(", ")}</span><i>${aberto.outros ? "fechar" : "abrir"}</i></button>
-        ${aberto.outros ? outrasTelas.map(o => html`<button key=${o.r} type="button" class="btn-barra claro" id=${"obd-ir-" + o.r} onClick=${() => ir(o.r)}>${o.rotulo}</button>`) : null}
-      </${Cartao}>` : null}
+      ${lig && !ocupado && foco ? html`<${Cartao} titulo="Serviços avançados" id="obd-avancado">${botoesAvancados}</${Cartao}>` : null}
 
       ${/* Os parâmetros saíram daqui e viraram tela (20/11/2026): eram um cartão para abrir e fechar
             no meio da leitura, e é o que se consulta para discutir um laudo — merece tela própria.
             Aqui fica só o caminho, para quem está lendo o carro e quer conferir a referência. */
-        !ocupado && (!lig || aberto.avancado) ? html`<button type="button" class="btn-barra claro" id="obd-ir-parametros" onClick=${() => ir("parametros")}>
+        !ocupado && (!lig || foco) ? html`<button type="button" class="btn-barra claro" id="obd-ir-parametros" onClick=${() => ir("parametros")}>
           <${Ic} n="sliders" t=${20} />VER OS PARÂMETROS DE REFERÊNCIA</button>` : null}
 
       ${lig && !ocupado && disponiveis.length && (foco || aberto.avancado) ? html`<${Cartao} titulo="Quais leituras mostrar" id="obd-escolha">
@@ -880,7 +873,7 @@ function Obd() {
         ${res.d.testes.length ? html`<div class="nota">Monitor que ainda não rodou costuma devolver um <b>valor padrão de fábrica</b>, não uma medição (a Ford documenta isso para o EVAP). Antes de usar um número daqui, veja em "Teste drive" se aquele monitor completou.</div>` : null}
       </${Cartao}>` : null}
 
-      <div class="nota" style="padding:0 2px 4px">Esta tela lê motor e emissões. ABS, câmbio e airbag ficam em Módulos do carro.</div>
+
     </div>` : null}
   </${Tela}>`;
 }

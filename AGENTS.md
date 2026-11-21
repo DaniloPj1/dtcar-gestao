@@ -986,3 +986,66 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - `avisoOleo(resumo)`: quando o resumo tem, para a mesma cilindrada (turbo e aspirado juntos), respostas sem viscosidade em comum, devolve o texto "Atenção: …" com a resposta de cima e as outras (motor, período e fonte). Aparece na tela Óleo e filtros (`#of-atencao`), no quadro "Preencher pelo catálogo" da ficha (`#fo-atencao`) e no conector (`oleo_atencao`, PR seguinte, com o commit do catálogo trocado).
 - Ordem do resumo: linha cujo período contém o ano vem antes; depois o período mais curto; depois a fonte mais nova (a tabela nova às vezes estica o período).
 - `CORRECOES_OLEO` em `catalogo/gerar.py`: correções de período conferidas (Onix 1.0 3 cilindros da Texaco: 2020 em diante, não 2015). Regenerar com `python3 catalogo/gerar.py catalogo js/catalogodados.js && python3 tools_sw.py`.
+
+## Diagnóstico OBD: etapas 1 a 4, o que está construído (21/11/2026)
+
+Branch `obd-etapas-1-4`, PR #167. **Não está na main.** Depende do `supabase/v63.sql` (o Danilo roda) e de APK novo.
+
+### O que o app passa a fazer
+
+**Ler o carro (OBD)**
+- Código de falha explicado: descrição, causas prováveis e a fonte escrita (`js/obdfalhas.js`, dados em `js/falhas/`).
+- Falhas separadas por módulo quando mais de um responde (ATH1 + junção ISO-TP). Só aparece quem respondeu.
+- Dados ao vivo em LISTA, PONTEIRO, DIGITAL e GRÁFICO. Gráfico: até 3 gráficos, leituras da mesma unidade juntas (até 4 linhas).
+- "Esta leitura vale?": adaptador, chassi lido x cadastro (`js/obdconfere.js`).
+- O carro comparado com ele mesmo: resumo por sinal e regime, guardado sozinho; compara a partir da 3ª leitura (`js/obdcompara.js`).
+- Laudo selado (SHA-256) com PDF (`js/obdlaudo.js`, `js/pdflaudo.js`).
+
+**Módulos do carro**
+- LER TODOS OS MÓDULOS: pelo mapa do modelo (76 modelos do OBDb, `tools_obdb.py` → `js/modelos/`) mais os endereços padrão.
+- Leituras ao vivo de cada módulo; as 4 rodas do ABS lado a lado e no mesmo gráfico (56 dos 76 modelos têm).
+- Carro sem mapa: mapeamento em segundo plano, só leitura, só com o carro parado (`js/obdmapa.js`). Sem botão.
+- O caderno do carro: toda conversa de leitura com módulo é anotada e gravada sozinha (tipo `mapa`).
+
+**Atuadores e aprendizados**
+- Honda com nome (`js/obdhonda.js`): 4 atuadores e 10 funções (VTC, CVT 1ª etapa, manutenção A e 1 a 5, pastilha entrar/sair).
+  Condições confirmadas uma a uma, valor antigo lido e guardado, item do painel só se o carro disser que tem.
+- Todo teste, aprendizado e apagamento por módulo fica registrado.
+
+**Programar bico**
+- Gravação voltou, no módulo do motor apenas, com login do administrador na hora.
+- A opção de gravar só aparece depois de o módulo dizer que aceita (pergunta que não grava: `sondarGravacao`).
+- Lê e guarda o valor antigo, confere lendo de volta, DESFAZER.
+
+### O que NÃO existe, e por quê
+- Tabela de "em que campo cada ECU guarda o código do bico": nenhuma base aberta tem. O campo é digitado, do manual.
+- Destravar módulo (0x27): o app não tem a chave de nenhuma família. Módulo que exige destravar não ganha o botão de gravar.
+- Conversão do código Delphi de 20 caracteres: não feita.
+- Segunda etapa do aprendizado do CVT: a ferramenta de origem não reproduz.
+- Tradução: 3.276 de 11.275 descrições genéricas e 67% das linhas de causa estão em português conferido
+  (665 de 1.462 códigos com causa inteiros em português). O resto aparece em inglês, marcado. Códigos de montadora (31.267) em inglês.
+- Dados baixados que NÃO servem pelo adaptador da tomada OBD: os 48.799 sinais de rede CAN (precisam escutar o barramento, que o
+  gateway do carro não entrega na tomada) e as 16.176 faixas VAG (são blocos de medição do protocolo antigo da VW, que o ELM327 não fala).
+- Laudo pelo WhatsApp da oficina como anexo do conector: não feito (o PDF sai pelo compartilhar do celular).
+- Carro gravado para reproduzir no teste: o caderno já guarda a conversa crua; falta gravar um carro de verdade.
+- Nada disto foi testado em carro de verdade. Tudo foi conferido contra adaptador e módulos simulados.
+
+### Segurança (portão no Android, `ObdPlugin.java`)
+- `comando()` só lê: 01, 02, 03, 06, 07, 09, 0A, 19, 21 (1 byte), 22, 24, 3E.
+- Métodos próprios: `apagar`, `atuar`, `rotina` (0x0200–0xDFFF), `reiniciarModulo`, `gravarDado`, `sondarGravacao`.
+- `gravarDado`: só módulo do motor (7E0 ou 18DA10F1), nunca F180–F1FF, lê o valor antigo antes, até 32 bytes.
+- Proibidos: 34/35/36/37, sessão de programação (10 02), destravar (27).
+
+### Banco
+`supabase/v63.sql`: tipos novos na `obd_leituras` (atuar, aprender, apagar_modulo, gravar_bico, sessao, laudo, mapa) e colunas
+`dados` e `selo`. Sem tabela nova. Antes do SQL o app funciona: o que o banco recusa fica no aparelho e sobe sozinho.
+
+### Estrutura
+`app/telas.js` (oficina e rotas), `app/comum.js` (moldura), `app/diag.js` (telas do carro), `app/diagpartes.js`, `app/diagcarro.js`,
+`app/diaghonda.js`.
+
+### Testes
+`teste_app_sistema.py` 544 · `teste_obd_java.sh` 448 · `teste_obd.mjs` 259 · `teste_uds.mjs` 130 · `teste_bico.mjs` 105 ·
+`teste_obdextra.mjs` · `teste_obdmodelo.mjs` 28 · `teste_obdfalhas.mjs` 16 · `teste_v63.sh` (banco inteiro) · `teste_celular.py`.
+
+- **Mudou `catalogo/falhas/*.tsv` ou `catalogo/traduz_sae.py`?** `python3 -I catalogo/gerar_falhasdados.py`. **Modelo novo do OBDb?** baixe o `signalsets/v3/default.json` como `<Marca-Modelo>.json` e rode `python3 -I tools_obdb.py <pasta>`.

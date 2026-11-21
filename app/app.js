@@ -6,7 +6,7 @@
 (function () {
   'use strict';
 
-  var VERSAO = '1.5.1';
+  var VERSAO = '1.6.0';
   var SERVIDOR = 'br.com.dtcarcentroautomotivo.gestao'; // nome do "cofre" da digital no aparelho
   var CH_DIGITAL = 'dtcar-app-digital';   // "1" quando a entrada com a digital está ligada
   var CH_RECUSOU = 'dtcar-app-digital-recusada'; // "1" quando a pessoa disse "agora não"

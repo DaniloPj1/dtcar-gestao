@@ -81,7 +81,16 @@ public class ObdPlugin extends Plugin {
         "ATZ", "ATE0", "ATL0", "ATS0", "ATH0", "ATH1", "ATSP0", "ATDP", "ATDPN", "ATRV", "ATI",
         // Para falar com UM módulo (UDS) o adaptador precisa de cabeçalho, filtro e controle de
         // fluxo. Continua sendo ajuste do próprio ELM327: nenhum destes sai para o barramento.
-        "ATCAF0", "ATCAF1", "ATAL", "ATAR", "ATCRA", "ATSP6", "ATSP7", "ATSP8", "ATSP9"
+        //
+        // ATCAF0 ficou FORA de propósito, e a razão é a parte mais importante deste arquivo:
+        // com a formatação automática LIGADA (ATCAF1), o adaptador monta o quadro e o primeiro byte
+        // do que o site manda é o SERVIÇO — que é justamente o que permitido() confere. Com ela
+        // DESLIGADA, o primeiro byte passa a ser o byte de controle do ISO-TP e o serviço escorrega
+        // para a segunda posição. Aí "022EF190..." seria conferido como serviço 02 (foto do momento
+        // da falha, que é de leitura) e chegaria ao barramento como 2E, GRAVAR NO MÓDULO. O mesmo
+        // truque abriria o 34 e a regravação. Então ATCAF0 não entra, e permitido() só é confiável
+        // porque ele não entra.
+        "ATCAF1", "ATAL", "ATAR", "ATCRA", "ATSP6", "ATSP7", "ATSP8", "ATSP9"
     ));
 
     /**

@@ -23,8 +23,17 @@ public class VerificaListaBranca {
     /* ---------------- UDS: o que a camada nova precisa, e o que ela não pode ---------------- */
     // Ajuste do adaptador para falar com UM módulo. Nada disto sai para o barramento.
     for (String c : new String[]{"ATSH7E0","ATSH18DB33F1","ATCRA7E8","ATCRA18DAF110","ATCRA","ATFCSH7E0",
-                                 "ATFCSD300000","ATFCSM1","ATST64","ATAT1","ATCAF0","ATCAF1","ATAL","ATAR","ATSP6"})
+                                 "ATFCSD300000","ATFCSM1","ATST64","ATAT1","ATCAF1","ATAL","ATAR","ATSP6"})
       chk("permite ajuste do UDS " + c, ObdPlugin.permitido(c));
+    /* ATCAF0 é RECUSADO, e isto é o que faz todo o resto do portão valer.
+     * Com a formatação automática ligada (ATCAF1) o primeiro byte do que o site manda é o SERVIÇO,
+     * que é o que permitido() confere. Desligada, o primeiro byte vira o controle do ISO-TP e o
+     * serviço escorrega um byte: "022EF190" passaria como serviço 02 (leitura) e chegaria ao carro
+     * como 2E, GRAVAR. Se alguém puser ATCAF0 na lista, este teste reprova — e tem de reprovar. */
+    chk("RECUSA ATCAF0 (desligar a formatação deslocaria o byte do serviço)", !ObdPlugin.permitido("ATCAF0"));
+    chk("RECUSA ATCAF0 com espaço", !ObdPlugin.permitido("AT CAF 0"));
+    chk("e o pedido que o truque usaria continua sendo lido pelo primeiro byte",
+      ObdPlugin.permitido("022EF190") && !ObdPlugin.permitido("2EF19000"));
     // Valor torto no ajuste não passa: nem letra fora do hexadecimal, nem tamanho errado, nem modo inexistente.
     for (String c : new String[]{"ATSHZZZ","ATSH7E","ATSH7E00","ATCRAZZZ","ATFCSM3","ATAT3","ATSTZZ","ATSH"})
       chk("RECUSA ajuste torto " + c, !ObdPlugin.permitido(c));

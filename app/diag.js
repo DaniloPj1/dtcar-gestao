@@ -13,7 +13,7 @@ import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
 import * as registro from "../js/obdregistro.js";
-import { usarExplicacoes, FalhaExplicada, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
 import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
 import { HondaLista, Condicoes } from "./diaghonda.js";
@@ -642,6 +642,7 @@ function Obd() {
             <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>
             <${FalhaExplicada} e=${explicadas[f.codigo]} /></div>`)}
         </div>`)}
+        ${res.d.falhas.length ? html`<${NotaDasFontes} />` : null}
         ${res.d.falhas.length ? html`<div class="nota">O código é o que o módulo gravou. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
         ${res.d.variosModulos && res.d.porModulo && res.d.porModulo.length > 1 ? html`<div class="nota">Mais de um módulo respondeu: as falhas estão separadas por módulo. Só aparece quem respondeu.</div>` : null}
         ${res.d.variosModulos && !(res.d.porModulo && res.d.porModulo.length > 1) ? html`<div class="nota">Mais de um módulo do carro respondeu, mas este adaptador não deixou separar: a lista junta os códigos de todos.</div>` : null}
@@ -999,10 +1000,10 @@ function Modulos() {
           ${!falhas.length ? html`<div class="nota">Nenhuma falha gravada neste módulo.</div>` : falhas.map(f => html`
             <div key=${f.rotulo} class="diag-falha">
               <div class="diag-falha-topo"><b>${f.rotulo}</b>${f.pedeLuz ? html`<span class="selo ruim">LUZ NO PAINEL</span>` : null}</div>
-              ${f.causa ? html`<div class="diag-falha-causa">${f.causa}</div>` : html`<div class="nota">O tipo ${hexDoTipo(f.tipoFalha)} não está na tabela da norma que o app tem: o número fica aí, sem palpite de causa.</div>`}
-              <div class="nota">${f.situacaoTexto}</div>
               <${FalhaExplicada} e=${explicadasMod[f.codigo]} />
+              <div class="diag-falha-tipo">${f.causa ? html`Tipo de falha: <b>${f.causa}</b>. ` : html`Tipo ${hexDoTipo(f.tipoFalha)}, que a tabela da norma do app não tem. `}Situação: ${f.situacaoTexto}.</div>
             </div>`)}
+          ${falhas.length ? html`<${NotaDasFontes} />` : null}
           ${falhas.length && podeApagar ? html`<button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${apagar} disabled=${!!ocupado || !!st.dono}>APAGAR AS FALHAS DESTE MÓDULO</button>` : null}
           ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}
           ${regApagar ? html`<p class="nota" id="mod-reg-apagar">Apagamento anterior: ${regApagar}</p>` : null}

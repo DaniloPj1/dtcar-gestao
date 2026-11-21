@@ -93,7 +93,10 @@ const SECAO_TITULO = { viu: "O que o módulo viu", teste: "Em que condição ele
   ciclos: "Quando verifica", grava: "Quando grava", apaga: "Como o código sai", emergencia: "O que o módulo faz em emergência" };
 
 function montar(codigo, v, origem, marcaNome) {
-  const causas = (v.c || []).map(c => ({ nivel: c[0], texto: c[1], pt: !!c[2] }));
+  let causas = (v.c || []).map(c => ({ nivel: c[0], texto: c[1], pt: !!c[2] }));
+  // Lista que só tem sub-itens (sem o título de cima) é uma lista simples: sem isso a tela desenha
+  // tudo recuado, como se faltasse o começo.
+  if (causas.length && causas.every(c => c.nivel > 0)) causas = causas.map(c => ({ ...c, nivel: 0 }));
   const secoes = Object.keys(v.x || {}).filter(k => SECAO_TITULO[k]).map(k => ({
     chave: k, titulo: SECAO_TITULO[k], linhas: v.x[k].map(l => ({ texto: l[0], pt: !!l[1] })) }));
   const temIngles = (v.d && !v.p) || causas.some(c => !c.pt) || secoes.some(s => s.linhas.some(l => !l.pt));
@@ -105,6 +108,9 @@ function montar(codigo, v, origem, marcaNome) {
       : ORIGEM[origem],
   };
   if (causas.length) out.origemCausas = ORIGEM.honda;
+  // A fonte em poucas palavras, para ficar embaixo de CADA código sem repetir o parágrafo inteiro.
+  out.fonte = (origem === "marca" ? "Tabela da " + marcaNome : origem === "familia" ? "Tabela da " + marcaNome + " (mesma família)" : origem === "geral" ? "Lista geral, sem marca" : "Norma SAE")
+    + (causas.length ? "; causas da base da Honda" : "") + (temIngles ? "; parte ainda em inglês" : "");
   return out;
 }
 const nada = (codigo, motivo) => ({ codigo, achou: false, descricao: "", pt: false, causas: [], secoes: [], emIngles: false,
@@ -146,3 +152,6 @@ export async function explicarTodos(falhas, opc = {}) {
   const r = await Promise.all(codigos.map(c => explicar(c, opc)));
   return Object.fromEntries(r.map(x => [x.codigo, x]));
 }
+
+/** O aviso que vale para o cartão inteiro de falhas: dito uma vez, não embaixo de cada código. */
+export const NOTA_DAS_FONTES = "A descrição genérica (norma SAE) vale em qualquer carro. As causas vêm da base de diagnóstico da Honda: em outra marca servem de roteiro, não de definição. Código de montadora traz só a descrição, da tabela aberta da marca, e não é conferido para o módulo deste carro.";

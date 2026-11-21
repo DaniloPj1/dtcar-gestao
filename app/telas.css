@@ -408,7 +408,7 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .fx{margin:4px 0 2px;font-size:14px;line-height:1.35}
 .fx-desc{font-weight:600;color:var(--preto,#16191d)}
 .fx-pecas{margin-top:2px;color:#4a5560}
-.fx-t{margin-top:8px;font-size:12px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#5b6672}
+.fx-t{margin-top:8px;font-size:13.5px;font-weight:800;color:var(--tinta)}
 .fx-causas ul{margin:3px 0 0;padding:0;list-style:none}
 .fx-causas li{position:relative;padding:3px 0 3px 14px}
 .fx-causas li::before{content:"";position:absolute;left:2px;top:11px;width:5px;height:5px;background:var(--azul,#174f94)}
@@ -473,3 +473,6 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .laudo-linha{padding:2px 0;font-size:14px;line-height:1.35;white-space:pre-wrap}
 .laudo-nota{margin-top:8px;font-size:12.5px;color:var(--cinza-nota)}
 .laudo-selo{margin:10px 0 4px;padding:7px 9px;border:1.5px solid var(--tinta);font-size:13px;font-variant-numeric:tabular-nums;word-break:break-all}
+.fx-nota-fontes{margin-top:10px;padding-top:8px;border-top:1px solid #e7eaee;font-size:12.5px;line-height:1.35;color:#5b6672}
+.graf-escolha .graf-abrir{border-style:dashed;border-color:var(--azul);color:var(--azul);background:#fff}
+.diag-falha-tipo{margin-top:1px;font-size:13px;color:#4a5560}

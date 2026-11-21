@@ -14,7 +14,7 @@ import * as varredura from "../js/obdvarredura.js";
 import * as grafico from "../js/obdgrafico.js";
 import * as cadernoRegras from "../js/obdmapa.js";
 import { Ic, Cartao, usarPlaca, BuscaPlaca, Veiculo } from "./comum.js";
-import { usarExplicacoes, FalhaExplicada, Grafico } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Grafico } from "./diagpartes.js";
 
 /** O mapa do modelo do carro da vez (ou nada, se não há mapa para ele). */
 export function usarMapa(carro) {
@@ -82,17 +82,17 @@ export function CarroInteiro({ st, mapa, aoAbrir, aoVarrer }) {
         : html`<div class="carregando" id="carro-andando">${andando}</div><button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { parar.current = true; }}>PARAR</button>`}
       ${erro ? html`<div class="erro">${erro}</div>` : null}
       ${lista && !disponiveis.length ? html`<div class="vazio">Nenhum módulo respondeu. Confira a ignição ligada e o adaptador.</div>` : null}
-      ${disponiveis.length ? html`<div class="nota" id="carro-resumo">${disponiveis.length} módulo${disponiveis.length === 1 ? "" : "s"} disponíve${disponiveis.length === 1 ? "l" : "is"} · ${varredura.resumo(disponiveis).falhas} falha(s) no total</div>` : null}
+      ${disponiveis.length ? html`<div class="nota" id="carro-resumo">${disponiveis.length === 1 ? "1 módulo respondeu" : disponiveis.length + " módulos responderam"}, com ${(n => (n === 0 ? "nenhuma falha gravada" : n === 1 ? "1 falha ao todo" : n + " falhas ao todo"))(varredura.resumo(disponiveis).falhas)}.</div>` : null}
       ${disponiveis.map(m => html`<div key=${m.pedido} class="obd-mod" data-modulo=${m.pedido}>
         <h3 class="obd-mod-t">${m.nome}<span>${m.recusou ? "não entregou as falhas" : m.falhas.length ? m.falhas.length + (m.falhas.length === 1 ? " falha" : " falhas") : "sem falha gravada"}</span></h3>
         ${m.falhas.map(f => html`<div key=${f.rotulo} class="diag-falha">
           <div class="diag-falha-topo"><b>${f.rotulo}</b>${f.pedeLuz ? html`<span class="selo ruim">LUZ NO PAINEL</span>` : null}</div>
-          ${f.causa ? html`<div class="diag-falha-causa">${f.causa}</div>` : null}
-          <div class="nota">${f.situacaoTexto}</div>
           <${FalhaExplicada} e=${explicadas[f.codigo]} />
+          <div class="diag-falha-tipo">${f.causa ? html`Tipo de falha: <b>${f.causa}</b>. ` : null}Situação: ${f.situacaoTexto}.</div>
         </div>`)}
         <button type="button" class="fx-mais abrir-mod" onClick=${() => aoAbrir(m)} disabled=${!!st.dono}>Abrir este módulo (leituras ao vivo, apagar)</button>
       </div>`)}
+      ${disponiveis.some(m => m.falhas.length) ? html`<${NotaDasFontes} />` : null}
       ${calados.length ? html`<button type="button" class="fx-mais" id="carro-calados" onClick=${() => setVerCalados(!verCalados)}>${calados.length} módulo(s) do mapa deste modelo não responderam ${verCalados ? "· esconder" : "· ver quais"}</button>` : null}
       ${verCalados ? html`<div class="nota">${calados.map(m => m.nome).join(", ")}. Pode ser módulo que este carro não tem, fusível ou ignição: fica anotado na conferência.</div>` : null}
     `}

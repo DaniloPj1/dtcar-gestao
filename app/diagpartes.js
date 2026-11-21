@@ -46,7 +46,7 @@ export function FalhaExplicada({ e }) {
     ${e.secoes.length ? html`<button type="button" class="fx-mais" onClick=${() => setMais(!mais)}>${mais ? "Esconder como o módulo testa" : "Como o módulo testa"}</button>` : null}
     ${mais ? e.secoes.map(s => html`<div key=${s.chave} class="fx-sec"><div class="fx-t">${s.titulo}</div>
       ${s.linhas.map((l, i) => html`<div key=${i}>${l.texto}${!l.pt ? html` <span class="fx-en">em inglês</span>` : null}</div>`)}</div>`) : null}
-    <div class="fx-origem">${e.origem}${e.origemCausas && e.origemCausas !== e.origem ? " " + e.origemCausas : ""}${e.emIngles ? " O que está em inglês ainda não teve a tradução conferida." : ""}</div>
+    <div class="fx-origem">Fonte: ${e.fonte}.</div>
   </div>`;
 }
 
@@ -98,15 +98,18 @@ function UmGrafico({ g, historia, agora }) {
  */
 export function Grafico({ lidos, historia, escolha, aoTrocar, recusa }) {
   const numericas = lidos.filter(l => typeof l.valor === "number");
+  // Com leitura escolhida, a lista inteira some: senão 40 botões empurram o gráfico para fora da tela.
+  const [aberto, setAberto] = useState(false);
   const gs = grafico.graficosDe(escolha, numericas);
   const agora = Date.now();
   return html`<div class="graf" id="obd-grafico">
     <div class="graf-escolha" role="group" aria-label="Leituras no gráfico">
-      ${numericas.map(l => html`<button key=${l.chave} type="button" data-chave=${l.chave} class=${escolha.includes(l.chave) ? "esc" : ""}
+      ${(aberto || !escolha.length ? numericas : numericas.filter(l => escolha.includes(l.chave))).map(l => html`<button key=${l.chave} type="button" data-chave=${l.chave} class=${escolha.includes(l.chave) ? "esc" : ""}
         aria-pressed=${escolha.includes(l.chave)} onClick=${() => aoTrocar(l.chave)}>${l.rotulo}</button>`)}
+      ${escolha.length ? html`<button type="button" class="graf-abrir" id="graf-abrir" aria-expanded=${aberto} onClick=${() => setAberto(!aberto)}>${aberto ? "Fechar a lista" : "Pôr outra leitura"}</button>` : null}
     </div>
     <div class=${"nota" + (recusa ? " graf-cheio" : "")} id="obd-grafico-aviso">${recusa || (gs.length
-      ? gs.length + " de " + grafico.GRAFICOS_MAX + " gráficos · último minuto · leituras da mesma unidade ficam juntas"
+      ? "Último minuto. " + gs.length + " de " + grafico.GRAFICOS_MAX + " gráficos; leituras da mesma unidade ficam juntas."
       : "Toque nas leituras para ver no gráfico: até 3 gráficos; as da mesma unidade (as 4 rodas, por exemplo) ficam juntas no mesmo.")}</div>
     ${gs.map(g => html`<${UmGrafico} key=${g.grupo} g=${g} historia=${historia} agora=${agora} />`)}
   </div>`;
@@ -151,3 +154,6 @@ export function despejarCaderno() {
   if (!r || !quem) return;
   registro.guardar(api.obd.registrar, cofre(), registro.linha("mapa", quem, ultimoCarro, r)).catch(() => {});
 }
+
+/** O aviso das fontes, uma vez por cartão de falhas. */
+export const NotaDasFontes = () => html`<div class="fx-nota-fontes">${falhasCat.NOTA_DAS_FONTES}</div>`;

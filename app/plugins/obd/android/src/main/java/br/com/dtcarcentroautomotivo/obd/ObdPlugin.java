@@ -672,6 +672,87 @@ public class ObdPlugin extends Plugin {
     }
 
     /**
+     * Pergunta ao módulo do motor se ele ACEITA gravar um dado, SEM GRAVAR NADA.
+     * (Pedido do Danilo, 21/11/2026: a opção de gravar só aparece no módulo que aceita.)
+     *
+     * Como dá para perguntar sem gravar: a norma (ISO 14229-1) manda o módulo conferir o pedido de
+     * gravação nesta ordem — o dado existe e é gravável (senão 0x31), está destravado (senão 0x33)
+     * e, por último, o TAMANHO bate (senão 0x13). Então o app manda o pedido com tamanho ERRADO de
+     * propósito: lê o valor atual, e só pergunta se ele tem 2 bytes ou mais, mandando UM byte.
+     * Um pedido de tamanho errado não tem como ser gravado; a resposta diz em que degrau parou.
+     * Resposta 0x13 = passou por tudo e só o tamanho não bateu = o módulo aceita gravar ali.
+     * O byte mandado é montado aqui, não vem da página.
+     */
+    @PluginMethod
+    public void sondarGravacao(final PluginCall call) {
+        final String did = normalizar(call.getString("did"));
+        if (!didGravavel(did)) {
+            call.reject(hexExato(did, 4) ? "did-protegido" : "comando-recusado");
+            return;
+        }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
+            return;
+        }
+        if (!moduloDoMotor(cabecalho)) {
+            call.reject("so-modulo-do-motor");
+            return;
+        }
+        final int espera = Math.max(500, Math.min(call.getInt("esperaMs", 6000), ESPERA_MAXIMA));
+        naFila(call, new Runnable() {
+            @Override
+            public void run() {
+                final InputStream in = entrada;
+                final OutputStream out = saida;
+                final BluetoothSocket s = soquete;
+                if (s == null || !s.isConnected() || in == null || out == null) {
+                    call.reject("sem-conexao");
+                    return;
+                }
+                try {
+                    descartarAtrasado(in);
+                    try { Thread.sleep(120); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    descartarAtrasado(in);
+                    ultimoEstourou = false;
+                    out.write(("22" + did + "\r").getBytes(StandardCharsets.US_ASCII));
+                    out.flush();
+                    String antes = ler(in, espera);
+                    JSObject r = new JSObject();
+                    r.put("antes", antes);
+                    if (!podeSondarGravacao(antes, did)) {
+                        if (antes.startsWith("STOPPED") || antes.isEmpty()) ultimoEstourou = true;
+                        r.put("perguntou", false);
+                        r.put("resposta", "");
+                        call.resolve(r);
+                        return;
+                    }
+                    out.write(("2E" + did + "00\r").getBytes(StandardCharsets.US_ASCII));
+                    out.flush();
+                    String resposta = ler(in, espera);
+                    if (resposta.startsWith("STOPPED") || resposta.isEmpty()) ultimoEstourou = true;
+                    r.put("perguntou", true);
+                    r.put("resposta", resposta);
+                    call.resolve(r);
+                } catch (IOException e) {
+                    fechar();
+                    call.reject("conexao-caiu");
+                }
+            }
+        });
+    }
+
+    /**
+     * A pergunta "aceita gravar?" só é feita quando o valor atual tem DOIS BYTES OU MAIS: aí o
+     * pedido de um byte é de tamanho errado com certeza e não pode ser gravado. Com dado de um byte
+     * a pergunta SERIA uma gravação, então não é feita.
+     */
+    static boolean podeSondarGravacao(String respostaDaLeitura, String did) {
+        if (!valorAntigoValido(respostaDaLeitura, did)) return false;
+        String r = respostaDaLeitura.toUpperCase().replaceAll("[^0-9A-F]", "");
+        return r.length() >= 6 + 4;   // 62 + identificador (2 bytes) + pelo menos 2 bytes de dado
+    }
+
+    /**
      * Diz se a leitura de antes de gravar devolveu MESMO o valor daquele identificador: a resposta
      * tem de começar com 62 + o identificador e trazer pelo menos um byte de dado. Recusa (7F),
      * silêncio ou resposta de outro identificador não servem — e sem valor antigo não se grava.

@@ -359,6 +359,38 @@ export const podeAgir = () => { const p = plugin(); return !!(p && typeof p.atua
 export const podeGravar = () => { const p = plugin(); return !!(p && typeof p.gravarDado === "function"); };
 
 /**
+ * Pergunta ao módulo do motor se ele ACEITA gravar naquele campo, sem gravar nada (ver sondarGravacao
+ * no nativo: manda o pedido com tamanho errado de propósito e lê em que degrau o módulo parou).
+ * Devolve { aceita: true|false|null, motivo, texto, bytes }. null = não deu para saber.
+ */
+export async function aceitaGravar(did) {
+  const p = plugin();
+  if (!p || typeof p.sondarGravacao !== "function") return { aceita: null, motivo: "apk-antigo", texto: "O APK instalado não tem esta conferência." };
+  const r = await p.sondarGravacao({ did: hx(did, 4) });
+  return vereditoDaGravacao(r);
+}
+/** O veredito, separado do pedido para poder ser conferido sem carro. */
+export function vereditoDaGravacao(r) {
+  const lido = respostaDe({ resposta: (r && r.antes) || "" }, SV.lerDado);
+  const bytes = lido.dados ? Math.max(0, lido.dados.length - 2) : 0;
+  if (!r || !r.perguntou) {
+    if (lido.nrc === 0x31) return { aceita: false, motivo: "nao-existe", bytes: 0, texto: "Este campo não existe neste módulo." };
+    if (lido.nrc === 0x33) return { aceita: false, motivo: "protegido", bytes: 0, texto: "O módulo não deixa nem LER este campo sem destravar. O app não tem a chave: não dá para gravar." };
+    if (bytes === 1) return { aceita: null, motivo: "um-byte", bytes, texto: "Este campo tem um byte só: perguntar se aceita gravar seria gravar, então o app não pergunta. Um código de bico não cabe em um byte — confira o número do campo." };
+    return { aceita: null, motivo: "sem-leitura", bytes, texto: "O módulo não entregou o valor atual deste campo" + (lido.texto ? " (" + lido.texto + ")" : "") + "." };
+  }
+  const g = respostaDe({ resposta: r.resposta || "" }, 0x2e);
+  if (g.erro) return { aceita: null, motivo: "sem-resposta", bytes, texto: "O módulo não respondeu à pergunta." };
+  if (g.nrc === 0x13) return { aceita: true, motivo: "aceita", bytes, texto: "O módulo aceita gravar neste campo (" + bytes + " bytes)." };
+  if (g.nrc === 0x33 || g.nrc === 0x34) return { aceita: false, motivo: "trancado", bytes, texto: "Este módulo exige DESTRAVAR antes de gravar, e o app não tem a chave desta família. A gravação não está disponível aqui." };
+  if (g.nrc === 0x31) return { aceita: false, motivo: "so-leitura", bytes, texto: "Este campo é só de leitura neste módulo: não é nele que o código do bico é gravado." };
+  if (g.nrc === 0x11 || g.nrc === 0x7f || g.nrc === 0x12) return { aceita: false, motivo: "sem-servico", bytes, texto: "Este módulo não tem gravação de dado nesta sessão de diagnóstico." };
+  if (g.nrc === 0x22) return { aceita: false, motivo: "condicao", bytes, texto: "O módulo recusou pelas condições do carro agora (motor ligado, tensão, velocidade). Deixe a ignição ligada com o motor desligado e confira de novo." };
+  if (g.nrc == null) return { aceita: null, motivo: "inesperado", bytes, texto: "O módulo respondeu de um jeito fora da norma. O app não libera a gravação sem ter certeza." };
+  return { aceita: false, motivo: "recusou", bytes, texto: "O módulo recusou" + (g.texto ? ": " + g.texto : ".") };
+}
+
+/**
  * Grava UM dado no módulo do motor e devolve { gravou, antes, nrc, texto }.
  * Quem lê o valor antigo é o NATIVO, no mesmo passo, e ele só grava se o módulo o entregou: `antes`
  * (bytes) é o que estava lá, e é com ele que se desfaz. O nativo recusa qualquer módulo que não

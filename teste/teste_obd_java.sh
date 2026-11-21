@@ -40,6 +40,12 @@ echo "Compilou sem erro."
 # O texto de todo comando que AGE no carro é montado no próprio código, nunca colado do JavaScript:
 # o site escolhe o quê, e manda só os valores (identificador, opção, chave) — já conferidos um por um.
 # Se algum destes métodos passar a enviar texto vindo de fora, este teste reprova.
+# A pergunta "aceita gravar?" manda SEMPRE um byte fixo escrito no código (nunca valor vindo da página)
+# e só depois de conferir que o dado tem 2 bytes ou mais: é isso que garante que ela não grava nada.
+JAVA_OBD="$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java"
+sed -n "/public void sondarGravacao(/,/^    }/p" "$JAVA_OBD" | grep -q '"2E" + did + "00\\r"' || { echo "FALHOU: sondarGravacao deveria mandar o byte fixo 00."; exit 1; }
+sed -n "/public void sondarGravacao(/,/^    }/p" "$JAVA_OBD" | grep -q 'podeSondarGravacao(antes, did)' || { echo "FALHOU: sondarGravacao tem de conferir o tamanho do dado antes de perguntar."; exit 1; }
+sed -n "/public void sondarGravacao(/,/^    }/p" "$JAVA_OBD" | grep -q 'getString("valor' && { echo "FALHOU: sondarGravacao não pode aceitar valor da página."; exit 1; }
 for m in atuar rotina reiniciarModulo; do
   sed -n "/public void $m(/,/^    }/p" "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
     | grep -q 'enviar(call, "' \

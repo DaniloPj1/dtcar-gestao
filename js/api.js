@@ -373,8 +373,9 @@ function criarApiSupabase() {
      *  Linha gravada não muda mais (o banco não tem política de update). Sem o v62 rodado, listar devolve vazio e
      *  registrar avisa com todas as letras — apagar sem registrar é justamente o que não pode acontecer. */
     obd: {
-      listar: async ({ placa, desde, limite = 20 } = {}) => {
+      listar: async ({ placa, desde, limite = 20, tipo } = {}) => {
         let q = sb.from("obd_leituras").select("*").order("criado_em", { ascending: false }).limit(limite);
+        if (tipo) q = q.eq("tipo", tipo);
         if (placa) q = q.eq("placa", String(placa).toUpperCase());
         if (desde) q = q.gte("criado_em", desde);
         const r = await q;
@@ -383,6 +384,7 @@ function criarApiSupabase() {
       },
       registrar: async linha => { const r = await sb.from("obd_leituras").insert(linha).select().single();
         if (r.error && /obd_leituras|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("O registro do OBD ainda não foi ligado no banco: falta rodar o supabase/v62.sql.");
+        if (r.error && /obd_leituras_tipo_check|column .*(dados|selo)|violates check/i.test(r.error.message || "")) throw new Error("O banco ainda não aceita este tipo de registro: falta rodar o supabase/v63.sql.");
         return ok(r); },
     },
 

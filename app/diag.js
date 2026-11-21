@@ -13,9 +13,15 @@ import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
 import * as registro from "../js/obdregistro.js";
-import { usarExplicacoes, FalhaExplicada, Digital, Grafico } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
-import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo } from "./diagcarro.js";
+import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
+import * as confere from "../js/obdconfere.js";
+import * as compara from "../js/obdcompara.js";
+import * as laudo from "../js/obdlaudo.js";
+import * as falhasCat from "../js/obdfalhas.js";
+import { pdfLaudo, garantirJsPDF } from "../js/pdflaudo.js";
+import { entregarArquivo } from "../js/pdf.js";
 import { useApp, Ic, ir, Cartao, KV, Campo, Quadro, usarPlaca, BuscaPlaca, Veiculo, Tela, usarPasso } from "./comum.js";
 
 const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
@@ -176,6 +182,11 @@ function Obd() {
     setGraficoRecusa(r.recusa); setNoGrafico(r.lista);
     try { window.localStorage.setItem("obd_grafico", JSON.stringify(r.lista)); } catch (e) { /* segue sem guardar */ }
   };
+  // O CARRO COMPARADO COM ELE MESMO (Etapa 1): a roda de leitura alimenta um resumo por sinal e por
+  // regime; quando ela para, o resumo é guardado sozinho e posto ao lado das leituras anteriores
+  // deste carro. Precisa da placa: sem saber qual é o carro não há com quem comparar.
+  const sessaoCmp = useRef(null);
+  const [comparado, setComparado] = useState(null);     // { achados, sessoes, guardou } | { semPlaca } | { pouco }
   const [vivo, setVivo] = useState(null);       // { valores: {chave: leitura}, volta, rodando, modo }
   // Falhas vigiadas DURANTE a leitura ao vivo: a roda pergunta de tempos em tempos e, se o módulo
   // gravar código com o motor trabalhando, o botão de falhas fica vermelho na hora.
@@ -311,6 +322,7 @@ function Obd() {
     setErro("");
     setRes(null);                                                   // uma leitura por vez na tela
     historia.current = {};
+    sessaoCmp.current = compara.novaSessao(); setComparado(null);
     setVivo({ valores: {}, volta: 0, rodando: true, modo });
     // Referência das falhas: o que já estava gravado quando a roda começou. Só o que aparecer
     // DEPOIS disso é "falha nova". Sem leitura de falhas antes, a primeira olhada vira a referência.
@@ -321,7 +333,7 @@ function Obd() {
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => { if (rodada.current === minha) { grafico.anotarPonto(historia.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
+        (v, volta) => { if (rodada.current === minha) { grafico.anotarPonto(historia.current, v); if (sessaoCmp.current) compara.anotar(sessaoCmp.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
         () => rodada.current === minha,
         {
           escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : escolhidas,
@@ -413,8 +425,52 @@ function Obd() {
     const chassi = await obd.lerChassi();
     if (chassi) sessao.definirCarro({ vin: chassi });
     const odometro = await obd.lerOdometro(lig.pidsSuportados);
-    guardar("conf", { monitores, chassi, odometro });
+    guardar("conf", { monitores, chassi, odometro, conferencia: confere.conferir({ avisoAdaptador: lig.aviso, versao: lig.versao, vinLido: chassi, chassiCadastro }) });
   }); };
+
+  // A roda parou: fecha o resumo, compara com as leituras anteriores DESTE carro e guarda sozinho.
+  const rodandoAgora = !!(vivo && vivo.rodando);
+  useEffect(() => {
+    if (rodandoAgora || !sessaoCmp.current) return;
+    const s = sessaoCmp.current; sessaoCmp.current = null;
+    const hoje = compara.resumo(s);
+    if (!hoje) { setComparado({ pouco: true }); return; }
+    if (!placa) { setComparado({ semPlaca: true }); return; }
+    (async () => {
+      let ant = [];
+      try { ant = (await api.obd.listar({ placa, tipo: "sessao", limite: 6 })).map(l => l.dados).filter(Boolean); } catch (e) { ant = []; }
+      const c = compara.comparar(hoje, ant);
+      const guardou = await registrarAcao("sessao", perfil, hoje);
+      setComparado({ achados: c.achados, sessoes: c.sessoes, guardou });
+    })();
+  }, [rodandoAgora]);
+
+  // LAUDO (Etapa 3): lê de novo o que importa, monta o conteúdo, sela com SHA-256 e guarda. Depois de
+  // guardado ninguém altera: a tabela não tem alteração e o selo denuncia qualquer mudança.
+  const gerarLaudo = () => { const leituras = vivo ? Object.keys(vivo.valores).map(k => vivo.valores[k]).filter(l => typeof l.valor === "number") : []; pararVivo(); return rodar("Montando o laudo…", async () => {
+    const f = await obd.lerFalhas();
+    let monitores = null, chassi = "", odometro = null;
+    try { monitores = await obd.lerMonitores(); } catch (e) { monitores = null; }
+    try { chassi = await obd.lerChassi(); } catch (e) { chassi = ""; }
+    try { odometro = await obd.lerOdometro(lig.pidsSuportados); } catch (e) { odometro = null; }
+    if (chassi) sessao.definirCarro({ vin: chassi });
+    const carro = Object.assign({}, sessao.carro(), { vin: chassi || sessao.carro().vin || "" });
+    const conferencia = confere.conferir({ avisoAdaptador: lig.aviso, versao: lig.versao, vinLido: chassi, chassiCadastro });
+    const explicacoes = await falhasCat.explicarTodos(f.falhas, carro);
+    const separado = f.porModulo && f.porModulo.length > 1;
+    const dados = laudo.montar({ carro, quem: perfil, oficina: (cfg && cfg.nome) || "", km: odometro && odometro.km, conferencia,
+      modulos: separado ? f.porModulo.map(m => ({ nome: m.nome, endereco: m.endereco, falhas: m.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })) })) : [],
+      falhasJuntas: separado ? [] : f.falhas.map(x => ({ codigo: x.codigo, situacao: SELO_DTC[x.situacao][0] })), monitores, odometro, leituras, explicacoes });
+    const selo = await registro.selar(dados);
+    const linha = registro.linha("laudo", perfil, carro, dados, { km: dados.km, codigos: f.falhas });
+    linha.selo = selo;
+    const g = await registro.guardar(api.obd.registrar, registro.cofreDe(window.localStorage), linha);
+    guardar("laudo", { dados, selo, gravado: g.gravado ? "Laudo guardado no banco." : g.pendente ? "Laudo guardado no aparelho: sobe sozinho quando o banco aceitar (sem internet, ou falta rodar o supabase/v63.sql)." : "NÃO deu para guardar o laudo: gere o PDF agora." });
+  }); };
+  const pdfDoLaudo = async () => {
+    try { await garantirJsPDF(); const b = pdfLaudo(res.d.dados, res.d.selo, cfg || {}); await entregarArquivo(b, "laudo-" + (res.d.dados.carro.placa || "carro") + "-" + res.d.selo.slice(0, 8) + ".pdf"); }
+    catch (e) { setErro((e && e.message) || "Não deu para gerar o PDF."); }
+  };
 
   const v = pl.veic;
   // O carro da vez sobe para a sessão: as outras telas do diagnóstico (módulos, atuadores…) passam
@@ -475,6 +531,7 @@ function Obd() {
 
       ${lig && !ocupado ? html`<${Cartao} titulo="Serviços avançados" id="obd-avancado">
         <button type="button" class="btn-barra claro" id="obd-conf" onClick=${lerConf}>CHASSI, MONITORES E ODÔMETRO</button>
+        <button type="button" class="btn-barra claro" id="obd-laudo" onClick=${gerarLaudo}>LAUDO DO CARRO (SELADO)</button>
         <button type="button" class="btn-barra claro" id="obd-calib" onClick=${lerCalib}>CALIBRAÇÃO DO MÓDULO (REPROGRAMAÇÃO)</button>
         <button type="button" class="btn-barra claro" id="obd-ciclo" onClick=${lerCiclo}>TESTE DRIVE: MONITORES DESTE CICLO</button>
         <button type="button" class="btn-barra claro" id="obd-contadores" onClick=${lerContadores}>CONTADORES DE USO DOS MONITORES</button>
@@ -627,6 +684,21 @@ function Obd() {
         })()}
       </${Cartao}>` : null}
 
+      ${res && res.o === "laudo" ? html`<${Cartao} titulo="Laudo do carro" id="obd-r-laudo">
+        ${laudo.linhas(res.d.dados, "").map((l, i) => html`<div key=${i} class=${"laudo-" + l.t}>${l.x}</div>`)}
+        <div class="laudo-selo" id="obd-laudo-selo"><b>SELADO</b> · ${res.d.selo.slice(0, 16)}…</div>
+        <div class="nota">${res.d.gravado} Depois de guardado ninguém altera: o selo é a conta do conteúdo, e qualquer mudança faz ele deixar de conferir.</div>
+        <button type="button" class="btn-barra" id="obd-laudo-pdf" style="justify-content:center" onClick=${pdfDoLaudo}><${Ic} n="share" t=${20} />PDF DO LAUDO (COMPARTILHAR OU BAIXAR)</button>
+      </${Cartao}>` : null}
+
+      ${comparado && !comparado.pouco ? html`<${Cartao} titulo="Este carro comparado com ele mesmo" id="obd-comparado">
+        ${comparado.semPlaca ? html`<div class="nota">Busque a placa antes de ler: sem saber qual é o carro, a leitura não é guardada e não há com quem comparar.</div>` : html`
+          ${comparado.sessoes < 2 ? html`<div class="nota">${comparado.sessoes === 0 ? "Primeira leitura guardada deste carro." : "Segunda leitura guardada deste carro."} A comparação começa na terceira: uma leitura só não é o normal de um carro.</div>` : null}
+          ${comparado.sessoes >= 2 && !comparado.achados.length ? html`<div class="nota"><b>SEM MUDANÇA.</b> Em marcha lenta e em cruzeiro, com o motor quente, este carro marcou o mesmo que nas ${comparado.sessoes} leituras anteriores.</div>` : null}
+          ${comparado.achados.map(a => html`<div key=${a.chave + a.regime} class="conf-item"><span class="selo atencao">MUDOU</span><div><b>${a.rotulo}</b> · ${compara.REGIMES[a.regime]}: hoje ${String(a.hoje).replace(".", ",")} ${a.unidade}; antes entre ${String(a.de).replace(".", ",")} e ${String(a.ate).replace(".", ",")}.<br />${a.texto}</div></div>`)}
+          <div class="fx-origem">${comparado.guardou} Só entram na comparação as leituras com o motor quente, em marcha lenta ou em velocidade constante.</div>`}
+      </${Cartao}>` : null}
+
       ${res && res.o === "calib" ? html`<${Cartao} titulo="Calibração do módulo" id="obd-r-calib">
         ${!res.d.calid.length && !res.d.cvn.length ? html`<div class="vazio">Este módulo não informa a calibração (serviço 09 $04/$06).${res.d.erro ? " " + res.d.erro : ""}</div>` : null}
         ${res.d.calid.map((c, i) => html`<${KV} key=${"ca" + i} a=${"Calibração" + (res.d.calid.length > 1 ? " " + (i + 1) : "")} b=${c} p />`)}
@@ -657,6 +729,9 @@ function Obd() {
       </${Cartao}>` : null}
 
       ${res && res.o === "conf" ? html`<${Cartao} titulo="Chassi, monitores e odômetro" id="obd-r-conf">
+        ${res.d.conferencia ? html`<div class="sec" id="obd-conferencia"><h3>Esta leitura vale?</h3>
+          <div class=${"conf-frase" + (res.d.conferencia.situacao === "ruim" ? " erro" : "")}>${res.d.conferencia.frase}</div>
+          ${res.d.conferencia.itens.map(i => html`<div key=${i.chave} class="conf-item"><span class=${"selo" + (i.situacao === "ruim" ? " ruim" : i.situacao === "atencao" ? " atencao" : "")}>${i.situacao === "ok" ? "CONFERE" : i.situacao === "ruim" ? "NÃO VALE" : i.situacao === "atencao" ? "ATENÇÃO" : "SEM DADO"}</span><div><b>${i.titulo}.</b> ${i.texto}</div></div>`)}</div>` : null}
         ${res.d.chassi ? html`<${KV} a="Chassi lido no módulo" b=${res.d.chassi} p />` : html`<div class="nota">O módulo não informou o chassi (comum em carro mais antigo).</div>`}
         ${res.d.chassi && chassiCadastro ? html`<div class="kv"><span>Confronto:</span><i></i><b>${res.d.chassi === chassiCadastro
           ? html`<span class="selo">CONFERE</span>igual ao cadastro`
@@ -727,7 +802,10 @@ function Obd() {
 /** Liga a tela à conexão compartilhada e devolve o estado dela. */
 function usarSessao() {
   const [st, setSt] = useState(() => sessao.estado());
+  const { perfil } = useApp();
   useEffect(() => {
+    ligarCaderno(perfil);                 // o caderno do carro: anota sozinho, sem botão (Etapa 4)
+    subirPendentes();                     // o que ficou guardado no aparelho sobe quando a tela abre
     sessao.entrandoNaTela();
     const cancelar = sessao.assinar(setSt);
     return () => { cancelar(); sessao.saindoDaTela(); };
@@ -854,6 +932,7 @@ function Modulos() {
   const podeApagar = podeApagarObd(cfg, perfil);
   const explicadasMod = usarExplicacoes(falhas, st.carro);
   const mapa = usarMapa(st.carro);
+  const [regApagar, setRegApagar] = useState("");
   usarPasso(!!mod, () => { setMod(null); setFalhas(null); setEpti(null); });
 
   const escolher = async m => {
@@ -893,6 +972,8 @@ function Modulos() {
     setOcupado("");
     if (!r.ok) { setErro(r.texto || "Não deu para apagar."); return; }
     if (r.r.nrc != null) { setErro(r.r.texto); return; }
+    const antes = (falhas || []).map(f => ({ codigo: f.rotulo, situacao: f.situacaoTexto }));
+    setRegApagar(await registrarAcao("apagar_modulo", perfil, { modulo: mod, antes }, { codigos: antes }));
     setFalhas(null); await lerFalhas();
   };
 
@@ -901,6 +982,7 @@ function Modulos() {
       : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
       <${Adaptador} compacto=${!!st.ligado} />
       <${CarroDaVez} st=${st} />
+      <${Mapeando} st=${st} mapa=${mapa} parado=${!!mod} caderno=${cadernoAtual} />
       ${!mod ? html`<${CarroInteiro} st=${st} mapa=${mapa} aoAbrir=${escolher} /><${EscolherModulo} aoEscolher=${escolher} />` : html`
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="mod-escolhido">
           <${KV} a="Pede em" b=${mod.pedido} />
@@ -922,7 +1004,7 @@ function Modulos() {
             </div>`)}
           ${falhas.length && podeApagar ? html`<button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${apagar} disabled=${!!ocupado || !!st.dono}>APAGAR AS FALHAS DESTE MÓDULO</button>` : null}
           ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}
-          ${falhas.length && podeApagar ? html`<p class="nota">O apagamento POR MÓDULO ainda não fica registrado no banco — a tabela de registro do OBD só aceita o apagar do OBD-II. Anote na O.S. o que foi apagado.</p>` : null}
+          ${regApagar ? html`<p class="nota" id="mod-reg-apagar">Apagamento anterior: ${regApagar}</p>` : null}
         </${Cartao}>` : null}
         ${epti ? html`<${Cartao} titulo="O que o módulo respondeu" id="mod-epti">
           ${epti.sistemas.length ? html`<div class="sec"><h3>Sistemas que ele cuida</h3>
@@ -988,6 +1070,9 @@ function Atuadores() {
       aoAndar: p => setAndando({ passos: p.passos }),
     }));
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar o teste." } }));
+    // Fica registrado quem acionou o quê, em que módulo e o que o módulo respondeu (Etapa 1).
+    const reg = await registrarAcao("atuar", perfil, { modulo: sessao.estado().modulo, did: hex4Txt(did), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
+    setAndando(a => (a ? { ...a, registro: reg } : a));
   };
 
   return html`<${Tela} tela="atuadores" ajuda="Manda o módulo acionar uma saída para você conferir no carro se a peça responde. O comando é curto de propósito, por segurança da própria norma, então o app fica repetindo enquanto o teste corre — e devolve o controle ao módulo no fim, no erro e se você sair.">
@@ -1018,7 +1103,7 @@ function Atuadores() {
             <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>`
             : html`<div class="carregando">Acionando… confira no carro.</div>
               <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { cancelar.current = true; }}>PARAR AGORA</button>`}
-          <p class="nota">Este teste não fica registrado no banco: a tabela de registro do OBD ainda não aceita atuador. O apagar falha, sim, fica.</p>
+          ${andando.registro ? html`<p class="nota" id="atu-registro">${andando.registro}</p>` : null}
         </${Cartao}>` : null}
       `}
     `}
@@ -1096,6 +1181,8 @@ function Aprendizados() {
       aoAndar: p => setAndando({ passos: p.passos }),
     }));
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar a rotina." } }));
+    const reg = await registrarAcao("aprender", perfil, { modulo: sessao.estado().modulo, rotina: hex4Txt(rid), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
+    setAndando(a => (a ? { ...a, registro: reg } : a));
   };
 
   return html`<${Tela} tela="aprendizados" ajuda="Roda rotina de aprendizado e calibração no módulo: adaptação, reset de serviço, zero do sensor de ângulo. O módulo trabalha sozinho depois do começar, e o app acompanha até terminar. Se ele recusar, a frase diz o que fazer — pôr em neutro, pisar no freio, aquecer o motor.">
@@ -1127,7 +1214,7 @@ function Aprendizados() {
             <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>`
             : html`<div class="carregando">Trabalhando… não desligue a chave.</div>
               <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { cancelar.current = true; }}>PARAR AGORA</button>`}
-          <p class="nota">Esta rotina não fica registrada no banco: a tabela de registro do OBD ainda não aceita aprendizado.</p>
+          ${andando.registro ? html`<p class="nota" id="apr-registro">${andando.registro}</p>` : null}
         </${Cartao}>` : null}
       `}
     `}
@@ -1172,6 +1259,32 @@ function Bico() {
     : !conf.podeGravar ? "Resolva o que está em “Confira antes”."
     : !camposCertos ? "Informe o campo de cada cilindro marcado (4 dígitos, do manual da ECU; um diferente para cada cilindro)."
     : st.dono ? "O adaptador está ocupado." : "";
+
+  // A OPÇÃO DE GRAVAR SÓ APARECE NO MÓDULO QUE ACEITA (Danilo, 21/11/2026). O app pergunta ao módulo,
+  // sem gravar nada, se ele aceita gravação naquele campo (uds.aceitaGravar). Só com "aceita" em todos
+  // os cilindros marcados é que o botão de gravar passa a existir. Mudou um campo, pergunta de novo.
+  const [aceite, setAceite] = useState(null);          // { assinatura, modulo, itens: [{ cilindro, campo, aceita, texto }] }
+  const assinatura = paraGravar.map(c => c.cilindro + ":" + c.campo).join(",");
+  const aceiteVale = !!(aceite && aceite.assinatura === assinatura);
+  const moduloAceita = aceiteVale && aceite.itens.length > 0 && aceite.itens.every(x => x.aceita === true);
+  const [conferindo, setConferindo] = useState(false);
+  const conferirModulo = async () => {
+    setConferindo(true); setFeito(null); setAndando(null);
+    const itensAceite = []; let modulo = null;
+    const r = await sessao.comAcao("a conferência do módulo", async () => {
+      for (const m of [{ pedido: "7E0", resposta: "7E8" }, { pedido: "18DA10F1", resposta: "18DAF110" }]) {
+        await uds.abrir(m);
+        const se = await uds.sessao(uds.SESSAO.estendida);
+        if (!se.erro && se.nrc == null) { modulo = m; break; }
+      }
+      if (!modulo) return false;
+      for (const c of paraGravar) itensAceite.push({ cilindro: c.cilindro, campo: c.campo, ...(await uds.aceitaGravar(parseInt(c.campo, 16))) });
+      await uds.fechar();
+      return true;
+    });
+    setConferindo(false);
+    setAceite({ assinatura, modulo, erro: !r.ok ? (r.texto || "Não deu para conferir.") : !modulo ? "O módulo do motor não abriu a sessão de diagnóstico." : "", itens: itensAceite });
+  };
 
   const pedirAutorizacao = () => { setFeito(null); setAndando(null); setAutoriza({ email: "", senha: "", erro: "" }); };
   const autorizarEGravar = async () => {
@@ -1292,8 +1405,15 @@ function Bico() {
         <div class="passo">1. Abrir a sessão de diagnóstico no módulo do motor.</div>
         ${paraGravar.map((c, i) => html`<div key=${c.cilindro} class="passo">${i + 2}. Cilindro ${c.cilindro}: ler e guardar o que está no campo ${c.campo || "(falta informar)"}, gravar ${c.codigo} e ler de volta para conferir.</div>`)}
         <div class="passo">${paraGravar.length + 2}. Parar no primeiro cilindro que não conferir. Registrar quem gravou e quem autorizou.</div>
-        <button type="button" class="btn-barra" id="bico-gravar" disabled=${!!falta || !!st.acaoCorrendo} style="justify-content:center" onClick=${pedirAutorizacao}>GRAVAR (pede o login do administrador)</button>
         ${falta ? html`<p class="nota" id="bico-falta">${falta}</p>` : null}
+        ${!falta && !moduloAceita ? html`<button type="button" class="btn-barra claro" id="bico-conferir" disabled=${conferindo || !!st.acaoCorrendo} style="justify-content:center" onClick=${conferirModulo}>${conferindo ? "Perguntando ao módulo…" : "CONFERIR SE ESTE MÓDULO ACEITA GRAVAR"}</button>
+          <p class="nota">A pergunta não grava nada: o app manda um pedido que o módulo é obrigado a recusar e lê o motivo da recusa. A opção de gravar só aparece se o módulo aceitar.</p>` : null}
+        ${aceiteVale ? html`<div id="bico-aceite">
+          ${aceite.erro ? html`<div class="erro">${aceite.erro}</div>` : null}
+          ${aceite.itens.map(x => html`<div key=${x.cilindro} class="conf-item"><span class=${"selo" + (x.aceita === true ? "" : x.aceita === false ? " ruim" : " atencao")}>${x.aceita === true ? "ACEITA" : x.aceita === false ? "NÃO ACEITA" : "NÃO SEI"}</span><div><b>Cilindro ${x.cilindro}, campo ${x.campo}.</b> ${x.texto}</div></div>`)}
+          ${!aceite.erro && aceite.itens.length && !moduloAceita ? html`<div class="nota"><b>A gravação não está disponível neste módulo.</b> Por isso o botão de gravar não aparece.</div>` : null}
+        </div>` : null}
+        ${!falta && moduloAceita ? html`<button type="button" class="btn-barra" id="bico-gravar" disabled=${!!st.acaoCorrendo} style="justify-content:center" onClick=${pedirAutorizacao}>GRAVAR (pede o login do administrador)</button>` : null}
       </${Cartao}>` : null}
 
       ${andando ? html`<${Cartao} titulo=${andando.fim ? "Resultado" : "Gravando…"} id="bico-andando">

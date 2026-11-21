@@ -146,3 +146,35 @@ t3(!q["7E8"], "continuação fora de ordem é descartada, não aproveitada");
 t3(Object.keys(o.quadrosPorModulo("NO DATA\r>")).length === 0 && Object.keys(o.quadrosPorModulo("4300\r430201710300")).length === 0, "sem cabeçalho não inventa módulo");
 t3(o.nomeDeQuemRespondeu("7E8") === "Motor" && o.nomeDeQuemRespondeu("7E9") === "Câmbio" && o.nomeDeQuemRespondeu("7EB") === "Módulo 7EB" && o.nomeDeQuemRespondeu("18DAF128") === "Módulo 28", "nome de quem respondeu, sem inventar");
 console.log(m3 + " conferências das falhas por módulo passaram.");
+
+/* ---- o laudo ---- */
+const ld = await import("../js/obdlaudo.js");
+let m4 = 0; const t4 = (c, msg) => { m4++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+const dl = ld.montar({ carro: { placa: "abc1d23", marca: "Honda", modelo: "City", ano: 2016, vin: "93H" }, quem: { id: "u", nome: "Danilo" }, km: 80000.4, em: "2026-11-21T13:00:00.000Z",
+  conferencia: conf.conferir({ versao: "ELM327 v2.1", vinLido: "93H", chassiCadastro: "93H" }),
+  modulos: [{ nome: "Motor", pedido: "7E0", falhas: [{ codigo: "P0301", rotulo: "P0301-00", situacaoTexto: "confirmada" }] }, { nome: "ABS", pedido: "7B0", falhas: [] }],
+  explicacoes: { P0301: { achou: true, descricao: "Falha de combustão no cilindro 1", origem: "SAE" } }, leituras: [{ rotulo: "Rotação", valor: 800.5, unidade: "rpm" }] });
+t4(dl.carro.placa === "ABC1D23" && dl.km === 80000 && dl.modulos[0].falhas[0].descricao.includes("cilindro 1") && ld.totalDeFalhas(dl) === 1, "o conteúdo do laudo");
+const sl = await reg.selar(dl);
+t4(await reg.integridade({ dados: dl, selo: sl }) === "confere" && await reg.integridade({ dados: { ...dl, km: 1 }, selo: sl }) === "nao-confere", "mexer em qualquer campo quebra o selo");
+t4(await reg.integridade({ dados: JSON.parse(JSON.stringify(dl)), selo: sl }) === "confere", "ir ao banco e voltar não quebra o selo");
+const tx = ld.linhas(dl, sl).map(l => l.x).join("\n");
+t4(/LAUDO/.test(tx) && /placa ABC1D23/.test(tx) && /P0301-00 · confirmada — Falha de combustão/.test(tx) && /ABS — sem falha gravada/.test(tx) && /800,5 rpm/.test(tx) && tx.includes(sl) && /Não é parecer sobre peça/.test(tx), "o texto do laudo");
+t4(/Nenhuma falha gravada/.test(ld.linhas(ld.montar({}), "").map(l => l.x).join("\n")), "laudo sem falha diz que não há falha");
+console.log(m4 + " conferências do laudo passaram.");
+
+/* ---- "o módulo aceita gravar?" sem gravar ---- */
+const ud = await import("../js/uds.js");
+let m5 = 0; const t5 = (c, msg) => { m5++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+const antes7 = "622A1041424344454647";
+t5(ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E13" }).aceita === true && ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E13" }).bytes === 7, "tamanho errado recusado por último = aceita gravar");
+t5(ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E33" }).motivo === "trancado" && ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E33" }).aceita === false, "0x33 = exige destravar = não aparece");
+t5(ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E31" }).motivo === "so-leitura" && ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E11" }).motivo === "sem-servico" && ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "7F2E7F" }).aceita === false, "só leitura e módulo sem o serviço");
+t5(ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "6E2A10" }).aceita === null, "resposta positiva a pedido torto é fora da norma: não libera");
+t5(ud.vereditoDaGravacao({ perguntou: true, antes: antes7, resposta: "NO DATA" }).aceita === null, "silêncio não é sim");
+t5(ud.vereditoDaGravacao({ perguntou: false, antes: "7F2231" }).motivo === "nao-existe" && ud.vereditoDaGravacao({ perguntou: false, antes: "622A1041" }).motivo === "um-byte" && ud.vereditoDaGravacao({ perguntou: false, antes: "NO DATA" }).aceita === null, "campo que não existe, campo de um byte (não pergunta) e sem leitura");
+console.log(m5 + " conferências do 'aceita gravar' passaram.");
+const ss = await import("../js/obdsessao.js");
+let viu = 0; const largar = ss.observar(() => { viu++; }); ss.definirCarro({ placa: "TST0A00" });
+if (!viu) { console.error("FALHOU: quem observa recebe as mudanças"); process.exit(1); }
+largar(); console.log("observador da sessão: ok");

@@ -44,9 +44,13 @@ const estadoInicial = () => ({
 
 let st = estadoInicial();
 const ouvintes = new Set();
+// Quem só OBSERVA (o caderno do carro) não é tela: não segura a conexão quando todas as telas saem.
+const observadores = new Set();
+export function observar(fn) { observadores.add(fn); return () => observadores.delete(fn); }
 const avisar = () => {
   st = { ...st, acaoCorrendo: emAcao > 0 };
   for (const f of [...ouvintes]) { try { f(st); } catch (e) { /* tela já saiu */ } }
+  for (const f of [...observadores]) { try { f(st); } catch (e) { /* segue */ } }
 };
 const mexer = p => { st = { ...st, ...p }; avisar(); };
 
@@ -167,7 +171,13 @@ export function pararTudo() { for (const p of [...pausadores]) { try { p.parar()
  * Com `pausaFundo`, a leitura de fundo é parada antes e retomada depois — é o que todo comando que
  * AGE no carro precisa.
  */
+/** Trabalho que o app faz sozinho, em segundo plano. Quem a pessoa pediu NÃO espera atrás dele sem fim. */
+export const DE_FUNDO = "o mapeamento do carro";
+
 export async function tomar(quem, tarefa, { pausaFundo = false } = {}) {
+  // Se quem está com a vez é o trabalho de fundo, o pedido da pessoa espera a pergunta em curso
+  // terminar (uma só, de até uns 2 s) em vez de ser recusado: o que a pessoa toca tem prioridade.
+  for (let i = 0; st.dono === DE_FUNDO && quem !== DE_FUNDO && i < 40; i++) await new Promise(f => setTimeout(f, 100));
   if (st.dono && st.dono !== quem) {
     return { ok: false, ocupado: st.dono, texto: "O adaptador está ocupado com " + st.dono + ". Espere terminar." };
   }

@@ -94,6 +94,8 @@ public class VerificaListaBranca {
     for (String c : new String[] {"", "7DF", "7E1", "7B0", "18DA28F1", "18DB33F1", "18DA1EF1", "720"}) chk("RECUSA gravar fora do motor: " + c, !ObdPlugin.moduloDoMotor(c));
     for (String d : new String[] {"0100", "2610", "F17F", "F200"}) chk("dado gravável: " + d, ObdPlugin.didGravavel(d));
     for (String d : new String[] {"F190", "F180", "F1FF", "F18C", "F1", "XYZW", ""}) chk("RECUSA gravar identificação ou torto: " + d, !ObdPlugin.didGravavel(d));
+    chk("pode perguntar se aceita gravar: dado de 2 bytes ou mais", ObdPlugin.podeSondarGravacao("62 26 10 41 42", "2610") && ObdPlugin.podeSondarGravacao("622610414243444546", "2610"));
+    for (String r : new String[] {"62261041", "7F2231", "", "NO DATA", "62261141 42", "622610"}) chk("NÃO pergunta (dado de 1 byte seria gravação, ou não leu): " + r, !ObdPlugin.podeSondarGravacao(r, "2610"));
     chk("valor antigo lido", ObdPlugin.valorAntigoValido("62 26 10 41 42\r\r>", "2610"));
     for (String r : new String[] {"7F2231", "", "NO DATA", "STOPPED", "62261141", "622610", "6226"}) chk("RECUSA gravar sem valor antigo: " + r, !ObdPlugin.valorAntigoValido(r, "2610"));
       try {

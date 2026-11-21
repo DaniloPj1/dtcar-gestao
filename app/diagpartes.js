@@ -6,6 +6,11 @@
 import { html, useState, useEffect } from "../js/lib.js";
 import * as falhasCat from "../js/obdfalhas.js";
 import * as grafico from "../js/obdgrafico.js";
+import { api } from "../js/api.js";
+import * as obd from "../js/obd.js";
+import * as sessao from "../js/obdsessao.js";
+import * as registro from "../js/obdregistro.js";
+import * as mapa from "../js/obdmapa.js";
 
 /** Explicações dos códigos da lista, buscadas uma vez por conjunto de códigos. */
 export function usarExplicacoes(falhas, carro) {
@@ -105,4 +110,44 @@ export function Grafico({ lidos, historia, escolha, aoTrocar, recusa }) {
       : "Toque nas leituras para ver no gráfico: até 3 gráficos; as da mesma unidade (as 4 rodas, por exemplo) ficam juntas no mesmo.")}</div>
     ${gs.map(g => html`<${UmGrafico} key=${g.grupo} g=${g} historia=${historia} agora=${agora} />`)}
   </div>`;
+}
+
+/* ---------------- o que é gravado SOZINHO: registro das ações e o caderno do carro ---------------- */
+
+const cofre = () => registro.cofreDe(window.localStorage);
+const FRASE = { ok: "Registrado no banco.", pendente: "Registro guardado no aparelho: sobe sozinho quando o banco aceitar (sem internet, ou falta rodar o supabase/v63.sql).", nada: "NÃO deu para registrar: anote na O.S." };
+
+/**
+ * Registra uma ação feita no carro (atuador, aprendizado, apagamento por módulo, bico…).
+ * Devolve a frase que a tela mostra. Nunca rejeita: o que não gravou fica guardado no aparelho.
+ */
+export async function registrarAcao(tipo, perfil, dados, extra) {
+  const g = await registro.guardar(api.obd.registrar, cofre(), registro.linha(tipo, perfil, sessao.carro(), dados, extra));
+  return g.gravado ? FRASE.ok : g.pendente ? FRASE.pendente : FRASE.nada;
+}
+/** Sobe o que ficou guardado no aparelho. Chamado quando uma tela do diagnóstico abre. */
+export const subirPendentes = () => registro.subirPendentes(api.obd.registrar, cofre()).catch(() => ({ subiram: 0, restam: 0 }));
+
+// O CADERNO DO CARRO (Etapa 4): liga uma vez e fica ouvindo a conversa com o adaptador. Não tem
+// botão e não gera pedido: anota o que já aconteceu, e despeja no banco quando o adaptador é
+// desligado ou o carro muda. Ninguém decide salvar.
+let caderno = null, quem = null, ultimoLigado = false, ultimoCarro = null;
+export function ligarCaderno(perfil) {
+  quem = perfil;
+  if (caderno) return;
+  caderno = mapa.novoCaderno();
+  obd.aoTrocar((cmd, cru, ms) => { if (caderno) mapa.anotarTroca(caderno, cmd, cru, ms); });
+  sessao.observar(st => {
+    const trocouCarro = ultimoCarro && st.carro && (st.carro.placa || "") !== (ultimoCarro.placa || "");
+    if ((ultimoLigado && !st.ligado) || (trocouCarro && st.ligado)) despejarCaderno();
+    ultimoLigado = st.ligado;
+    if (st.carro) ultimoCarro = st.carro;
+  });
+}
+export const cadernoAtual = () => caderno;
+export function despejarCaderno() {
+  const r = caderno && mapa.retrato(caderno, ultimoCarro);
+  caderno = mapa.novoCaderno();
+  if (!r || !quem) return;
+  registro.guardar(api.obd.registrar, cofre(), registro.linha("mapa", quem, ultimoCarro, r)).catch(() => {});
 }

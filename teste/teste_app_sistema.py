@@ -142,6 +142,14 @@ window.Capacitor.Plugins.DtcarObd = {
     if (c.length === 3) { var n = parseInt(c, 16); return n !== 0x7DF && n >= 0x600 && n <= 0x7FF; }
     return c.length === 8 && c.indexOf('18DA') === 0;
   },
+  sondarGravacao: function (o) {
+    // pergunta "aceita gravar?" sem gravar: o campo 2A99 exige destravar (33); os outros aceitam (13 = só o tamanho não bateu)
+    window.__obd.chamadas.push('sondarGravacao:' + o.did);
+    var cab = String(window.__obd.cabecalho || '').toUpperCase(), n = parseInt(o.did, 16);
+    if (!/^[0-9A-F]{4}$/.test(o.did) || (n >= 0xF180 && n <= 0xF1FF)) return Promise.reject(new Error('did-protegido'));
+    if (cab !== '7E0' && cab !== '18DA10F1') return Promise.reject(new Error('so-modulo-do-motor'));
+    return Promise.resolve({ perguntou: true, antes: '62' + o.did + '41414141414141', resposta: (o.did === '2A99' ? '7F2E33' : '7F2E13') + '\\r\\r>' });
+  },
   gravarDado: function (o) {
     // o mesmo portão do nativo: só o módulo do motor, nunca a identificação, e só com o valor antigo lido
     window.__obd.chamadas.push('gravarDado:' + o.did + ':' + o.valor);
@@ -673,6 +681,13 @@ try:
         pg.wait_for_selector('#obd-r-falhas .fx-causas', timeout=15000); fx = pg.inner_text('#obd-r-falhas')
         t('CAUSAS PROVÁVEIS' in fx.upper() and 'Honda' in fx and 'SAE' in fx, 'a falha lida vem com causas prováveis e a origem escrita: ' + fx[:200])
         t(pg.locator('#obd-r-falhas .fx-desc').count() >= 2, 'cada código tem a descrição embaixo')
+        # LAUDO SELADO (Etapa 3): lê, monta, sela e guarda — e o que foi guardado leva o selo
+        ng = len(f.gravados); pg.click('#obd-laudo'); pg.wait_for_selector('#obd-r-laudo', timeout=30000); tl = pg.inner_text('#obd-r-laudo')
+        t('LAUDO DE DIAGNÓSTICO' in tl and 'MOTOR' in tl.upper() and 'P0171' in tl and 'SELADO' in tl and 'Não é parecer sobre peça' in tl, 'o laudo traz o carro, as falhas por módulo e diz que não é parecer de peça: ' + tl[:120].replace(chr(10), ' '))
+        t('EM QUE CONDIÇÃO' in tl, 'o laudo diz em que condição a leitura foi feita')
+        lg = [c for (tab, c) in f.gravados[ng:] if tab == 'obd_leituras' and c.get('tipo') == 'laudo']
+        t(len(lg) == 1 and len(lg[0].get('selo') or '') == 64 and lg[0]['dados']['carro']['placa'] == lg[0]['placa'], 'o laudo vai para o banco com o selo de 64 dígitos: %s' % [list(x.keys())[:4] for x in lg])
+        pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=15000)
         t('P0043' not in tx and 'C3103' not in tx and 'P0201' not in tx, 'com dois módulos respondendo NÃO inventa código: %s' % tx.replace('\n', ' ')[:140])
         t('Mais de um módulo' in tx, 'avisa que mais de um módulo respondeu')
         # SEPARADO POR MÓDULO (pedido do Danilo, 21/11/2026): só quem respondeu aparece, cada um com as suas falhas
@@ -960,7 +975,7 @@ try:
         t('LIMPOU' in fe, 'diz o que sobrou: %s' % fe.replace('\n', ' ')[:90])
         t('volta' in fe, 'e repete que o código volta se o defeito continuar')
         t('Ajuste depois' in fe, 'mostra o ajuste de combustível antes e depois')
-        reg = f.tabela('obd_leituras')
+        todos_reg = f.tabela('obd_leituras'); reg = [x for x in todos_reg if x.get('tipo') == 'apagar']
         t(len(reg) == 1, 'gravou UM registro do apagamento: %d' % len(reg))
         r0 = reg[0] if reg else {}
         t(r0.get('tipo') == 'apagar' and r0.get('perfil_nome') == 'Fulano de Teste', 'registro diz quem apagou: %s' % r0.get('perfil_nome'))
@@ -976,7 +991,7 @@ try:
         pg.click('#obd-apagar-ok'); pg.wait_for_timeout(2500)
         t(not pg.query_selector('#obd-apagar-feito'), 'módulo que recusa não vira "apagou"')
         t('MOTOR DESLIGADO' in pg.inner_text('#obd-apagar-cx'), 'e a tela diz o que fazer: %s' % [l for l in pg.inner_text('#obd-apagar-cx').split('\n') if 'MOTOR' in l][:1])
-        t(len(f.tabela('obd_leituras')) == 1, 'recusa não grava registro novo')
+        t(len([x for x in f.tabela('obd_leituras') if x.get('tipo') == 'apagar']) == 1, 'recusa não grava registro novo')
         pg.click('#obd-apagar-nao'); pg.evaluate("window.__obd.recusaApagar = false"); pg.wait_for_timeout(300)
 
         # o que esta etapa NÃO faz
@@ -1113,11 +1128,15 @@ try:
         t(pg.query_selector('#bico-plano'), 'marcado o cilindro trocado, aparece o plano')
         tp = pg.inner_text('#bico-plano')
         t('ler e guardar' in tp and 'ler de volta' in tp, 'o plano lê e guarda antes de gravar, e confere lendo de volta')
-        t(pg.locator('#bico-gravar').is_disabled() and 'campo' in pg.inner_text('#bico-falta'), 'sem o campo da ECU o botão de gravar fica DESLIGADO, e diz o que falta')
+        t(not pg.query_selector('#bico-gravar') and 'campo' in pg.inner_text('#bico-falta'), 'sem o campo da ECU não existe botão de gravar, e a tela diz o que falta')
         pg.fill('.bico-campo >> nth=0', 'F190'); pg.wait_for_timeout(300)
-        t(pg.locator('#bico-gravar').is_disabled() and 'identificação' in pg.inner_text('#bico-codigos'), 'campo de identificação (chassi) é recusado na digitação')
+        t(not pg.query_selector('#bico-gravar') and not pg.query_selector('#bico-conferir') and 'identificação' in pg.inner_text('#bico-codigos'), 'campo de identificação (chassi) é recusado na digitação')
         pg.fill('.bico-campo >> nth=0', '2A10'); pg.wait_for_timeout(300)
-        t(not pg.locator('#bico-gravar').is_disabled(), 'com o campo informado, o botão liga')
+        t(not pg.query_selector('#bico-gravar'), 'a opção de gravar NÃO aparece antes de o módulo dizer que aceita')
+        pg.click('#bico-conferir'); pg.wait_for_selector('#bico-aceite', timeout=20000)
+        t('ACEITA' in pg.inner_text('#bico-aceite') and 'sondarGravacao:2A10' in pg.evaluate('window.__obd.chamadas'), 'o app pergunta ao módulo se aceita gravar: ' + pg.inner_text('#bico-aceite')[:90].replace(chr(10), ' '))
+        t(not any(x.startswith('gravarDado') for x in pg.evaluate('window.__obd.chamadas')), 'e a pergunta não grava nada')
+        t(pg.query_selector('#bico-gravar') and not pg.locator('#bico-gravar').is_disabled(), 'módulo aceitou: a opção de gravar aparece')
         pg.click('#bico-gravar'); pg.wait_for_selector('#bico-adm-ok', timeout=5000)
         t(not any(x.startswith('gravarDado') for x in pg.evaluate('window.__obd.chamadas')), 'nada é gravado antes da autorização do administrador')
         t(pg.locator('#bico-adm-ok').is_disabled(), 'sem login e senha o botão de autorizar fica desligado')
@@ -1133,9 +1152,11 @@ try:
         pg.click('#bico-desfazer'); pg.wait_for_timeout(2500)
         gr = [x for x in pg.evaluate('window.__obd.chamadas') if x.startswith('gravarDado')]
         t(len(gr) == 2 and gr[1] == 'gravarDado:2A10:41414141414141' and 'voltou para o valor' in pg.inner_text('#bico-andando'), 'DESFAZER grava de volta o valor que estava: %s' % gr)
-        pg.fill('.bico-campo >> nth=0', '2A99'); pg.wait_for_timeout(200); pg.click('#bico-gravar'); pg.wait_for_selector('#bico-adm-ok', timeout=5000)
-        pg.fill('#bico-adm-email', 'adm@dtcar.com'); pg.fill('#bico-adm-senha', 'certa'); pg.click('#bico-adm-ok'); pg.wait_for_timeout(4000)
-        t('DESTRAVAR' in pg.inner_text('#bico-andando') and not pg.query_selector('#bico-desfazer'), 'módulo que exige destravar: mostra a recusa e não finge que gravou')
+        pg.fill('.bico-campo >> nth=0', '2A99'); pg.wait_for_timeout(300)
+        t(not pg.query_selector('#bico-gravar'), 'trocou o campo: a opção de gravar some até conferir de novo')
+        pg.click('#bico-conferir'); pg.wait_for_selector('#bico-aceite', timeout=20000)
+        t('NÃO ACEITA' in pg.inner_text('#bico-aceite') and 'DESTRAVAR' in pg.inner_text('#bico-aceite') and not pg.query_selector('#bico-gravar'), 'módulo que exige destravar: a opção de gravar NÃO aparece, e a tela diz por quê')
+        t(len([x for x in pg.evaluate('window.__obd.chamadas') if x.startswith('gravarDado')]) == 2, 'e nada foi gravado nele')
         # o cilindro não marcado não entra
         pg.fill('.bico-cod:not(.bico-campo) >> nth=1', 'C2GKLLO'); pg.wait_for_timeout(300)
         pg.check('.bico-marca input >> nth=1'); pg.wait_for_timeout(400)

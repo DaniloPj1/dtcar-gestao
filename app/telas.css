@@ -460,3 +460,16 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .roda span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--cinza-texto)}
 .roda b{font-size:28px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;color:var(--tinta)}
 .roda i{margin-left:4px;font-style:normal;font-size:12px;font-weight:700;color:var(--cinza-nota)}
+.mapeando{margin:0 0 10px;padding:8px 11px;border:1px dashed #9aa4ae;background:#f6f7f9}
+.mapeando b{display:block;font-size:13px;font-weight:800;color:var(--tinta)}
+.mapeando span{display:block;margin-top:2px;font-size:12.5px;color:var(--cinza-nota)}
+.conf-item{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #e7eaee}
+.conf-item:last-child{border-bottom:0}
+.conf-item .selo{flex-shrink:0;min-width:86px;text-align:center}
+.conf-item div{font-size:14px;line-height:1.3}
+.conf-frase{margin:2px 0 6px;font-size:14px;font-weight:700}
+.laudo-titulo{font-size:15px;font-weight:800;letter-spacing:.03em;color:var(--tinta)}
+.laudo-sub{margin-top:10px;padding-bottom:2px;border-bottom:1px solid var(--tinta);font-size:12px;font-weight:800;letter-spacing:.05em;color:var(--tinta)}
+.laudo-linha{padding:2px 0;font-size:14px;line-height:1.35;white-space:pre-wrap}
+.laudo-nota{margin-top:8px;font-size:12.5px;color:var(--cinza-nota)}
+.laudo-selo{margin:10px 0 4px;padding:7px 9px;border:1.5px solid var(--tinta);font-size:13px;font-variant-numeric:tabular-nums;word-break:break-all}

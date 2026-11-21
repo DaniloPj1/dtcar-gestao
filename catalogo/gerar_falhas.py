@@ -57,25 +57,34 @@ def e_cabecalho(linha):
     return linha.strip().upper() in (c.upper() for c in TODOS_CABECALHOS)
 
 
+# Linha que é só a numeração da falha no jeito da Honda, com ou sem o código SAE
+# entre parênteses: "71-1(P0301)", "71-01 (P0301)", "B0001-2B", "T45-9", "B0001-11".
+# Sem reconhecer todas essas formas, a numeração virava o título da ficha.
+NUMERACAO = re.compile(
+    r"^[A-Za-z]{0,2}[0-9A-Fa-f]{1,5}-[0-9A-Za-z]{1,4}\s*(\(\s*[\w.]+\s*\))?$"
+)
+
+
 def partir(texto, chave, codigo):
     """Texto bruto do HDS → {titulo, secoes: {nome: [linhas]}}."""
     linhas = [l.rstrip() for l in texto.splitlines()]
-    # A primeira linha repete a chave; a segunda costuma ser "DTC HELP"; depois
-    # vem a linha do código no formato Honda ("71-01 (P0301)") e o título.
+    # O começo do texto traz a chave (às vezes REPETIDA na linha seguinte), às
+    # vezes "DTC HELP", a numeração da falha no jeito da Honda e só então o
+    # título. Pular só a primeira linha deixava a chave repetida virar título.
     titulo = ""
     secoes = {}
     atual = None
-    for i, l in enumerate(linhas):
+    for l in linhas:
         bruta, limpa = l, l.strip()
         if not limpa:
             continue
-        if i == 0 and limpa == chave:
+        if limpa == chave:
             continue
         if RUIDO.match(limpa):
             atual = None if limpa.upper() == "GLOSSARY" else atual
             continue
-        # Linha do código Honda, com ou sem o SAE entre parênteses.
-        if re.match(r"^\d+-\d+\s*\(?" + re.escape(codigo) + r"?\)?\s*$", limpa):
+        # Numeração da falha, antes de qualquer seção: não é título nem conteúdo.
+        if atual is None and (NUMERACAO.match(limpa) or limpa.upper() == codigo.upper()):
             continue
         achou = None
         for nome, cabecalhos in SECOES:

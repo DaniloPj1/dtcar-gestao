@@ -16,6 +16,7 @@ import * as registro from "../js/obdregistro.js";
 import { usarExplicacoes, FalhaExplicada, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
 import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
+import { HondaLista, Condicoes } from "./diaghonda.js";
 import * as confere from "../js/obdconfere.js";
 import * as compara from "../js/obdcompara.js";
 import * as laudo from "../js/obdlaudo.js";
@@ -1058,20 +1059,21 @@ function Atuadores() {
   // `cancelar` é uma caixa, não estado: a roda do teste precisa ver o valor NOVO a cada volta, e
   // estado dentro de função que já começou continuaria valendo o antigo.
   const cancelar = useRef(false);
-  const testar = async did => {
-    setAlvo(null); setAndando({ passos: [] }); cancelar.current = false;
+  const [condOk, setCondOk] = useState(false);
+  const testar = async (did, hd = null, antes = null) => {
+    setAlvo(null); setCondOk(false); setAndando({ passos: [] }); cancelar.current = false;
     // comAcao: pega a vez, para a leitura de fundo E TRAVA O DESLIGAMENTO enquanto o teste corre.
     // Sem a trava, trocar de tela ou de módulo no meio derrubava a conexão antes de o controle da
     // saída ser devolvido ao módulo — e saída presa no comando do aparelho queima peça.
     const r = await sessao.comAcao("o teste de atuador", () => uds.testarAtuador(did, {
-      segundos: 5,
+      segundos: hd ? hd.segundos : 5, ...(hd ? { valor: hd.valor } : {}),
       pausar: sessao.pausar, retomar: sessao.retomar,
       continuar: () => !cancelar.current,
       aoAndar: p => setAndando({ passos: p.passos }),
     }));
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar o teste." } }));
     // Fica registrado quem acionou o quê, em que módulo e o que o módulo respondeu (Etapa 1).
-    const reg = await registrarAcao("atuar", perfil, { modulo: sessao.estado().modulo, did: hex4Txt(did), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
+    const reg = await registrarAcao("atuar", perfil, { modulo: sessao.estado().modulo, did: hex4Txt(did), ...(hd ? { honda: hd.chave, nome: hd.nome, antes } : {}), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
     setAndando(a => (a ? { ...a, registro: reg } : a));
   };
 
@@ -1080,7 +1082,7 @@ function Atuadores() {
       : !obd.disponivel() ? html`<div class="vazio">Esta tela funciona no aplicativo instalado no celular (APK).</div>`
       : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
       <${Adaptador} compacto=${!!st.ligado} />
-      ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
+      ${!mod ? html`<${CarroDaVez} st=${st} /><${HondaLista} tipo="atuadores" st=${st} travado=${!!andando} aoPronto=${({ mod: m, item, antes }) => { setMod(m); setLista(null); setAlvo({ did: item.did, honda: item, antes }); }} /><${EscolherModulo} aoEscolher=${escolher} />` : html`
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="atu-modulo">
           <button type="button" class="btn-barra" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />VER OS ATUADORES DESTE MÓDULO</button>
           <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono || st.acaoCorrendo || !!andando}>TROCAR DE MÓDULO</button>
@@ -1108,11 +1110,12 @@ function Atuadores() {
       `}
     `}
     ${alvo ? html`<${Quadro} titulo="Acionar esta saída?" onFechar=${() => setAlvo(null)}>
-      <p>O módulo vai acionar a saída <b>${hex4Txt(alvo.did)}</b> por cinco segundos. Antes de confirmar:</p>
+      ${alvo.honda ? html`<p><b>${alvo.honda.nome}</b> (saída ${hex4Txt(alvo.did)}), por ${alvo.honda.segundos} segundos. ${alvo.honda.ver}</p>
+        <${Condicoes} item=${alvo.honda} aoMudar=${setCondOk} />` : html`<p>O módulo vai acionar a saída <b>${hex4Txt(alvo.did)}</b> por cinco segundos. Antes de confirmar:</p>`}
       <p class="nota">• Veja se não há ninguém com a mão perto de ventoinha, correia ou polia.<br />
       • Saída de luz, bomba e ventoinha é segura de testar. Saída que move peça grande, não.<br />
       • O app devolve o controle ao módulo no fim. Se não conseguir, ele avisa e aí é desligar a chave.</p>
-      <button type="button" class="btn-acao" onClick=${() => testar(alvo.did)}>ACIONAR AGORA</button>
+      <button type="button" class="btn-acao" id="atu-acionar" disabled=${!!alvo.honda && !condOk} onClick=${() => testar(alvo.did, alvo.honda || null, alvo.antes || null)}>ACIONAR AGORA</button>
       <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAlvo(null)}>Cancelar</button>
     </${Quadro}>` : null}
   </${Tela}>`;
@@ -1172,16 +1175,17 @@ function Aprendizados() {
     if (!(r.r || []).length) setErro("Nenhuma das rotinas sondadas existe neste módulo. A sondagem olha alguns números conhecidos da faixa do fabricante, não a faixa inteira: ela não prova que o módulo não tem nenhuma.");
   };
   const cancelar = useRef(false);
-  const rodar = async rid => {
-    setAlvo(null); setAndando({ passos: [] }); cancelar.current = false;
+  const [condOk, setCondOk] = useState(false);
+  const rodar = async (rid, hd = null, antes = null) => {
+    setAlvo(null); setCondOk(false); setAndando({ passos: [] }); cancelar.current = false;
     const r = await sessao.comAcao("o aprendizado", () => uds.rodarAprendizado(rid, {
-      segundosMax: 120,
+      segundosMax: hd ? hd.segundosMax : 120, ...(hd ? { dados: hd.dados } : {}),
       pausar: sessao.pausar, retomar: sessao.retomar,
       continuar: () => !cancelar.current,
       aoAndar: p => setAndando({ passos: p.passos }),
     }));
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar a rotina." } }));
-    const reg = await registrarAcao("aprender", perfil, { modulo: sessao.estado().modulo, rotina: hex4Txt(rid), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
+    const reg = await registrarAcao("aprender", perfil, { modulo: sessao.estado().modulo, rotina: hex4Txt(rid), ...(hd ? { honda: hd.chave, nome: hd.nome, antes } : {}), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });
     setAndando(a => (a ? { ...a, registro: reg } : a));
   };
 
@@ -1190,7 +1194,7 @@ function Aprendizados() {
       : !obd.disponivel() ? html`<div class="vazio">Esta tela funciona no aplicativo instalado no celular (APK).</div>`
       : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
       <${Adaptador} compacto=${!!st.ligado} />
-      ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
+      ${!mod ? html`<${CarroDaVez} st=${st} /><${HondaLista} tipo="aprendizados" st=${st} travado=${!!andando} aoPronto=${({ mod: m, item, antes }) => { setMod(m); setLista(null); setAlvo({ rid: item.rid, honda: item, antes }); }} /><${EscolherModulo} aoEscolher=${escolher} />` : html`
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="apr-modulo">
           <button type="button" class="btn-barra" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />VER AS ROTINAS DESTE MÓDULO</button>
           <button type="button" class="btn-barra claro" onClick=${sondar} disabled=${!!ocupado || !!st.dono}><${Ic} n="aprender" t=${20} />SONDAR SEM RODAR NADA</button>
@@ -1219,11 +1223,13 @@ function Aprendizados() {
       `}
     `}
     ${alvo ? html`<${Quadro} titulo="Rodar esta rotina?" onFechar=${() => setAlvo(null)}>
-      <p>O módulo vai rodar a rotina <b>${hex4Txt(alvo.rid)}</b>. Aprendizado muda o jeito do módulo trabalhar, e não tem botão de desfazer.</p>
+      ${alvo.honda ? html`<p><b>${alvo.honda.nome}</b> (rotina ${hex4Txt(alvo.rid)}). ${alvo.honda.aviso}</p>
+        <p class="nota" id="honda-antes">Valor atual lido e guardado antes de rodar: <b>${alvo.antes}</b>. Fica no registro junto com quem rodou.</p>
+        <${Condicoes} item=${alvo.honda} aoMudar=${setCondOk} />` : html`<p>O módulo vai rodar a rotina <b>${hex4Txt(alvo.rid)}</b>. Aprendizado muda o jeito do módulo trabalhar, e não tem botão de desfazer.</p>`}
       <p class="nota">• Deixe a chave ligada e não mexa no carro enquanto a rotina corre.<br />
       • Se o módulo pedir condição (neutro, freio, temperatura), o app mostra o que falta.<br />
       • Pode levar até dois minutos.</p>
-      <button type="button" class="btn-acao" onClick=${() => rodar(alvo.rid)}>RODAR AGORA</button>
+      <button type="button" class="btn-acao" id="apr-rodar" disabled=${!!alvo.honda && !condOk} onClick=${() => rodar(alvo.rid, alvo.honda || null, alvo.antes || null)}>RODAR AGORA</button>
       <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAlvo(null)}>Cancelar</button>
     </${Quadro}>` : null}
   </${Tela}>`;

@@ -203,11 +203,13 @@ window.Capacitor.Plugins.DtcarObd = {
     // cabeçalho ligado (ATH1): a resposta vem com o endereço de quem respondeu, como no adaptador de verdade
     // O carro de mentira tem TRÊS módulos: motor (7E0), câmbio (7E1) e ABS (713). Nos outros endereços
     // ninguém responde — é assim que o teste prova que a tela só mostra módulo disponível.
-    if (window.__obd.cabecalho && ['7E0', '7E1', '713'].indexOf(window.__obd.cabecalho) < 0 && c.indexOf('AT') !== 0) return Promise.resolve({ resposta: 'NO DATA\\r\\r>' });
+    if (window.__obd.cabecalho && ['7E0', '7E1', '713', '18DA10F1'].indexOf(window.__obd.cabecalho) < 0 && c.indexOf('AT') !== 0) return Promise.resolve({ resposta: 'NO DATA\\r\\r>' });
     // ABS do Polo: as quatro rodas no dado 03E8 (40,0 / 40,0 / 39,5 / 12,0 km/h — a traseira direita divergindo)
     if (window.__obd.cabecalho === '713' && c === '2203E8') { window.__obd.roda = (window.__obd.roda || 0) + 1; return Promise.resolve({ resposta: '6203E801900190018B00' + (120 + window.__obd.roda).toString(16).toUpperCase() + '\\r\\r>' }); }
     if (window.__obd.cabecalho === '713' && c.indexOf('22') === 0) return Promise.resolve({ resposta: '7F2231\\r\\r>' });
     if (window.__obd.dado && c.indexOf('22') === 0 && window.__obd.dado[c.slice(2)]) return Promise.resolve({ resposta: '62' + c.slice(2) + window.__obd.dado[c.slice(2)] + '\\r\\r>' });
+    // Honda: o dado 266C (onde mora o bit do aprendizado do VTC), 40 bytes
+    if (window.__obd.cabecalho === '18DA10F1' && c === '22266C') return Promise.resolve({ resposta: '62266C' + new Array(41).join('5A') + '\\r\\r>' });
     if (c === 'ATH1') { window.__obd.h1 = true; return Promise.resolve({ resposta: 'OK\\r\\r>' }); }
     if (c === 'ATH0' || c === 'ATZ') window.__obd.h1 = false;
     if (window.__obd.h1 && !window.__obd.limpo && !window.__obd.falhaNova && (c === '03' || c === '07' || c === '0A')) {
@@ -1054,6 +1056,33 @@ try:
         t('APAGAR AS FALHAS DESTE MÓDULO' in tf, 'o administrador pode apagar por módulo')
 
         # ---- ATUADORES: confirma antes, e DEVOLVE o controle ----
+        # HONDA COM NOME (Etapa 1): só aparece em Honda, pede as condições por escrito, e registra
+        pg.goto(URL + '#/atuadores'); pg.wait_for_selector('#diag-modulo', timeout=10000)
+        t(not pg.query_selector('#honda-lista'), 'em carro que não é Honda a lista da Honda não existe')
+        pg.evaluate("import('../js/obdsessao.js').then(m => m.definirCarro({ placa: 'HND0A00', marca: 'Honda', modelo: 'CITY EX', ano: '2016' }))"); pg.wait_for_selector('#honda-lista', timeout=5000)
+        th = pg.inner_text('#honda-lista'); t('Eletroventilador' in th and 'purga' in th and 'simulado' in th, 'os atuadores da Honda vêm com NOME, e a tela diz que foram conferidos em módulo simulado')
+        pg.click('#honda-lista [data-chave="ventoinha"]'); pg.wait_for_selector('#honda-condicoes', timeout=20000)
+        t(pg.locator('#atu-acionar').is_disabled(), 'sem confirmar as condições o botão de acionar fica desligado')
+        nc = pg.locator('#honda-condicoes input').count(); t(nc == 5, 'a ventoinha tem as 5 condições da ferramenta: %d' % nc)
+        for k in range(nc - 1): pg.locator('#honda-condicoes input').nth(k).check()
+        t(pg.locator('#atu-acionar').is_disabled(), 'faltando UMA condição continua desligado')
+        pg.locator('#honda-condicoes input').nth(nc - 1).check(); pg.wait_for_timeout(200)
+        na = len(f.gravados); pg.click('#atu-acionar'); pg.wait_for_selector('#atu-registro', timeout=40000)
+        ch = pg.evaluate('window.__obd.chamadas'); t('atuar:013C:03' in ch and 'atuar:013C:00' in ch, 'aciona a saída 013C e devolve o controle: %s' % [x for x in ch if x.startswith('atuar:013C')][:4])
+        t(pg.evaluate('window.__obd.cabecalho') in ('18DA10F1', '') and any(x == 'ATSH18DA10F1' for x in pg.evaluate('window.__obd.cmds')), 'no módulo do motor da Honda, em 29 bits')
+        ra = [c for (tab, c) in f.gravados[na:] if tab == 'obd_leituras' and c.get('tipo') == 'atuar']
+        t(len(ra) == 1 and ra[0]['dados'].get('honda') == 'ventoinha' and ra[0]['placa'] == 'HND0A00', 'o teste de atuador fica REGISTRADO, com quem e em qual carro: %s' % [x.get('dados', {}).get('did') for x in ra])
+        pg.goto(URL + '#/aprendizados'); pg.wait_for_selector('#honda-lista', timeout=10000)
+        pg.click('#honda-lista [data-chave="manut_1"]'); pg.wait_for_selector('#honda-erro', timeout=20000)
+        t('painel' in pg.inner_text('#honda-erro').lower() or 'Painel' in pg.inner_text('#honda-erro'), 'módulo que não responde: o item não roda, e a tela diz qual módulo faltou: ' + pg.inner_text('#honda-erro')[:80])
+        pg.click('#honda-lista [data-chave="vtc"]'); pg.wait_for_selector('#honda-antes', timeout=20000)
+        t('5A' in pg.inner_text('#honda-antes') and pg.locator('#apr-rodar').is_disabled(), 'o valor antigo é lido e mostrado antes, e rodar exige as condições')
+        for k in range(pg.locator('#honda-condicoes input').count()): pg.locator('#honda-condicoes input').nth(k).check()
+        na = len(f.gravados); pg.click('#apr-rodar'); pg.wait_for_selector('#apr-registro', timeout=60000)
+        t('rotina:0218:01' in pg.evaluate('window.__obd.chamadas'), 'roda a rotina do VTC (0218)')
+        rp = [c for (tab, c) in f.gravados[na:] if tab == 'obd_leituras' and c.get('tipo') == 'aprender']
+        t(len(rp) == 1 and rp[0]['dados'].get('antes') == '5A' and rp[0]['dados'].get('honda') == 'vtc', 'o aprendizado fica registrado COM o valor antigo: %s' % [x.get('dados', {}).get('antes') for x in rp])
+        pg.evaluate("import('../js/obdsessao.js').then(async m => { await m.soltarModulo(); m.definirCarro({ placa: 'ABC1D23', marca: 'Volkswagen', modelo: 'GOL 1.0', ano: '2015' }); })"); pg.wait_for_timeout(500)
         pg.goto(URL + '#/atuadores'); pg.wait_for_selector('#diag-modulo', timeout=10000)
         pg.click('#diag-modulo .btn-barra'); pg.wait_for_timeout(2500)
         pg.click('#diag-modulo .obd-ap >> nth=0'); pg.wait_for_selector('#atu-modulo', timeout=10000)

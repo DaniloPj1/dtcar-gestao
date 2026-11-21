@@ -178,3 +178,18 @@ const ss = await import("../js/obdsessao.js");
 let viu = 0; const largar = ss.observar(() => { viu++; }); ss.definirCarro({ placa: "TST0A00" });
 if (!viu) { console.error("FALHOU: quem observa recebe as mudanças"); process.exit(1); }
 largar(); console.log("observador da sessão: ok");
+
+/* ---- Honda: atuadores e aprendizados com nome ---- */
+const hd = await import("../js/obdhonda.js");
+let m6 = 0; const t6 = (c, msg) => { m6++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+t6(hd.eHonda({ marca: "Honda" }) && hd.eHonda({ vin: "93HGM2660GZ123456" }) && !hd.eHonda({ marca: "Chevrolet", vin: "9BG" }) && !hd.eHonda({}), "só Honda");
+t6(hd.ATUADORES.length === 4 && hd.ATUADORES.map(a => a.did).join() === [0x013c, 0x014a, 0x0163, 0x0137].join(), "os quatro atuadores da ferramenta, com os identificadores de lá");
+t6(hd.ATUADORES.every(a => a.condicoes.length >= 4 && a.valor === "01" && a.segundos <= 30), "cada atuador com as condições escritas e tempo máximo");
+t6(hd.APRENDIZADOS.length === 10 && hd.APRENDIZADOS.every(a => a.rid >= 0x0200 && a.rid <= 0xdfff), "as dez funções, todas na faixa de rotina de veículo que o portão do Android aceita");
+t6(hd.APRENDIZADOS.find(a => a.chave === "vtc").dados === "02" && hd.APRENDIZADOS.find(a => a.chave === "manut_3").rid === 0x7024 && hd.APRENDIZADOS.find(a => a.chave === "pastilha_sair").rid === 0x40d0, "números conferidos com a origem");
+t6(hd.APRENDIZADOS.every(a => a.antes && a.condicoes.length && a.aviso), "toda função lê e guarda o valor antigo antes, e tem aviso");
+const b7068 = Array.from({ length: 22 }, (_, i) => (i === 7 ? 0xa0 : i === 12 ? 0x0c : i === 13 ? 0x1e : 0));
+const it = n => hd.APRENDIZADOS.find(a => a.chave === "manut_" + n);
+t6(hd.habilitado(it(1), b7068) === true && hd.habilitado(it(2), b7068) === false && hd.habilitado(it(3), b7068) === true && hd.habilitado(it(1), [1, 2]) === null && hd.habilitado(hd.APRENDIZADOS[0], []) === true, "item do painel só é oferecido se o carro disser que tem");
+t6(hd.valorAntes(it(1).antes, b7068) === "0C1E" && hd.valorAntes(it(5).antes, [1, 2, 3]) === null, "o valor antigo sai do byte certo; resposta curta não vira zero");
+console.log(m6 + " conferências da Honda passaram.");

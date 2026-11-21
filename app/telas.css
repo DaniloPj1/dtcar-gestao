@@ -526,8 +526,8 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .mostrador-pes.faixa{display:block;text-align:center;font-weight:700;color:#4a5560}
 .mostrador-num.longo b{font-size:17px}
 
-/* ---- tela limpa: o que não é do dia a dia fica guardado dentro de um botão ---- */
-.grupo-abrir{width:100%;min-height:44px;display:flex;align-items:center;justify-content:space-between;gap:10px;padding:6px 2px;border:0;background:none;font:inherit;font-size:14px;font-weight:600;color:var(--tinta);text-align:left}
-.grupo-abrir i{flex:0 0 auto;font-style:normal;font-size:12.5px;font-weight:800;color:var(--azul);text-decoration:underline}
-.grupo-abrir .selo{margin-right:6px}
+/* ---- tela limpa: só botões; o que não é do dia a dia abre ao tocar no botão do grupo ---- */
+.btn-barra[aria-expanded]{justify-content:center}
+.btn-barra[aria-expanded="true"]{background:#e3ebf5}
+#obd-adaptador-abrir .selo{margin-right:2px}
 #obd-acoes .nota:empty{display:none}

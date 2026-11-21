@@ -44,7 +44,7 @@ import java.util.concurrent.Executors;
  *     10 só nas sessões 01 (padrão) e 03 (estendida), 3E (tester present).
  *
  * CONTINUA BLOQUEADO, igual ao app do pátio, tudo que ESCREVE ou AGE no carro:
- *   04/14 (apagar falha), 2E/3D (gravar), 2F (atuador), 31 (rotina), 34-37 (transferência de bloco),
+ *   04/14 (apagar falha), 2E/3D (gravar), 2F/AE completos (atuador), 31 (rotina), 34-37 (transferência de bloco),
  *   27 (destravar), 11/28/85 (reiniciar/comunicação), e a sessão de programação (10 02).
  * Este app NÃO tem o método apagar(): ele só lê.
  *
@@ -73,7 +73,8 @@ public class ObdPlugin extends Plugin {
     private static final Set<String> AT_EXATOS = new HashSet<>(Arrays.asList(
         "ATZ", "ATD", "ATE0", "ATE1", "ATL0", "ATL1", "ATS0", "ATS1",
         "ATH0", "ATH1", "ATAL", "ATDP", "ATDPN", "ATRV", "ATI",
-        "ATCAF0", "ATCAF1", "ATAT0", "ATAT1", "ATAT2", "ATCSM0", "ATCSM1"
+        "ATCAF0", "ATCAF1", "ATAT0", "ATAT1", "ATAT2", "ATCSM0", "ATCSM1",
+        "ATAR", "ATCRA"
     ));
 
     /**
@@ -91,9 +92,9 @@ public class ObdPlugin extends Plugin {
         "01", "02", "03", "06", "07", "09", "0A"
     ));
 
-    /** Serviços UDS de LEITURA liberados por completo (qualquer operando). */
+    /** Serviços UDS de LEITURA liberados por completo (qualquer operando). 23 = ler memória por endereço (leitura). */
     private static final Set<String> UDS_LEITURA = new HashSet<>(Arrays.asList(
-        "22", "19", "1A"
+        "22", "19", "1A", "23"
     ));
 
     private final ExecutorService fila = Executors.newSingleThreadExecutor();
@@ -132,6 +133,13 @@ public class ObdPlugin extends Plugin {
         if (servico.equals("10")) return c.equals("1001") || c.equals("1003");
         // 3E (tester present) só nas duas formas padrão.
         if (servico.equals("3E")) return c.equals("3E00") || c.equals("3E80");
+        // MAPEAR ATUADORES sem acionar: o pedido sai INCOMPLETO de propósito, então o módulo só pode recusar.
+        // Se a saída existe, ele responde "tamanho errado" (13); se não existe, "fora da faixa" (31).
+        //  - GMLAN device control: só "AE" + CPID (2 bytes). O comando de verdade leva os bytes de controle.
+        //  - UDS controle de entrada/saída: só "2F" + identificador (3 bytes). O de verdade leva o parâmetro.
+        // Qualquer coisa a mais (que poderia acionar) continua RECUSADA.
+        if (servico.equals("AE")) return c.length() == 4;
+        if (servico.equals("2F")) return c.length() == 6;
         return false;
     }
 

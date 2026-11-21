@@ -25,6 +25,7 @@ chk("CALID tem as duas calibrações", /12649229/.test(L.hex2txt(L.isotp(CAL,"7E
 chk("positiva do 22", L.analisa("7E8 05 62 F1 90 41 42","7E8","22").tipo==="pos");
 chk("negativa 31 = não existe", (r=>r.tipo==="neg"&&r.nrc==="31")(L.analisa("7E8 03 7F 22 31","7E8","22")));
 chk("sonda AE incompleta: 13 = saída EXISTE", (r=>r.tipo==="neg"&&r.nrc==="13")(L.analisa("7E8 03 7F AE 13","7E8","AE")));
+chk("aguarde (78) seguido de positiva = positiva", L.analisa("7E8 03 7F 22 78 | 7E8 05 62 F1 90 41 42","7E8","22").tipo==="pos");
 chk("NO DATA = nada", L.analisa("NO DATA","7E8","22").tipo==="nada");
 chk("resposta de OUTRO módulo é ignorada", L.analisa("7E9 05 62 F1 90 41 42","7E8","22").tipo==="nada");
 chk("o '50' sozinho do GMLAN conta como sessão aceita", L.analisa("7E8 01 50","7E8","10").tipo==="pos");

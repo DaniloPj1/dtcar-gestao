@@ -128,8 +128,10 @@ function isotp(raw, hdr){
 }
 /* classifica a resposta de UM módulo a UM serviço: positiva, negativa (com código) ou nada */
 function analisa(raw, hdr, serv){
-  const d=isotp(raw,hdr);
-  if(!d) return {tipo:"nada"};
+  let d=isotp(raw,hdr);
+  // "aguarde" (7F xx 78) pode vir antes da resposta de verdade: descarta e olha o que veio depois
+  while(d.startsWith("7F"+serv+"78")) d=d.slice(6);
+  if(!d) return {tipo:"nada", pendente:true};
   const pos=(parseInt(serv,16)+0x40).toString(16).toUpperCase().padStart(2,"0");
   if(d.startsWith("7F"+serv)) return {tipo:"neg", nrc:d.substr(4,2)};
   if(d.startsWith(pos)) return {tipo:"pos", dados:d.slice(2)};

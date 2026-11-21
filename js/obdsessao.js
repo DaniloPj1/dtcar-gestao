@@ -64,6 +64,16 @@ export const estado = () => st;
 
 /* ------------------------------------------------------------------ ligar e desligar */
 
+// O ÚLTIMO ADAPTADOR (pedido do Danilo, 21/11/2026): o app guarda em qual adaptador conectou por
+// último, e o botão CONECTAR vai direto nele, sem a pessoa apontar qual. Fica no aparelho.
+const CHAVE_ULTIMO = "obd_ultimo_adaptador";
+const cofreLocal = () => { try { return typeof window !== "undefined" ? window.localStorage : null; } catch (e) { return null; } };
+export function ultimoAparelho() {
+  try { const c = cofreLocal(); const v = c && JSON.parse(c.getItem(CHAVE_ULTIMO) || "null"); return v && v.endereco ? v : null; } catch (e) { return null; }
+}
+function lembrarAparelho(ap) { try { const c = cofreLocal(); if (c && ap && ap.endereco) c.setItem(CHAVE_ULTIMO, JSON.stringify({ endereco: ap.endereco, nome: ap.nome || "" })); } catch (e) { /* sem espaço */ } }
+export function esquecerAparelho() { try { const c = cofreLocal(); if (c) c.removeItem(CHAVE_ULTIMO); } catch (e) { /* segue */ } }
+
 export async function ligar({ endereco, nome } = {}) {
   if (st.ligando) return st;
   mexer({ ligando: true, erro: "" });
@@ -75,6 +85,7 @@ export async function ligar({ endereco, nome } = {}) {
       protocolo: r.protocolo || "", versao: r.versao || "", aviso: r.aviso || "",
       pidsSuportados: r.pidsSuportados || [], erro: "", modulo: null,
     });
+    lembrarAparelho({ endereco, nome: nome || "" });
   } catch (e) {
     mexer({ ligado: false, ligando: false, erro: obd.motivoDe(e) });
   }
@@ -128,10 +139,12 @@ export async function desligar() {
  * cortaria a conexão no meio de uma troca entre duas telas de diagnóstico. A espera curta é
  * cancelada pela tela seguinte, e só vira desligamento de verdade quando ninguém assume.
  */
+// A CONEXÃO FICA (pedido do Danilo, 21/11/2026): uma vez conectado, o adaptador continua ligado no
+// carro até o app ser fechado, o adaptador sair da tomada ou a pessoa tocar em DESCONECTAR. Sair das
+// telas do carro (voltar ao Início, abrir uma O.S.) NÃO desliga mais. Antes desligava ao sair da família.
 let relogioSaida = null;
 export function saindoDaTela() {
-  if (relogioSaida) clearTimeout(relogioSaida);
-  relogioSaida = setTimeout(() => { relogioSaida = null; if (!ouvintes.size && !emAcao) desligar(); }, 400);
+  if (relogioSaida) { clearTimeout(relogioSaida); relogioSaida = null; }
 }
 export function entrandoNaTela() {
   if (relogioSaida) { clearTimeout(relogioSaida); relogioSaida = null; }

@@ -57,7 +57,9 @@ function Inicio() {
             ${fechadas.length > 5 ? html`<button type="button" class="link" onClick=${() => ir("historico")}>Ver todo o histórico</button>` : null}</div>` : null}</${Cartao}>` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
       ${GRUPOS.map(gr => {
-        const botoes = TELAS.filter(b => b.g === gr.g && telas.includes(b.r));
+        // Do carro, o Início mostra só LER O CARRO: Módulos, Atuadores, Aprendizados, Programar bico e
+        // Parâmetros ficam DENTRO dele (botões Outros módulos e Serviços avançados) — pedido do Danilo, 21/11/2026.
+        const botoes = TELAS.filter(b => b.g === gr.g && telas.includes(b.r) && (b.g !== "diagnostico" || b.r === "obd" || !telas.includes("obd")));
         if (!botoes.length) return null;
         return html`<div key=${gr.g} class="grupo">
           ${GRUPOS.filter(x => TELAS.some(b => b.g === x.g && telas.includes(b.r))).length > 1 ? html`<h3 class="grupo-t">${gr.t}</h3>` : null}

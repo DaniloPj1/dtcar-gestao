@@ -316,13 +316,22 @@ function Obd() {
     try { await sessao.soltarModulo(); await fn(); } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
   }
 
-  const procurar = () => rodar("Procurando o adaptador…", async () => {
+  const procurar = (outro = false) => rodar("Procurando o adaptador…", async () => {
     const p = await obd.permissao();
     if (!p.concedida) {
       const q = await obd.pedirPermissao();
       if (!q.concedida) throw new Error("sem-permissao");
     }
     const lista = await obd.listar();
+    // Já conectou antes: vai direto no mesmo adaptador, sem a pessoa apontar qual.
+    const ult = !outro && sessao.ultimoAparelho();
+    const ap = ult && lista.find(x => x.endereco === ult.endereco);
+    if (ap) {
+      setOcupado("Conectando em " + ap.nome + "…");
+      const st = await sessao.ligar({ endereco: ap.endereco, nome: ap.nome });
+      if (!st.erro) { if (placa && st.pidsSuportados && st.pidsSuportados.length) guardado("suportados", st.pidsSuportados); setRes(null); setVivo(null); setFalhasVivo(null); return; }
+      setAparelhos(lista); throw new Error(st.erro);                 // não conectou: mostra a lista para escolher
+    }
     setAparelhos(lista);
   });
 
@@ -583,7 +592,8 @@ function Obd() {
       <${Cartao} titulo="Adaptador" id="obd-adaptador">
         ${!lig ? html`
           <p class="nota" style="margin-bottom:8px">Encaixe o adaptador na tomada do carro e ligue a ignição (chave na posição 2). Com o motor desligado e a chave fora, o módulo não responde.</p>
-          <button type="button" class="btn-barra" id="obd-procurar" onClick=${procurar} disabled=${!!ocupado}><${Ic} n="obd" t=${22} />PROCURAR ADAPTADOR</button>
+          <button type="button" class="btn-barra" id="obd-procurar" onClick=${() => procurar(false)} disabled=${!!ocupado}><${Ic} n="obd" t=${22} />CONECTAR</button>
+          ${sessao.ultimoAparelho() && !aparelhos ? html`<button type="button" class="btn-barra claro" id="obd-outro" style="justify-content:center" onClick=${() => procurar(true)} disabled=${!!ocupado}>OUTRO ADAPTADOR</button>` : null}
           ${aparelhos && !aparelhos.length ? html`<div class="vazio">Nenhum aparelho pareado. Pareie o adaptador uma vez nos Ajustes do Android (Bluetooth) e volte aqui.</div>` : null}
           ${aparelhos && aparelhos.length ? html`<div class="sec"><h3>Aparelhos pareados</h3>
             ${aparelhos.map(ap => html`<button key=${ap.endereco} type="button" class="obd-ap" onClick=${() => ligar(ap)} disabled=${!!ocupado}>
@@ -917,12 +927,21 @@ function Adaptador({ compacto = false }) {
   const [aparelhos, setAparelhos] = useState(null);
   const [ocupado, setOcupado] = useState("");
   const [erro, setErro] = useState("");
-  const procurar = async () => {
+  const procurar = async (outro = false) => {
     setErro(""); setOcupado("Procurando o adaptador…");
     try {
       const p = await obd.permissao();
       if (!p.concedida) { const q = await obd.pedirPermissao(); if (!q.concedida) throw new Error("sem-permissao"); }
-      setAparelhos(await obd.listar());
+      const lista = await obd.listar();
+      const ult = !outro && sessao.ultimoAparelho();
+      const ap = ult && lista.find(x => x.endereco === ult.endereco);
+      if (ap) {
+        setOcupado("Conectando em " + ap.nome + "…");
+        const r = await sessao.ligar({ endereco: ap.endereco, nome: ap.nome });
+        if (!r.erro) return;
+        setAparelhos(lista); setErro(r.erro); return;
+      }
+      setAparelhos(lista);
     } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
   };
   const ligar = async ap => {
@@ -941,7 +960,8 @@ function Adaptador({ compacto = false }) {
   return html`<${Cartao} titulo="Adaptador" id="diag-adaptador">
     ${!st.ligado ? html`
       <p class="nota" style="margin-bottom:8px">Encaixe o adaptador na tomada do carro e ligue a ignição (chave na posição 2). Com a chave fora, o módulo não responde.</p>
-      <button type="button" class="btn-barra" id="diag-procurar" onClick=${procurar} disabled=${!!ocupado || st.ligando}><${Ic} n="obd" t=${22} />PROCURAR ADAPTADOR</button>
+      <button type="button" class="btn-barra" id="diag-procurar" onClick=${() => procurar(false)} disabled=${!!ocupado || st.ligando}><${Ic} n="obd" t=${22} />CONECTAR</button>
+      ${sessao.ultimoAparelho() && !aparelhos ? html`<button type="button" class="btn-barra claro" id="diag-outro" style="justify-content:center" onClick=${() => procurar(true)} disabled=${!!ocupado || st.ligando}>OUTRO ADAPTADOR</button>` : null}
       ${aparelhos && !aparelhos.length ? html`<div class="vazio">Nenhum aparelho pareado. Pareie o adaptador uma vez nos Ajustes do Android (Bluetooth) e volte aqui.</div>` : null}
       ${aparelhos && aparelhos.length ? html`<div class="sec"><h3>Aparelhos pareados</h3>
         ${aparelhos.map(ap => html`<button key=${ap.endereco} type="button" class="obd-ap" onClick=${() => ligar(ap)} disabled=${!!ocupado || st.ligando}><b>${ap.nome}</b><span>${ap.endereco}</span></button>`)}

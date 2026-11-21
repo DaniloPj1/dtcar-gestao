@@ -77,11 +77,15 @@ const PADRAO_11 = { "7E0": "Motor", "7E1": "Câmbio" };
 // Honda, 29 bits: duas fontes independentes batem (a ferramenta decodificada da Honda e o OBDb).
 const HONDA_29 = { "0E": "Motor", "10": "Motor", "1E": "Câmbio", "28": "ABS/VSA", "30": "Direção elétrica", "53": "Airbag", "60": "Painel", "26": "Pressão dos pneus", "01": "Bateria" };
 
+// Grupo VW: os nomes vêm do acervo de endereços UDS da VAG que o app já tem (catalogo/uds/modulos_vag.json).
+const VAG_11 = { "713": "ABS/Freios", "715": "Airbag", "714": "Painel", "710": "Central de rede (gateway)", "70B": "Pressão dos pneus" };
+
 /** Nome do módulo para a tela. Sem tipo conhecido, o endereço fica escrito e nada é inventado. */
 export function nomeDoModulo(m, marca) {
   if (m.t && TIPO[m.t]) return TIPO[m.t];
   const p = String(m.p || "");
   if (p.length === 3 && PADRAO_11[p]) return PADRAO_11[p];
+  if (p.length === 3 && /VOLKSWAGEN|^VW\b|AUDI|SEAT|SKODA/.test(limpo(marca)) && VAG_11[p]) return VAG_11[p];
   if (p.length === 8 && /HONDA|ACURA/.test(limpo(marca)) && HONDA_29[p.slice(4, 6)]) return HONDA_29[p.slice(4, 6)];
   return "Módulo " + (p.length === 8 ? p.slice(4, 6) : p);
 }
@@ -122,9 +126,22 @@ const METRICA = { odometer: "Odômetro", speed: "Velocidade", transmissionFluidT
   shortTermFuelTrim: "Ajuste de combustível (curto)", throttlePosition: "Borboleta", o2Lambda: "Lambda", cvtDeterioration: "Desgaste do CVT" };
 
 export const unidadeDe = s => UNIDADE[s.u] || "";
-/** Nome do sinal: o nosso quando o OBDb diz o que é; senão o nome original, em inglês. */
-export const nomeDoSinal = s => METRICA[s.k] || s.n || s.id;
-export const nomeTraduzido = s => !!METRICA[s.k];
+// Velocidade de cada roda (módulo do ABS): o OBDb não padroniza o nome, mas escreve sempre parecido.
+const RODA = [[/\b(front left|fl|lf|left front)\b/i, "dianteira esquerda"], [/\b(front right|fr|rf|right front)\b/i, "dianteira direita"],
+  [/\b(rear left|rl|lr|left rear)\b/i, "traseira esquerda"], [/\b(rear right|rr|right rear)\b/i, "traseira direita"]];
+/** "Roda dianteira esquerda (velocidade)" quando o sinal é a velocidade de UMA roda; senão "". */
+export function nomeDaRoda(s) {
+  const n = String(s.n || "");
+  if (!/wheel/i.test(n) || !/speed/i.test(n) || /steering|average|pulse|count|raw/i.test(n)) return "";
+  if (!/kilometersPerHour|milesPerHour/.test(s.u || "")) return "";
+  for (const [re, nome] of RODA) if (re.test(n)) return "Roda " + nome + " (velocidade)" + (/high res/i.test(n) ? ", alta resolução" : "");
+  return "";
+}
+/** Nome do sinal: o nosso quando sabemos o que é; senão o nome original, em inglês. */
+export const nomeDoSinal = s => METRICA[s.k] || nomeDaRoda(s) || s.n || s.id;
+export const nomeTraduzido = s => !!(METRICA[s.k] || nomeDaRoda(s));
+/** Os sinais de velocidade por roda de um conjunto de comandos (para a tela pôr as quatro juntas). */
+export const eRoda = s => !!nomeDaRoda(s);
 
 /**
  * O valor de UM sinal a partir dos bytes de dado (depois do eco do identificador).
@@ -147,7 +164,7 @@ export function decodificar(s, bytes) {
   if ((s.nmn != null && v < s.nmn) || (s.nmx != null && v > s.nmx)) return null;
   v = Math.round(v * 100) / 100;
   if (s.u === "hex") return { valor: cru, texto: cru.toString(16).toUpperCase(), unidade: "" };
-  return { valor: v, texto: String(v).replace(".", ","), unidade: unidadeDe(s) };
+  return { valor: v, texto: String(v).replace(".", ","), unidade: unidadeDe(s), numero: true };
 }
 
 /** O texto do pedido para o adaptador e quantos bytes de eco descartar na resposta. */
@@ -169,7 +186,7 @@ export async function lerModulo(comandos, pedir, { aoAndar = null, continuar = (
       const bytes = r.dados.slice(p.eco);
       for (const s of c.z) {
         const v = decodificar(s, bytes);
-        if (v) item.sinais.push({ id: s.id, nome: nomeDoSinal(s), traduzido: nomeTraduzido(s), grupo: s.g || "", valor: v.valor, texto: v.texto, unidade: v.unidade, min: s.mn, max: s.mx });
+        if (v) item.sinais.push({ id: s.id, nome: nomeDoSinal(s), traduzido: nomeTraduzido(s), grupo: s.g || "", valor: v.valor, numero: !!v.numero, texto: v.texto, unidade: v.unidade, min: s.mn, max: s.mx, roda: eRoda(s) });
       }
     }
     out.push(item);

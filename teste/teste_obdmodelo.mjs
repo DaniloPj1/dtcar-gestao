@@ -44,3 +44,9 @@ t(lido[0].sinais.some(s => s.id === "CITY_GENERATOR" && s.texto === "50,2" && s.
 t(lido[1].nrc === 0x31 && !lido[1].sinais.length && !lido[2].sinais.length, "recusa e silêncio são ausência do dado, não zero");
 t(lido[0].situacao === "nao-conferido", "City 2016: o comando vem marcado como não conferido para o ano");
 console.log(n + " conferências do mapa por modelo passaram.");
+// rodas do ABS
+const polo = await m.carregar(m.acharModelo("Volkswagen", "Polo"));
+const rodas = m.comandosDoAno(polo, 2020).flatMap(c => c.z).filter(m.eRoda).map(m.nomeDoSinal);
+if (!(rodas.some(r => r.startsWith("Roda dianteira esquerda")) && rodas.some(r => r.startsWith("Roda traseira direita")))) { console.error("FALHOU: rodas do Polo: " + rodas.join("; ")); process.exit(1); }
+if (m.nomeDaRoda({ n: "Steering wheel speed", u: "kilometersPerHour" }) || m.nomeDaRoda({ n: "Average front wheel speed", u: "kilometersPerHour" }) || m.nomeDaRoda({ n: "Front left wheel speed", u: "scalar" })) { console.error("FALHOU: volante, média e número cru não são roda"); process.exit(1); }
+console.log("rodas do ABS: " + [...new Set(rodas)].join("; "));

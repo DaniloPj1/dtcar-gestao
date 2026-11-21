@@ -38,7 +38,7 @@ window.__obd = { cmds: [], chamadas: [], conectado: false };
 /* O PORTÃO, igual ao do plugin nativo (ObdPlugin.permitido). O teste em Python confere que as
    listas aqui são as MESMAS do Java — se alguém mudar um lado só, o teste reprova. */
 window.__AT_PERMITIDOS = ['ATZ','ATE0','ATL0','ATS0','ATH0','ATH1','ATSP0','ATDP','ATDPN','ATRV','ATI','ATCAF1','ATCRA','ATSP6','ATSP7'];
-window.__SERVICOS_LEITURA = ['01','02','03','06','07','09','0A','19','22','24','3E'];
+window.__SERVICOS_LEITURA = ['01','02','03','06','07','09','0A','19','21','22','24','3E'];
 window.__UDS_LEITURA = ['19','22','24','3E'];
 window.__SERVICOS_PROIBIDOS = ['34','35','36','37'];
 window.__portao = function (cru) {
@@ -61,6 +61,7 @@ window.__portao = function (cru) {
   var sv = c.slice(0, 2);
   if (window.__SERVICOS_PROIBIDOS.indexOf(sv) >= 0) return false;
   if (sv === '10') return c === '1001' || c === '1003';
+  if (sv === '21') return c.length === 4;
   if (window.__SERVICOS_LEITURA.indexOf(sv) >= 0) {
     return c.length <= (window.__UDS_LEITURA.indexOf(sv) >= 0 ? 32 : 14);
   }
@@ -141,6 +142,18 @@ window.Capacitor.Plugins.DtcarObd = {
     if (c.length === 3) { var n = parseInt(c, 16); return n !== 0x7DF && n >= 0x600 && n <= 0x7FF; }
     return c.length === 8 && c.indexOf('18DA') === 0;
   },
+  gravarDado: function (o) {
+    // o mesmo portão do nativo: só o módulo do motor, nunca a identificação, e só com o valor antigo lido
+    window.__obd.chamadas.push('gravarDado:' + o.did + ':' + o.valor);
+    var cab = String(window.__obd.cabecalho || '').toUpperCase(), n = parseInt(o.did, 16);
+    if (!/^[0-9A-F]{4}$/.test(o.did) || (n >= 0xF180 && n <= 0xF1FF)) return Promise.reject(new Error('did-protegido'));
+    if (cab !== '7E0' && cab !== '18DA10F1') return Promise.reject(new Error('so-modulo-do-motor'));
+    window.__obd.dado = window.__obd.dado || {};
+    var antes = window.__obd.dado[o.did] || '41414141414141';
+    if (o.did === '2A99') return Promise.resolve({ gravou: true, antes: '62' + o.did + antes, resposta: '7F2E33\\r\\r>' });
+    window.__obd.dado[o.did] = o.valor;
+    return Promise.resolve({ gravou: true, antes: '62' + o.did + antes + '\\r\\r>', resposta: '6E' + o.did + '\\r\\r>' });
+  },
   atuar: function (o) {
     window.__obd.chamadas.push('atuar:' + o.did + ':' + o.opcao);
     if (!window.Capacitor.Plugins.DtcarObd.__umModulo()) return Promise.reject(new Error('sem-modulo-escolhido'));
@@ -179,6 +192,19 @@ window.Capacitor.Plugins.DtcarObd = {
     if (!window.__portao(c)) return Promise.reject(new Error('comando-recusado'));
     if (c.indexOf('ATSH') === 0) window.__obd.cabecalho = c.slice(4);
     else if (c.indexOf('ATSP') === 0 || c === 'ATZ' || c === 'ATD' || c === 'ATWS') window.__obd.cabecalho = '';
+    // cabeçalho ligado (ATH1): a resposta vem com o endereço de quem respondeu, como no adaptador de verdade
+    // O carro de mentira tem TRÊS módulos: motor (7E0), câmbio (7E1) e ABS (713). Nos outros endereços
+    // ninguém responde — é assim que o teste prova que a tela só mostra módulo disponível.
+    if (window.__obd.cabecalho && ['7E0', '7E1', '713'].indexOf(window.__obd.cabecalho) < 0 && c.indexOf('AT') !== 0) return Promise.resolve({ resposta: 'NO DATA\\r\\r>' });
+    // ABS do Polo: as quatro rodas no dado 03E8 (40,0 / 40,0 / 39,5 / 12,0 km/h — a traseira direita divergindo)
+    if (window.__obd.cabecalho === '713' && c === '2203E8') { window.__obd.roda = (window.__obd.roda || 0) + 1; return Promise.resolve({ resposta: '6203E801900190018B00' + (120 + window.__obd.roda).toString(16).toUpperCase() + '\\r\\r>' }); }
+    if (window.__obd.cabecalho === '713' && c.indexOf('22') === 0) return Promise.resolve({ resposta: '7F2231\\r\\r>' });
+    if (window.__obd.dado && c.indexOf('22') === 0 && window.__obd.dado[c.slice(2)]) return Promise.resolve({ resposta: '62' + c.slice(2) + window.__obd.dado[c.slice(2)] + '\\r\\r>' });
+    if (c === 'ATH1') { window.__obd.h1 = true; return Promise.resolve({ resposta: 'OK\\r\\r>' }); }
+    if (c === 'ATH0' || c === 'ATZ') window.__obd.h1 = false;
+    if (window.__obd.h1 && !window.__obd.limpo && !window.__obd.falhaNova && (c === '03' || c === '07' || c === '0A')) {
+      return Promise.resolve({ resposta: (c === '03' ? '7E8024300\\r7E906430201710300' : c === '07' ? '7E80447010130' : '7E8024A00') + '\\r\\r>' });
+    }
     if (window.__obd.limpo && (c === '03' || c === '07' || c === '0A')) return Promise.resolve({ resposta: (c === '03' ? '4300' : c === '07' ? '4700' : '4A00') + '\\r\\r>' });
     if (window.__obd.limpo && (c === '0106' || c === '0107')) return Promise.resolve({ resposta: '41' + c.slice(2) + '80\\r\\r>' });   // ajuste zerado: o módulo recomeça
     if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
@@ -649,6 +675,11 @@ try:
         t(pg.locator('#obd-r-falhas .fx-desc').count() >= 2, 'cada código tem a descrição embaixo')
         t('P0043' not in tx and 'C3103' not in tx and 'P0201' not in tx, 'com dois módulos respondendo NÃO inventa código: %s' % tx.replace('\n', ' ')[:140])
         t('Mais de um módulo' in tx, 'avisa que mais de um módulo respondeu')
+        # SEPARADO POR MÓDULO (pedido do Danilo, 21/11/2026): só quem respondeu aparece, cada um com as suas falhas
+        mods = pg.locator('#obd-r-falhas .obd-mod'); t(mods.count() == 2, 'as falhas vêm separadas pelos dois módulos que responderam: %d' % mods.count())
+        t('MOTOR' in mods.nth(0).inner_text().upper() and 'P0130' in mods.nth(0).inner_text() and 'P0171' not in mods.nth(0).inner_text(), 'o motor fica só com o código dele: ' + mods.nth(0).inner_text()[:80].replace(chr(10), ' '))
+        t('CÂMBIO' in mods.nth(1).inner_text().upper() and 'P0171' in mods.nth(1).inner_text() and 'P0300' in mods.nth(1).inner_text(), 'e o câmbio com os dele')
+        t(pg.evaluate('window.__obd.h1') is False, 'o cabeçalho é desligado de novo depois de separar')
         # chassi e monitores
         pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=15000); tx = pg.inner_text('#obd-r-conf')
         t('9BWZZZ377VT004251' in tx and 'CONFERE' in tx, 'confronta o chassi do módulo com o do cadastro: %s' % tx.replace('\n', ' ')[:120])
@@ -818,18 +849,20 @@ try:
         pg.click('#obd-jeito-digital'); pg.wait_for_timeout(300)
         t(pg.locator('#obd-r-vivo .digital').count() >= 3 and not pg.query_selector('#obd-r-vivo .painel-obd'), 'o filtro DIGITAL mostra os números grandes, sem ponteiro')
         pg.click('#obd-jeito-grafico'); pg.wait_for_selector('#obd-grafico', timeout=5000)
-        t(pg.locator('#obd-grafico .graf-faixa').count() == 0 and 'até 3' in pg.inner_text('#obd-grafico-aviso'), 'o GRÁFICO começa pedindo para escolher até 3 leituras')
+        t(pg.locator('#obd-grafico .graf-faixa').count() == 0 and 'até 3 gráficos' in pg.inner_text('#obd-grafico-aviso'), 'o GRÁFICO começa pedindo para escolher, e diz o limite')
         bts = pg.locator('#obd-grafico .graf-escolha button'); nb = bts.count()
         t(nb >= 4, 'o gráfico oferece as leituras que estão chegando: %d' % nb)
-        for k in range(4): bts.nth(k).click(); pg.wait_for_timeout(120)
-        t(pg.locator('#obd-grafico .graf-faixa').count() == 3, 'entram só 3 leituras no gráfico, mesmo tocando na quarta')
-        t('Já tem 3' in pg.inner_text('#obd-grafico-aviso'), 'a quarta é recusada com aviso escrito')
+        for k in range(nb): bts.nth(k).click(); pg.wait_for_timeout(60)
+        nf = pg.locator('#obd-grafico .graf-faixa').count()
+        t(nf == 3, 'tocando em todas as leituras, ficam 3 gráficos e não mais: %d' % nf)
+        t(pg.locator('#obd-grafico .graf-leg').count() >= 3 and pg.locator('#obd-grafico .graf-faixa >> nth=0').locator('.graf-leg').count() <= 4, 'cada gráfico tem a legenda escrita, com no máximo 4 leituras')
+        t('Já tem 3 gráficos' in pg.inner_text('#obd-grafico-aviso') or 'já tem 4' in pg.inner_text('#obd-grafico-aviso'), 'o que não coube é recusado com aviso escrito: ' + pg.inner_text('#obd-grafico-aviso'))
         liguei = not pg.query_selector('#obd-r-vivo .selo.vivo')
         if liguei: pg.click('#obd-vivo')
-        pg.wait_for_selector('#obd-grafico .graf-linha', timeout=30000)
+        pg.wait_for_selector('#obd-grafico .graf-linha', timeout=30000, state='attached')
         t(pg.locator('#obd-grafico .graf-linha').count() >= 1, 'com a roda girando o traço aparece')
-        bts.nth(0).click(); pg.wait_for_timeout(200)
-        t(pg.locator('#obd-grafico .graf-faixa').count() == 2, 'tocar numa escolhida tira ela do gráfico')
+        antes_leg = pg.locator('#obd-grafico .graf-leg').count(); pg.locator('#obd-grafico .graf-escolha button.esc').first.click(); pg.wait_for_timeout(200)
+        t(pg.locator('#obd-grafico .graf-leg').count() == antes_leg - 1, 'tocar numa escolhida tira ela do gráfico')
         if liguei: pg.click('#obd-vivo'); pg.wait_for_timeout(1800)
         pg.click('#obd-jeito-painel'); pg.wait_for_timeout(300)
         t(pg.evaluate("window.localStorage.getItem('obd_jeito')") == 'painel', 'volta a guardar painel')
@@ -973,6 +1006,25 @@ try:
         pg.goto(URL + '#/modulos'); pg.wait_for_selector('.titulo b', timeout=10000)
         t(pg.query_selector('#diag-adaptador') or pg.query_selector('.diag-ligado'), 'a tela de módulos mostra o adaptador')
         pg.wait_for_selector('#diag-modulo', timeout=10000)
+        # O CARRO INTEIRO POR MÓDULO (pedido do Danilo, 21/11/2026): só módulo disponível aparece
+        pg.evaluate("import('../js/obdsessao.js').then(m => m.definirCarro({ placa: 'POL0A00', marca: 'Volkswagen', modelo: 'POLO 1.0 TSI', ano: '2020' }))"); pg.wait_for_timeout(600)
+        t('mapa de módulos' in pg.inner_text('#carro-vez'), 'a tela sabe o carro e diz que há mapa para o modelo: ' + pg.inner_text('#carro-vez')[:90])
+        pg.click('#carro-varrer'); pg.wait_for_selector('#carro-resumo', timeout=60000)
+        ci = pg.inner_text('#carro-inteiro'); nm = pg.locator('#carro-inteiro .obd-mod').count()
+        t(nm == 3, 'aparecem os 3 módulos que responderam, e só eles: %d' % nm)
+        t('MOTOR' in ci.upper() and 'CÂMBIO' in ci.upper() and 'ABS/FREIOS' in ci.upper(), 'cada módulo com o nome escrito: ' + ci[:160].replace(chr(10), ' '))
+        t('AIRBAG' not in ci.upper() and 'PAINEL' not in ci.upper() and '7E3' not in ci, 'módulo que não respondeu NÃO vira cartão na tela')
+        t(pg.locator('#carro-inteiro .obd-mod >> nth=0').locator('.diag-falha').count() >= 1, 'as falhas vêm dentro do módulo de quem são')
+        t(pg.query_selector('#carro-calados') and 'não responderam' in pg.inner_text('#carro-calados'), 'os calados ficam numa linha só, recolhida')
+        pg.click('#carro-inteiro .obd-mod[data-modulo="713"] .abrir-mod'); pg.wait_for_selector('#mod-leituras', timeout=15000)
+        pg.click('#mod-vivo'); pg.wait_for_selector('#mod-rodas', timeout=30000)
+        tr = pg.inner_text('#mod-rodas')
+        t('DIANTEIRA ESQUERDA' in tr.upper() and 'TRASEIRA DIREITA' in tr.upper() and '40' in tr and '39,5' in tr, 'as quatro rodas do ABS lado a lado, com nome e valor: ' + tr.replace(chr(10), ' ')[:140])
+        pg.click('#mod-rodas-grafico'); pg.wait_for_selector('#mod-leituras .graf-linha', timeout=30000, state='attached')
+        t(pg.locator('#mod-leituras .graf-faixa').count() == 1 and pg.locator('#mod-leituras .graf-leg').count() == 4, 'as 4 rodas no MESMO gráfico, cada uma com a sua legenda')
+        pg.click('#mod-vivo'); pg.wait_for_timeout(1500)
+        pg.eval_on_selector('#mod-leituras', "e => e.scrollIntoView({block:'start'})"); pg.wait_for_timeout(300); pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'modulo-rodas-celular.png'))
+        pg.click('text=TROCAR DE MÓDULO'); pg.wait_for_selector('#diag-modulo', timeout=10000)
         pg.click('#diag-modulo .btn-barra'); pg.wait_for_timeout(2500)
         t(pg.locator('#diag-modulo .obd-ap').count() > 0, 'a procura acha módulo que responde')
         t('7E0' in pg.inner_text('#diag-modulo'), 'e mostra o endereço de quem respondeu')
@@ -1047,7 +1099,7 @@ try:
         # ---- PROGRAMAR BICO: a conferência de digitação, que é o que mais vale ----
         pg.goto(URL + '#/bico'); pg.wait_for_selector('#bico-codigos', timeout=10000)
         t(pg.query_selector('#bico-limite'), 'a tela diz, antes de tudo, onde o app chega hoje')
-        t('não grava no escuro' in pg.inner_text('#bico-limite'), 'e que não grava sem saber o campo')
+        t('NÃO tem tabela' in pg.inner_text('#bico-limite') and 'administrador' in pg.inner_text('#bico-limite'), 'e que o campo vem do manual e a gravação pede o administrador')
         pg.fill('.bico-cod >> nth=0', 'C2GKLL0'); pg.wait_for_timeout(300)
         t1 = pg.inner_text('#bico-codigos')
         t('não usa 0' in t1, 'zero no lugar do O é pego: %s' % [l for l in t1.split(chr(10)) if 'não usa' in l][:1])
@@ -1060,11 +1112,32 @@ try:
         pg.check('.bico-marca input >> nth=0'); pg.wait_for_timeout(400)
         t(pg.query_selector('#bico-plano'), 'marcado o cilindro trocado, aparece o plano')
         tp = pg.inner_text('#bico-plano')
-        t('Ler o que está gravado' in tp, 'o plano lê antes de gravar')
-        t('Ler de volta e conferir' in tp, 'e confere lendo de volta depois')
-        t(pg.locator('#bico-plano .btn-barra').is_disabled(), 'o botão de gravar fica DESLIGADO enquanto falta o campo da ECU')
+        t('ler e guardar' in tp and 'ler de volta' in tp, 'o plano lê e guarda antes de gravar, e confere lendo de volta')
+        t(pg.locator('#bico-gravar').is_disabled() and 'campo' in pg.inner_text('#bico-falta'), 'sem o campo da ECU o botão de gravar fica DESLIGADO, e diz o que falta')
+        pg.fill('.bico-campo >> nth=0', 'F190'); pg.wait_for_timeout(300)
+        t(pg.locator('#bico-gravar').is_disabled() and 'identificação' in pg.inner_text('#bico-codigos'), 'campo de identificação (chassi) é recusado na digitação')
+        pg.fill('.bico-campo >> nth=0', '2A10'); pg.wait_for_timeout(300)
+        t(not pg.locator('#bico-gravar').is_disabled(), 'com o campo informado, o botão liga')
+        pg.click('#bico-gravar'); pg.wait_for_selector('#bico-adm-ok', timeout=5000)
+        t(not any(x.startswith('gravarDado') for x in pg.evaluate('window.__obd.chamadas')), 'nada é gravado antes da autorização do administrador')
+        t(pg.locator('#bico-adm-ok').is_disabled(), 'sem login e senha o botão de autorizar fica desligado')
+        pg.fill('#bico-adm-email', 'errado@dtcar.com'); pg.fill('#bico-adm-senha', 'senha-errada'); pg.click('#bico-adm-ok'); pg.wait_for_selector('#bico-adm-erro', timeout=10000)
+        t(not any(x.startswith('gravarDado') for x in pg.evaluate('window.__obd.chamadas')) and pg.input_value('#bico-adm-senha') == '', 'login errado não grava e a senha é apagada do campo: ' + pg.inner_text('#bico-adm-erro'))
+        pg.fill('#bico-adm-email', 'adm@dtcar.com'); pg.fill('#bico-adm-senha', 'certa'); pg.click('#bico-adm-ok'); pg.wait_for_selector('#bico-desfazer', timeout=30000)
+        ch = pg.evaluate('window.__obd.chamadas'); gr = [x for x in ch if x.startswith('gravarDado')]
+        t(len(gr) == 1 and gr[0].startswith('gravarDado:2A10:'), 'grava UMA vez, no campo informado: %s' % gr)
+        ta = pg.inner_text('#bico-andando')
+        t('Conferido' in ta and '7E0' in ta, 'aponta o módulo do motor, grava e confere lendo de volta: ' + ta.replace(chr(10), ' ')[:200])
+        t('Registrado' in ta or 'guardado no aparelho' in ta, 'e o registro de quem gravou e quem autorizou é feito ou guardado')
+        t(not pg.evaluate("Object.keys(window.localStorage).some(k => /password|senha/i.test(window.localStorage.getItem(k) || '') || /autoriza/.test(k))"), 'a senha do administrador não fica guardada no aparelho')
+        pg.click('#bico-desfazer'); pg.wait_for_timeout(2500)
+        gr = [x for x in pg.evaluate('window.__obd.chamadas') if x.startswith('gravarDado')]
+        t(len(gr) == 2 and gr[1] == 'gravarDado:2A10:41414141414141' and 'voltou para o valor' in pg.inner_text('#bico-andando'), 'DESFAZER grava de volta o valor que estava: %s' % gr)
+        pg.fill('.bico-campo >> nth=0', '2A99'); pg.wait_for_timeout(200); pg.click('#bico-gravar'); pg.wait_for_selector('#bico-adm-ok', timeout=5000)
+        pg.fill('#bico-adm-email', 'adm@dtcar.com'); pg.fill('#bico-adm-senha', 'certa'); pg.click('#bico-adm-ok'); pg.wait_for_timeout(4000)
+        t('DESTRAVAR' in pg.inner_text('#bico-andando') and not pg.query_selector('#bico-desfazer'), 'módulo que exige destravar: mostra a recusa e não finge que gravou')
         # o cilindro não marcado não entra
-        pg.fill('.bico-cod >> nth=1', 'C2GKLLO'); pg.wait_for_timeout(300)
+        pg.fill('.bico-cod:not(.bico-campo) >> nth=1', 'C2GKLLO'); pg.wait_for_timeout(300)
         pg.check('.bico-marca input >> nth=1'); pg.wait_for_timeout(400)
         t('mesmo código' in pg.inner_text('#bico-avisos'), 'dois cilindros com o mesmo código são barrados')
         t(not pg.query_selector('#bico-plano'), 'e o plano não aparece enquanto houver aviso grave')

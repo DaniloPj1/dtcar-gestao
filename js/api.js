@@ -114,6 +114,24 @@ function criarApiSupabase() {
       guardadaVencida: s => !!(s && s.expires_at && s.expires_at * 1000 < Date.now() + 60000),
       aoMudar: cb => { const { data } = sb.auth.onAuthStateChange((evento, s) => cb(s, evento)); return () => data.subscription.unsubscribe(); },
       entrar: async (email, senha) => ok(await sb.auth.signInWithPassword({ email, password: senha })),
+      /**
+       * Confere se o login e a senha digitados AGORA são de um administrador ativo, sem trocar quem
+       * está logado no aparelho. Usado para autorizar a gravação de dado no módulo do carro (decisão
+       * do Danilo, 21/11/2026). Abre uma sessão à parte, que não é guardada, e a encerra em seguida.
+       * A senha não é guardada em lugar nenhum: vai do campo para o Supabase e some.
+       */
+      conferirAdmin: async (email, senha) => {
+        const outro = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "dtcar-autoriza" } });
+        try {
+          const r = await outro.auth.signInWithPassword({ email: String(email || "").trim(), password: senha });
+          if (r.error || !r.data || !r.data.user) return { ok: false, motivo: "Login ou senha não conferem." };
+          const p = await outro.from("perfis").select("id,nome,papel,ativo").eq("id", r.data.user.id).maybeSingle();
+          if (p.error || !p.data) return { ok: false, motivo: "Não deu para conferir o perfil deste login." };
+          if (p.data.papel !== "admin" || p.data.ativo === false) return { ok: false, motivo: "Este login não é de administrador." };
+          return { ok: true, id: p.data.id, nome: p.data.nome || "" };
+        } catch (e) { return { ok: false, motivo: "Sem internet: a autorização do administrador precisa de conexão." }; }
+        finally { try { await outro.auth.signOut({ scope: "local" }); } catch (e) { /* sessão à parte: some sozinha */ } }
+      },
       cadastrar: async (nome, email, senha) => ok(await sb.auth.signUp({ email, password: senha, options: { data: { nome }, emailRedirectTo: location.origin + location.pathname } })),
       recuperar: async email => ok(await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname })),
       novaSenha: async senha => ok(await sb.auth.updateUser({ password: senha })),

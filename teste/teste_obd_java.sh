@@ -47,8 +47,9 @@ for m in atuar rotina reiniciarModulo; do
 done
 grep -q 'return porUds ? "14FFFFFF" : "04";' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
   || { echo "FALHOU: o comando de apagar deveria ser literal, no comandoApagar."; exit 1; }
-# gravar (0x2E) e destravar (0x27) NÃO podem existir enquanto nenhuma tela os usa: método publicado
+# gravar LIVRE (0x2E em qualquer módulo) e destravar (0x27) NÃO podem existir: método publicado
 # que ninguém chama é superfície de ataque de graça, e o 0x2E é escrita de calibração.
+# (21/11/2026: a gravação voltou como gravarDado, travada no módulo do motor; ver ObdPlugin.java)
 for m in gravar destravar; do
   grep -q "public void $m(" "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
     && { echo "FALHOU: o método $m não deveria existir enquanto nenhuma tela o usa."; exit 1; }

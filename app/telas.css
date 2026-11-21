@@ -435,13 +435,28 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .graf-escolha button.esc{border-color:var(--azul);background:var(--azul);color:#fff}
 .graf-cheio{font-weight:700;color:var(--tinta)}
 .graf-faixa{margin-top:10px;padding-top:8px;border-top:1px solid var(--cinza-linha)}
-.graf-topo{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.graf-leg{display:flex;align-items:center;gap:6px;padding:1px 0}
+.graf-amostra{width:26px;height:8px;flex-shrink:0}
+.graf-leg .graf-rot{flex:1;min-width:0}
 .graf-rot{font-size:12.5px;font-weight:700;color:var(--cinza-texto);text-transform:uppercase;letter-spacing:.02em}
-.graf-num{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.graf-num{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
 .graf-num span{margin-left:3px;font-size:12px;font-weight:700;color:var(--cinza-nota)}
 .graf-corpo{display:flex;gap:6px;margin-top:4px}
 .graf-esc{display:flex;flex-direction:column;justify-content:space-between;min-width:38px;text-align:right;font-size:10.5px;font-weight:700;color:#6b747e;font-variant-numeric:tabular-nums}
-.graf-corpo svg{flex:1;min-width:0;height:72px;background:#f6f7f9;border:1px solid #dfe3e8}
+.graf-corpo svg{flex:1;min-width:0;height:96px;background:#f6f7f9;border:1px solid #dfe3e8}
 .graf-meio{stroke:#dfe3e8;stroke-width:1;vector-effect:non-scaling-stroke}
-.graf-linha{fill:none;stroke:var(--azul);stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
-.graf-ponto{fill:var(--tinta)}
+.graf-linha{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+
+/* ---- leituras separadas por módulo ---- */
+.obd-mod{margin-top:10px;padding-top:2px;border-top:2px solid var(--tinta)}
+.obd-mod:first-child{margin-top:0}
+.obd-mod-t{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:6px 0 2px;font-size:15px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--tinta)}
+.obd-mod-t span{font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--cinza-nota)}
+.carro-vez{margin:0 0 10px;padding:9px 11px;border-left:4px solid var(--azul);background:#fff}
+.carro-vez b{display:block;font-size:15px;font-weight:800;color:var(--tinta)}
+.carro-vez span{display:block;margin-top:2px;font-size:12.5px;color:var(--cinza-nota)}
+.rodas{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 2px}
+.roda{border:1.5px solid var(--azul-suave);border-radius:10px;background:#fff;padding:7px 9px}
+.roda span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--cinza-texto)}
+.roda b{font-size:28px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;color:var(--tinta)}
+.roda i{margin-left:4px;font-style:normal;font-size:12px;font-weight:700;color:var(--cinza-nota)}

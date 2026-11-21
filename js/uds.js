@@ -355,8 +355,24 @@ export async function sondarDado(did) {
 
 /** Diz se o APK instalado tem a camada que age no carro (APK antigo não tem). */
 export const podeAgir = () => { const p = plugin(); return !!(p && typeof p.atuar === "function" && typeof p.rotina === "function"); };
-/** Hoje é sempre falso: o nativo não expõe gravação de calibração (ver o bloco acima). */
-export const podeGravar = () => { const p = plugin(); return !!(p && typeof p.gravar === "function"); };
+/** O APK tem a gravação de dado no módulo do motor (gravarDado, de 21/11/2026 em diante)? */
+export const podeGravar = () => { const p = plugin(); return !!(p && typeof p.gravarDado === "function"); };
+
+/**
+ * Grava UM dado no módulo do motor e devolve { gravou, antes, nrc, texto }.
+ * Quem lê o valor antigo é o NATIVO, no mesmo passo, e ele só grava se o módulo o entregou: `antes`
+ * (bytes) é o que estava lá, e é com ele que se desfaz. O nativo recusa qualquer módulo que não
+ * seja o do motor e a faixa de identificação (chassi, número de peça).
+ */
+export async function gravarDado(did, valorHex, esperaMs = 8000) {
+  const r = await plugin().gravarDado({ did: hx(did, 4), valor: String(valorHex || "").toUpperCase(), esperaMs });
+  const lido = respostaDe({ resposta: (r && r.antes) || "" }, SV.lerDado);
+  if (!r || !r.gravou) {
+    return { gravou: false, antes: null, nrc: lido.nrc, texto: "O módulo não entregou o valor atual deste campo" + (lido.texto ? " (" + lido.texto + ")" : "") + ". Sem o valor antigo não dá para desfazer, então nada foi gravado." };
+  }
+  const g = respostaDe({ resposta: r.resposta || "" }, 0x2e);
+  return { gravou: g.nrc == null && !g.erro, antes: lido.dados ? lido.dados.slice(2) : [], nrc: g.nrc, texto: g.texto || "" };
+}
 
 export const respostaDe = (r, servico) => {
   const j = juntarLinhas((r && r.resposta) || "");

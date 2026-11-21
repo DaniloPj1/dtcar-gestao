@@ -89,6 +89,13 @@ public class VerificaListaBranca {
 
     /* ---------------- cada coisa que age tem método próprio, com nome ---------------- */
     for (String nome : new String[]{"atuar","rotina","reiniciarModulo","apagar"}) {
+    // gravação de dado: só o módulo do motor, nunca a identificação, e só com o valor antigo lido
+    for (String c : new String[] {"7E0", "18DA10F1", "7e0"}) chk("módulo do motor: " + c, ObdPlugin.moduloDoMotor(c));
+    for (String c : new String[] {"", "7DF", "7E1", "7B0", "18DA28F1", "18DB33F1", "18DA1EF1", "720"}) chk("RECUSA gravar fora do motor: " + c, !ObdPlugin.moduloDoMotor(c));
+    for (String d : new String[] {"0100", "2610", "F17F", "F200"}) chk("dado gravável: " + d, ObdPlugin.didGravavel(d));
+    for (String d : new String[] {"F190", "F180", "F1FF", "F18C", "F1", "XYZW", ""}) chk("RECUSA gravar identificação ou torto: " + d, !ObdPlugin.didGravavel(d));
+    chk("valor antigo lido", ObdPlugin.valorAntigoValido("62 26 10 41 42\r\r>", "2610"));
+    for (String r : new String[] {"7F2231", "", "NO DATA", "STOPPED", "62261141", "622610", "6226"}) chk("RECUSA gravar sem valor antigo: " + r, !ObdPlugin.valorAntigoValido(r, "2610"));
       try {
         java.lang.reflect.Method m = ObdPlugin.class.getMethod(nome, com.getcapacitor.PluginCall.class);
         chk(nome + " está marcado com @PluginMethod", m.getAnnotation(com.getcapacitor.PluginMethod.class) != null);

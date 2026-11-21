@@ -139,7 +139,7 @@ public class ObdPlugin extends Plugin {
      */
     private static final Set<String> SERVICOS_LEITURA = new HashSet<>(Arrays.asList(
         "01", "02", "03", "06", "07", "09", "0A",
-        "19", "22", "24", "3E"
+        "19", "21", "22", "24", "3E"
     ));
 
     /** Quais dos de leitura são do UDS: só muda o tamanho de pedido que cada um aceita. */
@@ -197,6 +197,9 @@ public class ObdPlugin extends Plugin {
         // O tamanho é conferido por serviço, não por igual: um pedido de OBD-II cabe em 7 bytes
         // (modo 01 aceita 6 PIDs), e passar disso é lixo. Os de UDS pedem mais, porque o
         // identificador do dado já ocupa dois bytes e o pedido de falha leva a máscara de situação.
+        // Leitura por identificador local (21, do KWP2000 sobre CAN): um byte de identificador e mais
+        // nada. É como Toyota, Renault e Peugeot entregam boa parte dos dados de montadora.
+        if (sv.equals("21")) return c.length() == 4;
         if (SERVICOS_LEITURA.contains(sv)) {
             int maximo = UDS_LEITURA.contains(sv) ? 32 : 14;
             return c.length() <= maximo;
@@ -225,10 +228,21 @@ public class ObdPlugin extends Plugin {
      *
      * O que a gravação existe para fazer (código de bico) não está nessa faixa.
      */
-    static boolean didGravavel(String did) {   // guardada para quando o gravar voltar
+    static boolean didGravavel(String did) {
         if (!hexExato(normalizar(did), 4)) return false;
         int n = Integer.parseInt(normalizar(did), 16);
         return n < 0xF180 || n > 0xF1FF;
+    }
+
+    /**
+     * Diz se o cabeçalho aponta para o módulo do MOTOR. A gravação de dado só existe para ele.
+     * 7E0 é o endereço que a norma do OBD em CAN (ISO 15765-4) dá ao módulo do motor; 18DA10F1 é o
+     * mesmo módulo nos carros de 29 bits. Câmbio, ABS, airbag, painel e imobilizador ficam de fora
+     * por construção: é neles que mora o perigo de uma escrita errada.
+     */
+    static boolean moduloDoMotor(String cab) {
+        String c = normalizar(cab);
+        return c.equals("7E0") || c.equals("18DA10F1");
     }
 
     /** Hexadecimal com exatamente este tanto de dígitos. */
@@ -581,23 +595,98 @@ public class ObdPlugin extends Plugin {
         enviar(call, "31" + sub + rid + dados, call.getInt("esperaMs", 15000));
     }
 
-    /*
-     * NÃO EXISTEM AQUI, de propósito: gravar (0x2E) e destravar (0x27).
+    /**
+     * Grava UM dado no módulo do motor (UDS 0x2E). Existe para o código de bico injetor.
+     * Voltou em 21/11/2026 por decisão do Danilo, com a autorização do administrador pedida na tela.
      *
-     * Eles chegaram a existir e saíram na reconferência da revisão independente de 20/11/2026, por
-     * um motivo simples: NENHUMA tela os usa. A tela de programar bico monta o plano e confere o
-     * código, mas o botão de gravar está desligado porque o app ainda não sabe o número do campo de
-     * cada família de ECU. Método publicado que ninguém chama é superfície de ataque de graça — e
-     * o 0x2E é escrita de calibração: é por ele que se mexe em codificação de variante, canal de
-     * adaptação, imobilizador e configuração de airbag, que é onde mora o perigo de verdade.
-     *
-     * Então a promessa deste APK é mais forte do que "não regrava módulo": ele NÃO ESCREVE NADA de
-     * calibração em módulo nenhum. O que ele faz é acionar atuador, rodar rotina de serviço,
-     * reiniciar módulo e apagar falha.
-     *
-     * Quando a gravação de bico tiver o número do campo, estes métodos voltam — com lista de
-     * identificadores permitidos por família, e não com escrita livre como estavam.
+     * O que ESTE método garante, aqui embaixo, onde um script da página não alcança:
+     *  - só o módulo do MOTOR (moduloDoMotor): nada de câmbio, airbag, painel ou imobilizador;
+     *  - nunca a faixa de identificação (chassi, número de peça): didGravavel;
+     *  - LÊ O VALOR ANTIGO ANTES, com o mesmo identificador, e só grava se o módulo o entregou. O
+     *    valor antigo volta junto na resposta: sem ele não há como desfazer, então sem ele não grava;
+     *  - no máximo 32 bytes de valor, que é muito mais que um código de bico e muito menos que
+     *    qualquer coisa parecida com programa.
+     * O que NÃO existe: destravar (0x27). O app não tem a conta da chave de nenhuma família, então
+     * módulo que exige destravar recusa a gravação (resposta 0x33) e é isso que a tela mostra.
+     * A sessão de programação (10 02) e os serviços de transferência continuam proibidos.
      */
+    @PluginMethod
+    public void gravarDado(final PluginCall call) {
+        final String did = normalizar(call.getString("did"));
+        final String valor = normalizar(call.getString("valor", ""));
+        if (!didGravavel(did) || !ehHexPar(valor) || valor.length() < 2 || valor.length() > 64) {
+            call.reject(hexExato(did, 4) && !didGravavel(did) ? "did-protegido" : "comando-recusado");
+            return;
+        }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
+            return;
+        }
+        if (!moduloDoMotor(cabecalho)) {
+            call.reject("so-modulo-do-motor");
+            return;
+        }
+        final int espera = Math.max(500, Math.min(call.getInt("esperaMs", 8000), ESPERA_MAXIMA));
+        naFila(call, new Runnable() {
+            @Override
+            public void run() {
+                final InputStream in = entrada;
+                final OutputStream out = saida;
+                final BluetoothSocket s = soquete;
+                if (s == null || !s.isConnected() || in == null || out == null) {
+                    call.reject("sem-conexao");
+                    return;
+                }
+                try {
+                    descartarAtrasado(in);
+                    try { Thread.sleep(120); } catch (InterruptedException ie) { Thread.currentThread().interrupt(); }
+                    descartarAtrasado(in);
+                    ultimoEstourou = false;
+                    out.write(("22" + did + "\r").getBytes(StandardCharsets.US_ASCII));
+                    out.flush();
+                    String antes = ler(in, espera);
+                    if (!valorAntigoValido(antes, did)) {
+                        if (antes.startsWith("STOPPED") || antes.isEmpty()) ultimoEstourou = true;
+                        JSObject r = new JSObject();
+                        r.put("gravou", false);
+                        r.put("antes", antes);
+                        r.put("resposta", "");
+                        call.resolve(r);
+                        return;
+                    }
+                    out.write(("2E" + did + valor + "\r").getBytes(StandardCharsets.US_ASCII));
+                    out.flush();
+                    String resposta = ler(in, espera);
+                    if (resposta.startsWith("STOPPED") || resposta.isEmpty()) ultimoEstourou = true;
+                    JSObject r = new JSObject();
+                    r.put("gravou", true);
+                    r.put("antes", antes);
+                    r.put("resposta", resposta);
+                    call.resolve(r);
+                } catch (IOException e) {
+                    fechar();
+                    call.reject("conexao-caiu");
+                }
+            }
+        });
+    }
+
+    /**
+     * Diz se a leitura de antes de gravar devolveu MESMO o valor daquele identificador: a resposta
+     * tem de começar com 62 + o identificador e trazer pelo menos um byte de dado. Recusa (7F),
+     * silêncio ou resposta de outro identificador não servem — e sem valor antigo não se grava.
+     */
+    static boolean valorAntigoValido(String resposta, String did) {
+        String r = resposta == null ? "" : resposta.toUpperCase().replaceAll("[^0-9A-F]", "");
+        String d = normalizar(did);
+        return hexExato(d, 4) && r.startsWith("62" + d) && r.length() >= 8;
+    }
+
+    /*
+     * NÃO EXISTE AQUI, de propósito: destravar (0x27). O app não tem a conta da chave de nenhuma
+     * família de módulo, e método publicado que ninguém usa é superfície de ataque de graça.
+     */
+
 
     /**
      * Reinicia o módulo (UDS 0x11): 01 reinício completo, 03 leve.

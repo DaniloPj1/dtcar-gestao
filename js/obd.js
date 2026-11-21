@@ -531,6 +531,7 @@ const MOTIVOS = {
   "demorou": "O adaptador não respondeu no tempo. Confira o encaixe na tomada e tente de novo.",
   "rotina-fora-da-faixa": "Esta rotina está fora da faixa que o app pode rodar. Só rotina de serviço do fabricante é permitida.",
   "did-protegido": "Este dado é da identificação do módulo (chassi, número de peça) e o app não grava nele.",
+  "so-modulo-do-motor": "A gravação de dado só existe para o módulo do motor. Aponte o módulo do motor antes.",
   "sem-modulo-escolhido": "Escolha UM módulo antes. Este comando não vai para todos os módulos de uma vez.",
 };
 export const motivoDe = e => MOTIVOS[e && (e.message || e.code || e)] || "Não deu para falar com o adaptador.";
@@ -628,6 +629,81 @@ export async function iniciar() {
   return { protocolo, versao, aviso: adaptadorSuspeito(versao), pidsSuportados };
 }
 
+/* ---- quem respondeu: separar a resposta por módulo ---- */
+
+/**
+ * Com o cabeçalho ligado (ATH1), cada linha da resposta vem com o endereço de QUEM respondeu na
+ * frente. Isto junta os quadros de cada módulo e devolve { endereço: "hex do conteúdo" }.
+ *
+ * Só para CAN. O tamanho da linha diz qual: endereço de 11 bits tem 3 dígitos (linha de tamanho
+ * ímpar), de 29 bits tem 8 (linha par). Depois do endereço vem o byte de controle do transporte
+ * (ISO 15765-2): 0L = quadro único de L bytes; 1L LL = primeiro quadro de uma resposta longa;
+ * 2N = continuação. Linha que não fecha nessa conta é DESCARTADA, nunca aproveitada: código de
+ * falha atribuído ao módulo errado é pior que código nenhum.
+ */
+export function quadrosPorModulo(cru) {
+  const linhas = String(cru || "").split(/[\r\n]+/).map(l => l.replace(/[\s>]/g, "").toUpperCase()).filter(l => /^[0-9A-F]+$/.test(l));
+  const montando = {}, pronto = {};
+  for (const l of linhas) {
+    const n = l.length % 2 ? 3 : 8;
+    if (l.length < n + 4) continue;
+    const end = l.slice(0, n), corpo = l.slice(n), tipo = corpo[0];
+    if (n === 3 && !(parseInt(end, 16) >= 0x7e8 && parseInt(end, 16) <= 0x7ef) && !(parseInt(end, 16) >= 0x600)) continue;
+    if (tipo === "0") {
+      const tam = parseInt(corpo[1], 16);
+      if (tam < 1 || corpo.length < 2 + tam * 2) continue;
+      pronto[end] = corpo.slice(2, 2 + tam * 2);
+    } else if (tipo === "1") {
+      const tam = parseInt(corpo.slice(1, 4), 16);
+      if (!(tam > 7)) continue;
+      montando[end] = { tam, hex: corpo.slice(4), seq: 1 };
+    } else if (tipo === "2") {
+      const m = montando[end];
+      if (!m || parseInt(corpo[1], 16) !== (m.seq & 15)) { delete montando[end]; continue; }
+      m.hex += corpo.slice(2); m.seq++;
+      if (m.hex.length >= m.tam * 2) { pronto[end] = m.hex.slice(0, m.tam * 2); delete montando[end]; }
+    }
+  }
+  return pronto;
+}
+
+/** Nome de quem respondeu num pedido de OBD-II, pelo endereço de resposta. */
+export function nomeDeQuemRespondeu(end) {
+  const e = String(end || "").toUpperCase();
+  if (e === "7E8" || e === "18DAF110") return "Motor";
+  if (e === "7E9" || e === "18DAF118") return "Câmbio";
+  return "Módulo " + (e.length === 8 ? e.slice(6) : e);
+}
+
+/**
+ * As falhas SEPARADAS POR MÓDULO (pedido do Danilo, 21/11/2026): liga o cabeçalho, repete os três
+ * pedidos e devolve [{ endereco, nome, falhas: [{ codigo, situacao }] }] — só de quem respondeu.
+ * Devolve null se a resposta não vier no formato do CAN (aí vale a lista junta, como antes).
+ * O cabeçalho é desligado no fim de qualquer jeito: o resto da leitura conta com ele desligado.
+ */
+export async function lerFalhasPorModulo() {
+  const pedidos = [["03", 0x03, "atual"], ["07", 0x07, "pendente"], ["0A", 0x0a, "permanente"]];
+  const mods = {};
+  try {
+    await comando("ATH1", 2000);
+    for (const [cmd, servico, situacao] of pedidos) {
+      let cru = "";
+      try { cru = await comando(cmd, 8000); } catch (e) { continue; }
+      const q = quadrosPorModulo(cru);
+      for (const end of Object.keys(q)) {
+        const codigos = codigosDa(q[end], servico);
+        if (codigos === null) continue;                       // não é resposta deste serviço
+        const m = mods[end] || (mods[end] = { endereco: end, nome: nomeDeQuemRespondeu(end), falhas: [] });
+        for (const c of codigos) if (!m.falhas.some(f => f.codigo === c && f.situacao === situacao)) m.falhas.push({ codigo: c, situacao });
+      }
+    }
+  } finally {
+    try { await comando("ATH0", 2000); } catch (e) { /* o iniciar() da próxima conexão desliga */ }
+  }
+  const lista = Object.keys(mods).sort().map(k => mods[k]);
+  return lista.length ? lista : null;
+}
+
 /* ---- leituras de alto nível ---- */
 
 /** Códigos de falha, com a situação de cada um. */
@@ -644,7 +720,12 @@ export async function lerFalhas() {
     if (modulos > 1) variosModulos = true;
     for (const c of codigos) if (!falhas.some(f => f.codigo === c && f.situacao === situacao)) falhas.push({ codigo: c, situacao });
   }
-  return { falhas, erros, variosModulos };
+  // Mais de um módulo respondeu: separa por módulo, para a tela dizer de quem é cada código.
+  let porModulo = null;
+  if (variosModulos) { try { porModulo = await lerFalhasPorModulo(); } catch (e) { porModulo = null; } }
+  // Só vale se a conta fecha: todo código da lista junta tem de estar em algum módulo.
+  if (porModulo && !falhas.every(f => porModulo.some(m => m.falhas.some(x => x.codigo === f.codigo && x.situacao === f.situacao)))) porModulo = null;
+  return { falhas, erros, variosModulos, porModulo };
 }
 
 /** Dados ao vivo, uma volta só: os PIDs que o carro disse que tem. */

@@ -103,3 +103,46 @@ const visto = new Set(); const c2 = mapa.novoCaderno();
 for (let i = 0; i < 400; i++) { const q = mapa.proximoPasso(c2); if (!q) break; visto.add(q.tipo); if (q.tipo === "endereco") c2.enderecos[q.pedido] = { respondeu: 1 }; else (c2.dados[q.pedido] || (c2.dados[q.pedido] = {}))["22" + q.did] = { bytes: 1 }; t(!q.pedido.includes("7DF"), "nunca o endereço de todos"); }
 t([...visto].every(x => x === "endereco" || x === "dado"), "a descoberta só devolve pergunta de leitura");
 console.log(n + " conferências do registro, conferência, varredura, comparação e caderno passaram.");
+
+/* ---- o gráfico: até 3 gráficos, mesma unidade junta (as 4 rodas) ---- */
+const gr = await import("../js/obdgrafico.js");
+let m2 = 0; const tt = (c, msg) => { m2++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+const L = [{ chave: 1, rotulo: "Roda DE", unidade: "km/h", valor: 40 }, { chave: 2, rotulo: "Roda DD", unidade: "km/h", valor: 40 }, { chave: 3, rotulo: "Roda TE", unidade: "km/h", valor: 40 },
+  { chave: 4, rotulo: "Roda TD", unidade: "km/h", valor: 39 }, { chave: 5, rotulo: "Velocidade", unidade: "km/h", valor: 40 }, { chave: 6, rotulo: "Rotação", unidade: "rpm", valor: 800 },
+  { chave: 7, rotulo: "Temperatura", unidade: "°C", valor: 90 }, { chave: 8, rotulo: "Tensão", unidade: "V", valor: 14 }, { chave: 9, rotulo: "Cru A", unidade: "", valor: 1 }, { chave: 10, rotulo: "Cru B", unidade: "", valor: 2 }, { chave: 11, rotulo: "Texto", unidade: "", valor: "x" }];
+let esc = [];
+for (const k of [1, 2, 3, 4]) esc = gr.trocar(esc, k, L).lista;
+tt(esc.length === 4 && gr.graficosDe(esc, L).length === 1 && gr.graficosDe(esc, L)[0].leituras.length === 4, "as 4 rodas entram no MESMO gráfico");
+let r5 = gr.trocar(esc, 5, L);
+tt(r5.lista.length === 4 && /já tem 4/.test(r5.recusa), "a quinta leitura da mesma unidade é recusada com motivo");
+esc = gr.trocar(esc, 6, L).lista; esc = gr.trocar(esc, 7, L).lista;
+tt(gr.graficosDe(esc, L).length === 3, "rotação e temperatura abrem o segundo e o terceiro gráfico");
+const r8 = gr.trocar(esc, 8, L);
+tt(r8.lista.length === 6 && /Já tem 3 gráficos/.test(r8.recusa), "o quarto gráfico é recusado com motivo");
+tt(gr.trocar(esc, 2, L).lista.length === 5 && gr.trocar(esc, 2, L).recusa === "", "tocar numa escolhida tira");
+tt(gr.graficosDe([9, 10], L).length === 2, "leituras sem unidade não se misturam");
+tt(gr.graficosDe([11, 99], L).length === 0, "texto e leitura que sumiu não viram gráfico");
+const hist = {}; for (let i = 0; i < 200; i++) gr.anotarPonto(hist, { chave: 1, valor: i }, 1000 + i);
+tt(hist[1].length === gr.PONTOS && hist[1][0].v === 80, "a história não cresce sem fim");
+gr.anotarPonto(hist, { chave: 2, valor: NaN }); gr.anotarPonto(hist, { chave: 2, valor: "a" });
+tt(!hist[2], "valor que não é número não entra");
+const h2 = { 1: [{ t: 100000, v: 40 }, { t: 100500, v: 42 }], 4: [{ t: 100200, v: 30 }], 2: [{ t: 10, v: 999 }] };
+const ee = gr.escalaDe([L[0], L[3], L[1]], h2, 101000);
+tt(ee.min === 30 && ee.max === 42 && ee.de < 30 && ee.ate > 42, "a escala é comum às leituras do gráfico e ignora ponto fora do minuto");
+tt(gr.escalaDe([L[0]], {}, 5).min === null, "sem ponto, sem escala inventada");
+console.log(m2 + " conferências do gráfico passaram.");
+
+/* ---- falhas separadas por módulo ---- */
+const o = await import("../js/obd.js");
+let m3 = 0; const t3 = (c, msg) => { m3++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+let q = o.quadrosPorModulo("7E8024300\r7E906430201710300\r\r>");
+t3(q["7E8"] === "4300" && q["7E9"] === "430201710300", "quadro único: cada módulo com o seu conteúdo");
+q = o.quadrosPorModulo("7E8 10 0A 43 04 01 71 03 00\r7E8 21 01 30 04 20 00 00 00\r7E9 02 43 00\r>");
+t3(q["7E8"] === "43040171030001300420" && q["7E9"] === "4300", "resposta longa é juntada na ordem, sem misturar com o outro módulo");
+q = o.quadrosPorModulo("18DAF110024300\r18DAF11806430201710300\r>");
+t3(q["18DAF110"] === "4300" && q["18DAF118"] === "430201710300", "endereço de 29 bits");
+q = o.quadrosPorModulo("7E8 10 0A 43 04 01 71 03 00\r7E8 22 01 30 04 20 00 00 00\r>");
+t3(!q["7E8"], "continuação fora de ordem é descartada, não aproveitada");
+t3(Object.keys(o.quadrosPorModulo("NO DATA\r>")).length === 0 && Object.keys(o.quadrosPorModulo("4300\r430201710300")).length === 0, "sem cabeçalho não inventa módulo");
+t3(o.nomeDeQuemRespondeu("7E8") === "Motor" && o.nomeDeQuemRespondeu("7E9") === "Câmbio" && o.nomeDeQuemRespondeu("7EB") === "Módulo 7EB" && o.nomeDeQuemRespondeu("18DAF128") === "Módulo 28", "nome de quem respondeu, sem inventar");
+console.log(m3 + " conferências das falhas por módulo passaram.");

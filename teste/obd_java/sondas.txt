@@ -150,3 +150,11 @@ nao ATFCSH18FEF100
 
 # --- a sonda que explica o ATCAF0: com a formatação LIGADA isto é serviço 02 (leitura) e passa ---
 sim 022EF190
+
+# --- leitura por identificador local (21): um byte e mais nada ---
+sim 2101
+sim 21C3
+nao 21
+nao 210102
+nao 2E261041
+nao 2701

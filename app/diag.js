@@ -12,7 +12,10 @@ import * as obd from "../js/obd.js";
 import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
-import { usarExplicacoes, FalhaExplicada, Digital, Grafico, anotarPonto, trocarNoGrafico, GRAFICO_MAX } from "./diagpartes.js";
+import * as registro from "../js/obdregistro.js";
+import { usarExplicacoes, FalhaExplicada, Digital, Grafico } from "./diagpartes.js";
+import * as grafico from "../js/obdgrafico.js";
+import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo } from "./diagcarro.js";
 import { useApp, Ic, ir, Cartao, KV, Campo, Quadro, usarPlaca, BuscaPlaca, Veiculo, Tela, usarPasso } from "./comum.js";
 
 const SELO_DTC = { atual: ["ATUAL", "ruim"], pendente: ["PENDENTE", "atencao"], permanente: ["PERMANENTE", "atencao"] };
@@ -161,16 +164,16 @@ function Obd() {
     setJeito(j);
     try { window.localStorage.setItem("obd_jeito", j); } catch (e) { /* sem espaço: segue sem guardar */ }
   };
-  // GRÁFICO (pedido do Danilo, 21/11/2026): até 3 leituras ao mesmo tempo. A história de cada leitura
+  // GRÁFICO (pedido do Danilo, 21/11/2026): até 3 gráficos; leituras da mesma unidade dividem um. A história de cada leitura
   // fica numa caixa (não em estado): quem redesenha a tela é o valor novo chegando, e guardar ponto
   // não pode custar um desenho a mais. A escolha fica guardada: quem acompanha rotação e sonda num
   // carro quer as mesmas no próximo.
   const historia = useRef({});
-  const [noGrafico, setNoGrafico] = useState(() => { try { const l = JSON.parse(window.localStorage.getItem("obd_grafico") || "[]"); return Array.isArray(l) ? l.slice(0, GRAFICO_MAX) : []; } catch (e) { return []; } });
-  const [graficoCheio, setGraficoCheio] = useState(false);
+  const [noGrafico, setNoGrafico] = useState(() => { try { const l = JSON.parse(window.localStorage.getItem("obd_grafico") || "[]"); return Array.isArray(l) ? l.slice(0, grafico.GRAFICOS_MAX * grafico.LINHAS_MAX) : []; } catch (e) { return []; } });
+  const [graficoRecusa, setGraficoRecusa] = useState("");
   const trocarGrafico = chave => {
-    const r = trocarNoGrafico(noGrafico, chave);
-    setGraficoCheio(r.cheio); setNoGrafico(r.lista);
+    const r = grafico.trocar(noGrafico, chave, vivo ? Object.keys(vivo.valores).map(k => vivo.valores[k]) : []);
+    setGraficoRecusa(r.recusa); setNoGrafico(r.lista);
     try { window.localStorage.setItem("obd_grafico", JSON.stringify(r.lista)); } catch (e) { /* segue sem guardar */ }
   };
   const [vivo, setVivo] = useState(null);       // { valores: {chave: leitura}, volta, rodando, modo }
@@ -318,7 +321,7 @@ function Obd() {
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => { if (rodada.current === minha) { anotarPonto(historia.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
+        (v, volta) => { if (rodada.current === minha) { grafico.anotarPonto(historia.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
         () => rodada.current === minha,
         {
           escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : escolhidas,
@@ -573,13 +576,17 @@ function Obd() {
         <div class="nota">Monitor que ainda não terminou e falha que "não existia" podem ser disto: o carro ainda não rodou o bastante depois do apagamento.</div>
       </${Cartao}>` : null}
 
-      ${res && res.o === "falhas" ? html`<${Cartao} titulo=${"Falhas do motor" + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">
+      ${res && res.o === "falhas" ? html`<${Cartao} titulo=${(res.d.porModulo && res.d.porModulo.length > 1 ? "Falhas por módulo" : "Falhas do motor") + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">
         ${!res.d.falhas.length ? html`<div class="vazio">Nenhuma falha gravada no módulo do motor.</div>` : null}
-        ${res.d.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc-bloco"><div class="obd-dtc">
-          <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>
-          <${FalhaExplicada} e=${explicadas[f.codigo]} /></div>`)}
+        ${(res.d.porModulo && res.d.porModulo.length > 1 ? res.d.porModulo : [{ endereco: "", nome: "", falhas: res.d.falhas }]).map(m => html`<div key=${m.endereco} class=${m.nome ? "obd-mod" : ""} data-modulo=${m.endereco}>
+          ${m.nome ? html`<h3 class="obd-mod-t">${m.nome}<span>${m.falhas.length ? m.falhas.length + (m.falhas.length === 1 ? " falha" : " falhas") : "sem falha gravada"}</span></h3>` : null}
+          ${m.falhas.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc-bloco"><div class="obd-dtc">
+            <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>
+            <${FalhaExplicada} e=${explicadas[f.codigo]} /></div>`)}
+        </div>`)}
         ${res.d.falhas.length ? html`<div class="nota">O código é o que o módulo gravou. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
-        ${res.d.variosModulos ? html`<div class="nota">Mais de um módulo do carro respondeu: a lista junta os códigos de todos. Sem o cabeçalho ligado não dá para dizer qual código é de qual módulo.</div>` : null}
+        ${res.d.variosModulos && res.d.porModulo && res.d.porModulo.length > 1 ? html`<div class="nota">Mais de um módulo respondeu: as falhas estão separadas por módulo. Só aparece quem respondeu.</div>` : null}
+        ${res.d.variosModulos && !(res.d.porModulo && res.d.porModulo.length > 1) ? html`<div class="nota">Mais de um módulo do carro respondeu, mas este adaptador não deixou separar: a lista junta os códigos de todos.</div>` : null}
         ${res.d.erros.length ? html`<div class="nota">Não respondeu: ${res.d.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
       </${Cartao}>` : null}
 
@@ -602,7 +609,7 @@ function Obd() {
               <button type="button" id="obd-jeito-digital" class=${jeito === "digital" ? "esc" : ""} aria-pressed=${jeito === "digital"} onClick=${() => trocarJeito("digital")}>DIGITAL</button>
               <button type="button" id="obd-jeito-grafico" class=${jeito === "grafico" ? "esc" : ""} aria-pressed=${jeito === "grafico"} onClick=${() => trocarJeito("grafico")}>GRÁFICO</button>
             </div>
-            ${jeito === "grafico" ? html`<${Grafico} lidos=${lidos} historia=${historia.current} escolha=${noGrafico} aoTrocar=${trocarGrafico} cheio=${graficoCheio} />`
+            ${jeito === "grafico" ? html`<${Grafico} lidos=${lidos} historia=${historia.current} escolha=${noGrafico} aoTrocar=${trocarGrafico} recusa=${graficoRecusa} />`
             : jeito === "digital" ? html`<div class="digitais">${lidos.map(l => html`<${Digital} key=${l.chave} l=${l} />`)}</div>`
             : jeito === "painel" ? html`
               ${comFaixa.length ? html`<div class="painel-obd">${comFaixa.map(l => html`<${Mostrador} key=${l.chave} l=${l} />`)}</div>` : null}
@@ -846,6 +853,7 @@ function Modulos() {
   const [erro, setErro] = useState("");
   const podeApagar = podeApagarObd(cfg, perfil);
   const explicadasMod = usarExplicacoes(falhas, st.carro);
+  const mapa = usarMapa(st.carro);
   usarPasso(!!mod, () => { setMod(null); setFalhas(null); setEpti(null); });
 
   const escolher = async m => {
@@ -892,7 +900,8 @@ function Modulos() {
     ${!obd.disponivel() ? html`<div class="vazio">Esta tela funciona no aplicativo instalado no celular (APK), que é quem conversa com o adaptador.</div>`
       : !uds.podeAgir() ? html`<${PrecisaApk} />` : html`
       <${Adaptador} compacto=${!!st.ligado} />
-      ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
+      <${CarroDaVez} st=${st} />
+      ${!mod ? html`<${CarroInteiro} st=${st} mapa=${mapa} aoAbrir=${escolher} /><${EscolherModulo} aoEscolher=${escolher} />` : html`
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="mod-escolhido">
           <${KV} a="Pede em" b=${mod.pedido} />
           <${KV} a="Responde em" b=${mod.resposta} />
@@ -900,6 +909,7 @@ function Modulos() {
           <button type="button" class="btn-barra claro" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />PERGUNTAR O QUE ELE TEM</button>
           <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setFalhas(null); setEpti(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
         </${Cartao}>
+        <${LeiturasDoModulo} st=${st} mod=${mod} comandos=${mapa.comandos} />
         ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
         ${erro ? html`<div class="erro">${erro}</div>` : null}
         ${falhas ? html`<${Cartao} titulo=${"Falhas (" + falhas.length + ")"} id="mod-falhas">
@@ -1138,29 +1148,108 @@ function Bico() {
   const { cfg, perfil } = useApp();
   const pl = usarPlaca();
   const [cilindros, setCilindros] = useState(4);
-  const [itens, setItens] = useState(() => [1, 2, 3, 4].map(c => ({ cilindro: c, codigo: "", trocado: false })));
-  const [mostrarPlano, setMostrarPlano] = useState(false);
+  const [itens, setItens] = useState(() => [1, 2, 3, 4].map(c => ({ cilindro: c, codigo: "", trocado: false, campo: "" })));
+  // A gravação voltou em 21/11/2026, por decisão do Danilo: só com o administrador autorizando com
+  // o login dele NA HORA. O app não tem a tabela de "em que campo cada ECU guarda o bico" — nenhuma
+  // base aberta tem — então o campo é informado por quem tem o manual da ECU, e nunca é chutado.
+  const [autoriza, setAutoriza] = useState(null);      // { email, senha, erro, conferindo }
+  const [andando, setAndando] = useState(null);        // { passos: [], fim }
+  const [feito, setFeito] = useState(null);            // [{ cilindro, campo, antes, ok, texto }]
   const pode = podeGravarObd(cfg, perfil);
-  usarPasso(mostrarPlano, () => setMostrarPlano(false));
+  usarPasso(!!autoriza, () => setAutoriza(null));
 
   const trocarQtd = n => {
     setCilindros(n);
-    setItens(anteriores => Array.from({ length: n }, (_, i) => anteriores[i] || { cilindro: i + 1, codigo: "", trocado: false }));
+    setItens(anteriores => Array.from({ length: n }, (_, i) => anteriores[i] || { cilindro: i + 1, codigo: "", trocado: false, campo: "" }));
   };
   const mexer = (i, p) => setItens(l => l.map((x, j) => (j === i ? { ...x, ...p } : x)));
   const conf = bico.conferirConjunto(itens, cilindros);
-  const plano = bico.plano({ cilindros: conf.paraGravar, temChave: false });
+  const paraGravar = conf.paraGravar.map(c => ({ ...c, campo: String((itens.find(x => x.cilindro === c.cilindro) || {}).campo || "").toUpperCase() }));
+  const campoBom = c => /^[0-9A-F]{4}$/.test(c) && !(parseInt(c, 16) >= 0xf180 && parseInt(c, 16) <= 0xf1ff);
+  const camposCertos = paraGravar.length > 0 && paraGravar.every(c => campoBom(c.campo)) && new Set(paraGravar.map(c => c.campo)).size === paraGravar.length;
+  const falta = !uds.podeGravar() ? "O APK instalado é antigo: a gravação entra no APK novo."
+    : !st.ligado ? "Conecte o adaptador."
+    : !conf.podeGravar ? "Resolva o que está em “Confira antes”."
+    : !camposCertos ? "Informe o campo de cada cilindro marcado (4 dígitos, do manual da ECU; um diferente para cada cilindro)."
+    : st.dono ? "O adaptador está ocupado." : "";
 
-  return html`<${Tela} tela="bico" ajuda="Grava na ECU o código que veio escrito no bico recodificado. O código IMA tem 7 caracteres e não usa 0, 9, I, J nem Q — então o app confere a digitação antes de qualquer coisa. Só grava o cilindro que você marcar como trocado.">
+  const pedirAutorizacao = () => { setFeito(null); setAndando(null); setAutoriza({ email: "", senha: "", erro: "" }); };
+  const autorizarEGravar = async () => {
+    setAutoriza(a => ({ ...a, erro: "", conferindo: true }));
+    const adm = await api.auth.conferirAdmin(autoriza.email, autoriza.senha);
+    if (!adm.ok) { setAutoriza(a => ({ ...a, senha: "", conferindo: false, erro: adm.motivo })); return; }
+    setAutoriza(null);
+    await gravar(adm);
+  };
+  const gravar = async adm => {
+    const passos = [], anota = t => { passos.push(t); setAndando({ passos: passos.slice() }); };
+    const resultado = [];
+    const r = await sessao.comAcao("a gravação do bico", async () => {
+      anota("Apontando o módulo do motor…");
+      let apontou = false;
+      for (const m of [{ pedido: "7E0", resposta: "7E8" }, { pedido: "18DA10F1", resposta: "18DAF110" }]) {
+        await uds.abrir(m);
+        const s = await uds.sessao(uds.SESSAO.estendida);
+        if (!s.erro && s.nrc == null) { apontou = true; anota("Módulo do motor respondeu em " + m.pedido + "."); break; }
+      }
+      if (!apontou) { anota("O módulo do motor não abriu a sessão de diagnóstico. Nada foi gravado."); return false; }
+      for (const c of paraGravar) {
+        const hexCod = bico.paraHex(c.codigo);
+        anota("Cilindro " + c.cilindro + ": lendo o valor atual do campo " + c.campo + " e gravando " + c.codigo + "…");
+        const g = await uds.gravarDado(parseInt(c.campo, 16), hexCod);
+        const item = { cilindro: c.cilindro, campo: c.campo, codigo: c.codigo, antes: g.antes ? g.antes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("") : null, ok: false, texto: "" };
+        if (!g.gravou) {
+          item.texto = g.nrc === 0x33 ? "O módulo exige DESTRAVAR antes de gravar (resposta 33), e o app não tem a chave desta família. Não gravou."
+            : g.texto || "O módulo recusou a gravação.";
+        } else {
+          const volta = await uds.lerDado(parseInt(c.campo, 16));
+          const lido = volta.dados ? volta.dados.slice(2).map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("") : "";
+          const cf = bico.conferirGravacao(c.codigo, lido);
+          item.ok = cf.ok; item.texto = cf.t; item.depois = lido;
+        }
+        anota("Cilindro " + c.cilindro + ": " + item.texto);
+        resultado.push(item);
+        if (!item.ok) break;                      // parou num: não segue gravando os outros no escuro
+      }
+      await uds.fechar();
+      return true;
+    });
+    setFeito(resultado);
+    setAndando({ passos: passos.slice(), fim: true, erro: r.ok ? "" : (r.texto || "Não deu para gravar.") });
+    if (resultado.length) {
+      const reg = registro.linha("gravar_bico", perfil, sessao.carro(), { autorizado_por: { id: adm.id, nome: adm.nome }, cilindros: resultado });
+      const g = await registro.guardar(api.obd.registrar, registro.cofreDe(window.localStorage), reg);
+      setAndando(a => ({ ...a, registro: g.gravado ? "Registrado no banco." : g.pendente ? "Registro guardado no aparelho: sobe quando o banco aceitar (falta rodar o v63.sql ou não há internet)." : "NÃO deu para registrar: anote na O.S." }));
+    }
+  };
+  /** Desfazer: grava de volta o valor que estava lá. Só existe porque o valor antigo foi guardado. */
+  const desfazer = async () => {
+    const voltar = (feito || []).filter(x => x.antes && x.depois !== undefined);
+    const passos = [], anota = t => { passos.push(t); setAndando({ passos: passos.slice() }); };
+    await sessao.comAcao("desfazer a gravação do bico", async () => {
+      for (const m of [{ pedido: "7E0", resposta: "7E8" }, { pedido: "18DA10F1", resposta: "18DAF110" }]) {
+        await uds.abrir(m); const s = await uds.sessao(uds.SESSAO.estendida); if (!s.erro && s.nrc == null) break;
+      }
+      for (const x of voltar) {
+        const g = await uds.gravarDado(parseInt(x.campo, 16), x.antes);
+        anota("Cilindro " + x.cilindro + ": " + (g.gravou ? "voltou para o valor que estava (" + x.antes + ")." : "NÃO voltou: " + (g.texto || "o módulo recusou") + ". Valor antigo: " + x.antes));
+      }
+      await uds.fechar();
+    });
+    setFeito(null); setAndando({ passos: passos.slice(), fim: true });
+  };
+
+  return html`<${Tela} tela="bico" ajuda="Grava no módulo do motor o código que veio escrito no bico recodificado. O código IMA tem 7 caracteres e não usa 0, 9, I, J nem Q — o app confere a digitação antes. Só grava o cilindro que você marcar como trocado, lê e guarda o valor antigo antes, e pede o login do administrador na hora de gravar.">
     ${!pode ? html`<${SemPermissao} o="Programar bico" />` : html`
       <${BuscaPlaca} id="bico-placa" titulo="Placa do carro (opcional)" pl=${pl} />
       ${pl.veic ? html`<${Veiculo} v=${pl.veic} />` : null}
+      ${obd.disponivel() ? html`<${Adaptador} compacto=${!!st.ligado} />` : null}
 
-      <${Cartao} titulo="Onde o app chega hoje" id="bico-limite">
-        <p>A gravação em si está pronta, e a conferência do código também. O que falta para fechar a corrente, e é honesto dizer antes de você digitar:</p>
-        <div class="passo">1. O número do campo de cada cilindro muda de família para família de ECU, e não existe tabela pública confiável. Sem ele o app não sabe ONDE gravar.</div>
-        <div class="passo">2. Quase toda ECU exige destravar a adaptação antes (o 0x27), e a conta da chave depende da família.</div>
-        <p class="nota">Então hoje esta tela confere o código, monta o plano e mostra onde para. Ela não grava no escuro: gravar no campo errado de uma ECU diesel é prejuízo, não é tentativa.</p>
+      <${Cartao} titulo="Antes de gravar, o que o app sabe e o que não sabe" id="bico-limite">
+        <div class="passo">1. O app NÃO tem tabela de em qual campo cada ECU guarda o código do bico: nenhuma base aberta tem. O campo (4 dígitos) vem do manual da ECU e é você quem informa. Campo errado não é tentativa, é prejuízo.</div>
+        <div class="passo">2. Muita ECU diesel exige destravar antes (resposta 33). O app não tem a chave de nenhuma família: nessas ele lê, tenta, mostra a recusa e não grava.</div>
+        <div class="passo">3. O valor que estava no campo é lido e guardado antes. Se o módulo não entregar o valor antigo, o app não grava.</div>
+        <p class="nota">A gravação só vai para o módulo do motor e só com o administrador autorizando com o login dele na hora.</p>
       </${Cartao}>
 
       <${Cartao} titulo="Os códigos dos bicos" id="bico-codigos">
@@ -1171,6 +1260,7 @@ function Bico() {
         </${Campo}>
         ${itens.map((it, i) => {
           const v = it.codigo ? bico.validarIma(it.codigo) : null;
+          const cp = String(it.campo || "").toUpperCase();
           return html`<div key=${it.cilindro} class="bico-linha">
             <label class="bico-marca">
               <input type="checkbox" checked=${it.trocado} onChange=${e => mexer(i, { trocado: e.target.checked })} />
@@ -1183,6 +1273,10 @@ function Bico() {
             ${v && !v.ok ? html`<div class="erro">${v.erro}${v.dica ? " " + v.dica : ""}
               ${v.corrigido ? html`<button type="button" class="link" onClick=${() => mexer(i, { codigo: v.corrigido })}>usar ${v.corrigido}</button>` : null}</div>` : null}
             ${v && v.ok ? html`<div class="nota">Código válido. Vai gravado como ${bico.paraHex(v.codigo)}.</div>` : null}
+            ${it.trocado ? html`<input type="text" class=${"bico-cod bico-campo" + (cp && !campoBom(cp) ? " ruim" : cp ? " bom" : "")} inputmode="text" autocomplete="off" autocapitalize="characters" maxlength="4"
+              placeholder="Campo no módulo (4 dígitos, do manual da ECU)" aria-label=${"Campo do módulo para o cilindro " + it.cilindro}
+              value=${it.campo} onInput=${e => mexer(i, { campo: e.target.value.toUpperCase().replace(/[^0-9A-F]/g, "") })} />` : null}
+            ${it.trocado && cp && !campoBom(cp) ? html`<div class="erro">${cp.length < 4 ? "O campo tem 4 dígitos (0 a 9 e A a F)." : "Este campo é da identificação do módulo (chassi, número de peça): o app não grava nele."}</div>` : null}
           </div>`;
         })}
         <p class="nota">O código está gravado a laser no corpo do bico. Ele não usa 0, 9, I, J nem Q: o que parece 0 é a letra O, e o que parece I é o número 1.</p>
@@ -1192,14 +1286,38 @@ function Bico() {
         ${conf.avisos.map((a, i) => html`<div key=${i} class=${a.grave ? "erro" : "nota"}>${a.t}</div>`)}
       </${Cartao}>` : null}
 
-      ${/* O plano só aparece quando NÃO há aviso grave. Mostrar o plano com um código repetido ou
-            inválido na tela faz parecer que está pronto para gravar, e o que se lê é a sequência,
-            não o aviso. Primeiro resolve o aviso; depois aparece o que vai acontecer no carro. */
+      ${/* O plano só aparece quando NÃO há aviso grave: com código repetido ou inválido na tela, o
+            que se lê é a sequência, não o aviso. */
         conf.podeGravar ? html`<${Cartao} titulo="O que vai acontecer no carro" id="bico-plano">
-        ${plano.map((p, i) => html`<div key=${i} class=${"passo" + (p.trava ? " ruim" : "")}>${i + 1}. ${p.t}</div>`)}
-        <button type="button" class="btn-barra" disabled=${true} style="justify-content:center">GRAVAR (falta o número do campo desta ECU)</button>
-        <p class="nota">O botão fica desligado de propósito enquanto o app não souber o campo certo desta família de ECU. Quando entrar, ele liga — e a sequência é essa aí, com a leitura de volta conferindo o que ficou gravado.</p>
+        <div class="passo">1. Abrir a sessão de diagnóstico no módulo do motor.</div>
+        ${paraGravar.map((c, i) => html`<div key=${c.cilindro} class="passo">${i + 2}. Cilindro ${c.cilindro}: ler e guardar o que está no campo ${c.campo || "(falta informar)"}, gravar ${c.codigo} e ler de volta para conferir.</div>`)}
+        <div class="passo">${paraGravar.length + 2}. Parar no primeiro cilindro que não conferir. Registrar quem gravou e quem autorizou.</div>
+        <button type="button" class="btn-barra" id="bico-gravar" disabled=${!!falta || !!st.acaoCorrendo} style="justify-content:center" onClick=${pedirAutorizacao}>GRAVAR (pede o login do administrador)</button>
+        ${falta ? html`<p class="nota" id="bico-falta">${falta}</p>` : null}
       </${Cartao}>` : null}
+
+      ${andando ? html`<${Cartao} titulo=${andando.fim ? "Resultado" : "Gravando…"} id="bico-andando">
+        ${andando.passos.map((p, i) => html`<div key=${i} class="passo">${p}</div>`)}
+        ${andando.erro ? html`<div class="erro">${andando.erro}</div>` : null}
+        ${andando.registro ? html`<div class="nota">${andando.registro}</div>` : null}
+        ${andando.fim && feito && feito.some(x => x.antes && x.depois !== undefined) ? html`
+          <button type="button" class="btn-barra claro" id="bico-desfazer" style="justify-content:center" onClick=${desfazer} disabled=${!!st.dono}>DESFAZER: VOLTAR O VALOR QUE ESTAVA</button>
+          <p class="nota">Depois de gravar, alguns módulos só passam a usar o valor novo ao desligar e ligar a ignição. Leia as falhas do módulo: gravação certa não deixa código novo.</p>` : null}
+      </${Cartao}>` : null}
+
+      ${autoriza ? html`<${Quadro} titulo="Autorização do administrador" onFechar=${() => setAutoriza(null)}>
+        <p>Vai gravar no módulo do motor: ${paraGravar.map(c => "cilindro " + c.cilindro + " → " + c.codigo + " no campo " + c.campo).join("; ")}.</p>
+        <${Campo} id="bico-adm-email" rotulo="Login do administrador (e-mail)">
+          <input id="bico-adm-email" type="email" autocomplete="off" autocapitalize="none" spellcheck=${false} value=${autoriza.email} onInput=${e => setAutoriza(a => ({ ...a, email: e.target.value }))} />
+        </${Campo}>
+        <${Campo} id="bico-adm-senha" rotulo="Senha do administrador">
+          <input id="bico-adm-senha" type="password" autocomplete="off" value=${autoriza.senha} onInput=${e => setAutoriza(a => ({ ...a, senha: e.target.value }))} />
+        </${Campo}>
+        ${autoriza.erro ? html`<div class="erro" id="bico-adm-erro">${autoriza.erro}</div>` : null}
+        <p class="nota">A senha não fica guardada no aparelho. Quem está logado no app continua o mesmo.</p>
+        <button type="button" class="btn-acao" id="bico-adm-ok" disabled=${!autoriza.email || !autoriza.senha || autoriza.conferindo} onClick=${autorizarEGravar}>${autoriza.conferindo ? "Conferindo…" : "AUTORIZAR E GRAVAR"}</button>
+        <button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${() => setAutoriza(null)}>Cancelar</button>
+      </${Quadro}>` : null}
     `}
   </${Tela}>`;
 }

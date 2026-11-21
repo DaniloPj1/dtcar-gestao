@@ -304,6 +304,9 @@ function Obd() {
     setErro(""); setOcupado(aviso);
     // Esta tela fala OBD-II genérico. Se a pessoa veio de Módulos com o ABS (ou outro) apontado, o
     // adaptador ainda está com o endereço e o filtro dele: solta antes, senão o pedido vai ao módulo errado.
+    // E não fala por cima de uma ação em curso (atuador, aprendizado, gravação): os pedidos se misturariam
+    // aos dela, no módulo dela. soltarModulo() não espera ação — por isso a recusa é aqui.
+    if (sessao.estado().acaoCorrendo) { setOcupado(""); setErro("O adaptador está ocupado com uma ação em outro módulo (atuador, aprendizado ou gravação). Espere terminar."); return; }
     try { await sessao.soltarModulo(); await fn(); } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
   }
 
@@ -347,6 +350,7 @@ function Obd() {
       if (mesmo) return;                                            // …mas trocar de modo recomeça
       await new Promise(r => setTimeout(r, 120));
     }
+    if (sessao.estado().acaoCorrendo) { setErro("O adaptador está ocupado com uma ação em outro módulo (atuador, aprendizado ou gravação). Espere terminar."); return; }
     await sessao.soltarModulo();                                    // idem: o ao vivo é OBD-II genérico
     const minha = ++contador.current;
     rodada.current = minha;
@@ -422,7 +426,8 @@ function Obd() {
     try {
       const l = JSON.parse(window.localStorage.getItem("obd_pendentes") || "[]");
       l.push(Object.assign({ guardado_em: new Date().toISOString() }, reg));
-      window.localStorage.setItem("obd_pendentes", JSON.stringify(l.slice(-20)));
+      // mesma fila e mesmo limite de js/obdregistro.js (80): cortar em 20 aqui apagava laudos e gravações de bico à espera
+      window.localStorage.setItem("obd_pendentes", JSON.stringify(l.slice(-80)));
     } catch (e) { /* sem espaço: o aviso na tela é o que resta */ }
   };
   const carregarAnteriores = async () => {

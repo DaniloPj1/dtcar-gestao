@@ -569,8 +569,12 @@ export async function rodarAprendizado(rid, {
       return { ok: false, passos, texto: c.texto, nrc: c.nrc };
     }
     if (c.erro) {
-      anota("recusou", c.texto || "Não deu para falar com o módulo.");
-      return { ok: false, passos, texto: c.texto };
+      // O pedido de início FOI ENVIADO e a resposta se perdeu: a rotina pode estar rodando. Marca como
+      // começada para o `finally` mandar parar — e avisar se a parada não for confirmada.
+      comecou = true;
+      const t = "O pedido para começar foi enviado, mas a resposta do módulo se perdeu. A rotina pode ter começado; o app mandou interromper.";
+      anota("incerto", t);
+      return { ok: false, passos, texto: t, incerto: true };
     }
     comecou = true;
     anota("comecou", "Rotina começou. Não desligue a chave.");

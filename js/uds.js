@@ -560,7 +560,9 @@ export async function rodarAprendizado(rid, {
     const s = await sessao(SESSAO.estendida);
     if (s.nrc != null) return { ok: false, passos, texto: s.texto, nrc: s.nrc };
     anota("sessao", "Sessão de diagnóstico aberta.");
-    const c = await rodarRotina(rid, ROTINA.comecar, dados);
+    // A conexão pode cair DEPOIS de o pedido sair: a promessa rejeitada é tratada como "enviado, sem
+    // resposta" (rotina possivelmente começada), não como erro genérico.
+    const c = await rodarRotina(rid, ROTINA.comecar, dados).catch(() => ({ erro: "conexao-caiu", texto: "a conexão caiu" }));
     // 0x78 e 0x21 querem dizer que o módulo RECEBEU e está trabalhando. Tratar como recusa fazia o
     // app desistir com a rotina já correndo dentro do módulo, e sem mandar o "parar" — achado da
     // revisão independente de 20/11/2026.

@@ -487,11 +487,12 @@ function Obd() {
     const hoje = compara.resumo(s);
     if (!hoje) { setComparado({ pouco: true }); return; }
     if (!placa) { setComparado({ semPlaca: true }); return; }
+    const carroDaLeitura = Object.assign({}, sessao.carro());       // antes de esperar: a placa pode mudar no meio
     (async () => {
       let ant = [];
       try { ant = (await api.obd.listar({ placa, tipo: "sessao", limite: 6 })).map(l => l.dados).filter(Boolean); } catch (e) { ant = []; }
       const c = compara.comparar(hoje, ant);
-      const guardou = await registrarAcao("sessao", perfil, hoje);
+      const guardou = await registrarAcao("sessao", perfil, hoje, undefined, carroDaLeitura);
       setComparado({ achados: c.achados, sessoes: c.sessoes, guardou });
     })();
   }, [rodandoAgora]);

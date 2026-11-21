@@ -136,8 +136,10 @@ const FRASE = { ok: "Registrado no banco.", pendente: "Registro guardado no apar
  * Registra uma ação feita no carro (atuador, aprendizado, apagamento por módulo, bico…).
  * Devolve a frase que a tela mostra. Nunca rejeita: o que não gravou fica guardado no aparelho.
  */
-export async function registrarAcao(tipo, perfil, dados, extra) {
-  const g = await registro.guardar(api.obd.registrar, cofre(), registro.linha(tipo, perfil, sessao.carro(), dados, extra));
+// `carro`: o carro EM QUE a coisa aconteceu, quando quem chama já o tinha na mão antes de esperar
+// alguma resposta. Sem ele vale o carro da sessão no momento de gravar.
+export async function registrarAcao(tipo, perfil, dados, extra, carro = null) {
+  const g = await registro.guardar(api.obd.registrar, cofre(), registro.linha(tipo, perfil, carro || sessao.carro(), dados, extra));
   return g.gravado ? FRASE.ok : g.pendente ? FRASE.pendente : FRASE.nada;
 }
 /** Sobe o que ficou guardado no aparelho. Chamado quando uma tela do diagnóstico abre. */

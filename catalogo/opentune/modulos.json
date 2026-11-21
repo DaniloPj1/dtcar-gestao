@@ -1,0 +1,4722 @@
+{
+ "bosch-dq381-vag": {
+  "access": {
+   "bench": {
+    "confidence": "unverified",
+    "how": "The published CAN bench pinout lists +12 V on TCU-9 and TCU-15, ground on TCU-16, CAN-H on TCU-6 and CAN-L on TCU-7. It lists no K-line and calls the connector 10-pin despite numbering pins up to 16. Confirm the numbering on the unit before applying power.",
+    "possible": true,
+    "sources": [
+     0
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "The connector pinout and the bench backup listing do not identify a DQ381 processor boot entry point or reset timing.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     0,
+     3
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "VW_Flash supports programming the MQB DQ381. For the 401 bootloader revision, AutoTuner lists virtual calibration reads over OBD and reserves full backups for bench access. A complete original read through OBD is undocumented in these sources.",
+    "protocol": "UDS over ISO-TP on CAN",
+    "sources": [
+     2,
+     3
+    ]
+   },
+   "security": {
+    "confidence": "community",
+    "diag_read": "unknown",
+    "flash_write": "required",
+    "notes": "The VW_Flash DQ381 writer uses a UDS programming session that requests security access. The cited sources do not establish the requirement for a complete diagnostic read. OpenTune ships no OEM key.",
+    "sources": [
+     4,
+     5
+    ]
+   }
+  },
+  "aliases": [
+   "DQ381",
+   "DQ380",
+   "0GC",
+   "DSG7 wet"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "TCU-6"
+   ],
+   "can_l": [
+    "TCU-7"
+   ],
+   "ground": [
+    "TCU-16"
+   ],
+   "ign": [],
+   "kline": [],
+   "notes": "ecupinouts: +12 V to 9 and 15, ground 16, CAN-H 6 / CAN-L 7. Single source with an inconsistent connector description - verify on the unit.",
+   "power": [
+    "TCU-9",
+    "TCU-15"
+   ],
+   "resistor_notes": "Put a 120 ohm resistor across CAN-H/CAN-L if your interface does not terminate."
+  },
+  "bus": [
+   "can"
+  ],
+  "checksum": "dq381",
+  "connectors": [
+   {
+    "description": "Gearbox (mechatronic) connector as drawn by ecupinouts ('VAG DQ500' connector)",
+    "name": "TCU",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "CAN-High",
+      "pin": "6",
+      "signal": "can_h",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-Low",
+      "pin": "7",
+      "signal": "can_l",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'.",
+      "pin": "9",
+      "signal": "12v_perm",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'.",
+      "pin": "15",
+      "signal": "12v_perm",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground",
+      "pin": "16",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Renesas SH725xx",
+  "ecudef": "bosch-dq381",
+  "eeprom": null,
+  "family": "DQ381",
+  "flash_kib": 1568,
+  "id": "bosch-dq381-vag",
+  "kind": "tcu",
+  "maker": "Bosch",
+  "name": "VAG DQ381 / 0GC 7-speed DSG TCU",
+  "notes": "Seven-speed wet-clutch DSG (refined DQ380, 2017+) used across MQB models (Wikipedia names the Arteon). OpenTune's dq381 checksum (BOOT/ASW/CAL CRC-32) is validated on a real full dump. The pinout below comes from one source whose connector description is internally inconsistent (it calls the plug 10-pin but numbers pins up to 16), so the unit-level confidence is 'unverified' - check every pin.",
+  "part_number_examples": [
+   "0GC927373K"
+  ],
+  "pinout_confidence": "unverified",
+  "protocols": [
+   "uds"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "UDS programming over CAN is documented for the MQB DQ381. For the 401 bootloader revision, AutoTuner lists a virtual calibration read over OBD and backup on the bench. A processor boot entry point is undocumented.",
+   "obd": "write-only"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "ecupinouts.com: Bosch DQ381 (DQ500 connector) bench pinout",
+    "url": "https://ecupinouts.com/en/vag-dq500-dq381/"
+   },
+   {
+    "title": "Wikipedia: Direct-shift gearbox (DQ381 / 0GC)",
+    "url": "https://en.wikipedia.org/wiki/Direct-shift_gearbox"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause), supported MQB control units and UDS transport",
+    "url": "https://github.com/bri3d/VW_Flash"
+   },
+   {
+    "title": "AutoTuner DQ38x 401 bootloader support announcement, OBD virtual read and bench backup",
+    "url": "https://us.autotuner.com/blogs/news/dq381-gen-2-401-bootloader-now-unlocked-by-autotuner"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause), DQ381 programming support",
+    "url": "https://github.com/bri3d/VW_Flash/blob/master/lib/dq381_flash_utils.py"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause), security access in the UDS programming session",
+    "url": "https://github.com/bri3d/VW_Flash/blob/master/lib/flash_uds.py"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Arteon",
+    "years": "2017-"
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "MQB-platform models (various)",
+    "years": "2017-"
+   }
+  ]
+ },
+ "bosch-edc15-vag": {
+  "access": {
+   "bench": {
+    "confidence": "verified",
+    "how": "On T121, apply +12 V to pins 2 and 37, ground pins 4 and 5, and use pin 16 for K-line diagnostics. Pins 6 (CAN-L) and 7 (CAN-H) carry powertrain CAN. Diag-Prof labels 2 as switched and 37 as permanent. Dilemma labels 37 as switched, so confirm the ignition feed for the specific revision.",
+    "possible": true,
+    "sources": [
+     0,
+     2,
+     3,
+     8
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "board-pad",
+    "mcu_mode": "C167 bootstrap mode on the documented EDC15P board.",
+    "notes": "Dilemma identifies DQ4 on the EDC15P flash chip as the boot input. The board connection on other revisions is unconfirmed.",
+    "points": [
+     {
+      "action": "pull-to-gnd",
+      "confidence": "unverified",
+      "location": "pcb:Am29F400 DQ4",
+      "name": "Am29F400 flash data pin DQ4"
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "DQ4 is sampled low at startup. The source gives no release interval.",
+    "sources": [
+     8
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "read+write",
+    "notes": "ecu-tool documents a full flash read and writes to the calibration area through the vehicle socket on supported EDC15P, EDC15V and 512 KiB EDC15VM units. Its manual excludes the 1 MiB EDC15VM.",
+    "protocol": "K-line (KWP2000 documented for EDC15P).",
+    "sources": [
+     7,
+     8
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The ecu-tool manual mentions authentication during model selection. It does not establish the access requirement for a complete diagnostic read or for programming across these revisions. OpenTune ships no OEM key.",
+    "sources": [
+     7
+    ]
+   }
+  },
+  "aliases": [
+   "EDC15P",
+   "EDC15P+",
+   "EDC15V",
+   "EDC15VM+"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "T121-4",
+    "T121-5"
+   ],
+   "ign": [
+    "T121-2"
+   ],
+   "kline": [
+    "T121-16"
+   ],
+   "notes": "K-line only: +12 V to pins 37 (terminal 30) and 2 (terminal 15), ground on 4 and 5, K-line on 16. Diag-Prof also lists pin 1 as terminal 15; feeding it too is harmless per that source.",
+   "power": [
+    "T121-37",
+    "T121-2"
+   ],
+   "resistor_notes": "No CAN termination needed: diagnostics and programming run over K-line."
+  },
+  "bus": [
+   "kline"
+  ],
+  "checksum": "edc15",
+  "connectors": [
+   {
+    "description": "121-pin Bosch connector (81 vehicle-side + 40 engine-side). Diag-Prof labels the vehicle block T81; pin numbers are the same.",
+    "name": "T121",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "Ignition, terminal 15 (switched)",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Ignition, terminal 15 (switched) / supply",
+      "pin": "2",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Ground, terminal 31",
+      "pin": "4",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "Ground, terminal 31",
+      "pin": "5",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "CAN-Low (powertrain CAN, 500 kbit/s)",
+      "note": "Diag-Prof: not used for diagnostics.",
+      "pin": "6",
+      "signal": "can_l",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "CAN-High (powertrain CAN, 500 kbit/s)",
+      "note": "Diag-Prof: not used for diagnostics.",
+      "pin": "7",
+      "signal": "can_h",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "K-line (diagnostics)",
+      "pin": "16",
+      "signal": "kline",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "37",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "C167 family (Bosch-marked, e.g. B59388 on EDC15P+)",
+  "ecudef": null,
+  "eeprom": "ST24C04 (512 B, I2C); some units 24C02",
+  "family": "EDC15",
+  "flash_kib": 512,
+  "flash_note": "The documented EDC15P has a 512 KiB Am29F400. The ecu-tool manual distinguishes 512 KiB and 1 MiB EDC15VM revisions.",
+  "id": "bosch-edc15-vag",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch EDC15P / EDC15P+ / EDC15V (VAG 1.9 TDI)",
+  "notes": "Classic VAG TDI diesel ECU: EDC15V on the rotary-pump (VP37) 1.9 TDI, EDC15P/P+ on the unit-injector (PD) 1.9 TDI. Part numbers above are VAG prefixes (028906021xx / 038906019xx), not single software keys. OpenTune's edc15 checksum (alias of edc15c6) fully solves the VAG TDI 512 KiB layout and self-corrects.",
+  "part_number_examples": [
+   "028906021",
+   "038906019"
+  ],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "Programmed over K-line, without CAN (ecupinouts); the same K-line is on the OBD socket, so OBD and bench use the same protocol. The 121-pin connector also carries a powertrain CAN pair that Diag-Prof marks as not used for diagnostics. A board-level boot mode exists for recovery (obdii365 article).",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Diag-Prof: VAG Bosch EDC15P / EDC15P+ (pin assignment, memory)",
+    "url": "http://www.diagprof.com/ecu_tips_and_tricks/manufacturer-vag/ecudomain-pcm_powertrain_control_module/supplier-bosch/ecutt-edc15p"
+   },
+   {
+    "title": "Transpondery: VAG EDC15 pinout",
+    "url": "https://www.transpondery.com/pinouts/vag/edc15_pinout.html"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC15P bench pinout",
+    "url": "https://ecupinouts.com/en/edc15p/"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC15V bench pinout",
+    "url": "https://ecupinouts.com/en/edc15p-edc15v/"
+   },
+   {
+    "title": "Diag-Prof: VAG Bosch EDC15P+",
+    "url": "http://www.diagprof.com/ecu_tips_and_tricks/manufacturer-vag/ecudomain-pcm_powertrain_control_module/supplier-bosch/ecutt-edc15p+"
+   },
+   {
+    "title": "obdii365: reading VAG Bosch EDC15P/EDC15P+ in boot mode",
+    "url": "https://blog.obdii365.com/2018/05/11/read-vag-bosch-edc15p-boot-with-mpps-fgtech-or-kess-v2/"
+   },
+   {
+    "title": "OpenTune vehicle catalog (catalog/manual, engine to ECU-family mapping)",
+    "url": "https://github.com/ebjerk01/opentune/tree/main/catalog/manual"
+   },
+   {
+    "title": "fjvva/ecu-tool, EDC15 User Manual (project licence unspecified)",
+    "url": "https://github.com/fjvva/ecu-tool/wiki/EDC15-User-Manual"
+   },
+   {
+    "title": "Dilemma (author), VAG EDC15P hardware and communication notes, in the author's VAGEDCSuite repository (licence unspecified)",
+    "url": "https://github.com/mattiasclaesson/VAGEDCSuite/blob/master/Docs/VAG%20EDC15P.pdf"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "Volkswagen",
+    "model": "Golf Mk3/Mk4",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "Volkswagen",
+    "model": "Passat (B5)",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "Audi",
+    "model": "A4 (B5)",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "Audi",
+    "model": "A6 (C5)",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "SEAT",
+    "model": "Toledo (1M)",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "Skoda",
+    "model": "Octavia (1U)",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI VP37 (EDC15V)",
+    "make": "Volkswagen",
+    "model": "Sharan (7M)",
+    "years": "1996-2003"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "Volkswagen",
+    "model": "Golf Mk4",
+    "years": "1999-2004"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "Volkswagen",
+    "model": "Bora",
+    "years": "1999-2004"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "Volkswagen",
+    "model": "Passat (B5.5)",
+    "years": "1999-2004"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "Audi",
+    "model": "A3 (8L)",
+    "years": "1999-2004"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "Audi",
+    "model": "A4 (B6)",
+    "years": "1999-2004"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "SEAT",
+    "model": "Leon/Toledo (1M)",
+    "years": "1999-2004"
+   },
+   {
+    "engine": "1.9 TDI PD (EDC15P)",
+    "make": "Skoda",
+    "model": "Octavia (1U)",
+    "years": "1999-2004"
+   }
+  ]
+ },
+ "bosch-edc15c6-mercedes": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "On the desk through the three connector blocks: terminal 30 on 2-13, terminal 15 on 1-1, K-line on 3-28 (both sources agree). Ground is disputed (1-5 or 1-6): find it by continuity before powering. Same protocol and security access as in the car.",
+    "possible": true,
+    "sources": [
+     0,
+     1
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "board-pad",
+    "mcu_mode": "C167-family bootstrap loader (BSL) on ASC0 (RxD0 = P3.11, TxD0 = P3.10), 8N1: after reset the host sends one zero byte, the BSL takes its baud rate from it and answers with an identification byte (C5h = C167 derivatives, D5h = devices with identification registers), then loads exactly 32 bytes of loader code. On EDC15 boards ASC0 reaches the K-line through the board's transceiver.",
+    "notes": "Board level only: the case has to be opened. No public source documents this route for the EDC15C6 itself: the C167 bootstrap loader is the EDC15 platform's, and grounding flash pin 24 at power-up is reported for the sibling VAG EDC15P in a retailer blog post. Check the CPU marking (C167 family) and the flash chip on your board first. OpenTune's BSL read only reads; it never writes or erases.",
+    "points": [
+     {
+      "action": "pull-to-gnd",
+      "confidence": "unverified",
+      "location": "pcb:flash DQ4 (pin 24 of the SO-44 29F400/29F800)",
+      "name": "Flash DQ4 to CPU P0L.4/AD4",
+      "note": "Only valid if the board routes flash DQ4 to CPU AD4 (C167CR P-MQFP-144 pin 104 = P0L.4/AD4): confirm continuity between flash pin 24 and CPU pin 104 before using it. The C167CR manual's example pull-down on P0L.4 is 8 kOhm.",
+      "resistor_ohms": 8000
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "P0L.4 must read low at the end of the hardware reset: apply the pull-down before power-up and release it once the BSL has answered (the cited EDC15P post releases after about 5 s; OpenTune's notes cite 2-3 s). P0L.5, P0L.3 and P0L.2 must read high (Table 19-2: P0L.5..2 = 1 0 1 1 selects the standard bootstrap loader). A hardware reset pulse must last at least 1032 TCL (errata CPU.7).",
+    "sources": [
+     3,
+     4,
+     5,
+     6,
+     7,
+     8
+    ]
+   },
+   "obd": {
+    "confidence": "unverified",
+    "mode": "read+write",
+    "notes": "The K-line pin agrees between both pinout sources. That a complete read and a write work over the diagnostic link is carried over from OpenTune's bosch-edc15c6 definition: no cited source states it for this unit and it has not been tried on one yet. A complete read needs security access (see security).",
+    "protocol": "KWP2000 (ISO 14230) on the K-line, connector pin 3-28",
+    "sources": [
+     0,
+     1
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "required",
+    "flash_write": "required",
+    "notes": "A complete flash read and programming over KWP2000 need the ECU's Mercedes security access (programming session); not yet confirmed on a unit. OpenTune ships no OEM key: supply your own through the off-by-default seed/key loader, or use the board-level boot read, which runs before the ECU software.",
+    "sources": [
+     8
+    ]
+   }
+  },
+  "aliases": [
+   "EDC15C6",
+   "EDC15C5",
+   "CR1",
+   "CR2",
+   "CDI-2"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [],
+   "ign": [
+    "1-1"
+   ],
+   "kline": [
+    "3-28"
+   ],
+   "notes": "Supply (2-13 terminal 30, 1-1 terminal 15) and K-line (3-28) agree between sources. The GROUND pin is deliberately left out: Transpondery says 1-5, ecupinouts says 1-6. Identify ground on your unit by continuity to the housing/other ground pins before powering.",
+   "power": [
+    "2-13",
+    "1-1"
+   ],
+   "resistor_notes": "K-line programming; CAN termination not needed for it."
+  },
+  "bus": [
+   "kline",
+   "can"
+  ],
+  "checksum": "edc15c6",
+  "connectors": [
+   {
+    "description": "Connector block 1 (Transpondery: S1)",
+    "name": "1",
+    "pins": [
+     {
+      "function": "Ignition, terminal 15 / +12 V",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "Ground (per Transpondery)",
+      "note": "Disputed: ecupinouts gives ground on 1-6 instead. Do not wire without checking continuity.",
+      "pin": "5",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "Ground (per ecupinouts)",
+      "note": "Disputed: Transpondery gives ground on 1-5 instead. Do not wire without checking continuity.",
+      "pin": "6",
+      "signal": "gnd",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "Terminal 15 (per Transpondery)",
+      "note": "ecupinouts lists 1-8 as the second +12 V pin instead; single conflicting source.",
+      "pin": "7",
+      "signal": "12v_ign",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "+12 V (per ecupinouts)",
+      "note": "Transpondery lists 1-7 as the second terminal-15 pin instead; single conflicting source.",
+      "pin": "8",
+      "signal": "12v_ign",
+      "sources": [
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "Connector block 2 (Transpondery: S2)",
+    "name": "2",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "CAN-High",
+      "pin": "11",
+      "signal": "can_h",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-Low",
+      "pin": "12",
+      "signal": "can_l",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "13",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "Connector block 3 (Transpondery: S3)",
+    "name": "3",
+    "pins": [
+     {
+      "function": "K-line (diagnostics)",
+      "pin": "28",
+      "signal": "kline",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": null,
+  "ecudef": "bosch-edc15c6",
+  "eeprom": null,
+  "family": "EDC15",
+  "flash_kib": 1024,
+  "flash_note": "Flash chip by hardware revision: a 29F400 (512 KiB; the chip of the sibling VAG EDC15P in the cited boot-mode post) or a 29F800 (1 MiB; OpenTune's edc15c6 checksum is validated on 1 MiB images). Confirm from the chip marking on your board before reading.",
+  "id": "bosch-edc15c6-mercedes",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch EDC15C6 (Mercedes CDI, CR1 / CR2)",
+  "notes": "First-generation Mercedes common-rail CDI (Mercedes calls the ECU CR1.x / CR2.x). Part numbers are Mercedes prefixes per engine (A611.../A612.../A613...). Checksum: OpenTune's edc15c6 module verifies and corrects the Mercedes 1 MiB block chain (validated on real stock and tuned dumps); unrecognised images are refused. Ground pin is disputed between sources (see bench.notes).",
+  "part_number_examples": [
+   "A6111",
+   "A6121",
+   "A6131"
+  ],
+  "pinout_confidence": "community",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "Diagnostics/programming over K-line (ISO 14230 KWP2000, per OpenTune's bosch-edc15c6 definition); a full read needs the ECU's security access (access.security). Board-level boot mode (C167 bootstrap loader, case open) is described in access.boot and is unverified for this unit.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Transpondery: Mercedes EDC15C5 / EDC15C6 pinout",
+    "url": "https://www.transpondery.com/pinouts/mercedes/edc15_pinout.html"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC15C6 (Mercedes) bench pinout",
+    "url": "https://ecupinouts.com/en/edc15c6-mercedes/"
+   },
+   {
+    "title": "OpenTune vehicle catalog (catalog/manual, engine to ECU-family mapping)",
+    "url": "https://github.com/ebjerk01/opentune/tree/main/catalog/manual"
+   },
+   {
+    "title": "Infineon C167CR Derivatives User's Manual V3.1: ch. 14 bootstrap loader (P0L.4 low at the end of reset, Fig. 14-2 8 kOhm pull-down, identification bytes C5h/D5h), Table 19-2 reset configuration",
+    "url": "https://www.keil.com/dd/docs/datashts/infineon/c167cr_um.pdf"
+   },
+   {
+    "title": "Infineon C167CR data sheet: P-MQFP-144 pin 104 = P0L.4/AD4",
+    "url": "https://www.infineon.com/assets/row/public/documents/10/57/infineon-c167cr-ds-en.pdf"
+   },
+   {
+    "title": "Infineon SAK-C167CR-LM errata sheet: CPU.7 warm hardware reset shorter than 1032 TCL",
+    "url": "https://www.infineon.com/assets/row/public/documents/10/52/ab12-1.pdf"
+   },
+   {
+    "title": "AMD Am29F800B data sheet: 44-pin SO, DQ4 = pin 24",
+    "url": "https://sy-dep-epc-lpc.web.cern.ch/components/datasheets/epc%20%28fgc-dccts%29/_fgc2/Memory/Flash/am29f800b.pdf"
+   },
+   {
+    "title": "OBD2Express blog (retailer post): reading a VAG EDC15P (29F400) in boot mode, flash pin 24 to ground at power-up",
+    "url": "https://obd2expresscouk.bcz.com/2019/03/04/fgtech-galletto-4-read-vag-edc15p-in-boot-mode/"
+   },
+   {
+    "title": "OpenTune docs/C167-BSL.md: C167 bootstrap-mode read on EDC15 (sequence, strap, K-line link)",
+    "url": "https://github.com/ebjerk01/opentune/blob/main/docs/C167-BSL.md"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "OM611 CDI",
+    "make": "Mercedes-Benz",
+    "model": "C-Class (W202/W203)",
+    "years": "1997-2003"
+   },
+   {
+    "engine": "OM611 CDI",
+    "make": "Mercedes-Benz",
+    "model": "E-Class (W210)",
+    "years": "1997-2003"
+   },
+   {
+    "engine": "OM611 CDI",
+    "make": "Mercedes-Benz",
+    "model": "Sprinter (T1N)",
+    "years": "1997-2003"
+   },
+   {
+    "engine": "OM611 CDI",
+    "make": "Mercedes-Benz",
+    "model": "Vito (W638)",
+    "years": "1997-2003"
+   },
+   {
+    "engine": "OM612 CDI",
+    "make": "Mercedes-Benz",
+    "model": "E-Class (W210/W211)",
+    "years": "1999-2003"
+   },
+   {
+    "engine": "OM612 CDI",
+    "make": "Mercedes-Benz",
+    "model": "ML (W163)",
+    "years": "1999-2003"
+   },
+   {
+    "engine": "OM612 CDI",
+    "make": "Mercedes-Benz",
+    "model": "Sprinter (T1N)",
+    "years": "1999-2003"
+   },
+   {
+    "engine": "OM613 CDI",
+    "make": "Mercedes-Benz",
+    "model": "E-Class (W210/W211)",
+    "years": "1999-2005"
+   },
+   {
+    "engine": "OM613 CDI",
+    "make": "Mercedes-Benz",
+    "model": "S-Class (W220)",
+    "years": "1999-2005"
+   },
+   {
+    "engine": "OM613 CDI",
+    "make": "Mercedes-Benz",
+    "model": "ML (W163)",
+    "years": "1999-2005"
+   }
+  ]
+ },
+ "bosch-edc16c3x-bmw": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "For K-line diagnostics, use X2412-7 for permanent +12 V, X2412-1 for ignition +12 V, X2412-2 for ground and X2412-8 for K-line. The C31 and C35 pinouts also identify CAN-H on X2412-46 and CAN-L on X2412-33. Their use for bench programming is undocumented here.",
+    "possible": true,
+    "sources": [
+     0,
+     1,
+     2,
+     3
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "bdm-jtag",
+    "mcu_mode": "Background debug mode (BDM)",
+    "notes": "An owner reports a BDM read through a connector attached to the board pads on a BMW 118d. A separate C35 report confirms BDM access. The pad layout and reset timing for other revisions are unknown.",
+    "points": [
+     {
+      "action": "connect",
+      "confidence": "unverified",
+      "location": "pcb:BDM connector pads",
+      "name": "BDM connector pads (C35)",
+      "note": "A BDM probe is attached to these board contacts. The report gives no pad numbering or orientation."
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": null,
+    "sources": [
+     5,
+     6
+    ]
+   },
+   "obd": {
+    "confidence": "unverified",
+    "mode": "unknown",
+    "notes": "A BMW EDC16C35 forum report describes OBD reading and writing. It does not establish which flash regions can be read over OBD or identify the programming protocol across the listed variants.",
+    "protocol": null,
+    "sources": [
+     6
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The C35 access report does not state the security requirements for a complete diagnostic read or for flash programming. OpenTune ships no OEM key.",
+    "sources": [
+     6
+    ]
+   }
+  },
+  "aliases": [
+   "EDC16C31",
+   "EDC16C35",
+   "EDC16CP35",
+   "DDE5",
+   "DDE6"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "X2412-2"
+   ],
+   "ign": [
+    "X2412-1"
+   ],
+   "kline": [
+    "X2412-8"
+   ],
+   "notes": "+12 V to X2412-7 (terminal 30) and X2412-1 (terminal 15), ground X2412-2, K-line X2412-8.",
+   "power": [
+    "X2412-7",
+    "X2412-1"
+   ],
+   "resistor_notes": "K-line bench connection; no CAN termination needed for it."
+  },
+  "bus": [
+   "can",
+   "kline"
+  ],
+  "checksum": "edc16",
+  "connectors": [
+   {
+    "description": "Vehicle-side block (Transpondery: socket K)",
+    "name": "X2412",
+    "pins": [
+     {
+      "function": "Ignition, terminal 15",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "function": "Ground",
+      "pin": "2",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "7",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "function": "K-line",
+      "pin": "8",
+      "signal": "kline",
+      "sources": [
+       0,
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-Low",
+      "note": "Both citations are from the same site.",
+      "pin": "33",
+      "signal": "can_l",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-High",
+      "note": "Both citations are from the same site.",
+      "pin": "46",
+      "signal": "can_h",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "Engine-side block",
+    "name": "X2411",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "GPT1 auxiliary programming-mode line (bench tools)",
+      "note": "Both citations are from the same site. Never connect +12 V here.",
+      "pin": "62",
+      "signal": "other",
+      "sources": [
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "GPT2 auxiliary programming-mode line (bench tools)",
+      "note": "Both citations are from the same site. Never connect +12 V here.",
+      "pin": "87",
+      "signal": "other",
+      "sources": [
+       2,
+       3
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Freescale MPC5xx family",
+  "ecudef": null,
+  "eeprom": null,
+  "family": "EDC16",
+  "flash_kib": null,
+  "id": "bosch-edc16c3x-bmw",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch EDC16C31 / EDC16C35 (BMW diesel, DDE5/DDE6)",
+  "notes": "BMW four- and six-cylinder diesel ECU of the E46/E60/E87/E90 era. OpenTune's edc16 checksum is the EDC16 (MPC56x) family algorithm; validate per software variant before trusting a correction. The CAN pins come from a single site.",
+  "part_number_examples": [
+   "0281010565",
+   "0281012091",
+   "0281012190"
+  ],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "K-line bench diagnostics through X2412. Open-case BDM is reported for the C35. Complete OBD flash read coverage across the listed variants is unknown.",
+   "obd": "unknown"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Transpondery: BMW EDC16C31 pinout",
+    "url": "https://www.transpondery.com/pinouts/bmw/edc16c31_pinout.html"
+   },
+   {
+    "title": "Transpondery: BMW EDC16C35 pinout",
+    "url": "https://www.transpondery.com/pinouts/bmw/edc16c35_pinout.html"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC16C31 bench pinout",
+    "url": "https://ecupinouts.com/en/edc16c31/"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC16CP35 bench pinout",
+    "url": "https://ecupinouts.com/en/edc16cp35/"
+   },
+   {
+    "title": "OpenTune vehicle catalog (catalog/manual, engine to ECU-family mapping)",
+    "url": "https://github.com/ebjerk01/opentune/tree/main/catalog/manual"
+   },
+   {
+    "title": "ETP Solutions forum: BMW 118d owner reports a BDM read through a connector on the board pads",
+    "url": "https://www.etpsolutions.com/forums/topic/46872-informazioni-edc16-bmw-letturascrittura/"
+   },
+   {
+    "title": "ETP Solutions forum: BMW EDC16C35 OBD and BDM access reports",
+    "url": "https://www.etpsolutions.com/forums/topic/48810-intervenire-su-bmw-con-edc16c35/"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "M47TU / M47TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "1 Series (E87)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M47TU / M47TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "3 Series (E46/E90)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M47TU / M47TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "5 Series (E60)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M47TU / M47TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "X3 (E83)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M57TU / M57TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "3 Series (E90)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M57TU / M57TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "5 Series (E60)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M57TU / M57TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "7 Series (E65)",
+    "years": "2004-2010"
+   },
+   {
+    "engine": "M57TU / M57TU2 (EDC16C31/C35)",
+    "make": "BMW",
+    "model": "X5 (E70)",
+    "years": "2004-2010"
+   }
+  ]
+ },
+ "bosch-edc16u34-vag": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "At the closed-case connector, permanent +12 V is T94-18, switched +12 V is T94-5, and ground is T94-1. K-line diagnostics use T94-72. Diag-Prof identifies CAN high on T94-89 and CAN low on T94-66.",
+    "possible": true,
+    "sources": [
+     0,
+     2
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "No boot route is documented in a public source here. Microtronik's support list mentions open-case access for this ECU, but names no board point, entry action or reset sequence, so a usable boot route cannot be specified.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     6
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "read+write",
+    "notes": "Microtronik lists OBD reading and writing. OpenTune defines a full OBD read of the 2 MiB flash and a writable calibration region. The support list does not specify read length or confirm the protocol for each vehicle.",
+    "protocol": "OpenTune configures KWP2000 over ISO-TP on CAN and lists UDS as vehicle-dependent.",
+    "sources": [
+     5,
+     6
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "Neither the unit definition nor the support list states the access requirement for a complete diagnostic read or for programming. OpenTune ships no OEM key.",
+    "sources": [
+     5,
+     6
+    ]
+   }
+  },
+  "aliases": [
+   "EDC16U34",
+   "EDC16U31"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "T94-89"
+   ],
+   "can_l": [
+    "T94-66"
+   ],
+   "ground": [
+    "T94-1"
+   ],
+   "ign": [
+    "T94-5"
+   ],
+   "kline": [
+    "T94-72"
+   ],
+   "notes": "+12 V to T94-18 (terminal 30) and T94-5 (terminal 15), ground T94-1. K-line on T94-72 is the usual bench path; CAN is on T94-89/66.",
+   "power": [
+    "T94-18",
+    "T94-5"
+   ],
+   "resistor_notes": "If you use CAN on the bench, make sure the bus is terminated (about 60 ohm across CAN-H/CAN-L)."
+  },
+  "bus": [
+   "can",
+   "kline"
+  ],
+  "checksum": "edc16",
+  "connectors": [
+   {
+    "description": "94-pin vehicle-side block of the 154-pin (60 + 94) Bosch connector",
+    "name": "T94",
+    "pins": [
+     {
+      "function": "Ground, terminal 31",
+      "pin": "1",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Ignition, terminal 15 (switched)",
+      "pin": "5",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "18",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "CAN-Low (500 kbit/s)",
+      "pin": "66",
+      "signal": "can_l",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "K-line",
+      "pin": "72",
+      "signal": "kline",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "CAN-High (500 kbit/s)",
+      "pin": "89",
+      "signal": "can_h",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "60-pin engine-side block",
+    "name": "T60",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "GPT1 auxiliary programming-mode line (bench tools)",
+      "note": "Only needed by bench tools that use GPT/PWD signals; never connect +12 V here.",
+      "pin": "58",
+      "signal": "other",
+      "sources": [
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "GPT2 auxiliary programming-mode line (bench tools)",
+      "note": "Only needed by bench tools that use GPT/PWD signals; never connect +12 V here.",
+      "pin": "28",
+      "signal": "other",
+      "sources": [
+       2
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "MPC562",
+  "ecudef": "bosch-edc16u34",
+  "eeprom": "ST95320 (4 KiB, SPI)",
+  "family": "EDC16",
+  "flash_kib": 2048,
+  "id": "bosch-edc16u34-vag",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch EDC16U34 (VAG 1.9 / 2.0 TDI PD)",
+  "notes": "Second-generation VAG unit-injector (PD) diesel ECU, roughly 2004-2009 (Golf V, Touran, A3 8P, Octavia II, Leon II). Part number shown is the VAG prefix (03G906xxx). EDC16U31 shares the same vehicle-side pin assignment per Diag-Prof.",
+  "part_number_examples": [
+   "03G906"
+  ],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "kwp2000",
+   "uds"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "Full read over OBD/CAN per OpenTune's bosch-edc16u34 definition (some cars answer KWP2000, others UDS). Diag-Prof lists a 512 KiB processor area plus 2 MiB external flash. Bench over K-line; ecupinouts notes some bench tools also drive two auxiliary programming-mode lines (GPT1/GPT2). No serial boot mode is documented in the cited sources.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Diag-Prof: VAG Bosch EDC16U34 (pin assignment, memory)",
+    "url": "http://www.diagprof.com/ecu_tips_and_tricks/manufacturer-vag/ecudomain-pcm_powertrain_control_module/supplier-bosch/ecutt-edc16u34"
+   },
+   {
+    "title": "Transpondery: VAG EDC16 pinout",
+    "url": "https://www.transpondery.com/pinouts/vag/edc16_pinout.html"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC16U34 (VAG) bench pinout",
+    "url": "https://ecupinouts.com/en/bosch-edc16u34-vag/"
+   },
+   {
+    "title": "Diag-Prof: VAG Bosch EDC16U31",
+    "url": "http://www.diagprof.com/ecu_tips_and_tricks/manufacturer-vag/ecudomain-pcm_powertrain_control_module/supplier-bosch/ecutt-edc16u31"
+   },
+   {
+    "title": "OpenTune vehicle catalog (catalog/manual, engine to ECU-family mapping)",
+    "url": "https://github.com/ebjerk01/opentune/tree/main/catalog/manual"
+   },
+   {
+    "title": "OpenTune EDC16U34 definition (GPL-3.0-or-later): OBD read scope and diagnostic protocol configuration",
+    "url": "https://github.com/ebjerk01/opentune/blob/main/ecudefs/bosch-edc16u34.json"
+   },
+   {
+    "title": "Microtronik Volkswagen EDC16U34 support list: OBD read/write and open-case access",
+    "url": "https://www.microtronik.com/support/hexprogeculist/Volkswagen/EDC16U34"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "Volkswagen",
+    "model": "Golf Mk5",
+    "years": "2003-2010"
+   },
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "Volkswagen",
+    "model": "Passat (B6)",
+    "years": "2003-2010"
+   },
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "Volkswagen",
+    "model": "Touran (1T)",
+    "years": "2003-2010"
+   },
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "Audi",
+    "model": "A3 (8P)",
+    "years": "2003-2010"
+   },
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "Audi",
+    "model": "A4 (B7)",
+    "years": "2003-2010"
+   },
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "SEAT",
+    "model": "Leon (1P)/Altea",
+    "years": "2003-2010"
+   },
+   {
+    "engine": "1.9 / 2.0 TDI PD",
+    "make": "Skoda",
+    "model": "Octavia (1Z)",
+    "years": "2003-2010"
+   }
+  ]
+ },
+ "bosch-edc17cp14-vag": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "The T94 connector carries +12 V permanent on T94-87, ignition on T94-5, CAN high on T94-68 and CAN low on T94-67. The primary layout uses ground T94-1 and auxiliary GPT1 on T60-52 and GPT2 on T60-44 for bench programming. The second ecupinouts layout uses ground T94-2 and omits both GPT lines. Neither layout lists a K-line. Confirm the ground by continuity before applying power.",
+    "possible": true,
+    "sources": [
+     0,
+     1
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": "The TC1796 supports serial bootstrap over ASC0 or CAN (Infineon, Table 7). The mode used on this ECU is unknown.",
+    "notes": "The processor data sheet describes chip-level boot choices. The available pinout evidence does not establish a usable point, strap action and reset sequence for an identified EDC17CP14 board revision.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     0,
+     6
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "AUTOM8 lists writing and virtual reads. A virtual read does not capture the installed flash. Microtronik also reports direct reads on some versions, without specifying their coverage or the revisions involved.",
+    "protocol": "TP2.0 over CAN for the 2.0 TDI listed by AUTOM8",
+    "sources": [
+     4,
+     5
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The OBD support list does not specify security access requirements for a complete diagnostic read or for flash programming. OpenTune ships no OEM key.",
+    "sources": [
+     5
+    ]
+   }
+  },
+  "aliases": [
+   "EDC17CP14",
+   "EDC17CP20"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "T94-68"
+   ],
+   "can_l": [
+    "T94-67"
+   ],
+   "ground": [
+    "T94-1"
+   ],
+   "ign": [
+    "T94-5"
+   ],
+   "kline": [],
+   "notes": "+12 V to T94-87 (terminal 30) and T94-5 (terminal 15), ground T94-1 (T94-2 on some hardware), CAN-H T94-68 / CAN-L T94-67.",
+   "power": [
+    "T94-87",
+    "T94-5"
+   ],
+   "resistor_notes": "Put a 120 ohm resistor across CAN-H/CAN-L if your interface does not terminate (ecupinouts)."
+  },
+  "bus": [
+   "can"
+  ],
+  "checksum": "edc17",
+  "connectors": [
+   {
+    "description": "94-pin vehicle-side block of the 154-pin (60 + 94) Bosch connector (Transpondery: socket K)",
+    "name": "T94",
+    "pins": [
+     {
+      "function": "Ground, terminal 31",
+      "pin": "1",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground (ecupinouts variant 2)",
+      "note": "Only on the second hardware variant listed by ecupinouts.",
+      "pin": "2",
+      "signal": "gnd",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "function": "Ignition, terminal 15",
+      "pin": "5",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "CAN-Low",
+      "pin": "67",
+      "signal": "can_l",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "CAN-High",
+      "pin": "68",
+      "signal": "can_h",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "87",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "60-pin engine-side block",
+    "name": "T60",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "GPT1 auxiliary programming-mode line (bench tools)",
+      "note": "Never connect +12 V here.",
+      "pin": "52",
+      "signal": "other",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "GPT2 auxiliary programming-mode line (bench tools)",
+      "note": "Never connect +12 V here.",
+      "pin": "44",
+      "signal": "other",
+      "sources": [
+       1
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Infineon TC1796 (TriCore)",
+  "ecudef": "bosch-edc17cp14",
+  "eeprom": "Emulated in the TC1796 128 KiB data flash",
+  "family": "EDC17",
+  "flash_kib": 2048,
+  "flash_note": "The 2048 KiB figure covers the TC1796's internal program flash (Infineon, section 3.2). Microtronik also lists external-flash versions of the VAG EDC17CP14. External flash capacity is unknown.",
+  "id": "bosch-edc17cp14-vag",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch EDC17CP14 (VAG 2.0 TDI common rail)",
+  "notes": "Higher-output VAG 2.0 TDI common-rail (EA189) ECU, about 2008-2013. The EDC17 checksum's VAG per-block constant is firmware-specific: OpenTune corrects it with the owner's stock dump as reference. ecupinouts documents a second hardware variant grounded on T94-2 instead of T94-1 - check continuity.",
+  "part_number_examples": [],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "uds"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "OBD writing and virtual reads are documented. Complete original reads over OBD are unconfirmed across revisions. Closed-case bench communication uses CAN. A usable boot entry point is unconfirmed.",
+   "obd": "write-only"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Transpondery: VAG EDC17CP14 / CP20 pinout",
+    "url": "https://www.transpondery.com/pinouts/vag/edc17/edc17_cp14_cp20_pinout.html"
+   },
+   {
+    "title": "ecupinouts.com: Bosch EDC17CP14 (VAG) bench pinout",
+    "url": "https://ecupinouts.com/en/bosch-edc17cp14-vag/"
+   },
+   {
+    "title": "ECUTools: Bosch EDC17CP14 TC1796 VAG bench manual (CPU identification)",
+    "url": "https://ecutools.vn/wp-content/uploads/2024/10/ECUTools-Vietnam-Pinout-Dimsport-Bench-Mode-Bosch-EDC17CP14-VAG.pdf"
+   },
+   {
+    "title": "Infineon TC1796 data sheet (2 MB program flash, 128 KB data flash)",
+    "url": "https://www.mouser.com/datasheet/2/196/Infineon_SAK_TC1796_256F150E_BE_DS_v01_00_EN-1732136.pdf"
+   },
+   {
+    "title": "AUTOM8-OBD supported vehicles (VAG EDC17CP14 2.0 TDI TP20)",
+    "url": "https://autom8-obd.com/pages/supported-vehicles"
+   },
+   {
+    "title": "Microtronik HexProg 1.0.33 support announcement (VAG EDC17CP14 read support and flash variants)",
+    "url": "https://www.microtronik.com/info/softwarenews/hexprog-software-version-1-0-33"
+   },
+   {
+    "title": "Infineon TC1796 data sheet V1.0, section 3.2 and Table 7 (on-chip memory and boot selections)",
+    "url": "https://www.infineon.com/assets/row/public/documents/10/49/infineon-sak-tc1796-256f150e-be-ds-en.pdf"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "2.0 TDI CR (EA189)",
+    "make": "Volkswagen",
+    "model": "Golf VI GTD",
+    "years": null
+   },
+   {
+    "engine": "2.0 TDI CR (EA189)",
+    "make": "Volkswagen",
+    "model": "Scirocco",
+    "years": null
+   },
+   {
+    "engine": "2.0 TDI CR (EA189)",
+    "make": "Volkswagen",
+    "model": "Passat",
+    "years": null
+   }
+  ]
+ },
+ "bosch-me75-vag": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "Use the T121 connector for K-line diagnostics and programming. ECUpinouts lists +12 V on pins 3 and 62, ground on 1 and K-line on 43. NefMoto also lists pin 21 as a supply and requires switched +12 V on pin 121 for ME7.5 programming. Leave CAN disconnected for K-line access.",
+    "possible": true,
+    "sources": [
+     2,
+     4
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "board-pad",
+    "mcu_mode": "C167 serial bootstrap loader over K-line",
+    "notes": "NefMoto describes two alternative contacts for the same bootstrap input. The guide identifies the ME7.5 pad pair in text but illustrates an ME7.1 board.",
+    "points": [
+     {
+      "action": "pull-to-gnd",
+      "confidence": "unverified",
+      "location": "pcb:flash pin 24",
+      "name": "Flash pin 24"
+     },
+     {
+      "action": "bridge",
+      "confidence": "unverified",
+      "location": "pcb:P0L.4 boot pad pair",
+      "name": "ME7.5 boot pads"
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "Apply either strap before switching on ignition power. Release it 2–3 seconds after power-up.",
+    "sources": [
+     5
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "read+write",
+    "notes": "NefMoto supports full flash reads and writes. A full diagnostic read requires selecting the flash layout for the fitted chip.",
+    "protocol": "KWP2000 over K-line",
+    "sources": [
+     4,
+     2
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "NefMoto attempts login for a full diagnostic read and can continue probing after refusal. The guide does not establish whether this ME7.5 requires security access for a full read or write. OpenTune ships no OEM key.",
+    "sources": [
+     4
+    ]
+   }
+  },
+  "aliases": [
+   "ME7.5",
+   "Motronic ME7.5"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "T121-1"
+   ],
+   "ign": [],
+   "kline": [
+    "T121-43"
+   ],
+   "notes": "Minimal, multi-source wiring: +12 V to pins 3 and 62, ground pin 1, K-line pin 43. Nefmoto additionally grounds pin 2 and feeds pin 121 (terminal 15); Transpondery also lists pin 21 as a supply. Boot mode is board-level (see Nefmoto).",
+   "power": [
+    "T121-3",
+    "T121-62"
+   ],
+   "resistor_notes": "K-line only; no CAN termination needed."
+  },
+  "bus": [
+   "kline",
+   "can"
+  ],
+  "checksum": "me7",
+  "connectors": [
+   {
+    "description": "121-pin Bosch connector (81 + 40)",
+    "name": "T121",
+    "pins": [
+     {
+      "function": "Ground, terminal 31",
+      "pin": "1",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground, terminal 31",
+      "pin": "2",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "+12 V supply (terminal 30 per Nefmoto)",
+      "pin": "3",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "+12 V supply (per Transpondery)",
+      "pin": "21",
+      "signal": "12v_perm",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "function": "K-line (OBD pin 7)",
+      "pin": "43",
+      "signal": "kline",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "CAN (polarity disputed)",
+      "note": "Transpondery: CAN-L. Nefmoto (ME7.1.1 table): CAN-H. Not needed for K-line bench work.",
+      "pin": "58",
+      "signal": "other",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "CAN (polarity disputed)",
+      "note": "Transpondery: CAN-H. Nefmoto (ME7.1.1 table): CAN-L. Not needed for K-line bench work.",
+      "pin": "60",
+      "signal": "other",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "62",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ignition, terminal 15 (per Nefmoto)",
+      "pin": "121",
+      "signal": "12v_ign",
+      "sources": [
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "C16x / ST10 family",
+  "ecudef": "bosch-me7",
+  "eeprom": null,
+  "family": "ME7",
+  "flash_kib": 512,
+  "id": "bosch-me75-vag",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch ME7.5 (VAG 1.8T 20V, 121-pin)",
+  "notes": "The classic VAG 1.8 T 20V Motronic (Golf IV, A3 8L, TT 8N, Leon I, Octavia I). OpenTune's me7 checksum (main ROMSYS word-sum + multipoint block) is validated on real ME7.5 dumps. CAN pins 58/60 are listed with opposite polarity by two sources, so they are marked unverified.",
+  "part_number_examples": [
+   "06A906032",
+   "06A906018"
+  ],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "Full flash read and write over K-line in the car or on the bench. See access.bench for the ME7.5 ignition feed and access.boot for open-case recovery.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Nefmoto wiki: ECU pin outs (ME7.x bench tables)",
+    "url": "https://nefariousmotorsports.com/wiki/ECU_pin_outs"
+   },
+   {
+    "title": "Transpondery: VAG ME7.x pinout",
+    "url": "https://www.transpondery.com/pinouts/vag/me7x_pinout.html"
+   },
+   {
+    "title": "ecupinouts.com: Bosch ME7.5 bench pinout",
+    "url": "https://ecupinouts.com/en/me75/"
+   },
+   {
+    "title": "OpenTune vehicle catalog (catalog/manual, engine to ECU-family mapping)",
+    "url": "https://github.com/ebjerk01/opentune/tree/main/catalog/manual"
+   },
+   {
+    "title": "NefMoto ME7 ECU Flasher (GPL-3.0): Flashing guide (KWP full read/write and ME7.5 bench power)",
+    "url": "https://raw.githubusercontent.com/NefMoto/NefMotoOpenSource/master/docs/user-guide/flashing.md"
+   },
+   {
+    "title": "NefMoto ME7 ECU Flasher (GPL-3.0): Bootmode guide (ME7.5 bootstrap entry)",
+    "url": "https://raw.githubusercontent.com/NefMoto/NefMotoOpenSource/master/docs/user-guide/bootmode.md"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "Volkswagen",
+    "model": "Golf Mk4 (GTI/1.8T)",
+    "years": "1997-2006"
+   },
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "Volkswagen",
+    "model": "Passat (B5/B5.5)",
+    "years": "1997-2006"
+   },
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "Audi",
+    "model": "A3 (8L)",
+    "years": "1997-2006"
+   },
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "Audi",
+    "model": "A4 (B5/B6)",
+    "years": "1997-2006"
+   },
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "Audi",
+    "model": "TT (8N)",
+    "years": "1997-2006"
+   },
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "SEAT",
+    "model": "Leon Cupra (1M)",
+    "years": "1997-2006"
+   },
+   {
+    "engine": "1.8T 20V (ME7.5)",
+    "make": "Skoda",
+    "model": "Octavia vRS (1U)",
+    "years": "1997-2006"
+   }
+  ]
+ },
+ "bosch-me7510-vag": {
+  "access": {
+   "bench": {
+    "confidence": "verified",
+    "how": "Use T80-15 for permanent +12 V, T80-27 for switched +12 V, T80-28 for ground and T80-29 for K-line diagnostics. Both pinouts agree on these numbers. Diag-Prof identifies the connector as T80 and ecupinouts labels it T94. Leave CAN pins 31 and 32 disconnected for diagnostics.",
+    "possible": true,
+    "sources": [
+     0,
+     1
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "Alientech lists boot support for the Arosa 1.4 AKK. The cited sources identify neither an entry point nor reset timing for this board.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     3,
+     0
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "read+write",
+    "notes": "Alientech lists OBD read/write for the 1999 and 2000 SEAT Arosa 1.4 AKK with ME7.5.10. Coverage of other hardware revisions is unknown.",
+    "protocol": "K-line on T80-29. The cited sources do not identify the flash-session protocol.",
+    "sources": [
+     3,
+     0
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The support list does not specify whether a complete diagnostic read or flash write requires security access. OpenTune ships no OEM key.",
+    "sources": [
+     3
+    ]
+   }
+  },
+  "aliases": [
+   "ME7.5.10",
+   "ME7.5B"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "T80-28"
+   ],
+   "ign": [
+    "T80-27"
+   ],
+   "kline": [
+    "T80-29"
+   ],
+   "notes": "+12 V to 15 (terminal 30) and 27 (terminal 15), ground 28, K-line 29.",
+   "power": [
+    "T80-15",
+    "T80-27"
+   ],
+   "resistor_notes": "K-line only; no CAN termination needed."
+  },
+  "bus": [
+   "kline",
+   "can"
+  ],
+  "checksum": "me7",
+  "connectors": [
+   {
+    "description": "80-pin connector (Diag-Prof: T80; ecupinouts draws it as T94 of a 154-pin layout - pin numbers agree)",
+    "name": "T80",
+    "pins": [
+     {
+      "confidence": "unverified",
+      "function": "Ground (per Transpondery only)",
+      "note": "Diag-Prof and ecupinouts give ground on pin 28.",
+      "pin": "2",
+      "signal": "gnd",
+      "sources": [
+       2
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "15",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Ignition, terminal 15",
+      "pin": "27",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Ground, terminal 31",
+      "pin": "28",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "K-line",
+      "pin": "29",
+      "signal": "kline",
+      "sources": [
+       0,
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "CAN (polarity disputed)",
+      "note": "Diag-Prof: CAN-High (not for diagnostics). Transpondery: CAN-L (or pin 17).",
+      "pin": "31",
+      "signal": "other",
+      "sources": [
+       0,
+       2
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "CAN (polarity disputed)",
+      "note": "Diag-Prof: CAN-Low (not for diagnostics). Transpondery: CAN-H (or pin 18).",
+      "pin": "32",
+      "signal": "other",
+      "sources": [
+       0,
+       2
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Bosch-marked B59233 (C16x family)",
+  "ecudef": "bosch-me7",
+  "eeprom": "ST95040 (512 B, SPI)",
+  "family": "ME7",
+  "flash_kib": 512,
+  "id": "bosch-me7510-vag",
+  "kind": "ecu",
+  "maker": "Bosch",
+  "name": "Bosch ME7.5.10 (VAG small petrol, 80-pin)",
+  "notes": "Cost-reduced ME7.5 variant with an 80-pin connector. The ME7 checksum family applies, but OpenTune validated it on ME7.5/ME7.1 images - verify per variant. No vehicle list is given because the cited sources do not name specific applications. CAN polarity and a second ground pin are disputed between sources.",
+  "part_number_examples": [],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "OBD read/write is listed for the SEAT Arosa 1.4 AKK application. Bench diagnostics use K-line. The physical boot entry point is unknown.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "Diag-Prof: VAG Bosch ME7.5.10 (pin assignment, memory)",
+    "url": "http://www.diagprof.com/ecu_tips_and_tricks/manufacturer-vag/ecudomain-pcm_powertrain_control_module/supplier-bosch/ecutt-me7p5p10"
+   },
+   {
+    "title": "ecupinouts.com: Bosch ME7.5.10 (VAG) bench pinout",
+    "url": "https://ecupinouts.com/en/bosch-me7-5-10-vag/"
+   },
+   {
+    "title": "Transpondery: VAG ME7.x pinout (ME7.5B / ME7.5.10 80-pin)",
+    "url": "https://www.transpondery.com/pinouts/vag/me7x_pinout.html"
+   },
+   {
+    "title": "Alientech Japan K-Suite vehicle support list (2018), SEAT Arosa 6H1 1.4 AKK with Bosch ME7.5.10",
+    "url": "https://alientech-japan.com/wordpress/wp-content/uploads/2017/03/ksuite-list2018-1.pdf"
+   }
+  ],
+  "vehicles": []
+ },
+ "haldex-gen4": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "The in-line plug pinout comes from one source (terminal 15 on 1, ground 2, K-line 5, CAN-H 8, CAN-L 7), so the unit can be powered and diagnosed on the bench, but no public source documents reading its flash that way.",
+    "possible": false,
+    "sources": [
+     0
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "notes": "The MCU, the flash size and any boot or debug entry are not publicly documented.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "sources": [
+     7
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "unknown",
+    "notes": "Identification, trouble codes and measuring groups are readable (public capture of an 0AY 907 554 C). No public flash read or write procedure is known. Whether the gateway passes the TP2.0 channel from the OBD socket to the drivetrain CAN is to be confirmed on the car.",
+    "protocol": "KWP2000 over VW TP2.0, logical address 0x0A, on the drivetrain CAN",
+    "sources": [
+     3,
+     4
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "Not publicly documented. OpenTune's Gen4 read sends no security-access service and never writes. OpenTune ships no OEM key.",
+    "sources": [
+     7
+    ]
+   }
+  },
+  "aliases": [
+   "Haldex Gen4",
+   "J492",
+   "AWD",
+   "0AY",
+   "0BR",
+   "0BS",
+   "0BY"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "1J0973814-8"
+   ],
+   "can_l": [
+    "1J0973814-7"
+   ],
+   "ground": [
+    "1J0973814-2"
+   ],
+   "ign": [
+    "1J0973814-1"
+   ],
+   "kline": [
+    "1J0973814-5"
+   ],
+   "notes": "Terminal 15 on 1, ground 2, K-line 5, Haldex CAN-H 8 / CAN-L 7 (OpenHaldex). Other sources number the Haldex-side CAN pins differently for other connectors - check before wiring.",
+   "power": [
+    "1J0973814-1"
+   ],
+   "resistor_notes": "Termination of the Haldex CAN segment is not documented; measure the resistance between CAN-H and CAN-L on the unit first."
+  },
+  "bus": [
+   "can",
+   "kline"
+  ],
+  "checksum": null,
+  "connectors": [
+   {
+    "description": "8-pin Haldex-side harness plug (1J0 973 814), Gen1/2/4",
+    "name": "1J0973814",
+    "pins": [
+     {
+      "function": "Terminal 15 (ignition)",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Ground",
+      "pin": "2",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Brake light signal",
+      "pin": "3",
+      "signal": "other",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Handbrake signal",
+      "pin": "4",
+      "signal": "other",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "K-line",
+      "pin": "5",
+      "signal": "kline",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Haldex CAN-Low",
+      "pin": "7",
+      "signal": "can_l",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Haldex CAN-High",
+      "pin": "8",
+      "signal": "can_h",
+      "sources": [
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": null,
+  "ecudef": "borgwarner-haldex-gen4",
+  "eeprom": null,
+  "family": "Haldex",
+  "flash_kib": null,
+  "id": "haldex-gen4",
+  "kind": "awd",
+  "maker": "BorgWarner (Haldex)",
+  "name": "Haldex Generation 4 AWD coupling controller",
+  "notes": "Fourth-generation Haldex coupling controller (J492; coupling codes 0AY / 0BR / 0BY per Dark Side Developments, controller 0BS 907 554 in public part listings for the Passat CC). 0AY 907 554 C identifies as 'Haldex 4Motion' in the public OpenHaldex-C6 capture; 0AY 907 554 F is a different unit OpenHaldex treats as Gen5 (PQ), so identify on the full part number including suffix. Checksum: null - no Gen4 dump was available (none found in the project's dump library) and no public source describes one, so no scheme is claimed; the Gen5 word-sum is not assumed to apply. Pinout: the in-line harness plug as documented by OpenHaldex (single source; its README also mentions a 6-pin 1J0 973 713 plug for other generations) - TO BE CHECKED ON THE CAR before wiring anything. No terminal-30 pin is documented on the Gen1-4 plug.",
+  "part_number_examples": [
+   "0AY 907 554 C",
+   "0BS 907 554"
+  ],
+  "pinout_confidence": "community",
+  "protocols": [
+   "kwp2000",
+   "tp20"
+  ],
+  "read_methods": {
+   "bench": false,
+   "boot": false,
+   "notes": "Diagnostics (identification, trouble codes, measuring groups) are KWP2000 over VW TP2.0 at logical address 0x0A on the drivetrain CAN (public OpenHaldex-C6 capture of an 0AY 907 554 C). No public flash read or write procedure, flash layout or MCU is known, so 'obd' stays unknown and no full read is offered. The lock request (Bremse_4 0x2A0) and the unit's status (Allrad_1 0x2C0) are readable passively on the drivetrain CAN (opendbc vw_pq.dbc).",
+   "obd": "unknown"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "OpenHaldex: installation (Gen1-4 and Gen5 connector pinouts)",
+    "url": "https://openhaldex.com/install/"
+   },
+   {
+    "title": "eTek Tuning: Haldex Gen 4 (applications)",
+    "url": "https://www.etektuning.com/haldex-gen-4/"
+   },
+   {
+    "title": "Dark Side Developments: Haldex performance controller Gen4 (applications)",
+    "url": "https://www.darksidedevelopments.co.uk/products/haldex-performance-controller-generation-4-gen4.html"
+   },
+   {
+    "title": "OpenHaldex-C6 README: Live Diagnostics (Gen4 0AY: KWP2000 over VW TP2.0) and Fault Codes (MIT)",
+    "url": "https://github.com/Forbes-Automotive/OpenHaldex-C6"
+   },
+   {
+    "title": "OpenHaldex-C6 public PQ capture of an 0AY 907 554 C (TP2.0 to logical address 0x0A, KWP 0x1A 0x9B / 0x18 / 0x21)",
+    "url": "https://github.com/Forbes-Automotive/OpenHaldex-C6/tree/main/documents/vehicle-logs/vw-pq"
+   },
+   {
+    "title": "commaai/opendbc vw_pq.dbc: Allrad_1 0x2C0, Bremse_4 0x2A0 (MIT)",
+    "url": "https://github.com/commaai/opendbc/blob/master/opendbc/dbc/vw_pq.dbc"
+   },
+   {
+    "title": "oemwolf: 0BS 598 554 B Haldex control unit repair set (Passat / Passat CC 4Motion 2009-2015)",
+    "url": "https://oemwolf.com/oem-parts/0bs598554b.html"
+   },
+   {
+    "title": "OpenTune docs/HALDEX.md: Gen4 known and unknown (MCU, flash, read procedure, checksum)",
+    "url": "https://github.com/ebjerk01/opentune/blob/main/docs/HALDEX.md"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Passat CC 4Motion",
+    "years": "2009-"
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Passat (B6 facelift / B7) 4Motion",
+    "years": "2009-"
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Sharan 4Motion",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "SEAT",
+    "model": "Alhambra 4Drive",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Skoda",
+    "model": "Yeti 4x4 / Superb 4x4",
+    "years": "2009-"
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "Q3 quattro (8U)",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Golf Mk6 4Motion / Golf R",
+    "years": "2008-2012"
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "A3 / S3 (8P facelift) quattro",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "TT / TTS / TT RS (8J)",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Tiguan (5N)",
+    "years": null
+   }
+  ]
+ },
+ "haldex-gen5": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "On the Haldex-side 1J0973713 connector, pin 3 is permanent +12 V, pin 1 is ignition +12 V, pin 2 is ground, pin 6 is CAN-H and pin 5 is CAN-L. OpenHaldex lists no K-line on this plug and documents live measurements over CAN. A complete connector-only bench read is undocumented.",
+    "possible": true,
+    "sources": [
+     0,
+     3
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "bdm-jtag",
+    "mcu_mode": "XC2000-family on-chip debug access (reported on 0CQ 907 554 D).",
+    "notes": "One contributor reports detecting the processor with a debug probe and reading the flash of 0CQ 907 554 D. The report does not establish reset timing or applicability to other 0CQ revisions.",
+    "points": [
+     {
+      "action": "connect",
+      "confidence": "unverified",
+      "location": "pcb:XC2000 debug connections",
+      "name": "Board debug interface",
+      "note": "The contributor reports connecting a MiniWiggler. The successful pin assignment is unconfirmed."
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": null,
+    "sources": [
+     4
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "VW_Flash supports programming the Gen5 controller, and a separate forum report confirms flashing over OBD. OpenHaldex reads live measurements. The cited sources do not demonstrate a complete original flash read through the vehicle socket.",
+    "protocol": "UDS over ISO-TP on CAN",
+    "sources": [
+     2,
+     3,
+     5
+    ]
+   },
+   "security": {
+    "confidence": "community",
+    "diag_read": "unknown",
+    "flash_write": "required",
+    "notes": "The Haldex writer calls the shared UDS programming routine, which requests security access before writing. The sources do not establish the requirement for a complete diagnostic read. OpenTune ships no OEM key.",
+    "sources": [
+     6,
+     7
+    ]
+   }
+  },
+  "aliases": [
+   "Haldex Gen5",
+   "0CQ"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "1J0973713-6"
+   ],
+   "can_l": [
+    "1J0973713-5"
+   ],
+   "ground": [
+    "1J0973713-2"
+   ],
+   "ign": [
+    "1J0973713-1"
+   ],
+   "kline": [],
+   "notes": "Terminal 30 on 3, terminal 15 on 1, ground 2, Haldex CAN-H 6 / CAN-L 5 (OpenHaldex).",
+   "power": [
+    "1J0973713-3",
+    "1J0973713-1"
+   ],
+   "resistor_notes": "Termination of the Haldex CAN segment is not documented; measure the resistance between CAN-H and CAN-L on the unit first."
+  },
+  "bus": [
+   "can"
+  ],
+  "checksum": "haldex",
+  "connectors": [
+   {
+    "description": "6-pin Haldex-side harness plug (1J0 973 713), Gen5",
+    "name": "1J0973713",
+    "pins": [
+     {
+      "function": "Terminal 15 (ignition)",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Ground",
+      "pin": "2",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Terminal 30 (permanent)",
+      "pin": "3",
+      "signal": "12v_perm",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Haldex CAN-Low",
+      "pin": "5",
+      "signal": "can_l",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Haldex CAN-High",
+      "pin": "6",
+      "signal": "can_h",
+      "sources": [
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": null,
+  "ecudef": null,
+  "eeprom": null,
+  "family": "Haldex",
+  "flash_kib": null,
+  "id": "haldex-gen5",
+  "kind": "awd",
+  "maker": "BorgWarner (Haldex)",
+  "name": "Haldex Generation 5 AWD coupling controller (MQB)",
+  "notes": "Fifth-generation Haldex on MQB AWD cars (pump/kit part prefix 0CQ). OpenTune's haldex checksum (per-block 16-bit word-sum) is synthetic/vector-validated only. These are the pins of the in-line harness plug that mates with the Haldex controller, as documented by the OpenHaldex project (single source).",
+  "part_number_examples": [],
+  "pinout_confidence": "community",
+  "protocols": [],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "VW_Flash supports diagnostic programming. OpenHaldex documents the connector for CAN diagnostics. A board-level debug read is reported for 0CQ 907 554 D.",
+   "obd": "write-only"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "OpenHaldex: installation (Gen1-4 and Gen5 connector pinouts)",
+    "url": "https://openhaldex.com/install/"
+   },
+   {
+    "title": "VAG Parts: Gen 5 Haldex pump 0CQ598549 (MQB applications)",
+    "url": "https://www.vagparts.com.au/products/0cq598549-haldex-pump"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause): Gen 5 Haldex4Motion diagnostic programming",
+    "url": "https://github.com/bri3d/VW_Flash"
+   },
+   {
+    "title": "OpenHaldex (MIT): Gen5 live diagnostics",
+    "url": "https://openhaldex.com/docs/"
+   },
+   {
+    "title": "NefMoto forum: a contributor reports an XC2000 debug-probe (MiniWiggler) connection and flash read on 0CQ 907 554 D",
+    "url": "https://nefariousmotorsports.com/forum/index.php?topic=1001.375"
+   },
+   {
+    "title": "NefMoto: Gen5 Haldex OBD programming and discussion of full reads",
+    "url": "https://nefariousmotorsports.com/forum/index.php?topic=1001.390"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause): Haldex programming uses the common UDS writer",
+    "url": "https://raw.githubusercontent.com/bri3d/VW_Flash/master/lib/haldex_flash_utils.py"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause): security access in the UDS programming session",
+    "url": "https://raw.githubusercontent.com/bri3d/VW_Flash/master/lib/flash_uds.py"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Golf Mk7 R",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "A3 / S3 (8V) quattro",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "TT / TTS (8S)",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "RS3 (8V)",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Tiguan (AD)",
+    "years": null
+   }
+  ]
+ },
+ "mercedes-egs52-7226": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "+12 V to C1-29, ground C1-30, K-line C1-1 (ATSG and ecupinouts agree); CAN-H/L on C2 pins H and L (ATSG only). The same diagnostic link and security access as in the car apply.",
+    "possible": true,
+    "sources": [
+     0,
+     1
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "board-pad",
+    "mcu_mode": "C167 bootstrap loader (BSL) on ASC0, entered with P0L.4 low at the end of a hardware reset: the host sends one zero byte, the BSL answers with an identification byte (C5h/D5h) and loads 32 bytes of loader code. OpenTune's bsl preset 'egs52' covers the 512 KiB external-flash window but not yet the board's bus setup.",
+    "notes": "Board level: the TCU must be opened. The C167 bootstrap loader is the CPU's standard boot path (Infineon manual); no open source confirms the pad for this board. The Ultimate-NAG52 author read his unit's flash on an external reader (chip-off).",
+    "points": [
+     {
+      "action": "pull-to-gnd",
+      "confidence": "unverified",
+      "location": "pcb:P0L.4 net (not publicly located on the EGS52 board)",
+      "name": "P0L.4 / AD4 strap",
+      "note": "No public source gives the pad on this board. Trace P0L.4 from the CPU (pin 104 on the C167CR P-MQFP-144 per its data sheet; confirm for the fitted C167 variant) or from the flash data pin wired to it, and confirm by continuity.",
+      "resistor_ohms": 8000
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "P0L.4 low at the end of the hardware reset (power-up), P0L.5, P0L.3 and P0L.2 high (Table 19-2); release the strap once the BSL has answered.",
+    "sources": [
+     5,
+     6,
+     3,
+     7
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "unknown",
+    "notes": "Whether a complete read or a write works over the diagnostic socket is not documented in a cited public source. OpenTune does not talk to this TCU's diagnostics yet.",
+    "protocol": "K-line diagnosis line to the data-link connector (C1-1); CAN on C2 on 2000+ units. The diagnostic protocol is not stated in the cited sources.",
+    "sources": [
+     0,
+     1
+    ]
+   },
+   "security": {
+    "confidence": "community",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The stock EGS52 has diagnostic security-access levels (the Ultimate-NAG52 notes name a 'Siemens level' access for a service function); what a complete read or a write over diagnostics needs is not publicly documented. OpenTune ships no OEM key.",
+    "sources": [
+     7
+    ]
+   }
+  },
+  "aliases": [
+   "722.6",
+   "EGS52",
+   "EGS51",
+   "EGS53",
+   "NAG52"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "C1-30"
+   ],
+   "ign": [],
+   "kline": [
+    "C1-1"
+   ],
+   "notes": "+12 V to C1-29, ground C1-30, K-line C1-1. CAN-H/L are on C2 (pins labelled H and L) if your tool uses CAN.",
+   "power": [
+    "C1-29"
+   ],
+   "resistor_notes": "For CAN on the bench a forum thread recommends terminating the bus (about 60 ohm across CAN-H/CAN-L)."
+  },
+  "bus": [
+   "kline",
+   "can"
+  ],
+  "checksum": null,
+  "connectors": [
+   {
+    "description": "TCU connector C1 (vehicle side)",
+    "name": "C1",
+    "pins": [
+     {
+      "function": "Diagnosis line to the data-link connector (K-line)",
+      "pin": "1",
+      "signal": "kline",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "TCU voltage supply",
+      "note": "Sources do not say whether this is switched; feed +12 V on the bench.",
+      "pin": "29",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "TCU ground",
+      "pin": "30",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "TCU connector C2 (gearbox side)",
+    "name": "C2",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "CAN-High",
+      "pin": "H",
+      "signal": "can_h",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-Low",
+      "pin": "L",
+      "signal": "can_l",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Battery supply to all solenoids",
+      "note": "Solenoid feed - not needed to talk to the TCU on the bench.",
+      "pin": "38",
+      "signal": "other",
+      "sources": [
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Infineon C167 family (SAK-C167; the open EGS52 emulator models a C167CS)",
+  "ecudef": null,
+  "eeprom": "separate serial EEPROM (the open EGS52_emu loads it as its own image); part number not confirmed by an open source",
+  "family": "EGS5x",
+  "flash_kib": 512,
+  "id": "mercedes-egs52-7226",
+  "kind": "tcu",
+  "maker": "Siemens",
+  "name": "Mercedes 722.6 5-speed TCU (EGS52)",
+  "notes": "External (body-mounted) TCU for the Mercedes 722.6 5-speed automatic, also used by Chrysler. Per ATSG, 1996-1999 units read the range switch on C1-25..28 while 2000+ units use CAN. The open-source ultimate_nag52 project is a drop-in replacement TCU for EGS51/52/53 cars. No OpenTune checksum applies. Hardware (open-source projects): a C167-family CPU with 512 KiB of external flash and a separate serial EEPROM (rnd-ash/EGS52_emu maps a 512 KiB flash image, models a C167CS and loads a separate EEPROM image; Ultimate-NAG52: EGS52/53 on C166/ST10). The flash and EEPROM part numbers are not confirmed by an open source - read them from the chips.",
+  "part_number_examples": [],
+  "pinout_confidence": "verified",
+  "protocols": [],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "Bench connection: supply, ground and K-line on C1 (ecupinouts); CAN is on the C2 connector (ATSG). OBD programming capability is not documented in the cited sources. Board-level boot: the C167 bootstrap loader (access.boot).",
+   "obd": "unknown"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "ATSG 722.6 service manual: TCM connectors and terminal identification",
+    "url": "https://www.manualslib.com/manual/1373460/Atsg-722-6.html?page=22"
+   },
+   {
+    "title": "ecupinouts.com: Siemens EGS52 / EGS53 bench pinout",
+    "url": "https://ecupinouts.com/en/siemens-egs5x/"
+   },
+   {
+    "title": "ultimate_nag52: open-source 722.6 TCU",
+    "url": "https://github.com/rnd-ash/ultimate_nag52"
+   },
+   {
+    "title": "rnd-ash/EGS52_emu (GPL-3.0): EGS52 emulator that simulates the C167CS CPU and maps the flash file as a 512 KiB (0x80000) image",
+    "url": "https://github.com/rnd-ash/EGS52_emu"
+   },
+   {
+    "title": "rnd-ash/ultimate-nag52-fw-rs README (GPL-3.0): EGS52/53 are based on a C166/ST10 processor, EGS51 on an SEC51C810",
+    "url": "https://github.com/rnd-ash/ultimate-nag52-fw-rs"
+   },
+   {
+    "title": "Infineon C167CR Derivatives User's Manual V3.1: ch. 14 bootstrap loader, Table 19-2 reset configuration",
+    "url": "https://www.keil.com/dd/docs/datashts/infineon/c167cr_um.pdf"
+   },
+   {
+    "title": "Infineon C167CR data sheet: P-MQFP-144 pin 104 = P0L.4/AD4",
+    "url": "https://www.infineon.com/assets/row/public/documents/10/57/infineon-c167cr-ds-en.pdf"
+   },
+   {
+    "title": "rnd-ash/ultimate-nag52-fw lib/slave_ecus/README.md (GPL-3.0): stock EGS52 security access level for a service function; flash read on an external reader",
+    "url": "https://github.com/rnd-ash/ultimate-nag52-fw/blob/dev/lib/slave_ecus/README.md"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Mercedes-Benz",
+    "model": "722.6 5-speed automatic applications",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Chrysler",
+    "model": "722.6 5-speed automatic applications",
+    "years": null
+   }
+  ]
+ },
+ "siemens-ms41": {
+  "access": {
+   "bench": {
+    "confidence": "verified",
+    "how": "For closed-case communication, use +12 V on X6000-26 and X6000-49, ground on X6000-28 and K-line on X6000-88. OpenMS41 also identifies X6000-60 as the programming-voltage input for writing.",
+    "possible": true,
+    "sources": [
+     1,
+     3
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "board-pad",
+    "mcu_mode": "SAB 80C166 on-chip bootstrap loader using the ASC0 serial port.",
+    "notes": "The recovery project documents these points on its MS41 board and uses a direct full-duplex ASC0 connection inside the case. Coverage across board revisions is unknown.",
+    "points": [
+     {
+      "action": "pull-to-vcc",
+      "confidence": "unverified",
+      "location": "pcb:SAB 80C166 ALE (pin 25)",
+      "name": "ALE pull-up",
+      "note": "Pull up to the board’s +5 V rail.",
+      "resistor_ohms": 2200
+     },
+     {
+      "action": "bridge",
+      "confidence": "unverified",
+      "location": "pcb:SAB 80C166 NMI# (pin 29)",
+      "name": "ALE to NMI#",
+      "note": "Bridge to ALE (CPU pin 25)."
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "Establish the pull-up and bridge before hardware reset and keep them in place as reset is released. The source gives no subsequent strap-release time.",
+    "sources": [
+     5
+    ]
+   },
+   "obd": {
+    "confidence": "verified",
+    "mode": "read+write",
+    "notes": "Supported versions allow a full 256 KiB read and programming through the vehicle diagnostic socket. Write access requires the vehicle programming-voltage connection. OpenMS41 lists five European MS41.0 versions as non-flashable: 1744598, 1427703, 1744897, 1427704 and 1429999.",
+    "protocol": "BMW DS2 over K-line",
+    "sources": [
+     2,
+     4,
+     6
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The sources describe full reads, writes and the electrical write-enable connection. They do not establish whether either diagnostic operation requires security access. OpenTune ships no OEM key.",
+    "sources": [
+     2,
+     4
+    ]
+   }
+  },
+  "aliases": [
+   "MS41",
+   "MS41.0",
+   "MS41.1",
+   "MS41.2"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "X6000-28"
+   ],
+   "ign": [],
+   "kline": [
+    "X6000-88"
+   ],
+   "notes": "ecupinouts: tie +12 V to 26 and 49, ground 28, K-line 88.",
+   "power": [
+    "X6000-26",
+    "X6000-49"
+   ],
+   "resistor_notes": "K-line only."
+  },
+  "bus": [
+   "kline"
+  ],
+  "checksum": null,
+  "connectors": [
+   {
+    "description": "88-pin BMW DME connector",
+    "name": "X6000",
+    "pins": [
+     {
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'.",
+      "pin": "26",
+      "signal": "12v_perm",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "function": "Ground",
+      "pin": "28",
+      "signal": "gnd",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'.",
+      "pin": "49",
+      "signal": "12v_perm",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "function": "K-line",
+      "pin": "88",
+      "signal": "kline",
+      "sources": [
+       1
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Infineon C166 (20 MHz)",
+  "ecudef": "bmw-ms4x-ms41",
+  "eeprom": null,
+  "family": "MS4x",
+  "flash_kib": 256,
+  "id": "siemens-ms41",
+  "kind": "ecu",
+  "maker": "Siemens",
+  "name": "Siemens MS41 (BMW M52 / S52)",
+  "notes": "Siemens DME for the BMW M52 (MS41.0, MS41.1 OBD-II) and US S52 (MS41.2). OpenTune has no MS4x checksum module yet (checksum null). Pinout from a single source.",
+  "part_number_examples": [],
+  "pinout_confidence": "community",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "Flashable versions support full reads and programming over the vehicle diagnostic link. The closed-case bench connection uses K-line. Hardware bootstrap recovery uses a direct serial connection inside the case.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "ms4x.net wiki: Siemens MS41",
+    "url": "https://www.ms4x.net/index.php?title=Siemens_MS41"
+   },
+   {
+    "title": "ecupinouts.com: Siemens MS41 bench pinout",
+    "url": "https://ecupinouts.com/en/ms41/"
+   },
+   {
+    "title": "OpenMS41 community guide: Enable Write Access",
+    "url": "https://sites.google.com/site/openms41/read-write-ms41/enable-write"
+   },
+   {
+    "title": "OpenMS41 community guide: MS41 Bench Setup",
+    "url": "https://sites.google.com/site/openms41/read-write-ms41/bench-rig"
+   },
+   {
+    "title": "BimmerStein ECU Tool (GPL-3.0-only): MS41 diagnostic transfers and supported image sizes",
+    "url": "https://github.com/CAATZ/BimmerStein-ECU-Tool"
+   },
+   {
+    "title": "MS41 BSL Unbricker (MIT): SAB 80C166 hardware recovery and board wiring",
+    "url": "https://github.com/CAATZ/MS41-BSL-Unbricker"
+   },
+   {
+    "title": "OpenMS41 community guide: MS41 Conversion and European MS41.0 exclusions",
+    "url": "https://sites.google.com/site/openms41/read-write-ms41/ms41-conversion"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "M52 (MS41.0 / MS41.1)",
+    "make": "BMW",
+    "model": "3 Series (E36)",
+    "years": null
+   },
+   {
+    "engine": "M52 (MS41.0 / MS41.1)",
+    "make": "BMW",
+    "model": "5 Series (E39)",
+    "years": null
+   },
+   {
+    "engine": "S52 (MS41.2)",
+    "make": "BMW",
+    "model": "M3 (E36, US)",
+    "years": null
+   }
+  ]
+ },
+ "siemens-ms42": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "For closed-case K-line programming, supply +12 V to X60001-7 and ignition X60004-26, ground X60001-4 and connect K-line at X60004-32. CAN is unused for this connection.",
+    "possible": true,
+    "sources": [
+     2,
+     3
+    ]
+   },
+   "boot": {
+    "confidence": "community",
+    "entry": "board-pad",
+    "mcu_mode": "Infineon C167 on-chip bootstrap loader.",
+    "notes": "MS4X documents this open-case route for a byte-for-byte flash backup.",
+    "points": [
+     {
+      "action": "pull-to-gnd",
+      "confidence": "unverified",
+      "location": "pcb:test pad beside C167 pin 104",
+      "name": "C167 bootstrap test pad",
+      "note": "MS4X identifies this pad on the MS42 board. The processor data sheet identifies P0L.4 as the bootstrap input."
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "Ground the pad before power-up. MS4X reports releasing it about ten seconds after power-up, before reading or writing.",
+    "sources": [
+     2,
+     5
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "read+write",
+    "notes": "Stock OBD programming writes the program and calibration regions. Its 512 KiB read omits part of the bootloader. BimmerStein documents full-ROM transfers using a temporary RAM agent on supported MS42 boot variants.",
+    "protocol": "BMW DS2 over K-line (stock programming route).",
+    "sources": [
+     2,
+     4
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The cited programming guides do not establish whether a complete diagnostic read or a flash write requires security access. OpenTune ships no OEM key.",
+    "sources": [
+     2,
+     4
+    ]
+   }
+  },
+  "aliases": [
+   "MS42",
+   "MS42.0"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "X60001-4"
+   ],
+   "ign": [
+    "X60004-26"
+   ],
+   "kline": [
+    "X60004-32"
+   ],
+   "notes": "Multi-source minimum: +12 V to X60001-7 and X60004-26, ground X60001-4. ms4x.net's bench recipe instead feeds X60001-1, -7 and -8, grounds X60001-4/5/6 and uses K-line X60001-3 (X60004-32 as fallback). Boot mode is board-level: the C167's pin 104 is grounded while powering up, then released (ms4x 'How to connect'); never write a 512 KiB OBD read back in boot mode - it erases the unit-specific bootloader keys.",
+   "power": [
+    "X60001-7",
+    "X60004-26"
+   ],
+   "resistor_notes": "K-line programming; CAN (X60004-36/37) is for development only per ms4x."
+  },
+  "bus": [
+   "kline",
+   "can"
+  ],
+  "checksum": null,
+  "connectors": [
+   {
+    "description": "9-pin power/diagnosis module",
+    "name": "X60001",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "Ignition, terminal 15",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "K-line (diagnostic TxD)",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "3",
+      "signal": "kline",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Ground, terminal 31",
+      "pin": "4",
+      "signal": "gnd",
+      "sources": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground, terminal 31",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "5",
+      "signal": "gnd",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground, terminal 31",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "6",
+      "signal": "gnd",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "7",
+      "signal": "12v_perm",
+      "sources": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Main-relay supply, terminal 87",
+      "note": "Relay-switched in the car; ms4x feeds +12 V here on the bench. Both citations are from the ms4x.net wiki.",
+      "pin": "8",
+      "signal": "12v_ign",
+      "sources": [
+       1,
+       2
+      ]
+     }
+    ]
+   },
+   {
+    "description": "24-pin module",
+    "name": "X60002",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "Gearbox CAN-Low (AT/SMG only)",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "3",
+      "signal": "can_l",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Gearbox CAN-High (AT/SMG only)",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "4",
+      "signal": "can_h",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Main relay control (output)",
+      "pin": "23",
+      "signal": "other",
+      "sources": [
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "40-pin vehicle module",
+    "name": "X60004",
+    "pins": [
+     {
+      "function": "Ignition, terminal 15",
+      "pin": "26",
+      "signal": "12v_ign",
+      "sources": [
+       1,
+       3
+      ]
+     },
+     {
+      "function": "Engine diagnostic TxD (OBD-II connector)",
+      "pin": "32",
+      "signal": "kline",
+      "sources": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "EWS immobiliser link",
+      "pin": "33",
+      "signal": "other",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-High",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "36",
+      "signal": "can_h",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-Low",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "37",
+      "signal": "can_l",
+      "sources": [
+       1,
+       2
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Infineon C167CR (20 MHz)",
+  "ecudef": "bmw-ms4x-ms42",
+  "eeprom": "On-board EEPROM (size not documented)",
+  "family": "MS4x",
+  "flash_kib": 512,
+  "id": "siemens-ms42",
+  "kind": "ecu",
+  "maker": "Siemens",
+  "name": "Siemens MS42 (BMW M52TU)",
+  "notes": "Siemens DME for the BMW M52TU inline-6 (predecessor of MS43). Flash is an AM29F400BB (512 KiB). ms4x.net describes three CRC16 checksums (boot/program/calibration); OpenTune has no MS4x checksum module yet (checksum null).",
+  "part_number_examples": [],
+  "pinout_confidence": "verified",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "OBD and closed-case bench programming use K-line. Stock OBD reads omit part of the bootloader. Full-ROM access depends on a compatible RAM agent or the open-case C167 bootstrap route.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "ms4x.net wiki: Siemens MS42",
+    "url": "https://www.ms4x.net/index.php?title=Siemens_MS42"
+   },
+   {
+    "title": "ms4x.net wiki: Siemens MS42 pinout",
+    "url": "https://www.ms4x.net/index.php?title=Siemens_MS42_Pinout"
+   },
+   {
+    "title": "ms4x.net wiki: How to connect (MS42/MS43 OBD, bench and boot mode)",
+    "url": "https://www.ms4x.net/index.php?title=How_to_connect"
+   },
+   {
+    "title": "ecupinouts.com: Siemens MS42 bench pinout",
+    "url": "https://ecupinouts.com/en/ms42/"
+   },
+   {
+    "title": "BimmerStein ECU Tool (GPL-3.0-only): MS42/MS43 read and write support by boot variant",
+    "url": "https://github.com/CAATZ/BimmerStein-ECU-Tool/blob/main/docs/MS42_MS43.md"
+   },
+   {
+    "title": "Infineon C167CR/C167SR data sheet: PORT0 pin definitions and bootstrap selection at reset",
+    "url": "https://www.infineon.com/assets/row/public/documents/10/57/infineon-c167cr-ds-en.pdf"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "M52TU",
+    "make": "BMW",
+    "model": "5 Series (E39)",
+    "years": null
+   },
+   {
+    "engine": "M52TU",
+    "make": "BMW",
+    "model": "3 Series (E46)",
+    "years": null
+   },
+   {
+    "engine": "M52TU",
+    "make": "BMW",
+    "model": "Z3",
+    "years": null
+   }
+  ]
+ },
+ "siemens-ms43": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "For closed-case K-line access, MS4X supplies +12 V to X60001-1, -7 and -8, grounds X60001-4, -5 and -6, and uses X60001-3 for diagnostics. Vehicle CAN is on X60004-36 (high) and X60004-37 (low). The K-line bench connection does not use CAN.",
+    "possible": true,
+    "sources": [
+     2
+    ]
+   },
+   "boot": {
+    "confidence": "verified",
+    "entry": "board-pad",
+    "mcu_mode": "C167CR on-chip bootstrap loader",
+    "notes": "MS4X identifies the processor pin on the MS43 board for a complete flash backup. Infineon confirms the pin assignment and active-low bootstrap selection.",
+    "points": [
+     {
+      "action": "pull-to-gnd",
+      "confidence": "verified",
+      "location": "pcb:C167CR pin 104 (P0L.4/AD4, 144-pin package)",
+      "name": "C167CR bootstrap input P0L.4"
+     }
+    ],
+    "possible": true,
+    "reachable": "open-case",
+    "reset_timing": "Hold the input low at power-up. MS4X specifies releasing it after about 10 seconds, before reading or writing.",
+    "sources": [
+     2,
+     5
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "read+write",
+    "notes": "Programming works over OBD. The stock 512 KiB DS2 read omits a protected region, so it is not a complete original backup. BimmerStein documents a complete 512 KiB read through a temporary RAM agent on recognised MS43 boot variants; other units need open-case boot mode for a complete read.",
+    "protocol": "BMW DS2 over K-line",
+    "sources": [
+     2,
+     4,
+     6
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "MS4X documents limits on diagnostic reads and support for programming. It does not establish the security-access requirement for either operation. OpenTune ships no OEM key.",
+    "sources": [
+     4,
+     6
+    ]
+   }
+  },
+  "aliases": [
+   "MS43",
+   "MS43.0"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [],
+   "can_l": [],
+   "ground": [
+    "X60001-4"
+   ],
+   "ign": [
+    "X60004-26"
+   ],
+   "kline": [
+    "X60001-3",
+    "X60004-32"
+   ],
+   "notes": "Multi-source minimum: +12 V to X60001-7 and X60004-26, ground X60001-4. ms4x.net's bench recipe instead feeds X60001-1, -7 and -8, grounds X60001-4/5/6 and uses K-line X60001-3 (X60004-32 as fallback). Boot mode is board-level: the C167's pin 104 is grounded while powering up, then released (ms4x 'How to connect'); never write a 512 KiB OBD read back in boot mode - it erases the unit-specific bootloader keys.",
+   "power": [
+    "X60001-7",
+    "X60004-26"
+   ],
+   "resistor_notes": "K-line programming; CAN (X60004-36/37) is for development only per ms4x."
+  },
+  "bus": [
+   "kline",
+   "can"
+  ],
+  "checksum": null,
+  "connectors": [
+   {
+    "description": "9-pin power/diagnosis module",
+    "name": "X60001",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "Ignition, terminal 15",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "1",
+      "signal": "12v_ign",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "K-line (diagnostic TxD)",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "3",
+      "signal": "kline",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Ground, terminal 31",
+      "pin": "4",
+      "signal": "gnd",
+      "sources": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground, terminal 31",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "5",
+      "signal": "gnd",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground, terminal 31",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "6",
+      "signal": "gnd",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "function": "Permanent supply, terminal 30",
+      "pin": "7",
+      "signal": "12v_perm",
+      "sources": [
+       1,
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Main-relay supply, terminal 87",
+      "note": "Relay-switched in the car; ms4x feeds +12 V here on the bench. Both citations are from the ms4x.net wiki.",
+      "pin": "8",
+      "signal": "12v_ign",
+      "sources": [
+       1,
+       2
+      ]
+     }
+    ]
+   },
+   {
+    "description": "24-pin module",
+    "name": "X60002",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "Gearbox CAN-Low (AT/SMG only)",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "3",
+      "signal": "can_l",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Gearbox CAN-High (AT/SMG only)",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "4",
+      "signal": "can_h",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Main relay control (output)",
+      "pin": "23",
+      "signal": "other",
+      "sources": [
+       1
+      ]
+     }
+    ]
+   },
+   {
+    "description": "40-pin vehicle module",
+    "name": "X60004",
+    "pins": [
+     {
+      "function": "Ignition, terminal 15",
+      "pin": "26",
+      "signal": "12v_ign",
+      "sources": [
+       1,
+       3
+      ]
+     },
+     {
+      "confidence": "unverified",
+      "function": "Engine diagnostic TxD (per the ms4x MS43 pinout page)",
+      "note": "Conflicts with ecupinouts and the ms4x 'How to connect' page, which use X60004-32.",
+      "pin": "31",
+      "signal": "kline",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "K-line alternative (OBD-II connector)",
+      "note": "Disputed: the ms4x MS43 pinout page lists the OBD TxD on X60004-31. Prefer X60001-3.",
+      "pin": "32",
+      "signal": "kline",
+      "sources": [
+       2,
+       3
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "EWS immobiliser link",
+      "pin": "33",
+      "signal": "other",
+      "sources": [
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-High",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "36",
+      "signal": "can_h",
+      "sources": [
+       1,
+       2
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "CAN-Low",
+      "note": "Both citations are from the ms4x.net wiki.",
+      "pin": "37",
+      "signal": "can_l",
+      "sources": [
+       1,
+       2
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Infineon C167CR (24 MHz)",
+  "ecudef": "bmw-ms4x-ms43",
+  "eeprom": "On-board EEPROM (size not documented)",
+  "family": "MS4x",
+  "flash_kib": 512,
+  "id": "siemens-ms43",
+  "kind": "ecu",
+  "maker": "Siemens",
+  "name": "Siemens MS43 (BMW M54)",
+  "notes": "Siemens DME for the BMW M54 (2.2 / 2.5 / 3.0). AM29F400BB flash: 64 KiB boot + 384 KiB program + 64 KiB calibration. ms4x.net describes three CRC16 plus two 32-bit additive checksums (fix the additive ones first); OpenTune has no MS4x checksum module yet (checksum null). The second K-line pin on X60004 is disputed between sources (31 vs 32).",
+  "part_number_examples": [],
+  "pinout_confidence": "community",
+  "protocols": [
+   "kwp2000"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": true,
+   "notes": "OBD supports programming. The stock 512 KiB DS2 read omits part of the flash; a complete read over OBD needs a temporary RAM agent on recognised boot variants, otherwise open-case boot mode.",
+   "obd": "read+write"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "ms4x.net wiki: Siemens MS43",
+    "url": "https://www.ms4x.net/index.php?title=Siemens_MS43"
+   },
+   {
+    "title": "ms4x.net wiki: Siemens MS43 pinout",
+    "url": "https://www.ms4x.net/index.php?title=Siemens_MS43_Pinout"
+   },
+   {
+    "title": "ms4x.net wiki: How to connect (MS42/MS43 OBD, bench and boot mode)",
+    "url": "https://www.ms4x.net/index.php?title=How_to_connect"
+   },
+   {
+    "title": "ecupinouts.com: Siemens MS43 bench pinout",
+    "url": "https://ecupinouts.com/en/ms43/"
+   },
+   {
+    "title": "MS4X Wiki: MS4x Flasher read and write coverage",
+    "url": "https://www.ms4x.net/index.php?title=MS4x_Flasher"
+   },
+   {
+    "title": "Infineon C167CR/C167SR data sheet V3.3, 144-pin package and bootstrap input",
+    "url": "https://www.infineon.com/assets/row/public/documents/non-assigned/49/infineon-c167cr-ds-en.pdf"
+   },
+   {
+    "title": "BimmerStein ECU Tool (GPL-3.0-only): MS42/MS43 read and write support by boot variant",
+    "url": "https://github.com/CAATZ/BimmerStein-ECU-Tool/blob/main/docs/MS42_MS43.md"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "M54",
+    "make": "BMW",
+    "model": "5 Series (E39)",
+    "years": null
+   },
+   {
+    "engine": "M54",
+    "make": "BMW",
+    "model": "3 Series (E46)",
+    "years": null
+   },
+   {
+    "engine": "M54",
+    "make": "BMW",
+    "model": "X5 (E53)",
+    "years": null
+   },
+   {
+    "engine": "M54",
+    "make": "BMW",
+    "model": "Z3",
+    "years": null
+   },
+   {
+    "engine": "M54",
+    "make": "BMW",
+    "model": "Z4",
+    "years": null
+   }
+  ]
+ },
+ "siemens-pcr21-vag": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "For bench CAN communication, supply +12 V to T94-5, T94-87 and T94-92, with ground on T94-1. CAN-H is T94-68 and CAN-L is T94-67. The pinout lists no K-line.",
+    "possible": true,
+    "sources": [
+     0
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "AutoTuner lists boot support for the 1.6 TDI PCR2.1. The public capability listing does not identify a board point, connector pin or reset timing for this unit.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     5
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "OpenTune lists OBD calibration programming and says a complete original typically needs bench or boot access. AutoTuner lists OBD reading on the 1.6 TDI without specifying the memory range.",
+    "protocol": "UDS over CAN",
+    "sources": [
+     4,
+     5
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "AutoTuner reports write protection on the 1.6 TDI PCR2.1. Its support listing does not specify diagnostic security-access requirements for a complete read or for programming. OpenTune ships no OEM key.",
+    "sources": [
+     5
+    ]
+   }
+  },
+  "aliases": [
+   "PCR2.1",
+   "SIMOS PCR2.1"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "T94-68"
+   ],
+   "can_l": [
+    "T94-67"
+   ],
+   "ground": [
+    "T94-1"
+   ],
+   "ign": [
+    "T94-5"
+   ],
+   "kline": [],
+   "notes": "ecupinouts: tie +12 V to T94-5, T94-87 and T94-92, ground T94-1, CAN-H T94-68 / CAN-L T94-67.",
+   "power": [
+    "T94-5",
+    "T94-87",
+    "T94-92"
+   ],
+   "resistor_notes": "Put a 120 ohm resistor across CAN-H/CAN-L if your interface does not terminate."
+  },
+  "bus": [
+   "can"
+  ],
+  "checksum": "pcr21",
+  "connectors": [
+   {
+    "description": "94-pin vehicle-side block of the 154-pin (60 + 94) connector",
+    "name": "T94",
+    "pins": [
+     {
+      "function": "Ground",
+      "pin": "1",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'; on the related VAG units T94-5 is terminal 15.",
+      "pin": "5",
+      "signal": "12v_ign",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'.",
+      "pin": "87",
+      "signal": "12v_perm",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "+12 V supply",
+      "note": "Source labels it only '+12 V'.",
+      "pin": "92",
+      "signal": "12v_perm",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "CAN-Low",
+      "pin": "67",
+      "signal": "can_l",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "CAN-High",
+      "pin": "68",
+      "signal": "can_h",
+      "sources": [
+       0
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Infineon TC1796 (TriCore)",
+  "ecudef": "siemens-pcr21",
+  "eeprom": null,
+  "family": "Simos PCR",
+  "flash_kib": 2048,
+  "id": "siemens-pcr21-vag",
+  "kind": "ecu",
+  "maker": "Siemens/Continental",
+  "name": "Continental Simos PCR2.1 (VAG 1.6 / 2.0 TDI common rail)",
+  "notes": "Continental unit for EA189 1.6 TDI (and some 2.0 TDI) common rail, alternative to the Bosch EDC17C46. Processor per a programming-module vendor's compatibility list (TC1796, 2 MB internal flash); OpenTune's ecudef flash_size is still a family placeholder. Pinout comes from a single source.",
+  "part_number_examples": [
+   "03L906"
+  ],
+  "pinout_confidence": "community",
+  "protocols": [
+   "uds"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "Calibration programming over OBD. A complete OBD read is undocumented. The T94 connector supports bench CAN communication. A usable boot entry point is unknown.",
+   "obd": "write-only"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "ecupinouts.com: Continental SIMOS PCR2.1 bench pinout",
+    "url": "https://ecupinouts.com/en/simos-pcr21/"
+   },
+   {
+    "title": "Bitbox: VAG Continental Simos 12/16/18/PCR2 module (PCR2.1 on TC1796, 2 MB flash)",
+    "url": "https://bitbox.ru/frontend_dev.php/en/catalog/59"
+   },
+   {
+    "title": "Actronics: Continental Simos PCR2.1",
+    "url": "https://www.actronics.co.uk/news/continental-simos-pcr2-1"
+   },
+   {
+    "title": "OpenTune vehicle catalog (catalog/manual, engine to ECU-family mapping)",
+    "url": "https://github.com/ebjerk01/opentune/tree/main/catalog/manual"
+   },
+   {
+    "title": "OpenTune (GPL-3.0): Siemens PCR2.1 family definition and diagnostic transport",
+    "url": "https://github.com/ebjerk01/opentune/blob/main/ecudefs/siemens-pcr21.json"
+   },
+   {
+    "title": "AutoTuner: supported OBD and boot operations for VAG 1.6 TDI PCR2.1",
+    "url": "https://www.autotuner.com/blogs/news/volkswagen-skoda-audi-seat-1-6-tdi"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "1.6 TDI CR (EA189)",
+    "make": "Volkswagen",
+    "model": "Golf Mk6",
+    "years": "2009-2015"
+   },
+   {
+    "engine": "1.6 TDI CR (EA189)",
+    "make": "Volkswagen",
+    "model": "Polo (6R)",
+    "years": "2009-2015"
+   },
+   {
+    "engine": "1.6 TDI CR (EA189)",
+    "make": "Audi",
+    "model": "A3 (8P)",
+    "years": "2009-2015"
+   },
+   {
+    "engine": "1.6 TDI CR (EA189)",
+    "make": "SEAT",
+    "model": "Leon (1P)/Ibiza (6J)",
+    "years": "2009-2015"
+   },
+   {
+    "engine": "1.6 TDI CR (EA189)",
+    "make": "Skoda",
+    "model": "Octavia (1Z)/Fabia (5J)",
+    "years": "2009-2015"
+   }
+  ]
+ },
+ "temic-dq250-mqb-vag": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "The bench project uses permanent 12 V, switched ignition supply, ground, CAN-H and CAN-L for access through the TCU connector, including a full PFlash read. The unit record has no connector pin numbers. The documented connection uses CAN only.",
+    "possible": true,
+    "sources": [
+     2
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "The bench project documents SBOOT over CAN. It identifies no physical boot strap, bridge or probe point for the 0D9. Physical entry and its reset timing remain unknown.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     2
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "VW_Flash supports DQ250-MQB programming. AutoTuner lists virtual reading over OBD. The cited sources document a complete original PFlash read on the bench only.",
+    "protocol": "UDS over CAN",
+    "sources": [
+     0,
+     3,
+     2
+    ]
+   },
+   "security": {
+    "confidence": "community",
+    "diag_read": "unknown",
+    "flash_write": "required",
+    "notes": "VW_Flash requests security access before UDS programming. The cited sources do not establish the access requirement for a complete diagnostic read. OpenTune ships no OEM key.",
+    "sources": [
+     0,
+     4
+    ]
+   }
+  },
+  "aliases": [
+   "DQ250-MQB",
+   "0D9",
+   "DSG6 MQB"
+  ],
+  "bench": null,
+  "bus": [
+   "can"
+  ],
+  "checksum": "dq250",
+  "connectors": [],
+  "cpu": "Infineon TC1766 (TriCore)",
+  "ecudef": "temic-dq250-mqb",
+  "eeprom": "external serial EEPROM on SSC0/SPI (per DQ250-MQB-Bench-Flash)",
+  "family": "DQ250",
+  "flash_kib": 1536,
+  "id": "temic-dq250-mqb-vag",
+  "kind": "tcu",
+  "maker": "Temic",
+  "name": "VAG DQ250-MQB / 0D9 6-speed DSG TCU",
+  "notes": "MQB-generation DQ250 (software 0D9300xxx). Layout and checksum facts come from the open flashing tools cited below; OpenTune's dq250 JAMCRC is algorithm-vector + synthetic validated only - no real 0D9 dump was available. No pinout is given: no open source with a pin-level drawing for this unit was found, so none is guessed.",
+  "part_number_examples": [
+   "0D9300042M"
+  ],
+  "pinout_confidence": null,
+  "protocols": [
+   "uds"
+  ],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "VW_Flash / mqb-flash-rs flash the CAL (0x20000) and ASW (0x130000) blocks over UDS on CAN (0x7E1/0x7E9) from an FRF/ODX container (DSG table cipher + LZSS) or a raw 0x180000-byte bin file; a full read uses the SBOOT bench path of DQ250-MQB-Bench-Flash (power-cycle window, RSA-1024 SBOOT check, uploaded flash manager). OpenTune has not validated either path on hardware. The boot flag is false because no physical boot entry (strap, pad or debug probe) is documented; the SBOOT full read is a bench route over CAN (see access.bench).",
+   "obd": "write-only"
+  },
+  "safety_note": null,
+  "sources": [
+   {
+    "title": "bri3d/VW_Flash (BSD-2-Clause): docs/dsg.md, lib/modules/dq250mqb.py, lib/dsg_checksum.py",
+    "url": "https://github.com/bri3d/VW_Flash"
+   },
+   {
+    "title": "bri3d/mqb-flash-rs (MIT): crates/mqb-modules/src/modules/dq250mqb.rs",
+    "url": "https://github.com/bri3d/mqb-flash-rs"
+   },
+   {
+    "title": "TheFlashBold/DQ250-MQB-Bench-Flash (GPL-3.0): SBOOT bench read/flash, TC1766",
+    "url": "https://github.com/TheFlashBold/DQ250-MQB-Bench-Flash"
+   },
+   {
+    "title": "AutoTuner DSG gearboxes support announcement (DQ250 MQB virtual read)",
+    "url": "https://www.autotuner.com/blogs/news/dsg-gearboxes"
+   },
+   {
+    "title": "bri3d/VW_Flash (BSD-2-Clause): UDS programming session security access",
+    "url": "https://raw.githubusercontent.com/bri3d/VW_Flash/master/lib/flash_uds.py"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "MQB-platform models with the 6-speed wet DSG",
+    "years": null
+   }
+  ]
+ },
+ "temic-dq250-vag": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "CAN on the 20-pin T20e plug: +12 V to 11 and 13, ground 19, CAN-H 10, CAN-L 15 (both sources agree); 120 ohm across CAN-H/CAN-L if the interface does not terminate. It speaks the same diagnostic protocol as in the car; what can be read that way is not documented.",
+    "possible": true,
+    "sources": [
+     1,
+     0
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "notes": "No cited public source documents a boot or bootstrap mode for the 02E unit (PowerPC or TriCore software). The open DQ250-MQB bench path (SBOOT) belongs to the 0D9 unit, not to this one.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "sources": [
+     2
+    ]
+   },
+   "obd": {
+    "confidence": "unverified",
+    "mode": "unknown",
+    "notes": "Neither a complete read nor programming over OBD is documented in the cited sources. Factory software for 02E comes as VAG FRF/ODX containers (method 0x11, vag-tcu-tools); the programming session and its security access are not documented.",
+    "protocol": "KWP2000 over VW TP2.0 to logical address 0x02 on the powertrain CAN (what OpenTune's read-only opentune dsg uses; not yet confirmed on a car)",
+    "sources": [
+     2,
+     3
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "Not documented in the cited sources; opentune dsg sends no security-access service. OpenTune ships no OEM key.",
+    "sources": [
+     2
+    ]
+   }
+  },
+  "aliases": [
+   "DQ250",
+   "02E",
+   "DSG6",
+   "J743"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "T20e-10"
+   ],
+   "can_l": [
+    "T20e-15"
+   ],
+   "ground": [
+    "T20e-19"
+   ],
+   "ign": [
+    "T20e-13"
+   ],
+   "kline": [],
+   "notes": "+12 V to 11 and 13, ground 19, CAN-H 10 / CAN-L 15 (both sources). MaxxECU additionally wires 18 (+12 V) and 16 (ground).",
+   "power": [
+    "T20e-11",
+    "T20e-13"
+   ],
+   "resistor_notes": "Put a 120 ohm resistor across CAN-H/CAN-L if your interface does not terminate (ecupinouts). Run CAN as a twisted pair."
+  },
+  "bus": [
+   "can"
+  ],
+  "checksum": "dq250-02e",
+  "connectors": [
+   {
+    "description": "20-pin gearbox (mechatronic) connector",
+    "name": "T20e",
+    "pins": [
+     {
+      "confidence": "community",
+      "function": "K-line",
+      "note": "MaxxECU: present but not used; ecupinouts: K-line on a second hardware variant.",
+      "pin": "1",
+      "signal": "kline",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "CAN-High (powertrain)",
+      "pin": "10",
+      "signal": "can_h",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "+12 V supply (MaxxECU: '30a')",
+      "pin": "11",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "+12 V supply (MaxxECU: '15a')",
+      "pin": "13",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "CAN-Low (powertrain)",
+      "pin": "15",
+      "signal": "can_l",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "Ground",
+      "pin": "16",
+      "signal": "gnd",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "confidence": "community",
+      "function": "+12 V supply (MaxxECU: '30a')",
+      "pin": "18",
+      "signal": "12v_perm",
+      "sources": [
+       0
+      ]
+     },
+     {
+      "function": "Ground",
+      "pin": "19",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "PowerPC, big-endian (observed in real reads); later 02E software on an Infineon TriCore",
+  "ecudef": "temic-dq250-02e",
+  "eeprom": null,
+  "family": "DQ250",
+  "flash_kib": 416,
+  "id": "temic-dq250-vag",
+  "kind": "tcu",
+  "maker": "Temic",
+  "name": "VAG DQ250 / 02E DSG mechatronic (J743, PQ platforms)",
+  "notes": "Six-speed wet-clutch DSG (02E) with the mechatronic/TCU (J743) inside the gearbox. Two software generations were seen in real reads: PowerPC (big-endian; ecudef temic-dq250-02e, checksum dq250-02e = CRC-16/MCRF4XX sector table, real-image-tested on six reads) and a later Infineon TriCore build (02E300013N; ecudef temic-dq250-02e-tricore, checksum not located). The DQ250-MQB JAMCRC (checksum id dq250) does NOT apply to 02E. The 02E927770xx numbers are mechatronic (hardware) part numbers; 02E300xxx numbers are the software/gearbox part numbers found in the flash image. Vehicle list and 02E927770 part numbers from MaxxECU's DQ250 integration notes (not exhaustive). Protocols left empty: not stated by the sources.",
+  "part_number_examples": [
+   "02E927770AD",
+   "02E927770AE",
+   "02E927770AJ",
+   "02E927770AL",
+   "02E927770AM",
+   "02E300011BL",
+   "02E300011C",
+   "02E300013N",
+   "02E300041N",
+   "02E300042F",
+   "02E300042G",
+   "02E300042M",
+   "02E300046K"
+  ],
+  "pinout_confidence": "verified",
+  "protocols": [],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "Bench over CAN on the 20-pin T20e plug (ecupinouts lists a K-line variant on pin 1; MaxxECU marks pin 1 K-line as unused). The PowerPC-generation software is handled as a 0x68000-byte (416 KiB) image (12 code sectors + one 32 KiB CAL sector); the TriCore-generation 02E300013N reads seen are 0xB0000 bytes with a 64 KiB CAL first. Reading the CAL over OBD and the OBD programming protocol are not documented in the cited sources; flash containers for 02E are VAG FRF/ODX files (method 0x11 table cipher + compression per vag-tcu-tools), not decoded by OpenTune for 02E yet.",
+   "obd": "unknown"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "MaxxECU: VAG DSG (DQ250) wiring and hardware requirements",
+    "url": "https://www.maxxecu.com/webhelp/wirings-vag_dsg_dq250.html"
+   },
+   {
+    "title": "ecupinouts.com: Temic DQ250 bench pinout",
+    "url": "https://ecupinouts.com/en/temic-dq250/"
+   },
+   {
+    "title": "OpenTune docs/DSG.md: 02E layout and checksum analysis of real reads",
+    "url": "https://github.com/ebjerk01/opentune/blob/main/docs/DSG.md"
+   },
+   {
+    "title": "dspl1236/vag-tcu-tools docs/PLATFORM_RESEARCH.md (MIT): FRF method 0x11 for DQ200/DQ250/DL382",
+    "url": "https://github.com/dspl1236/vag-tcu-tools/blob/main/docs/PLATFORM_RESEARCH.md"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": "2.0 TFSI / 2.0 TDI",
+    "make": "Audi",
+    "model": "A3 (8P)",
+    "years": null
+   },
+   {
+    "engine": "2.0 TFSI",
+    "make": "Audi",
+    "model": "S3 (8P)",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Golf V GTI / R32",
+    "years": null
+   },
+   {
+    "engine": "2.0 TFSI",
+    "make": "Volkswagen",
+    "model": "Golf VI R",
+    "years": null
+   },
+   {
+    "engine": "2.0 TFSI",
+    "make": "Volkswagen",
+    "model": "Scirocco R",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "SEAT",
+    "model": "Leon (1P)",
+    "years": null
+   }
+  ]
+ },
+ "vag-dl382": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "The published DL382 bench pinout puts +12 V on pins 1 and 20 (the unit needs both; tie them together), ground on pin 2, CAN-H on pin 19 and CAN-L on pin 18 of the TCU connector, with 120 ohm across CAN-H/CAN-L if the interface does not terminate; it lists no K-line or separate ignition pin. A tool vendor's page lists bench access at the unit's external plug without opening the case. Single pin source, and these pins are not yet in this unit's connector list: confirm every pin with a multimeter on your unit. What a bench session can read is not documented.",
+    "possible": true,
+    "sources": [
+     3,
+     4
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "No cited public source documents a processor boot or bootstrap entry for the DL382 (no pad, strap or reset timing). The bench pinout gives no boot pin, and the vendor page that names the processor as an Infineon TC1784 does not list a boot method for this unit.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     3,
+     4
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "A tool vendor's public pages list writing the DL382 through the OBD socket, and for its VAG DL/DQ TCU support give the OBD mode as \"OBD VR\" with a calibration-only readout. A complete original read through the vehicle socket is not documented in any cited source, so OBD is write-only here. No open project documents the DL382 programming protocol (VW_Flash does not list DL382), so the protocol is left unknown.",
+    "protocol": null,
+    "sources": [
+     4,
+     5,
+     6
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "Not documented in the cited sources: no public source states whether a diagnostic read or programming of the DL382 requests security access, and the open VAG UDS flasher (VW_Flash) does not cover this unit. OpenTune ships no OEM key.",
+    "sources": [
+     6
+    ]
+   }
+  },
+  "aliases": [
+   "DL382",
+   "0CK",
+   "0CL",
+   "0CJ",
+   "S tronic 7"
+  ],
+  "bench": null,
+  "bus": [
+   "can"
+  ],
+  "checksum": null,
+  "connectors": [],
+  "cpu": null,
+  "ecudef": null,
+  "eeprom": null,
+  "family": "DL382",
+  "flash_kib": null,
+  "id": "vag-dl382",
+  "kind": "tcu",
+  "maker": "VAG (supplier not confirmed)",
+  "name": "Audi DL382 / 0CK (0CL, 0CJ) 7-speed S tronic TCU",
+  "notes": "Longitudinal seven-speed wet dual-clutch S tronic (0CK; sources disagree on which of 0CK/0CL/0CJ is FWD vs quattro). Identify only: no DL382 read was available, so no definition, checksum or maps are claimed; opentune-scan recognises 0CK/0CL/0CJ part numbers in an image as DL382 (medium tier). No pinout is given: no open source with a pin-level drawing for this unit was found, so none is guessed.",
+  "part_number_examples": [
+   "0CK927156AA",
+   "0CK927156S"
+  ],
+  "pinout_confidence": null,
+  "protocols": [],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "A tool vendor lists OBD writing with a calibration-only OBD readout, so OBD is write-only here; a public bench pinout gives CAN bench access at the external plug. No boot route is documented. Factory containers use the same method 0x11 table cipher + compression as DQ200/DQ250 (vag-tcu-tools).",
+   "obd": "write-only"
+  },
+  "safety_note": null,
+  "sources": [
+   {
+    "title": "gearboxlist.com: Volkswagen DL382",
+    "url": "https://gearboxlist.com/volkswagen/dl382/"
+   },
+   {
+    "title": "controlunits.com: Audi DL382 S-Tronic TCU (0CK 927 156 AA)",
+    "url": "https://controlunits.com/?p=24591"
+   },
+   {
+    "title": "dspl1236/vag-tcu-tools docs/PLATFORM_RESEARCH.md (MIT): method 0x11 for DL382",
+    "url": "https://github.com/dspl1236/vag-tcu-tools/blob/main/docs/PLATFORM_RESEARCH.md"
+   },
+   {
+    "title": "ecupinouts.com: Temic DL382 (S tronic 7) bench pinout",
+    "url": "https://ecupinouts.com/en/temic-dl382/"
+   },
+   {
+    "title": "AutoTuner public ECU page: Temic DL382 (TC1784) supported methods (tool vendor page)",
+    "url": "https://www.autotuner.com/pages/ecu/temic-dl382-tc1784"
+   },
+   {
+    "title": "AutoTuner public news page: VAG DLxxx/DQxxx TCU support (DL382 listed), OBD mode and calibration readout (tool vendor page)",
+    "url": "https://www.autotuner.com/blogs/news/vag-dlxxx-dqxxx"
+   },
+   {
+    "title": "VW_Flash (BSD-2-Clause), README: supported control units (DL382 not listed)",
+    "url": "https://github.com/bri3d/VW_Flash"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "A4 / A5 (B9), A6 / A7 (C7.5), Q5",
+    "years": "2015-"
+   }
+  ]
+ },
+ "vag-dq200": {
+  "access": {
+   "bench": {
+    "confidence": "community",
+    "how": "ecupinouts publishes a CAN bench connection on the 11-pin VAG DQ200 (0AM/0CW) mechatronic plug: two +12 V pins, one ground, CAN-H and CAN-L. The pins are marked by position in its drawing only, without numbers, so no pin is recorded here: take the positions from the drawing and confirm each with a multimeter before applying power; add 120 ohm across CAN-H/CAN-L if the interface does not terminate. It speaks the same diagnostic protocol as in the car; what can be read that way is not documented.",
+    "possible": true,
+    "sources": [
+     2
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "No cited public source names the DQ200 processor or documents a boot, bootstrap or debug-port route; the bench pinout lists only power, ground and CAN. Commercial bench-tool procedures are not used.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     2
+    ]
+   },
+   "obd": {
+    "confidence": "community",
+    "mode": "write-only",
+    "notes": "VW updates the DQ200 mechatronic software in the workshop: the NZ DQ200 campaign names a software update of the mechatronic control unit, and the US Jetta Hybrid action (a 0AM mechatronic per recall 34J6) does it with the VAS diagnostic tester running ODIS. Factory software ships as FRF/ODX flash containers (vag-tcu-tools counts 145 for 0CW). A tool vendor lists OBD write and only a 'virtual' OBD read. No cited source documents a complete original read through the diagnostic socket, so this is write-only. The diagnostic protocol is not stated in the cited sources; the unit is on CAN.",
+    "protocol": null,
+    "sources": [
+     3,
+     4,
+     5,
+     1,
+     6
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The cited sources do not state whether a diagnostic read or programming of the DQ200 requests security access (the VW workshop documents only describe the tester-driven update). OpenTune ships no OEM key.",
+    "sources": [
+     3
+    ]
+   }
+  },
+  "aliases": [
+   "DQ200",
+   "0AM",
+   "0CW",
+   "DSG7 dry"
+  ],
+  "bench": null,
+  "bus": [
+   "can"
+  ],
+  "checksum": null,
+  "connectors": [],
+  "cpu": null,
+  "ecudef": null,
+  "eeprom": null,
+  "family": "DQ200",
+  "flash_kib": null,
+  "id": "vag-dq200",
+  "kind": "tcu",
+  "maker": "VAG (supplier not confirmed)",
+  "name": "VAG DQ200 / 0AM (0CW) 7-speed dry DSG mechatronic",
+  "notes": "Seven-speed dry-clutch DSG (0AM, later 0CW), 200 Nm class, mechatronic inside the gearbox. Identify only: no DQ200 read was available, so no definition, checksum or maps are claimed; opentune-scan recognises 0AM/0CW part numbers in an image as DQ200 (medium tier). Vehicle list per the cited listing (not exhaustive). No pin table is given: the public bench drawing (ecupinouts) marks the pins by position only, without numbers, so none is recorded or guessed.",
+  "part_number_examples": [
+   "0AM927769D",
+   "0AM927769G",
+   "0AM927769K"
+  ],
+  "pinout_confidence": null,
+  "protocols": [],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "Programming through the vehicle's diagnostic socket is documented (VW workshop software updates of the mechatronic with the VAS tester / ODIS; a tool vendor lists OBD write), but no cited source documents a complete original read over OBD (the vendor lists only a 'virtual' read). ecupinouts publishes a CAN bench connection (+12 V twice, ground, CAN-H, CAN-L on the 11-pin plug; pin numbers only in its drawing). No processor boot route is documented. Factory flash containers are VAG FRF/ODX files using the method 0x11 table cipher + compression (vag-tcu-tools); OpenTune does not decode them for DQ200 yet.",
+   "obd": "write-only"
+  },
+  "safety_note": null,
+  "sources": [
+   {
+    "title": "Actronics: DSG 7 DQ200 (0AM) TCU",
+    "url": "https://actronics.co.uk/tcu/dsg-7-dq200-0am"
+   },
+   {
+    "title": "dspl1236/vag-tcu-tools docs/PLATFORM_RESEARCH.md (MIT): DQ200 0CW FRFs, method 0x11",
+    "url": "https://github.com/dspl1236/vag-tcu-tools/blob/main/docs/PLATFORM_RESEARCH.md"
+   },
+   {
+    "title": "ecupinouts.com: Temic DQ200 (DSG7, 0AM/0CW) bench pinout",
+    "url": "https://ecupinouts.com/en/vag-dq200/"
+   },
+   {
+    "title": "Volkswagen of America via NHTSA: Emissions Service Action 38C4, Jetta Hybrid 2013-2016 mechatronic unit software (update with the VAS diagnostic tester / ODIS)",
+    "url": "https://static.nhtsa.gov/odi/tsbs/2020/MC-10170643-0001.pdf"
+   },
+   {
+    "title": "Volkswagen of America via NHTSA: Safety Recall 34J6, Jetta Hybrid mechatronic accumulator housing (0AM repair kit)",
+    "url": "https://static.nhtsa.gov/odi/rcl/2019/RCRIT-19V866-4357.pdf"
+   },
+   {
+    "title": "Volkswagen New Zealand: DQ200 mechatronics unit campaign (software update of the mechatronic control unit)",
+    "url": "https://volkswagen.co.nz/en/owners-and-servicing/about-my-car/campaigns-and-recalls/mechatronics-unit.html"
+   },
+   {
+    "title": "AutoTuner: Temic DQ200 support announcement (OBD virtual read and OBD write; tool vendor page, fallback)",
+    "url": "https://www.autotuner.com/blogs/news/temic-dq200"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "Volkswagen",
+    "model": "Polo",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Audi",
+    "model": "A3",
+    "years": null
+   }
+  ]
+ },
+ "zf-8hp-gen1": {
+  "access": {
+   "bench": {
+    "confidence": "verified",
+    "how": "On the documented 16-pin connector, TCU-13 and TCU-9 take +12 V, TCU-14 is ground, TCU-5 is CAN high and TCU-6 is CAN low. The Ram 1500 bench project communicates through this CAN pair. Match the connector variant before applying power.",
+    "possible": true,
+    "sources": [
+     1,
+     3
+    ]
+   },
+   "boot": {
+    "confidence": "unverified",
+    "entry": "unknown",
+    "mcu_mode": null,
+    "notes": "The bench wiring documents CAN communication. The cited sources identify no physical processor boot entry point or reset timing for this unit.",
+    "points": [],
+    "possible": "unknown",
+    "reachable": "unknown",
+    "reset_timing": null,
+    "sources": [
+     1,
+     3
+    ]
+   },
+   "obd": {
+    "confidence": "unverified",
+    "mode": "unknown",
+    "notes": "1769Flash lists OBD flashing support for BMW F-series 8HP45, 8HP70 and 8HP90. The listing does not specify a complete original-image read or the diagnostic protocol, and covers only the BMW application.",
+    "protocol": null,
+    "sources": [
+     4
+    ]
+   },
+   "security": {
+    "confidence": "unverified",
+    "diag_read": "unknown",
+    "flash_write": "unknown",
+    "notes": "The cited sources do not establish the security access requirements for a complete diagnostic read or flash programming. OpenTune ships no OEM key.",
+    "sources": [
+     3,
+     4
+    ]
+   }
+  },
+  "aliases": [
+   "8HP",
+   "8HP45",
+   "8HP70",
+   "8HP90",
+   "8HP55",
+   "AL551",
+   "EGS"
+  ],
+  "bench": {
+   "boot": [],
+   "can_h": [
+    "TCU-5"
+   ],
+   "can_l": [
+    "TCU-6"
+   ],
+   "ground": [
+    "TCU-14"
+   ],
+   "ign": [
+    "TCU-9"
+   ],
+   "kline": [],
+   "notes": "Main supply 13, wake-up 9, ground 14, CAN-H 5 / CAN-L 6. MaxxECU: apply the main supply for 10-15 s BEFORE the wake-up line, or part of the TCU does not initialise.",
+   "power": [
+    "TCU-13",
+    "TCU-9"
+   ],
+   "resistor_notes": "The 8HP TCU has NO internal termination (MaxxECU): fit 120 ohm at the TCU end in addition to the interface's own termination."
+  },
+  "bus": [
+   "can"
+  ],
+  "checksum": "zf8hp",
+  "connectors": [
+   {
+    "description": "16-pin gearbox connector (8HP Gen1)",
+    "name": "TCU",
+    "pins": [
+     {
+      "function": "CAN-High",
+      "pin": "5",
+      "signal": "can_h",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "CAN-Low",
+      "pin": "6",
+      "signal": "can_l",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "+12 V wake-up (ignition)",
+      "pin": "9",
+      "signal": "12v_ign",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "+12 V main supply",
+      "pin": "13",
+      "signal": "12v_perm",
+      "sources": [
+       0,
+       1
+      ]
+     },
+     {
+      "function": "Ground",
+      "pin": "14",
+      "signal": "gnd",
+      "sources": [
+       0,
+       1
+      ]
+     }
+    ]
+   }
+  ],
+  "cpu": "Renesas SH725xx",
+  "ecudef": null,
+  "eeprom": null,
+  "family": "8HP",
+  "flash_kib": null,
+  "id": "zf-8hp-gen1",
+  "kind": "tcu",
+  "maker": "ZF",
+  "name": "ZF 8HP (first generation) EGS / TCU",
+  "notes": "Eight-speed ZF automatic, TCU integrated in the gearbox. MaxxECU's table lists SH725xx processors for every supported unit and marks the '2048 KB memory area' units as unsupported; Gen2/Gen3 (TriCore) are different hardware. OpenTune's zf8hp checksum covers the AL551-generation CAL block (e.g. 4G0/4H1 software) and needs a stock reference dump to correct. Pin numbers are from the Dodge Gen1 connector per MaxxECU; confirm for other brands.",
+  "part_number_examples": [],
+  "pinout_confidence": "verified",
+  "protocols": [],
+  "read_methods": {
+   "bench": true,
+   "boot": false,
+   "notes": "Bench communication uses CAN. BMW F-series variants have listed OBD flashing support. Complete original-image reading through the vehicle socket remains undocumented in the cited sources.",
+   "obd": "unknown"
+  },
+  "safety_note": "Bench safety: use a current-limited bench supply (12-13.8 V, start with a low current limit) and a fuse in the +12 V lead; connect ground first. Confirm every pin with a multimeter on YOUR unit before applying power - ground pins should show continuity to each other (and usually the housing), and hardware revisions can differ from the sources. A CAN bus needs about 60 ohm between CAN-H and CAN-L (two 120 ohm terminations): add a 120 ohm resistor if neither the unit nor your interface terminates. Swapped CAN-H/CAN-L just gives timeouts; +12 V on a signal pin can destroy the unit.",
+  "sources": [
+   {
+    "title": "MaxxECU: 8HP gearbox wiring",
+    "url": "https://maxxecu.com/webhelp/wirings-8hp_gearbox.html"
+   },
+   {
+    "title": "ecupinouts.com: ZF 8HP bench pinout",
+    "url": "https://ecupinouts.com/en/zf-8hp/"
+   },
+   {
+    "title": "MaxxECU: advanced 8HP installation and wiring (CPU / supported units)",
+    "url": "https://www.maxxecu.com/webhelp/advanced-8hp-installation_and_wiring.html"
+   },
+   {
+    "title": "8hp-teensy-flasher bench hardware (GPL-3.0), Ram 1500 ZF 8HP connector",
+    "url": "https://raw.githubusercontent.com/alldogsoffroad/8hp-teensy-flasher/main/hardware/README.md"
+   },
+   {
+    "title": "1769Flash supported BMW transmission controllers, F-series 8HP Gen1 OBD coverage",
+    "url": "https://flash.1769.fi/supported"
+   }
+  ],
+  "vehicles": [
+   {
+    "engine": null,
+    "make": "BMW",
+    "model": "F-series (8HP applications)",
+    "years": null
+   },
+   {
+    "engine": null,
+    "make": "Dodge",
+    "model": "8HP Gen1 applications",
+    "years": null
+   }
+  ]
+ }
+}

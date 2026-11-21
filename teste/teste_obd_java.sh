@@ -37,9 +37,32 @@ cp "$RAIZ/teste/obd_java/VerificaListaBranca.java" "$TMP/src/br/com/dtcarcentroa
 echo "Compilando o plugin…"
 javac -nowarn -d "$TMP/out" $(find "$TMP/src" -name '*.java')
 echo "Compilou sem erro."
-# o apagar manda o 04 escrito no próprio código, nunca o que vier do JavaScript
-grep -q 'enviar(call, "04"' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
-  || { echo "FALHOU: o método apagar deveria mandar o 04 escrito no código."; exit 1; }
+# O texto de todo comando que AGE no carro é montado no próprio código, nunca colado do JavaScript:
+# o site escolhe o quê, e manda só os valores (identificador, opção, chave) — já conferidos um por um.
+# Se algum destes métodos passar a enviar texto vindo de fora, este teste reprova.
+# A pergunta "aceita gravar?" manda SEMPRE um byte fixo escrito no código (nunca valor vindo da página)
+# e só depois de conferir que o dado tem 2 bytes ou mais: é isso que garante que ela não grava nada.
+JAVA_OBD="$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java"
+sed -n "/public void sondarGravacao(/,/^    }/p" "$JAVA_OBD" | grep -q '"2E" + did + "00\\r"' || { echo "FALHOU: sondarGravacao deveria mandar o byte fixo 00."; exit 1; }
+sed -n "/public void sondarGravacao(/,/^    }/p" "$JAVA_OBD" | grep -q 'podeSondarGravacao(antes, did)' || { echo "FALHOU: sondarGravacao tem de conferir o tamanho do dado antes de perguntar."; exit 1; }
+sed -n "/public void sondarGravacao(/,/^    }/p" "$JAVA_OBD" | grep -q 'getString("valor' && { echo "FALHOU: sondarGravacao não pode aceitar valor da página."; exit 1; }
+for m in atuar rotina reiniciarModulo; do
+  sed -n "/public void $m(/,/^    }/p" "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
+    | grep -q 'enviar(call, "' \
+    || { echo "FALHOU: o método $m deveria montar o comando a partir de um literal escrito no código."; exit 1; }
+done
+grep -q 'return porUds ? "14FFFFFF" : "04";' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
+  || { echo "FALHOU: o comando de apagar deveria ser literal, no comandoApagar."; exit 1; }
+# gravar LIVRE (0x2E em qualquer módulo) e destravar (0x27) NÃO podem existir: método publicado
+# que ninguém chama é superfície de ataque de graça, e o 0x2E é escrita de calibração.
+# (21/11/2026: a gravação voltou como gravarDado, travada no módulo do motor; ver ObdPlugin.java)
+for m in gravar destravar; do
+  grep -q "public void $m(" "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java" \
+    && { echo "FALHOU: o método $m não deveria existir enquanto nenhuma tela o usa."; exit 1; }
+done
+# Regravar memória de módulo não pode existir de jeito nenhum: nem serviço, nem método.
+grep -qE '"3[4567]"' <(sed -n '/SERVICOS_PROIBIDOS = /,/));/p' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java") \
+  || { echo "FALHOU: os serviços de transferência (34/35/36/37) deveriam estar na lista de proibidos."; exit 1; }
 grep -q '"04"' <(grep -A3 'SERVICOS_LEITURA = ' "$RAIZ/app/plugins/obd/android/src/main/java/br/com/dtcarcentroautomotivo/obd/ObdPlugin.java") \
   && { echo "FALHOU: o 04 não pode entrar na lista branca do comando()."; exit 1; }
-java -cp "$TMP/out" br.com.dtcarcentroautomotivo.obd.VerificaListaBranca
+java -cp "$TMP/out" br.com.dtcarcentroautomotivo.obd.VerificaListaBranca "$RAIZ/teste/obd_java/sondas.txt"

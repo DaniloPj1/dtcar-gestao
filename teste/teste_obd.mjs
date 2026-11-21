@@ -223,9 +223,10 @@ chk("a última posição de cada faixa é o aviso da faixa seguinte", suportados
 const vps = (pid, dados) => valorPid("41" + pid + dados, parseInt(pid, 16), 0x01);
 const vp = (pid, dados) => vps(pid, dados)[0] || null;
 chk("velocidade", vp("0D", "50").valor === 80);
-chk("pressão do rail: 5000 x 10 = 50.000 kPa (500 bar, diesel)", vp("23", "1388").valor === 50000);
-chk("pressão do rail absoluta usa a mesma escala", vp("59", "1388").valor === 50000);
-chk("pressão do rail sobre o vácuo é outra escala (x0,079)", vp("22", "1388").valor === 395);
+chk("pressão do rail em BAR: 5000 x 0,1 = 500 bar (diesel)", vp("23", "1388").valor === 500 && vp("23", "1388").unidade === "bar");
+chk("pressão do rail absoluta usa a mesma escala", vp("59", "1388").valor === 500);
+chk("pressão do rail sobre o vácuo é outra escala (x0,079 kPa), mostrada em bar", vp("22", "1388").valor === 3.95 && vp("22", "1388").unidade === "bar");
+chk("pressão de combustível em bar: 100 x 3 kPa = 3 bar", vp("0A", "64").valor === 3 && vp("0A", "64").unidade === "bar");
 chk("tempo de injeção: 2,5° (não é o avanço de ignição)", vp("5D", "6A40").valor === 2.5 && vp("5D", "6A40").rotulo.includes("injeção"));
 chk("tempo de injeção negativo (atrasado)", vp("5D", "6540").valor === -7.5);
 chk("consumo instantâneo 3,5 L/h", vp("5E", "0046").valor === 3.5);
@@ -395,7 +396,7 @@ chk("sem resposta nenhuma não vira 'apagou'", !respostaApagar([]).ok && !respos
 chk("resposta estranha avisa que NADA foi apagado", respostaApagar(["41 0C 1A F8"]).erro.includes("nada foi apagado"));
 {
   const antes = [{ codigo: "P0171", situacao: "atual" }, { codigo: "P0300", situacao: "pendente" }];
-  chk("limpou: diz que o código volta se o defeito continuar", resultadoApagar(antes, []).situacao === "limpo" && resultadoApagar(antes, []).frase.includes("volta"));
+  chk("limpou: diz que não sobrou código, sem sermão", resultadoApagar(antes, []).situacao === "limpo" && !/volta|conserta/.test(resultadoApagar(antes, []).frase));
   chk("voltou na hora = defeito acontecendo agora", resultadoApagar(antes, antes).situacao === "voltou" && resultadoApagar(antes, antes).frase.includes("agora"));
   chk("sobrou código de outro módulo", resultadoApagar(antes, [{ codigo: "C1234", situacao: "atual" }]).situacao === "sobrou");
   chk("não deu para conferir não vira 'limpou'", resultadoApagar(antes, null).situacao === "nao_conferido");
@@ -411,7 +412,7 @@ chk("resposta estranha avisa que NADA foi apagado", respostaApagar(["41 0C 1A F8
   chk("registro sem KM e sem placa não inventa nada", sem.km === null && sem.placa === "" && sem.codigos_depois === null && sem.perfil_id === null, sem);
   chk("KM bobo (0 ou texto) não entra", registroApagar({ antes: [], km: "0" }).km === null && registroApagar({ antes: [], km: "abc" }).km === null);
 }
-chk("os avisos de apagar dizem que NÃO conserta", AVISOS_APAGAR.some(a => a.includes("NÃO conserta")));
+chk("os avisos de apagar não repetem o óbvio para um mecânico (pedido do Danilo)", !AVISOS_APAGAR.some(a => /conserta/i.test(a)) && AVISOS_APAGAR.length === 3);
 chk("os avisos falam do aprendizado de combustível e da prontidão", AVISOS_APAGAR.some(a => a.toLowerCase().includes("combustível")) && AVISOS_APAGAR.some(a => a.toLowerCase().includes("prontidão")));
 chk("nenhum aviso promete conserto ou dá veredito", !AVISOS_APAGAR.some(a => /resolve|conserta o|arruma/i.test(a)));
 chk("a passada curta do ajuste é curta mesmo (5 pedidos)", PIDS_AJUSTE.length === 5 && PIDS_AJUSTE.every(p => PIDS_COMBUSTIVEL.includes(p)));

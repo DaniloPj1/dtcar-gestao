@@ -1,0 +1,584 @@
+{
+ "Twingo_3_Ph2": [
+  {
+   "nome": "Navigation-UCC-ITM",
+   "pede_em": "747",
+   "responde_em": "767",
+   "sessao": "5003",
+   "sigla": "Navigation-UCC-ITM"
+  },
+  {
+   "nome": "CAN1-CAN2 Gateway",
+   "pede_em": "785",
+   "responde_em": "7A5",
+   "sessao": "5003",
+   "sigla": "INSULATOR"
+  },
+  {
+   "nome": "Body Control Module",
+   "pede_em": "745",
+   "responde_em": "765",
+   "sessao": "5003",
+   "sigla": "UCH"
+  },
+  {
+   "nome": "Multimedia Interface Unit",
+   "pede_em": "714",
+   "responde_em": "734",
+   "sessao": "5003",
+   "sigla": "MIU"
+  },
+  {
+   "nome": "Lithium Battery Controller",
+   "pede_em": "79B",
+   "responde_em": "7BB",
+   "sessao": "5003",
+   "sigla": "LBC-(EV)"
+  },
+  {
+   "nome": "Security Gateway3",
+   "pede_em": "18DAD2F1",
+   "responde_em": "18DAF1D2",
+   "sessao": "5003",
+   "sigla": "S-GW3"
+  },
+  {
+   "nome": "Climate Control",
+   "pede_em": "744",
+   "responde_em": "764",
+   "sessao": "5003",
+   "sigla": "HVAC"
+  },
+  {
+   "nome": "Meter Cluster",
+   "pede_em": "743",
+   "responde_em": "763",
+   "sessao": "5003",
+   "sigla": "TDB"
+  },
+  {
+   "nome": "Automatic Transmission",
+   "pede_em": "7E1",
+   "responde_em": "7E9",
+   "sessao": "5003",
+   "sigla": "AT"
+  },
+  {
+   "nome": "USM",
+   "pede_em": "74D",
+   "responde_em": "76D",
+   "sessao": "5003",
+   "sigla": "UPC-EMM"
+  },
+  {
+   "nome": "Engine Control Module",
+   "pede_em": "7E0",
+   "responde_em": "7E8",
+   "sessao": "5003",
+   "sigla": "ECM"
+  },
+  {
+   "nome": "Electrical Vehicle Control module",
+   "pede_em": "7E4",
+   "responde_em": "7EC",
+   "sessao": "5003",
+   "sigla": "(H)-EVC"
+  },
+  {
+   "nome": "Battery Charger Block",
+   "pede_em": "792",
+   "responde_em": "793",
+   "sessao": "5003",
+   "sigla": "BCB-OBC"
+  },
+  {
+   "nome": "Front camera",
+   "pede_em": "7DC",
+   "responde_em": "7DD",
+   "sessao": "5003",
+   "sigla": "FCAM"
+  },
+  {
+   "nome": "Audio Unit",
+   "pede_em": "712",
+   "responde_em": "732",
+   "sessao": "5003",
+   "sigla": "Audio"
+  },
+  {
+   "nome": "Airbag-SRS",
+   "pede_em": "752",
+   "responde_em": "772",
+   "sessao": "5003",
+   "sigla": "Airbag-SRS"
+  },
+  {
+   "nome": "CSHV",
+   "pede_em": "78A",
+   "responde_em": "7D7",
+   "sessao": "5003",
+   "sigla": "CSHV-Airbag-Vehicle-stopped"
+  },
+  {
+   "nome": "Vehicle Charger Controler Unit",
+   "pede_em": "719",
+   "responde_em": "739",
+   "sessao": "5003",
+   "sigla": "VCCU"
+  },
+  {
+   "nome": "Data Communication Module",
+   "pede_em": "7CA",
+   "responde_em": "7DA",
+   "sessao": "5003",
+   "sigla": "DCM"
+  },
+  {
+   "nome": "ABS-VDC",
+   "pede_em": "740",
+   "responde_em": "760",
+   "sessao": "5003",
+   "sigla": "ABS-VDC"
+  },
+  {
+   "nome": "Vehicle Sound for Pedestrian",
+   "pede_em": "73F",
+   "responde_em": "761",
+   "sessao": "5003",
+   "sigla": "VSP"
+  },
+  {
+   "nome": "Wireless Charger Smartphone",
+   "pede_em": "7AA",
+   "responde_em": "7AD",
+   "sessao": "5003",
+   "sigla": "WCGS"
+  },
+  {
+   "nome": "Electric Power Steering",
+   "pede_em": "742",
+   "responde_em": "762",
+   "sessao": "5003",
+   "sigla": "EPS"
+  },
+  {
+   "nome": "ACC",
+   "pede_em": "75D",
+   "responde_em": "77D",
+   "sessao": "5003",
+   "sigla": "ACC"
+  },
+  {
+   "nome": "Top Control Unit",
+   "pede_em": "74B",
+   "responde_em": "76B",
+   "sessao": "5003",
+   "sigla": "TCU"
+  },
+  {
+   "nome": "Power Electronic Box",
+   "pede_em": "75A",
+   "responde_em": "77E",
+   "sessao": "5003",
+   "sigla": "PEB"
+  },
+  {
+   "nome": "Power Line connection/ Power Line GateWay",
+   "pede_em": "7D8",
+   "responde_em": "7C8",
+   "sessao": "5003",
+   "sigla": "PLC-PLGW"
+  },
+  {
+   "nome": "Shift By Wire",
+   "pede_em": "79D",
+   "responde_em": "7BD",
+   "sessao": "5003",
+   "sigla": "SCU"
+  },
+  {
+   "nome": "Audio Amplifier Unit",
+   "pede_em": "782",
+   "responde_em": "7A2",
+   "sessao": "5003",
+   "sigla": "AAU"
+  }
+ ],
+ "Twizy": [
+  {
+   "nome": "Meter Cluster",
+   "pede_em": "743",
+   "responde_em": "763",
+   "sessao": "5003",
+   "sigla": "TDB"
+  },
+  {
+   "nome": "Lithium Battery Controller",
+   "pede_em": "79B",
+   "responde_em": "7BB",
+   "sessao": "5003",
+   "sigla": "LBC"
+  },
+  {
+   "nome": "Battery Charger Block",
+   "pede_em": "792",
+   "responde_em": "793",
+   "sessao": "5003",
+   "sigla": "BCB-OBC"
+  }
+ ],
+ "ZOE": [
+  {
+   "nome": "Electric Vehicle Controller",
+   "pede_em": "7e4",
+   "responde_em": "7ec",
+   "sessao": "50c0",
+   "sigla": "EVC"
+  },
+  {
+   "nome": "Telematics Control Unit",
+   "pede_em": "7ca",
+   "responde_em": "7da",
+   "sessao": "50c0",
+   "sigla": "DCM"
+  },
+  {
+   "nome": "Lithium Battery Controller",
+   "pede_em": "79b",
+   "responde_em": "7bb",
+   "sessao": "50c0",
+   "sigla": "LBC"
+  },
+  {
+   "nome": "Power Electronics Block",
+   "pede_em": "75a",
+   "responde_em": "77e",
+   "sessao": "50c0",
+   "sigla": "PEB"
+  },
+  {
+   "nome": "Airbag",
+   "pede_em": "752",
+   "responde_em": "772",
+   "sessao": "50c0",
+   "sigla": "AIBAG"
+  },
+  {
+   "nome": "U Safety Module",
+   "pede_em": "74d",
+   "responde_em": "76d",
+   "sessao": "50c0",
+   "sigla": "USM"
+  },
+  {
+   "nome": "Instrument panel",
+   "pede_em": "743",
+   "responde_em": "763",
+   "sessao": "50c0",
+   "sigla": "TDB"
+  },
+  {
+   "nome": "Electrical Power Steering",
+   "pede_em": "742",
+   "responde_em": "762",
+   "sessao": "50c0",
+   "sigla": "EPS"
+  },
+  {
+   "nome": "Electronic Stability Control",
+   "pede_em": "740",
+   "responde_em": "760",
+   "sessao": "50c0",
+   "sigla": "ESC"
+  },
+  {
+   "nome": "Uncoupled Braking Pedal",
+   "pede_em": "79c",
+   "responde_em": "7bc",
+   "sessao": "50c0",
+   "sigla": "UBP"
+  },
+  {
+   "nome": "Body Control Module",
+   "pede_em": "745",
+   "responde_em": "765",
+   "sessao": "50c0",
+   "sigla": "UCH"
+  },
+  {
+   "nome": "Climate Control",
+   "pede_em": "744",
+   "responde_em": "764",
+   "sessao": "50c0",
+   "sigla": "HVAC"
+  },
+  {
+   "nome": "Park Assist",
+   "pede_em": "74e",
+   "responde_em": "76e",
+   "sessao": "50c0",
+   "sigla": "Parking-Sonar"
+  },
+  {
+   "nome": "Battery Connection Box",
+   "pede_em": "792",
+   "responde_em": "793",
+   "sessao": "50c0",
+   "sigla": "BCB-OBC"
+  },
+  {
+   "nome": "Lithium Battery Controller 2",
+   "pede_em": "796",
+   "responde_em": "7b6",
+   "sessao": "50c0",
+   "sigla": "LBC2"
+  },
+  {
+   "nome": "Tuner",
+   "pede_em": "0",
+   "responde_em": "0",
+   "sessao": "50c0",
+   "sigla": "RADIO"
+  },
+  {
+   "nome": "Joystick",
+   "pede_em": "0",
+   "responde_em": "0",
+   "sessao": "50c0",
+   "sigla": "-"
+  },
+  {
+   "nome": "R-Link",
+   "pede_em": "0",
+   "responde_em": "0",
+   "sessao": "50c0",
+   "sigla": "AUTOS"
+  },
+  {
+   "nome": "Horn",
+   "pede_em": "0",
+   "responde_em": "0",
+   "sessao": "50c0",
+   "sigla": "-"
+  },
+  {
+   "nome": "VirtualField computer",
+   "pede_em": "800",
+   "responde_em": "800",
+   "sessao": "50c0",
+   "sigla": "VFC"
+  },
+  {
+   "nome": "Free fields",
+   "pede_em": "801",
+   "responde_em": "801",
+   "sessao": "50c0",
+   "sigla": "FFC"
+  }
+ ],
+ "ZOE_Ph2": [
+  {
+   "nome": "ABS-VDC",
+   "pede_em": "18da2df1",
+   "responde_em": "18daf12d",
+   "sessao": "5003",
+   "sigla": "ABS-VDC"
+  },
+  {
+   "nome": "Airbag",
+   "pede_em": "752",
+   "responde_em": "772",
+   "sessao": "50c0",
+   "sigla": "AIRBAG-SRS"
+  },
+  {
+   "nome": "Audio Amplifier Unit",
+   "pede_em": "782",
+   "responde_em": "7a2",
+   "sessao": "5003",
+   "sigla": "AAU"
+  },
+  {
+   "nome": "Automatic Parking Brake",
+   "pede_em": "755",
+   "responde_em": "775",
+   "sessao": "5003",
+   "sigla": "APB"
+  },
+  {
+   "nome": "Battery Charger Block",
+   "pede_em": "18dadef1",
+   "responde_em": "18daf1de",
+   "sessao": "50c0",
+   "sigla": "BCB-OBC"
+  },
+  {
+   "nome": "Body Control Module",
+   "pede_em": "745",
+   "responde_em": "765",
+   "sessao": "5003",
+   "sigla": "UCH"
+  },
+  {
+   "nome": "Climate Control",
+   "pede_em": "744",
+   "responde_em": "764",
+   "sessao": "5003",
+   "sigla": "HVAC"
+  },
+  {
+   "nome": "Data Communication Module",
+   "pede_em": "7ca",
+   "responde_em": "7da",
+   "sessao": "5003",
+   "sigla": "DCM"
+  },
+  {
+   "nome": "E-ACT-EBA",
+   "pede_em": "18dae2f1",
+   "responde_em": "18daf1e2",
+   "sessao": "5003",
+   "sigla": "E-ACT-EBA"
+  },
+  {
+   "nome": "Electrical Power Steering",
+   "pede_em": "742",
+   "responde_em": "762",
+   "sessao": "5003",
+   "sigla": "EPS"
+  },
+  {
+   "nome": "Front Camera",
+   "pede_em": "7dc",
+   "responde_em": "7dd",
+   "sessao": "5003",
+   "sigla": "FCAM"
+  },
+  {
+   "nome": "Hands Free Module",
+   "pede_em": "799",
+   "responde_em": "7b9",
+   "sessao": "5003",
+   "sigla": "HFM"
+  },
+  {
+   "nome": "Integrated Dynamics Control Module",
+   "pede_em": "70c",
+   "responde_em": "700",
+   "sessao": "5000",
+   "sigla": "IDM"
+  },
+  {
+   "nome": "INV-ME",
+   "pede_em": "18dadff1",
+   "responde_em": "18daf1df",
+   "sessao": "50c0",
+   "sigla": "INV-ME"
+  },
+  {
+   "nome": "Laser radar for Adaptive Cruise Control System",
+   "pede_em": "723",
+   "responde_em": "735",
+   "sessao": "5003",
+   "sigla": "FRRAD"
+  },
+  {
+   "nome": "Lithium Battery Controller",
+   "pede_em": "18dadbf1",
+   "responde_em": "18daf1db",
+   "sessao": "5003",
+   "sigla": "LBC"
+  },
+  {
+   "nome": "Lithium Battery Controller 2",
+   "pede_em": "18dadcf1",
+   "responde_em": "18daf1dc",
+   "sessao": "5003",
+   "sigla": "LBC2"
+  },
+  {
+   "nome": "Meter Cluster",
+   "pede_em": "743",
+   "responde_em": "763",
+   "sessao": "5003",
+   "sigla": "TDB"
+  },
+  {
+   "nome": "Multimedia Interface Unit",
+   "pede_em": "714",
+   "responde_em": "734",
+   "sessao": "5003",
+   "sigla": "MIU"
+  },
+  {
+   "nome": "Navigation-UCC-ITM",
+   "pede_em": "747",
+   "responde_em": "767",
+   "sessao": "5003",
+   "sigla": "Navigation-UCC-ITM"
+  },
+  {
+   "nome": "Parking Sonar",
+   "pede_em": "74e",
+   "responde_em": "76e",
+   "sessao": "5003",
+   "sigla": "Parking-Sonar"
+  },
+  {
+   "nome": "Power Line connection/ Power Line Gateway",
+   "pede_em": "7d8",
+   "responde_em": "7c8",
+   "sessao": "5003",
+   "sigla": "PLC-PLGW"
+  },
+  {
+   "nome": "Security Gateway",
+   "pede_em": "18dad2f1",
+   "responde_em": "18daf1d2",
+   "sessao": "5003",
+   "sigla": "S-GW3"
+  },
+  {
+   "nome": "U Safety Module",
+   "pede_em": "74d",
+   "responde_em": "76d",
+   "sessao": "50c0",
+   "sigla": "USM"
+  },
+  {
+   "nome": "Vehicle Controle Module",
+   "pede_em": "18dadaf1",
+   "responde_em": "18daf1da",
+   "sessao": "5003",
+   "sigla": "EVC-HCM-VCM"
+  },
+  {
+   "nome": "Vehicle Sound for Pedestrians",
+   "pede_em": "73f",
+   "responde_em": "761",
+   "sessao": "50c0",
+   "sigla": "VSP"
+  },
+  {
+   "nome": "Wireless Charger Smartphone",
+   "pede_em": "7aa",
+   "responde_em": "7ad",
+   "sessao": "5003",
+   "sigla": "WCGS"
+  },
+  {
+   "nome": "VirtualField computer",
+   "pede_em": "800",
+   "responde_em": "800",
+   "sessao": "50c0",
+   "sigla": "VFC"
+  },
+  {
+   "nome": "Free fields",
+   "pede_em": "801",
+   "responde_em": "801",
+   "sessao": "50c0",
+   "sigla": "FFC"
+  }
+ ]
+}

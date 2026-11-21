@@ -1,0 +1,34 @@
+{
+ "confirmedDTC": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "pendingDTC": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "testFailed": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "testFailedSinceLastClear": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "testFailedThisMonitoringCycle": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "testNotCompletedSinceLastClear": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "testNotCompletedThisMonitoringCycle": {
+  "nao": "No",
+  "sim": "Yes"
+ },
+ "warningIndicatorRequested": {
+  "nao": "No",
+  "sim": "Yes"
+ }
+}

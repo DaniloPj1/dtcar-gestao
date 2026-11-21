@@ -365,3 +365,163 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .apg-avisos { margin: 8px 0 10px; padding-left: 18px; color: #4a515a; font-size: 13.5px; line-height: 1.45 }
 .apg-avisos li { margin-bottom: 4px }
 #obd-apagar-cx .campo { margin-top: 2px }
+
+/* ---------------- família do diagnóstico (20/11/2026) ----------------
+ * O diagnóstico virou família de telas, então o Início passou a separar por grupo e as telas
+ * novas trouxeram quatro peças: a barra do adaptador quando ele já está ligado, o registro de
+ * passos de um teste, a linha de falha com a causa elétrica e a linha do código do bico.
+ * Tudo aqui é do app (celular). Nada neste arquivo é usado pelas telas do PC. */
+
+/* grupos de botões no Início */
+.grupo{display:flex;flex-direction:column;gap:10px}
+.grupo+.grupo{margin-top:6px}
+.grupo-t{margin:10px 6px 0;font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--cinza-nota)}
+
+/* adaptador já ligado: uma linha, para não repetir o cartão inteiro em cada tela */
+.diag-ligado{display:flex;align-items:center;flex-wrap:wrap;gap:4px;padding:8px 12px;margin-bottom:10px;
+  border:1.5px solid #cfd5dd;border-left:4px solid #1f7a3a;border-radius:10px;background:#fff;font-size:13px}
+.diag-ligado b{font-weight:600}
+
+/* registro de passos de um teste ou rotina: o mecânico acompanha o que está acontecendo */
+.passo{padding:7px 10px;margin-top:6px;border-radius:8px;background:#f2f4f7;font-size:13px;line-height:1.35}
+.passo.bom{background:#e8f3ea;border-left:3px solid #1f7a3a}
+.passo.ruim{background:#f6e9e9;border-left:3px solid #8a2d2d;font-weight:600}
+
+/* falha de um módulo, com a causa elétrica que vem do tipo de falha */
+.diag-falha{padding:9px 0;border-bottom:1px solid #e7eaee}
+.diag-falha:last-child{border-bottom:0}
+.diag-falha-topo{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.diag-falha-topo b{font-size:16px;font-weight:700;color:var(--azul)}
+.diag-falha-causa{margin-top:2px;font-size:14px;font-weight:600}
+
+/* código do bico: um por cilindro, com a conferência de digitação na hora */
+.bico-linha{padding:10px 0;border-bottom:1px solid #e7eaee}
+.bico-linha:last-child{border-bottom:0}
+.bico-marca{display:flex;align-items:center;gap:8px;font-size:14px;margin-bottom:6px}
+.bico-marca input{width:22px;height:22px;flex-shrink:0}
+.bico-cod{width:100%;min-height:48px;padding:10px 12px;border:1.5px solid #9aa1ab;border-radius:10px;
+  background:#fff;color:var(--tinta);font:inherit;font-size:18px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.bico-cod.bom{border-color:#1f7a3a}
+.bico-cod.ruim{border-color:#8a2d2d}
+
+/* ---- explicação do código de falha (app/diagpartes.js) ---- */
+.fx{margin:4px 0 2px;font-size:14px;line-height:1.35}
+.fx-desc{font-weight:600;color:var(--preto,#16191d)}
+.fx-pecas{margin-top:2px;color:#4a5560}
+.fx-t{margin-top:8px;font-size:13.5px;font-weight:800;color:var(--tinta)}
+.fx-causas ul{margin:3px 0 0;padding:0;list-style:none}
+.fx-causas li{position:relative;padding:3px 0 3px 14px}
+.fx-causas li::before{content:"";position:absolute;left:2px;top:11px;width:5px;height:5px;background:var(--azul,#174f94)}
+.fx-causas li.sub{padding-left:28px;color:#333b44}
+.fx-causas li.sub::before{left:16px;width:5px;height:1px;top:13px;background:#8a949e}
+.fx-mais{margin-top:6px;padding:8px 0;border:0;background:none;font:inherit;font-weight:700;color:var(--azul,#174f94);text-decoration:underline;min-height:40px;cursor:pointer}
+.fx-sec{margin-top:4px}
+.fx-en{display:inline-block;padding:0 5px;border:1px solid #b9c1ca;font-size:11px;font-weight:600;color:#5b6672;white-space:nowrap}
+.fx-origem{margin-top:8px;font-size:12.5px;color:#5b6672}
+.obd-dtc-bloco{padding:8px 0;border-bottom:1px solid #e7eaee}
+.obd-dtc-bloco:last-child{border-bottom:0}
+.obd-dtc-bloco .obd-dtc{padding:0;border:0}
+
+/* ---- dados ao vivo: DIGITAL e GRÁFICO ---- */
+.obd-filtro button{min-width:0;padding:0 2px;white-space:nowrap}
+.digitais{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.digital{border:1.5px solid var(--azul-suave);border-radius:10px;background:#fff;padding:8px 8px 10px;min-width:0}
+.digital-rot{font-size:11px;font-weight:700;line-height:1.15;color:var(--cinza-texto);text-transform:uppercase;letter-spacing:.02em;min-height:26px}
+.digital-num{display:flex;align-items:baseline;gap:4px;color:var(--tinta)}
+.digital-num b{font-size:34px;font-weight:800;line-height:1;font-variant-numeric:tabular-nums}
+.digital-num span{font-size:13px;font-weight:700;color:var(--cinza-nota)}
+.graf-escolha{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.graf-escolha button{min-height:40px;padding:0 10px;border:1.5px solid #b9c1ca;border-radius:9px;background:#fff;color:var(--tinta);font:inherit;font-size:12.5px;font-weight:700}
+.graf-escolha button.esc{border-color:var(--azul);background:var(--azul);color:#fff}
+.graf-cheio{font-weight:700;color:var(--tinta)}
+.graf-faixa{margin-top:10px;padding-top:8px;border-top:1px solid var(--cinza-linha)}
+.graf-leg{display:flex;align-items:center;gap:6px;padding:1px 0}
+.graf-amostra{width:26px;height:8px;flex-shrink:0}
+.graf-leg .graf-rot{flex:1;min-width:0}
+.graf-rot{font-size:12.5px;font-weight:700;color:var(--cinza-texto);text-transform:uppercase;letter-spacing:.02em}
+.graf-num{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+.graf-num span{margin-left:3px;font-size:12px;font-weight:700;color:var(--cinza-nota)}
+.graf-corpo{display:flex;gap:6px;margin-top:4px}
+.graf-esc{display:flex;flex-direction:column;justify-content:space-between;min-width:38px;text-align:right;font-size:10.5px;font-weight:700;color:#6b747e;font-variant-numeric:tabular-nums}
+.graf-corpo svg{flex:1;min-width:0;height:96px;background:#f6f7f9;border:1px solid #dfe3e8}
+.graf-meio{stroke:#dfe3e8;stroke-width:1;vector-effect:non-scaling-stroke}
+.graf-linha{fill:none;stroke-width:2;vector-effect:non-scaling-stroke;stroke-linejoin:round}
+
+/* ---- leituras separadas por módulo ---- */
+.obd-mod{margin-top:10px;padding-top:2px;border-top:2px solid var(--tinta)}
+.obd-mod:first-child{margin-top:0}
+.obd-mod-t{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin:6px 0 2px;font-size:15px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;color:var(--tinta)}
+.obd-mod-t span{font-size:12px;font-weight:700;letter-spacing:0;text-transform:none;color:var(--cinza-nota)}
+.carro-vez{margin:0 0 10px;padding:9px 11px;border-left:4px solid var(--azul);background:#fff}
+.carro-vez b{display:block;font-size:15px;font-weight:800;color:var(--tinta)}
+.carro-vez span{display:block;margin-top:2px;font-size:12.5px;color:var(--cinza-nota)}
+.rodas{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:8px 0 2px}
+.roda{border:1.5px solid var(--azul-suave);border-radius:10px;background:#fff;padding:7px 9px}
+.roda span{display:block;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.02em;color:var(--cinza-texto)}
+.roda b{font-size:28px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;color:var(--tinta)}
+.roda i{margin-left:4px;font-style:normal;font-size:12px;font-weight:700;color:var(--cinza-nota)}
+.mapeando{margin:0 0 10px;padding:8px 11px;border:1px dashed #9aa4ae;background:#f6f7f9}
+.mapeando b{display:block;font-size:13px;font-weight:800;color:var(--tinta)}
+.mapeando span{display:block;margin-top:2px;font-size:12.5px;color:var(--cinza-nota)}
+.conf-item{display:flex;gap:8px;align-items:flex-start;padding:6px 0;border-bottom:1px solid #e7eaee}
+.conf-item:last-child{border-bottom:0}
+.conf-item .selo{flex-shrink:0;min-width:86px;text-align:center}
+.conf-item div{font-size:14px;line-height:1.3}
+.conf-frase{margin:2px 0 6px;font-size:14px;font-weight:700}
+.laudo-titulo{font-size:15px;font-weight:800;letter-spacing:.03em;color:var(--tinta)}
+.laudo-sub{margin-top:10px;padding-bottom:2px;border-bottom:1px solid var(--tinta);font-size:12px;font-weight:800;letter-spacing:.05em;color:var(--tinta)}
+.laudo-linha{padding:2px 0;font-size:14px;line-height:1.35;white-space:pre-wrap}
+.laudo-nota{margin-top:8px;font-size:12.5px;color:var(--cinza-nota)}
+.laudo-selo{margin:10px 0 4px;padding:7px 9px;border:1.5px solid var(--tinta);font-size:13px;font-variant-numeric:tabular-nums;word-break:break-all}
+.fx-nota-fontes{margin-top:10px;padding-top:8px;border-top:1px solid #e7eaee;font-size:12.5px;line-height:1.35;color:#5b6672}
+.graf-escolha .graf-abrir{border-style:dashed;border-color:var(--azul);color:var(--azul);background:#fff}
+.diag-falha-tipo{margin-top:1px;font-size:13px;color:#4a5560}
+
+/* ---- UMA TELA POR VEZ (pedido do Danilo, 21/11/2026): com uma leitura aberta, só ela fica na tela ---- */
+.obd-foco > *{display:none}
+.obd-foco > .foco-voltar,.obd-foco > .carregando,.obd-foco > .erro,.obd-foco > [id^="obd-r-"],.obd-foco > #obd-apagar-cx,.obd-foco > #obd-apagar-feito{display:block}
+.obd-foco[data-vista="vivo"] > #obd-escolha,.obd-foco[data-vista="combustivel"] > #obd-escolha,.obd-foco[data-vista="vivo"] > #obd-comparado,.obd-foco[data-vista="combustivel"] > #obd-comparado{display:block}
+.obd-foco.obd-so-grafico > #obd-escolha,.obd-foco.obd-so-grafico > #obd-comparado,.obd-foco.obd-so-grafico .obd-vivo-topo{display:none}
+.foco-voltar{width:100%;min-height:42px;margin:0 0 6px;padding:0 4px;border:0;background:none;text-align:left;font:inherit;font-size:15px;font-weight:800;color:var(--azul)}
+/* o menu de leituras vira uma tira de abas, de rolar para o lado */
+.obd-foco > #obd-acoes,.obd-foco > #obd-avancado{display:block;margin:0 0 6px;padding:0;border:0;border-radius:0;background:none;box-shadow:none;overflow:visible}
+.obd-foco > #obd-acoes > h2,.obd-foco > #obd-avancado > h2,.obd-foco > #obd-acoes .nota,.obd-foco > #obd-avancado .nota{display:none}
+.obd-foco > #obd-acoes > h2 + div,.obd-foco > #obd-avancado > h2 + div{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding:0 0 4px;scrollbar-width:none}
+.obd-foco > #obd-acoes .btn-barra,.obd-foco > #obd-avancado .btn-barra{flex:0 0 auto;width:auto;min-height:40px;height:40px;margin:0;padding:0 12px;font-size:12px;white-space:nowrap;border:1.5px solid var(--azul);background:#fff;color:var(--azul)}
+.obd-foco > #obd-acoes .btn-barra svg,.obd-foco > #obd-avancado .btn-barra svg{display:none}
+.obd-foco > #obd-acoes .btn-barra.alerta{border-color:#b3261e;color:#b3261e}
+.obd-foco[data-vista="falhas"] #obd-falhas,.obd-foco[data-vista="vivo"] #obd-vivo,.obd-foco[data-vista="combustivel"] #obd-combustivel,.obd-foco[data-vista="foto"] #obd-foto,.obd-foco[data-vista="cilindros"] #obd-cilindros,.obd-foco[data-vista="testes"] #obd-testes,.obd-foco[data-vista="conf"] #obd-conf,.obd-foco[data-vista="laudo"] #obd-laudo,.obd-foco[data-vista="calib"] #obd-calib,.obd-foco[data-vista="ciclo"] #obd-ciclo,.obd-foco[data-vista="contadores"] #obd-contadores,.obd-foco[data-vista="apagar"] #obd-apagar{background:var(--azul);color:#fff}
+.mod-foco > *{display:none}
+.mod-foco > #mod-escolhido,.mod-foco > .carregando,.mod-foco > .erro,.mod-foco[data-vista="falhas"] > #mod-falhas,.mod-foco[data-vista="epti"] > #mod-epti,.mod-foco[data-vista="leituras"] > #mod-leituras{display:block}
+.mod-foco > #mod-escolhido .kv{display:none}
+.mod-foco > #mod-escolhido > h2 + div{display:flex;flex-direction:row;flex-wrap:nowrap;gap:6px;overflow-x:auto;padding:8px;scrollbar-width:none}
+.mod-foco > #mod-escolhido .btn-barra{flex:0 0 auto;width:auto;min-height:40px;height:40px;margin:0;padding:0 12px;font-size:12px;white-space:nowrap}
+.mod-foco > #mod-escolhido .btn-barra svg{display:none}
+
+/* ---- faixa de trabalho: só os dois números, onde não há barra nem ponteiro ---- */
+.faixa-txt{margin-top:2px;font-size:12px;font-weight:700;color:#4a5560;font-variant-numeric:tabular-nums}
+.graf-leg{flex-wrap:wrap}
+.graf-leg .faixa-txt{flex-basis:100%;margin:0 0 2px 32px}
+
+/* ---- barra com as três zonas: antes da faixa, faixa de trabalho, depois da faixa ---- */
+.barra-zonas{margin-top:7px}
+.barra-zonas-trilho{position:relative;display:flex;height:12px;border-radius:2px}
+.barra-zonas .zona{display:block;height:100%}
+.barra-zonas .zona.antes{background:#c3cad2;border-radius:2px 0 0 2px}
+.barra-zonas .zona.trabalho{background:var(--azul)}
+.barra-zonas .zona.depois{background:#b3261e;border-radius:0 2px 2px 0}
+.barra-zonas .agulha{position:absolute;top:-4px;bottom:-4px;width:4px;margin-left:-2px;background:#fff;border:1.5px solid var(--tinta);border-radius:2px;transition:left .25s linear}
+.barra-zonas-pes{position:relative;height:15px;font-size:11px;font-weight:700;color:#4a5560;font-variant-numeric:tabular-nums}
+.barra-zonas-pes span{position:absolute;top:2px;white-space:nowrap}
+.barra-zonas-pes .pe-de{transform:translateX(-100%);padding-right:3px}
+.barra-zonas-pes .pe-ate{padding-left:3px}
+.mostrador-arco .zona{stroke-linecap:butt}
+.mostrador-arco .zona.antes{stroke:#c3cad2}
+.mostrador-arco .zona.trabalho{stroke:var(--azul)}
+.mostrador-arco .zona.depois{stroke:#b3261e}
+.mostrador-arco .agulha{stroke:#fff;stroke-width:13;stroke-linecap:butt;paint-order:stroke;filter:drop-shadow(0 0 0.8px #16191d) drop-shadow(0 0 0.8px #16191d);transition:stroke-dashoffset .25s linear}
+@media (prefers-reduced-motion: reduce){.barra-zonas .agulha,.mostrador-arco .agulha{transition:none}}
+/* acima do limite em vermelho (pedido do Danilo, 21/11/2026): a zona e o número de agora */
+[data-situacao="acima"] .linha-viva-num,[data-situacao="acima"] .mostrador-num b,.digital-num.acima b{color:#b3261e}
+.mostrador-pes.faixa{display:block;text-align:center;font-weight:700;color:#4a5560}
+.mostrador-num.longo b{font-size:17px}

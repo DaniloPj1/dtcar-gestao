@@ -1,0 +1,816 @@
+[
+ {
+  "nome": "LL_ParkiAssis2UDS",
+  "pede_em": [
+   "70A"
+  ],
+  "responde_em": [
+   "774"
+  ]
+ },
+ {
+  "nome": "LL_HighBeamAssisUDS",
+  "pede_em": [
+   "730",
+   "748"
+  ],
+  "responde_em": [
+   "79A",
+   "7B2"
+  ]
+ },
+ {
+  "nome": "LL_SpeciFunct2UDS",
+  "pede_em": [
+   "72B"
+  ],
+  "responde_em": [
+   "795"
+  ]
+ },
+ {
+  "nome": "LL_EnginContrModul1UDS",
+  "pede_em": [
+   "7E0"
+  ],
+  "responde_em": [
+   "7E8"
+  ]
+ },
+ {
+  "nome": "LL_EnginContrModul2UDS",
+  "pede_em": [
+   "7E2"
+  ],
+  "responde_em": [
+   "7EA"
+  ]
+ },
+ {
+  "nome": "LL_TransContrModulUDS",
+  "pede_em": [
+   "7E1"
+  ],
+  "responde_em": [
+   "7E9"
+  ]
+ },
+ {
+  "nome": "LL_AllWheelContrUDS",
+  "pede_em": [
+   "70F",
+   "71D"
+  ],
+  "responde_em": [
+   "779",
+   "787"
+  ]
+ },
+ {
+  "nome": "LL_LockElectUDS",
+  "pede_em": [
+   "71E"
+  ],
+  "responde_em": [
+   "788"
+  ]
+ },
+ {
+  "nome": "LL_Brake1UDS",
+  "pede_em": [
+   "713"
+  ],
+  "responde_em": [
+   "77D"
+  ]
+ },
+ {
+  "nome": "LL_AdaptCruisContrUDS",
+  "pede_em": [
+   "757"
+  ],
+  "responde_em": [
+   "7C1"
+  ]
+ },
+ {
+  "nome": "LL_SteerAngleSendeUDS",
+  "pede_em": [
+   "751"
+  ],
+  "responde_em": [
+   "7BB"
+  ]
+ },
+ {
+  "nome": "LL_WheelDampeElectUDS",
+  "pede_em": [
+   "772"
+  ],
+  "responde_em": [
+   "7DC"
+  ]
+ },
+ {
+  "nome": "LL_RideContrSysteUDS",
+  "pede_em": [
+   "755"
+  ],
+  "responde_em": [
+   "7BF"
+  ]
+ },
+ {
+  "nome": "LL_KessyUDS",
+  "pede_em": [
+   "732"
+  ],
+  "responde_em": [
+   "79C"
+  ]
+ },
+ {
+  "nome": "LL_AirbaUDS",
+  "pede_em": [
+   "715"
+  ],
+  "responde_em": [
+   "77F"
+  ]
+ },
+ {
+  "nome": "LL_ImmobUDS",
+  "pede_em": [
+   "711"
+  ],
+  "responde_em": [
+   "77B"
+  ]
+ },
+ {
+  "nome": "LL_SeatAdjusPasseSideUDS",
+  "pede_em": [
+   "74D"
+  ],
+  "responde_em": [
+   "7B7"
+  ]
+ },
+ {
+  "nome": "LL_SteerColumElectUDS",
+  "pede_em": [
+   "70C"
+  ],
+  "responde_em": [
+   "776"
+  ]
+ },
+ {
+  "nome": "LL_ElectRoofContrUDS",
+  "pede_em": [
+   "72D"
+  ],
+  "responde_em": [
+   "797"
+  ]
+ },
+ {
+  "nome": "LL_DashBoardUDS",
+  "pede_em": [
+   "714"
+  ],
+  "responde_em": [
+   "77E"
+  ]
+ },
+ {
+  "nome": "LL_AirCondiUDS",
+  "pede_em": [
+   "746"
+  ],
+  "responde_em": [
+   "7B0"
+  ]
+ },
+ {
+  "nome": "LL_AuxilParkiHeateUDS",
+  "pede_em": [
+   "76A"
+  ],
+  "responde_em": [
+   "7D4"
+  ]
+ },
+ {
+  "nome": "LL_ClimaContrUnitRearUDS",
+  "pede_em": [
+   "71A"
+  ],
+  "responde_em": [
+   "784"
+  ]
+ },
+ {
+  "nome": "LL_CentrElectUDS",
+  "pede_em": [
+   "70E"
+  ],
+  "responde_em": [
+   "778"
+  ]
+ },
+ {
+  "nome": "LL_GatewUDS",
+  "pede_em": [
+   "710"
+  ],
+  "responde_em": [
+   "77A"
+  ]
+ },
+ {
+  "nome": "LL_ActivSteerUDS",
+  "pede_em": [
+   "716"
+  ],
+  "responde_em": [
+   "780"
+  ]
+ },
+ {
+  "nome": "LL_SteerColumLockiUDS",
+  "pede_em": [
+   "731"
+  ],
+  "responde_em": [
+   "79B"
+  ]
+ },
+ {
+  "nome": "LL_VehicPositDetecUDS",
+  "pede_em": [
+   "750"
+  ],
+  "responde_em": [
+   "7BA"
+  ]
+ },
+ {
+  "nome": "LL_SlidiDoorLeftUDS",
+  "pede_em": [
+   "733"
+  ],
+  "responde_em": [
+   "79D"
+  ]
+ },
+ {
+  "nome": "LL_MediaPlayePosit1UDS",
+  "pede_em": [
+   "770"
+  ],
+  "responde_em": [
+   "7DA"
+  ]
+ },
+ {
+  "nome": "LL_MediaPlayePosit3UDS",
+  "pede_em": [
+   "76E"
+  ],
+  "responde_em": [
+   "7D8"
+  ]
+ },
+ {
+  "nome": "LL_AirCondiComprUDS",
+  "pede_em": [
+   "719"
+  ],
+  "responde_em": [
+   "783"
+  ]
+ },
+ {
+  "nome": "LL_TachoUDS",
+  "pede_em": [
+   "771"
+  ],
+  "responde_em": [
+   "7DB"
+  ]
+ },
+ {
+  "nome": "LL_DriveMotorContrModulUDS",
+  "pede_em": [
+   "7E6"
+  ],
+  "responde_em": [
+   "7EE"
+  ]
+ },
+ {
+  "nome": "LL_BatteRegulUDS",
+  "pede_em": [
+   "728"
+  ],
+  "responde_em": [
+   "792"
+  ]
+ },
+ {
+  "nome": "LL_DoorElectDriveSideUDS",
+  "pede_em": [
+   "74A"
+  ],
+  "responde_em": [
+   "7B4"
+  ]
+ },
+ {
+  "nome": "LL_DoorElectPasseSideUDS",
+  "pede_em": [
+   "74B"
+  ],
+  "responde_em": [
+   "7B5"
+  ]
+ },
+ {
+  "nome": "LL_ParkiBrakeUDS",
+  "pede_em": [
+   "752"
+  ],
+  "responde_em": [
+   "7BC"
+  ]
+ },
+ {
+  "nome": "LL_SteerAssisUDS",
+  "pede_em": [
+   "712"
+  ],
+  "responde_em": [
+   "77C"
+  ]
+ },
+ {
+  "nome": "LL_HeadlRegulUDS",
+  "pede_em": [
+   "754"
+  ],
+  "responde_em": [
+   "7BE"
+  ]
+ },
+ {
+  "nome": "LL_TirePressMonit1UDS",
+  "pede_em": [
+   "70B"
+  ],
+  "responde_em": [
+   "775"
+  ]
+ },
+ {
+  "nome": "LL_SeatAdjusDriveSideUDS",
+  "pede_em": [
+   "74C"
+  ],
+  "responde_em": [
+   "7B6"
+  ]
+ },
+ {
+  "nome": "LL_CentrModulComfoSysteUDS",
+  "pede_em": [
+   "70D"
+  ],
+  "responde_em": [
+   "777"
+  ]
+ },
+ {
+  "nome": "LL_RadioUDS",
+  "pede_em": [
+   "718"
+  ],
+  "responde_em": [
+   "782"
+  ]
+ },
+ {
+  "nome": "LL_NavigUDS",
+  "pede_em": [
+   "76C"
+  ],
+  "responde_em": [
+   "7D6"
+  ]
+ },
+ {
+  "nome": "LL_SoundSysteUDS",
+  "pede_em": [
+   "76F"
+  ],
+  "responde_em": [
+   "7D9"
+  ]
+ },
+ {
+  "nome": "LL_TVTunerUDS",
+  "pede_em": [
+   "76D"
+  ],
+  "responde_em": [
+   "7D7"
+  ]
+ },
+ {
+  "nome": "LL_TrailFunctUDS",
+  "pede_em": [
+   "747"
+  ],
+  "responde_em": [
+   "7B1"
+  ]
+ },
+ {
+  "nome": "LL_SensoElectUDS",
+  "pede_em": [
+   "721"
+  ],
+  "responde_em": [
+   "78B"
+  ]
+ },
+ {
+  "nome": "LL_LaneChangAssisUDS",
+  "pede_em": [
+   "74E"
+  ],
+  "responde_em": [
+   "7B8"
+  ]
+ },
+ {
+  "nome": "LL_SpeciFunctUDS",
+  "pede_em": [
+   "72C"
+  ],
+  "responde_em": [
+   "796"
+  ]
+ },
+ {
+  "nome": "LL_InforContrUnit1UDS",
+  "pede_em": [
+   "773"
+  ],
+  "responde_em": [
+   "7DD"
+  ]
+ },
+ {
+  "nome": "LL_PreteFrontRightUDS",
+  "pede_em": [
+   "75F"
+  ],
+  "responde_em": [
+   "7C9"
+  ]
+ },
+ {
+  "nome": "LL_BatteChargUDS",
+  "pede_em": [
+   "765"
+  ],
+  "responde_em": [
+   "7CF"
+  ]
+ },
+ {
+  "nome": "LL_GearShiftContrModulUDS",
+  "pede_em": [
+   "753"
+  ],
+  "responde_em": [
+   "7BD"
+  ]
+ },
+ {
+  "nome": "LL_HeadUpDisplUDS",
+  "pede_em": [
+   "71B"
+  ],
+  "responde_em": [
+   "785"
+  ]
+ },
+ {
+  "nome": "LL_NightVisioUDS",
+  "pede_em": [
+   "727"
+  ],
+  "responde_em": [
+   "791"
+  ]
+ },
+ {
+  "nome": "LL_ArmreUDS",
+  "pede_em": [
+   "739"
+  ],
+  "responde_em": [
+   "7A3"
+  ]
+ },
+ {
+  "nome": "LL_TelemUDS",
+  "pede_em": [
+   "767"
+  ],
+  "responde_em": [
+   "7D1"
+  ]
+ },
+ {
+  "nome": "LL_OnBoardCamerUDS",
+  "pede_em": [
+   "726"
+  ],
+  "responde_em": [
+   "790"
+  ]
+ },
+ {
+  "nome": "LL_ParkiAssisUDS",
+  "pede_em": [
+   "70A"
+  ],
+  "responde_em": [
+   "774"
+  ]
+ },
+ {
+  "nome": "LL_TelepUDS",
+  "pede_em": [
+   "76B"
+  ],
+  "responde_em": [
+   "7D5"
+  ]
+ },
+ {
+  "nome": "LL_SlidiDoorRightUDS",
+  "pede_em": [
+   "734"
+  ],
+  "responde_em": [
+   "79E"
+  ]
+ },
+ {
+  "nome": "LL_MultiContoSeatDriveSideUDS",
+  "pede_em": [
+   "735"
+  ],
+  "responde_em": [
+   "79F"
+  ]
+ },
+ {
+  "nome": "LL_MultiContoSeatPasseSideUDS",
+  "pede_em": [
+   "736"
+  ],
+  "responde_em": [
+   "7A0"
+  ]
+ },
+ {
+  "nome": "LL_MultiContoSeatRearDriveSideUDS",
+  "pede_em": [
+   "737"
+  ],
+  "responde_em": [
+   "7A1"
+  ]
+ },
+ {
+  "nome": "LL_AdaptCruisContr2UDS",
+  "pede_em": [
+   "756"
+  ],
+  "responde_em": [
+   "7C0"
+  ]
+ },
+ {
+  "nome": "LL_CamerSysteRearViewUDS",
+  "pede_em": [
+   "769"
+  ],
+  "responde_em": [
+   "7D3"
+  ]
+ },
+ {
+  "nome": "LL_BatteEnergContrModulUDS",
+  "pede_em": [
+   "7E5"
+  ],
+  "responde_em": [
+   "7ED"
+  ]
+ },
+ {
+  "nome": "LL_DeckLidContrUnitUDS",
+  "pede_em": [
+   "723"
+  ],
+  "responde_em": [
+   "78D"
+  ]
+ },
+ {
+  "nome": "LL_MultiContoSeatRearPasseSideUDS",
+  "pede_em": [
+   "738"
+  ],
+  "responde_em": [
+   "7A2"
+  ]
+ },
+ {
+  "nome": "LL_DashBoardDisplUnitUDS",
+  "pede_em": [
+   "716"
+  ],
+  "responde_em": [
+   "780"
+  ]
+ },
+ {
+  "nome": "LL_ImageProceElectUDS",
+  "pede_em": [
+   "758"
+  ],
+  "responde_em": [
+   "7C2"
+  ]
+ },
+ {
+  "nome": "LL_CentrModulComfoSyste2UDS",
+  "pede_em": [
+   "745"
+  ],
+  "responde_em": [
+   "7AF"
+  ]
+ },
+ {
+  "nome": "LL_PreteFrontLeftUDS",
+  "pede_em": [
+   "75E"
+  ],
+  "responde_em": [
+   "7C8"
+  ]
+ },
+ {
+  "nome": "LL_FrontSensoDriveAssisSysteUDS",
+  "pede_em": [
+   "74F"
+  ],
+  "responde_em": [
+   "7B9"
+  ]
+ },
+ {
+  "nome": "LL_MicroContrUnitUDS",
+  "pede_em": [
+   "763"
+  ],
+  "responde_em": [
+   "7CD"
+  ]
+ },
+ {
+  "nome": "LL_InfotInterUDS",
+  "pede_em": [
+   "749"
+  ],
+  "responde_em": [
+   "7B3"
+  ]
+ },
+ {
+  "nome": "LL_AccesStartInterUDS",
+  "pede_em": [
+   "732"
+  ],
+  "responde_em": [
+   "79C"
+  ]
+ },
+ {
+  "nome": "LL_ExterCommuInterUDS",
+  "pede_em": [
+   "76B"
+  ],
+  "responde_em": [
+   "7D5"
+  ]
+ },
+ {
+  "nome": "LL_ElectRoofContr2UDS",
+  "pede_em": [
+   "73D"
+  ],
+  "responde_em": [
+   "7A7"
+  ]
+ },
+ {
+  "nome": "LL_ActuaForStrucBorneSoundUDS",
+  "pede_em": [
+   "71C"
+  ],
+  "responde_em": [
+   "786"
+  ]
+ },
+ {
+  "nome": "LL_AuxilDisplContrUnitUDS",
+  "pede_em": [
+   "73C"
+  ],
+  "responde_em": [
+   "7A6"
+  ]
+ },
+ {
+  "nome": "LL_WheelBrakeRearRightUDS",
+  "pede_em": [
+   "720"
+  ],
+  "responde_em": [
+   "78A"
+  ]
+ },
+ {
+  "nome": "LL_AssemMountUDS",
+  "pede_em": [
+   "72E"
+  ],
+  "responde_em": [
+   "798"
+  ]
+ },
+ {
+  "nome": "LL_WheelBrakeRearLeftUDS",
+  "pede_em": [
+   "71F"
+  ],
+  "responde_em": [
+   "789"
+  ]
+ },
+ {
+  "nome": "LL_DoorElectRearDriveSideUDS",
+  "pede_em": [
+   "73E"
+  ],
+  "responde_em": [
+   "7A8"
+  ]
+ },
+ {
+  "nome": "LL_ReducContrModulUDS",
+  "pede_em": [
+   "72A"
+  ],
+  "responde_em": [
+   "794"
+  ]
+ },
+ {
+  "nome": "LL_DoorElectRearPasseSideUDS",
+  "pede_em": [
+   "73F"
+  ],
+  "responde_em": [
+   "7A9"
+  ]
+ },
+ {
+  "nome": "LL_SensoBrakeSysteUDS",
+  "pede_em": [
+   "762"
+  ],
+  "responde_em": [
+   "7CC"
+  ]
+ }
+]

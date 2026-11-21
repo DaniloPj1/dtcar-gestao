@@ -687,6 +687,7 @@ try:
         t(pg.locator('#obd-r-falhas').is_visible() and not pg.locator('#obd-placa').is_visible() and not pg.locator('#obd-adaptador').is_visible(), 'com as falhas abertas, a placa e o adaptador saem da frente')
         t(pg.locator('#obd-vivo').is_visible() and pg.locator('#obd-voltar-menu').is_visible(), 'o menu de leituras vira a tira de abas no alto, com o voltar')
         pg.evaluate('window.scrollTo(0, 0)'); pg.wait_for_timeout(200); pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'foco-falhas-celular.png'))
+        cx = pg.locator('#obd-r-falhas').bounding_box(); t(cx and cx['y'] < 420, 'com a tira de abas, as falhas começam no alto da tela, sem rolar: y=%s' % (cx and round(cx['y'])))
         pg.click('#obd-voltar-menu'); pg.wait_for_timeout(300)
         t(not pg.query_selector('#obd-r-falhas') and pg.locator('#obd-adaptador').is_visible(), 'voltar traz o menu inteiro de novo')
         pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=15000)

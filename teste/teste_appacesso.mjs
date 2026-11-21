@@ -26,8 +26,8 @@ chk("os nomes dizem o que a tela FAZ no carro",
 /* ---------------- as permissões do que age no carro ---------------- */
 chk("quatro permissões", PERMISSOES_OBD.length === 4);
 chk("cada uma tem marca, nome, tela e aviso", PERMISSOES_OBD.every(p => p.length === 4 && p.every(x => x && x.length)));
-chk("cada uma aponta para uma tela que existe",
-  PERMISSOES_OBD.every(([, , tela]) => TELAS_APP.some(t => t[0] === tela)));
+chk("cada uma aponta para tela(s) que existem",
+  PERMISSOES_OBD.every(([, , tela]) => (Array.isArray(tela) ? tela : [tela]).every(x => TELAS_APP.some(t => t[0] === x))));
 chk("o aviso explica a consequência, não só o nome",
   PERMISSOES_OBD.every(([, , , aviso]) => aviso.length > 25));
 
@@ -57,11 +57,18 @@ chk("marca de atuar SEM a tela de atuadores não vale",
   !podeAtuarObd({ appAcessos: { m1: { entra: true, telas: ["obd"], obd_atuar: true } } }, mec));
 chk("marca de gravar SEM a tela do bico não vale",
   !podeGravarObd({ appAcessos: { m1: { entra: true, telas: ["obd", "atuadores"], obd_gravar: true } } }, mec));
-chk("marca de apagar SEM a tela do OBD não vale",
-  !podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["parametros"], obd_apagar: true } } }, mec));
-chk("cada permissão exige exatamente a tela dela", PERMISSOES_OBD.every(([marca, , tela]) =>
-  podeNoObd({ appAcessos: { m1: { entra: true, telas: [tela], [marca]: true } } }, mec, marca, tela)
-  && !podeNoObd({ appAcessos: { m1: { entra: true, telas: ["parametros"], [marca]: true } } }, mec, marca, tela)));
+chk("marca de apagar SEM nenhuma tela que apaga não vale",
+  !podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["parametros", "atuadores"], obd_apagar: true } } }, mec));
+// o apagar vale nas DUAS telas que apagam: a leitura comum e Módulos do carro
+chk("apagar vale com a tela do OBD",
+  podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["obd"], obd_apagar: true } } }, mec));
+chk("apagar vale com a tela de Módulos (é onde apaga por módulo)",
+  podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["modulos"], obd_apagar: true } } }, mec));
+chk("cada permissão exige uma das telas dela", PERMISSOES_OBD.every(([marca, , tela]) => {
+  const quais = Array.isArray(tela) ? tela : [tela];
+  return quais.every(t => podeNoObd({ appAcessos: { m1: { entra: true, telas: [t], [marca]: true } } }, mec, marca, tela))
+    && !podeNoObd({ appAcessos: { m1: { entra: true, telas: ["parametros"], [marca]: true } } }, mec, marca, tela);
+}));
 
 /* ---------------- quem não entra no app não faz nada ---------------- */
 chk("mecânico com entra=false não faz nada, mesmo com marca",

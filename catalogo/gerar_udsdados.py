@@ -159,6 +159,28 @@ SITUACAO = [
 ]
 
 
+def endereco_valido(e):
+    """Diz se é endereço de diagnóstico que dá para usar.
+
+    A fonte traz lixo: entradas com endereço "0" (campo que o projeto de origem deixou em branco) e
+    endereços como 800/801, que não são de diagnóstico. A tela de escolha de módulo lista o que está
+    aqui, então lixo no acervo é lixo na mão do mecânico — ele toca, não responde, e parece defeito
+    do app. Achado da revisão independente de 20/11/2026.
+
+    Vale endereço de 11 bits (3 dígitos hex, de 600 a 7FF, onde moram os de diagnóstico) ou de
+    29 bits (8 dígitos hex).
+    """
+    e = (e or '').strip().upper()
+    if not e or not all(c in '0123456789ABCDEF' for c in e):
+        return False
+    if len(e) == 8:
+        return True
+    if len(e) != 3:
+        return False
+    n = int(e, 16)
+    return 0x600 <= n <= 0x7FF
+
+
 def modulos():
     """Mapa de módulos: endereço de pedido, de resposta e o nome, por família."""
     fam = {}
@@ -168,7 +190,7 @@ def modulos():
         for m in json.load(open(cam, encoding='utf-8')):
             ped = (m.get('pede_em') or [None])[0]
             resp = (m.get('responde_em') or [None])[0]
-            if ped and resp:
+            if endereco_valido(ped) and endereco_valido(resp):
                 vag.append([ped.upper(), resp.upper(), m.get('nome') or ''])
         if vag:
             fam['VAG'] = vag
@@ -177,7 +199,7 @@ def modulos():
         for veic, lista in json.load(open(cam, encoding='utf-8')).items():
             l = [[(m.get('pede_em') or '').upper(), (m.get('responde_em') or '').upper(),
                   m.get('nome') or m.get('sigla') or ''] for m in lista
-                 if m.get('pede_em') and m.get('responde_em')]
+                 if endereco_valido(m.get('pede_em')) and endereco_valido(m.get('responde_em'))]
             if l:
                 fam['RENAULT ' + veic.replace('_', ' ')] = l
     cam = os.path.join(UDS, 'modulos_ovms.json')
@@ -187,7 +209,7 @@ def modulos():
             vistos = {}
             for p in lista:
                 ped, resp = (p.get('pede_em') or '').upper(), (p.get('responde_em') or '').upper()
-                if not ped or not resp or resp == '0' or not all(c in '0123456789ABCDEF' for c in ped):
+                if not endereco_valido(ped) or not endereco_valido(resp):
                     continue
                 vistos.setdefault((ped, resp), p.get('nota') or '')
             if vistos:

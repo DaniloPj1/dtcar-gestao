@@ -67,6 +67,14 @@ chk("e volta igual", deHex("41424344454647") === "ABCDEFG");
 chk("ida e volta de um código de verdade", deHex(paraHex("C2GKLLO")) === "C2GKLLO");
 chk("byte de enfeite no fim não entra no texto", deHex("4142434445464700") === "ABCDEFG");
 chk("hex torto não explode", deHex("ZZZZ") === "" && deHex("") === "" && deHex(null) === "");
+/* paraHex CONFERE antes de virar bytes. Sem isso, um código Delphi de 20 caracteres viraria 40
+   bytes que o plugin nativo aceitaria gravar — risco latente para o dia em que a gravação ligar.
+   Correção da revisão independente de 20/11/2026. */
+chk("código inválido NÃO vira bytes", paraHex("C2GKLL0") === "" && paraHex("ABC") === "");
+chk("código Delphi de 20 caracteres não vira bytes", paraHex("BS011KR4BAGY3926RYWZ") === "");
+chk("AAAAAAA não vira bytes", paraHex("AAAAAAA") === "");
+chk("vazio e nulo não viram bytes", paraHex("") === "" && paraHex(null) === "");
+chk("código válido continua virando bytes", paraHex("C2GKLLO").length === 14);
 
 /* ---------------- famílias: o que se sabe, e só ---------------- */
 chk("EDC15C7 não codifica bico", familiaDe("EDC15C7").codifica === false);

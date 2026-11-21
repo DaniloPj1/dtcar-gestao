@@ -99,7 +99,13 @@ export function validarIma(cru) {
  * (É assim que o campo aparece na adaptação: sete posições de texto.)
  */
 export function paraHex(codigo) {
-  return [...limpar(codigo)].map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")).join("");
+  // CONFERE antes de virar bytes. Sem isto, um código Delphi de 20 caracteres (ou qualquer coisa
+  // digitada) viraria 40 bytes que o plugin nativo aceitaria gravar. Enquanto a gravação não está
+  // ligada o risco é latente, mas é justamente o tipo de coisa que passa batido quando a etapa
+  // seguinte liga o botão. Achado da revisão independente de 20/11/2026.
+  const v = validarIma(codigo);
+  if (!v.ok) return "";
+  return [...v.codigo].map(c => c.charCodeAt(0).toString(16).toUpperCase().padStart(2, "0")).join("");
 }
 /** O caminho de volta, para mostrar o que já está gravado na ECU. */
 export function deHex(hex) {

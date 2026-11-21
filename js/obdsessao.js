@@ -28,6 +28,7 @@ export const FAMILIA = ["obd", "modulos", "atuadores", "aprendizados", "bico", "
 export const naFamilia = rota => FAMILIA.includes(rota);
 
 const estadoInicial = () => ({
+  acaoCorrendo: false,
   ligado: false,
   ligando: false,
   aparelho: null,          // { nome, endereco }
@@ -42,7 +43,10 @@ const estadoInicial = () => ({
 
 let st = estadoInicial();
 const ouvintes = new Set();
-const avisar = () => { for (const f of [...ouvintes]) { try { f(st); } catch (e) { /* tela já saiu */ } } };
+const avisar = () => {
+  st = { ...st, acaoCorrendo: emAcao > 0 };
+  for (const f of [...ouvintes]) { try { f(st); } catch (e) { /* tela já saiu */ } }
+};
 const mexer = p => { st = { ...st, ...p }; avisar(); };
 
 /** A tela assina e recebe o estado a cada mudança. Devolve a função de cancelar. */
@@ -72,7 +76,40 @@ export async function ligar({ endereco, nome } = {}) {
   return st;
 }
 
+/**
+ * Quantas ações que AGEM no carro estão correndo agora.
+ *
+ * Existe por um defeito que a revisão independente de 20/11/2026 apontou e que podia QUEIMAR PEÇA:
+ * o teste de atuador mantém a saída acionada repetindo o comando, e desfaz isso devolvendo o
+ * controle ao módulo no fim. Se a conexão caísse no meio — trocar de tela, sair da família, tocar
+ * em "trocar de módulo" — a devolução falhava e a saída ficava presa no comando do aparelho.
+ *
+ * Com este contador, desligar e soltar o módulo ficam BLOQUEADOS enquanto uma ação corre, e a saída
+ * da tela não derruba a conexão. É trava, não sugestão: quem acionou é quem devolve.
+ */
+let emAcao = 0;
+export const temAcaoCorrendo = () => emAcao > 0;
+
+/**
+ * Envolve uma ação que age no carro: pega a vez, para a leitura de fundo, trava o desligamento
+ * enquanto corre e devolve tudo no fim, aconteça o que acontecer.
+ */
+export async function comAcao(quem, tarefa) {
+  if (st.dono && st.dono !== quem) {
+    return { ok: false, ocupado: st.dono, texto: "O adaptador está ocupado com " + st.dono + ". Espere terminar." };
+  }
+  emAcao++;
+  try {
+    return await tomar(quem, tarefa, { pausaFundo: true });
+  } finally {
+    emAcao = Math.max(0, emAcao - 1);
+    avisar();
+  }
+}
+
 export async function desligar() {
+  // Não desliga por cima de uma ação em curso: a saída acionada tem de ser devolvida primeiro.
+  if (emAcao) return;
   pararTudo();
   try { if (st.modulo) await uds.fechar(); } catch (e) { /* segue */ }
   try { await obd.desconectar(); } catch (e) { /* segue */ }
@@ -89,7 +126,7 @@ export async function desligar() {
 let relogioSaida = null;
 export function saindoDaTela() {
   if (relogioSaida) clearTimeout(relogioSaida);
-  relogioSaida = setTimeout(() => { relogioSaida = null; if (!ouvintes.size) desligar(); }, 400);
+  relogioSaida = setTimeout(() => { relogioSaida = null; if (!ouvintes.size && !emAcao) desligar(); }, 400);
 }
 export function entrandoNaTela() {
   if (relogioSaida) { clearTimeout(relogioSaida); relogioSaida = null; }
@@ -168,14 +205,14 @@ export async function apontarModulo(mod) {
 }
 
 export async function soltarModulo() {
-  if (!st.modulo) return;
+  if (!st.modulo || emAcao) return;
   await tomar("a conexão do módulo", () => uds.fechar());
   mexer({ modulo: null });
 }
 
 /** Zera tudo (usado pelo teste). */
 export function reiniciarParaTeste() {
-  ouvintes.clear(); pausadores.clear();
+  ouvintes.clear(); pausadores.clear(); emAcao = 0;
   if (relogioSaida) { clearTimeout(relogioSaida); relogioSaida = null; }
   st = estadoInicial();
 }

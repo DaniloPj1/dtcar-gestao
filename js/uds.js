@@ -109,6 +109,8 @@ export const ridDeServico = n => n >= RID_DE && n <= RID_ATE;
 /* ------------------------------------------------------------------ sessões e serviços */
 
 export const SESSAO = { comum: 0x01, programacao: 0x02, estendida: 0x03 };
+/** Serviços que não mudam nada no carro: são os únicos em que vale repetir o pedido. */
+export const SERVICOS_SO_LEITURA = [0x10, 0x19, 0x22, 0x24, 0x3e];
 export const SV = {
   sessao: 0x10, reiniciar: 0x11, apagar: 0x14, falhas: 0x19, lerDado: 0x22,
   lerEscala: 0x24, destravar: 0x27, gravar: 0x2e, atuar: 0x2f, rotina: 0x31, presenca: 0x3e,
@@ -166,12 +168,18 @@ export async function pedir(cmd, servico, esperaMs = 5000, tentativasPendente = 
   const cru = await comando(cmd, esperaMs);
   let r = juntarLinhas(cru);
   if (r.erro) return { dados: null, nrc: null, texto: r.erro, hex: "", erro: r.erro };
-  for (let i = 0; i < tentativasPendente; i++) {
-    const n = negativaDe(r.hex, servico);
-    if (n !== 0x78) break;
-    // o módulo pediu mais tempo: espera e lê de novo, sem mandar o pedido outra vez
-    await new Promise(f => setTimeout(f, 300));
-    const outra = await comando("ATRV", 1500).then(() => comando(cmd, esperaMs)).catch(() => "");
+  // O 0x78 ("recebi e estou trabalhando") pede mais tempo. O ELM327 não tem comando de "só ler",
+  // então insistir significa mandar o pedido DE NOVO — e isso só pode ser feito com pedido que não
+  // muda nada no carro. Por isso a insistência vale apenas para os serviços de leitura; para
+  // qualquer outro o 0x78 sobe como está, e quem chamou decide (é o que rodarAprendizado faz,
+  // perguntando o resultado de tempos em tempos). Antes daqui havia um reenvio para qualquer
+  // serviço, e um ATRV no meio que podia engolir a resposta atrasada: achado da revisão
+  // independente de 20/11/2026.
+  const podeInsistir = SERVICOS_SO_LEITURA.includes(servico);
+  for (let i = 0; podeInsistir && i < tentativasPendente; i++) {
+    if (negativaDe(r.hex, servico) !== 0x78) break;
+    await new Promise(f => setTimeout(f, 400));
+    const outra = await comando(cmd, esperaMs).catch(() => "");
     const nova = juntarLinhas(outra);
     if (nova.erro) break;
     r = nova;
@@ -225,8 +233,20 @@ export const TIPOS_ESCALA = {
 };
 export function escalaDe(dados) {
   // dados: [DID alto, DID baixo, byte de escala, ...]
+  //
+  // Nem todo byte depois do eco do identificador é byte de escala: os tipos 9 (estendido),
+  // A (fórmula) e B (unidade) são seguidos de bytes de EXTENSÃO, cuja quantidade vem no nibble de
+  // baixo do próprio byte de escala. Tratar extensão como escala inventava item de escala na tela
+  // quando o módulo usa fórmula ou unidade — achado da revisão independente de 20/11/2026.
   const d = (dados || []).slice(2);
-  return d.map(b => ({ tipo: (b >> 4) & 0x0f, nomeTipo: TIPOS_ESCALA[(b >> 4) & 0x0f] || "desconhecido", tamanho: b & 0x0f }));
+  const COM_EXTENSAO = [0x9, 0xa, 0xb];
+  const itens = [];
+  for (let i = 0; i < d.length; i++) {
+    const b = d[i], tipo = (b >> 4) & 0x0f, tamanho = b & 0x0f;
+    itens.push({ tipo, nomeTipo: TIPOS_ESCALA[tipo] || "desconhecido", tamanho });
+    if (COM_EXTENSAO.includes(tipo)) i += tamanho;   // pula os bytes de extensão deste item
+  }
+  return itens;
 }
 
 /** Falhas do módulo, por situação (0x19 subfunção 02). A máscara 0xFF pede todas. */
@@ -278,7 +298,12 @@ export function falhasDe(dados) {
  */
 export async function sondar(rid, { sessaoAtual = SESSAO.estendida } = {}) {
   if (!ridDeServico(rid)) return { rid, existe: false, motivo: "fora-da-faixa", texto: "Fora da faixa de rotina de veículo." };
-  const r = await pedir(hx(SV.rotina, 2) + hx(ROTINA.resultado, 2) + hx(rid, 4), SV.rotina, 5000);
+  // Vai pelo MÉTODO PRÓPRIO do nativo, e não pelo comando(): o serviço 0x31 não é de leitura, e o
+  // portão do nativo o recusa — com razão. Pedir o RESULTADO (subfunção 03) não aciona nem aprende
+  // nada, mas ainda é o serviço 0x31, então passa pelo mesmo caminho conferido das outras rotinas.
+  // (Antes isto ia pelo comando() e a sondagem simplesmente nunca funcionava: achado da revisão
+  // independente de 20/11/2026.)
+  const r = await rodarRotina(rid, ROTINA.resultado, "", 5000).catch(e => ({ erro: (e && e.message) || "falhou", texto: "" }));
   return { rid, ...vereditoDaSonda(r, sessaoAtual) };
 }
 
@@ -320,6 +345,10 @@ export async function sondarDado(did) {
  * Tudo daqui para baixo passa pelos métodos PRÓPRIOS do plugin nativo (atuar, rotina, gravar,
  * destravar, reiniciarModulo), nunca pelo comando(). Quem confere o formato e a faixa é o nativo;
  * aqui fica a sequência, que é o que não pode sair errado.
+ *
+ * O que estas ações AINDA NÃO fazem: ficar registradas no banco. A tabela obd_leituras só aceita os
+ * tipos "leitura" e "apagar", e estender isso é SQL. Até entrar, as telas dizem que o teste não fica
+ * registrado — melhor isso do que dar a entender que fica.
  */
 
 /** Diz se o APK instalado tem a camada que age no carro (APK antigo não tem). */
@@ -390,10 +419,10 @@ export const apagarDoModulo = (esperaMs = 10000) =>
  *     Tenta duas vezes. Atuador que fica preso no comando do aparelho é atuador que queima.
  *  5. Voltar para a sessão comum.
  */
-export async function testarAtuador(did, {
-  valor = "", segundos = 5, intervaloMs = 1000, pausar = null, retomar = null,
-  aoAndar = null, continuar = () => true,
-} = {}) {
+export async function testarAtuador(did, opc = {}) {
+  let { valor = "" } = opc;
+  const { segundos = 5, intervaloMs = 1000, pausar = null, retomar = null,
+          aoAndar = null, continuar = () => true } = opc;
   const passos = [];
   const anota = (o, t) => { passos.push({ o, t }); if (aoAndar) { try { aoAndar({ o, t, passos: passos.slice() }); } catch (e) { /* tela fechou */ } } };
   let pausou = false;
@@ -402,11 +431,26 @@ export async function testarAtuador(did, {
     const s = await sessao(SESSAO.estendida);
     if (s.nrc != null) return { ok: false, passos, texto: s.texto, nrc: s.nrc };
     anota("sessao", "Sessão de diagnóstico aberta.");
-    const primeira = await acionar(did, valor);
-    if (primeira.nrc != null || primeira.erro) {
+    // O 0x2F pede bytes de estado junto, e quantos depende do atuador — e isso está num anexo da
+    // norma que não temos. Então tenta sem, e se o módulo reclamar do TAMANHO (0x13) tenta com um
+    // byte e com dois. Pedido de tamanho errado é recusado pelo módulo sem acionar nada, então a
+    // tentativa é segura. Antes só tentava sem, e na prática o teste não acionava quase nada.
+    let primeira = null, usado = valor;
+    for (const tentativa of [valor, valor || "01", valor || "0100"]) {
+      primeira = await acionar(did, tentativa);
+      usado = tentativa;
+      if (primeira.nrc !== 0x13) break;
+      anota("tamanho", "O módulo pediu o comando com mais dados. Tentando de outro jeito.");
+    }
+    // 0x78 e 0x21 não são recusa: o módulo recebeu e está trabalhando. Tratar como recusa fazia o
+    // app desistir COM O COMANDO JÁ ACEITO — achado da revisão independente de 20/11/2026.
+    if (primeira.nrc === 0x78 || primeira.nrc === 0x21) {
+      anota("andando", "O módulo recebeu e está trabalhando.");
+    } else if (primeira.nrc != null || primeira.erro) {
       anota("recusou", primeira.texto || "O módulo não aceitou o comando.");
       return { ok: false, passos, texto: primeira.texto, nrc: primeira.nrc };
     }
+    valor = usado;
     anota("acionou", "Acionado. Confira no carro.");
     const fim = Date.now() + Math.max(1, segundos) * 1000;
     while (Date.now() < fim && continuar()) {
@@ -447,17 +491,25 @@ export async function rodarAprendizado(rid, {
 } = {}) {
   const passos = [];
   const anota = (o, t) => { passos.push({ o, t }); if (aoAndar) { try { aoAndar({ o, t, passos: passos.slice() }); } catch (e) { /* tela fechou */ } } };
-  let pausou = false;
+  let pausou = false, comecou = false, terminou = false;
   try {
     if (pausar) { await pausar(); pausou = true; anota("pausa", "Leitura ao vivo parada."); }
     const s = await sessao(SESSAO.estendida);
     if (s.nrc != null) return { ok: false, passos, texto: s.texto, nrc: s.nrc };
     anota("sessao", "Sessão de diagnóstico aberta.");
     const c = await rodarRotina(rid, ROTINA.comecar, dados);
-    if (c.nrc != null || c.erro) {
+    // 0x78 e 0x21 querem dizer que o módulo RECEBEU e está trabalhando. Tratar como recusa fazia o
+    // app desistir com a rotina já correndo dentro do módulo, e sem mandar o "parar" — achado da
+    // revisão independente de 20/11/2026.
+    if (c.nrc != null && c.nrc !== 0x78 && c.nrc !== 0x21) {
       anota("recusou", c.texto || "O módulo não aceitou começar.");
       return { ok: false, passos, texto: c.texto, nrc: c.nrc };
     }
+    if (c.erro) {
+      anota("recusou", c.texto || "Não deu para falar com o módulo.");
+      return { ok: false, passos, texto: c.texto };
+    }
+    comecou = true;
     anota("comecou", "Rotina começou. Não desligue a chave.");
     const fim = Date.now() + Math.max(1, segundosMax) * 1000;
     while (Date.now() < fim && continuar()) {
@@ -467,16 +519,23 @@ export async function rodarAprendizado(rid, {
       if (r.erro) { anota("sem-resposta", "O módulo parou de responder."); return { ok: false, passos, texto: "O módulo parou de responder." }; }
       if (r.nrc === 0x78 || r.nrc === 0x21) { anota("andando", "Trabalhando…"); continue; }
       if (r.nrc != null) { anota("recusou", r.texto); return { ok: false, passos, texto: r.texto, nrc: r.nrc }; }
+      terminou = true;
       anota("pronto", "Rotina concluída.");
       return { ok: true, passos, texto: "Rotina concluída.", dados: r.dados };
     }
     // acabou o tempo com o módulo ainda trabalhando: parar é mais seguro que deixar correndo solto
     try { await rodarRotina(rid, ROTINA.parar, "", 6000); } catch (e) { /* segue */ }
+    terminou = true;
     anota("tempo", "Passou do tempo e a rotina foi interrompida.");
     return { ok: false, passos, texto: "Passou do tempo e a rotina foi interrompida." };
   } catch (e) {
     return { ok: false, passos, texto: "Deu problema no meio da rotina.", erro: (e && e.message) || "falhou" };
   } finally {
+    // Se a rotina COMEÇOU e não chegou ao fim, manda parar antes de sair. Deixar rotina de
+    // aprendizado correndo solta dentro do módulo é o que não pode acontecer.
+    if (comecou && !terminou) {
+      try { await rodarRotina(rid, ROTINA.parar, "", 6000); anota("parou", "Rotina interrompida no módulo."); } catch (e) { /* segue */ }
+    }
     try { await sessao(SESSAO.comum); } catch (e) { /* segue */ }
     if (pausou && retomar) { try { await retomar(); } catch (e) { /* tela fechou */ } }
   }
@@ -637,12 +696,21 @@ export function listaDe16(dados) {
  */
 export function decidirRotinaAtuador(la, lb) {
   const A = la || [], B = lb || [];
-  const ehRotina = l => l.length > 0 && l.every(n => ridDeServico(n));
-  if (ehRotina(A)) return { rotinas: A, atuadores: B, invertido: false };
-  if (ehRotina(B)) return { rotinas: B, atuadores: A, invertido: true };
-  // nenhuma das duas cabe inteira na faixa: fica como a norma publicada manda, sem palpite
-  return { rotinas: A, atuadores: B, invertido: false };
+  // Para inverter, a prova tem de vir das DUAS listas e concordar. Uma lista só não basta:
+  //  - número de ROTINA mora de 0x0100 a 0xE2FF (tacógrafo, fabricante, teste de emissão e
+  //    segurança são todas faixas de rotina da ISO 14229-1 — não só a do fabricante);
+  //  - identificador de ATUADOR é um identificador de dado, e os do ePTI moram na parte alta,
+  //    de 0xF000 para cima.
+  // Então só inverte quando o que veio no FA23 parece rotina E o que veio no FA22 parece atuador.
+  // Qualquer outro caso fica como a norma publicada manda, marcado como `duvida`, para a tela
+  // mostrar os dois rótulos e pedir confirmação — o app não decide sozinho o que vai ser acionado.
+  const pareceRotina = l => l.length > 0 && l.every(n => n >= 0x0100 && n <= 0xe2ff);
+  const pareceAtuador = l => l.length > 0 && l.every(n => n >= 0xf000);
+  if (pareceRotina(B) && pareceAtuador(A)) return { rotinas: B, atuadores: A, invertido: true, duvida: false };
+  const certo = pareceRotina(A) && (pareceAtuador(B) || B.length === 0);
+  return { rotinas: A, atuadores: B, invertido: false, duvida: !certo && (A.length > 0 || B.length > 0) };
 }
+
 
 /**
  * Descobre, perguntando ao carro, o que este módulo tem — na ordem que a própria norma usa
@@ -679,8 +747,9 @@ export async function descobrirEpti({ aoAndar = null } = {}) {
   const la = a.nrc == null && a.dados ? listaDe16(a.dados).lista : [];
   const lb = b.nrc == null && b.dados ? listaDe16(b.dados).lista : [];
   const d = decidirRotinaAtuador(la, lb);
-  r.rotinas = d.rotinas; r.atuadores = d.atuadores; r.invertido = d.invertido;
+  r.rotinas = d.rotinas; r.atuadores = d.atuadores; r.invertido = d.invertido; r.duvida = d.duvida;
   if (d.invertido) r.avisos.push("Este módulo responde no jeito do rascunho da norma, com os dois identificadores trocados. O app corrigiu pelo conteúdo da resposta.");
+  if (d.duvida) r.avisos.push("Não deu para saber com certeza qual lista é de rotina e qual é de atuador: o módulo respondeu números que cabem nas duas leituras. Ficou como a norma publicada manda. Confira o número antes de acionar.");
 
   anota("Perguntando como está cada sistema…");
   const st = await lerDado(EPTI.situacao);

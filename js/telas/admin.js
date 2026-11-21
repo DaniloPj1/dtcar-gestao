@@ -65,7 +65,7 @@ function AcessoApp({ p, cfg, salvar }) {
             UDS entraram testar atuador, rodar aprendizado e programar bico, e cada um é mais sério
             que o anterior. A chave só aparece se a pessoa TEM a tela daquela ação: permissão solta,
             sem a tela, não quer dizer nada. O administrador não aparece porque ele sempre pode. */
-        p.papel !== "admin" ? PERMISSOES_OBD.filter(([, , tela]) => a.telas.includes(tela)).map(([marca, nome, tela, aviso]) => html`
+        p.papel !== "admin" ? PERMISSOES_OBD.filter(([, , tela]) => (Array.isArray(tela) ? tela : [tela]).some(t => a.telas.includes(t))).map(([marca, nome, tela, aviso]) => html`
         <div class="chave-linha chave-obd" key=${marca} data-obd=${marca + "-" + p.id}><span><b>Pode ${nome.toLowerCase()}</b><span class="sub"> · ${aviso}</span></span>
           <button type="button" role="switch" aria-checked=${atual[marca] === true ? "true" : "false"} aria-label=${nome + ": " + p.nome} class=${"chave" + (atual[marca] === true ? " on" : "")}
             onClick=${() => salvar({ ...cfg, appAcessos: { ...(cfg.appAcessos || {}), [p.id]: { ...atual, entra: true, telas: a.telas, [marca]: atual[marca] !== true } } })}><i></i></button></div>`) : null}

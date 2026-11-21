@@ -1651,12 +1651,16 @@ function EscolherModulo({ aoEscolher }) {
       setOcupado("Perguntando em " + e.pedido + "…");
       const r = await sessao.tomar("a procura de módulos", async () => {
         await uds.abrir({ pedido: e.pedido, resposta: e.resposta });
+        // Abrir a sessão é a pergunta: módulo que está ali responde, mesmo que seja para recusar.
+        // Quem não está ali não responde nada, e é o `erro` que diz isso. Recusa NEGATIVA conta
+        // como presente, mas é anotada: pode ser um gateway respondendo pelo barramento, e não o
+        // módulo daquele endereço. (Antes isto era `s.nrc == null || s.nrc != null`, que é sempre
+        // verdadeiro — a conferência não existia: achado da revisão independente de 20/11/2026.)
         const s = await uds.sessao(uds.SESSAO.comum);
         if (s.erro) return null;
-        const id = await uds.lerDado(0xf190);            // chassi: quase todo módulo responde
-        return { respondeu: s.nrc == null || s.nrc != null, id };
+        return { respondeu: true, recusou: s.nrc != null, texto: s.texto || "" };
       });
-      if (r.ok && r.r && r.r.respondeu) encontrados.push(e);
+      if (r.ok && r.r && r.r.respondeu) encontrados.push({ ...e, recusou: r.r.recusou });
     }
     setAchados(encontrados); setOcupado("");
   };
@@ -1667,7 +1671,7 @@ function EscolherModulo({ aoEscolher }) {
       ${achados && !achados.length ? html`<div class="vazio">Nenhum módulo respondeu nos endereços padrão. Escolha a família abaixo e tente pelo endereço do acervo.</div>` : null}
       ${achados && achados.length ? html`<div class="sec"><h3>Responderam</h3>
         ${achados.map(m => html`<button key=${m.pedido} type="button" class="obd-ap" onClick=${() => aoEscolher(m)}>
-          <b>${m.nome || "Módulo " + m.pedido}</b><span>pede em ${m.pedido} · responde em ${m.resposta}</span></button>`)}</div>` : null}
+          <b>${m.nome || "Módulo " + m.pedido}</b><span>pede em ${m.pedido} · responde em ${m.resposta}${m.recusou ? " · respondeu recusando (pode ser o gateway)" : ""}</span></button>`)}</div>` : null}
       <div class="sec"><h3>Ou pelo acervo (${uds.quantosModulos()} módulos)</h3>
         <${Campo} id="diag-fam" rotulo="Família">
           <select id="diag-fam" value=${fam} onChange=${e => setFam(e.target.value)}>
@@ -1759,6 +1763,7 @@ function Modulos() {
             </div>`)}
           ${falhas.length && podeApagar ? html`<button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${apagar} disabled=${!!ocupado || !!st.dono}>APAGAR AS FALHAS DESTE MÓDULO</button>` : null}
           ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}
+          ${falhas.length && podeApagar ? html`<p class="nota">O apagamento POR MÓDULO ainda não fica registrado no banco — a tabela de registro do OBD só aceita o apagar do OBD-II. Anote na O.S. o que foi apagado.</p>` : null}
         </${Cartao}>` : null}
         ${epti ? html`<${Cartao} titulo="O que o módulo respondeu" id="mod-epti">
           ${epti.sistemas.length ? html`<div class="sec"><h3>Sistemas que ele cuida</h3>
@@ -1804,14 +1809,21 @@ function Atuadores() {
     setLista(r.r.atuadores.map(n => ({ did: n })));
     if (!r.r.atuadores.length) setErro("Este módulo não informou nenhum atuador. Isso não quer dizer que ele não tenha: quer dizer que ele não responde pela norma de inspeção, e o app não vai adivinhar o número da saída.");
   };
+  // `cancelar` é uma caixa, não estado: a roda do teste precisa ver o valor NOVO a cada volta, e
+  // estado dentro de função que já começou continuaria valendo o antigo.
+  const cancelar = useRef(false);
   const testar = async did => {
-    setAlvo(null); setAndando({ passos: [] });
-    const r = await uds.testarAtuador(did, {
+    setAlvo(null); setAndando({ passos: [] }); cancelar.current = false;
+    // comAcao: pega a vez, para a leitura de fundo E TRAVA O DESLIGAMENTO enquanto o teste corre.
+    // Sem a trava, trocar de tela ou de módulo no meio derrubava a conexão antes de o controle da
+    // saída ser devolvido ao módulo — e saída presa no comando do aparelho queima peça.
+    const r = await sessao.comAcao("o teste de atuador", () => uds.testarAtuador(did, {
       segundos: 5,
       pausar: sessao.pausar, retomar: sessao.retomar,
+      continuar: () => !cancelar.current,
       aoAndar: p => setAndando({ passos: p.passos }),
-    });
-    setAndando(a => ({ passos: (a && a.passos) || [], fim: r }));
+    }));
+    setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar o teste." } }));
   };
 
   return html`<${Tela} tela="atuadores" ajuda="Manda o módulo acionar uma saída para você conferir no carro se a peça responde. O comando é curto de propósito, por segurança da própria norma, então o app fica repetindo enquanto o teste corre — e devolve o controle ao módulo no fim, no erro e se você sair.">
@@ -1822,7 +1834,7 @@ function Atuadores() {
       ${!mod ? html`<${EscolherModulo} aoEscolher=${escolher} />` : html`
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="atu-modulo">
           <button type="button" class="btn-barra" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />VER OS ATUADORES DESTE MÓDULO</button>
-          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
+          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono || st.acaoCorrendo || !!andando}>TROCAR DE MÓDULO</button>
         </${Cartao}>
         ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
         ${erro ? html`<div class="erro">${erro}</div>` : null}
@@ -1834,7 +1846,10 @@ function Atuadores() {
         ${andando ? html`<${Cartao} titulo="Teste em andamento" id="atu-andando">
           ${andando.passos.map((p, i) => html`<div key=${i} class=${"passo " + (p.o === "nao-devolveu" ? "ruim" : p.o === "devolveu" || p.o === "acionou" ? "bom" : "")}>${p.t}</div>`)}
           ${andando.fim ? html`<div class=${andando.fim.ok ? "nota" : "erro"}>${andando.fim.texto}</div>
-            <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>` : html`<div class="carregando">Acionando… confira no carro.</div>`}
+            <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>`
+            : html`<div class="carregando">Acionando… confira no carro.</div>
+              <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { cancelar.current = true; }}>PARAR AGORA</button>`}
+          <p class="nota">Este teste não fica registrado no banco: a tabela de registro do OBD ainda não aceita atuador. O apagar falha, sim, fica.</p>
         </${Cartao}>` : null}
       `}
     `}
@@ -1899,14 +1914,16 @@ function Aprendizados() {
     setLista((r.r || []).map(a => ({ rid: a.rid, sabido: false, motivo: a.motivo, texto: a.texto })));
     if (!(r.r || []).length) setErro("Nenhuma das rotinas sondadas existe neste módulo. A sondagem olha alguns números conhecidos da faixa do fabricante, não a faixa inteira: ela não prova que o módulo não tem nenhuma.");
   };
+  const cancelar = useRef(false);
   const rodar = async rid => {
-    setAlvo(null); setAndando({ passos: [] });
-    const r = await uds.rodarAprendizado(rid, {
+    setAlvo(null); setAndando({ passos: [] }); cancelar.current = false;
+    const r = await sessao.comAcao("o aprendizado", () => uds.rodarAprendizado(rid, {
       segundosMax: 120,
       pausar: sessao.pausar, retomar: sessao.retomar,
+      continuar: () => !cancelar.current,
       aoAndar: p => setAndando({ passos: p.passos }),
-    });
-    setAndando(a => ({ passos: (a && a.passos) || [], fim: r }));
+    }));
+    setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar a rotina." } }));
   };
 
   return html`<${Tela} tela="aprendizados" ajuda="Roda rotina de aprendizado e calibração no módulo: adaptação, reset de serviço, zero do sensor de ângulo. O módulo trabalha sozinho depois do começar, e o app acompanha até terminar. Se ele recusar, a frase diz o que fazer — pôr em neutro, pisar no freio, aquecer o motor.">
@@ -1918,7 +1935,7 @@ function Aprendizados() {
         <${Cartao} titulo=${mod.nome || "Módulo " + mod.pedido} id="apr-modulo">
           <button type="button" class="btn-barra" onClick=${descobrir} disabled=${!!ocupado || !!st.dono}><${Ic} n="search" t=${20} />VER AS ROTINAS DESTE MÓDULO</button>
           <button type="button" class="btn-barra claro" onClick=${sondar} disabled=${!!ocupado || !!st.dono}><${Ic} n="aprender" t=${20} />SONDAR SEM RODAR NADA</button>
-          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono}>TROCAR DE MÓDULO</button>
+          <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { setMod(null); setLista(null); sessao.soltarModulo(); }} disabled=${!!st.dono || st.acaoCorrendo || !!andando}>TROCAR DE MÓDULO</button>
         </${Cartao}>
         ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
         ${erro ? html`<div class="erro">${erro}</div>` : null}
@@ -1930,7 +1947,10 @@ function Aprendizados() {
         ${andando ? html`<${Cartao} titulo="Rotina em andamento" id="apr-andando">
           ${andando.passos.map((p, i) => html`<div key=${i} class=${"passo " + (p.o === "pronto" ? "bom" : p.o === "recusou" ? "ruim" : "")}>${p.t}</div>`)}
           ${andando.fim ? html`<div class=${andando.fim.ok ? "nota" : "erro"}>${andando.fim.texto}</div>
-            <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>` : html`<div class="carregando">Trabalhando… não desligue a chave.</div>`}
+            <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => setAndando(null)}>FECHAR</button>`
+            : html`<div class="carregando">Trabalhando… não desligue a chave.</div>
+              <button type="button" class="btn-barra claro" style="justify-content:center" onClick=${() => { cancelar.current = true; }}>PARAR AGORA</button>`}
+          <p class="nota">Esta rotina não fica registrada no banco: a tabela de registro do OBD ainda não aceita aprendizado.</p>
         </${Cartao}>` : null}
       `}
     `}

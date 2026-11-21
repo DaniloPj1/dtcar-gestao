@@ -35,6 +35,36 @@ window.Capacitor = { Plugins: { App: { addListener: (ev, fn) => { if (ev === 'ba
 # adaptador ELM327 de mentira: responde como um de verdade, inclusive "NO DATA" no que o carro não tem
 FAKE_OBD = """
 window.__obd = { cmds: [], chamadas: [], conectado: false };
+/* O PORTÃO, igual ao do plugin nativo (ObdPlugin.permitido). O teste em Python confere que as
+   listas aqui são as MESMAS do Java — se alguém mudar um lado só, o teste reprova. */
+window.__AT_PERMITIDOS = ['ATZ','ATE0','ATL0','ATS0','ATH0','ATH1','ATSP0','ATDP','ATDPN','ATRV','ATI','ATCAF1','ATCRA','ATSP6','ATSP7'];
+window.__SERVICOS_LEITURA = ['01','02','03','06','07','09','0A','19','22','24','3E'];
+window.__UDS_LEITURA = ['19','22','24','3E'];
+window.__SERVICOS_PROIBIDOS = ['34','35','36','37'];
+window.__portao = function (cru) {
+  var c = String(cru == null ? '' : cru).trim().replace(/[ \t]/g, '').toUpperCase();
+  if (!c) return false;
+  var hexN = function (t, n) { return t.length === n && new RegExp('^[0-9A-F]{' + n + '}$').test(t); };
+  var parN = function (t) { return t.length % 2 === 0 && (t === '' || /^[0-9A-F]+$/.test(t)); };
+  if (c.indexOf('AT') === 0) {
+    if (window.__AT_PERMITIDOS.indexOf(c) >= 0) return true;
+    if (c.indexOf('ATSH') === 0) return hexN(c.slice(4), 3) || hexN(c.slice(4), 8);
+    if (c.indexOf('ATCRA') === 0) return hexN(c.slice(5), 3) || hexN(c.slice(5), 8);
+    if (c.indexOf('ATFCSH') === 0) return hexN(c.slice(6), 3) || hexN(c.slice(6), 8);
+    if (c.indexOf('ATFCSD') === 0) return parN(c.slice(6)) && c.length > 6 && c.length <= 16;
+    if (c.indexOf('ATFCSM') === 0) return c.length === 7 && c[6] >= '0' && c[6] <= '2';
+    if (c.indexOf('ATST') === 0) return hexN(c.slice(4), 2);
+    return false;
+  }
+  if (!/^[0-9A-F]+$/.test(c) || c.length % 2 !== 0 || c.length < 2) return false;
+  var sv = c.slice(0, 2);
+  if (window.__SERVICOS_PROIBIDOS.indexOf(sv) >= 0) return false;
+  if (sv === '10') return c === '1001' || c === '1003';
+  if (window.__SERVICOS_LEITURA.indexOf(sv) >= 0) {
+    return c.length <= (window.__UDS_LEITURA.indexOf(sv) >= 0 ? 32 : 14);
+  }
+  return false;
+};
 window.Capacitor = window.Capacitor || { Plugins: {} };
 window.Capacitor.Plugins = window.Capacitor.Plugins || {};
 var R = {
@@ -102,12 +132,19 @@ window.Capacitor.Plugins.DtcarObd = {
   desconectar: function () { window.__obd.chamadas.push('desconectar'); window.__obd.conectado = false; return Promise.resolve({ conectado: false }); },
   // Cada coisa que age no carro tem método PRÓPRIO no plugin, nunca o comando() — é assim no APK de
   // verdade, e é a garantia de que uma leitura não vira comando. O teste usa os mesmos nomes.
+  // como o nativo: agir exige UM módulo escolhido, nunca o endereço de difusão
+  __umModulo: function () {
+    var c = window.__obd.cabecalho || '';
+    return !(c === '' || c === '7DF' || c === '18DB33F1');
+  },
   atuar: function (o) {
     window.__obd.chamadas.push('atuar:' + o.did + ':' + o.opcao);
+    if (!window.Capacitor.Plugins.DtcarObd.__umModulo()) return Promise.reject(new Error('sem-modulo-escolhido'));
     return Promise.resolve({ resposta: '6F' + o.did + o.opcao + '\\r\\r>' });
   },
   rotina: function (o) {
     window.__obd.chamadas.push('rotina:' + o.rotina + ':' + o.sub);
+    if (!window.Capacitor.Plugins.DtcarObd.__umModulo()) return Promise.reject(new Error('sem-modulo-escolhido'));
     // a primeira pergunta do resultado diz "estou trabalhando"; a segunda diz que terminou
     if (o.sub === '03') {
       window.__obd.voltas = (window.__obd.voltas || 0) + 1;
@@ -131,6 +168,12 @@ window.Capacitor.Plugins.DtcarObd = {
     var c = String(o.cmd || '').toUpperCase();
     window.__obd.cmds.push(c);
     if (!window.__obd.conectado) return Promise.reject(new Error('sem-conexao'));
+    // O adaptador de mentira aplica A MESMA LISTA BRANCA do plugin nativo (ver PORTAO abaixo).
+    // Antes ele não aplicava nada, e por isso nenhum teste de navegador provava o portão: comando
+    // que o APK recusaria passava no teste. Foi assim que a sondagem de rotina, que ia pelo
+    // comando() e era recusada no aparelho de verdade, passou verde aqui.
+    if (!window.__portao(c)) return Promise.reject(new Error('comando-recusado'));
+    if (c.indexOf('ATSH') === 0) window.__obd.cabecalho = c.slice(4);
     if (window.__obd.limpo && (c === '03' || c === '07' || c === '0A')) return Promise.resolve({ resposta: (c === '03' ? '4300' : c === '07' ? '4700' : '4A00') + '\\r\\r>' });
     if (window.__obd.limpo && (c === '0106' || c === '0107')) return Promise.resolve({ resposta: '41' + c.slice(2) + '80\\r\\r>' });   // ajuste zerado: o módulo recomeça
     if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
@@ -941,6 +984,16 @@ try:
         pg.click('#diag-modulo .obd-ap >> nth=0'); pg.wait_for_selector('#apr-modulo', timeout=10000)
         pg.click('#apr-modulo .btn-barra >> nth=0'); pg.wait_for_selector('#apr-lista', timeout=15000)
         t('AD6E' in pg.inner_text('#apr-lista'), 'lista as rotinas que o módulo informou')
+        # SONDAR SEM RODAR NADA: ia pelo comando(), que o nativo recusa (0x31 não é de leitura), e
+        # por isso nunca funcionava. Agora vai pelo método próprio `rotina` com subfunção 03.
+        # O adaptador de mentira aplica a lista branca, então este teste prova de verdade.
+        pg.evaluate("window.__obd.chamadas.length = 0; window.__obd.voltas = 0")
+        pg.click('#apr-modulo .btn-barra >> nth=1'); pg.wait_for_timeout(6000)
+        ch2 = pg.evaluate("window.__obd.chamadas")
+        t(any(c.startswith('rotina:') and c.endswith(':03') for c in ch2),
+          'a sondagem vai pelo método próprio, pedindo o RESULTADO (subfunção 03): %s' % ch2[:4])
+        t(not any(c == 'comando-recusado' for c in ch2), 'e não é recusada pelo portão')
+        t('não é permitido' not in textos(pg), 'a tela não mostra recusa do portão na sondagem')
         pg.evaluate("window.__obd.voltas = 0")
         pg.click('#apr-lista .obd-ap >> nth=0'); pg.wait_for_selector('.quadro', timeout=10000)
         t('não tem botão de desfazer' in pg.inner_text('.quadro'), 'avisa que aprendizado não se desfaz')
@@ -1048,6 +1101,34 @@ try:
           'a sessão de PROGRAMAÇÃO (10 02) não passa do portão: só a comum e a estendida')
         t('rotinaNaFaixa' in jv and '0x0200' in jv and '0xDFFF' in jv,
           'a faixa da rotina de veículo é conferida no nativo, não no site')
+        # A faixa de identificação (F180-F1FF) não se grava: chassi e número de peça não são dado
+        # de calibração, e gravar chassi é coisa que só se faz com má intenção.
+        t('didGravavel' in jv and '0xF180' in jv and '0xF1FF' in jv,
+          'a faixa de identificação do módulo é protegida contra gravação, no nativo')
+        # Resposta atrasada de um pedido não pode entrar na resposta do seguinte: seria mostrar as
+        # falhas de um módulo com o nome de outro.
+        t('descartarAtrasado' in jv and 'descartarAtrasado(in);' in jv,
+          'a entrada é esvaziada antes de cada envio')
+        # Agir em DIFUSÃO (7DF) mandaria o comando para todos os módulos: um reiniciarModulo assim
+        # reinicia o carro inteiro. Os métodos que agem exigem UM módulo escolhido.
+        t('emDifusao' in jv and '"7DF"' in jv and '"18DB33F1"' in jv,
+          'o nativo recusa agir no endereço de difusão')
+        for metodo in ('atuar', 'rotina', 'gravar', 'destravar', 'reiniciarModulo'):
+            corpo = jv.split('public void %s(' % metodo)[1].split('\n    }')[0]
+            t('emDifusao()' in corpo, '%s confere se há UM módulo escolhido' % metodo)
+        # ---- as listas do adaptador de mentira são AS MESMAS do Java ----
+        # Sem isto o portão do teste e o do aparelho poderiam divergir, e o teste de navegador
+        # voltaria a não provar nada.
+        def lista_java(nome):
+            bloco = jv.split(nome + ' = ')[1].split(';')[0]
+            return sorted(re.findall(r'"([0-9A-Fa-z]+)"', bloco))
+        fk = open(os.path.join(raiz, 'teste', 'teste_app_sistema.py'), encoding='utf-8').read()
+        def lista_fake(nome):
+            bloco = fk.split('window.__' + nome + ' = ')[1].split(';')[0]
+            return sorted(re.findall(r"'([0-9A-Fa-z]+)'", bloco))
+        for nome in ('AT_PERMITIDOS', 'SERVICOS_LEITURA', 'UDS_LEITURA', 'SERVICOS_PROIBIDOS'):
+            j, f = lista_java(nome), lista_fake(nome)
+            t(j == f, 'a lista %s do teste é igual à do Java: Java=%s teste=%s' % (nome, j, f))
         br.close()
     print('OK: %d conferências' % ok)
 finally:

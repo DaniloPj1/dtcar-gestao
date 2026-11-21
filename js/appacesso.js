@@ -53,7 +53,11 @@ export function foraDoHorario(h, agora = new Date()) {
  * Apagar é o único comando que o app manda PARA o carro: o administrador sempre pode; qualquer outra pessoa só com
  * cfg.appAcessos[id].obd_apagar === true, marcado por ele em Sistema › Equipe. Quem não tem a tela do OBD não apaga nada. */
 export function podeApagarObd(cfg, perfil) {
-  return podeNoObd(cfg, perfil, "obd_apagar", "obd");
+  // Vale nas DUAS telas que apagam: a leitura comum (apagar do OBD-II) e Módulos do carro (apagar de
+  // um módulo). Antes exigia só "obd", então quem tinha só Módulos nunca apagava e a chave em
+  // Sistema › Equipe nem aparecia para essa pessoa — confuso de administrar, e o apagar por módulo
+  // ficava inalcançável. Achado da revisão independente de 20/11/2026.
+  return podeNoObd(cfg, perfil, "obd_apagar", ["obd", "modulos"]);
 }
 
 /* ---- O que AGE no carro (20/11/2026) ----
@@ -68,7 +72,8 @@ export function podeApagarObd(cfg, perfil) {
  */
 export function podeNoObd(cfg, perfil, marca, tela) {
   const a = acessoApp(cfg, perfil);
-  if (!a.entra || !a.telas.includes(tela)) return false;
+  const quais = Array.isArray(tela) ? tela : [tela];
+  if (!a.entra || !quais.some(t => a.telas.includes(t))) return false;
   if (perfil.papel === "admin") return true;
   const g = ((cfg && cfg.appAcessos) || {})[perfil.id];
   return g ? g[marca] === true : false;
@@ -79,7 +84,7 @@ export const podeGravarObd = (cfg, perfil) => podeNoObd(cfg, perfil, "obd_gravar
 
 /** As permissões do diagnóstico, para a tela Equipe desenhar sozinha a partir daqui. */
 export const PERMISSOES_OBD = [
-  ["obd_apagar", "Apagar falha", "obd", "Apaga os códigos do carro. A foto do momento da falha some junto."],
+  ["obd_apagar", "Apagar falha", ["obd", "modulos"], "Apaga os códigos do carro. A foto do momento da falha some junto."],
   ["obd_atuar", "Testar atuador", "atuadores", "Aciona uma saída do carro: ventoinha, bomba, lanterna. Mexe em peça que se move."],
   ["obd_aprender", "Rodar aprendizado", "aprendizados", "Roda calibração e aprendizado. Muda o jeito do módulo trabalhar."],
   ["obd_gravar", "Programar bico", "bico", "Grava o código do bico na ECU. Fica gravado."],

@@ -90,7 +90,7 @@ public class ObdPlugin extends Plugin {
         // da falha, que é de leitura) e chegaria ao barramento como 2E, GRAVAR NO MÓDULO. O mesmo
         // truque abriria o 34 e a regravação. Então ATCAF0 não entra, e permitido() só é confiável
         // porque ele não entra.
-        "ATCAF1", "ATAL", "ATAR", "ATCRA", "ATSP6", "ATSP7", "ATSP8", "ATSP9"
+        "ATCAF1", "ATCRA", "ATSP6", "ATSP7"
     ));
 
     /**
@@ -105,10 +105,6 @@ public class ObdPlugin extends Plugin {
         if (c.startsWith("ATFCSD")) return ehHexPar(c.substring(6)) && c.length() > 6 && c.length() <= 16;
         if (c.startsWith("ATFCSM")) return c.length() == 7 && c.charAt(6) >= '0' && c.charAt(6) <= '2';
         if (c.startsWith("ATST")) return hexExato(c.substring(4), 2);
-        if (c.startsWith("ATAT")) return c.length() == 5 && c.charAt(4) >= '0' && c.charAt(4) <= '2';
-        if (c.startsWith("ATCF") || c.startsWith("ATCM")) {
-            return hexExato(c.substring(4), 3) || hexExato(c.substring(4), 8);
-        }
         return false;
     }
 
@@ -149,6 +145,8 @@ public class ObdPlugin extends Plugin {
     private volatile OutputStream saida;
     private volatile String conectadoEm;
     private volatile String conectadoNome;
+    /** O último cabeçalho aceito (ATSH): para quem o pedido está indo agora. */
+    private volatile String cabecalho = "";
 
     /* ------------------------------------------------------------------ comandos permitidos */
 
@@ -192,6 +190,22 @@ public class ObdPlugin extends Plugin {
         if (!hexExato(normalizar(rid), 4)) return false;
         int n = Integer.parseInt(normalizar(rid), 16);
         return n >= 0x0200 && n <= 0xDFFF;
+    }
+
+    /**
+     * Diz se um dado pode ser GRAVADO por aqui.
+     *
+     * A faixa F180 a F1FF é a da IDENTIFICAÇÃO do módulo pela ISO 14229-1: chassi (F190), número da
+     * peça, número do programa, número de série. Nada ali é dado de calibração, e gravar chassi é
+     * coisa que só se faz com má intenção — então a faixa inteira fica fora, e o portão é aqui
+     * embaixo, onde um script da página não alcança.
+     *
+     * O que a gravação existe para fazer (código de bico) não está nessa faixa.
+     */
+    static boolean didGravavel(String did) {
+        if (!hexExato(normalizar(did), 4)) return false;
+        int n = Integer.parseInt(normalizar(did), 16);
+        return n < 0xF180 || n > 0xF1FF;
     }
 
     /** Hexadecimal com exatamente este tanto de dígitos. */
@@ -371,6 +385,7 @@ public class ObdPlugin extends Plugin {
         soquete = null;
         conectadoEm = null;
         conectadoNome = null;
+        cabecalho = "";
     }
 
     /* ------------------------------------------------------------------ comandos */
@@ -390,7 +405,24 @@ public class ObdPlugin extends Plugin {
             call.reject("comando-recusado");
             return;
         }
-        enviar(call, normalizar(cmd), call.getInt("esperaMs", ESPERA_PADRAO));
+        final String limpo = normalizar(cmd);
+        // Guarda para onde os pedidos estão indo: os métodos que AGEM conferem isso antes de sair.
+        if (limpo.startsWith("ATSH")) cabecalho = limpo.substring(4);
+        enviar(call, limpo, call.getInt("esperaMs", ESPERA_PADRAO));
+    }
+
+    /**
+     * Diz se o cabeçalho corrente é de DIFUSÃO — o pedido iria para todos os módulos de uma vez.
+     *
+     * 7DF é o endereço funcional do OBD-II e 18DB33F1 o equivalente em 29 bits: quem responde é
+     * quem quiser. Ler em difusão é normal e é o que o OBD-II faz. AGIR em difusão não é: um
+     * reiniciarModulo em 7DF reinicia o carro inteiro, e um apagar em difusão limpa a falha de todos
+     * os módulos de uma vez, inclusive as que o mecânico ainda não leu. Então os métodos que agem
+     * exigem cabeçalho de UM módulo. Achado da revisão independente de 20/11/2026.
+     */
+    private boolean emDifusao() {
+        String c = cabecalho == null ? "" : cabecalho;
+        return c.isEmpty() || c.equals("7DF") || c.equals("18DB33F1");
     }
 
     /**
@@ -405,6 +437,12 @@ public class ObdPlugin extends Plugin {
     @PluginMethod
     public void apagar(final PluginCall call) {
         final boolean porUds = "uds".equals(call.getString("modo", "obd"));
+        // O apagar por UDS é de UM módulo. Em difusão ele limparia a falha de todos de uma vez,
+        // inclusive as que o mecânico ainda não leu.
+        if (porUds && emDifusao()) {
+            call.reject("sem-modulo-escolhido");
+            return;
+        }
         enviar(call, comandoApagar(porUds), call.getInt("esperaMs", 10000));
     }
 
@@ -425,8 +463,12 @@ public class ObdPlugin extends Plugin {
      * Daqui para baixo, cada coisa que mexe no carro tem MÉTODO PRÓPRIO e nenhuma passa pelo
      * comando(). Vale a razão do apagar: o app abre um site, e a promessa de que uma leitura não
      * vira um comando não pode morar no JavaScript. Quem pode fazer cada uma é decidido no sistema
-     * (Sistema › Equipe, por pessoa) e fica registrado no banco — aqui embaixo não há como saber
-     * quem está com o celular na mão.
+     * (Sistema › Equipe, por pessoa) — aqui embaixo não há como saber quem está com o celular.
+     *
+     * REGISTRO: hoje só o apagar do OBD-II fica gravado no banco. Atuador, aprendizado e apagar por
+     * módulo NÃO ficam, porque a tabela obd_leituras só aceita os tipos "leitura" e "apagar" e
+     * estender isso é SQL, que é do Danilo. Enquanto não entrar, a tela diz que o teste não fica
+     * registrado, em vez de dar a entender que fica.
      *
      * Nenhum destes métodos regrava módulo: os serviços de transferência estão proibidos lá em cima
      * e a sessão de programação não passa do portão. O limite é de propósito: dá para codificar bico
@@ -450,6 +492,10 @@ public class ObdPlugin extends Plugin {
         }
         if (Integer.parseInt(opcao, 16) > 0x03) {   // a norma define de 00 a 03
             call.reject("comando-recusado");
+            return;
+        }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
             return;
         }
         enviar(call, "2F" + did + opcao + valor, call.getInt("esperaMs", 8000));
@@ -480,6 +526,10 @@ public class ObdPlugin extends Plugin {
             call.reject("rotina-fora-da-faixa");
             return;
         }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
+            return;
+        }
         enviar(call, "31" + sub + rid + dados, call.getInt("esperaMs", 15000));
     }
 
@@ -494,6 +544,14 @@ public class ObdPlugin extends Plugin {
         final String valor = normalizar(call.getString("valor", ""));
         if (!hexExato(did, 4) || !ehHexPar(valor) || valor.isEmpty() || valor.length() > 64) {
             call.reject("comando-recusado");
+            return;
+        }
+        if (!didGravavel(did)) {
+            call.reject("did-protegido");
+            return;
+        }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
             return;
         }
         enviar(call, "2E" + did + valor, call.getInt("esperaMs", 10000));
@@ -516,6 +574,10 @@ public class ObdPlugin extends Plugin {
             call.reject("comando-recusado");
             return;
         }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
+            return;
+        }
         enviar(call, "27" + sub + chave, call.getInt("esperaMs", 8000));
     }
 
@@ -529,6 +591,10 @@ public class ObdPlugin extends Plugin {
         final String tipo = normalizar(call.getString("tipo", "01"));
         if (!tipo.equals("01") && !tipo.equals("03")) {
             call.reject("comando-recusado");
+            return;
+        }
+        if (emDifusao()) {
+            call.reject("sem-modulo-escolhido");
             return;
         }
         enviar(call, "11" + tipo, call.getInt("esperaMs", 10000));
@@ -549,6 +615,18 @@ public class ObdPlugin extends Plugin {
                     return;
                 }
                 try {
+                    // Esvazia o que ficou do pedido anterior ANTES de escrever.
+                    //
+                    // Por que isso importa mais aqui do que parece: quando um pedido estoura o
+                    // tempo, a resposta dele pode chegar depois, e fica guardada no soquete. Sem
+                    // esvaziar, ela entra na resposta do pedido SEGUINTE. A conferência do site
+                    // pega troca de serviço (a resposta tem de começar com serviço + 0x40), mas
+                    // NÃO pega resposta do mesmo serviço vinda de outro módulo: ler as falhas do
+                    // módulo A com tempo estourado, apontar o cabeçalho para o B e ler as falhas
+                    // dele mostraria as falhas de A com o nome de B. Num laudo de oficina esse é o
+                    // pior defeito possível, e com o UDS, que fala com um módulo de cada vez, a
+                    // chance de acontecer é muito maior do que no OBD-II.
+                    descartarAtrasado(in);
                     out.write((limpo + "\r").getBytes(StandardCharsets.US_ASCII));
                     out.flush();
                     String resposta = ler(in, espera);
@@ -586,6 +664,16 @@ public class ObdPlugin extends Plugin {
         }
     }
 
+    /** Joga fora o que sobrou de um pedido anterior que estourou o tempo. */
+    private void descartarAtrasado(InputStream in) throws IOException {
+        byte[] balde = new byte[256];
+        int voltas = 0;
+        // o limite de voltas existe para um adaptador que fala sem parar não prender a fila
+        while (in.available() > 0 && voltas++ < 64) {
+            if (in.read(balde) <= 0) break;
+        }
+    }
+
     /** Lê até o sinal de pronto do ELM327 ou até acabar o tempo. */
     private String ler(InputStream in, int espera) throws IOException {
         StringBuilder sb = new StringBuilder();
@@ -608,8 +696,10 @@ public class ObdPlugin extends Plugin {
                 }
             }
         }
-        // Sem o sinal de pronto: devolve o que chegou, para o js/obd.js decidir se dá ou não.
-        return sb.toString();
+        // Sem o sinal de pronto, o pedido estourou o tempo. Devolver o pedaço que chegou como se
+        // fosse resposta boa é o começo do defeito descrito em descartarAtrasado: o site poderia
+        // interpretar meia resposta. Então vai marcado, e o js/obd.js trata como recusa.
+        return sb.length() == 0 ? "" : ("STOPPED " + sb.toString());
     }
 
     @Override

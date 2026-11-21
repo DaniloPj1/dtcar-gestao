@@ -98,6 +98,16 @@ chk("as faixas cobrem tudo sem buraco", (() => {
   chk("vários bytes de escala viram vários itens", escalaDe([0, 0, 0x02, 0x51]).length === 2);
   chk("tipo fora da tabela não finge nome", escalaDe([0, 0, 0xd1])[0].nomeTipo === "desconhecido");
   chk("a tabela de tipos é a da norma", TIPOS_ESCALA[0x0] === "número sem sinal" && TIPOS_ESCALA[0x5] === "texto");
+  // Tipos 9 (estendido), A (fórmula) e B (unidade) são seguidos de bytes de EXTENSÃO, e a
+  // quantidade vem no nibble de baixo. Tratar extensão como escala inventava item na tela quando o
+  // módulo usa fórmula — correção da revisão independente de 20/11/2026.
+  {
+    const e = escalaDe([0xf1, 0x90, 0xa2, 0x11, 0x22, 0x51]);
+    chk("fórmula com 2 bytes de extensão conta como UM item", e.length === 2, e);
+    chk("e o item seguinte é lido certo", e[0].nomeTipo === "fórmula" && e[1].nomeTipo === "texto", e);
+    chk("unidade também pula a extensão", escalaDe([0, 0, 0xb1, 0x0a, 0x00]).length === 2, escalaDe([0, 0, 0xb1, 0x0a, 0x00]));
+    chk("sem extensão, cada byte é um item", escalaDe([0, 0, 0x02, 0x51, 0x12]).length === 3);
+  }
 }
 
 /* ---------------- casca da resposta que vem dos métodos nativos ---------------- */
@@ -180,23 +190,39 @@ chk("os números do ePTI estão certos", EPTI.rotinas === 0xfa22 && EPTI.atuador
   && EPTI.sistemas === 0xfa21 && EPTI.dados === 0xfa20);
 chk("o app sabe que não tem os anexos C e D", eptiTemAnexoCD() === false);
 
-/* ---------------- a armadilha do rascunho: os dois trocaram de lugar ---------------- */
+/* ---------------- a armadilha do rascunho: os dois trocaram de lugar ----------------
+   Para inverter, a prova tem de vir das DUAS listas e concordar. Rotina mora de 0x0100 a 0xE2FF
+   (tacógrafo, fabricante, teste de emissão e segurança são TODAS faixas de rotina da norma, não só
+   a do fabricante); identificador de atuador é identificador de dado, e os do ePTI moram de 0xF000
+   para cima. Exigir prova nos dois lados foi correção da revisão independente de 20/11/2026: antes,
+   UMA entrada fora da faixa do fabricante virava a decisão e trocava rotina por atuador em silêncio. */
 {
-  const rotinas = [0x0200, 0xad6e, 0xa001];      // dentro da faixa de rotina do fabricante
-  const atuadores = [0xf101, 0x0150, 0xe300];    // fora dela: são identificadores de atuador
+  const rotinas = [0x0200, 0xad6e, 0xa001];
+  const atuadores = [0xf101, 0xfa30, 0xf2c0];
   const certo = decidirRotinaAtuador(rotinas, atuadores);
-  chk("módulo na norma publicada: fica como veio", !certo.invertido
-    && certo.rotinas.length === 3 && certo.atuadores[0] === 0xf101, certo);
+  chk("módulo na norma publicada: fica como veio, sem dúvida",
+    !certo.invertido && !certo.duvida && certo.rotinas.length === 3 && certo.atuadores[0] === 0xf101, certo);
   const trocado = decidirRotinaAtuador(atuadores, rotinas);
-  chk("módulo no jeito do rascunho: o app corrige pelo conteúdo", trocado.invertido === true, trocado);
+  chk("módulo no jeito do rascunho: o app corrige pelo conteúdo", trocado.invertido === true && !trocado.duvida, trocado);
   chk("e as duas listas vão para o lugar certo",
     trocado.rotinas[1] === 0xad6e && trocado.atuadores[0] === 0xf101, trocado);
-  chk("uma lista vazia não faz o app achar que está invertido",
-    decidirRotinaAtuador(rotinas, []).invertido === false
-    && decidirRotinaAtuador([], rotinas).invertido === true);
-  chk("nenhuma das duas na faixa: fica como a norma publicada manda, sem palpite",
-    decidirRotinaAtuador([0xff00], [0xff01]).invertido === false);
-  chk("listas vazias não explodem", decidirRotinaAtuador([], []).rotinas.length === 0
+
+  // A parte que mais importa: faixa LEGÍTIMA de rotina fora da do fabricante não pode virar inversão
+  for (const [nome, extra] of [["tacógrafo", 0x0150], ["teste de emissão", 0xe050], ["segurança", 0xe250]])
+    chk("rotina com " + nome + " na lista NÃO inverte",
+      decidirRotinaAtuador([0x0200, extra], atuadores).invertido === false, { nome, r: decidirRotinaAtuador([0x0200, extra], atuadores) });
+
+  // Sem prova dos dois lados, não decide: marca dúvida para a tela pedir confirmação
+  chk("FA22 vazio não força inversão, e marca dúvida",
+    decidirRotinaAtuador([], rotinas).invertido === false && decidirRotinaAtuador([], rotinas).duvida === true);
+  chk("as duas na faixa de rotina: dúvida, sem inverter",
+    decidirRotinaAtuador([0x0200], [0x0300]).duvida === true && decidirRotinaAtuador([0x0200], [0x0300]).invertido === false);
+  chk("nenhuma reconhecível: dúvida, e fica como a norma publicada manda",
+    decidirRotinaAtuador([0xff00], [0xff01]).invertido === false && decidirRotinaAtuador([0xff00], [0xff01]).duvida === true);
+  chk("só o FA22, sem FA23: fica certo e sem dúvida",
+    decidirRotinaAtuador(rotinas, []).duvida === false && decidirRotinaAtuador(rotinas, []).invertido === false);
+  chk("listas vazias não explodem e não geram dúvida",
+    decidirRotinaAtuador([], []).rotinas.length === 0 && decidirRotinaAtuador([], []).duvida === false
     && decidirRotinaAtuador(null, null).atuadores.length === 0);
 }
 

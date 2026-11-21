@@ -529,6 +529,9 @@ const MOTIVOS = {
   "comando-recusado": "Este comando não é permitido nesta etapa (a leitura não escreve no carro).",
   "falhou": "O adaptador respondeu de um jeito que o app não esperava.",
   "demorou": "O adaptador não respondeu no tempo. Confira o encaixe na tomada e tente de novo.",
+  "rotina-fora-da-faixa": "Esta rotina está fora da faixa que o app pode rodar. Só rotina de serviço do fabricante é permitida.",
+  "did-protegido": "Este dado é da identificação do módulo (chassi, número de peça) e o app não grava nele.",
+  "sem-modulo-escolhido": "Escolha UM módulo antes. Este comando não vai para todos os módulos de uma vez.",
 };
 export const motivoDe = e => MOTIVOS[e && (e.message || e.code || e)] || "Não deu para falar com o adaptador.";
 

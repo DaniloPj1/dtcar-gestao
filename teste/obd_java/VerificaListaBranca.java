@@ -23,8 +23,13 @@ public class VerificaListaBranca {
     /* ---------------- UDS: o que a camada nova precisa, e o que ela não pode ---------------- */
     // Ajuste do adaptador para falar com UM módulo. Nada disto sai para o barramento.
     for (String c : new String[]{"ATSH7E0","ATSH18DB33F1","ATCRA7E8","ATCRA18DAF110","ATCRA","ATFCSH7E0",
-                                 "ATFCSD300000","ATFCSM1","ATST64","ATAT1","ATCAF1","ATAL","ATAR","ATSP6"})
+                                 "ATFCSD300000","ATFCSM1","ATST64","ATCAF1","ATSP6","ATSP7"})
       chk("permite ajuste do UDS " + c, ObdPlugin.permitido(c));
+    /* A lista branca é só o que o app MANDA. ATAL, ATAR, ATAT, ATCF e ATCM entraram numa primeira
+     * versão e nenhuma tela usava: lista branca com comando que ninguém manda é superfície de
+     * ataque de graça. Saíram na revisão de 20/11/2026. */
+    for (String c : new String[]{"ATAL","ATAR","ATAT1","ATAT0","ATCF7E0","ATCM7FF","ATSP8","ATSP9"})
+      chk("RECUSA ajuste que o app não usa: " + c, !ObdPlugin.permitido(c));
     /* ATCAF0 é RECUSADO, e isto é o que faz todo o resto do portão valer.
      * Com a formatação automática ligada (ATCAF1) o primeiro byte do que o site manda é o SERVIÇO,
      * que é o que permitido() confere. Desligada, o primeiro byte vira o controle do ISO-TP e o
@@ -35,8 +40,16 @@ public class VerificaListaBranca {
     chk("e o pedido que o truque usaria continua sendo lido pelo primeiro byte",
       ObdPlugin.permitido("022EF190") && !ObdPlugin.permitido("2EF19000"));
     // Valor torto no ajuste não passa: nem letra fora do hexadecimal, nem tamanho errado, nem modo inexistente.
-    for (String c : new String[]{"ATSHZZZ","ATSH7E","ATSH7E00","ATCRAZZZ","ATFCSM3","ATAT3","ATSTZZ","ATSH"})
+    for (String c : new String[]{"ATSHZZZ","ATSH7E","ATSH7E00","ATCRAZZZ","ATFCSM3","ATSTZZ","ATSH"})
       chk("RECUSA ajuste torto " + c, !ObdPlugin.permitido(c));
+    /* Faixa de identificação do módulo (F180-F1FF): chassi, número de peça, número de programa.
+     * Nada ali é dado de calibração, e gravar chassi é coisa que só se faz com má intenção. */
+    for (String d : new String[]{"F190","F180","F1FF","F18C","F1A2"})
+      chk("RECUSA gravar na faixa de identificação: " + d, !ObdPlugin.didGravavel(d));
+    for (String d : new String[]{"F17F","F200","0300","2A10","FFFF"})
+      chk("permite gravar fora dela: " + d, ObdPlugin.didGravavel(d));
+    for (String d : new String[]{"","ZZZZ","F19",null})
+      chk("RECUSA dado torto no gravar: " + d, !ObdPlugin.didGravavel(d));
     // Leitura por módulo: falha com situação, ler dado, ler a escala do dado, e o sinal de presença.
     for (String c : new String[]{"1902FF","19 02 FF","190A","22F190","22F1A0","24F190","3E00","3E80"})
       chk("permite leitura de UDS " + c, ObdPlugin.permitido(c));

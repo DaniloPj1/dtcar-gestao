@@ -49,7 +49,18 @@ export function anotarTroca(cad, cmd, cru, ms) {
   const r = juntarLinhas(cru);
   const end = cad.enderecos[cad.cabecalho] || (cad.enderecos[cad.cabecalho] = { respondeu: 0, calado: 0, ms: 0 });
   const hex = r.hex || "";
-  if (r.erro || !hex) { end.calado++; cad.novidade++; return; }
+  if (r.erro || !hex) {
+    end.calado++; cad.novidade++;
+    // O identificador que ficou SEM RESPOSTA também é anotado: sem isso o mapeamento repetia a mesma
+    // pergunta para sempre e nunca passava para o identificador seguinte. Uma resposta de verdade,
+    // se vier depois, substitui esta anotação.
+    if (servico === 0x22 || servico === 0x21) {
+      const d = cad.dados[cad.cabecalho] || (cad.dados[cad.cabecalho] = {});
+      const k = hx(servico, 2) + c.slice(2);
+      if (!d[k]) d[k] = { calado: true };
+    }
+    return;
+  }
   end.respondeu++; end.ms = Math.max(end.ms, ms || 0); cad.novidade++;
   const negativa = hex.startsWith("7F") && hex.slice(2, 4) === hx(servico, 2) ? parseInt(hex.slice(4, 6), 16) : null;
   if (servico === 0x22 || servico === 0x21) {
@@ -81,7 +92,7 @@ export function consenso(retratos) {
       const o = porEnd[e] || (porEnd[e] = { responderam: new Set(), calados: new Set(), dados: {} });
       (r.enderecos[e].respondeu ? o.responderam : o.calados).add(r.carro || "?");
       for (const d of Object.keys((r.dados && r.dados[e]) || {})) {
-        if (r.dados[e][d].nrc == null) (o.dados[d] || (o.dados[d] = new Set())).add(r.carro || "?");
+        if (r.dados[e][d].nrc == null && !r.dados[e][d].calado) (o.dados[d] || (o.dados[d] = new Set())).add(r.carro || "?");
       }
     }
   }

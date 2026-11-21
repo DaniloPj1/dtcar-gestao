@@ -255,6 +255,9 @@ chk("o app sabe que não tem os anexos C e D", eptiTemAnexoCD() === false);
     com({ gravou: true, antes: "62 12 34 41 42", resposta: "", caiu: true });
     g = await u.gravarDado(0x1234, "4343");
     if (!(g.incerto === true && g.antes.length === 2 && /conexão caiu/.test(g.texto))) falha("conexão caída depois do envio é incerta, com o valor antigo: " + JSON.stringify(g));
+    com({ gravou: true, antes: "62 12 34 41 42", resposta: "7F 2E 78" });
+    g = await u.gravarDado(0x1234, "4343");
+    if (!(g.incerto === true && g.antes.length === 2)) falha("resposta 78 (processando) é incerta: " + JSON.stringify(g));
     console.log("gravação: aceita, recusada e incerta distinguidas.");
   } finally { globalThis.window = antigo; }
 }

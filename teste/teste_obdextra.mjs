@@ -238,3 +238,15 @@ console.log(m7 + " conferências da faixa de trabalho passaram.");
   if (!(r[0].respondeu && r[0].recusou && r[0].erro === "conexao-caiu")) { console.error("FALHOU: leitura interrompida virou diagnóstico limpo: " + JSON.stringify(r[0])); process.exit(1); }
   console.log("varredura: leitura interrompida fica como indisponível.");
 }
+
+/* ---- mapa: identificador sem resposta é anotado e o mapeamento anda (revisão do Codex) ---- */
+{
+  const mp = await import("../js/obdmapa.js");
+  const cad = mp.novoCaderno({ marca: "X", modelo: "Y", ano: "2020" });
+  for (let a = 0x700; a < 0x7e8; a++) { if (a === 0x7df) continue; const p = a.toString(16).toUpperCase(); mp.anotarTroca(cad, "ATSH" + p, "OK", 1); mp.anotarTroca(cad, "1001", a === 0x7b0 ? "50 01" : "NO DATA", 5); }
+  const p1 = mp.proximoPasso(cad);
+  mp.anotarTroca(cad, "ATSH7B0", "OK", 1); mp.anotarTroca(cad, "22" + p1.did, "NO DATA", 5);
+  const p2 = mp.proximoPasso(cad);
+  if (!(p1 && p1.tipo === "dado" && (!p2 || p2.did !== p1.did))) { console.error("FALHOU: o mapeamento repete o mesmo identificador: " + JSON.stringify([p1, p2])); process.exit(1); }
+  console.log("mapa: identificador calado é anotado e o mapeamento segue.");
+}

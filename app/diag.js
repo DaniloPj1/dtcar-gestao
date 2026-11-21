@@ -1387,7 +1387,12 @@ function Bico() {
         anota("Cilindro " + c.cilindro + ": lendo o valor atual do campo " + c.campo + " e gravando " + c.codigo + "…");
         const g = await uds.gravarDado(parseInt(c.campo, 16), hexCod);
         const item = { cilindro: c.cilindro, campo: c.campo, codigo: c.codigo, antes: g.antes ? g.antes.map(b => b.toString(16).toUpperCase().padStart(2, "0")).join("") : null, ok: false, texto: "" };
-        if (!g.gravou) {
+        if (g.incerto) {
+          // Escrita enviada sem resposta: tratada como POSSIVELMENTE gravada — fica no registro e no DESFAZER.
+          item.gravou = true; item.incerto = true;
+          item.texto = g.texto + " Confira o campo antes de confiar; dá para desfazer.";
+          resultado.push(item);
+        } else if (!g.gravou) {
           item.texto = g.nrc === 0x33 ? "O módulo exige DESTRAVAR antes de gravar (resposta 33), e o app não tem a chave desta família. Não gravou."
             : g.texto || "O módulo recusou a gravação.";
         } else {
@@ -1421,17 +1426,22 @@ function Bico() {
   const desfazer = async () => {
     const voltar = (feito || []).filter(x => x.antes && x.gravou);
     const passos = [], anota = t => { passos.push(t); setAndando({ passos: passos.slice() }); };
-    await sessao.comAcao("desfazer a gravação do bico", async () => {
+    const voltaram = new Set();
+    const r = await sessao.comAcao("desfazer a gravação do bico", async () => {
       for (const m of [{ pedido: "7E0", resposta: "7E8" }, { pedido: "18DA10F1", resposta: "18DAF110" }]) {
         await uds.abrir(m); const s = await uds.sessao(uds.SESSAO.estendida); if (!s.erro && s.nrc == null) break;
       }
       for (const x of voltar) {
         const g = await uds.gravarDado(parseInt(x.campo, 16), x.antes);
+        if (g.gravou) voltaram.add(x);
         anota("Cilindro " + x.cilindro + ": " + (g.gravou ? "voltou para o valor que estava (" + x.antes + ")." : "NÃO voltou: " + (g.texto || "o módulo recusou") + ". Valor antigo: " + x.antes));
       }
       await uds.fechar();
     });
-    setFeito(null); setAndando({ passos: passos.slice(), fim: true });
+    // Só sai da recuperação o cilindro cuja volta o módulo CONFIRMOU. O resto continua com o DESFAZER.
+    const faltam = (feito || []).filter(x => x.antes && x.gravou && !voltaram.has(x));
+    setFeito(faltam.length ? faltam : null);
+    setAndando({ passos: passos.slice(), fim: true, erro: !r.ok ? (r.texto || "Não deu para desfazer.") : faltam.length ? "Ainda falta voltar " + faltam.length + " cilindro(s): " + faltam.map(x => x.cilindro + " (valor antigo " + x.antes + ")").join(", ") + "." : "" });
   };
 
   return html`<${Tela} tela="bico" ajuda="Grava no módulo do motor o código que veio escrito no bico recodificado. O código IMA tem 7 caracteres e não usa 0, 9, I, J nem Q — o app confere a digitação antes. Só grava o cilindro que você marcar como trocado, lê e guarda o valor antigo antes, e pede o login do administrador na hora de gravar.">

@@ -403,7 +403,12 @@ export async function gravarDado(did, valorHex, esperaMs = 8000) {
     return { gravou: false, antes: null, nrc: lido.nrc, texto: "O módulo não entregou o valor atual deste campo" + (lido.texto ? " (" + lido.texto + ")" : "") + ". Sem o valor antigo não dá para desfazer, então nada foi gravado." };
   }
   const g = respostaDe({ resposta: r.resposta || "" }, 0x2e);
-  return { gravou: g.nrc == null && !g.erro, antes: lido.dados ? lido.dados.slice(2) : [], nrc: g.nrc, texto: g.texto || "" };
+  // Três desfechos, e o do meio não é recusa: o pedido de escrita FOI ENVIADO e a resposta se perdeu
+  // (tempo estourado, STOPPED). O módulo pode ter gravado. `incerto` mantém o valor antigo na mão de
+  // quem chamou, para dar para desfazer.
+  const antes = lido.dados ? lido.dados.slice(2) : [];
+  if (g.nrc == null && g.erro) return { gravou: false, incerto: true, antes, nrc: null, texto: "O pedido de gravação foi enviado, mas a resposta do módulo se perdeu (" + g.erro + "). Pode ter gravado ou não." };
+  return { gravou: g.nrc == null, antes, nrc: g.nrc, texto: g.texto || "" };
 }
 
 export const respostaDe = (r, servico) => {

@@ -236,6 +236,26 @@ chk("o app sabe que não tem os anexos C e D", eptiTemAnexoCD() === false);
   chk("dado nulo não explode", listaDe16(null).lista.length === 0);
 }
 
+/* ---- gravação com resposta perdida não é recusa (revisão do Codex) ---- */
+{
+  const u = await import("../js/uds.js");
+  const antigo = globalThis.window;
+  const com = resp => { globalThis.window = { Capacitor: { Plugins: { DtcarObd: { gravarDado: async () => resp } } } }; };
+  const falha = m => { console.error("FALHOU: " + m); process.exit(1); };
+  try {
+    com({ gravou: true, antes: "62 12 34 41 42", resposta: "STOPPED" });
+    let g = await u.gravarDado(0x1234, "4343");
+    if (!(g.incerto === true && g.gravou === false && g.antes.length === 2)) falha("resposta perdida deveria ser incerta, com o valor antigo: " + JSON.stringify(g));
+    com({ gravou: true, antes: "62 12 34 41 42", resposta: "7F 2E 33" });
+    g = await u.gravarDado(0x1234, "4343");
+    if (!(g.gravou === false && !g.incerto && g.nrc === 0x33)) falha("recusa confirmada não é incerta: " + JSON.stringify(g));
+    com({ gravou: true, antes: "62 12 34 41 42", resposta: "6E 12 34" });
+    g = await u.gravarDado(0x1234, "4343");
+    if (!(g.gravou === true && !g.incerto)) falha("resposta positiva grava: " + JSON.stringify(g));
+    console.log("gravação: aceita, recusada e incerta distinguidas.");
+  } finally { globalThis.window = antigo; }
+}
+
 console.log(falhas.length ? ok.length + " ok, " + falhas.length + " FALHARAM:\n  " + falhas.join("\n  ")
                           : ok.length + " conferências do UDS passaram.");
 process.exit(falhas.length ? 1 : 0);

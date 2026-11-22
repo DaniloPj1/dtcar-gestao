@@ -1722,3 +1722,69 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 @media (max-width:899px){.sino-cel{display:block;margin-left:8px}.sino-cel .sino-btn{width:34px;height:34px;background:transparent;border-color:rgba(255,255,255,.35);color:var(--on-steel)}.sino-cel .sino-btn.tem{color:#ffd27a;border-color:#ffd27a}}
 @media (max-width:640px){.sino-cel .sino-lista{position:fixed;left:12px;right:12px;top:58px;width:auto}}
 .pill-app{background:#fff1dc;color:#8a5200;border:1px solid #e08a00;font-weight:700}
+
+/* ===== Painel Financeiro (estilo do protótipo "Painel DTCar", 22/11/2026) =====
+   Tonalidades do azul do app (#2f6fb5) nos cartões; verde = entradas e vermelho = saídas,
+   sempre com o nome escrito ao lado (a cor nunca fala sozinha). Cartões coloridos são
+   fixos nos dois temas (texto branco conferido); o resto usa as variáveis do tema. */
+:root{--pf-az6:#2f6fb5;--pf-az7:#225da4;--pf-az8:#174f94;--pf-az9:#0d2c52;--pf-ok:#2e7d4f;--pf-bad:#a63a31}
+.pf-topo{align-items:flex-end}
+.pf-filtros{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
+.pf-ano{display:inline-flex;align-items:center;gap:2px;background:var(--pf-az8);border-radius:999px;padding:2px 4px;color:#fff}
+.pf-ano b{font-size:14.5px;letter-spacing:.04em;padding:0 2px}
+.pf-ano button{background:none;border:0;color:#fff;font-size:13px;padding:4px 8px;cursor:pointer;border-radius:999px}
+.pf-ano button:hover{background:rgba(255,255,255,.12)}
+.pf-meses{display:flex;gap:5px;flex-wrap:wrap}
+.pf-mes{background:var(--surface);border:1px solid var(--line);color:var(--muted);border-radius:999px;padding:4px 10px;font-size:12.5px;font-weight:600;cursor:pointer}
+.pf-mes:hover{background:var(--surface-2)}
+.pf-mes[aria-pressed="true"]{background:var(--pf-az6);border-color:var(--pf-az6);color:#fff}
+.pf-grupos{display:flex;gap:18px;flex-wrap:wrap;margin-top:4px}
+.pf-grupo{flex:1 1 420px;min-width:0}
+.pf-rotulo{font-size:13.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-family:var(--f-corpo,inherit)}
+.pf-grupo .pf-rotulo{margin-bottom:8px}
+.pf-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.pf-kpi{border-radius:14px;padding:12px 14px;color:#fff;display:flex;align-items:center;gap:10px;min-width:0}
+.pf-kpi>div,.pf-kt{flex:1 1 0;min-width:0}
+.pf-kpi span{display:block;font-size:12px;font-weight:600;letter-spacing:.03em}
+.pf-kpi b{display:block;font-family:var(--f-display);font-size:24px;font-weight:600;text-align:right;margin-top:10px;font-variant-numeric:tabular-nums;white-space:nowrap}
+.pf-kpi small{display:block;font-size:11px;text-align:right;color:rgba(255,255,255,.8)}
+.pf-az6{background:var(--pf-az6)}.pf-az7{background:var(--pf-az7)}.pf-az8{background:var(--pf-az8)}.pf-az9{background:var(--pf-az9)}
+.pf-ok{background:var(--pf-ok)}.pf-bad{background:var(--pf-bad)}
+.pf-anel{width:46px;height:46px;flex:0 0 46px}
+.pf-anel text{font:700 10px var(--f-corpo,Barlow,sans-serif);fill:currentColor}
+.pf-kpi .pf-anel text{fill:#fff}
+.pf-linha{display:flex;gap:14px;flex-wrap:wrap;margin-top:14px}
+.pf-card{flex:1 1 380px;min-width:0}
+.pf-larga{flex:2 1 520px}
+.pf-cab{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.pf-legenda{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin-top:6px}
+.pf-legenda span{display:inline-flex;align-items:center;gap:6px}
+.pf-q{width:10px;height:10px;border-radius:2px;display:inline-block}
+.pf-q-ok{background:var(--pf-ok)}.pf-q-bad{background:var(--pf-bad)}.pf-q-cinza{background:var(--muted)}.pf-q-azul{background:var(--brand)}
+.pf-resumo{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:7px 11px;font-size:12.5px;color:var(--ink);display:flex;flex-direction:column;gap:2px}
+.pf-resumo b{font-variant-numeric:tabular-nums}
+.pf-azul{color:var(--brand)}
+.pf-bars{display:flex;align-items:flex-end;gap:4px;margin-top:14px}
+.pf-bm{flex:1 1 0;min-width:0;display:flex;flex-direction:column;align-items:center;gap:6px}
+.pf-bb{display:flex;align-items:flex-end;gap:2px;height:152px}
+.pf-bars-meta .pf-bb{height:112px}
+.pf-b{width:11px;border-radius:3px 3px 0 0;display:inline-block;min-height:2px}
+.pf-b-ok{background:var(--pf-ok)}.pf-b-bad{background:var(--pf-bad)}.pf-b-cinza{background:var(--muted)}.pf-b-azul{background:var(--brand)}
+.pf-bars .pf-mes{padding:2px 7px;font-size:11px}
+.pf-ml{font-size:11px;color:var(--muted)}
+.pf-cats{display:flex;flex-direction:column;gap:9px;margin-top:12px}
+.pf-cat{display:flex;align-items:center;gap:10px;min-width:0}
+.pf-cat-n{flex:0 0 150px;text-align:right;font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-cat-b{flex:1 1 0;min-width:0;display:flex;align-items:center;gap:8px}
+.pf-cat-b i{height:14px;border-radius:3px;background:var(--pf-bad);display:inline-block}
+.pf-cat-b b{font-family:var(--f-display);font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pf-svg{width:100%;height:170px;margin-top:10px}
+.pf-eixo{stroke:var(--line);stroke-width:1}
+.pf-serie{fill:none;stroke:var(--brand);stroke-width:3;stroke-linejoin:round;stroke-linecap:round}
+.pf-ponto{fill:var(--brand);stroke:var(--surface);stroke-width:2}
+.pf-eixo-x{display:flex;justify-content:space-between;font-size:11px;color:var(--muted)}
+.pf-meta-mes{display:flex;align-items:center;gap:10px;margin-top:10px;font-size:12.5px;color:var(--muted)}
+.pf-meta-mes .pf-anel{width:56px;height:56px;flex:0 0 56px;color:var(--ink)}
+.pf-meta-edit{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+.pf-meta-edit .inp-suf{max-width:220px}
+@media (max-width:640px){.pf-cat-n{flex-basis:110px}.pf-kpi b{font-size:21px}.pf-bars{overflow-x:auto;padding-bottom:4px}.pf-bm{min-width:34px}}

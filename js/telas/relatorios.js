@@ -104,7 +104,7 @@ function useCarga(fn, deps) {
 }
 const Carregando = ({ erro }) => erro ? html`<div class="erros">Não foi possível carregar: ${erro}</div>` : html`<section class="card"><div class="esqueleto"></div></section>`;
 /** agrupa as linhas da função relatorio_itens por O.S. */
-function agruparOS(linhas) {
+export function agruparOS(linhas) {
   const m = new Map();
   for (const l of linhas || []) {
     let o = m.get(l.ordem_id);
@@ -119,7 +119,7 @@ function agruparOS(linhas) {
   }
   return [...m.values()];
 }
-const faturadas = l => l.filter(o => ["entregue", "recusado"].includes(o.status) && o.total > 0);
+export const faturadas = l => l.filter(o => ["entregue", "recusado"].includes(o.status) && o.total > 0);
 
 /* =================== relatórios =================== */
 function RelHistorico() {

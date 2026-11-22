@@ -141,6 +141,7 @@ export function BarraTopo({ titulo, offline, pend, enviarFila }) {
       <${Sino} />
       <${BotaoTema} classe="btn-icone" />
       <button type="button" class="btn btn-sm bt-oleo" title="Óleo e filtros pelo modelo do carro" aria-label="Óleo e filtros" onClick=${() => ir("/oleo-filtros")}>${I.gota}<span>Óleo e filtros</span></button>
+      ${pode(perfil, "financeiro") ? html`<button type="button" class="btn btn-sm bt-oleo bt-fin" title="Painel Financeiro: entradas, saídas, faturamento e meta do mês" aria-label="Painel Financeiro" onClick=${() => ir("/painel-financeiro")}>${I.grafico}<span>Painel Financeiro</span></button>` : null}
       ${pode(perfil, "orcar") ? html`<button type="button" class="btn btn-sm bt-novo-orc" title="Novo orçamento, sem abrir O.S." onClick=${() => ir("/orcamento/novo")}>${I.mais}<span>Novo orçamento</span></button>` : null}
       ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-pri btn-sm" title="Nova O.S. (F2)" onClick=${() => ir("/entrada")}>${I.mais}<span>Nova O.S.</span></button>` : null}
     </div>

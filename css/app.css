@@ -1818,3 +1818,5 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pf-anel-g{width:104px;height:104px;flex:0 0 auto;color:var(--ink)}
 .pf-serie-ok{stroke:var(--pf-ok)}
 .pf-serie-bad{stroke:var(--pf-bad)}
+.lst-sec{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:14px 2px 2px;padding-top:10px;border-top:1px solid var(--line)}
+.lst-sec:first-child{margin-top:0;padding-top:0;border-top:0}

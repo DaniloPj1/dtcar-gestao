@@ -176,6 +176,11 @@ function criarApiSupabase() {
     alterados: async (nome, desde) => todos(() => sb.from(nome).select("*").gt("atualizado_em", desde).order("id")),
     idsDe: async nome => todos(() => sb.from(nome).select("id").order("id")).then(r => r.map(x => x.id)),
     recibos: {
+      /** das vendas dadas, as que têm recibo NÃO cancelado em qualquer data (o recibo pode vir noutro mês/ano);
+          usado pelo caixa para a venda de balcão entrar uma vez só (achado do Codex, 22/11/2026) */
+      dasVendas: async ids => { const out = new Set(); for (let i = 0; i < (ids || []).length; i += 200) {
+        const r = ok(await sb.from("recibos").select("venda_id,cancelado").in("venda_id", ids.slice(i, i + 200)));
+        for (const x of r) if (x.venda_id && !x.cancelado) out.add(x.venda_id); } return [...out]; },
       listar: async ({ ordemId, de, ate } = {}) => { let q = sb.from("recibos").select("*"); if (ordemId) q = q.eq("ordem_id", ordemId); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
       um: async id => ok(await sb.from("recibos").select("*").eq("id", id).single()),
       /** todos os recibos a partir de uma data, sem limite (saldo por conta) */
@@ -335,6 +340,8 @@ function criarApiSupabase() {
     },
     vendas: {
       listar: async ({ de, ate } = {}) => { let q = sb.from("vendas").select("*"); if (de) q = q.gte("criado_em", de); if (ate) q = q.lt("criado_em", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
+      /** o período inteiro, sem o teto de 1.000 (Painel Financeiro, DRE e Inteligência leem o ano todo) */
+      periodo: async ({ de, ate } = {}) => todos(() => { let q = sb.from("vendas").select("*"); if (de) q = q.gte("criado_em", de); if (ate) q = q.lt("criado_em", ate); return q.order("numero"); }),
       uma: async id => { const v = ok(await sb.from("vendas").select("*").eq("id", id).single()); v.itens = ok(await sb.from("venda_itens").select("*").eq("venda_id", id).order("posicao")); return v; },
       finalizar: async p => ok(await sb.rpc("finalizar_venda", { p })),
       cancelar: async (id, motivo) => ok(await sb.rpc("cancelar_venda", { p_id: id, p_motivo: motivo || "" })),
@@ -616,6 +623,8 @@ function criarApiSupabase() {
         return data;
       },
     },
+    /** descrições já lançadas (sem preço), para o corretor do pedido no App DTCar (22/11/2026) — as mesmas que o app do mecânico lê */
+    descricoesItens: async () => ok(await sb.from("os_itens").select("descricao,tipo").order("criado_em", { ascending: false }).limit(3000)),
     relatorioItens: async (ini, fim, base) => todos(() => sb.rpc("relatorio_itens", { p_ini: ini, p_fim: fim, p_base: base || "entrega" }).order("numero").order("item_id")),
     /** réplica no banco do PC (etapa 2): o que mudou desde uma data e o que foi apagado (supabase/v13.sql) */
     replica: {
@@ -838,7 +847,7 @@ function comBancoDoPC(a) {
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })),
       ...(a.contas.fixas ? { fixas: ler(a.contas.fixas, L.contasFixas) } : {}) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },
-    vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },
+    vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), periodo: ler(a.vendas.periodo, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },

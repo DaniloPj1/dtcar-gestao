@@ -17,7 +17,7 @@ const mesDe = s => { const str = String(s || ""); if (!str) return null;
   const m = Number(str.slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
 const din = v => reais(v).replace("R$ ", "");
 /** categoria que é compra de peça/insumo (fica fora da conta do resultado: o custo do item já conta) */
-export const ehCompraDePeca = c => /fornecedor|pe[çc]a|insumo|mercadoria/i.test(String(c || ""));
+export const ehCompraDePeca = c => /fornecedor|pe[çc]a|insumo|mercadoria|terceir|prestador/i.test(String(c || ""));
 
 const COLS = "minmax(230px, 1.6fr) repeat(12, minmax(84px, 1fr)) minmax(104px, 1.1fr)";
 function Linha({ cls, label, vals }) {
@@ -40,7 +40,7 @@ export function DRE() {
       const iniISO = new Date(ini + "T00:00:00").toISOString(), fimISO = new Date(new Date(fim + "T00:00:00").getTime() + 86400000).toISOString();
       const [itens, vendas, pagas] = await Promise.all([
         api.relatorioItens(iniISO, fimISO, "entrega"),
-        api.vendas && api.vendas.listar ? api.vendas.listar({ de: iniISO, ate: fimISO }).catch(() => []) : [],
+        api.vendas && (api.vendas.periodo || api.vendas.listar) ? (api.vendas.periodo || api.vendas.listar)({ de: iniISO, ate: fimISO }).catch(() => []) : [],
         api.contas.listar({ de: ini, ate: fim, campo: "pago_em", status: "paga" }),
       ]);
       if (vivo) setD({ oss: faturadas(agruparOS(itens)), vendas: (vendas || []).filter(v => v.status === "concluida"), pagas: pagas || [] });
@@ -89,14 +89,14 @@ export function DRE() {
           <div class="tf-cel">Total</div>
         </div>
         <${Linha} cls="tf-total" label="Receita bruta (O.S. entregues + balcão)" vals=${vals(t.fat)} />
-        <${Linha} cls="tf-sub" label="(−) Custo de peças e insumos dos itens" vals=${vals(t.custo, true)} />
+        <${Linha} cls="tf-sub" label="(−) Custo de peças, insumos e terceiros dos itens" vals=${vals(t.custo, true)} />
         <${Linha} cls="tf-total" label="Resultado bruto" vals=${vals(t.rb)} />
         ${t.listaCats.length ? html`<${Linha} cls="tf-grupo" label="Despesas pagas no mês, por categoria" vals=${MESES.concat([""]).map(() => ({ v: "" }))} />` : null}
         ${t.listaCats.map(c => html`<${Linha} key=${c.k} cls="tf-sub" label=${"(−) " + c.k} vals=${vals(c.vs, true)} />`)}
         <${Linha} cls="tf-total" label="Total de despesas pagas" vals=${vals(t.desp, true)} />
         <${Linha} cls="tf-final" label="Resultado do mês (aproximado)" vals=${t.res.concat([soma(t.res)]).map(v => ({ v: (v < 0 ? "−" : "") + din(Math.abs(v)), cls: v < 0 ? "tf-neg" : "" }))} />
         <${Linha} cls="tf-margem" label="Margem (resultado ÷ receita)" vals=${valsPct(t.fat.concat([soma(t.fat)]).map((f, i) => { const r = i < 12 ? t.res[i] : soma(t.res); return f ? r / f * 100 : null; }))} />
-        ${soma(t.pecas) ? html`<${Linha} cls="tf-info" label="Compras de peças pagas (fora da conta: o custo já está na linha de custo)" vals=${vals(t.pecas)} />` : null}
+        ${soma(t.pecas) ? html`<${Linha} cls="tf-info" label="Peças e serviços de terceiros pagos (fora da conta: o custo já está na linha de custo)" vals=${vals(t.pecas)} />` : null}
       </div></div>
       <p class="dica">DRE gerencial, para acompanhar o negócio: a receita e o custo dos itens seguem a data de ENTREGA (competência) e as despesas seguem a data do PAGAMENTO (caixa). As compras de peças pagas no mês ficam fora da soma do resultado, porque o custo das peças vendidas já aparece na linha de custo — senão a peça contaria duas vezes. Impostos, folha e demais contas entram pela categoria do lançamento em Contas a pagar. A DRE oficial é a do contador.</p>
     </section>`}

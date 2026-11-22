@@ -51,7 +51,7 @@ export function AppMecanico() {
       <div class="acoes"><a class="btn btn-pri" href=${ARQUIVO_APP} download="DTCar-app.apk">Baixar o app (APK)</a></div>
       <span class="dica">Para instalar: abra o arquivo no celular e, se o Android pedir, permita "instalar apps desconhecidos" para o navegador. Desinstale a versão anterior antes de instalar esta (a 1.5.0 traz o Diagnóstico OBD pelo adaptador ELM327); sem desinstalar, o Android recusa a instalação. As telas novas chegam sozinhas, sem instalar de novo.</span>
     </section>
-    <section class="card"><h2>App do mecânico · itens da lista</h2>
+    <section class="card"><h2>Itens da lista do mecânico no app</h2>
       <span class="dica">É o que o mecânico vê para marcar ao receber um veículo, separado por sistema. Cada mudança vale na hora; o app pega na próxima vez que for aberto.</span>
       <div class="seg" role="group" aria-label="Sistema">${SISTEMAS_PADRAO.map(s => html`<button type="button" key=${s.id} aria-pressed=${s.id === sid ? "true" : "false"} onClick=${() => setSid(s.id)}>${s.nome}</button>`)}</div>
       <div class="am-lista">${pecas.map(p => html`<div key=${p.id} class=${"am-linha" + (p.oculto ? " am-off" : "")}>

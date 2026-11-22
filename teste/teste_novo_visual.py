@@ -26,7 +26,9 @@ SEMEAR = """(() => {
     cliente: { nome: "Cliente Painel" }, veiculo: { placa: "PNF1A11", marca: "Fiat", modelo: "Uno" }, total: 900 });
   db.os_itens.push({ id: "if1", ordem_id: "of1", tipo: "servico", descricao: "REVISAO COMPLETA", qtd: 1, valor_unit: 600, desconto: 0, aprovado: true },
     { id: "if2", ordem_id: "of1", tipo: "peca", descricao: "FILTRO DE OLEO", qtd: 1, valor_unit: 300, desconto: 0, custo_unit: 300, aprovado: true });
-  db.vendas = [{ id: "vf1", status: "concluida", criado_em: iso(m, 7), total: 100, custo: 40, forma_pagamento: "PIX" }];
+  db.vendas = [{ id: "vf1", status: "concluida", criado_em: iso(m, 7), total: 100, custo: 40, forma_pagamento: "PIX" },
+    { id: "vf2", status: "concluida", criado_em: iso(m, 12), total: 300, custo: 100, forma_pagamento: "PIX" }];
+  db.recibos.push({ id: "rf5", numero: 12, valor: 300, forma: "PIX", venda_id: "vf2", data: dia(m, 12), criado_em: iso(m, 12) });
   db.receber = [{ id: "pf1", ordem_id: "o5", status: "aberta", valor: 1200, pago: 0, vencimento: dia(m + 1, 10), forma: "Promissória" }];
   db.config.contasFinanceiras = [{ nome: "Sicredi", saldo: 5000, em: agora.toISOString() }];
   return m;
@@ -51,10 +53,10 @@ try:
     chk("dre: título e nota dos regimes", "DRE gerencial" in tx and "entrega" in pg.inner_text(".dica").lower())
     chk("dre: receita bruta do ano = 1.000 + O.S. antigas", "Receita bruta" in tx)
     linhas = pg.eval_on_selector_all(".tf-row", "l => l.map(e => e.textContent)")
-    chk("dre: custo na linha própria", any("Custo de peças e insumos" in x and "340,00" in x for x in linhas), [x[:60] for x in linhas])
+    chk("dre: custo na linha própria", any("Custo de peças, insumos e terceiros" in x and "440,00" in x for x in linhas), [x[:60] for x in linhas])
     chk("dre: despesa por categoria (Energia)", any(x.startswith("(−) Energia") and "800,00" in x for x in linhas))
     chk("dre: compras de peças FORA da conta", any("fora da conta" in x and "650,00" in x for x in linhas))
-    chk("dre: resultado não desconta a compra de peça", any("Resultado do mês (aproximado)" in x and "140,00" in x for x in linhas))
+    chk("dre: resultado não desconta a compra de peça", any("Resultado do mês (aproximado)" in x and "60,00" in x for x in linhas))
     chk("dre: margem na última linha", any("Margem" in x and "%" in x for x in linhas))
     pg.close()
 
@@ -66,14 +68,14 @@ try:
     chk("fluxo: saídas por categoria", any(x.startswith("Energia") and "800,00" in x for x in linhas))
     chk("fluxo: saldo do dia com sinal e nome escrito", any("Saldo do dia (entradas − saídas)" in x and "−800,00" in x for x in linhas))
     chk("fluxo: total de saídas traz os dois dias (800 e 650)", any("Total de saídas" in x and "800,00" in x and "650,00" in x for x in linhas))
-    chk("fluxo: saldo acumulado fecha em 150", any("Saldo acumulado no mês" in x and "150,00" in x for x in linhas))
-    chk("fluxo: tiles das formas no mês", "PIX" in pg.inner_text(".tf-tiles") and "1.000,00" in pg.inner_text(".tf-tiles"))
+    chk("fluxo: saldo acumulado fecha em 450 (venda com recibo entra uma vez)", any("Saldo acumulado no mês" in x and "450,00" in x for x in linhas))
+    chk("fluxo: tiles das formas no mês", "PIX" in pg.inner_text(".tf-tiles") and "1.300,00" in pg.inner_text(".tf-tiles") and "balcão" in pg.inner_text(".tf-tiles"))
     pg.close()
 
     # ----- Inteligência do Negócio -----
     pg = abrir(b, "#/inteligencia")
     tx = pg.inner_text(".pf")
-    chk("inteligencia: recebimentos e pagamentos do ano", "Recebimentos" in tx and "Pagamentos" in tx and "1.500,00" in tx and "4.450,00" in tx, tx[:300])
+    chk("inteligencia: recebimentos e pagamentos do ano", "Recebimentos" in tx and "Pagamentos" in tx and "1.900,00" in tx and "4.450,00" in tx, tx[:300])
     chk("inteligencia: receita por serviço", "REVISAO COMPLETA" in tx)
     chk("inteligencia: gastos por favorecido", "EDP" in tx)
     chk("inteligencia: a receber × a pagar com nomes escritos", "A receber (parcelas)" in tx and "A pagar (contas)" in tx)

@@ -44,13 +44,17 @@ export function PainelFinanceiro() {
       const ini = ano + "-01-01", fim = ano + "-12-31";
       const iniISO = new Date(ini + "T00:00:00").toISOString(), fimISO = new Date(new Date(fim + "T00:00:00").getTime() + 86400000).toISOString();
       const [recibos, pagas, itens, vendas, saldos] = await Promise.all([
-        api.recibos.listar({ de: ini, ate: fim }),
+        api.recibos.desde ? api.recibos.desde(ini) : api.recibos.listar({ de: ini, ate: fim }),
         api.contas.listar({ de: ini, ate: fim, campo: "pago_em", status: "paga" }),
         api.relatorioItens(iniISO, fimISO, "entrega"),
-        api.vendas && api.vendas.listar ? api.vendas.listar({ de: iniISO, ate: fimISO }).catch(() => []) : [],
+        api.vendas && (api.vendas.periodo || api.vendas.listar) ? (api.vendas.periodo || api.vendas.listar)({ de: iniISO, ate: fimISO }).catch(() => []) : [],
         cfg.contasFinanceiras && cfg.contasFinanceiras.length && api.saldosContas ? api.saldosContas().catch(() => null) : null,
       ]);
-      if (vivo) setD({ recibos: (recibos || []).filter(r => !r.cancelado), pagas: pagas || [], oss: faturadas(agruparOS(itens)), vendas: (vendas || []).filter(v => v.status === "concluida"), saldos });
+      const rs = (recibos || []).filter(r => !r.cancelado && String(r.data || r.criado_em || "").slice(0, 10) <= fim);
+      const conc = (vendas || []).filter(v => v.status === "concluida");
+      // venda com recibo entra pelo recibo — em QUALQUER data: o recibo pode vir noutro mês ou ano (achados do Codex, 22/11/2026)
+      const comRecibo = new Set(api.recibos.dasVendas ? await api.recibos.dasVendas(conc.map(v => v.id)).catch(() => rs.map(r => r.venda_id).filter(Boolean)) : rs.map(r => r.venda_id).filter(Boolean));
+      if (vivo) setD({ recibos: rs, pagas: pagas || [], oss: faturadas(agruparOS(itens)), vendas: conc, vendasCaixa: conc.filter(v => !comRecibo.has(v.id)), saldos });
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano]);
@@ -63,6 +67,7 @@ export function PainelFinanceiro() {
       for (const c of d.pagas) { const m = mesDe(c.pago_em); if (m != null) sai[m] += n(c.valor_pago != null ? c.valor_pago : c.valor); }
       for (const o of d.oss) { const m = mesDe(o.entregue_em); if (m != null) { fat[m] += o.total; custo[m] += o.custo; } }
       for (const v of d.vendas) { const m = mesDe(v.criado_em); if (m != null) { fat[m] += n(v.total); custo[m] += n(v.custo); } }
+      for (const v of d.vendasCaixa) { const m = mesDe(v.criado_em); if (m != null) entra[m] += n(v.total); } // balcão sem recibo entra no caixa pela venda
     }
     const saldo = entra.map((e, i) => e - sai[i]);
     let acc = 0; const acum = saldo.map(s => (acc += s));
@@ -102,7 +107,7 @@ export function PainelFinanceiro() {
 
   return html`<div class="pagina pf">
     <div class="painel-topo pf-topo">
-      <div><h1>Painel Financeiro</h1><span class="sub">Entradas e saídas pelo caixa; faturamento e custo pelas O.S. entregues e vendas de balcão.</span></div>
+      <div><h1>Painel Financeiro</h1><span class="sub">Entradas (recibos e balcão sem recibo) e saídas pelo caixa; faturamento e custo pelas O.S. entregues e balcão.</span></div>
       <div class="pf-filtros">
         <button type="button" class="btn btn-sm" onClick=${() => ir("/dre")}>DRE</button>
         <button type="button" class="btn btn-sm" onClick=${() => ir("/fluxo-diario")}>Fluxo diário</button>
@@ -138,7 +143,7 @@ export function PainelFinanceiro() {
       <section class="card pf-card pf-larga">
         <div class="pf-cab">
           <div><h3 class="pf-rotulo">Entradas × saídas · ${ano}</h3>
-            <div class="pf-legenda"><span><i class="pf-q pf-q-ok"></i>Entradas (recibos)</span><span><i class="pf-q pf-q-bad"></i>Saídas (contas pagas)</span></div></div>
+            <div class="pf-legenda"><span><i class="pf-q pf-q-ok"></i>Entradas (recibos e balcão)</span><span><i class="pf-q pf-q-bad"></i>Saídas (contas pagas)</span></div></div>
           <div class="pf-resumo" id="pf-resumo-mes"><b>${MESES_EXT[mes]}</b><span>Entradas: <b>${reais(t.entra[mes])}</b></span><span>Saídas: <b>${reais(t.sai[mes])}</b></span><span>Saldo: <b class=${t.saldo[mes] < 0 ? "c-bad" : "pf-azul"}>${reais(t.saldo[mes])}</b></span></div>
         </div>
         <div class="pf-bars" role="img" aria-label=${"Entradas e saídas de cada mês de " + ano}>

@@ -16,6 +16,8 @@ import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
 import { acessoApp, foraDoHorario } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
+import { novoVocabulario, corrigirFrase } from "../js/corretor.js";
+import { criarDitado } from "../js/ditado.js";
 import { Ctx, useApp, Ic, GRUPOS, TELAS, ROTAS_RE, ir, rotaAtual, Cabecalho, Cartao, KV, Campo, Rodape, Quadro, nomeVeic, usarPlaca, BuscaPlaca, Veiculo, ModeloAMao, SairBotao, Tela, quadros, usarPasso, limparPlacaGuardada } from "./comum.js";
 import { Obd, Modulos, Atuadores, Aprendizados, Bico, ParametrosTela } from "./diag.js";
 export { limparPlacaGuardada };
@@ -112,6 +114,17 @@ function PedidoNovo({ onFeito, onCancelar }) {
   useEffect(() => { let p = ""; try { p = sessionStorage.getItem(CH_PLACA_PEDIDO) || ""; sessionStorage.removeItem(CH_PLACA_PEDIDO); } catch (e) { /* nada */ } if (p) pl.buscar(p); }, []);
   const [mao, setMao] = useState({ modelo: "", ano: "" }), [nome, setNome] = useState(""), [whats, setWhats] = useState(""), [texto, setTexto] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [itens, setItens] = useState([]);
   const v = pl.veic, trava = useRef(false);
+  // Corretor e ditado do app do mecânico, agora aqui (22/11/2026: o App DTCar absorve o app antigo).
+  // O vocabulário vem das descrições já lançadas; sem internet ou sem resposta, vale o glossário fixo.
+  const { avisar: avisarD } = useApp();
+  const vocRef = useRef(novoVocabulario([]));
+  useEffect(() => { let vivo = true; api.descricoesItens && api.descricoesItens().then(l => { if (vivo && l && l.length) vocRef.current = novoVocabulario(l); }).catch(() => {}); return () => { vivo = false; }; }, []);
+  const [ouvindo, setOuvindo] = useState(""), [falando, setFalando] = useState(false);
+  const dit = useRef(null); if (!dit.current) dit.current = criarDitado(m => avisarD(m, true));
+  const falar = () => { setFalando(true); dit.current.segurar(parcial => setOuvindo(parcial), fim => { setFalando(false); setOuvindo("");
+    const f = String(fim || "").trim(); if (f) setTexto(t => (t ? t.replace(/\s*$/, "\n") : "") + corrigirFrase(vocRef.current, f)); }); };
+  const soltarFala = () => { dit.current.soltar(); };
+  const arrumar = () => setTexto(t => String(t || "").split("\n").map(l => l.trim() && !l.startsWith("— ") ? corrigirFrase(vocRef.current, l) : l).join("\n"));
   const enviar = async () => {
     if (trava.current) return;
     const t = texto.trim();
@@ -141,7 +154,12 @@ function PedidoNovo({ onFeito, onCancelar }) {
       <${SistemasCarro} onMuda=${setItens} />
       ${itens.length ? html`<div class="lista-marcados" id="pd-marcados"><b>Marcados (${itens.length})</b>${itens.map((i, n) => html`<div key=${n} class=${i.falta ? "falta" : ""}>${i.qtd > 1 ? i.qtd + "× " : ""}${i.descricao}${i.falta ? " — falta a posição" : ""}</div>`)}</div>` : null}</${Cartao}>
     <${Cartao} titulo="Observação (opcional)" id="pd-texto">
-      <textarea id="pd-area" class="area" rows="4" placeholder="O que não está na lista, o que o cliente reclamou, o que você viu no carro" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></${Cartao}>
+      <textarea id="pd-area" class="area" rows="4" placeholder="O que não está na lista, o que o cliente reclamou, o que você viu no carro" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+      <div class="fala-linha">
+        <button type="button" class=${"btn-fala" + (falando ? " on" : "")} id="pd-falar" onPointerDown=${e => { e.preventDefault(); falar(); }} onPointerUp=${soltarFala} onPointerCancel=${soltarFala} onPointerLeave=${() => falando && soltarFala()}>${falando ? "Ouvindo… solte para parar" : "Segurar para falar"}</button>
+        <button type="button" class="btn-arrumar" id="pd-arrumar" onClick=${arrumar} disabled=${!String(texto).trim()}>Arrumar a escrita</button>
+      </div>
+      ${ouvindo ? html`<div class="nota" id="pd-ouvindo">${ouvindo}</div>` : null}</${Cartao}>
     <button type="button" class="link" onClick=${onCancelar}>Cancelar e voltar aos orçamentos</button>
   </${Tela}>`;
 }

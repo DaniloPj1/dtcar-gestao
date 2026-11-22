@@ -590,6 +590,13 @@ body{font-size:15px}
   .rodape-acoes{left:0}
   .pagina{max-width:1200px}.pagina.larga{max-width:1480px}.pagina.larga-media{max-width:1200px}
 }
+/* monitor grande: layout aberto de verdade — a página usa a largura da tela (pedido do Danilo, 22/11/2026) */
+@media (min-width:1500px){
+  .pagina,.pagina.larga,.pagina.larga-media{max-width:1760px}
+}
+@media (min-width:1860px){
+  .pagina,.pagina.larga,.pagina.larga-media{max-width:none}
+}
 .lateral-marca{background:none;border:0;padding:0 14px 0 0;text-align:left}
 .lateral-marca img{height:28px;width:auto;display:block}
 .lateral-grupo{position:relative;display:flex;align-self:stretch}

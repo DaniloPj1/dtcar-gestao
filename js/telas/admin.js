@@ -30,6 +30,9 @@ export function Mais() {
       ${pode(perfil, "financeiro") ? it("/financeiro", "Contas a pagar", "Boletos, duplicatas das notas e despesas da oficina", I.dinheiro) : null}
       ${pode(perfil, "financeiro") ? it("/caixa", "Previsão de caixa", "Saldo previsto dia a dia até o fim do mês", I.grafico) : null}
       ${pode(perfil, "financeiro") ? it("/painel-financeiro", "Painel Financeiro", "Entradas, saídas, faturamento e meta do mês", I.grafico) : null}
+      ${pode(perfil, "financeiro") ? it("/dre", "DRE gerencial", "Resultado do ano, mês a mês", I.grafico) : null}
+      ${pode(perfil, "financeiro") ? it("/fluxo-diario", "Fluxo de Caixa Diário", "O caixa dia a dia, com as formas de pagamento", I.grafico) : null}
+      ${pode(perfil, "financeiro") ? it("/inteligencia", "Inteligência do Negócio", "Receita por serviço, gastos e o que vem pela frente", I.grafico) : null}
       ${pode(perfil, "financeiro") ? it("/funcionarios", "Funcionários", "Cadastro, horário, folha de ponto, vales, comissão e custo da equipe", I.pessoas) : null}
       ${pode(perfil, "verValores") ? it("/relatorios", "Relatórios", "Histórico de serviços, faturamento, caixa, contas, estoque e mais", I.grafico) : null}
       ${pode(perfil, "ajustes") ? it("/equipe", "Equipe", "Liberar acessos e definir papéis", I.pessoas) : null}

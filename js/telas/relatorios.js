@@ -35,7 +35,7 @@ const TITULO = Object.fromEntries(RELATORIOS.flatMap(([, l]) => l.map(([k, t]) =
 const isoDia = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const diaDe = iso => iso ? isoDia(new Date(iso)) : "";
 const n = v => Number(v) || 0;
-const valorItem = i => i.fornecida_cliente || i.aprovado === false ? 0 : n(i.qtd) * n(i.valor_unit) - n(i.desconto);
+export const valorItem = i => i.fornecida_cliente || i.aprovado === false ? 0 : n(i.qtd) * n(i.valor_unit) - n(i.desconto);
 const custoItem = i => i.fornecida_cliente || i.aprovado === false ? 0 : n(i.qtd) * n(i.custo_unit);
 const pctF = v => v === null || v === undefined || !isFinite(v) ? "—" : Math.round(v) + "%";
 const FMT = { reais: v => reais(v), qtd: v => qtdFmt(v), data: v => v ? fmtData(v) : "—", pct: pctF, txt: v => v ?? "" };

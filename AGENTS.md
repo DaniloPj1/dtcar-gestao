@@ -13,7 +13,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `js/pasta.js` grava a cópia na pasta "DTCar Gestão" do computador.
 
 ## Onde fica cada coisa
-- `js/app.js`: menu lateral (`LATERAL`), rotas, carga e sincronização dos dados, permissões por rota (`restrito`).
+- `js/app.js`: menu do computador (`LATERAL`; desde 22/11/2026 é uma BARRA PRETA NO TOPO, layout aberto: os grupos descem com as opções no hover/foco — o menu lateral acabou e com ele o limite de altura em 1366x768), rotas, carga e sincronização dos dados, permissões por rota (`restrito`).
 - `js/api.js`: todas as chamadas ao Supabase. Telas não falam com o Supabase diretamente.
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).

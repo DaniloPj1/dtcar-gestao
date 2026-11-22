@@ -65,6 +65,7 @@ function serie(pontos, ini, fim, grupo) {
 // tam: colunas de 12 no computador (3 = ¼, 4 = ⅓, 6 = ½, 8 = ⅔, 12 = inteira)
 export const JANELAS = {
   busca: { t: "Busca rápida", tam: 12 },
+  acoes: { t: "Ações do dia a dia", tam: 12 },
   hoje: { t: "Resumo do dia", tam: 12 },
   patio: { t: "Pátio", tam: 12 },
   agenda: { t: "Agenda da semana", tam: 12 },
@@ -85,7 +86,7 @@ export const JANELAS = {
   aniversarios: { t: "Aniversariantes do mês", tam: 3, valores: true },
   contas: { t: "Contas a pagar", tam: 12, valores: true, fin: true },
 };
-export const LAYOUT_PADRAO = [["busca", 12], ["hoje", 12], ["patio", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
+export const LAYOUT_PADRAO = [["busca", 12], ["acoes", 12], ["hoje", 12], ["patio", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
   ["servicos", 4], ["pecas", 4], ["formas", 4], ["manutencao", 6], ["recuperar", 3], ["aniversarios", 3]].map(([k, tam]) => ({ k, tam }));
 const TAMANHOS = [[3, "¼"], [4, "⅓"], [6, "½"], [8, "⅔"], [12, "Inteira"]];
 
@@ -155,9 +156,9 @@ function BuscaRapida() {
   const n = norm(q), p = normPlaca(q), d = soDig(q);
   const res = useMemo(() => {
     if (q.trim().length < 2) return [];
-    const os = dados.ordens.filter(o => (d && String(o.numero) === String(+d)) || (p.length >= 3 && (o.veiculo.placa || "").includes(p))).slice(0, 4).map(o => ({ k: "o" + o.id, t: numOS(o.numero) + " · " + (o.veiculo.placa || "") + " · " + o.cliente.nome, s: situacaoOS(o).curto, r: "/os/" + o.id }));
+    const os = dados.ordens.filter(o => (d && String(o.numero) === String(+d)) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || (n.length >= 3 && norm((o.cliente && o.cliente.nome) || "").includes(n))).sort((x, y) => (ABERTOS.includes(y.status) ? 1 : 0) - (ABERTOS.includes(x.status) ? 1 : 0) || y.numero - x.numero).slice(0, 4).map(o => ({ k: "o" + o.id, t: numOS(o.numero) + " · " + (o.veiculo.placa || "") + " · " + o.cliente.nome, s: situacaoOS(o).curto, r: "/os/" + o.id }));
     const cl = n.length >= 3 ? dados.clientes.filter(c => norm(c.nome).includes(n) || (d.length >= 4 && soDig(c.telefone).includes(d))).slice(0, 4).map(c => ({ k: "c" + c.id, t: c.nome, s: c.telefone ? fmtTel(c.telefone) : "cliente", r: "/cliente/" + c.id })) : [];
-    const ve = p.length >= 3 ? dados.veiculos.filter(v => v.placa.includes(p)).slice(0, 3).map(v => ({ k: "v" + v.id, t: v.placa + " · " + v.marca + " " + v.modelo, s: "veículo", r: "/veiculo/" + v.id })) : [];
+    const ve = p.length >= 3 || n.length >= 3 ? dados.veiculos.filter(v => (p.length >= 3 && (v.placa || "").includes(p)) || (n.length >= 3 && norm([v.marca, v.modelo].filter(Boolean).join(" ")).includes(n))).slice(0, 3).map(v => ({ k: "v" + v.id, t: v.placa + " · " + v.marca + " " + v.modelo, s: "veículo", r: "/veiculo/" + v.id })) : [];
     const pr = n.length >= 3 ? dados.produtos.filter(x => x.ativo !== false && (norm(x.descricao).includes(n) || norm(x.referencia) === n)).slice(0, 3).map(x => ({ k: "p" + x.id, t: x.descricao, s: x.tipo === "produto" ? "estoque " + Number(x.estoque_atual).toLocaleString("pt-BR") : "serviço", r: "/cadastros?aba=produtos" })) : [];
     return [...os, ...ve, ...cl, ...pr].slice(0, 9);
   }, [q, dados.ordens, dados.clientes, dados.veiculos, dados.produtos]);
@@ -183,6 +184,8 @@ export function Painel() {
   if (!cfg.painelV5 && !salvo.some(j => j.k === "contas")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "contas", tam: 12 }, ...salvo.slice(i + 1)]; }
   // janela nova da versão 6 (agenda da semana, v54): entra uma vez no layout já salvo, logo depois do pátio
   if (!cfg.painelV6 && !salvo.some(j => j.k === "agenda")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "agenda", tam: 12 }, ...salvo.slice(i + 1)]; }
+  // janela nova da versão 7 (ações do dia a dia, pedido do Danilo em 22/11/2026): entra uma vez, logo depois da busca
+  if (!cfg.painelV7 && !salvo.some(j => j.k === "acoes")) { const i = Math.max(0, salvo.findIndex(j => j.k === "busca")); salvo = [...salvo.slice(0, i + 1), { k: "acoes", tam: 12 }, ...salvo.slice(i + 1)]; }
   const layout = editar ? rascunho : salvo;
   let visiveis = layout.filter(j => (ver || !JANELAS[j.k].valores) && (fin || !JANELAS[j.k].fin));
   const [contasAb, setContasAb] = useState(null), [sefazNovas, setSefazNovas] = useState(0);
@@ -252,6 +255,7 @@ export function Painel() {
     : erroRes ? html`<div class="erros">Não foi possível calcular: ${erroRes}</div>` : html`<div class="esqueleto"></div>`;
   const conteudo = {
     busca: () => html`<${BuscaRapida} />`,
+    acoes: () => html`<${AcoesDia} />`,
     hoje: () => html`<div class="hoje">
       <div><span>Entradas hoje</span><b>${entradasHoje}</b></div>
       <div><span>Entregas hoje</span><b>${saidasHoje.length}</b>${ver && saidasHoje.length ? html`<small>${reaisCurto(saidasHoje.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</div>
@@ -292,7 +296,7 @@ export function Painel() {
   const mover = (i, d) => setRascunho(l => { const n = [...l], j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const soltar = (alvo) => { if (arrastando === null || arrastando === alvo) return; setRascunho(l => { const n = [...l]; const [x] = n.splice(arrastando, 1); n.splice(alvo, 0, x); return n; }); setArrastando(null); };
   const salvarLayout = async () => { setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
+    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true, painelV7: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
   const restaurar = async () => { if (await confirmar({ titulo: "Restaurar painel padrão", texto: "As janelas voltam para a organização original.", botao: "Restaurar" })) setRascunho(LAYOUT_PADRAO.map(j => ({ ...j }))); };
   const ocultas = Object.keys(JANELAS).filter(k => !(rascunho || []).some(j => j.k === k));
 
@@ -314,7 +318,7 @@ export function Painel() {
       ${ocultas.length ? html`<div class="chips adicionar-janela"><span class="sub">Adicionar janela:</span>${ocultas.map(k => html`<button type="button" key=${k} class="chip-f" onClick=${() => setRascunho(l => [...l, { k, tam: JANELAS[k].tam }])}>+ ${JANELAS[k].t}</button>`)}</div>` : null}
     </div>` : null}
     <div class=${"grade-painel" + (editar ? " editando" : "")}>
-      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "hoje", "patio"].includes(j.k) && !editar;
+      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "acoes", "hoje", "patio"].includes(j.k) && !editar;
         return html`<section key=${j.k} class=${"janela t" + j.tam + " j-" + j.k + (semTitulo ? " sem-moldura" : "") + (arrastando === idx ? " arrastando" : "")} style=${{ "--tam": j.tam }}
           draggable=${editar ? "true" : "false"} onDragStart=${e => { setArrastando(idx); e.dataTransfer.effectAllowed = "move"; }} onDragOver=${e => editar && e.preventDefault()} onDrop=${e => { e.preventDefault(); soltar(idx); }} onDragEnd=${() => setArrastando(null)}
           aria-label=${def.t}>
@@ -326,6 +330,17 @@ export function Painel() {
           <div class="janela-corpo">${conteudo[j.k]()}</div></section>`; })}
     </div>
     ${ver ? html`<p class="dica rodape-painel">Faturamento não é lucro: a margem desconta só peças e terceiros. Impostos do Simples, salários, aluguel e taxas de cartão ainda saem dela.</p>` : null}
+  </div>`;
+}
+/** Ações do dia a dia (pedido do Danilo em 22/11/2026): os atalhos que mais se usam, em botões grandes como no app */
+function AcoesDia() {
+  const { ir, perfil } = useApp();
+  const B = ({ rota, rot, ic, p }) => !p || pode(perfil, p) ? html`<button type="button" class="acao-dia" onClick=${() => ir(rota)}>${I[ic]}<span>${rot}</span></button>` : null;
+  return html`<div class="acoes-dia">
+    <${B} rota="/entrada" rot="Nova O.S." ic="mais" p="entrada" />
+    <${B} rota="/orcamento/novo" rot="Novo orçamento" ic="nota" p="orcar" />
+    <${B} rota="/cadastros?novo=1" rot="Novo cliente" ic="pessoas" p="cadastrar" />
+    <${B} rota="/cadastros?aba=veiculos&novo=1" rot="Novo veículo" ic="carro" p="cadastrar" />
   </div>`;
 }
 const exPlacaCurta = o => (o.veiculo && o.veiculo.placa) || "sem placa";

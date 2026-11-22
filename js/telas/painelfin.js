@@ -14,7 +14,9 @@ import { agruparOS, faturadas } from "./relatorios.js";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const MESES_EXT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
 const n = v => Number(v) || 0;
-const mesDe = s => { const m = Number(String(s || "").slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
+const mesDe = s => { const str = String(s || ""); if (!str) return null;
+  if (str.length > 10) { const d = new Date(str); return isNaN(d) ? null : d.getMonth(); } // timestamp: mês no fuso daqui
+  const m = Number(str.slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
 
 /** Anel de percentual com o número dentro (o rótulo do cartão fica sempre escrito ao lado). */
 function Anel({ pct, cor, trilha, texto }) {
@@ -27,7 +29,7 @@ function Anel({ pct, cor, trilha, texto }) {
 }
 
 export function PainelFinanceiro() {
-  const { cfg, perfil, avisar, recarregar } = useApp();
+  const { cfg, perfil, avisar, recarregar, ir } = useApp();
   const agora = new Date();
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth());
@@ -102,6 +104,9 @@ export function PainelFinanceiro() {
     <div class="painel-topo pf-topo">
       <div><h1>Painel Financeiro</h1><span class="sub">Entradas e saídas pelo caixa; faturamento e custo pelas O.S. entregues e vendas de balcão.</span></div>
       <div class="pf-filtros">
+        <button type="button" class="btn btn-sm" onClick=${() => ir("/dre")}>DRE</button>
+        <button type="button" class="btn btn-sm" onClick=${() => ir("/fluxo-diario")}>Fluxo diário</button>
+        <button type="button" class="btn btn-sm" onClick=${() => ir("/inteligencia")}>Inteligência</button>
         <span class="pf-ano"><button type="button" aria-label="Ano anterior" onClick=${() => setAno(ano - 1)}>◀</button><b>${ano}</b><button type="button" aria-label="Próximo ano" onClick=${() => setAno(ano + 1)}>▶</button></span>
         <span class="pf-meses">${MESES.map((_, i) => html`<${Chip} key=${i} i=${i} />`)}</span>
       </div>
@@ -148,7 +153,7 @@ export function PainelFinanceiro() {
         ${catsMes.length ? html`<div class="pf-cats">${catsMes.map(([k, v]) => html`<div class="pf-cat" key=${k}>
           <span class="pf-cat-n">${k}</span>
           <span class="pf-cat-b"><i style=${{ width: Math.max(2, Math.round(v / maiorCat * 100)) + "%" }}></i><b>${reais(v)}</b></span>
-        </div>`)}</div>` : html`<${Vazio} texto="Nenhuma conta paga neste mês." />`}
+        </div>`)}</div>` : html`<${Vazio}>Nenhuma conta paga neste mês.<//>`}
       </section>
     </div>
     <div class="pf-linha">
@@ -161,7 +166,7 @@ export function PainelFinanceiro() {
             ${Math.min(mes, linha.fim) >= 0 ? html`<circle cx=${linha.x(Math.min(mes, linha.fim))} cy=${linha.y(linha.vals[Math.min(mes, linha.fim)])} r="5" class="pf-ponto"></circle>` : null}
           </svg>
           <div class="pf-eixo-x"><span>${MESES[0]}</span><span>${MESES[linha.fim]}</span></div>`
-        : html`<${Vazio} texto="Ainda não há movimento neste ano." />`}
+        : html`<${Vazio}>Ainda não há movimento neste ano.<//>`}
         <p class="dica">Entradas menos saídas somadas desde janeiro. O saldo real de cada conta fica na Previsão de caixa.</p>
       </section>
       <section class="card pf-card">

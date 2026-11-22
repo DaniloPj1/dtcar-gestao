@@ -10,7 +10,9 @@ import { reais } from "../util.js";
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const DIAS_SEM = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
 const n = v => Number(v) || 0;
-const diaDe = s => { const d = Number(String(s || "").slice(8, 10)); return d >= 1 ? d - 1 : null; };
+const diaDe = (s, ano, mes) => { const str = String(s || ""); if (!str) return null;
+  if (str.length > 10) { const d = new Date(str); return isNaN(d) || d.getFullYear() !== ano || d.getMonth() !== mes ? null : d.getDate() - 1; } // timestamp: dia no fuso daqui (fora do mês: fica de fora)
+  const d = Number(str.slice(8, 10)); return d >= 1 ? d - 1 : null; };
 const din = v => reais(v).replace("R$ ", "");
 
 export function FluxoDiario() {
@@ -44,9 +46,9 @@ export function FluxoDiario() {
     const formas = new Map(), cats = new Map();
     const poe = (mapa, k, dia, v) => { if (!mapa.has(k)) mapa.set(k, zero()); mapa.get(k)[dia] += v; };
     if (d) {
-      for (const r of d.recibos) { const dia = diaDe(r.data || r.criado_em); if (dia != null && dia < dias) poe(formas, r.forma || "Sem forma informada", dia, n(r.valor)); }
-      for (const v of d.vendas) { const dia = diaDe(v.criado_em); if (dia != null && dia < dias) poe(formas, v.forma_pagamento ? v.forma_pagamento + " (balcão)" : "Balcão", dia, n(v.total)); }
-      for (const c of d.pagas) { const dia = diaDe(c.pago_em); if (dia != null && dia < dias) poe(cats, c.categoria || "Sem categoria", dia, n(c.valor_pago != null ? c.valor_pago : c.valor)); }
+      for (const r of d.recibos) { const dia = diaDe(r.data || r.criado_em, ano, mes); if (dia != null && dia < dias) poe(formas, r.forma || "Sem forma informada", dia, n(r.valor)); }
+      for (const v of d.vendas) { const dia = diaDe(v.criado_em, ano, mes); if (dia != null && dia < dias) poe(formas, v.forma_pagamento ? v.forma_pagamento + " (balcão)" : "Balcão", dia, n(v.total)); }
+      for (const c of d.pagas) { const dia = diaDe(c.pago_em, ano, mes); if (dia != null && dia < dias) poe(cats, c.categoria || "Sem categoria", dia, n(c.valor_pago != null ? c.valor_pago : c.valor)); }
     }
     const somaDe = mapa => Array.from({ length: dias }, (_, i) => [...mapa.values()].reduce((s, vs) => s + vs[i], 0));
     const entra = somaDe(formas), sai = somaDe(cats);
@@ -54,7 +56,7 @@ export function FluxoDiario() {
     let acc = 0; const acum = saldo.map(s => (acc += s));
     const lista = mapa => [...mapa.entries()].map(([k, vs]) => ({ k, vs, tot: vs.reduce((a, b) => a + b, 0) })).sort((a, b) => b.tot - a.tot);
     return { formas: lista(formas), cats: lista(cats), entra, sai, saldo, acum };
-  }, [d, dias]);
+  }, [d, dias, ano, mes]);
 
   const COLS = "minmax(210px, 1.4fr) repeat(" + dias + ", minmax(76px, 1fr))";
   const Linha = ({ cls, label, vals }) => html`<div class=${"tf-row " + cls} style=${{ gridTemplateColumns: COLS }}>

@@ -310,6 +310,7 @@ export function Cadastros({ params }) {
     ? (params.aba === "veiculos" ? edVeiculo() : edCliente()) : null); // ?novo=1: quadro "Ações do dia a dia" do painel
   const [filtro, setFiltro] = useState(params && params.filtro === "recuperar" ? "recuperar" : "todos"), [ordem, setOrdem] = useState(params && params.filtro === "recuperar" ? "ultima" : "nome");
   const [lim, setLim] = useState(80);
+  useEffect(() => { if (params && params.novo) history.replaceState(null, "", "#/cadastros" + (params.aba ? "?aba=" + params.aba : "")); }, []); // o F5 não deve reabrir o formulário
   const podeCad = pode(perfil, "cadastrar"), ver = pode(perfil, "verValores");
   const res = useMemo(() => resumoClientes(dados.ordens), [dados.ordens]);
   const n = norm(q), qd = soDig(q), p = normPlaca(q);

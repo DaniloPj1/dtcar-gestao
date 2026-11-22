@@ -11,10 +11,12 @@ import { nomeFavorecido } from "./financeiro.js";
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const n = v => Number(v) || 0;
-const mesDe = s => { const m = Number(String(s || "").slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
+const mesDe = s => { const str = String(s || ""); if (!str) return null;
+  if (str.length > 10) { const d = new Date(str); return isNaN(d) ? null : d.getMonth(); } // timestamp: mês no fuso daqui
+  const m = Number(str.slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
 
 function Ranking({ itens, cor, vazio }) {
-  if (!itens.length) return html`<${Vazio} texto=${vazio} />`;
+  if (!itens.length) return html`<${Vazio}>${vazio}<//>`;
   const maior = itens[0].v || 1;
   return html`<div class="pf-cats">${itens.map(x => html`<div class="pf-cat" key=${x.k}>
     <span class="pf-cat-n" title=${x.k}>${x.k}</span>

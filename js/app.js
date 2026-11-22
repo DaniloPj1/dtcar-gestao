@@ -482,9 +482,9 @@ function App() {
       <button type="button" class="lat-direto" aria-current=${["ordens", "os", "entrada"].includes(base) ? "page" : undefined} onClick=${() => ir("/ordens")}>O.S.</button>
       ${LATERAL.map(([grupo, itens]) => { const vis = itens.filter(it => !it[3] || pode(perfil, it[3])); if (!vis.length) return null;
         const noGrupo = vis.some(([r]) => rota === r || "/" + base === r.split("?")[0] || (r === "/whatsapp" && base === "email") || (r === "/ajustes" && ["equipe", "backup", "importar"].includes(base)));
-        const nbG = grupo === "Financeiro" && pagar ? pagar.vencidas + pagar.hoje + pagar.amanha : 0;
+        const nbG = grupo === "Financeiro" ? (pagar ? pagar.vencidas + pagar.hoje + pagar.amanha : 0) + (vencidasRec || 0) : 0;
         return html`<nav key=${grupo} class="lateral-grupo">
-        <button type="button" class="lateral-grupo-tit" aria-haspopup="true" aria-current=${noGrupo ? "page" : undefined}>${grupo}<i aria-hidden="true">▾</i>${nbG ? html`<em class=${"lat-badge" + (pagar && !pagar.vencidas ? " lat-badge-aviso" : "")} aria-label=${nbG + " conta(s) para olhar"}>${nbG}</em>` : null}</button>
+        <button type="button" class="lateral-grupo-tit" aria-haspopup="true" aria-current=${noGrupo ? "page" : undefined}>${grupo}<i aria-hidden="true">▾</i>${nbG ? html`<em class=${"lat-badge" + ((pagar && pagar.vencidas) || vencidasRec ? "" : " lat-badge-aviso")} aria-label=${nbG + " conta(s) para olhar"}>${nbG}</em>` : null}</button>
         <div class="lat-menu">
         ${vis.map(([r, t, ic]) => { const [rb, rq] = r.split("?"); const ativo = rota === r || (!rq && "/" + base === rb && (!qs || rb !== "/cadastros")) || (rb === "/cadastros" && !rq && (base === "cliente" || (base === "cadastros" && !qs))) || (rb === "/cadastros" && rq && base === "cadastros" && qs === rq) || (r === "/cadastros?aba=veiculos" && base === "veiculo") || (r === "/whatsapp" && base === "email") || (r === "/funcionarios" && base === "rh") || (r === "/sefaz" && base === "nfe") || (r === "/ajustes" && ["equipe", "backup", "importar"].includes(base));
           const pg = r === "/financeiro" && pagar ? pagar : null, nb = r === "/receber" ? vencidasRec : pg ? pg.vencidas + pg.hoje + pg.amanha : 0;

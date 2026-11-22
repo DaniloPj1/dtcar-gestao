@@ -12,7 +12,9 @@ import { agruparOS, faturadas } from "./relatorios.js";
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const n = v => Number(v) || 0;
-const mesDe = s => { const m = Number(String(s || "").slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
+const mesDe = s => { const str = String(s || ""); if (!str) return null;
+  if (str.length > 10) { const d = new Date(str); return isNaN(d) ? null : d.getMonth(); } // timestamp: mês no fuso daqui
+  const m = Number(str.slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
 const din = v => reais(v).replace("R$ ", "");
 /** categoria que é compra de peça/insumo (fica fora da conta do resultado: o custo do item já conta) */
 export const ehCompraDePeca = c => /fornecedor|pe[çc]a|insumo|mercadoria/i.test(String(c || ""));

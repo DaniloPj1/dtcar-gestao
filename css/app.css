@@ -608,14 +608,6 @@ body{font-size:15px}
 .lateral-user b{color:#fff;font-size:13.5px;white-space:nowrap}.lateral-user small{color:#7d8899;white-space:nowrap}
 .lateral-pe .btn-link{color:#9fb6ff}
 /* tela baixa (notebook 1366x768): menu compacto para caber sem barra de rolagem */
-@media (max-height:1000px){
-  .lateral{gap:8px;padding:12px 12px 10px}
-  .lateral-marca{padding:2px 8px 4px}.lateral-marca img{height:28px}
-  .lateral-grupo{gap:0}
-  .lateral-grupo button{min-height:30px;font-size:14px}  /* 30px: com "Orçamentos" (v52) e "Agenda" (v54) o menu aberto continua cabendo em 1600x950 e o fechado em 1366x768 */
-  .lateral-grupo>span,.lateral-grupo>button.lateral-grupo-tit{padding-bottom:2px}
-  .lateral-pe{padding-top:8px}
-}
 
 /* cabeçalho das páginas */
 .painel-topo{align-items:center}
@@ -1794,7 +1786,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .acoes-dia{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .acao-dia{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:84px;border:0;border-radius:14px;background:var(--brand);color:#fff;font-weight:700;font-size:14.5px;padding:12px}
 .acao-dia svg{width:24px;height:24px}
-.acao-dia:hover{background:var(--brand-strong)}
+.acao-dia:hover{background:var(--pf-az8)}
 :root[data-tema="escuro"] .acao-dia,:root:not([data-tema="claro"]) .acao-dia{color:#fff}
 .tf-card{overflow:hidden}
 .tf-tabela{overflow-x:auto;padding-bottom:4px}
@@ -1823,6 +1815,6 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pf-estreita{flex:1 1 230px;max-width:330px}
 .pf-sep{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
 .pf-margem-caixa{display:flex;flex-direction:column;align-items:center;gap:8px;margin-top:10px;padding:14px}
-.pf-anel-g{width:104px;height:104px;color:var(--ink)}
+.pf-anel-g{width:104px;height:104px;flex:0 0 auto;color:var(--ink)}
 .pf-serie-ok{stroke:var(--pf-ok)}
 .pf-serie-bad{stroke:var(--pf-bad)}

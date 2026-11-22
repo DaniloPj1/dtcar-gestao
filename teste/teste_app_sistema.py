@@ -38,7 +38,7 @@ FAKE_OBD = """
 window.__obd = { cmds: [], chamadas: [], conectado: false };
 /* O PORTÃO, igual ao do plugin nativo (ObdPlugin.permitido). O teste em Python confere que as
    listas aqui são as MESMAS do Java — se alguém mudar um lado só, o teste reprova. */
-window.__AT_PERMITIDOS = ['ATZ','ATE0','ATL0','ATS0','ATH0','ATH1','ATSP0','ATDP','ATDPN','ATRV','ATI','ATCAF1','ATCRA','ATSP6','ATSP7'];
+window.__AT_PERMITIDOS = ['ATZ','ATE0','ATL0','ATS0','ATH0','ATH1','ATSP0','ATDP','ATDPN','ATRV','ATI','ATCAF1','ATCRA','ATSP6','ATSP7','ATAT0','ATAT1','ATAT2'];
 window.__SERVICOS_LEITURA = ['01','02','03','06','07','09','0A','19','21','22','24','3E'];
 window.__UDS_LEITURA = ['19','22','24','3E'];
 window.__SERVICOS_PROIBIDOS = ['34','35','36','37'];
@@ -904,6 +904,18 @@ try:
         t(risco and float(risco.split()[0]) > 0, 'o arco está preenchido conforme o valor: %s' % risco)
         t('8000' in pg.inner_text('#obd-r-vivo [data-pid="12"]'), 'o fim da escala da rotação aparece no mostrador')
         pg.click('#obd-jeito-lista'); pg.wait_for_timeout(300)
+        # O FILTRO VALE NA HORA (falha apontada pelo Danilo, 22/11/2026): marcar uma leitura com o ao vivo rodando faz ela aparecer
+        pg.click('#obd-escolher'); pg.wait_for_selector('#obd-escolha input[data-pid]', timeout=5000)
+        pg.click('#obd-padrao'); pg.wait_for_timeout(400)
+        caixas = pg.evaluate("() => [...document.querySelectorAll('#obd-escolha input[data-pid]')].map(x => x.dataset.pid + (x.checked ? '+' : '-'))")
+        novo = pg.evaluate("() => { const c = [...document.querySelectorAll('#obd-escolha input[data-pid]')].find(x => !x.checked && ['51', '10', '31', '70'].includes(x.dataset.pid)); if (!c) return null; c.click(); return c.dataset.pid; }")
+        t(novo is not None, 'há leitura fora do padrão para acrescentar: %s de %s' % (novo, caixas))
+        pg.wait_for_selector('#obd-r-vivo [data-pid="%s"]' % novo, timeout=15000, state='attached')
+        t(True, 'leitura marcada no filtro com o ao vivo rodando aparece sem parar a leitura')
+        pg.click('#obd-jeito-painel'); pg.wait_for_timeout(300); t(pg.locator('#obd-r-vivo .mostrador[data-pid="%s"]' % novo).count() == 1, 'e aparece também no PONTEIRO'); pg.click('#obd-jeito-lista'); pg.wait_for_timeout(200)
+        pg.evaluate("p => document.querySelector('#obd-escolha input[data-pid=\"' + p + '\"]').click()", novo); pg.wait_for_timeout(400)
+        t(pg.locator('#obd-r-vivo [data-pid="%s"]' % novo).count() == 0, 'desmarcou: sai da tela na hora')
+        pg.click('#obd-padrao'); pg.wait_for_timeout(200); pg.click('#obd-escolher'); pg.wait_for_timeout(200)
         # FAIXA DE TRABALHO ao lado da leitura (pedido do Danilo, 21/11/2026)
         lv5 = pg.locator('#obd-r-vivo .linha-viva[data-pid="5"]')
         t(lv5.get_attribute('data-situacao') in ('dentro', 'acima', 'abaixo') and 'suposto' in (lv5.get_attribute('title') or ''), 'a temperatura do motor tem faixa de trabalho; de onde ela veio fica no toque longo')

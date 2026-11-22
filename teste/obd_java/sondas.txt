@@ -48,7 +48,10 @@ nao ATFCSD
 # --- ajuste que o app não manda: lista branca é só o que se usa ---
 nao ATAL
 nao ATAR
-nao ATAT1
+sim ATAT0
+sim ATAT1
+sim ATAT2
+nao ATAT3
 nao ATCF7E0
 nao ATCM7FF
 nao ATSP8

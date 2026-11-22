@@ -26,10 +26,14 @@ public class VerificaListaBranca {
     for (String c : new String[]{"ATSH7E0","ATSH18DB33F1","ATCRA7E8","ATCRA18DAF110","ATCRA","ATFCSH7E0",
                                  "ATFCSD300000","ATFCSM1","ATST64","ATCAF1","ATSP6","ATSP7"})
       chk("permite ajuste do UDS " + c, ObdPlugin.permitido(c));
+    /* ATAT0/1/2 voltaram em 22/11/2026 porque agora o app MANDA: sem a espera fixa o City de 2016
+     * respondia NO DATA a toda leitura de módulo (conferido no carro). */
+    for (String c : new String[]{"ATAT0","ATAT1","ATAT2"})
+      chk("permite a espera fixa/adaptativa " + c, ObdPlugin.permitido(c));
     /* A lista branca é só o que o app MANDA. ATAL, ATAR, ATAT, ATCF e ATCM entraram numa primeira
      * versão e nenhuma tela usava: lista branca com comando que ninguém manda é superfície de
      * ataque de graça. Saíram na revisão de 20/11/2026. */
-    for (String c : new String[]{"ATAL","ATAR","ATAT1","ATAT0","ATCF7E0","ATCM7FF","ATSP8","ATSP9"})
+    for (String c : new String[]{"ATAL","ATAR","ATAT3","ATAT","ATCF7E0","ATCM7FF","ATSP8","ATSP9"})
       chk("RECUSA ajuste que o app não usa: " + c, !ObdPlugin.permitido(c));
     /* ATCAF0 é RECUSADO, e isto é o que faz todo o resto do portão valer.
      * Com a formatação automática ligada (ATCAF1) o primeiro byte do que o site manda é o SERVIÇO,

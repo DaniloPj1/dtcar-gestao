@@ -19,7 +19,8 @@ const END = a => ({ pedido: "18DA" + a + "F1", resposta: "18DAF1" + a });
 export const MODULOS = {
   // CONFERIDO NO CARRO (City 2016 do Danilo, 21/11/2026): os dois endereços abrem sessão, mas o 0E
   // recusou o teste da ventoinha com "precisa destravar" (33). O motor do City é o 10 — por isso o 10
-  // vem primeiro, e o app passa para o outro quando o primeiro recusa sem acionar nada.
+  // vem primeiro. (Trocar de endereço DEPOIS de uma recusa foi tentado e retirado na revisão do Codex de
+  // 22/11/2026: repetir uma rotina em outro módulo sem ler o valor antigo dele não é seguro.)
   motor: { nome: "Motor (PGM-FI)", enderecos: [END("10"), END("0E")] },
   cvt: { nome: "Câmbio CVT", enderecos: [END("0E"), END("1E")] },
   painel: { nome: "Painel", enderecos: [END("60")] },

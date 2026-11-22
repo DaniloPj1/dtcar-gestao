@@ -19,7 +19,6 @@ import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "
 import { HondaLista } from "./diaghonda.js";
 import * as confere from "../js/obdconfere.js";
 import * as compara from "../js/obdcompara.js";
-import * as honda from "../js/obdhonda.js";
 import * as faixas from "../js/obdfaixa.js";
 import * as laudo from "../js/obdlaudo.js";
 import * as falhasCat from "../js/obdfalhas.js";
@@ -1206,7 +1205,7 @@ function Atuadores() {
         continuar: () => !cancelar.current,
         aoAndar: p => setAndando({ passos: p.passos }),
       });
-      return noOutroEndereco(hd, await acionar(), acionar);
+      return acionar();
     });
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar o teste." } }));
     // Fica registrado quem acionou o quê, em que módulo e o que o módulo respondeu (Etapa 1).
@@ -1256,26 +1255,6 @@ function Atuadores() {
 }
 // Tirou o adaptador (ou desconectou): a placa puxada deixa de valer — o próximo carro é outro.
 { let estavaLigado = false; sessao.observar(st => { if (estavaLigado && !st.ligado) { esquecerPlacaDoCarro(); sessao.definirCarro({ placa: "", marca: "", modelo: "", ano: "", veiculo_id: null, vin: "" }); } estavaLigado = !!st.ligado; }); }
-
-/**
- * O módulo recusou SEM FAZER NADA (não tem a função, ou diz que é protegida): num item da Honda o
- * mesmo sistema responde em mais de um endereço conforme o modelo, então o app tenta o outro antes
- * de desistir. No City do Danilo o 0E respondeu "protegida" (33) para a ventoinha; o motor é o 10.
- * Só vale para recusa limpa — se algo chegou a ser acionado, não repete em outro lugar.
- */
-const RECUSA_LIMPA = [0x33, 0x11, 0x12, 0x31, 0x7f];
-async function noOutroEndereco(hd, primeiro, repetir) {
-  if (!hd || !primeiro || primeiro.ok || !RECUSA_LIMPA.includes(primeiro.nrc)) return primeiro;
-  const atual = (sessao.estado().modulo || {}).pedido;
-  const outros = ((honda.MODULOS[hd.modulo] || {}).enderecos || []).filter(e => e.pedido !== atual);
-  for (const e of outros) {
-    await uds.abrir({ pedido: e.pedido, resposta: e.resposta });
-    const r = await repetir();
-    if (r && (r.ok || !RECUSA_LIMPA.includes(r.nrc))) return Object.assign({}, r, { texto: (r.texto || "") + " (pelo endereço " + e.pedido + ")" });
-  }
-  if (atual) { const m = sessao.estado().modulo; await uds.abrir({ pedido: m.pedido, resposta: m.resposta }); }
-  return primeiro;
-}
 
 /**
  * AS CONDIÇÕES, CONFERIDAS PELO APP (pedido do Danilo, 21/11/2026): em vez de um questionário para o
@@ -1368,7 +1347,7 @@ function Aprendizados() {
         continuar: () => !cancelar.current,
         aoAndar: p => setAndando({ passos: p.passos }),
       });
-      return noOutroEndereco(hd, await rodarLa(), rodarLa);
+      return rodarLa();
     });
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar a rotina." } }));
     const reg = await registrarAcao("aprender", perfil, { modulo: sessao.estado().modulo, rotina: hex4Txt(rid), ...(hd ? { honda: hd.chave, nome: hd.nome, antes } : {}), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });

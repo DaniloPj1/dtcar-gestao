@@ -160,6 +160,9 @@ export async function abrir({ pedido, resposta, bits29 = false, esperaMs = 1000 
 /** Volta o adaptador ao jeito do OBD-II comum (sem cabeçalho fixo, sem filtro). */
 export async function fechar() {
   try { await comando("ATCRA", 2000); } catch (e) { /* adaptador que não aceita: segue */ }
+  // O controle de fluxo volta ao automático: senão a resposta longa do motor (o chassi, por exemplo)
+  // continuaria recebendo o "pode mandar o resto" no endereço do módulo anterior e não chegaria inteira.
+  try { await comando("ATFCSM0", 2000); } catch (e) { /* segue */ }
   try { await comando("ATAT1", 2000); } catch (e) { /* APK antigo: nunca saiu do adaptativo */ }
   try { await comando("ATSP0", 2000); } catch (e) { /* segue */ }
 }

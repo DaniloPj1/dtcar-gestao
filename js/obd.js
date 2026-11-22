@@ -886,17 +886,23 @@ const VOLTAS_ATE_FALHA = 8;
  * devolveu falso, a roda para. Devolve o número de voltas completadas.
  */
 export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc = {}) {
-  const quais = leiturasPara(pidsSuportados, opc.escolhidos);
-  if (!quais.length) return 0;
-  const mudos = {};
+  // `escolhidos` pode ser uma FUNÇÃO: aí a lista é relida a cada volta, e marcar uma leitura no filtro
+  // com a roda girando faz ela entrar na volta seguinte. (Antes a lista era fixada no começo: o Danilo
+  // acrescentou três leituras com o ao vivo rodando e elas não apareceram — 22/11/2026.)
+  const listaDeAgora = () => leiturasPara(pidsSuportados, typeof opc.escolhidos === "function" ? opc.escolhidos() : opc.escolhidos);
+  if (!listaDeAgora().length) return 0;
+  const mudos = {}, jaLidos = {};
   let volta = 0;
   while (continuar()) {
     volta++;
     let leuAlgo = false;
+    const quais = listaDeAgora();
+    if (!quais.length) return volta - 1;
     for (const p of quais) {
       if (!continuar()) return volta - 1;
       if ((mudos[p.pid] || 0) >= PACIENCIA) continue;                 // já não responde: fora da roda
-      if (volta > 1 && !p.vivo) continue;                             // não muda: lido só na 1ª volta
+      if (jaLidos[p.pid] && !p.vivo) continue;                        // não muda: lido só uma vez
+      jaLidos[p.pid] = true;
       const r = await pedir("01" + p.pid.toString(16).toUpperCase().padStart(2, "0"), ESPERA_VIVO);
       const lidos = r.erro ? [] : valorPid(primeiraDe(r.respostas, 0x01), p.pid, 0x01);
       if (lidos.length) {

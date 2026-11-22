@@ -30,9 +30,17 @@ export function HondaLista({ tipo, st, aoPronto, travado }) {
         if (item.antes && item.habilita && item.antes.did !== item.habilita.did) { const l2 = await uds.lerDado(item.antes.did); bytesAntes = l2.dados && l2.nrc == null ? l2.dados.slice(2) : null; }
         return { antes: honda.valorAntes(item.antes, bytesAntes), oferecido: honda.habilitado(item, bytes) };
       });
-      if (s.ok && s.r) { mod = m; antes = s.r.antes; oferecido = s.r.oferecido; break; }
+      if (s.ok && s.r) {
+        const completo = !(item.antes && s.r.antes === null) && s.r.oferecido !== null;
+        // Abriu a sessão mas não entregou o dado que o item precisa: pode ser o endereço errado para
+        // este modelo (no City o motor é o 10 e o 0E também abre sessão). Guarda e tenta o próximo.
+        if (completo || !mod) { mod = m; antes = s.r.antes; oferecido = s.r.oferecido; }
+        if (completo) break;
+      }
       await sessao.soltarModulo();
     }
+    // ficou com um endereço que não é o último tentado: aponta nele de novo
+    if (mod && (sessao.estado().modulo || {}).pedido !== mod.pedido) { const a = await sessao.apontarModulo(mod); if (!a.ok) mod = null; }
     setOcupado("");
     if (!mod) { setErro("O módulo " + honda.MODULOS[item.modulo].nome + " não abriu a sessão de diagnóstico neste carro. Sem ele não há como rodar este item."); return; }
     if (oferecido === false) { await sessao.soltarModulo(); setErro("Este carro diz que NÃO tem este item habilitado no painel. O app não roda o que o próprio carro não oferece."); return; }

@@ -90,7 +90,11 @@ public class ObdPlugin extends Plugin {
         // da falha, que é de leitura) e chegaria ao barramento como 2E, GRAVAR NO MÓDULO. O mesmo
         // truque abriria o 34 e a regravação. Então ATCAF0 não entra, e permitido() só é confiável
         // porque ele não entra.
-        "ATCAF1", "ATCRA", "ATSP6", "ATSP7"
+        "ATCAF1", "ATCRA", "ATSP6", "ATSP7",
+        // Espera adaptativa do adaptador: 0 = fixa (vale o ATST inteiro), 1 e 2 = adaptativa. É ajuste de
+        // quanto o ADAPTADOR escuta, não pedido ao carro. Sem o AT0 o City de 2016 respondia "NO DATA"
+        // a toda leitura de módulo (conferido no carro, 21/11/2026).
+        "ATAT0", "ATAT1", "ATAT2"
     ));
 
     /**

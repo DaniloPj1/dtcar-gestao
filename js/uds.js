@@ -148,12 +148,22 @@ export async function abrir({ pedido, resposta, bits29 = false, esperaMs = 1000 
   await comando("ATFCSD300000", 2000);                  // "pode mandar o resto, sem pausa"
   await comando("ATFCSM1", 2000);
   await comando("ATST" + hx(Math.max(1, Math.min(255, Math.round(esperaMs / 4))), 2), 2000);
+  // ESPERA FIXA. O adaptador vem com a espera "adaptativa" ligada: ele encurta o tempo de escuta pelo
+  // que mediu nas respostas rápidas. No City do Danilo (21/11/2026) a abertura de sessão respondia em
+  // 130 ms e TODA leitura de dado voltava "NO DATA" em 150 ms, e a resposta que vem depois do "estou
+  // trabalhando" (78) se perdia: o adaptador parava de escutar antes de o módulo responder. Com a
+  // adaptação desligada vale o tempo inteiro do ATST. APK antigo não aceita o comando: segue como antes.
+  try { await comando("ATAT0", 2000); } catch (e) { /* APK anterior a 22/11/2026 */ }
   return { pedido: ped, resposta: resp };
 }
 
 /** Volta o adaptador ao jeito do OBD-II comum (sem cabeçalho fixo, sem filtro). */
 export async function fechar() {
   try { await comando("ATCRA", 2000); } catch (e) { /* adaptador que não aceita: segue */ }
+  // O controle de fluxo volta ao automático: senão a resposta longa do motor (o chassi, por exemplo)
+  // continuaria recebendo o "pode mandar o resto" no endereço do módulo anterior e não chegaria inteira.
+  try { await comando("ATFCSM0", 2000); } catch (e) { /* segue */ }
+  try { await comando("ATAT1", 2000); } catch (e) { /* APK antigo: nunca saiu do adaptativo */ }
   try { await comando("ATSP0", 2000); } catch (e) { /* segue */ }
 }
 

@@ -294,6 +294,7 @@ function Obd() {
   // Os PIDs que valem agora: null quando é "todas" (sem filtro nenhum).
   const escolhidas = obd.pidsDaEscolha(escolha, suportados, combustivel);
   const valendo = obd.leiturasPara(suportados, escolhidas);
+  const escolhidasAgora = useRef(escolhidas); escolhidasAgora.current = escolhidas;   // a roda do ao vivo lê daqui a cada volta
 
   const guardarEscolha = e => { setEscolha(e); guardado("leituras", e); };
   // Marcar ou desmarcar uma leitura parte do que está na tela AGORA (padrão ou todas) e vira escolha à mão.
@@ -390,7 +391,7 @@ function Obd() {
         (v, volta) => { if (rodada.current === minha) { grafico.anotarPonto(historia.current, v); if (sessaoCmp.current) compara.anotar(sessaoCmp.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
         () => rodada.current === minha,
         {
-          escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : escolhidas,
+          escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : () => escolhidasAgora.current,
           aoFalhas: codigos => {
             if (rodada.current !== minha) return;
             if (baseFalhas.current === null) baseFalhas.current = codigos.slice();
@@ -758,7 +759,8 @@ function Obd() {
         ${!Object.keys(vivo.valores).length ? html`<div class="carregando">${vivo.rodando ? "Lendo o motor…" : "O módulo não respondeu nenhum dado ao vivo."}</div>` : null}
         ${vivo.modo === "combustivel" && Object.keys(vivo.valores).length ? html`<${Combustivel} v=${vivo.valores} />` : null}
         ${(() => {
-          const lidos = Object.keys(vivo.valores).map(k => vivo.valores[k]).sort((a, b) => obd.ordemDaLeitura(a) - obd.ordemDaLeitura(b));
+          // só o que está marcado AGORA no filtro: leitura desmarcada com a roda girando sai da tela na hora
+          const lidos = Object.keys(vivo.valores).map(k => vivo.valores[k]).filter(l => vivo.modo === "combustivel" || !escolhidas || escolhidas.includes(l.pid)).sort((a, b) => obd.ordemDaLeitura(a) - obd.ordemDaLeitura(b));
           if (!lidos.length) return null;
           // em que regime o carro está AGORA, para escolher a faixa que se aplica
           const ag = k => (vivo.valores[k] && typeof vivo.valores[k].valor === "number" ? vivo.valores[k].valor : undefined);
@@ -1197,12 +1199,13 @@ function Atuadores() {
     const r = await sessao.comAcao("o teste de atuador", async () => {
       const nao = hd ? await conferirSozinho(hd) : "";
       if (nao) return { ok: false, passos: [{ o: "recusou", t: nao }], texto: nao };
-      return uds.testarAtuador(did, {
+      const acionar = () => uds.testarAtuador(did, {
         segundos: hd ? hd.segundos : 5, ...(hd ? { valor: hd.valor } : {}),
         pausar: sessao.pausar, retomar: sessao.retomar,
         continuar: () => !cancelar.current,
         aoAndar: p => setAndando({ passos: p.passos }),
       });
+      return acionar();
     });
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar o teste." } }));
     // Fica registrado quem acionou o quê, em que módulo e o que o módulo respondeu (Etapa 1).
@@ -1338,12 +1341,13 @@ function Aprendizados() {
     const r = await sessao.comAcao("o aprendizado", async () => {
       const nao = hd ? await conferirSozinho(hd) : "";
       if (nao) return { ok: false, passos: [{ o: "recusou", t: nao }], texto: nao };
-      return uds.rodarAprendizado(rid, {
+      const rodarLa = () => uds.rodarAprendizado(rid, {
         segundosMax: hd ? hd.segundosMax : 120, ...(hd ? { dados: hd.dados } : {}),
         pausar: sessao.pausar, retomar: sessao.retomar,
         continuar: () => !cancelar.current,
         aoAndar: p => setAndando({ passos: p.passos }),
       });
+      return rodarLa();
     });
     setAndando(a => ({ passos: (a && a.passos) || [], fim: r.ok ? r.r : { ok: false, texto: r.texto || "Não deu para rodar a rotina." } }));
     const reg = await registrarAcao("aprender", perfil, { modulo: sessao.estado().modulo, rotina: hex4Txt(rid), ...(hd ? { honda: hd.chave, nome: hd.nome, antes } : {}), ok: !!(r.ok && r.r && r.r.ok), texto: (r.ok && r.r && r.r.texto) || r.texto || "" });

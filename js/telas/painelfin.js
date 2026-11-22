@@ -51,8 +51,10 @@ export function PainelFinanceiro() {
         cfg.contasFinanceiras && cfg.contasFinanceiras.length && api.saldosContas ? api.saldosContas().catch(() => null) : null,
       ]);
       const rs = (recibos || []).filter(r => !r.cancelado && String(r.data || r.criado_em || "").slice(0, 10) <= fim);
-      const comRecibo = new Set(rs.map(r => r.venda_id).filter(Boolean)); // venda com recibo entra pelo recibo (achado do Codex, 22/11/2026)
-      if (vivo) setD({ recibos: rs, pagas: pagas || [], oss: faturadas(agruparOS(itens)), vendas: (vendas || []).filter(v => v.status === "concluida"), vendasCaixa: (vendas || []).filter(v => v.status === "concluida" && !comRecibo.has(v.id)), saldos });
+      const conc = (vendas || []).filter(v => v.status === "concluida");
+      // venda com recibo entra pelo recibo — em QUALQUER data: o recibo pode vir noutro mês ou ano (achados do Codex, 22/11/2026)
+      const comRecibo = new Set(api.recibos.dasVendas ? await api.recibos.dasVendas(conc.map(v => v.id)).catch(() => rs.map(r => r.venda_id).filter(Boolean)) : rs.map(r => r.venda_id).filter(Boolean));
+      if (vivo) setD({ recibos: rs, pagas: pagas || [], oss: faturadas(agruparOS(itens)), vendas: conc, vendasCaixa: conc.filter(v => !comRecibo.has(v.id)), saldos });
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano]);

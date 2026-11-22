@@ -45,8 +45,9 @@ export function Inteligencia() {
         api.vendas && (api.vendas.periodo || api.vendas.listar) ? (api.vendas.periodo || api.vendas.listar)({ de: iniISO, ate: fimISO }).catch(() => []) : [],
       ]);
       const rs = (recibos || []).filter(r => !r.cancelado && String(r.data || r.criado_em || "").slice(0, 10) <= fim);
-      const comRecibo = new Set(rs.map(r => r.venda_id).filter(Boolean));
-      if (vivo) setD({ recibos: rs, pagas: pagas || [], itens: itens || [], abertas: abertas || [], parcelas: parcelas || [], vendasCaixa: (vendas || []).filter(v => v.status === "concluida" && !comRecibo.has(v.id)) });
+      const conc = (vendas || []).filter(v => v.status === "concluida");
+      const comRecibo = new Set(api.recibos.dasVendas ? await api.recibos.dasVendas(conc.map(v => v.id)).catch(() => rs.map(r => r.venda_id).filter(Boolean)) : rs.map(r => r.venda_id).filter(Boolean));
+      if (vivo) setD({ recibos: rs, pagas: pagas || [], itens: itens || [], abertas: abertas || [], parcelas: parcelas || [], vendasCaixa: conc.filter(v => !comRecibo.has(v.id)) });
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano]);

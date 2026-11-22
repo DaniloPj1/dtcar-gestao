@@ -37,8 +37,10 @@ export function FluxoDiario() {
         api.vendas && api.vendas.listar ? api.vendas.listar({ de: iniISO, ate: fimISO }).catch(() => []) : [],
       ]);
       const rs = (recibos || []).filter(r => !r.cancelado);
-      const comRecibo = new Set(rs.map(r => r.venda_id).filter(Boolean)); // venda com recibo entra pelo recibo, não duas vezes (achado do Codex, 22/11/2026)
-      if (vivo) setD({ recibos: rs, pagas: pagas || [], vendas: (vendas || []).filter(v => v.status === "concluida" && !comRecibo.has(v.id)) });
+      const conc = (vendas || []).filter(v => v.status === "concluida");
+      // venda com recibo entra pelo recibo, não duas vezes — e o recibo pode estar noutro mês (achados do Codex, 22/11/2026)
+      const comRecibo = new Set(api.recibos.dasVendas ? await api.recibos.dasVendas(conc.map(v => v.id)).catch(() => rs.map(r => r.venda_id).filter(Boolean)) : rs.map(r => r.venda_id).filter(Boolean));
+      if (vivo) setD({ recibos: rs, pagas: pagas || [], vendas: conc.filter(v => !comRecibo.has(v.id)) });
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano, mes]);

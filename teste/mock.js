@@ -346,7 +346,7 @@
     temV18: () => true,
     // mesmas regras da função saldos_contas do v18 (no servidor, numa consulta só)
     // vendas de balcão e relatorio_itens de mentira (Painel Financeiro e relatórios)
-    vendas: { listar: async ({ de, ate } = {}) => (db.vendas || []).filter(v => (!de || (v.criado_em || "") >= de) && (!ate || (v.criado_em || "") <= ate)), uma: async id => (db.vendas || []).find(v => v.id === id) },
+    vendas: { listar: async ({ de, ate } = {}) => (db.vendas || []).filter(v => (!de || (v.criado_em || "") >= de) && (!ate || (v.criado_em || "") <= ate)), periodo: async o => window.__API_MOCK.vendas.listar(o), uma: async id => (db.vendas || []).find(v => v.id === id) },
     relatorioItens: async (ini, fim, base) => { const campo = base === "abertura" ? "criado_em" : "entregue_em";
       const linhas = [];
       for (const o of db.ordens.filter(o => ["entregue", "recusado"].includes(o.status) && (o[campo] || "") >= ini && (o[campo] || "") < fim)) {

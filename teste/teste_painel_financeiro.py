@@ -51,16 +51,16 @@ try:
     corpo = txt(".pf")
     chk("título da tela", "Painel Financeiro" in corpo)
     kpis = pg.eval_on_selector_all(".pf-kpi", "l => l.map(e => e.textContent)")
-    chk("entradas do mês = R$ 1.500,00", any("Entradas no mês" in k and "1.500,00" in k for k in kpis), kpis)
+    chk("entradas do mês = R$ 1.600,00 (recibos + balcão sem recibo)", any("Entradas no mês" in k and "1.600,00" in k for k in kpis), kpis)
     chk("saídas do mês = R$ 800,00", any("Saídas no mês" in k and "800,00" in k for k in kpis), kpis)
-    chk("saldo do mês = R$ 700,00", any("Saldo no mês" in k and "700,00" in k for k in kpis), kpis)
+    chk("saldo do mês = R$ 800,00", any("Saldo no mês" in k and "800,00" in k for k in kpis), kpis)
     chk("saldo atual das contas = R$ 5.000,00", any("Saldo atual" in k and "5.000,00" in k for k in kpis), kpis)
     chk("faturamento do mês = R$ 1.000,00", any("Faturamento" in k and "1.000,00" in k for k in kpis), kpis)
     chk("custo do mês = R$ 340,00", any("Custo" in k and "340,00" in k for k in kpis), kpis)
     chk("margem bruta do mês = R$ 660,00", any("Margem bruta" in k and "660,00" in k for k in kpis), kpis)
     chk("gasto por categoria: Energia", "Energia" in txt(".pf-cats") and "800,00" in txt(".pf-cats"))
     chk("resumo do mês no gráfico", "Entradas:" in txt("#pf-resumo-mes"))
-    chk("nome sempre escrito na legenda", "Entradas (recibos)" in corpo and "Saídas (contas pagas)" in corpo)
+    chk("nome sempre escrito na legenda", "Entradas (recibos e balcão)" in corpo and "Saídas (contas pagas)" in corpo)
 
     # entrada pela barra de cima (como o Óleo e filtros): botão novo, e o menu lateral continua como era
     pg2 = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
@@ -87,7 +87,7 @@ try:
     pg.click("#pf-meta-abrir"); pg.wait_for_timeout(200)
     pg.fill("#pf-meta", "10000"); pg.click("#pf-meta-salvar"); pg.wait_for_timeout(800)
     chk("meta salva: orçado × realizado aparece", "da meta em" in txt(".pf"))
-    chk("anel da meta = 15%", "15%" in txt(".pf-meta-mes"))
+    chk("anel da meta = 16%", "16%" in txt(".pf-meta-mes"))
     pg.close()
 
     # ----- celular -----

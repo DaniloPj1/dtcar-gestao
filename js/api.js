@@ -335,6 +335,8 @@ function criarApiSupabase() {
     },
     vendas: {
       listar: async ({ de, ate } = {}) => { let q = sb.from("vendas").select("*"); if (de) q = q.gte("criado_em", de); if (ate) q = q.lt("criado_em", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
+      /** o período inteiro, sem o teto de 1.000 (Painel Financeiro, DRE e Inteligência leem o ano todo) */
+      periodo: async ({ de, ate } = {}) => todos(() => { let q = sb.from("vendas").select("*"); if (de) q = q.gte("criado_em", de); if (ate) q = q.lt("criado_em", ate); return q.order("numero"); }),
       uma: async id => { const v = ok(await sb.from("vendas").select("*").eq("id", id).single()); v.itens = ok(await sb.from("venda_itens").select("*").eq("venda_id", id).order("posicao")); return v; },
       finalizar: async p => ok(await sb.rpc("finalizar_venda", { p })),
       cancelar: async (id, motivo) => ok(await sb.rpc("cancelar_venda", { p_id: id, p_motivo: motivo || "" })),
@@ -616,6 +618,8 @@ function criarApiSupabase() {
         return data;
       },
     },
+    /** descrições já lançadas (sem preço), para o corretor do pedido no App DTCar (22/11/2026) — as mesmas que o app do mecânico lê */
+    descricoesItens: async () => ok(await sb.from("os_itens").select("descricao,tipo").order("criado_em", { ascending: false }).limit(3000)),
     relatorioItens: async (ini, fim, base) => todos(() => sb.rpc("relatorio_itens", { p_ini: ini, p_fim: fim, p_base: base || "entrega" }).order("numero").order("item_id")),
     /** réplica no banco do PC (etapa 2): o que mudou desde uma data e o que foi apagado (supabase/v13.sql) */
     replica: {

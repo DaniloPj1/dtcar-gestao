@@ -36,7 +36,9 @@ export function FluxoDiario() {
         api.contas.listar({ de: iso(ini), ate: iso(fim), campo: "pago_em", status: "paga" }),
         api.vendas && api.vendas.listar ? api.vendas.listar({ de: iniISO, ate: fimISO }).catch(() => []) : [],
       ]);
-      if (vivo) setD({ recibos: (recibos || []).filter(r => !r.cancelado), pagas: pagas || [], vendas: (vendas || []).filter(v => v.status === "concluida") });
+      const rs = (recibos || []).filter(r => !r.cancelado);
+      const comRecibo = new Set(rs.map(r => r.venda_id).filter(Boolean)); // venda com recibo entra pelo recibo, não duas vezes (achado do Codex, 22/11/2026)
+      if (vivo) setD({ recibos: rs, pagas: pagas || [], vendas: (vendas || []).filter(v => v.status === "concluida" && !comRecibo.has(v.id)) });
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano, mes]);
@@ -93,7 +95,7 @@ export function FluxoDiario() {
         <${Linha} cls="tf-total" label="Saldo do dia (entradas − saídas)" vals=${t.saldo.map(v => v === 0 ? null : { v: (v > 0 ? "+" : "−") + din(Math.abs(v)), cls: v < 0 ? "c-bad" : "c-ok" })} />
         <${Linha} cls="tf-final" label="Saldo acumulado no mês" vals=${t.acum.map(v => ({ v: (v < 0 ? "−" : "") + din(Math.abs(v)), cls: v < 0 ? "tf-neg" : "" }))} />
       </div></div>
-      <p class="dica">Recibos entram pela data do recibo; vendas de balcão pela data da venda; contas pela data do pagamento. O saldo acumulado começa do zero no dia 1º — o saldo real de cada conta fica na Previsão de caixa.</p>
+      <p class="dica">Recibos entram pela data do recibo; venda de balcão sem recibo, pela data da venda (com recibo, ela entra pelo recibo — uma vez só); contas pela data do pagamento. O saldo acumulado começa do zero no dia 1º — o saldo real de cada conta fica na Previsão de caixa.</p>
     </section>
     <section class="card tf-card">
       <h3 class="pf-rotulo">Entradas por forma de pagamento · ${MESES[mes]} de ${ano}</h3>

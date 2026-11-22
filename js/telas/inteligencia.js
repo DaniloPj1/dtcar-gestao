@@ -36,14 +36,17 @@ export function Inteligencia() {
     (async () => {
       const ini = ano + "-01-01", fim = ano + "-12-31";
       const iniISO = new Date(ini + "T00:00:00").toISOString(), fimISO = new Date(new Date(fim + "T00:00:00").getTime() + 86400000).toISOString();
-      const [recibos, pagas, itens, abertas, parcelas] = await Promise.all([
-        api.recibos.listar({ de: ini, ate: fim }),
+      const [recibos, pagas, itens, abertas, parcelas, vendas] = await Promise.all([
+        api.recibos.desde ? api.recibos.desde(ini) : api.recibos.listar({ de: ini, ate: fim }),
         api.contas.listar({ de: ini, ate: fim, campo: "pago_em", status: "paga" }),
         api.relatorioItens(iniISO, fimISO, "entrega"),
         api.contas.abertas().catch(() => []),
         api.receber && api.receber.listar ? api.receber.listar({ status: "aberta" }).catch(() => []) : [],
+        api.vendas && (api.vendas.periodo || api.vendas.listar) ? (api.vendas.periodo || api.vendas.listar)({ de: iniISO, ate: fimISO }).catch(() => []) : [],
       ]);
-      if (vivo) setD({ recibos: (recibos || []).filter(r => !r.cancelado), pagas: pagas || [], itens: itens || [], abertas: abertas || [], parcelas: parcelas || [] });
+      const rs = (recibos || []).filter(r => !r.cancelado && String(r.data || r.criado_em || "").slice(0, 10) <= fim);
+      const comRecibo = new Set(rs.map(r => r.venda_id).filter(Boolean));
+      if (vivo) setD({ recibos: rs, pagas: pagas || [], itens: itens || [], abertas: abertas || [], parcelas: parcelas || [], vendasCaixa: (vendas || []).filter(v => v.status === "concluida" && !comRecibo.has(v.id)) });
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano]);
@@ -51,7 +54,7 @@ export function Inteligencia() {
   const t = useMemo(() => {
     if (!d) return null;
     const soma = a => a.reduce((x, y) => x + y, 0);
-    const rec = soma(d.recibos.map(r => n(r.valor)));
+    const rec = soma(d.recibos.map(r => n(r.valor))) + soma((d.vendasCaixa || []).map(v => n(v.total))); // balcão sem recibo conta como recebimento
     const pag = soma(d.pagas.map(c => n(c.valor_pago != null ? c.valor_pago : c.valor)));
     const rank = mapa => [...mapa.entries()].map(([k, v]) => ({ k, v })).filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 8);
     const serv = new Map(), pecas = new Map(), cats = new Map(), quem = new Map();

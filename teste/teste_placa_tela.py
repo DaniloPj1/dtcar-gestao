@@ -160,7 +160,7 @@ try:
       chk("agenda: abriu o agendamento novo", False, pg.inner_text("body")[:200])
 
     # ================= Ajustes =================
-    pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1500)
+    pg.goto(U + "#/ajustes?aba=consultas"); pg.wait_for_timeout(1500)
     t = pg.inner_text("#cartao-placa")
     chk("Ajustes: mostra que está ligada, o saldo e o uso do mês", "Ligada" in t and "Saldo no API Placas" in t and "R$ " in t and "Este mês:" in t and "consultas pagas" in t, t)
     pg.locator("#cartao-placa").scroll_into_view_if_needed(); pg.screenshot(path=SAIDA + "/placa-5-ajustes.png")
@@ -173,7 +173,7 @@ try:
     chk("busca automática desligada: Nova O.S. não consulta sozinha e mostra o botão", len(ch()) == n and val("#v-marca") == "" and pg.query_selector(".placa-buscar") is not None)
     pg.click(".placa-buscar"); pg.wait_for_timeout(1100)
     chk("…e o botão busca na hora", len(ch()) == n + 1 and val("#v-marca") == "Volkswagen")
-    pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1200)
+    pg.goto(U + "#/ajustes?aba=consultas"); pg.wait_for_timeout(1200)
     pg.click("#cartao-placa input[type=checkbox]"); pg.wait_for_timeout(200); pg.click("button:has-text('Salvar ajustes')"); pg.wait_for_timeout(900)
     chk("Ajustes: religou a busca automática", pg.evaluate("window.__DB.config.placaAuto") is True)
 
@@ -189,7 +189,7 @@ try:
     chk("…e não fica insistindo a cada placa (pausa de 5 minutos)", len(ch()) == 1, len(ch()))
     pg.click(".placa-buscar"); pg.wait_for_timeout(900)
     chk("…mas o botão tenta na hora e diz o motivo", len(ch()) == 2 and "ainda não foi ligada" in pg.inner_text(".placa-nova"), pg.inner_text(".placa-nova"))
-    pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1300)
+    pg.goto(U + "#/ajustes?aba=consultas"); pg.wait_for_timeout(1300)
     chk("Ajustes: mostra que ainda não está ligada", "Ainda não está ligada" in pg.inner_text("#cartao-placa"), pg.inner_text("#cartao-placa"))
     # servidor sem resposta (o que o navegador vê se a função ainda não foi publicada e ele não consegue ler a recusa)
     pg.reload(); pg.wait_for_timeout(2200)
@@ -201,7 +201,7 @@ try:
     chk("servidor sem resposta: a tela segue normal, sem insistir a cada placa", len(ch()) == 1 and "Preencha os dados do veículo" in t and "Não deu" not in t, [len(ch()), t])
     pg.click(".placa-buscar"); pg.wait_for_timeout(900)
     chk("…e o botão tenta na hora e explica", len(ch()) == 2 and "Sem resposta da consulta de placa" in pg.inner_text(".placa-nova"), pg.inner_text(".placa-nova"))
-    pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1300)
+    pg.goto(U + "#/ajustes?aba=consultas"); pg.wait_for_timeout(1300)
     chk("Ajustes: sem resposta do servidor não vira erro de tela", "Não deu para conferir" in pg.inner_text("#cartao-placa") and "Sem resposta da consulta de placa" in pg.inner_text("#cartao-placa"), pg.inner_text("#cartao-placa"))
     pg.reload(); pg.wait_for_timeout(2200)
     pg.evaluate("window.__PLACA = { situacao: 'saldo', chamadas: [] }")

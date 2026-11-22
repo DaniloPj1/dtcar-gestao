@@ -121,7 +121,7 @@ try:
     chk("cadastro: com nome digitado, trocar o CPF não consulta nem mexe no nome", val("#c-nome") == "Nome Que Eu Digitei")
 
     # ================= Ajustes =================
-    pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1800)
+    pg.goto(U + "#/ajustes?aba=consultas"); pg.wait_for_timeout(1800)
     cart = pg.query_selector("#cartao-cpf")
     chk("Ajustes: cartão da consulta pelo CPF, ligada", cart is not None and "Ligada" in cart.inner_text() and "Só o administrador" in cart.inner_text())
     # cadastro da chave (a do plano grátis vence todo mês)
@@ -141,9 +141,9 @@ try:
     pg.fill("#c-doc", "248.135.790-60"); pg.wait_for_timeout(1500)
     chk("chave vencida: avisa na Nova O.S. e manda cadastrar em Ajustes", "chave da API CPF venceu" in pg.inner_text("body") and "Ajustes" in pg.inner_text(".cpf-aviso") and val("#c-nome") == "")
     pg.reload(); pg.wait_for_timeout(1500)
-    pg.evaluate("window.__CPF = { chamadas: [], semChave: true }"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/ajustes"); pg.wait_for_timeout(1500)
+    pg.evaluate("window.__CPF = { chamadas: [], semChave: true }"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/ajustes?aba=consultas"); pg.wait_for_timeout(1500)
     chk("Ajustes sem chave: avisa que falta cadastrar e mostra o campo", "Ainda não está ligada" in pg.inner_text("#cartao-cpf") and pg.query_selector("#cpf-chave") is not None)
-    celA = pagina(390, 800); celA.goto(U + "#/ajustes"); celA.wait_for_timeout(2500)
+    celA = pagina(390, 800); celA.goto(U + "#/ajustes?aba=consultas"); celA.wait_for_timeout(2500)
     la = celA.evaluate("document.documentElement.scrollWidth"); celA.query_selector("#cartao-cpf").scroll_into_view_if_needed(); celA.screenshot(path=SAIDA + "/cpf-5-ajustes-celular.png")
     chk("celular: Ajustes com o campo da chave não passa da largura", la <= 392, la)
 

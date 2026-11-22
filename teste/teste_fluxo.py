@@ -321,17 +321,18 @@ try:
     # painel
     pg.goto(U + "#/painel"); pg.wait_for_timeout(1500)
     pg.screenshot(path=SAIDA + "/u5-painel.png")
-    # menu lateral: grupo "Sistema" recolhido, sem barra de rolagem numa tela de notebook (1366x768)
+    # menu do computador (22/11/2026): barra preta no topo, layout aberto; os grupos descem com as opções no mouse
     pg.set_viewport_size({"width": 1366, "height": 768}); pg.wait_for_timeout(400)
     lat = ".lateral"
-    chk("menu: Sistema recolhido", pg.query_selector(lat + " .lateral-grupo-tit[aria-expanded=false]") is not None and "WhatsApp e e-mail" not in pg.inner_text(lat))
+    chk("menu: barra no topo com os grupos fechados", pg.query_selector(lat + " .lateral-grupo-tit[aria-haspopup=true]") is not None and "WhatsApp e e-mail" not in pg.inner_text(lat))
     alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
-    chk("menu: cabe na tela sem rolar (%d/%d)" % tuple(alt), alt[0] <= alt[1])
+    chk("menu: barra sem rolagem (%d/%d)" % tuple(alt), alt[0] <= alt[1])
     pg.screenshot(path=SAIDA + "/u5b-menu.png")
-    pg.click(lat + " .lateral-grupo-tit"); pg.wait_for_timeout(200)
-    chk("menu: abre ao clicar e lembra", "WhatsApp e e-mail" in pg.inner_text(lat) and pg.evaluate("localStorage.getItem('dtcar-menu-sistema')") == "true")
-    pg.click(lat + " .lateral-grupo-tit"); pg.goto(U + "#/equipe"); pg.wait_for_timeout(800)
-    chk("menu: tela do Sistema aberta mostra o grupo", "WhatsApp e e-mail" in pg.inner_text(lat))
+    pg.hover(lat + " .lateral-grupo:last-of-type .lateral-grupo-tit"); pg.wait_for_timeout(250)
+    chk("menu: grupo desce com as opções no mouse em cima", "WhatsApp e e-mail" in pg.inner_text(lat))
+    pg.screenshot(path=SAIDA + "/u5c-menu-aberto.png")
+    pg.mouse.move(400, 500); pg.goto(U + "#/equipe"); pg.wait_for_timeout(800)
+    chk("menu: tela do Sistema marca o grupo", pg.get_attribute(lat + " .lateral-grupo:last-of-type .lateral-grupo-tit", "aria-current") == "page")
     # v35: cópia de leitura por e-mail (todo dia às 18h)
     pg.goto(U + "#/backup"); pg.wait_for_selector("text=Cópia de leitura por e-mail", timeout=5000)
     chk("backup leitura: cartão com o e-mail da oficina", "centroautomotivodtcar@hotmail.com" in pg.input_value("#bl-emails"))
@@ -350,7 +351,8 @@ try:
     chk("whatsapp: aparece na tela Mais (celular)", "WhatsApp da oficina" in pg.inner_text("main"))
     # Sistema › WhatsApp (etapa 1): testar conexão e pedir código de pareamento
     pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(800)
-    chk("whatsapp: item no menu Sistema", "WhatsApp" in pg.inner_text(lat))
+    pg.hover(lat + " .lateral-grupo:last-of-type .lateral-grupo-tit"); pg.wait_for_timeout(250)
+    chk("whatsapp: item no menu Sistema", "WhatsApp" in pg.inner_text(lat)); pg.mouse.move(400, 500)
     pg.click("text=Testar conexão"); pg.wait_for_timeout(400)
     chk("whatsapp: teste mostra o resultado", "Funcionou" in pg.inner_text("main"))
     chk("whatsapp: teste mostra a criptografia do servidor", "pareamento por código não suportado" in pg.inner_text("main"))
@@ -440,7 +442,7 @@ try:
     chk("email: aparece na tela Mais", "E-mail da oficina" in pg.inner_text("main"))
     pg.goto(U + "#/email"); pg.wait_for_timeout(800)
     tx = pg.inner_text("main")
-    chk("email: menu lateral 'WhatsApp e e-mail' marcado nesta tela", "WhatsApp e e-mail" in pg.inner_text(lat + " [aria-current=page]"))
+    chk("email: grupo Sistema marcado nesta tela", pg.get_attribute(lat + " .lateral-grupo:last-of-type .lateral-grupo-tit", "aria-current") == "page")
     chk("email: abas WhatsApp / E-mail", pg.query_selector("[role=tab][aria-selected=true]:has-text('E-mail')") is not None)
     chk("email: sem MS_CLIENT_ID mostra o registro na Microsoft", "Registros de aplicativo" in tx and "MS_CLIENT_ID" in tx, tx[:300])
     chk("email: mostra o endereço de retorno para copiar", pg.input_value("input[aria-label='Endereço de retorno do login']").endswith("/functions/v1/email"))
@@ -467,14 +469,16 @@ try:
     chk("email: aba WhatsApp volta para a tela do WhatsApp", "WhatsApp da oficina" in pg.inner_text("main") and "#/whatsapp" in pg.url)
     pg.set_viewport_size({"width": 1600, "height": 950}); pg.wait_for_timeout(300)
     alt = pg.evaluate("(() => { const l = document.querySelector('.lateral'); return [l.scrollHeight, l.clientHeight]; })()")
-    chk("menu: cabe sem rolar em 1600x950 (%d/%d)" % tuple(alt), alt[0] <= alt[1])
+    chk("menu: barra sem rolagem em 1600x950 (%d/%d)" % tuple(alt), alt[0] <= alt[1])
     # Financeiro › Documentos do RH (v30): busca no e-mail da contabilidade, lista por mês, imprime e adiciona à mão
     pg.evaluate("""window.__RH_EMAIL = [
       { competencia: '2026-10', tipo: 'pro_labore', titulo: 'PRO LABORE 10.2026 - DTCAR', arquivo: '2026-10/a.pdf', nome_arquivo: 'PRO LABORE 10.2026 - DTCAR.pdf', email_data: '2026-11-04T16:38:00Z' },
       { competencia: '2026-10', tipo: 'recibo', titulo: 'RECIBO 10.2026 - DTCAR', arquivo: '2026-10/b.pdf', nome_arquivo: 'RECIBO 10.2026 - DTCAR.pdf', email_data: '2026-11-04T16:38:00Z' },
       { competencia: '2026-09', tipo: 'darf', titulo: 'DARF 09.2026 - DTCAR', arquivo: '2026-09/c.pdf', nome_arquivo: 'DARF 09.2026 - DTCAR.pdf', email_data: '2026-10-14T12:00:00Z' }]""")
     pg.goto(U + "#/funcionarios"); pg.wait_for_timeout(700)
+    pg.hover(lat + " .lateral-grupo:nth-of-type(2) .lateral-grupo-tit"); pg.wait_for_timeout(250)
     chk("rh: menu 'Funcionários e RH' e aba Documentos do RH", "Funcionários e RH" in pg.inner_text(lat) and pg.query_selector("[role=tab]:has-text('Documentos do RH')") is not None)
+    pg.mouse.move(400, 500)
     pg.click("[role=tab]:has-text('Documentos do RH')"); pg.wait_for_timeout(1500)
     tx = pg.inner_text("main")
     chk("rh: busca sozinha na contabilidade até não restar nada (3 documentos, 2 chamadas)", tx.count("Imprimir") == 3 and len(pg.evaluate("window.__RH_IMPORT")) == 2, tx[:300])

@@ -306,7 +306,8 @@ export function FormCadastro(p) { return p.ed.tipo === "cliente" ? html`<${FormC
 export function Cadastros({ params }) {
   const { dados, perfil, cfg, ir } = useApp();
   const [aba, setAba] = useState(params && ["veiculos", "produtos", "fornecedores"].includes(params.aba) ? params.aba : "clientes");
-  const [q, setQ] = useState(""), [ed, setEd] = useState(null);
+  const [q, setQ] = useState(""), [ed, setEd] = useState(() => params && params.novo && pode(perfil, "cadastrar")
+    ? (params.aba === "veiculos" ? edVeiculo() : edCliente()) : null); // ?novo=1: quadro "Ações do dia a dia" do painel
   const [filtro, setFiltro] = useState(params && params.filtro === "recuperar" ? "recuperar" : "todos"), [ordem, setOrdem] = useState(params && params.filtro === "recuperar" ? "ultima" : "nome");
   const [lim, setLim] = useState(80);
   const podeCad = pode(perfil, "cadastrar"), ver = pode(perfil, "verValores");

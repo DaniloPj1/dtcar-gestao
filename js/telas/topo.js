@@ -4,7 +4,7 @@ import { html, useState, useEffect, useRef, useMemo } from "../lib.js";
 import { useApp, I, Modal } from "../ui.js";
 import { norm, soDig, normPlaca, exPlaca, fmtTel, fmtDataHora, numOS, numORC, lsGet, lsSet } from "../util.js";
 import { api } from "../api.js";
-import { pode, STATUS, situacaoOS } from "../regras.js";
+import { pode, STATUS, situacaoOS, ABERTOS } from "../regras.js";
 import { temaEfetivo, temaEscolhido, aplicarTema } from "../tema.js";
 
 const ICON_SOL = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
@@ -37,8 +37,11 @@ function BuscaRapida() {
   const res = useMemo(() => {
     const t = q.trim(); if (t.length < 2) return [];
     const n = norm(t), d = soDig(t), p = normPlaca(t), out = [];
-    if (d && d === t && d.length <= 6) dados.ordens.filter(o => String(o.numero) === String(+d)).forEach(o => out.push({ k: "os" + o.id, ic: I.lista, t: numOS(o.numero) + " · " + exPlaca(o.veiculo.placa), s: o.cliente.nome + " · " + (situacaoOS(o) || { t: o.status }).t, r: "/os/" + o.id }));
-    if (p.length >= 3) dados.veiculos.filter(v => v.placa && v.placa.includes(p)).slice(0, 6).forEach(v => out.push({ k: "v" + v.id, ic: I.carro, t: exPlaca(v.placa) + " · " + [v.marca, v.modelo].filter(Boolean).join(" "), s: ((dados.clientes.find(c => c.id === v.cliente_id) || {}).nome) || "sem proprietário", r: "/veiculo/" + v.id }));
+    // O.S. pelo número, pela placa ou pelo nome do cliente (pedido do Danilo em 22/11/2026: a busca promete "placa, O.S., cliente" e tem de achar pelos três)
+    dados.ordens.filter(o => (d && d === t && d.length <= 6 && String(o.numero) === String(+d)) || (p.length >= 3 && ((o.veiculo && o.veiculo.placa) || "").includes(p)) || (n.length >= 3 && norm((o.cliente && o.cliente.nome) || "").includes(n)))
+      .sort((x, y) => (ABERTOS.includes(y.status) ? 1 : 0) - (ABERTOS.includes(x.status) ? 1 : 0) || y.numero - x.numero).slice(0, 6)
+      .forEach(o => out.push({ k: "os" + o.id, ic: I.lista, t: numOS(o.numero) + " · " + exPlaca(o.veiculo.placa), s: o.cliente.nome + " · " + (situacaoOS(o) || { t: o.status }).t, r: "/os/" + o.id }));
+    dados.veiculos.filter(v => (p.length >= 3 && v.placa && v.placa.includes(p)) || (n.length >= 3 && norm([v.marca, v.modelo].filter(Boolean).join(" ")).includes(n))).slice(0, 6).forEach(v => out.push({ k: "v" + v.id, ic: I.carro, t: exPlaca(v.placa) + " · " + [v.marca, v.modelo].filter(Boolean).join(" "), s: ((dados.clientes.find(c => c.id === v.cliente_id) || {}).nome) || "sem proprietário", r: "/veiculo/" + v.id }));
     if (n.length >= 2) dados.clientes.filter(c => norm(c.nome).includes(n) || norm(c.fantasia).includes(n) || (d.length >= 4 && soDig(c.telefone).includes(d))).slice(0, 6)
       .forEach(c => out.push({ k: "c" + c.id, ic: I.pessoas, t: c.nome, s: [c.codigo ? "cód. " + c.codigo : "", c.telefone ? fmtTel(c.telefone) : ""].filter(Boolean).join(" · "), r: "/cliente/" + c.id }));
     return out.slice(0, 10);

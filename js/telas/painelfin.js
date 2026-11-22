@@ -27,7 +27,7 @@ function Anel({ pct, cor, trilha, texto }) {
 }
 
 export function PainelFinanceiro() {
-  const { cfg, perfil, avisar, recarregar } = useApp();
+  const { cfg, perfil, avisar, recarregar, ir } = useApp();
   const agora = new Date();
   const [ano, setAno] = useState(agora.getFullYear());
   const [mes, setMes] = useState(agora.getMonth());
@@ -102,6 +102,9 @@ export function PainelFinanceiro() {
     <div class="painel-topo pf-topo">
       <div><h1>Painel Financeiro</h1><span class="sub">Entradas e saídas pelo caixa; faturamento e custo pelas O.S. entregues e vendas de balcão.</span></div>
       <div class="pf-filtros">
+        <button type="button" class="btn btn-sm" onClick=${() => ir("/dre")}>DRE</button>
+        <button type="button" class="btn btn-sm" onClick=${() => ir("/fluxo-diario")}>Fluxo diário</button>
+        <button type="button" class="btn btn-sm" onClick=${() => ir("/inteligencia")}>Inteligência</button>
         <span class="pf-ano"><button type="button" aria-label="Ano anterior" onClick=${() => setAno(ano - 1)}>◀</button><b>${ano}</b><button type="button" aria-label="Próximo ano" onClick=${() => setAno(ano + 1)}>▶</button></span>
         <span class="pf-meses">${MESES.map((_, i) => html`<${Chip} key=${i} i=${i} />`)}</span>
       </div>

@@ -70,8 +70,8 @@ try:
     pg2.click(".bt-fin"); pg2.wait_for_timeout(900)
     chk("botão leva à tela", "Painel Financeiro" in pg2.inner_text(".pf"))
     rolagem = pg2.evaluate("() => { const e = document.querySelector('.lateral'); return e ? e.scrollHeight - e.clientHeight : -1; }")
-    chk("menu lateral sem rolagem em 1366x768 (continua como na main)", 0 <= rolagem <= 2, rolagem)
-    chk("menu lateral sem item novo (ele vive na barra de cima e no Mais)", "Painel Financeiro" not in pg2.eval_on_selector(".lateral", "e => e.textContent"))
+    chk("barra de menu sem rolagem em 1366x768", 0 <= rolagem <= 2, rolagem)
+    chk("grupo Financeiro marcado nesta tela", pg2.get_attribute(".lateral .lateral-grupo:nth-of-type(3) .lateral-grupo-tit", "aria-current") == "page")
     pg2.close()
 
     # troca de mês pelos chips (mês anterior tem R$ 2.000,00 de entradas)

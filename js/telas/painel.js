@@ -6,6 +6,7 @@ import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js"
 import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, lsSet, fmtTel, exPlaca, linkWhats } from "../util.js";
 import { STATUS, ABERTOS, ETAPAS, etapaOS, situacaoOS, pode } from "../regras.js";
 import { LS_NOVA } from "./entrada.js";
+import { ClimaJanela, NoticiasJanela, AtalhosJanela } from "./casa.js";
 import { estoqueBaixo } from "./produtos.js";
 import { CancelarModal, EncerrarModal, MenuOS, proximaEtapa, avancarEtapa } from "./acoesos.js";
 import { situacaoParcela } from "./receber.js";
@@ -66,6 +67,9 @@ function serie(pontos, ini, fim, grupo) {
 export const JANELAS = {
   busca: { t: "Busca rápida", tam: 12 },
   acoes: { t: "Ações do dia a dia", tam: 12 },
+  atalhos: { t: "Atalhos", tam: 12 },
+  clima: { t: "Previsão do tempo — Colatina/ES", tam: 4 },
+  noticias: { t: "Notícias do Espírito Santo", tam: 8 },
   hoje: { t: "Resumo do dia", tam: 12 },
   patio: { t: "Pátio", tam: 12 },
   agenda: { t: "Agenda da semana", tam: 12 },
@@ -86,7 +90,7 @@ export const JANELAS = {
   aniversarios: { t: "Aniversariantes do mês", tam: 3, valores: true },
   contas: { t: "Contas a pagar", tam: 12, valores: true, fin: true },
 };
-export const LAYOUT_PADRAO = [["busca", 12], ["acoes", 12], ["hoje", 12], ["patio", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
+export const LAYOUT_PADRAO = [["busca", 12], ["acoes", 12], ["atalhos", 12], ["hoje", 12], ["patio", 12], ["agenda", 12], ["noticias", 8], ["clima", 4], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
   ["servicos", 4], ["pecas", 4], ["formas", 4], ["manutencao", 6], ["recuperar", 3], ["aniversarios", 3]].map(([k, tam]) => ({ k, tam }));
 const TAMANHOS = [[3, "¼"], [4, "⅓"], [6, "½"], [8, "⅔"], [12, "Inteira"]];
 
@@ -96,9 +100,9 @@ function ContasJanela({ l }) {
   const hoje = hojeISO(), sete = somaDiasISO(hoje, 7), soma = x => x.reduce((s, c) => s + Number(c.valor), 0);
   const venc = l.filter(c => c.vencimento < hoje), hj = l.filter(c => c.vencimento === hoje), sem = l.filter(c => c.vencimento > hoje && c.vencimento <= sete);
   return html`<div class="contas-janela"><div class="contas-mini">
-      <div class=${venc.length ? "c-bad" : ""}><span>Vencidas</span><b>${reais(soma(venc))}</b><small>${venc.length}</small></div>
-      <div class=${hj.length ? "c-warn" : ""}><span>Hoje</span><b>${reais(soma(hj))}</b><small>${hj.length}</small></div>
-      <div><span>Próximos 7 dias</span><b>${reais(soma(sem))}</b><small>${sem.length}</small></div></div>
+      <button type="button" class=${venc.length ? "c-bad" : ""} title="Abrir contas a pagar" onClick=${() => ir("/financeiro")}><span>Vencidas</span><b>${reais(soma(venc))}</b><small>${venc.length}</small></button>
+      <button type="button" class=${hj.length ? "c-warn" : ""} title="Abrir contas a pagar" onClick=${() => ir("/financeiro")}><span>Hoje</span><b>${reais(soma(hj))}</b><small>${hj.length}</small></button>
+      <button type="button" title="Abrir contas a pagar" onClick=${() => ir("/financeiro")}><span>Próximos 7 dias</span><b>${reais(soma(sem))}</b><small>${sem.length}</small></button></div>
     ${l.length ? html`<ul class="ranking">${l.slice(0, 5).map(c => html`<li key=${c.id}><span>${c.descricao}</span><b class=${c.vencimento < hoje ? "c-bad" : ""}>${reais(c.valor)}</b><small>${fmtData(c.vencimento).slice(0, 5)}</small></li>`)}</ul>` : html`<span class="dica">Nenhuma conta em aberto.</span>`}
     <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/financeiro")}>Contas a pagar</button><button type="button" class="btn btn-sm" onClick=${() => ir("/financeiro?nova=pdf")}>Lançar boleto</button></div>
     <span class="dica">Total em aberto: ${reais(soma(l))}</span></div>`;
@@ -186,6 +190,11 @@ export function Painel() {
   if (!cfg.painelV6 && !salvo.some(j => j.k === "agenda")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "agenda", tam: 12 }, ...salvo.slice(i + 1)]; }
   // janela nova da versão 7 (ações do dia a dia, pedido do Danilo em 22/11/2026): entra uma vez, logo depois da busca
   if (!cfg.painelV7 && !salvo.some(j => j.k === "acoes")) { const i = Math.max(0, salvo.findIndex(j => j.k === "busca")); salvo = [...salvo.slice(0, i + 1), { k: "acoes", tam: 12 }, ...salvo.slice(i + 1)]; }
+  // janelas novas da versão 8 (atalhos, notícias e previsão do tempo, pedido do Danilo em 22/11/2026): entram uma vez
+  if (!cfg.painelV8) {
+    if (!salvo.some(j => j.k === "atalhos")) { const i = Math.max(0, salvo.findIndex(j => j.k === "acoes")); salvo = [...salvo.slice(0, i + 1), { k: "atalhos", tam: 12 }, ...salvo.slice(i + 1)]; }
+    if (!salvo.some(j => j.k === "noticias")) { const i = Math.max(0, salvo.findIndex(j => j.k === "agenda")); salvo = [...salvo.slice(0, i + 1), { k: "noticias", tam: 8 }, { k: "clima", tam: 4 }, ...salvo.slice(i + 1)]; }
+  }
   const layout = editar ? rascunho : salvo;
   let visiveis = layout.filter(j => (ver || !JANELAS[j.k].valores) && (fin || !JANELAS[j.k].fin));
   const [contasAb, setContasAb] = useState(null), [sefazNovas, setSefazNovas] = useState(0);
@@ -256,11 +265,14 @@ export function Painel() {
   const conteudo = {
     busca: () => html`<${BuscaRapida} />`,
     acoes: () => html`<${AcoesDia} />`,
+    atalhos: () => html`<${AtalhosJanela} />`,
+    clima: () => html`<${ClimaJanela} />`,
+    noticias: () => html`<${NoticiasJanela} />`,
     hoje: () => html`<div class="hoje">
-      <div><span>Entradas hoje</span><b>${entradasHoje}</b></div>
-      <div><span>Entregas hoje</span><b>${saidasHoje.length}</b>${ver && saidasHoje.length ? html`<small>${reaisCurto(saidasHoje.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</div>
-      <div><span>No pátio</span><b>${ativas.length}</b>${ver ? html`<small>${reaisCurto(ativas.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</div>
-      <div class=${nAlerta ? "t-alerta" : ""}><span>Alertas</span><b>${nAlerta}</b></div></div>`,
+      <button type="button" title="Abrir as ordens de serviço" onClick=${() => ir("/ordens")}><span>Entradas hoje</span><b>${entradasHoje}</b></button>
+      <button type="button" title="Abrir as O.S. finalizadas" onClick=${() => ir("/ordens?filtro=finalizadas")}><span>Entregas hoje</span><b>${saidasHoje.length}</b>${ver && saidasHoje.length ? html`<small>${reaisCurto(saidasHoje.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</button>
+      <button type="button" title="Abrir as O.S. em aberto" onClick=${() => ir("/ordens")}><span>No pátio</span><b>${ativas.length}</b>${ver ? html`<small>${reaisCurto(ativas.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</button>
+      <button type="button" class=${nAlerta ? "t-alerta" : ""} title="Ver o que precisa de atenção" onClick=${() => { const j = document.querySelector(".j-alertas"); j ? j.scrollIntoView({ behavior: "smooth", block: "start" }) : ir("/ordens?filtro=atrasadas"); }}><span>Alertas</span><b>${nAlerta}</b></button></div>`,
     patio: () => html`<div class="patio" role="group" aria-label="Situação do pátio">
       ${["orcamento", "execucao", "pagamento"].map(s => { const n = naEtapaP(s).length; return html`<button type="button" key=${s} class=${"patio-item t-" + ET[s].cor + (foco === s ? " ativo" : "")} aria-pressed=${foco === s} onClick=${() => setFoco(foco === s ? "" : s)}>
         <b>${n}</b><span>${ET[s].t}</span>${ver && n ? html`<small>${reaisCurto(valorDe(s))}</small>` : null}</button>`; })}</div>`,
@@ -296,7 +308,7 @@ export function Painel() {
   const mover = (i, d) => setRascunho(l => { const n = [...l], j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const soltar = (alvo) => { if (arrastando === null || arrastando === alvo) return; setRascunho(l => { const n = [...l]; const [x] = n.splice(arrastando, 1); n.splice(alvo, 0, x); return n; }); setArrastando(null); };
   const salvarLayout = async () => { setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true, painelV7: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
+    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true, painelV7: true, painelV8: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
   const restaurar = async () => { if (await confirmar({ titulo: "Restaurar painel padrão", texto: "As janelas voltam para a organização original.", botao: "Restaurar" })) setRascunho(LAYOUT_PADRAO.map(j => ({ ...j }))); };
   const ocultas = Object.keys(JANELAS).filter(k => !(rascunho || []).some(j => j.k === k));
 
@@ -318,7 +330,7 @@ export function Painel() {
       ${ocultas.length ? html`<div class="chips adicionar-janela"><span class="sub">Adicionar janela:</span>${ocultas.map(k => html`<button type="button" key=${k} class="chip-f" onClick=${() => setRascunho(l => [...l, { k, tam: JANELAS[k].tam }])}>+ ${JANELAS[k].t}</button>`)}</div>` : null}
     </div>` : null}
     <div class=${"grade-painel" + (editar ? " editando" : "")}>
-      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "acoes", "hoje", "patio"].includes(j.k) && !editar;
+      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "acoes", "atalhos", "hoje", "patio"].includes(j.k) && !editar;
         return html`<section key=${j.k} class=${"janela t" + j.tam + " j-" + j.k + (semTitulo ? " sem-moldura" : "") + (arrastando === idx ? " arrastando" : "")} style=${{ "--tam": j.tam }}
           draggable=${editar ? "true" : "false"} onDragStart=${e => { setArrastando(idx); e.dataTransfer.effectAllowed = "move"; }} onDragOver=${e => editar && e.preventDefault()} onDrop=${e => { e.preventDefault(); soltar(idx); }} onDragEnd=${() => setArrastando(null)}
           aria-label=${def.t}>
@@ -364,7 +376,7 @@ function GradeOS({ lista, ver, ir, soma, total, acoesDe, prox = {} }) {
 const COR_ETAPA = { orcamento: "orc", execucao: "exe", pagamento: "pag", fechada: "fec", recusado: "rec", cancelado: "can" };
 function CardsOS({ lista, ver, ir, acoesDe, prox = {} }) {
   const hoje = hojeISO();
-  return html`<div class="os-cards">${lista.map(o => {
+  const carta = o => {
     const e = o._pendente ? "prov" : COR_ETAPA[etapaOS(o)] || "can", st = situacaoOS(o);
     const atrasada = ["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hoje;
     const aReceber = o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em;
@@ -373,7 +385,7 @@ function CardsOS({ lista, ver, ir, acoesDe, prox = {} }) {
     const quando = atrasada ? "previsão vencida" : parcVencida ? "recebimento vencido" : o.status === "entregue" && o.entregue_em ? "entregue em " + fmtData(o.entregue_em) : "há " + tempoDesde(o.criado_em);
     return html`<article key=${o.id} class=${"os-card e-" + e}>
       <button type="button" class="botao-limpo osc-corpo" onClick=${() => ir("/os/" + o.id)}>
-        <span class="osc-cab"><span class="osc-id"><small>${o._provisorio || numOS(o.numero)}, aberta em ${fmtData(o.criado_em)}</small>
+        <span class="osc-cab"><span class="osc-id"><small><b class="osc-num">${o._provisorio || numOS(o.numero)}</b> · aberta em ${fmtData(o.criado_em)}</small>
           <strong>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") || "Veículo"}</strong>${ficha ? html`<span>${ficha}</span>` : null}</span>
           <${Placa} placa=${o.veiculo.placa} /></span>
         <span class="osc-cli"><b>${o.cliente.nome}</b>${o.cliente.telefone ? html`<span>${fmtTel(o.cliente.telefone)}</span>` : null}</span>
@@ -383,7 +395,18 @@ function CardsOS({ lista, ver, ir, acoesDe, prox = {} }) {
           <span class="osc-valor"><small class=${atrasada || parcVencida ? "c-bad" : ""}>${quando}</small>
           ${ver && Number(o.total) > 0 ? html`<b>${aReceber ? "falta " + reais(faltaReceber(o)) : reais(o.total)}</b>` : null}</span></span>
       </button>
-      ${acoesDe ? html`<div class="osc-acoes">${acoesDe(o)}</div>` : null}</article>`; })}</div>`;
+      ${acoesDe ? html`<div class="osc-acoes">${acoesDe(o)}</div>` : null}</article>`; };
+  // 3 colunas por etapa, cada O.S. na sua (pedido do Danilo, 22/11/2026); o nome da etapa fica escrito no topo da coluna
+  const COLS = [["orcamento", "Orçamento"], ["execucao", "Em execução"], ["pagamento", "Aguardando pagamento"]];
+  const por = { orcamento: [], execucao: [], pagamento: [] }, resto = [];
+  for (const o of lista) (por[etapaOS(o)] || resto).push(o);
+  // até 4 colunas: a quarta aparece quando o filtro traz fechadas, recusadas ou canceladas
+  return html`<div class=${"os-colunas" + (resto.length ? " c4" : "")}>
+    ${COLS.map(([k, t]) => html`<section key=${k} class=${"os-col ec-" + COR_ETAPA[k]}><h3>${t}<span>${por[k].length}</span></h3>
+      <div class="os-col-lista">${por[k].length ? por[k].map(carta) : html`<p class="os-col-vazia">Nenhuma O.S. nesta etapa.</p>`}</div></section>`)}
+    ${resto.length ? html`<section class="os-col ec-fec"><h3>Fechadas, recusadas e canceladas<span>${resto.length}</span></h3>
+      <div class="os-col-lista">${resto.map(carta)}</div></section>` : null}
+  </div>`;
 }
 
 const ETAPAS_RESUMO = ETAPAS;
@@ -409,23 +432,34 @@ export function Ordens({ params = {} }) {
   };
   const imprimir = (o, valores) => ir(`/imprimir/os/${o.id}?vias=${cfg.impressaoVias || 1}&valores=${valores ? 1 : 0}&formato=a4`);
   const podeEncerrar = o => !o._pendente && pode(perfil, "entregar") && naEtapa(o, "pagamento");
+  const infoDe = o => ({ et: proximaEtapa(o, perfil), podeCanc: pode(perfil, "aprovar") && !["entregue", "cancelado"].includes(o.status), enc: podeEncerrar(o) });
+  const itensMenu = (o, { et, podeCanc, enc }) => [
+    ["Abrir O.S.", () => ir("/os/" + o.id)],
+    ["Imprimir O.S.", () => imprimir(o, ver)],
+    ver ? ["Imprimir sem valores (mecânico)", () => imprimir(o, false)] : null,
+    o.cliente.telefone ? ["WhatsApp do cliente", () => window.open(linkWhats(o.cliente.telefone, "Olá, " + (o.cliente.nome || "").split(" ")[0] + "! "), "_blank", "noopener")] : null,
+    et && et.tipo === "abrir" && et.acao === "entregar" && o.status === "recusado" ? ["Registrar retirada", () => ir("/os/" + o.id + "?acao=entregar")] : null,
+    enc && o.status === "pronto" ? ["Entregar sem receber (prazo)", () => ir("/os/" + o.id + "?acao=entregar")] : null,
+    podeCanc ? ["Cancelar O.S.", () => setCancelar(o), true] : null,
+  ];
   const acoesDe = o => {
     if (o._pendente) return null;
-    const et = proximaEtapa(o, perfil), podeCanc = pode(perfil, "aprovar") && !["entregue", "cancelado"].includes(o.status);
-    const enc = podeEncerrar(o);
+    const i = infoDe(o), { et, enc } = i;
     // "Entregar"/"Receber" viram o botão Encerrar; o avanço fica para as etapas sem janela
     const mostraAvanco = et && et.tipo !== "abrir";
     return html`${mostraAvanco ? html`<button type="button" class="btn btn-sm btn-avancar" title=${et.dica} disabled=${ocupado === o.id} onClick=${() => avancar(o, et)}>${ocupado === o.id ? "…" : et.rot} →</button>` : null}
       ${enc ? html`<button type="button" class="btn btn-sm btn-encerrar" title="Registrar o pagamento e fechar a O.S." onClick=${() => setEncerrar(o)}>${o.status === "entregue" ? "Receber" : "Receber e fechar"}</button>` : null}
-      <${MenuOS} o=${o} itens=${[
-        ["Abrir O.S.", () => ir("/os/" + o.id)],
-        ["Imprimir O.S.", () => imprimir(o, ver)],
-        ver ? ["Imprimir sem valores (mecânico)", () => imprimir(o, false)] : null,
-        o.cliente.telefone ? ["WhatsApp do cliente", () => window.open(linkWhats(o.cliente.telefone, "Olá, " + (o.cliente.nome || "").split(" ")[0] + "! "), "_blank", "noopener")] : null,
-        et && et.tipo === "abrir" && et.acao === "entregar" && o.status === "recusado" ? ["Registrar retirada", () => ir("/os/" + o.id + "?acao=entregar")] : null,
-        enc && o.status === "pronto" ? ["Entregar sem receber (prazo)", () => ir("/os/" + o.id + "?acao=entregar")] : null,
-        podeCanc ? ["Cancelar O.S.", () => setCancelar(o), true] : null,
-      ]} />`;
+      <${MenuOS} o=${o} itens=${itensMenu(o, i)} />`;
+  };
+  // Tabela: linha curta — um só botão "Opções ▾" com TODAS as ações numa janela flutuante (pedido do Danilo, 22/11/2026)
+  const acoesTabela = o => {
+    if (o._pendente) return null;
+    const i = infoDe(o), { et, enc } = i;
+    const avancos = [
+      et && et.tipo !== "abrir" ? [et.rot + " →", () => avancar(o, et)] : null,
+      enc ? [(o.status === "entregue" ? "Receber" : "Receber e fechar"), () => setEncerrar(o)] : null,
+    ];
+    return html`<${MenuOS} o=${o} rotulo="Opções ▾" itens=${[...avancos, ...itensMenu(o, i)]} />`;
   };
   // próxima parcela em aberto de cada O.S. (contas a receber)
   const prox = useMemo(() => { const m = {}; (dados.receber || []).filter(p => p.status === "aberta").forEach(p => { if (!m[p.ordem_id] || p.vencimento < m[p.ordem_id].vencimento) m[p.ordem_id] = p; }); return m; }, [dados.receber]);
@@ -466,7 +500,7 @@ export function Ordens({ params = {} }) {
     </div>
     <section class="card"><div class="secao-topo"><h2>${lista.length} O.S.</h2><span class="sub">${ver && soma ? reais(soma) : ""}</span>
         ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${() => ir("/entrada")}>+ Nova O.S.</button>` : null}</div>
-      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} acoesDe=${acoesDe} prox=${prox} />`
+      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} acoesDe=${acoesTabela} prox=${prox} />`
       : lista.length && visao === "cards" ? html`<${CardsOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} acoesDe=${acoesDe} prox=${prox} />`
       : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} parcela=${prox[o.id]} acoes=${acoesDe(o)} onClick=${() => ir("/os/" + o.id)} />`)}</div>`
         : html`<${Vazio}>${dados.ordens.length ? "Nenhuma O.S. com esse filtro." : "Nenhuma O.S. ainda."}</${Vazio}>`}

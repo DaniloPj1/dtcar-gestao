@@ -172,7 +172,7 @@ def rodar(b, nome, w, h):
   chk(T("sem o v59: aviso para rodar o SQL"), "v59.sql" in pg2.inner_text("#cp-erro"), pg2.inner_text("main")[:300])
   pg2.goto(U + "#/ajustes?aba=consultas"); pg2.wait_for_timeout(1000)
   chk(T("sem o v59: Ajustes abre e o cartão só avisa"), "v59.sql" in pg2.inner_text("#cp-conexoes"))
-  pg2.click(".abas button:has-text('Oficina')"); pg2.wait_for_timeout(400)
+  pg2.click(".aj-botoes button:has-text('Oficina')"); pg2.wait_for_timeout(400)
   chk(T("Ajustes em abas: a aba Oficina tem os dados"), pg2.locator("#a-nome").count() == 1)
   pg2.close()
   # 8. mecânico não entra

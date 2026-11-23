@@ -225,7 +225,7 @@ export function DescontoModal({ o, subtotal, desconto, onFechar, onFeito }) {
 }
 
 /** Menu "Mais" de cada O.S. na lista */
-export function MenuOS({ o, itens }) {
+export function MenuOS({ o, itens, rotulo }) {
   const [aberto, setAberto] = useState(null), ref = useRef(null);
   // posição fixa na tela: o menu não fica cortado dentro da tabela com rolagem
   const abrir = e => { if (aberto) return setAberto(null); const r = e.currentTarget.getBoundingClientRect(), alto = 44 * itens.filter(Boolean).length + 12;
@@ -235,6 +235,6 @@ export function MenuOS({ o, itens }) {
     document.addEventListener("pointerdown", f); document.addEventListener("keydown", k); return () => { document.removeEventListener("pointerdown", f); document.removeEventListener("keydown", k); }; }, [aberto]);
   const vis = itens.filter(Boolean);
   if (!vis.length) return null;
-  return html`<div class="menu-os-lista" ref=${ref}><button type="button" class="btn btn-sm btn-mais" aria-haspopup="menu" aria-expanded=${aberto ? "true" : "false"} aria-label=${"Mais opções da " + numOS(o.numero)} onClick=${abrir}>Mais ▾</button>
+  return html`<div class="menu-os-lista" ref=${ref}><button type="button" class="btn btn-sm btn-mais" aria-haspopup="menu" aria-expanded=${aberto ? "true" : "false"} aria-label=${"Mais opções da " + numOS(o.numero)} onClick=${abrir}>${rotulo || "Mais ▾"}</button>
     ${aberto ? html`<div class="mol-lista" role="menu" style=${{ position: "fixed", top: aberto.top + "px", right: aberto.right + "px" }}>${vis.map(([t, fn, perigo]) => html`<button type="button" role="menuitem" key=${t} class=${perigo ? "perigo" : ""} onClick=${() => { setAberto(null); fn(); }}>${t}</button>`)}</div>` : null}</div>`;
 }

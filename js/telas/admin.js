@@ -181,7 +181,8 @@ export function Ajustes({ params }) {
   // Abas (pedido do Danilo em 22/11/2026: "organizar o conteúdo dentro de algumas telas"): o conteúdo é o mesmo
   // de sempre, só agrupado — nada foi removido. ?aba= abre direto numa aba (os testes e atalhos usam).
   const ABAS = [["oficina", "Oficina"], ["precos", "Preços e prazos"], ["os", "O.S. e cadastros"], ["consultas", "Consultas e integrações"], ["termos", "Termos"], ["sistema", "Mais do sistema"]];
-  const [aba, setAba] = useState(params && ABAS.some(x => x[0] === params.aba) ? params.aba : "oficina");
+  // nada aberto de início: só os botões; cada tipo de ajuste abre ao clicar (e fecha clicando de novo)
+  const [aba, setAba] = useState(params && ABAS.some(x => x[0] === params.aba) ? params.aba : null);
   const { cfg, avisar, recarregar, ir } = useApp();
   const [c, setC] = useState({ ...CONFIG_PADRAO, ...cfg });
   const [sujo, setSujo] = useState(false), [salvando, setSalvando] = useState(false), [novoItem, setNovoItem] = useState(""), [novaForma, setNovaForma] = useState(""), [enviando, setEnviando] = useState(false);
@@ -206,7 +207,7 @@ export function Ajustes({ params }) {
   const termo = (k, rot, padrao, dica) => html`<${Campo} id=${"a-" + k} rotulo=${rot} dica=${dica}><${Area} id=${"a-" + k} style=${{ minHeight: "150px" }} valor=${c[k]} onMuda=${v => set({ [k]: v })} /></${Campo}>
     ${c[k] !== padrao ? html`<button type="button" class="btn-link" onClick=${() => set({ [k]: padrao })}>Restaurar texto padrão</button>` : null}`;
   return html`<div class="pagina">
-    <${Abas} abas=${ABAS} ativa=${aba} onTroca=${setAba} />
+    <div class="aj-botoes" role="tablist" aria-label="Tipos de ajuste">${ABAS.map(([k, t]) => html`<button type="button" key=${k} role="tab" aria-selected=${aba === k ? "true" : "false"} aria-expanded=${aba === k ? "true" : "false"} onClick=${() => setAba(aba === k ? null : k)}>${t}</button>`)}</div>
     ${aba !== "sistema" ? null : html`<section class="card"><h2>Mais do sistema</h2><span class="sub">Atalhos do sistema que se usam pouco no dia a dia.</span>
       <div class="lista">
         <button type="button" class="linha" onClick=${() => ir("/equipe")}><span class="ic">${I.pessoas}</span><span class="meio"><strong>Equipe</strong><span>Liberar acessos e definir papéis</span></span></button>

@@ -356,7 +356,9 @@
         for (const i of its) linhas.push({ ...cab, item_id: i.id, tipo: i.tipo, descricao: i.descricao, qtd: i.qtd, valor_unit: i.valor_unit, desconto: i.desconto, custo_unit: i.custo_unit, aprovado: i.aprovado, horas: i.horas, fornecida_cliente: i.fornecida_cliente });
       }
       return linhas; },
-    saldosContas: async () => { if (window.__FALHA_RECIBOS) throw new Error("sem conexão"); const dia = em => em ? new Date(em).toISOString().slice(0, 10) : "";
+    saldosContas: async () => { if (window.__FALHA_RECIBOS) throw new Error("sem conexão");
+      // dia LOCAL, como o saldos_contas() de verdade (v18: at time zone America/Sao_Paulo) — em UTC o teste falhava depois das 21h de Brasília
+      const dia = em => { if (!em) return ""; const d = new Date(em); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
       return (db.config.contasFinanceiras || []).map(c => { const em = c.em, d0 = dia(em), dep = (data, reg) => !em || (reg ? reg > em && data >= d0 : data > d0);
         const s = l => l.reduce((t, x) => t + Number(x), 0);
         const ent = s((db.recibos || []).filter(r => !r.cancelado && r.conta_destino === c.nome && dep(r.data, r.criado_em || "9")).map(r => r.valor));

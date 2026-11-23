@@ -104,7 +104,7 @@ const cfg = tabelas.config[0].dados as L;
   const r = await w({ modelo: "cobranca", numero_os: 1865 });
   const t = String(r.texto);
   confere("cobrança: parcela em aberto, saldo e nome da empresa inteiro", /Parcela 2\/2/.test(t) && /1\.052,71/.test(t) && /01\/12\/2026/.test(t) && !/01\/11\/2026/.test(t)
-    && t.startsWith("Olá, Marbrasa Norte Mineradora Ltda!"), t);
+    && /^💳 \*Pagamento em aberto — OS 01865\*\n\n(Bom dia|Boa tarde|Boa noite), Marbrasa Norte Mineradora!/.test(t), t);
   await deve("cobrança de O.S. quitada", () => w({ modelo: "cobranca", numero_os: 1900 }), /nada a receber/);
   tabelas.ordens.push({ id: "o4", numero: 1500, status: "entregue", criado_em: "2025-01-01T12:00:00Z", cliente: { nome: "Antigo" }, veiculo: { placa: "BBB2B22" },
     total: 800, recebido: 0, finalizada_em: null, checkin: { legado: { a_receber: false } } });
@@ -120,7 +120,8 @@ const cfg = tabelas.config[0].dados as L;
 }
 {
   const r = await w({ modelo: "boas_vindas", cliente_id: "c1", telefone: "27999990000" });
-  confere("boas-vindas: primeiro nome e PARAR", /^Olá, João!/.test(String(r.texto)) && /PARAR/.test(String(r.texto)), r.texto);
+  confere("boas-vindas: título, tratamento pelo primeiro nome e PARAR",
+    /^👋 \*Bem-vindo à /.test(String(r.texto)) && /\n(Bom dia|Boa tarde|Boa noite), Sr\. João!\n/.test(String(r.texto)) && /PARAR/.test(String(r.texto)), r.texto);
 }
 {
   const r = await w({ modelo: "pronto", numero_os: 1887 });
@@ -142,7 +143,8 @@ await deve("nada para mandar", () => w({ numero_os: 1887 }), /texto, um modelo o
     && /^2026\/11\/[0-9a-f-]{36}\.pdf$/.test(String(arq.path)) && arq.tipo === "application/pdf" && Number(arq.bytes) > 1000 && pastas["whatsapp-envio"].size === 0, { r, arq });
   const ck = await w({ modelo: "orcamento", numero_os: 1887, anexo: { fonte: "os", documento: "entrada" } });
   confere("orçamento com outro PDF (checklist): mantém os itens no texto", /Bieleta dianteira/.test(String(ck.texto)), ck.texto);
-  confere("orçamento com PDF: mensagem curta (itens só no PDF)", /Segue o orçamento da OS 01887/.test(String(r.texto)) && !/Bieleta/.test(String(r.texto)) && /291,00/.test(String(r.texto)), r.texto);
+  confere("orçamento com PDF: mensagem curta (itens só no PDF)", /^📄 \*Orçamento — OS 01887\*/.test(String(r.texto))
+    && /Segue em anexo o orçamento/.test(String(r.texto)) && !/Bieleta/.test(String(r.texto)) && /291,00/.test(String(r.texto)), r.texto);
   const c = await w({ modelo: "orcamento", numero_os: 1887, anexo: { fonte: "os", documento: "orcamento" }, confirmar: true, pedido: "manda o orçamento" });
   const ult = chamadasFila.at(-1)!; const pa = (ult.p as L).arquivo as L;
   const guardado = pastas["whatsapp-envio"].get(String(pa.path));

@@ -484,7 +484,7 @@ export function Ordens({ params = {} }) {
   const totalAberto = abertas.reduce((s, o) => s + (etapaOS(o) === "pagamento" ? faltaReceber(o) : Number(o.total || 0)), 0);
   const atrasadas = dados.ordens.filter(o => ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO()).length;
   const nRecVenc = ver ? dados.ordens.filter(recVencida).length : 0;
-  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : visao === "cards" ? " larga visao-cards" : " larga-media")}>
+  return html`<div class=${"pagina tela-ordens" + (visao === "tabela" ? " larga" : visao === "cards" ? " larga visao-cards" : " larga-media")}>
     <div class="os-resumo">${ver ? html`<button type="button" class=${"osr osr-total" + (filtro === "abertas" ? " ativo" : "")} onClick=${() => setFiltro("abertas")} title="Orçamento + em execução + o que falta receber das O.S. aguardando pagamento">
         <span>Total em aberto</span><b>${reais(totalAberto)}</b><small>${abertas.length} O.S.</small></button>` : null}
       ${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>

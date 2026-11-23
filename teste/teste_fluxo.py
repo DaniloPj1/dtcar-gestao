@@ -436,6 +436,28 @@ try:
     pg.fill("#zap-tel-alerta", "27 99769-6545"); pg.click("button:has-text('Salvar número')"); pg.wait_for_timeout(500)
     chk("whatsapp v32: número de alerta salvo", pg.evaluate("window.__ZAP.alerta_telefone") == "5527997696545" and pg.input_value("#zap-tel-alerta") == "5527997696545")
     pg.screenshot(path=SAIDA + "/u5f-whatsapp-v32.png", full_page=True)
+    # agente de mensagens (23/11/2026): o texto que manda na forma dos rascunhos, editável na tela e só por aqui
+    tx = pg.inner_text("main")
+    chk("zap agente: cartão aparece com o padrão do sistema", "Agente de mensagens" in tx and "o padrão do sistema" in tx
+        and "MOLDE" in pg.input_value("#zap-agente"))
+    chk("zap agente: diz que o conector não mexe no texto", "o conector não mexe neste texto" in tx)
+    pg.fill("#zap-agente", "curto"); pg.click("button:has-text('Salvar texto')"); pg.wait_for_timeout(400)
+    chk("zap agente: texto curto demais é recusado", "pelo menos 40 caracteres" in pg.inner_text("main")
+        and pg.evaluate("(window.__DB.config || {}).zapAgente || null") is None)
+    MEU = "Escreva as mensagens da DTCar com título em negrito, tópicos com • e a assinatura da oficina no fim de tudo."
+    pg.fill("#zap-agente", MEU); pg.click("button:has-text('Salvar texto')"); pg.wait_for_timeout(600)
+    chk("zap agente: texto salvo na config e passa a valer", pg.evaluate("((window.__DB.config || {}).zapAgente || {}).texto || null") == MEU and "o seu texto" in pg.inner_text("main"))
+    pg.click("button:has-text('Pôr o padrão do sistema no campo')"); pg.wait_for_timeout(300)
+    chk("zap agente: botão traz o padrão para o campo sem salvar", "MOLDE" in pg.input_value("#zap-agente") and pg.evaluate("((window.__DB.config || {}).zapAgente || {}).texto || null") == MEU)
+    pg.click("button:has-text('Voltar ao padrão')"); pg.wait_for_timeout(200)
+    pg.click("[role=dialog] button:has-text('Voltar ao padrão')"); pg.wait_for_timeout(600)
+    chk("zap agente: voltar ao padrão apaga o texto da config", pg.evaluate("((window.__DB.config || {}).zapAgente || {}).texto || null") is None and "o padrão do sistema" in pg.inner_text("main"))
+    pg.screenshot(path=SAIDA + "/u5g-whatsapp-agente.png", full_page=True)
+    pg.evaluate("window.__ZAP_SEM_CHAVE_IA = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(700)
+    chk("zap agente: sem a chave da IA, avisa que o rascunho volta sem revisão", "ANTHROPIC_API_KEY" in pg.inner_text("main") and "sem revisão da IA" in pg.inner_text("main"))
+    pg.evaluate("window.__ZAP_SEM_CHAVE_IA = false; window.__ZAP_SEM_AGENTE = true"); pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(700)
+    chk("zap agente: função antiga publicada: explica em vez de quebrar a tela", "não conhece o agente de mensagens" in pg.inner_text("main") and pg.query_selector("#zap-agente") is None)
+    pg.evaluate("window.__ZAP_SEM_AGENTE = false")
     pg.evaluate("window.__ZAP.alertas = {}; window.__ZAP_FOTOS = []; window.__ZAP_SEM_RESPOSTA = []")
     # Sistema › E-mail (v29): sem o registro da Microsoft, mostra o passo a passo; conectado, mostra conta, chave e filtro
     pg.goto(U + "#/mais"); pg.wait_for_timeout(400)

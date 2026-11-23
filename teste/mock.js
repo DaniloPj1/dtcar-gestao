@@ -91,6 +91,11 @@
         if (b.acao === "processar") return { ok: true, iniciado: true, detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." };
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
+        // agente de mensagens (23/11/2026): o padrão vem da função; o texto que vale é o da config, quando o Danilo gravou um
+        if (b.acao === "agente") { if (window.__ZAP_SEM_AGENTE) throw new Error("Ação desconhecida.");
+          const meu = ((db.config || {}).zapAgente || {}).texto || "";
+          const padrao = window.__ZAP_AGENTE_PADRAO || "MOLDE: título com ícone em negrito, saudação pela hora, tópicos com • e a assinatura no fim.\nDTCar Centro Automotivo\n*Mensagem gerada pelo sistema Gestão DTCar*";
+          return { padrao, texto: meu || padrao, proprio: !!meu, modelo: "claude-haiku-5-5", tem_chave: window.__ZAP_SEM_CHAVE_IA !== true }; }
         throw new Error("Ação desconhecida."); } },
     // NF anexada à O.S. (v33)
     notasOS: { listar: async n => (window.__NOTAS = window.__NOTAS || []).filter(x => x.os_numero === n),

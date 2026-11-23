@@ -91,7 +91,11 @@ function salarioDoMes(f, ym) {
  * Resumo do mês de um funcionário.
  * lancs: lançamentos da competência; baseComissao: mão de obra das O.S. entregues em que ele foi o mecânico.
  */
-export function calcularMes(f, ym, lancs, baseComissao, encargos) {
+/** comissaoLancada: o mês já tem comissão lançada pela tela de Comissão (v61). Aí o cálculo automático
+ *  (mão de obra x comissao_pct da ficha) não vale mais: quem manda é o que foi lançado por serviço.
+ *  "?" = não deu para saber (sem internet e sem o banco do PC). Nesse caso TAMBÉM não se calcula a automática: somar uma
+ *  comissão por cima de outra já lançada inventaria dinheiro na folha. A tela avisa que o número pode estar incompleto. */
+export function calcularMes(f, ym, lancs, baseComissao, encargos, comissaoLancada = false) {
   const enc = { ...ENCARGOS_PADRAO, ...(encargos || {}) };
   const sal = salarioDoMes(f, ym);
   const vh = Number(f.horas_mes) > 0 ? (Number(f.salario) || 0) / Number(f.horas_mes) : 0;
@@ -103,11 +107,12 @@ export function calcularMes(f, ym, lancs, baseComissao, encargos) {
     return 0;
   };
   const tot = t => arred(soma(t).reduce((s, l) => s + valorDe(l), 0));
-  const comissaoAuto = arred((Number(baseComissao) || 0) * (Number(f.comissao_pct) || 0) / 100);
+  const comissaoAuto = comissaoLancada ? 0 : arred((Number(baseComissao) || 0) * (Number(f.comissao_pct) || 0) / 100);
+  const comissaoIncerta = comissaoLancada === "?";
   const r = {
     salario: sal.valor, diasSalario: sal.dias, valorHora: arred(vh),
     horasExtras: tot("hora_extra"), qtdHorasExtras: soma("hora_extra").reduce((s, l) => s + (Number(l.qtd) || 0), 0),
-    comissao: arred(comissaoAuto + tot("comissao")), comissaoAuto, baseComissao: arred(baseComissao || 0), bonus: tot("bonus"),
+    comissao: arred(comissaoAuto + tot("comissao")), comissaoAuto, comissaoLancada: comissaoLancada === true, comissaoIncerta, baseComissao: arred(baseComissao || 0), bonus: tot("bonus"),
     faltas: tot("falta"), qtdFaltas: soma("falta").reduce((s, l) => s + (Number(l.qtd) || 0), 0),
     vales: arred(tot("vale") + tot("adiantamento")), descontos: tot("desconto"), inss: tot("inss"), pagos: tot("pagamento"),
   };
@@ -135,3 +140,15 @@ export function calcularMes(f, ym, lancs, baseComissao, encargos) {
 const n = s => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
 export const eMecanicoDa = (f, o) => o.tecnico_id ? o.tecnico_id === f.id
   : (f.perfil_id && o.mecanico_id === f.perfil_id) || (!!o.mecanico_nome && [f.nome, f.apelido].filter(Boolean).some(x => n(x) === n(o.mecanico_nome)));
+
+/** As duas quinzenas de um mês (decisão do Danilo em 18/11/2026: 1 a 15 e 16 ao fim). ym = "2026-11". */
+export function quinzenas(ym) {
+  const { ano, mes } = periodo(ym);
+  const dd = n => ano + "-" + String(mes).padStart(2, "0") + "-" + String(n).padStart(2, "0");
+  const ultimo = new Date(ano, mes, 0).getDate();
+  return [{ inicio: dd(1), fim: dd(15), rotulo: "1 a 15 de " + NOMES_MES[mes - 1] },
+          { inicio: dd(16), fim: dd(ultimo), rotulo: "16 a " + ultimo + " de " + NOMES_MES[mes - 1] }];
+}
+/** A quinzena em que cai uma data ("2026-11-18" → a segunda de novembro) */
+export const quinzenaDe = data => { const [a, m, d] = String(data).split("-").map(Number);
+  return quinzenas(a + "-" + String(m).padStart(2, "0"))[d <= 15 ? 0 : 1]; };

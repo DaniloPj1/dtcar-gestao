@@ -1,5 +1,5 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
-import { local, erroDeRede } from "./local.js";
+import { local, erroDeRede, semTabelaComissao } from "./local.js";
 import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
 import { versaoOS, tocarOS } from "./fila.js";
 import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente, comTrava, podeAlterarSemInternet } from "./alteracoes.js";
@@ -416,6 +416,31 @@ function criarApiSupabase() {
       /** indicações feitas PARA esta pessoa ainda não vistas (aviso no app) */
       indicadasPara: async perfil_id => { const l = await metodos.apontamentos.listar({ desde: new Date(Date.now() - 60 * 86400000).toISOString() });
         return l.flatMap(s => (Array.isArray(s.indicacoes) ? s.indicacoes : []).filter(i => i.para_id === perfil_id && !i.visto_em).map(i => ({ ...i, apontamento_id: s.id, ordem_id: s.ordem_id, os_numero: s.os_numero, de_nome: s.perfil_nome }))); },
+    },
+    /** Comissão por quinzena (v61, pedido do Danilo em 18/11/2026). A comissão vira custo do item de serviço na O.S. e
+     *  lançamento na folha. Só administrador. Sem o v61 no banco, "quinzena" devolve null e a tela avisa. */
+    comissao: {
+      quinzena: async (inicio, fim, funcionarioId = null, itens = []) => {
+        const r = await sb.rpc("comissao_quinzena", { p_inicio: inicio, p_fim: fim, p_funcionario: funcionarioId, p_itens: itens });
+        if (r.error && /comissao_quinzena|schema cache|PGRST202|404/i.test(r.error.message || "")) return null;
+        return ok(r) || [];
+      },
+      /** lançamentos de uma quinzena (ou de uma competência da folha) */
+      lancamentos: async ({ inicio, fim, competencia, funcionarioId, comId } = {}) => {
+        let q = sb.from("comissoes").select("*");
+        if (inicio) q = q.eq("inicio", inicio); if (fim) q = q.eq("fim", fim);
+        if (competencia) q = q.eq("competencia", competencia);
+        if (funcionarioId) q = q.eq("funcionario_id", funcionarioId); if (comId) q = q.eq("id", comId);
+        const r = await q.order("criado_em", { ascending: false });
+        if (semTabelaComissao(r.error)) return [];   // banco ainda sem o v61: não existe comissão lançada
+        return ok(r);
+      },
+      itens: async comId => { const r = await sb.from("comissao_itens").select("*").eq("comissao_id", comId).order("os_numero");
+        if (semTabelaComissao(r.error)) return []; return ok(r); },
+      lancar: async p => { const r = await sb.rpc("comissao_lancar", { p });
+        if (r.error && /comissao_lancar|schema cache|PGRST202|404/i.test(r.error.message || "")) throw new Error("A comissão ainda não foi ligada: falta rodar o supabase/v61.sql no banco.");
+        return ok(r); },
+      cancelar: async (id, motivo = "") => ok(await sb.rpc("comissao_cancelar", { p_id: id, p_motivo: motivo })),
     },
     agenda: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("agendamentos").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate);
@@ -838,6 +863,13 @@ function comBancoDoPC(a) {
     obd: { ...a.obd, registrar: soOnline(a.obd.registrar, "Sem conexão com a internet: o apagamento precisa ficar registrado, então só com internet.") },
     apontamentos: { ...a.apontamentos, abrir: soOnline(a.apontamentos.abrir, "Sem conexão com a internet: o serviço só pode ser iniciado com internet."),
       atualizar: soOnline(a.apontamentos.atualizar, "Sem conexão com a internet: tente de novo quando a internet voltar."), visto: soOnline(a.apontamentos.visto, "Sem conexão com a internet.") },
+    // comissão: lançar e cancelar mexem em O.S. e na folha no servidor; sem internet, nem consulta (não vai para o banco do PC)
+    comissao: { ...a.comissao,
+      // consultar os lançamentos funciona sem internet (pelo banco do PC): a folha PRECISA saber que a quinzena já foi
+      // lançada, senão volta a calcular a comissão automática por cima do que já foi lançado
+      lancamentos: ler(a.comissao.lancamentos, L.comissoes), itens: ler(a.comissao.itens, L.comissaoItens),
+      lancar: soOnline(a.comissao.lancar, "Sem conexão com a internet: a comissão só pode ser lançada com internet."),
+      cancelar: soOnline(a.comissao.cancelar, "Sem conexão com a internet: o lançamento só pode ser cancelado com internet.") },
     agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),
       salvar: soOnline(a.agenda.salvar, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),
       excluir: soOnline(a.agenda.excluir, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),

@@ -21,6 +21,14 @@ export const local = {
   apagarTudo: async () => { try { await tx("readwrite", s => s.clear()); } catch (e) {} },
 };
 
+/** O banco ainda não tem as tabelas da comissão (v61 não rodado)? SÓ isso vale como "não há comissão lançada".
+ *  Erro de permissão, tempo esgotado ou rede precisa estourar: a folha tem de distinguir "não foi lançado" de "não
+ *  consegui ler", senão volta a calcular a comissão automática por cima de uma que já foi lançada e inventa dinheiro. */
+export const semTabelaComissao = e => !!e && (/PGRST205/i.test(e.code || "") || /PGRST205/i.test(e.message || "")
+  || /(relation|table)[^\n]*comiss[^\n]*does not exist/i.test(e.message || "")
+  || /could not find the table[^\n]*comiss/i.test(e.message || "")
+  || /schema cache[^\n]*comiss|comiss[^\n]*schema cache/i.test(e.message || ""));
+
 /** Erro de rede (sem internet ou servidor fora do ar), e não erro de permissão ou de dados */
 export const erroDeRede = e => !navigator.onLine || /Failed to fetch|NetworkError|network|Load failed|Sem conexão|fetch failed|ERR_INTERNET/i.test(String((e && e.message) || e));
 

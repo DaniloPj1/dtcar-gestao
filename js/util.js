@@ -112,20 +112,22 @@ export function extenso(valor) {
   return sr && sc ? sr + " e " + sc : sr || sc || "zero reais";
 }
 
-/** Totais de uma O.S. a partir dos itens. aprovados=true considera só o que o cliente aprovou. */
+/** Totais de uma O.S. a partir dos itens. aprovados=true considera só o que o cliente aprovou.
+ *  O custo conta peças, terceiros E a mão de obra (custo_unit do item de serviço = comissão do mecânico, v61). */
 export function totais(itens, desconto = 0, aprovados = false) {
-  const t = { servicos: 0, pecas: 0, terceiros: 0, custoPecas: 0, custoTerceiros: 0, subtotal: 0, desconto: arred(desconto), total: 0, custo: 0, margem: 0, margemPct: 0, horas: 0 };
+  const t = { servicos: 0, pecas: 0, terceiros: 0, custoServicos: 0, custoPecas: 0, custoTerceiros: 0, subtotal: 0, desconto: arred(desconto), total: 0, custo: 0, margem: 0, margemPct: 0, horas: 0 };
   for (const i of itens || []) {
     if (aprovados ? i.aprovado !== true : i.aprovado === false) continue;
     const v = totalItem(i);
-    const c = arred((Number(i.qtd) || 0) * (Number(i.custo_unit) || 0));
-    if (i.tipo === "servico") { t.servicos += v; t.horas += Number(i.horas) || 0; }
+    // peça fornecida pelo cliente não é custo da oficina (a mesma conta do banco e do relatório)
+    const c = i.fornecida_cliente ? 0 : arred((Number(i.qtd) || 0) * (Number(i.custo_unit) || 0));
+    if (i.tipo === "servico") { t.servicos += v; t.custoServicos += c; t.horas += Number(i.horas) || 0; }
     else if (i.tipo === "peca") { t.pecas += v; t.custoPecas += c; }
     else { t.terceiros += v; t.custoTerceiros += c; }
   }
   t.subtotal = arred(t.servicos + t.pecas + t.terceiros);
   t.total = arred(Math.max(0, t.subtotal - t.desconto));
-  t.custo = arred(t.custoPecas + t.custoTerceiros);
+  t.custo = arred(t.custoServicos + t.custoPecas + t.custoTerceiros);
   t.margem = arred(t.total - t.custo);
   t.margemPct = t.total > 0 ? t.margem / t.total * 100 : 0;
   return t;

@@ -227,6 +227,18 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   acaba, saem mesmo fora do horário comercial (sem o motor, o agendamento de 1 min acorda a zap para elas: v39). IA: depois de uma falha, nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
   (padrões em `whatsapp_avisos_cfg()`). Tabelas fora do backup, do banco do PC e do espelho. Mudou `paraGuardar`/`mensagemCitada`? Mude
   as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
+  **Agente de mensagens (23/11/2026, sem SQL): o texto que manda na FORMA das mensagens.** O Danilo dita o conteúdo; o agente dá a forma.
+  O molde que ele aprovou: título em negrito com **um** ícone (o único da mensagem, escolhido pelo assunto), saudação pela hora do envio
+  ("Sr."/"Sra." + primeiro nome; empresa = o contato pelo nome, com a empresa junto do veículo; "Boa noite" das 18h em diante), informações
+  em tópicos `• ` quando há duas ou mais, negrito só em três lugares (título, valor total de orçamento/cobrança e a última linha) e a
+  assinatura de duas linhas no fim de TODA mensagem (`ASSINATURA_1`/`ASSINATURA_2` em `zap/index.ts`, a última sempre em negrito).
+  `SISTEMA_ASSISTENTE` é só o PADRÃO: vale o texto que o Danilo gravar em **Sistema › WhatsApp › Agente de mensagens**
+  (`cfg.zapAgente.texto`, tabela config, de 40 a 6.000 caracteres; fora disso ou sem a chave, volta o padrão — `textoDoAgente`), então
+  mudar o jeito das mensagens **não precisa de atualização do sistema**. A ação `agente` da zap entrega o texto e o padrão para a tela;
+  quem grava é a tela, nunca a função. **O conector não mexe nessa chave:** o `agente_ajustes` (v50) só aceita a lista fechada de ajustes
+  e recusa qualquer outra — mesma proteção do número dos avisos, contra ordem falsa vinda de e-mail ou mensagem. `garantirAssinatura`
+  completa as duas linhas finais quando a IA esquece (só se couber nos 1.400 do rascunho; não inventa conteúdo nenhum). Nada muda no
+  caminho do OK: o rascunho continua voltando para o Danilo e nada vai ao cliente sem ele.
   **v38 (05/11/2026): pacote de mensagens para o mesmo número.** O intervalo de 25–70 s vale entre contatos; se a próxima que a fila vai
   pegar (mesma ordem da `whatsapp_pegar_proxima`: `interno` primeiro, depois `id`) é para o MESMO número e entrou até 5 min depois da que
   acabou de sair e pode sair agora (PARAR, horário e limites, como na retirada), o intervalo é 3 s (`whatsapp_pacote_segue`, usada pela `whatsapp_resultado` e pelo gatilho `whatsapp_fila_pacote`, que

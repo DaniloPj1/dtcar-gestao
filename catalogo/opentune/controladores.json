@@ -1,0 +1,3518 @@
+{
+ "borgwarner-haldex-gen4": {
+  "adaptations": [],
+  "buses": [
+   {
+    "bitrate": 500000,
+    "description": "PQ35/PQ46 drivetrain CAN",
+    "frames": [
+     {
+      "id": "0x2A0",
+      "min_len": 1,
+      "name": "Bremse_4",
+      "notes": "Lock request from the ABS (or an OpenHaldex in its place).",
+      "sender": "ABS",
+      "signals": [
+       {
+        "factor": 3.0,
+        "kind": "number",
+        "len": 8,
+        "name": "ABS_Vorgabewert_mitte_Kupplung",
+        "notes": "Requested coupling stiffness, DBC scale (vw_pq.dbc).",
+        "offset": -381.0,
+        "start": 0,
+        "unit": "Nm/min"
+       },
+       {
+        "curve": [
+         [
+          0,
+          0
+         ],
+         [
+          128,
+          0
+         ],
+         [
+          253,
+          100
+         ],
+         [
+          255,
+          100
+         ]
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "lock_request",
+        "notes": "Byte 0 as lock percent. Lock percent on the Gen2/Gen4 lever scale OpenHaldex-C6 documents: <= 0x80 open, 0x81..0xFD linear over 125 steps, >= 0xFE full. Community confidence.",
+        "start": 0,
+        "unit": "%"
+       },
+       {
+        "factor": 0.7874,
+        "kind": "number",
+        "len": 8,
+        "name": "ABS_Vorgabewert_hinten_Kupplung",
+        "notes": "Rear coupling request, DBC scale.",
+        "start": 8,
+        "unit": "%"
+       }
+      ],
+      "validation": "synthetic-tested"
+     },
+     {
+      "id": "0x2C0",
+      "min_len": 2,
+      "name": "Allrad_1",
+      "notes": "Haldex status (Gen1/2/4). Checked on two public real Gen4 captures (OpenHaldex-C6 vehicle logs).",
+      "sender": "Haldex",
+      "signals": [
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Fehler_Allrad_Kupplung",
+        "notes": "Coupling fault.",
+        "start": 0
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Ubertemperaturschutz",
+        "notes": "Over-temperature protection active.",
+        "start": 1
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Fehlerstatus_Kupplungssteifigkeit",
+        "notes": "Clutch torque signal fault.",
+        "start": 2
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Kupplung_komplett_offen",
+        "notes": "Coupling fully open.",
+        "start": 3
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Notlauf",
+        "notes": "Limp / fault reaction.",
+        "start": 4
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Allrad_Warnlampe",
+        "notes": "AWD warning lamp request.",
+        "start": 5
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Geschwindigkeitsbegrenzung",
+        "notes": "Speed limitation.",
+        "start": 6
+       },
+       {
+        "factor": 3.0,
+        "kind": "number",
+        "len": 8,
+        "name": "Kupplungssteifigkeit_Mitte_Ist",
+        "notes": "Actual coupling stiffness, DBC scale.",
+        "offset": -381.0,
+        "start": 8,
+        "unit": "Nm/min"
+       },
+       {
+        "curve": [
+         [
+          0,
+          0
+         ],
+         [
+          128,
+          0
+         ],
+         [
+          253,
+          100
+         ],
+         [
+          255,
+          100
+         ]
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "lock_actual",
+        "notes": "Byte 1 as engagement percent. Lock percent on the Gen2/Gen4 lever scale OpenHaldex-C6 documents: <= 0x80 open, 0x81..0xFD linear over 125 steps, >= 0xFE full. Community confidence.",
+        "start": 8,
+        "unit": "%"
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "Fehlerspeichereintrag",
+        "notes": "A fault is stored.",
+        "start": 31
+       },
+       {
+        "factor": 0.7874,
+        "kind": "number",
+        "len": 8,
+        "name": "Kupplungssteifigkeit_Hinten_Ist",
+        "notes": "Byte 4 in the DBC reading.",
+        "start": 32,
+        "unit": "%"
+       },
+       {
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "gen4_temperature",
+        "notes": "Byte 4 read as the Gen4 unit temperature, raw - 60 (OpenHaldex-C6, community); not meaningful on Gen1/2.",
+        "offset": -60.0,
+        "start": 32,
+        "unit": "degC"
+       },
+       {
+        "kind": "number",
+        "len": 4,
+        "name": "counter",
+        "notes": "Alive counter (byte 7 high nibble).",
+        "start": 60
+       }
+      ],
+      "validation": "real-image-tested"
+     },
+     {
+      "id": "0x4A0",
+      "min_len": 8,
+      "name": "Bremse_3",
+      "notes": "Wheel speeds.",
+      "sender": "ABS",
+      "signals": [
+       {
+        "factor": 0.01,
+        "kind": "number",
+        "len": 15,
+        "name": "Radgeschw__VL",
+        "notes": "Wheel speed front left.",
+        "start": 1,
+        "unit": "km/h"
+       },
+       {
+        "factor": 0.01,
+        "kind": "number",
+        "len": 15,
+        "name": "Radgeschw__VR",
+        "notes": "Wheel speed front right.",
+        "start": 17,
+        "unit": "km/h"
+       },
+       {
+        "factor": 0.01,
+        "kind": "number",
+        "len": 15,
+        "name": "Radgeschw__HL",
+        "notes": "Wheel speed rear left.",
+        "start": 33,
+        "unit": "km/h"
+       },
+       {
+        "factor": 0.01,
+        "kind": "number",
+        "len": 15,
+        "name": "Radgeschw__HR",
+        "notes": "Wheel speed rear right.",
+        "start": 49,
+        "unit": "km/h"
+       }
+      ],
+      "validation": "synthetic-tested"
+     },
+     {
+      "id": "0x280",
+      "min_len": 6,
+      "name": "Motor_1",
+      "notes": "Engine speed and pedal.",
+      "sender": "engine",
+      "signals": [
+       {
+        "factor": 0.25,
+        "kind": "number",
+        "len": 16,
+        "name": "Motordrehzahl",
+        "notes": "Engine speed.",
+        "start": 16,
+        "unit": "rpm"
+       },
+       {
+        "factor": 0.4,
+        "kind": "number",
+        "len": 8,
+        "name": "Fahrpedalwert",
+        "notes": "Accelerator pedal.",
+        "start": 40,
+        "unit": "%"
+       }
+      ],
+      "validation": "synthetic-tested"
+     }
+    ],
+    "name": "pq",
+    "notes": "Frames a Gen1/2/4 Haldex sends and listens to."
+   }
+  ],
+  "checksum": null,
+  "diagnostics": [
+   {
+    "bitrate": 500000,
+    "identification": "1A9B",
+    "layer": "kwp2000",
+    "name": "tp20",
+    "notes": "Channel setup on 0x200, unit answers on 0x20A; rx_id is the id the tester asks the unit to send on. Seen in the public OpenHaldex-C6 capture of an 0AY 907 554 C. Raw-CAN adapters only (socketcan, slcan, gsusb); `opentune haldex gen4` is the read engine.",
+    "rx_id": "0x300",
+    "session": "0x89",
+    "tp20_address": "0x0A",
+    "transport": "vwtp20",
+    "validation": "synthetic-tested"
+   }
+  ],
+  "ecudefs": [
+   "borgwarner-haldex-gen4"
+  ],
+  "family": "Haldex Gen4",
+  "flash": null,
+  "gearsets": [],
+  "id": "borgwarner-haldex-gen4",
+  "identify": {
+   "gearbox_codes": [],
+   "part_numbers": [
+    "0AY907554C",
+    "0BS907554"
+   ],
+   "sw_numbers": []
+  },
+  "kind": "awd",
+  "live": [
+   {
+    "name": "oil temperature",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 0,
+     "group": 1,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "degC"
+   },
+   {
+    "name": "clutch plate temperature",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 1,
+     "group": 1,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "degC"
+   },
+   {
+    "name": "supply voltage",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 2,
+     "group": 1,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "V"
+   },
+   {
+    "name": "oil pressure",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 0,
+     "group": 3,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "bar"
+   },
+   {
+    "name": "estimated torque",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 1,
+     "group": 3,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "Nm"
+   },
+   {
+    "name": "clutch valve duty",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 2,
+     "group": 3,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "%"
+   },
+   {
+    "name": "clutch valve current",
+    "notes": "OpenHaldex-C6 label, community confidence.",
+    "source": {
+     "cell": 3,
+     "group": 3,
+     "kind": "kwp_measuring_block"
+    },
+    "unit": "A"
+   },
+   {
+    "name": "lock request",
+    "source": {
+     "bus": "pq",
+     "frame": "Bremse_4",
+     "kind": "can_signal",
+     "signal": "lock_request"
+    },
+    "unit": "%"
+   },
+   {
+    "name": "lock actual",
+    "source": {
+     "bus": "pq",
+     "frame": "Allrad_1",
+     "kind": "can_signal",
+     "signal": "lock_actual"
+    },
+    "unit": "%"
+   },
+   {
+    "name": "unit temperature",
+    "source": {
+     "bus": "pq",
+     "frame": "Allrad_1",
+     "kind": "can_signal",
+     "signal": "gen4_temperature"
+    },
+    "unit": "degC"
+   },
+   {
+    "name": "engine speed",
+    "source": {
+     "bus": "pq",
+     "frame": "Motor_1",
+     "kind": "can_signal",
+     "signal": "Motordrehzahl"
+    },
+    "unit": "rpm"
+   }
+  ],
+  "maker": "BorgWarner",
+  "name": "BorgWarner Haldex Gen4 AWD controller (VAG PQ, 0AY 907 554)",
+  "notes": "Mirror of what opentune-haldex implements for Gen4, as data: the read-only KWP2000/TP2.0 channel, the measuring-group cells it labels and the PQ drivetrain frames it decodes (a parity test in opentune-haldex keeps this file and the decoder in step). The ecudef holds the identify keys and the empty flash layout; no flash layout, MCU or checksum is publicly known. See docs/HALDEX.md.",
+  "safety": [
+   "Changing the AWD lock changes how the car drives. Only act with the car stationary or in a safe place, and know how to return to stock behaviour.",
+   "OpenTune never writes to the Haldex controller itself (no coding, adaptation, basic settings, code clearing or flashing).",
+   "Bench work: follow the pinout and bench-safety notes of the database unit, and check the pinout on your own unit first."
+  ],
+  "sources": [
+   {
+    "license": "MIT",
+    "title": "commaai/opendbc vw_pq.dbc / vw_mqb.dbc",
+    "url": "https://github.com/commaai/opendbc",
+    "used_for": "PQ Bremse_4/Allrad_1/Bremse_3/Motor_1 and MQB ESP_19 signal layouts and names"
+   },
+   {
+    "license": "MIT",
+    "title": "Forbes-Automotive/OpenHaldex-C6",
+    "url": "https://github.com/Forbes-Automotive/OpenHaldex-C6",
+    "used_for": "Gen4 TP2.0 address and measuring groups, Gen4/Gen5 status-byte meanings, lever scale, OpenHaldex frames and DIDs, public CAN captures"
+   },
+   {
+    "license": "facts",
+    "title": "Dark Side Developments Gen4 application list",
+    "url": "",
+    "used_for": "vehicle applications"
+   }
+  ],
+  "tables": [],
+  "units": [
+   "haldex-gen4"
+  ],
+  "validation": "synthetic-tested",
+  "vehicles": [
+   "VW Passat CC 4Motion",
+   "Passat 4Motion (2009-)",
+   "Tiguan",
+   "Golf Mk6 R",
+   "Skoda Yeti / Superb 4x4",
+   "Audi Q3",
+   "TT/TTS 8J",
+   "A3/S3 8P facelift"
+  ]
+ },
+ "borgwarner-haldex-gen5": {
+  "adaptations": [],
+  "buses": [
+   {
+    "bitrate": 500000,
+    "description": "MQB drivetrain CAN",
+    "frames": [
+     {
+      "id": "0x118",
+      "min_len": 3,
+      "name": "Allrad_03",
+      "notes": "Gen5 status (OpenHaldex-C6 / -S3).",
+      "sender": "Haldex",
+      "signals": [
+       {
+        "kind": "number",
+        "len": 4,
+        "name": "counter",
+        "notes": "Alive counter.",
+        "start": 8
+       },
+       {
+        "kind": "enum",
+        "len": 2,
+        "name": "status",
+        "notes": "2 = fault reaction (clutch released).",
+        "start": 12,
+        "values": [
+         {
+          "name": "normal",
+          "raw": 0
+         },
+         {
+          "name": "fault reaction",
+          "raw": 2
+         }
+        ]
+       },
+       {
+        "kind": "bool",
+        "len": 1,
+        "name": "request_accepted",
+        "notes": "The unit accepts the lock request it receives.",
+        "start": 14
+       },
+       {
+        "factor": 0.4,
+        "kind": "number",
+        "len": 8,
+        "name": "lock_actual",
+        "notes": "0..250 = 0..100 %; above 250 = no value yet.",
+        "raw_range": [
+         0,
+         250
+        ],
+        "start": 16,
+        "unit": "%"
+       }
+      ],
+      "validation": "synthetic-tested"
+     },
+     {
+      "id": "0x0B2",
+      "min_len": 8,
+      "name": "ESP_19",
+      "notes": "Wheel speeds (vw_mqb.dbc).",
+      "sender": "ABS",
+      "signals": [
+       {
+        "factor": 0.0075,
+        "kind": "number",
+        "len": 16,
+        "name": "ESP_HL_Radgeschw_02",
+        "notes": "Wheel speed rear left.",
+        "start": 0,
+        "unit": "km/h"
+       },
+       {
+        "factor": 0.0075,
+        "kind": "number",
+        "len": 16,
+        "name": "ESP_HR_Radgeschw_02",
+        "notes": "Wheel speed rear right.",
+        "start": 16,
+        "unit": "km/h"
+       },
+       {
+        "factor": 0.0075,
+        "kind": "number",
+        "len": 16,
+        "name": "ESP_VL_Radgeschw_02",
+        "notes": "Wheel speed front left.",
+        "start": 32,
+        "unit": "km/h"
+       },
+       {
+        "factor": 0.0075,
+        "kind": "number",
+        "len": 16,
+        "name": "ESP_VR_Radgeschw_02",
+        "notes": "Wheel speed front right.",
+        "start": 48,
+        "unit": "km/h"
+       }
+      ],
+      "validation": "synthetic-tested"
+     }
+    ],
+    "name": "mqb",
+    "notes": ""
+   }
+  ],
+  "checksum": "haldex",
+  "diagnostics": [
+   {
+    "bitrate": 500000,
+    "layer": "uds",
+    "name": "uds",
+    "notes": "VW_Flash lib/modules/haldex4motion.py (0x70F / 0x779); reachable from the OBD port where the gateway routes it. Not tried on a car.",
+    "rx_id": "0x779",
+    "transport": "iso_tp",
+    "tx_id": "0x70F",
+    "validation": "implemented"
+   }
+  ],
+  "ecudefs": [],
+  "family": "Haldex Gen5",
+  "flash": null,
+  "gearsets": [],
+  "id": "borgwarner-haldex-gen5",
+  "identify": {
+   "gearbox_codes": [],
+   "part_numbers": [
+    "0CQ907554"
+   ],
+   "sw_numbers": []
+  },
+  "kind": "awd",
+  "live": [
+   {
+    "name": "lock actual",
+    "source": {
+     "bus": "mqb",
+     "frame": "Allrad_03",
+     "kind": "can_signal",
+     "signal": "lock_actual"
+    },
+    "unit": "%"
+   }
+  ],
+  "maker": "BorgWarner",
+  "name": "BorgWarner Haldex Gen5 AWD controller (VAG MQB, 0CQ 907 554)",
+  "notes": "MQB Gen5 coupling controller: UDS module address from VW_Flash, the MQB status/wheel frames opentune-haldex decodes, and the 'haldex' block word-sum (VW_Flash, synthetic-tested only - no real Gen5 dump). The PQ unit 0AY 907 554 F that OpenHaldex treats as Gen5 is not covered here. No flash size or region layout is claimed.",
+  "safety": [
+   "Changing the AWD lock changes how the car drives. Only act with the car stationary or in a safe place, and know how to return to stock behaviour.",
+   "OpenTune never writes to the Haldex controller itself (no coding, adaptation, basic settings, code clearing or flashing).",
+   "Bench work: follow the pinout and bench-safety notes of the database unit, and check the pinout on your own unit first."
+  ],
+  "sources": [
+   {
+    "license": "MIT",
+    "title": "commaai/opendbc vw_pq.dbc / vw_mqb.dbc",
+    "url": "https://github.com/commaai/opendbc",
+    "used_for": "PQ Bremse_4/Allrad_1/Bremse_3/Motor_1 and MQB ESP_19 signal layouts and names"
+   },
+   {
+    "license": "MIT",
+    "title": "Forbes-Automotive/OpenHaldex-C6",
+    "url": "https://github.com/Forbes-Automotive/OpenHaldex-C6",
+    "used_for": "Gen4 TP2.0 address and measuring groups, Gen4/Gen5 status-byte meanings, lever scale, OpenHaldex frames and DIDs, public CAN captures"
+   },
+   {
+    "license": "BSD-2-Clause",
+    "title": "bri3d/VW_Flash",
+    "url": "https://github.com/bri3d/VW_Flash",
+    "used_for": "Gen5 UDS ids and the per-block word-sum ('haldex' checksum)"
+   }
+  ],
+  "tables": [],
+  "units": [
+   "haldex-gen5"
+  ],
+  "validation": "synthetic-tested",
+  "vehicles": [
+   "Golf 7 R",
+   "Audi S3 8V",
+   "Tiguan AD",
+   "TT 8S"
+  ]
+ },
+ "mercedes-egs5x-7226": {
+  "adaptations": [
+   {
+    "kind": "adaptation",
+    "name": "lock-up clutch pressure",
+    "notes": "Learned by the Ultimate-NAG52 firmware and edited through its configuration app. The stock EGS51/52 adaptation services are not publicly documented, so OpenTune declares no service to read or reset them.",
+    "requires_security": false,
+    "service": "",
+    "table": "TCC pressure adaptation",
+    "validation": "implemented",
+    "writes": false
+   },
+   {
+    "kind": "adaptation",
+    "name": "shift torque (pulling)",
+    "notes": "Learned by the Ultimate-NAG52 firmware and edited through its configuration app. The stock EGS51/52 adaptation services are not publicly documented, so OpenTune declares no service to read or reset them.",
+    "requires_security": false,
+    "service": "",
+    "table": "shift torque adaptation (pulling)",
+    "validation": "implemented",
+    "writes": false
+   },
+   {
+    "kind": "adaptation",
+    "name": "shift torque (pushing)",
+    "notes": "Learned by the Ultimate-NAG52 firmware and edited through its configuration app. The stock EGS51/52 adaptation services are not publicly documented, so OpenTune declares no service to read or reset them.",
+    "requires_security": false,
+    "service": "",
+    "table": "shift torque adaptation (pushing)",
+    "validation": "implemented",
+    "writes": false
+   },
+   {
+    "kind": "adaptation",
+    "name": "clutch prefill time",
+    "notes": "Learned by the Ultimate-NAG52 firmware and edited through its configuration app. The stock EGS51/52 adaptation services are not publicly documented, so OpenTune declares no service to read or reset them.",
+    "requires_security": false,
+    "service": "",
+    "table": "prefill time adaptation",
+    "validation": "implemented",
+    "writes": false
+   },
+   {
+    "kind": "adaptation",
+    "name": "shift pressure offset",
+    "notes": "Learned by the Ultimate-NAG52 firmware and edited through its configuration app. The stock EGS51/52 adaptation services are not publicly documented, so OpenTune declares no service to read or reset them.",
+    "requires_security": false,
+    "service": "",
+    "table": "shift pressure offset adaptation",
+    "validation": "implemented",
+    "writes": false
+   }
+  ],
+  "buses": [
+   {
+    "bitrate": 500000,
+    "description": "CAN (powertrain), EGS / EGS51 cars (pre-2000)",
+    "frames": [
+     {
+      "dlc": 8,
+      "id": "0x200",
+      "name": "BS_200",
+      "notes": "",
+      "sender": "ESP/ABS",
+      "signals": [
+       {
+        "byte_order": "big",
+        "kind": "number",
+        "len": 4,
+        "name": "BZ200h",
+        "notes": "Message counter.",
+        "start": 13
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "BLS",
+        "notes": "Brake light switch; upstream treats value 1 as brake pressed.",
+        "start": 9,
+        "values": [
+         {
+          "name": "released",
+          "raw": 0
+         },
+         {
+          "name": "pressed",
+          "raw": 1
+         },
+         {
+          "name": "undefined",
+          "raw": 2
+         },
+         {
+          "name": "SNV",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "DRTGVL",
+        "notes": "Rotation direction, front left.",
+        "start": 23,
+        "values": [
+         {
+          "name": "passive",
+          "raw": 0
+         },
+         {
+          "name": "forward",
+          "raw": 1
+         },
+         {
+          "name": "reverse",
+          "raw": 2
+         },
+         {
+          "name": "SNV",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.5,
+        "invalid": [
+         16383
+        ],
+        "kind": "number",
+        "len": 14,
+        "name": "DVL",
+        "notes": "Wheel speed. Upstream feeds the rear-wheel values to its output-speed estimate as twice the wheel rpm (TCUIO::wheel_*_2x_rpm), hence factor 0.5 rpm; 0x3FFF = not available (upstream check). Front wheels: same encoding assumed (same signal family), not checked by upstream code.",
+        "start": 21,
+        "unit": "rpm"
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "DRTGVR",
+        "notes": "Rotation direction, front right.",
+        "start": 39,
+        "values": [
+         {
+          "name": "passive",
+          "raw": 0
+         },
+         {
+          "name": "forward",
+          "raw": 1
+         },
+         {
+          "name": "reverse",
+          "raw": 2
+         },
+         {
+          "name": "SNV",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.5,
+        "invalid": [
+         16383
+        ],
+        "kind": "number",
+        "len": 14,
+        "name": "DVR",
+        "notes": "Wheel speed. Upstream feeds the rear-wheel values to its output-speed estimate as twice the wheel rpm (TCUIO::wheel_*_2x_rpm), hence factor 0.5 rpm; 0x3FFF = not available (upstream check). Front wheels: same encoding assumed (same signal family), not checked by upstream code.",
+        "start": 37,
+        "unit": "rpm"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x208",
+      "name": "BS_208",
+      "notes": "",
+      "sender": "ESP/ABS",
+      "signals": [
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 3,
+        "name": "GMAX_ESP",
+        "notes": "ESP upper gear limit.",
+        "start": 5,
+        "values": [
+         {
+          "name": "passive",
+          "raw": 0
+         },
+         {
+          "name": "G1",
+          "raw": 1
+         },
+         {
+          "name": "G2",
+          "raw": 2
+         },
+         {
+          "name": "G3",
+          "raw": 3
+         },
+         {
+          "name": "G4",
+          "raw": 4
+         },
+         {
+          "name": "G5",
+          "raw": 5
+         },
+         {
+          "name": "G6",
+          "raw": 6
+         },
+         {
+          "name": "G7",
+          "raw": 7
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 3,
+        "name": "GMIN_ESP",
+        "notes": "ESP lower gear limit.",
+        "start": 2,
+        "values": [
+         {
+          "name": "passive",
+          "raw": 0
+         },
+         {
+          "name": "G1",
+          "raw": 1
+         },
+         {
+          "name": "G2",
+          "raw": 2
+         },
+         {
+          "name": "G3",
+          "raw": 3
+         },
+         {
+          "name": "G4",
+          "raw": 4
+         },
+         {
+          "name": "G5",
+          "raw": 5
+         },
+         {
+          "name": "G6",
+          "raw": 6
+         },
+         {
+          "name": "G7",
+          "raw": 7
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "SZS",
+        "notes": "ESP system state.",
+        "start": 14,
+        "values": [
+         {
+          "name": "error",
+          "raw": 0
+         },
+         {
+          "name": "normal",
+          "raw": 1
+         },
+         {
+          "name": "diagnosis",
+          "raw": 2
+         },
+         {
+          "name": "exhaust test",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "ANFN",
+        "notes": "ESP request to select neutral.",
+        "start": 22,
+        "values": [
+         {
+          "name": "undefined",
+          "raw": 0
+         },
+         {
+          "name": "request N",
+          "raw": 1
+         },
+         {
+          "name": "no request",
+          "raw": 2
+         },
+         {
+          "name": "SNV",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "BRE_AKT_ESP",
+        "notes": "ESP brake intervention active.",
+        "start": 23
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "DRTGHR",
+        "notes": "Rotation direction, rear right.",
+        "start": 39,
+        "values": [
+         {
+          "name": "passive",
+          "raw": 0
+         },
+         {
+          "name": "forward",
+          "raw": 1
+         },
+         {
+          "name": "reverse",
+          "raw": 2
+         },
+         {
+          "name": "SNV",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.5,
+        "invalid": [
+         16383
+        ],
+        "kind": "number",
+        "len": 14,
+        "name": "DHR",
+        "notes": "Wheel speed. Upstream feeds the rear-wheel values to its output-speed estimate as twice the wheel rpm (TCUIO::wheel_*_2x_rpm), hence factor 0.5 rpm; 0x3FFF = not available (upstream check).",
+        "start": 37,
+        "unit": "rpm"
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "DRTGHL",
+        "notes": "Rotation direction, rear left.",
+        "start": 55,
+        "values": [
+         {
+          "name": "passive",
+          "raw": 0
+         },
+         {
+          "name": "forward",
+          "raw": 1
+         },
+         {
+          "name": "reverse",
+          "raw": 2
+         },
+         {
+          "name": "SNV",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.5,
+        "invalid": [
+         16383
+        ],
+        "kind": "number",
+        "len": 14,
+        "name": "DHL",
+        "notes": "Wheel speed. Upstream feeds the rear-wheel values to its output-speed estimate as twice the wheel rpm (TCUIO::wheel_*_2x_rpm), hence factor 0.5 rpm; 0x3FFF = not available (upstream check).",
+        "start": 53,
+        "unit": "rpm"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x308",
+      "name": "MS_308",
+      "notes": "",
+      "sender": "engine",
+      "signals": [
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "KUEB_O_A",
+        "notes": "Engine requests the torque-converter lock-up clutch open.",
+        "start": 6
+       },
+       {
+        "byte_order": "big",
+        "kind": "number",
+        "len": 16,
+        "name": "NMOT",
+        "notes": "Engine speed (upstream reads it unscaled as rpm).",
+        "start": 15,
+        "unit": "rpm"
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "UEHITZ",
+        "notes": "Engine oil overheating.",
+        "start": 39
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "ANL_LFT",
+        "notes": "Starter running.",
+        "start": 35
+       },
+       {
+        "byte_order": "big",
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "T_OEL",
+        "notes": "Engine oil temperature, raw - 40 (upstream); 0xFF = not available.",
+        "offset": -40.0,
+        "start": 47,
+        "unit": "degC"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x210",
+      "name": "MS_210",
+      "notes": "EGS51-era MS_210 layout from upstream's hand-made EGS51 matrix.",
+      "sender": "engine",
+      "signals": [
+       {
+        "byte_order": "big",
+        "factor": 0.4,
+        "kind": "number",
+        "len": 8,
+        "name": "PW",
+        "notes": "Accelerator pedal, 0..250 = 0..100 % (upstream).",
+        "start": 23,
+        "unit": "%"
+       },
+       {
+        "byte_order": "big",
+        "factor": 3.0,
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "M_ESP",
+        "notes": "Engine torque for ESP, raw * 3 (upstream EGS51 layer); 0xFF = not available.",
+        "start": 55,
+        "unit": "Nm"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x310",
+      "name": "MS_310",
+      "notes": "",
+      "sender": "engine",
+      "signals": [
+       {
+        "byte_order": "big",
+        "factor": 0.0078,
+        "kind": "number",
+        "len": 8,
+        "name": "MAX_TRQ_FACTOR",
+        "notes": "Factor applied to the maximum torque (upstream).",
+        "start": 31
+       },
+       {
+        "byte_order": "big",
+        "factor": 3.0,
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "IND_TORQUE",
+        "notes": "Indicated engine torque, raw * 3 (upstream).",
+        "start": 39,
+        "unit": "Nm"
+       },
+       {
+        "byte_order": "big",
+        "factor": 3.0,
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "DRG_TORQUE",
+        "notes": "Engine drag torque, raw * 3 (upstream).",
+        "start": 47,
+        "unit": "Nm"
+       },
+       {
+        "byte_order": "big",
+        "factor": 3.0,
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "MAX_TORQUE",
+        "notes": "Maximum engine torque, raw * 3 (upstream).",
+        "start": 55,
+        "unit": "Nm"
+       },
+       {
+        "byte_order": "big",
+        "factor": 3.0,
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "MIN_TORQUE",
+        "notes": "Minimum engine torque, raw * 3 (upstream).",
+        "start": 63,
+        "unit": "Nm"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x608",
+      "name": "MS_608",
+      "notes": "",
+      "sender": "engine",
+      "signals": [
+       {
+        "byte_order": "big",
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "T_MOT",
+        "notes": "Coolant temperature, raw - 40 (upstream); 0xFF = not available.",
+        "offset": -40.0,
+        "start": 7,
+        "unit": "degC"
+       },
+       {
+        "byte_order": "big",
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "T_LUFT",
+        "notes": "Intake air temperature, raw - 40 (upstream); 0xFF = not available.",
+        "offset": -40.0,
+        "start": 15,
+        "unit": "degC"
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.868,
+        "kind": "number",
+        "len": 16,
+        "name": "VB",
+        "notes": "Fuel consumption; upstream scales raw * 0.868 to microlitres per 250 ms.",
+        "start": 47,
+        "unit": "ul/250ms"
+       }
+      ]
+     },
+     {
+      "dlc": 1,
+      "id": "0x230",
+      "name": "EWM_230",
+      "notes": "",
+      "sender": "selector (EWM)",
+      "signals": [
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "W_S",
+        "notes": "Programme switch position (W/S).",
+        "start": 7
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "FPT",
+        "notes": "Programme button pressed.",
+        "start": 6
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "KD",
+        "notes": "Kickdown.",
+        "start": 5
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "SPERR",
+        "notes": "Shift-lock magnet energised.",
+        "start": 4
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 4,
+        "name": "WHC",
+        "notes": "Selector lever position (NAG).",
+        "start": 3,
+        "values": [
+         {
+          "name": "D",
+          "raw": 5
+         },
+         {
+          "name": "N",
+          "raw": 6
+         },
+         {
+          "name": "R",
+          "raw": 7
+         },
+         {
+          "name": "P",
+          "raw": 8
+         },
+         {
+          "name": "+",
+          "raw": 9
+         },
+         {
+          "name": "-",
+          "raw": 10
+         },
+         {
+          "name": "N-D",
+          "raw": 11
+         },
+         {
+          "name": "R-N",
+          "raw": 12
+         },
+         {
+          "name": "P-R",
+          "raw": 13
+         },
+         {
+          "name": "SNV",
+          "raw": 15
+         }
+        ]
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x410",
+      "name": "KLA_410",
+      "notes": "",
+      "sender": "climate control",
+      "signals": [
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "KOMP_EIN",
+        "notes": "A/C compressor on.",
+        "start": 0
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.25,
+        "kind": "number",
+        "len": 8,
+        "name": "M_KOMP",
+        "notes": "A/C compressor torque; upstream subtracts raw / 4 Nm from the engine torque.",
+        "start": 23,
+        "unit": "Nm"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x218",
+      "name": "GS_218",
+      "notes": "EGS51 GS_218 is upstream's own black-box layout ('manually generated').",
+      "sender": "TCU",
+      "signals": [
+       {
+        "byte_order": "big",
+        "factor": 3.0,
+        "invalid": [
+         254
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "TORQUE_REQ",
+        "notes": "TCU torque request, raw * 3 Nm (upstream encodes Nm / 3 plus drag / 3); 0xFE = no request.",
+        "start": 7,
+        "unit": "Nm"
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "GB_TYPE",
+        "notes": "Manual gearbox (1) / automatic (0).",
+        "start": 15
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "GB_OK",
+        "notes": "Gearbox programme OK.",
+        "start": 13
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "OFF_ROAD",
+        "notes": "Off-road.",
+        "start": 12
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "PN",
+        "notes": "Selector in P or N.",
+        "start": 11
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "GARAGE_SHIFT",
+        "notes": "Garage shift in progress.",
+        "start": 10
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "CAN_START",
+        "notes": "Engine start enable.",
+        "start": 9
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "TORQUE_REQ_EN",
+        "notes": "Torque request enabled.",
+        "start": 8
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 4,
+        "name": "GZC",
+        "notes": "Target gear (EGS51 coding: R = 6, R2 = 7, P = 8).",
+        "start": 23,
+        "values": [
+         {
+          "name": "N",
+          "raw": 0
+         },
+         {
+          "name": "D1",
+          "raw": 1
+         },
+         {
+          "name": "D2",
+          "raw": 2
+         },
+         {
+          "name": "D3",
+          "raw": 3
+         },
+         {
+          "name": "D4",
+          "raw": 4
+         },
+         {
+          "name": "D5",
+          "raw": 5
+         },
+         {
+          "name": "R",
+          "raw": 6
+         },
+         {
+          "name": "R2",
+          "raw": 7
+         },
+         {
+          "name": "P",
+          "raw": 8
+         },
+         {
+          "name": "SNV",
+          "raw": 15
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 4,
+        "name": "GIC",
+        "notes": "Actual gear (EGS51 coding).",
+        "start": 19,
+        "values": [
+         {
+          "name": "N",
+          "raw": 0
+         },
+         {
+          "name": "D1",
+          "raw": 1
+         },
+         {
+          "name": "D2",
+          "raw": 2
+         },
+         {
+          "name": "D3",
+          "raw": 3
+         },
+         {
+          "name": "D4",
+          "raw": 4
+         },
+         {
+          "name": "D5",
+          "raw": 5
+         },
+         {
+          "name": "R",
+          "raw": 6
+         },
+         {
+          "name": "R2",
+          "raw": 7
+         },
+         {
+          "name": "P",
+          "raw": 8
+         },
+         {
+          "name": "SNV",
+          "raw": 15
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "TCC_SLIPPING",
+        "notes": "Lock-up clutch slipping.",
+        "start": 31
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "TCC_OPEN",
+        "notes": "Lock-up clutch open.",
+        "start": 30
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "TCC_CLOSED",
+        "notes": "Lock-up clutch closed.",
+        "start": 29
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "GEARBOX_BIG",
+        "notes": "Large gearbox (W5A 580).",
+        "start": 28
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "LIMP_MODE",
+        "notes": "Gearbox in limp-home mode.",
+        "start": 27
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "SE",
+        "notes": "Shift started.",
+        "start": 26
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "KICKDOWN",
+        "notes": "Kickdown.",
+        "start": 25
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "FWD",
+        "notes": "Front-wheel drive.",
+        "start": 24
+       },
+       {
+        "byte_order": "big",
+        "kind": "number",
+        "len": 4,
+        "name": "FEHLER",
+        "notes": "Fault number / counter.",
+        "start": 43,
+        "unit": "raw"
+       }
+      ]
+     },
+     {
+      "dlc": 8,
+      "id": "0x418",
+      "name": "GS_418",
+      "notes": "",
+      "sender": "TCU",
+      "signals": [
+       {
+        "byte_order": "big",
+        "kind": "ascii",
+        "len": 8,
+        "name": "FSC",
+        "notes": "Gear / range letter for the cluster display ('P', 'R', 'N', 'D', '1'..'5').",
+        "start": 7
+       },
+       {
+        "byte_order": "big",
+        "kind": "ascii",
+        "len": 8,
+        "name": "FPC",
+        "notes": "Driving-programme letter for the cluster ('S', 'C', 'W', 'M', 'A', ...).",
+        "start": 15
+       },
+       {
+        "byte_order": "big",
+        "kind": "number",
+        "len": 8,
+        "name": "T_GET",
+        "notes": "ATF temperature, raw - 50 (the upstream CAN layers encode temp + 50). Upstream's EGS51 layer does not fill this byte.",
+        "offset": -50.0,
+        "start": 23,
+        "unit": "degC"
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "ALLRAD",
+        "notes": "Four-wheel drive vehicle.",
+        "start": 31
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "FRONT",
+        "notes": "Front-wheel drive (1) / rear-wheel drive (0).",
+        "start": 30
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "SCHALT",
+        "notes": "Manual gearbox (upstream: automatic = 0).",
+        "start": 29
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "CVT",
+        "notes": "CVT (1) / stepped gearbox (0).",
+        "start": 28
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 2,
+        "name": "MECH",
+        "notes": "Gearbox mechanics variant.",
+        "start": 27,
+        "values": [
+         {
+          "name": "large NAG",
+          "raw": 0
+         },
+         {
+          "name": "small NAG",
+          "raw": 1
+         },
+         {
+          "name": "large NAG2",
+          "raw": 2
+         },
+         {
+          "name": "small NAG2",
+          "raw": 3
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "ESV_BRE",
+        "notes": "Brake request when engaging a gear.",
+        "start": 25
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "KD",
+        "notes": "Kickdown.",
+        "start": 24
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 4,
+        "name": "GZC",
+        "notes": "Target gear (16-value coding).",
+        "start": 39,
+        "values": [
+         {
+          "name": "N",
+          "raw": 0
+         },
+         {
+          "name": "D1",
+          "raw": 1
+         },
+         {
+          "name": "D2",
+          "raw": 2
+         },
+         {
+          "name": "D3",
+          "raw": 3
+         },
+         {
+          "name": "D4",
+          "raw": 4
+         },
+         {
+          "name": "D5",
+          "raw": 5
+         },
+         {
+          "name": "D6",
+          "raw": 6
+         },
+         {
+          "name": "D7",
+          "raw": 7
+         },
+         {
+          "name": "D_CVT",
+          "raw": 8
+         },
+         {
+          "name": "R_CVT",
+          "raw": 9
+         },
+         {
+          "name": "R3",
+          "raw": 10
+         },
+         {
+          "name": "R",
+          "raw": 11
+         },
+         {
+          "name": "R2",
+          "raw": 12
+         },
+         {
+          "name": "P",
+          "raw": 13
+         },
+         {
+          "name": "none",
+          "raw": 14
+         },
+         {
+          "name": "SNV",
+          "raw": 15
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 4,
+        "name": "GIC",
+        "notes": "Actual gear (16-value coding).",
+        "start": 35,
+        "values": [
+         {
+          "name": "N",
+          "raw": 0
+         },
+         {
+          "name": "D1",
+          "raw": 1
+         },
+         {
+          "name": "D2",
+          "raw": 2
+         },
+         {
+          "name": "D3",
+          "raw": 3
+         },
+         {
+          "name": "D4",
+          "raw": 4
+         },
+         {
+          "name": "D5",
+          "raw": 5
+         },
+         {
+          "name": "D6",
+          "raw": 6
+         },
+         {
+          "name": "D7",
+          "raw": 7
+         },
+         {
+          "name": "D_CVT",
+          "raw": 8
+         },
+         {
+          "name": "R_CVT",
+          "raw": 9
+         },
+         {
+          "name": "R3",
+          "raw": 10
+         },
+         {
+          "name": "R",
+          "raw": 11
+         },
+         {
+          "name": "R2",
+          "raw": 12
+         },
+         {
+          "name": "P",
+          "raw": 13
+         },
+         {
+          "name": "none",
+          "raw": 14
+         },
+         {
+          "name": "SNV",
+          "raw": 15
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "factor": 0.25,
+        "invalid": [
+         255
+        ],
+        "kind": "number",
+        "len": 8,
+        "name": "M_VERL",
+        "notes": "Transmission loss torque, raw / 4 (upstream); 0xFF = implausible.",
+        "start": 47,
+        "unit": "Nm"
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "FMRADPAR",
+        "notes": "Wheel-torque factor parity.",
+        "start": 55
+       },
+       {
+        "byte_order": "big",
+        "kind": "bool",
+        "len": 1,
+        "name": "FMRADTGL",
+        "notes": "Wheel-torque factor toggle.",
+        "start": 54
+       },
+       {
+        "byte_order": "big",
+        "kind": "enum",
+        "len": 3,
+        "name": "WHST",
+        "notes": "Selector lever position as reported by the TCU.",
+        "start": 53,
+        "values": [
+         {
+          "name": "P",
+          "raw": 0
+         },
+         {
+          "name": "R",
+          "raw": 1
+         },
+         {
+          "name": "N",
+          "raw": 2
+         },
+         {
+          "name": "D",
+          "raw": 4
+         },
+         {
+          "name": "SNV",
+          "raw": 7
+         }
+        ]
+       },
+       {
+        "byte_order": "big",
+        "kind": "number",
+        "len": 11,
+        "name": "FMRAD",
+        "notes": "Wheel-torque factor; scaling not documented upstream (0x7FF on manual gearboxes).",
+        "start": 50,
+        "unit": "raw"
+       }
+      ]
+     }
+    ],
+    "name": "egs51",
+    "notes": "Bit layouts from ultimate-nag52-fw lib/egs51_ecus/can_data.txt (upstream: 'manually generated'); scaling from its src/canbus/can_egs51.cpp."
+   }
+  ],
+  "checksum": null,
+  "diagnostics": [],
+  "ecudefs": [],
+  "family": "722.6 EGS51",
+  "flash": null,
+  "gearsets": [
+   {
+    "applies_to": [
+     "W5A 280",
+     "W5A 300",
+     "W5A 330"
+    ],
+    "gears": [
+     {
+      "gear": "1",
+      "ratio": 3.932
+     },
+     {
+      "gear": "2",
+      "ratio": 2.408
+     },
+     {
+      "gear": "3",
+      "ratio": 1.486
+     },
+     {
+      "gear": "4",
+      "ratio": 1.0
+     },
+     {
+      "gear": "5",
+      "ratio": 0.83
+     },
+     {
+      "gear": "R1",
+      "ratio": -3.1
+     },
+     {
+      "gear": "R2",
+      "ratio": -1.899
+     }
+    ],
+    "name": "small NAG (W5A 280/300/330), 1996",
+    "notes": "Small core model (4/5/6-cylinder cars).",
+    "source": "Wikipedia 'Mercedes-Benz 5G-Tronic transmission' (gear ratio table; facts)"
+   },
+   {
+    "applies_to": [
+     "W5A 400",
+     "W5A 580",
+     "W5A 900"
+    ],
+    "gears": [
+     {
+      "gear": "1",
+      "ratio": 3.588
+     },
+     {
+      "gear": "2",
+      "ratio": 2.186
+     },
+     {
+      "gear": "3",
+      "ratio": 1.405
+     },
+     {
+      "gear": "4",
+      "ratio": 1.0
+     },
+     {
+      "gear": "5",
+      "ratio": 0.831
+     },
+     {
+      "gear": "R1",
+      "ratio": -3.16
+     },
+     {
+      "gear": "R2",
+      "ratio": -1.926
+     }
+    ],
+    "name": "large NAG (W5A 400/580/900), 1996",
+    "notes": "Large core model (8/12-cylinder, SUV, turbo).",
+    "source": "Wikipedia 'Mercedes-Benz 5G-Tronic transmission' (gear ratio table; facts)"
+   },
+   {
+    "applies_to": [
+     "W5A 330"
+    ],
+    "gears": [
+     {
+      "gear": "1",
+      "ratio": 3.951
+     },
+     {
+      "gear": "2",
+      "ratio": 2.423
+     },
+     {
+      "gear": "3",
+      "ratio": 1.486
+     },
+     {
+      "gear": "4",
+      "ratio": 1.0
+     },
+     {
+      "gear": "5",
+      "ratio": 0.833
+     },
+     {
+      "gear": "R1",
+      "ratio": -3.147
+     },
+     {
+      "gear": "R2",
+      "ratio": -1.93
+     }
+    ],
+    "name": "small NAG (W5A 330), 2004",
+    "notes": "",
+    "source": "Wikipedia 'Mercedes-Benz 5G-Tronic transmission' (gear ratio table; facts)"
+   },
+   {
+    "applies_to": [
+     "W5A 580"
+    ],
+    "gears": [
+     {
+      "gear": "1",
+      "ratio": 3.595
+     },
+     {
+      "gear": "2",
+      "ratio": 2.186
+     },
+     {
+      "gear": "3",
+      "ratio": 1.405
+     },
+     {
+      "gear": "4",
+      "ratio": 1.0
+     },
+     {
+      "gear": "5",
+      "ratio": 0.831
+     },
+     {
+      "gear": "R1",
+      "ratio": -3.167
+     },
+     {
+      "gear": "R2",
+      "ratio": -1.926
+     }
+    ],
+    "name": "large NAG (W5A 580), 2004",
+    "notes": "",
+    "source": "Wikipedia 'Mercedes-Benz 5G-Tronic transmission' (gear ratio table; facts); same values as the ratio table in rnd-ash/ultimate-nag52-fw-rs egs_pc_sim/src/gearbox.rs (GPL-3.0)"
+   }
+  ],
+  "id": "mercedes-egs5x-7226",
+  "identify": {
+   "gearbox_codes": [
+    "722.6",
+    "NAG1",
+    "W5A"
+   ],
+   "part_numbers": [],
+   "sw_numbers": []
+  },
+  "kind": "tcu",
+  "live": [
+   {
+    "name": "engine speed",
+    "source": {
+     "bus": "egs51",
+     "frame": "MS_308",
+     "kind": "can_signal",
+     "signal": "NMOT"
+    },
+    "unit": "rpm"
+   },
+   {
+    "name": "accelerator pedal",
+    "source": {
+     "bus": "egs51",
+     "frame": "MS_210",
+     "kind": "can_signal",
+     "signal": "PW"
+    },
+    "unit": "%"
+   },
+   {
+    "name": "coolant temperature",
+    "source": {
+     "bus": "egs51",
+     "frame": "MS_608",
+     "kind": "can_signal",
+     "signal": "T_MOT"
+    },
+    "unit": "degC"
+   },
+   {
+    "name": "engine oil temperature",
+    "source": {
+     "bus": "egs51",
+     "frame": "MS_308",
+     "kind": "can_signal",
+     "signal": "T_OEL"
+    },
+    "unit": "degC"
+   },
+   {
+    "name": "brake switch",
+    "source": {
+     "bus": "egs51",
+     "frame": "BS_200",
+     "kind": "can_signal",
+     "signal": "BLS"
+    },
+    "unit": ""
+   },
+   {
+    "name": "rear left wheel speed",
+    "source": {
+     "bus": "egs51",
+     "frame": "BS_208",
+     "kind": "can_signal",
+     "signal": "DHL"
+    },
+    "unit": "rpm"
+   },
+   {
+    "name": "rear right wheel speed",
+    "source": {
+     "bus": "egs51",
+     "frame": "BS_208",
+     "kind": "can_signal",
+     "signal": "DHR"
+    },
+    "unit": "rpm"
+   },
+   {
+    "name": "selector lever",
+    "source": {
+     "bus": "egs51",
+     "frame": "EWM_230",
+     "kind": "can_signal",
+     "signal": "WHC"
+    },
+    "unit": ""
+   },
+   {
+    "name": "display gear",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_418",
+     "kind": "can_signal",
+     "signal": "FSC"
+    },
+    "unit": ""
+   },
+   {
+    "name": "display programme",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_418",
+     "kind": "can_signal",
+     "signal": "FPC"
+    },
+    "unit": ""
+   },
+   {
+    "name": "actual gear",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_218",
+     "kind": "can_signal",
+     "signal": "GIC"
+    },
+    "unit": ""
+   },
+   {
+    "name": "target gear",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_218",
+     "kind": "can_signal",
+     "signal": "GZC"
+    },
+    "unit": ""
+   },
+   {
+    "name": "ATF temperature",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_418",
+     "kind": "can_signal",
+     "signal": "T_GET"
+    },
+    "unit": "degC"
+   },
+   {
+    "name": "indicated engine torque",
+    "source": {
+     "bus": "egs51",
+     "frame": "MS_310",
+     "kind": "can_signal",
+     "signal": "IND_TORQUE"
+    },
+    "unit": "Nm"
+   },
+   {
+    "name": "TCU torque request",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_218",
+     "kind": "can_signal",
+     "signal": "TORQUE_REQ"
+    },
+    "unit": "Nm"
+   },
+   {
+    "name": "lock-up clutch closed",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_218",
+     "kind": "can_signal",
+     "signal": "TCC_CLOSED"
+    },
+    "unit": ""
+   },
+   {
+    "name": "lock-up clutch slipping",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_218",
+     "kind": "can_signal",
+     "signal": "TCC_SLIPPING"
+    },
+    "unit": ""
+   },
+   {
+    "name": "TCU limp mode",
+    "source": {
+     "bus": "egs51",
+     "frame": "GS_218",
+     "kind": "can_signal",
+     "signal": "LIMP_MODE"
+    },
+    "unit": ""
+   }
+  ],
+  "maker": "Siemens",
+  "name": "Mercedes 722.6 5-speed automatic (NAG1) - EGS / EGS51 TCU",
+  "notes": "External (body-mounted) TCU of the 722.6 five-speed automatic. One CAN generation is defined: 'egs51' (pre-2000 EGS/EGS51 cars, 500 kbit/s), transcribed from the Ultimate-NAG52 project's hand-made EGS51 matrix. The frame layout of the later EGS52 (CAN-C, 2000+) cars is deliberately NOT included: it will be re-derived from a listen-only capture of the owner's own car. A W210 can be either generation; docs/MERCEDES-722.6.md describes how to tell them apart from a capture (by CAN ids, and by the gear coding in 0x218, which on EGS51 is R = 6 / P = 8). Everything here is passive CAN decode plus documentation: OpenTune does not transmit to this TCU, read its flash or know its checksum. Diagnostics: pre-2000 units are diagnosed on the K-line (C1 pin 1, see the database unit) with a protocol the cited sources do not document, so no diagnostic channel is declared. Tables describe the calibration structure of the open Ultimate-NAG52 replacement firmware (shift schedules, shift time, fill, TCC and adaptation maps), not the stock EGS flash layout, which is not publicly documented; no values are shipped. Validation: synthetic CAN frames built from the published layout only - nothing has been checked against a capture from a real car yet.",
+  "safety": [
+   "The 722.6 TCU sets line, shift and lock-up pressures: wrong maps or adaptations can slip and burn clutches or wreck the gearbox, and a gearbox fault can make the car move unexpectedly or lose drive in traffic.",
+   "OpenTune only listens here: it never transmits on the powertrain CAN for this unit. Do not replay captured frames onto a running car - GS_218 carries the TCU's engine-torque request and the engine acts on it.",
+   "Capture with a listen-only adapter where possible, car stationary or on a safe road, and never wire into CAN-C while the engine runs.",
+   "The tables describe the Ultimate-NAG52 replacement firmware; do not assume the stock EGS51/52 stores the same tables or values."
+  ],
+  "sources": [
+   {
+    "license": "GPL-3.0",
+    "title": "rnd-ash/ultimate-nag52-fw",
+    "url": "https://github.com/rnd-ash/ultimate-nag52-fw",
+    "used_for": "EGS51 CAN frame layouts (lib/egs51_ecus/can_data.txt), signal scaling (src/canbus/ CAN layers), map structures and axes (src/maps.h, src/profiles.*, src/pressure_manager.cpp, src/torque_converter.cpp, src/adaptation/)"
+   },
+   {
+    "license": "GPL-3.0",
+    "title": "rnd-ash/ultimate-nag52-fw-rs",
+    "url": "https://github.com/rnd-ash/ultimate-nag52-fw-rs",
+    "used_for": "cross-check of the EGS51 CAN matrix (can_data/egs51.txt) and the large-NAG ratio table (egs_pc_sim)"
+   },
+   {
+    "license": "facts",
+    "title": "Wikipedia: Mercedes-Benz 5G-Tronic transmission",
+    "url": "https://en.wikipedia.org/wiki/Mercedes-Benz_5G-Tronic_transmission",
+    "used_for": "gear ratios per variant"
+   }
+  ],
+  "tables": [
+   {
+    "cols": 11,
+    "confidence": "structure_only",
+    "name": "upshift schedule",
+    "notes": "Input-shaft speed at which each upshift happens, by pedal. One map per profile and per engine type (petrol / diesel). Manual (M) upshift maps hold 9999 (no automatic upshift).",
+    "profiles": [
+     "S",
+     "C",
+     "A",
+     "M"
+    ],
+    "role": "shift_up",
+    "rows": 4,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/profiles.h, src/maps.h",
+    "unit": "rpm (input shaft)",
+    "x_axis": {
+     "name": "pedal",
+     "unit": "%",
+     "values": [
+      0,
+      10,
+      20,
+      30,
+      40,
+      50,
+      60,
+      70,
+      80,
+      90,
+      100
+     ]
+    },
+    "y_axis": {
+     "labels": [
+      "1-2",
+      "2-3",
+      "3-4",
+      "4-5"
+     ],
+     "name": "shift"
+    }
+   },
+   {
+    "cols": 11,
+    "confidence": "structure_only",
+    "name": "downshift schedule",
+    "notes": "Input-shaft speed below which each downshift happens, by pedal. One map per profile and engine type. The manual-mode downshift map protects the gearbox from lugging and is not user-editable upstream.",
+    "profiles": [
+     "S",
+     "C",
+     "A",
+     "M"
+    ],
+    "role": "shift_down",
+    "rows": 4,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/profiles.h, src/maps.h",
+    "unit": "rpm (input shaft)",
+    "x_axis": {
+     "name": "pedal",
+     "unit": "%",
+     "values": [
+      0,
+      10,
+      20,
+      30,
+      40,
+      50,
+      60,
+      70,
+      80,
+      90,
+      100
+     ]
+    },
+    "y_axis": {
+     "labels": [
+      "2-1",
+      "3-2",
+      "4-3",
+      "5-4"
+     ],
+     "name": "shift"
+    }
+   },
+   {
+    "cols": 6,
+    "confidence": "structure_only",
+    "name": "upshift time",
+    "notes": "Target shift (overlap) duration for upshifts, by pedal and input speed.",
+    "profiles": [
+     "S",
+     "C",
+     "A",
+     "M",
+     "W",
+     "R"
+    ],
+    "role": "shift_time",
+    "rows": 5,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/profiles.cpp, src/maps.cpp",
+    "unit": "ms",
+    "x_axis": {
+     "name": "pedal",
+     "unit": "%",
+     "values": [
+      0,
+      20,
+      40,
+      60,
+      80,
+      100
+     ]
+    },
+    "y_axis": {
+     "count": 5,
+     "derived": "1000 + k * (redline - 1000) / 4 for k = 0..4; redline from the vehicle configuration (petrol / diesel)",
+     "name": "input speed",
+     "unit": "rpm"
+    }
+   },
+   {
+    "cols": 6,
+    "confidence": "structure_only",
+    "name": "downshift time",
+    "notes": "Target shift (overlap) duration for downshifts, by pedal and input speed.",
+    "profiles": [
+     "S",
+     "C",
+     "A",
+     "M",
+     "W",
+     "R"
+    ],
+    "role": "shift_time",
+    "rows": 5,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/profiles.cpp, src/maps.cpp",
+    "unit": "ms",
+    "x_axis": {
+     "name": "pedal",
+     "unit": "%",
+     "values": [
+      0,
+      20,
+      40,
+      60,
+      80,
+      100
+     ]
+    },
+    "y_axis": {
+     "count": 5,
+     "derived": "1000 + k * (redline - 1000) / 4 for k = 0..4; redline from the vehicle configuration (petrol / diesel)",
+     "name": "input speed",
+     "unit": "rpm"
+    }
+   },
+   {
+    "cols": 4,
+    "confidence": "structure_only",
+    "name": "clutch fill time",
+    "notes": "Fill-phase duration of the applying clutch (the firmware divides by its 20 ms cycle). Separate small-NAG and large-NAG defaults.",
+    "profiles": [],
+    "role": "fill_time",
+    "rows": 5,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/pressure_manager.cpp, src/maps.h",
+    "unit": "ms",
+    "x_axis": {
+     "name": "ATF temperature",
+     "unit": "degC",
+     "values": [
+      -20,
+      5,
+      25,
+      60
+     ]
+    },
+    "y_axis": {
+     "labels": [
+      "K1",
+      "K2",
+      "K3",
+      "B1",
+      "B2"
+     ],
+     "name": "clutch"
+    }
+   },
+   {
+    "cols": 6,
+    "confidence": "structure_only",
+    "name": "clutch fill pressure",
+    "notes": "Fill pressure per clutch (B3 = reverse).",
+    "profiles": [],
+    "role": "fill_pressure",
+    "rows": 1,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/pressure_manager.cpp, src/maps.h",
+    "unit": "mbar",
+    "x_axis": {
+     "labels": [
+      "K1",
+      "K2",
+      "K3",
+      "B1",
+      "B2",
+      "B3"
+     ],
+     "name": "clutch"
+    }
+   },
+   {
+    "cols": 5,
+    "confidence": "structure_only",
+    "name": "clutch low fill pressure",
+    "notes": "Low fill (hold) pressure per forward clutch.",
+    "profiles": [],
+    "role": "fill_pressure",
+    "rows": 1,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/pressure_manager.cpp, src/maps.h",
+    "unit": "mbar",
+    "x_axis": {
+     "labels": [
+      "K1",
+      "K2",
+      "K3",
+      "B1",
+      "B2"
+     ],
+     "name": "clutch"
+    }
+   },
+   {
+    "cols": 7,
+    "confidence": "structure_only",
+    "name": "TCC PWM",
+    "notes": "Lock-up clutch solenoid PWM for a target pressure.",
+    "profiles": [],
+    "role": "tcc_pressure",
+    "rows": 5,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/pressure_manager.cpp, src/maps.cpp",
+    "unit": "duty /4096",
+    "x_axis": {
+     "name": "TCC pressure",
+     "unit": "mbar",
+     "values": [
+      0,
+      2000,
+      4000,
+      5000,
+      7500,
+      10000,
+      15000
+     ]
+    },
+    "y_axis": {
+     "name": "ATF temperature",
+     "unit": "degC",
+     "values": [
+      0,
+      30,
+      60,
+      90,
+      120
+     ]
+    }
+   },
+   {
+    "cols": 11,
+    "confidence": "structure_only",
+    "name": "TCC slip target",
+    "notes": "Target lock-up slip: <= 10 = closed, > 100 = open, between = slipping at that target.",
+    "profiles": [],
+    "role": "tcc_slip",
+    "rows": 8,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/torque_converter.cpp, src/maps.cpp",
+    "unit": "rpm slip",
+    "x_axis": {
+     "name": "pedal",
+     "unit": "%",
+     "values": [
+      0,
+      5,
+      10,
+      20,
+      30,
+      40,
+      50,
+      60,
+      70,
+      80,
+      100
+     ]
+    },
+    "y_axis": {
+     "name": "input speed",
+     "unit": "rpm",
+     "values": [
+      1000,
+      1200,
+      1400,
+      1600,
+      1800,
+      2000,
+      4000,
+      6000
+     ]
+    }
+   },
+   {
+    "cols": 6,
+    "confidence": "structure_only",
+    "name": "TCC pressure adaptation",
+    "notes": "Learned lock-up pressure; one map per gear 1-5.",
+    "profiles": [
+     "D1",
+     "D2",
+     "D3",
+     "D4",
+     "D5"
+    ],
+    "role": "adaptation",
+    "rows": 6,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/torque_converter.cpp, src/adapt_maps.cpp",
+    "unit": "mbar",
+    "x_axis": {
+     "name": "engine load",
+     "unit": "%",
+     "values": [
+      0,
+      5,
+      10,
+      25,
+      50,
+      100
+     ]
+    },
+    "y_axis": {
+     "name": "ATF temperature",
+     "unit": "degC",
+     "values": [
+      -20,
+      0,
+      20,
+      40,
+      80,
+      120
+     ]
+    }
+   },
+   {
+    "cols": 4,
+    "confidence": "structure_only",
+    "name": "shift torque adaptation (pulling)",
+    "notes": "Learned torque correction for pulling shifts (crossover upshifts, release downshifts); one map per shift.",
+    "profiles": [
+     "1-2",
+     "2-3",
+     "3-4",
+     "4-5",
+     "5-4",
+     "4-3",
+     "3-2",
+     "2-1"
+    ],
+    "role": "adaptation",
+    "rows": 5,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/adaptation/shift_adaptation.cpp, src/maps.cpp",
+    "unit": "Nm",
+    "x_axis": {
+     "name": "input speed",
+     "unit": "rpm",
+     "values": [
+      1000,
+      1500,
+      2000,
+      4000
+     ]
+    },
+    "y_axis": {
+     "name": "load",
+     "unit": "%",
+     "values": [
+      0,
+      20,
+      50,
+      100,
+      150
+     ]
+    }
+   },
+   {
+    "cols": 4,
+    "confidence": "structure_only",
+    "name": "shift torque adaptation (pushing)",
+    "notes": "Learned torque correction for pushing shifts (crossover downshifts, release upshifts); one map per shift.",
+    "profiles": [
+     "1-2",
+     "2-3",
+     "3-4",
+     "4-5",
+     "5-4",
+     "4-3",
+     "3-2",
+     "2-1"
+    ],
+    "role": "adaptation",
+    "rows": 4,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/adaptation/shift_adaptation.cpp, src/maps.cpp",
+    "unit": "Nm",
+    "x_axis": {
+     "name": "input speed",
+     "unit": "rpm",
+     "values": [
+      1000,
+      1500,
+      2000,
+      4000
+     ]
+    },
+    "y_axis": {
+     "name": "load",
+     "unit": "%",
+     "values": [
+      0,
+      5,
+      10,
+      20
+     ]
+    }
+   },
+   {
+    "cols": 8,
+    "confidence": "structure_only",
+    "name": "prefill time adaptation",
+    "notes": "Learned prefill-time correction per shift.",
+    "profiles": [],
+    "role": "adaptation",
+    "rows": 1,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/adaptation/shift_adaptation.cpp",
+    "unit": "ms",
+    "x_axis": {
+     "labels": [
+      "1-2",
+      "2-3",
+      "3-4",
+      "4-5",
+      "5-4",
+      "4-3",
+      "3-2",
+      "2-1"
+     ],
+     "name": "shift"
+    }
+   },
+   {
+    "cols": 8,
+    "confidence": "structure_only",
+    "name": "shift pressure offset adaptation",
+    "notes": "Learned shift-pressure offset per shift.",
+    "profiles": [],
+    "role": "adaptation",
+    "rows": 1,
+    "source": "rnd-ash/ultimate-nag52-fw (GPL-3.0) src/adaptation/shift_adaptation.cpp",
+    "unit": "mbar",
+    "x_axis": {
+     "labels": [
+      "1-2",
+      "2-3",
+      "3-4",
+      "4-5",
+      "5-4",
+      "4-3",
+      "3-2",
+      "2-1"
+     ],
+     "name": "shift"
+    }
+   }
+  ],
+  "units": [
+   "mercedes-egs52-7226"
+  ],
+  "validation": "synthetic-tested",
+  "vehicles": [
+   "Mercedes W210 E-Class (1996-2002, pre-2000 TCU)",
+   "W202 C-Class",
+   "other pre-2000 722.6 applications with an EGS / EGS51 TCU"
+  ]
+ },
+ "openhaldex-c6": {
+  "adaptations": [
+   {
+    "kind": "adaptation",
+    "name": "mode",
+    "notes": "`opentune haldex mode set` - refuses without --confirm, then reads 0xFDA0 back.",
+    "requires_security": false,
+    "service": "UDS 0x2E 0xFDA2 [mode 0..5]",
+    "validation": "synthetic-tested",
+    "writes": true
+   }
+  ],
+  "buses": [
+   {
+    "bitrate": 500000,
+    "description": "the bus the OpenHaldex sits on",
+    "frames": [
+     {
+      "id": "0x6B0",
+      "min_len": 8,
+      "name": "OpenHaldex_state",
+      "notes": "README 'CAN Broadcast'.",
+      "sender": "OpenHaldex",
+      "signals": [
+       {
+        "kind": "number",
+        "len": 8,
+        "name": "standalone_flags",
+        "notes": "Standalone flags (bitmask for Gen1/2/4/5).",
+        "start": 8
+       },
+       {
+        "kind": "number",
+        "len": 8,
+        "name": "requested",
+        "notes": "Engagement requested by the firmware.",
+        "start": 16,
+        "unit": "%"
+       },
+       {
+        "kind": "number",
+        "len": 8,
+        "name": "actual",
+        "notes": "Lock percent returned by the differential.",
+        "start": 24,
+        "unit": "%"
+       },
+       {
+        "kind": "number",
+        "len": 8,
+        "name": "speed",
+        "notes": "Vehicle speed.",
+        "start": 32,
+        "unit": "km/h"
+       },
+       {
+        "kind": "number",
+        "len": 8,
+        "name": "mode_override",
+        "notes": "Legacy mode-override flag.",
+        "start": 40
+       },
+       {
+        "kind": "enum",
+        "len": 8,
+        "name": "mode",
+        "notes": "Mode index.",
+        "start": 48,
+        "values": [
+         {
+          "name": "stock",
+          "raw": 0
+         },
+         {
+          "name": "fwd",
+          "raw": 1
+         },
+         {
+          "name": "5050",
+          "raw": 2
+         },
+         {
+          "name": "6040",
+          "raw": 3
+         },
+         {
+          "name": "7525",
+          "raw": 4
+         },
+         {
+          "name": "expert",
+          "raw": 5
+         }
+        ]
+       },
+       {
+        "kind": "number",
+        "len": 8,
+        "name": "pedal",
+        "notes": "Driver's pedal.",
+        "start": 56,
+        "unit": "%"
+       }
+      ],
+      "validation": "synthetic-tested"
+     },
+     {
+      "id": "0x6A0",
+      "min_len": 1,
+      "name": "OpenHaldex_command",
+      "notes": "README 'Change Mode': byte 0 = mode index + 1.",
+      "sender": "tester",
+      "signals": [
+       {
+        "kind": "enum",
+        "len": 8,
+        "name": "mode_command",
+        "notes": "Requested mode.",
+        "start": 0,
+        "values": [
+         {
+          "name": "stock",
+          "raw": 1
+         },
+         {
+          "name": "fwd",
+          "raw": 2
+         },
+         {
+          "name": "5050",
+          "raw": 3
+         },
+         {
+          "name": "6040",
+          "raw": 4
+         },
+         {
+          "name": "7525",
+          "raw": 5
+         },
+         {
+          "name": "expert",
+          "raw": 6
+         }
+        ]
+       }
+      ],
+      "validation": "synthetic-tested"
+     }
+    ],
+    "name": "openhaldex",
+    "notes": "Only sent with 'Broadcast over CAN' enabled on the unit."
+   }
+  ],
+  "checksum": null,
+  "diagnostics": [
+   {
+    "bitrate": 500000,
+    "layer": "uds",
+    "name": "uds",
+    "notes": "include/OpenHaldexC6_canID.h; tested against a simulator.",
+    "rx_id": "0x779",
+    "transport": "iso_tp",
+    "tx_id": "0x70F",
+    "validation": "synthetic-tested"
+   }
+  ],
+  "ecudefs": [],
+  "family": "OpenHaldex",
+  "flash": null,
+  "gearsets": [],
+  "id": "openhaldex-c6",
+  "identify": {
+   "gearbox_codes": [
+    "OpenHaldex"
+   ],
+   "part_numbers": [],
+   "sw_numbers": []
+  },
+  "kind": "other",
+  "live": [
+   {
+    "name": "commanded lock",
+    "source": {
+     "byte": 0,
+     "did": "0xFDA0",
+     "kind": "uds_did",
+     "len": 1
+    },
+    "unit": "%"
+   },
+   {
+    "name": "engagement (raw)",
+    "source": {
+     "byte": 1,
+     "did": "0xFDA0",
+     "kind": "uds_did",
+     "len": 1
+    },
+    "unit": ""
+   },
+   {
+    "name": "mode index",
+    "source": {
+     "byte": 2,
+     "did": "0xFDA0",
+     "kind": "uds_did",
+     "len": 1
+    },
+    "unit": ""
+   },
+   {
+    "name": "slip FL",
+    "notes": "-128 = no value.",
+    "source": {
+     "byte": 0,
+     "did": "0xFDA1",
+     "kind": "uds_did",
+     "len": 1,
+     "signed": true
+    },
+    "unit": ""
+   },
+   {
+    "name": "slip FR",
+    "notes": "-128 = no value.",
+    "source": {
+     "byte": 1,
+     "did": "0xFDA1",
+     "kind": "uds_did",
+     "len": 1,
+     "signed": true
+    },
+    "unit": ""
+   },
+   {
+    "name": "slip RL",
+    "notes": "-128 = no value.",
+    "source": {
+     "byte": 2,
+     "did": "0xFDA1",
+     "kind": "uds_did",
+     "len": 1,
+     "signed": true
+    },
+    "unit": ""
+   },
+   {
+    "name": "slip RR",
+    "notes": "-128 = no value.",
+    "source": {
+     "byte": 3,
+     "did": "0xFDA1",
+     "kind": "uds_did",
+     "len": 1,
+     "signed": true
+    },
+    "unit": ""
+   },
+   {
+    "name": "mode (broadcast)",
+    "source": {
+     "bus": "openhaldex",
+     "frame": "OpenHaldex_state",
+     "kind": "can_signal",
+     "signal": "mode"
+    },
+    "unit": ""
+   },
+   {
+    "name": "lock actual (broadcast)",
+    "source": {
+     "bus": "openhaldex",
+     "frame": "OpenHaldex_state",
+     "kind": "can_signal",
+     "signal": "actual"
+    },
+    "unit": "%"
+   }
+  ],
+  "maker": "Forbes Automotive",
+  "name": "OpenHaldex controller (open-source Haldex lock-request box)",
+  "notes": "Aftermarket box that sits between the car and the Haldex and rewrites the lock request. Its CAN broadcast/command frames and supplier UDS DIDs as opentune-haldex implements them (parity-tested). The mode write is done by `opentune haldex mode set` (confirm-gated, read back).",
+  "safety": [
+   "Changing the AWD lock changes how the car drives. Only act with the car stationary or in a safe place, and know how to return to stock behaviour.",
+   "Mode changes are writes: they need --confirm and are read back; a disabled controller ignores them."
+  ],
+  "sources": [
+   {
+    "license": "MIT",
+    "title": "Forbes-Automotive/OpenHaldex-C6",
+    "url": "https://github.com/Forbes-Automotive/OpenHaldex-C6",
+    "used_for": "Gen4 TP2.0 address and measuring groups, Gen4/Gen5 status-byte meanings, lever scale, OpenHaldex frames and DIDs, public CAN captures"
+   },
+   {
+    "license": "MIT",
+    "title": "dandwyer/OpenHaldex-S3, ABangingDonk/OpenHaldexDue",
+    "url": "https://github.com/dandwyer/OpenHaldex-S3",
+    "used_for": "cross-checks of the frame layouts"
+   }
+  ],
+  "tables": [],
+  "units": [],
+  "validation": "synthetic-tested",
+  "vehicles": [
+   "VAG PQ / MQB cars with a Haldex Gen1/2/4/5 coupling"
+  ]
+ },
+ "vag-dq250-02e": {
+  "adaptations": [],
+  "buses": [],
+  "checksum": null,
+  "diagnostics": [
+   {
+    "bitrate": 500000,
+    "layer": "kwp2000",
+    "name": "kwp-isotp",
+    "notes": "OBD transmission ids, as in the ecudef; not confirmed for 02E.",
+    "rx_id": "0x7E9",
+    "transport": "iso_tp",
+    "tx_id": "0x7E1",
+    "validation": "implemented"
+   },
+   {
+    "bitrate": 500000,
+    "identification": "1A9B",
+    "layer": "kwp2000",
+    "name": "tp20",
+    "notes": "VAG gearbox logical address; rx_id is the id the tester asks the unit to send on. `opentune dsg identify|dtcs|groups` is the read-only engine (opentune-dsg): session 0x89 and identification 1A9B as on the Haldex Gen4 path, tested only against a scripted responder over the core TP2.0 simulator. Raw-CAN adapters only (socketcan, slcan, gsusb). Not tried on a car.",
+    "rx_id": "0x300",
+    "session": "0x89",
+    "tp20_address": "0x02",
+    "transport": "vwtp20",
+    "validation": "synthetic-tested"
+   }
+  ],
+  "ecudefs": [
+   "temic-dq250-02e",
+   "temic-dq250-02e-tricore"
+  ],
+  "family": "DQ250 (02E)",
+  "flash": null,
+  "gearsets": [],
+  "id": "vag-dq250-02e",
+  "identify": {
+   "gearbox_codes": [
+    "02E"
+   ],
+   "part_numbers": [
+    "02E300",
+    "02E927"
+   ],
+   "sw_numbers": []
+  },
+  "kind": "tcu",
+  "live": [],
+  "maker": "Temic",
+  "name": "VAG DQ250 6-speed DSG (02E, PQ35/PQ46) - Temic TCU J743",
+  "notes": "Controller view of the 02E mechatronic. Flash layout, maps and checksum live in the two ecudefs (one per software generation): temic-dq250-02e (PowerPC, dq250-02e checksum real-image-tested 78/78, 30 shift tables MEDIUM) and temic-dq250-02e-tricore (no checksum). Diagnostics: neither channel is confirmed for 02E; PQ-era workshop diagnostics commonly run KWP2000 over VW TP2.0. live[] is intentionally empty: the meaning of each 02E measuring group is parked until a real capture exists; add kwp_measuring_block entries here from a capture and `opentune dsg groups` labels those cells (all others read as unconfirmed). See docs/DSG.md.",
+  "safety": [
+   "A DSG TCU controls clutch pressure. Wrong shift or clutch data can damage the clutches or the gearbox and can make a car move unexpectedly. Edit by ratio, keep downshift points below their upshift points, and keep a verified stock read.",
+   "Only calibration editing is in scope: no launch-control, torque-limiter or protection defeat.",
+   "Bench reads: current-limited supply, fused +12 V, CAN terminated (see the database unit)."
+  ],
+  "sources": [
+   {
+    "license": "GPL-3.0-or-later",
+    "title": "OpenTune's own analysis of real 02E reads (docs/DSG.md)",
+    "url": "",
+    "used_for": "layout, checksum and maps (in the linked ecudefs)"
+   }
+  ],
+  "tables": [],
+  "units": [
+   "temic-dq250-vag"
+  ],
+  "validation": "real-image-tested",
+  "vehicles": [
+   "Golf V/VI",
+   "Jetta",
+   "Passat B6/CC",
+   "Audi A3 8P",
+   "TT 8J",
+   "Seat Leon",
+   "Skoda Octavia"
+  ]
+ },
+ "vag-dq250-mqb": {
+  "adaptations": [],
+  "buses": [],
+  "checksum": null,
+  "diagnostics": [
+   {
+    "bitrate": 500000,
+    "layer": "uds",
+    "name": "uds",
+    "notes": "VW_Flash / opendbc. Not tried on a car.",
+    "rx_id": "0x7E9",
+    "transport": "iso_tp",
+    "tx_id": "0x7E1",
+    "validation": "implemented"
+   }
+  ],
+  "ecudefs": [
+   "temic-dq250-mqb"
+  ],
+  "family": "DQ250 (0D9)",
+  "flash": null,
+  "gearsets": [],
+  "id": "vag-dq250-mqb",
+  "identify": {
+   "gearbox_codes": [
+    "0D9"
+   ],
+   "part_numbers": [
+    "0D9300"
+   ],
+   "sw_numbers": []
+  },
+  "kind": "tcu",
+  "live": [],
+  "maker": "Temic",
+  "name": "VAG DQ250 6-speed DSG (0D9, MQB) - Temic TCU",
+  "notes": "Layout and JAMCRC checksum in the ecudef temic-dq250-mqb (synthetic-tested; no real 0D9 read). UDS on 0x7E1/0x7E9 per VW_Flash/opendbc. See docs/DSG.md.",
+  "safety": [
+   "A DSG TCU controls clutch pressure. Wrong shift or clutch data can damage the clutches or the gearbox and can make a car move unexpectedly. Edit by ratio, keep downshift points below their upshift points, and keep a verified stock read.",
+   "Only calibration editing is in scope: no launch-control, torque-limiter or protection defeat.",
+   "Bench reads: current-limited supply, fused +12 V, CAN terminated (see the database unit)."
+  ],
+  "sources": [
+   {
+    "license": "BSD-2-Clause",
+    "title": "bri3d/VW_Flash",
+    "url": "https://github.com/bri3d/VW_Flash",
+    "used_for": "UDS ids, block layout, JAMCRC"
+   },
+   {
+    "license": "MIT",
+    "title": "bri3d/mqb-flash-rs",
+    "url": "https://github.com/bri3d/mqb-flash-rs",
+    "used_for": "block table"
+   },
+   {
+    "license": "GPL-3.0",
+    "title": "TheFlashBold/DQ250-MQB-Bench-Flash",
+    "url": "https://github.com/TheFlashBold/DQ250-MQB-Bench-Flash",
+    "used_for": "bench read path"
+   }
+  ],
+  "tables": [],
+  "units": [
+   "temic-dq250-mqb-vag"
+  ],
+  "validation": "synthetic-tested",
+  "vehicles": [
+   "MQB DQ250 applications (Golf 7 GTI/R, Audi S3 8V, ...)"
+  ]
+ },
+ "vag-dq381": {
+  "adaptations": [],
+  "buses": [],
+  "checksum": null,
+  "diagnostics": [
+   {
+    "bitrate": 500000,
+    "layer": "uds",
+    "name": "uds",
+    "notes": "OBD transmission ids, as in the ecudef. Not tried on a car.",
+    "rx_id": "0x7E9",
+    "transport": "iso_tp",
+    "tx_id": "0x7E1",
+    "validation": "implemented"
+   }
+  ],
+  "ecudefs": [
+   "bosch-dq381"
+  ],
+  "family": "DQ381",
+  "flash": null,
+  "gearsets": [],
+  "id": "vag-dq381",
+  "identify": {
+   "gearbox_codes": [
+    "0GC"
+   ],
+   "part_numbers": [
+    "0GC927",
+    "0GC300"
+   ],
+   "sw_numbers": []
+  },
+  "kind": "tcu",
+  "live": [],
+  "maker": "Bosch",
+  "name": "VAG DQ381 7-speed wet DSG (0GC) - Bosch TCU",
+  "notes": "Layout and the dq381 CRC-32 (real-image-tested) live in the ecudef bosch-dq381. No maps shipped. Boot reads and seed/key research stay out of the public tree.",
+  "safety": [
+   "A DSG TCU controls clutch pressure. Wrong shift or clutch data can damage the clutches or the gearbox and can make a car move unexpectedly. Edit by ratio, keep downshift points below their upshift points, and keep a verified stock read.",
+   "Only calibration editing is in scope: no launch-control, torque-limiter or protection defeat.",
+   "Bench reads: current-limited supply, fused +12 V, CAN terminated (see the database unit)."
+  ],
+  "sources": [
+   {
+    "license": "MIT",
+    "title": "dspl1236/vag-tcu-tools",
+    "url": "https://github.com/dspl1236/vag-tcu-tools",
+    "used_for": "DQ381 CRC-32 layout"
+   }
+  ],
+  "tables": [],
+  "units": [
+   "bosch-dq381-vag"
+  ],
+  "validation": "real-image-tested",
+  "vehicles": [
+   "MQB DQ381 applications"
+  ]
+ },
+ "zf-8hp-gen1": {
+  "adaptations": [],
+  "buses": [],
+  "checksum": "zf8hp",
+  "diagnostics": [],
+  "ecudefs": [],
+  "family": "8HP Gen1",
+  "flash": {
+   "full_read": "bench_boot",
+   "notes": "AL551 (method 0x22) image offsets from the zf8hp checksum handler: CRC-32 over 0x190000..=0x1FFD5F, stored at 0x180244. AES variants and Gen3 TriCore are not covered.",
+   "regions": [
+    {
+     "name": "cal_data",
+     "region": {
+      "address": 1638400,
+      "length": 458080
+     },
+     "writable": false
+    }
+   ],
+   "size": 0
+  },
+  "gearsets": [
+   {
+    "applies_to": [
+     "8HP45"
+    ],
+    "gears": [
+     {
+      "gear": "1",
+      "ratio": 4.7143
+     },
+     {
+      "gear": "2",
+      "ratio": 3.1429
+     },
+     {
+      "gear": "3",
+      "ratio": 2.1064
+     },
+     {
+      "gear": "4",
+      "ratio": 1.6667
+     },
+     {
+      "gear": "5",
+      "ratio": 1.2854
+     },
+     {
+      "gear": "6",
+      "ratio": 1.0
+     },
+     {
+      "gear": "7",
+      "ratio": 0.8387
+     },
+     {
+      "gear": "8",
+      "ratio": 0.6667
+     },
+     {
+      "gear": "R",
+      "ratio": -3.2952
+     }
+    ],
+    "name": "8HP45 (Gen1)",
+    "notes": "",
+    "source": "Wikipedia 'ZF 8HP transmission' (facts)"
+   },
+   {
+    "applies_to": [
+     "8HP55",
+     "8HP65",
+     "8HP70",
+     "8HP90"
+    ],
+    "gears": [
+     {
+      "gear": "1",
+      "ratio": 4.7143
+     },
+     {
+      "gear": "2",
+      "ratio": 3.1429
+     },
+     {
+      "gear": "3",
+      "ratio": 2.1064
+     },
+     {
+      "gear": "4",
+      "ratio": 1.6667
+     },
+     {
+      "gear": "5",
+      "ratio": 1.2847
+     },
+     {
+      "gear": "6",
+      "ratio": 1.0
+     },
+     {
+      "gear": "7",
+      "ratio": 0.8392
+     },
+     {
+      "gear": "8",
+      "ratio": 0.6667
+     },
+     {
+      "gear": "R",
+      "ratio": -3.3168
+     }
+    ],
+    "name": "8HP55/65/70/90 (Gen1)",
+    "notes": "",
+    "source": "Wikipedia 'ZF 8HP transmission' (facts)"
+   }
+  ],
+  "id": "zf-8hp-gen1",
+  "identify": {
+   "gearbox_codes": [
+    "8HP45",
+    "8HP55",
+    "8HP70",
+    "8HP90",
+    "AL551"
+   ],
+   "part_numbers": [],
+   "sw_numbers": []
+  },
+  "kind": "tcu",
+  "live": [],
+  "maker": "ZF",
+  "name": "ZF 8HP first-generation TCU (8HP45/55/70/90)",
+  "notes": "Drop-in example of a non-VAG controller: identity, the zf8hp CAL checksum (AL551 generation, CRC-32 vectors + synthetic only) and the first-generation gear ratios. The CAL_DATA region is the one the zf8hp checksum covers in an AL551 image; the full image size and other regions are not claimed. Diagnostics differ per brand (BMW, Audi, FCA) and are not declared until a cited source documents them.",
+  "safety": [
+   "An 8HP TCU controls clutch pressures: wrong calibration data can destroy clutches or make the car move unexpectedly.",
+   "The 8HP TCU has no internal CAN termination; on the bench fit 120 ohm at the TCU and apply the main supply before wake-up (database unit)."
+  ],
+  "sources": [
+   {
+    "license": "MIT",
+    "title": "dspl1236/vag-tcu-tools",
+    "url": "https://github.com/dspl1236/vag-tcu-tools",
+    "used_for": "ZF 8HP AL551 CAL CRC-32 layout"
+   },
+   {
+    "license": "facts",
+    "title": "Wikipedia: ZF 8HP transmission",
+    "url": "https://en.wikipedia.org/wiki/ZF_8HP_transmission",
+    "used_for": "first-generation gear ratios"
+   }
+  ],
+  "tables": [],
+  "units": [
+   "zf-8hp-gen1"
+  ],
+  "validation": "synthetic-tested",
+  "vehicles": [
+   "BMW F-series",
+   "Audi (AL551, 8HP55/8HP90)",
+   "Chrysler / Dodge / Jeep 8HP Gen1"
+  ]
+ }
+}

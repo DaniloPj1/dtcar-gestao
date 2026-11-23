@@ -2,3 +2,9 @@
 node_modules/
 worker/node_modules/
 teste/telas/
+
+# Extrato cru da base do HDS: entra no repositório só o que for traduzido e reescrito.
+catalogo/falhas/_extrato.json
+
+# Cache do Python dos geradores do catálogo: não é fonte nem dado.
+catalogo/__pycache__/

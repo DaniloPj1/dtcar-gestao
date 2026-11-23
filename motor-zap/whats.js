@@ -97,8 +97,33 @@ export async function jidParaEnvio(sock, tel) {
   return null;
 }
 
+/** Hora de Brasília (0–23). Sem a tabela de fusos no aparelho, cai em UTC−3 (Brasília não tem horário de verão desde 2019). */
+export function horaBrasilia(agora = new Date()) {
+  try { return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(agora)); }
+  catch (_) { return new Date(agora.getTime() - 10800000).getUTCHours(); }
+}
+
+/** Corrige a saudação do começo da mensagem para a hora em que ela está SAINDO. A mensagem é montada quando o
+ *  Danilo clica, mas a fila pode segurar até o dia seguinte: sem isso, uma montada às 19h sairia "Boa noite" às 8h.
+ *  Só a primeira saudação, nas primeiras linhas (o título vem antes); texto sem saudação não é tocado. */
+export function comSaudacaoDoEnvio(texto, agora = new Date()) {
+  const s = String(texto || "");
+  if (!s) return s;
+  const h = horaBrasilia(agora);
+  const certa = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  const linhas = s.split("\n");
+  for (let i = 0; i < Math.min(linhas.length, 4); i++) {
+    const m = /^(Bom dia|Boa tarde|Boa noite)\b/.exec(linhas[i]);
+    if (!m) continue;
+    if (m[1] !== certa) linhas[i] = certa + linhas[i].slice(m[1].length);
+    return linhas.join("\n");
+  }
+  return s;
+}
+
 /** Envia texto como uma pessoa: "digitando…" por alguns segundos, depois a mensagem. Devolve o id da mensagem. */
 export async function enviarTexto(sock, jid, texto, esperar = (ms) => new Promise((r) => setTimeout(r, ms))) {
+  texto = comSaudacaoDoEnvio(texto);
   try { await sock.presenceSubscribe(jid); } catch (_) { /* opcional */ }
   try { await sock.sendPresenceUpdate("composing", jid); } catch (_) { /* opcional */ }
   await esperar(Math.min(1500 + String(texto).length * 35, 6000));

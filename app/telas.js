@@ -5,11 +5,10 @@
 // para orçar e envia; o Danilo monta o orçamento no sistema; a O.S. e o orçamento abertos aceitam "mais coisas a orçar"); a placa digitada vale
 // só na tela em que foi digitada (sair da tela sem gravar limpa tudo); o botão Voltar do celular volta de tela em tela e só sai do app no Início;
 // NENHUMA tela do sistema abre dentro do app: tudo (O.S., histórico, orçamento) é desenhado aqui, no leiaute do app, e sem preço para o mecânico.
-import { html, render, createContext, useState, useEffect, useRef, useMemo, useContext } from "../js/lib.js";
+import { html, render, useState, useEffect, useRef, useMemo } from "../js/lib.js";
 import { useLayoutEffect } from "../vendor/preact-htm.js";
 import { api } from "../js/api.js";
-import { soDig, norm, normPlaca, placaValida, exPlaca, fmtTel, fmtData, fmtKm, hojeISO, numOS, numORC, reais, fmtDoc, lsGet, lsSet, linkWhats } from "../js/util.js";
-import { consultarPlaca, paraFicha, anoFabMod } from "../js/placa.js";
+import { soDig, norm, normPlaca, exPlaca, fmtTel, fmtData, fmtKm, hojeISO, numOS, numORC, reais, fmtDoc, lsGet, lsSet, linkWhats } from "../js/util.js";
 import { carregarCatalogo, pesquisar, pesquisarVeiculo, indiceEstoque, filtroParaMostrar, resumoOleo, periodoTexto, TIPOS_FILTRO, MARCAS_PRINCIPAIS } from "../js/catalogo.js";
 import { carregarPecas, pecasDoVeiculo, filtrarPecas, agruparEquivalentes, conversaoDoItem, chaveDaPeca } from "../js/pecas.js";
 import { copiaClienteDig } from "../js/clientedig.js";
@@ -17,6 +16,10 @@ import { pode, STATUS, situacaoOS, cfgCompleta } from "../js/regras.js";
 import { ICONE_D, catalogoDoApp, nomeItemApp, opcoesPosicao } from "../js/appmecanico.js";
 import { acessoApp, foraDoHorario } from "../js/appacesso.js";
 import { MAIUSC } from "../js/maiusculas.js";
+import { novoVocabulario, corrigirFrase } from "../js/corretor.js";
+import { Ctx, useApp, Ic, GRUPOS, TELAS, ROTAS_RE, ir, rotaAtual, Cabecalho, Cartao, KV, Campo, Rodape, Quadro, nomeVeic, usarPlaca, BuscaPlaca, Veiculo, ModeloAMao, SairBotao, Tela, quadros, usarPasso, limparPlacaGuardada } from "./comum.js";
+import { Obd, Modulos, Atuadores, Aprendizados, Bico, ParametrosTela } from "./diag.js";
+export { limparPlacaGuardada };
 
 const LS_VISTOS = "dtcar-app-avisos-vistos";   // ids dos orçamentos aprovados/recusados que a pessoa já viu (avisos do app)
 const ABERTA = o => !["entregue", "cancelado", "recusado"].includes(o.status);   // O.S. em andamento (orçamento, execução ou aguardando pagamento)
@@ -25,152 +28,25 @@ const ORC_ABERTO = o => o.situacao === "elaboracao" || o.situacao === "enviado";
 const ORC_MEU = (o, perfil) => perfil.papel !== "mecanico" || o.consultor_id === perfil.id || o.criado_por === perfil.id;
 const etapaTexto = o => (situacaoOS(o) || STATUS[o.status] || {}).t || o.status;
 const SIT_ORC = { elaboracao: "Em elaboração no sistema", enviado: "Enviado ao cliente", aprovado: "Aprovado · virou O.S.", recusado: "Recusado" };
-const Ctx = createContext(null);
-const useApp = () => useContext(Ctx);
-
-/* ---------------- ícones (os mesmos do protótipo) ---------------- */
-const P = {
-  orc: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M12 12v5M9.5 14.5h5"/>',
-  os: '<path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.4-.6-.6-2.4z"/>',
-  ag: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
-  oleo: '<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>',
-  peca: '<path d="M21 8l-9-5-9 5v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/>',
-  help: '<path d="M12 21a9 9 0 1 0-9-9c0 1.6.4 3 1.2 4.2L3 21l4.8-1.2A9 9 0 0 0 12 21z"/><path d="M9.7 9.6a2.4 2.4 0 1 1 3.4 2.2c-.7.4-1.1.9-1.1 1.6M12 16.5h.01"/>',
-  exit: '<path d="M9 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>',
-  search: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>',
-  home: '<path d="M4 11l8-7 8 7M6 10v9h12v-9M10 19v-5h4v5"/>',
-  car: '<path d="M5 17h14M5 17v-6l2-5h10l2 5v6M5 17v2M19 17v2M8 13h.01M16 13h.01M5 11h14"/>',
-  down: '<path d="M6 9l6 6 6-6"/>',
-  trash: '<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5M14 11v5"/>',
-  check: '<path d="M5 12l5 5 10-11"/>',
-  sliders: '<path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/>',
-  share: '<circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.2 10.8l7.6-3.6M8.2 13.2l7.6 3.6"/>',
-  clip: '<path d="M9 4h6v3H9z"/><path d="M7 5H6a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-1"/><path d="M8 12h8M8 16h5"/>',
-  hist: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-  x: '<path d="M6 6l12 12M18 6L6 18"/>',
-  zap: '<path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z"/><path d="M9 8.5c0 3 2.5 5.5 5.5 6.5l1.5-1.5 2 1-.5 1.8c-4.5.6-9.4-4.3-8.8-8.8L10.5 7l1 2z"/>',
-};
-const Ic = ({ n, t = 24, sw = 2 }) => html`<svg width=${t} height=${t} viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width=${sw} stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0" dangerouslySetInnerHTML=${{ __html: P[n] }}></svg>`;
-
-/* ---------------- botões do Início e abas (ordem aprovada pelo Danilo) ---------------- */
-const TELAS = [
-  { r: "servico", ic: "os", barra: "INICIAR SERVIÇO", aba: "Iniciar serviço", titulo: "INICIAR SERVIÇO" },
-  { r: "oleo", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
-  { r: "orcamento", ic: "orc", barra: "ORÇAMENTOS", aba: "Orçamentos", titulo: "ORÇAMENTOS" },
-  { r: "agendar", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
-  { r: "agenda", ic: "ag", barra: "AGENDA", aba: "Agenda", titulo: "AGENDA" },
-  { r: "peca", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
-  { r: "historico", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
-  { r: "meus", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
-  { r: "osconsulta", ic: "clip", barra: "CONSULTAR O.S.", aba: "Consultar O.S.", titulo: "CONSULTAR O.S." },
-];
-const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta)$/;
-const ir = r => { location.hash = "#/" + r; };
-const rotaAtual = () => { const m = /^#\/([a-z]+)/.exec(location.hash || ""); return m ? m[1] : "inicio"; };
-
-/* ---------------- pedaços comuns ---------------- */
-function Cabecalho() {
-  const { sair } = useApp();
-  return html`<header class="cab"><div class="cab-linha"><img src="../icons/logo-branco-sm.png" alt="DTCar Centro Automotivo" />
-    <button type="button" class="sair" onClick=${sair}><${Ic} n="exit" t=${22} /> Sair</button></div></header>`;
-}
-function Abas({ ativa }) {
-  const { telas, avisos, indicacoes } = useApp();
-  return html`<nav class="abas" aria-label="Telas">${TELAS.filter(t => telas.includes(t.r)).map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : t.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</a>`)}</nav>`;
-}
-function Titulo({ tela, ajuda }) {
-  const t = TELAS.find(x => x.r === tela);
-  return html`<div class="titulo"><div class="meio"><${Ic} n=${t.ic} t=${22} sw=${1.9} /><b>${t.titulo}</b></div>
-    <button type="button" class="ajuda" aria-label="Ajuda desta tela" onClick=${ajuda}><${Ic} n="help" t=${24} sw=${1.8} /></button></div>`;
-}
-const Cartao = ({ titulo, children, id }) => html`<section class="cartao" id=${id}><h2>${titulo}</h2><div>${children}</div></section>`;
-const KV = ({ a, b, p }) => html`<div class="kv"><span>${a}:</span><i></i><b class=${p ? "p" : ""}>${b}</b></div>`;
-function Campo({ id, rotulo, children }) { return html`<div class="campo"><label for=${id}>${rotulo}</label>${children}</div>`; }
-function Rodape({ tela, acao }) {
-  const ref = useRef(null);
-  useEffect(() => { const el = ref.current; if (!el) return; const mede = () => document.documentElement.style.setProperty("--rodape-h", el.offsetHeight + "px"); mede();
-    const ro = typeof ResizeObserver === "function" ? new ResizeObserver(mede) : null; if (ro) ro.observe(el); return () => { if (ro) ro.disconnect(); }; }, []);
-  return html`<div class="rodape" ref=${ref}>${acao || null}
-    <nav class="nav" aria-label="Navegação"><a href="#/inicio" aria-current=${tela === "inicio" ? "page" : undefined}><${Ic} n="home" t=${22} sw=${1.9} />Início</a>
-    <a href="#/ajuda" aria-current=${tela === "ajuda" ? "page" : undefined}><${Ic} n="help" t=${22} sw=${1.9} />Ajuda</a></nav></div>`;
-}
-function Quadro({ titulo, onFechar, children }) {
-  // registrado antes de a tela ser pintada: o botão Voltar do celular já encontra o quadro aberto
-  useLayoutEffect(() => { const k = e => e.key === "Escape" && onFechar(); document.addEventListener("keydown", k); quadros.push(onFechar); return () => { document.removeEventListener("keydown", k); const i = quadros.indexOf(onFechar); if (i >= 0) quadros.splice(i, 1); }; }, []);
-  return html`<div class="fundo-quadro" onClick=${e => { if (e.target === e.currentTarget) onFechar(); }}><section class="quadro" role="dialog" aria-modal="true" aria-label=${titulo}><h2>${titulo}</h2>${children}</section></div>`;
-}
-/** nome do carro para as telas */
-const nomeVeic = v => [v.marca, v.modelo].filter(Boolean).join(" ");
-
-/* ---------------- veículo: busca pela placa (um lugar só para todas as telas) ----------------
- * Regra do Danilo: placa do cadastro usa o cadastro (sem custo); placa nova consulta a função "placa" (básica), que guarda a cópia
- * no banco da DTCar. A placa vale só na tela em que foi digitada: sair da tela limpa (pedido do Danilo, 16/11/2026). */
-/** Placa buscada no Início fica guardada (sessionStorage) até uma nova busca ou "limpar": sair da tela e voltar mostra o mesmo carro
- *  (pedido do Danilo, 16/11/2026 à noite). As outras telas continuam sem memória: a placa vale só ali. */
-const CH_PLACA_INICIO = "dtcar-app-placa-inicio";
-const lerPlacaGuardada = () => { try { const v = JSON.parse(sessionStorage.getItem(CH_PLACA_INICIO) || "null"); return v && v.veic ? v : { texto: "" }; } catch (e) { return { texto: "" }; } };
-// guarda o carro e, do dono, só id/nome/telefone (não a ficha inteira)
-const guardarPlaca = p => { try { if (p && p.veic) { const c = p.veic.cliente; sessionStorage.setItem(CH_PLACA_INICIO, JSON.stringify({ texto: p.texto, veic: { ...p.veic, cliente: c ? { id: c.id, nome: c.nome, telefone: c.telefone || "" } : null } })); } else sessionStorage.removeItem(CH_PLACA_INICIO); } catch (e) { /* sem espaço */ } };
-export const limparPlacaGuardada = () => guardarPlaca(null);
-function usarPlaca(guardar = false) {
+/* ---- MEUS SERVIÇOS no Início (pedido do Danilo, 23/11/2026) ----
+ * O mecânico abria o app e não via em que carro estava: MEUS SERVIÇOS era o 8º botão da lista.
+ * Agora o que está na mão dele aparece no alto do Início, com o tempo correndo, e um toque leva
+ * para Iniciar serviço, que é onde se pausa e se finaliza. Sem nada aberto, o cartão continua
+ * aparecendo com o caminho para o histórico da quinzena: é o acompanhamento dele, não um aviso. */
+function MeusAgora() {
   const { dados } = useApp();
-  const [placa, setPlacaBruto] = useState(() => guardar ? lerPlacaGuardada() : { texto: "" });
-  const setPlaca = p => { setPlacaBruto(p); if (guardar) guardarPlaca(p); };
-  const buscar = async (texto) => {
-    const p = normPlaca(texto);
-    if (!placaValida(p)) { setPlaca({ texto, erro: "Digite a placa inteira (ABC1234 ou ABC1D23)." }); return null; }
-    const cad = dados.veiculos.find(v => v.placa === p);
-    if (cad) {
-      const cli = dados.clientes.find(c => c.id === cad.cliente_id) || null;
-      const v = { placa: p, id: cad.id, marca: cad.marca || "", modelo: cad.modelo || "", ano: cad.ano || anoFabMod(cad.ano_fab, cad.ano_mod) || "", cor: cad.cor || "", motor: cad.motor || "", combustivel: cad.combustivel || "", km_atual: cad.km_atual, cliente: cli, origem: "cadastro" };
-      setPlaca({ texto: p, veic: v }); return v;
-    }
-    setPlaca({ texto: p, buscando: true });
-    const r = await consultarPlaca(p, "basico", { manual: true });
-    if (r.ok && r.encontrado) {
-      const d = r.dados || {}, f = paraFicha(d);
-      const v = { placa: p, id: null, marca: f.marca, modelo: f.modelo, ano: anoFabMod(f.ano_fab, f.ano_mod), ano_fab: f.ano_fab, ano_mod: f.ano_mod, cor: f.cor, motor: f.motor, combustivel: f.combustivel, chassi: f.chassi, renavam: f.renavam, cliente: null, origem: r.origem === "api" ? "api" : "copia" };
-      setPlaca({ texto: p, veic: v }); return v;
-    }
-    setPlaca({ texto: p, naoAchou: true, motivo: r.ok ? "Placa não encontrada na consulta." : r.semRede ? "Sem internet para consultar a placa." : r.sem_saldo ? "Sem saldo no API Placas." : r.desligada ? "Consulta de placa desligada." : (r.erro || "A consulta não respondeu.") });
-    return null;
-  };
-  const limpar = () => setPlaca({ texto: "" });
-  return { placa, buscar, limpar, veic: placa.veic || null };
-}
-function BuscaPlaca({ id, titulo = "Buscar por placa", pl }) {
-  const { placa, buscar, limpar } = pl;
-  const [t, setT] = useState(placa.texto || "");
-  useEffect(() => { setT(placa.texto || ""); }, [placa.texto]);
-  // a busca lê o valor direto do campo: Enter logo depois de digitar não pode pegar o texto antigo (corrida de estado)
-  const campo = useRef(null);
-  const buscarAgora = () => buscar(campo.current ? campo.current.value : t);
-  const v = placa.veic;
-  const linha = placa.buscando ? html`<div class="achou buscando" role="status">Consultando a placa…</div>`
-    : v ? html`<div class="achou" role="status"><${Ic} n="check" t=${16} sw=${2.4} />${v.origem === "cadastro" ? "Placa gravada no banco da DTCar" : v.origem === "copia" ? "Placa consultada antes: sem custo" : "Placa nova: consultada e gravada"}</div>`
-    : placa.naoAchou ? html`<div class="achou nao" role="status">${placa.motivo} Digite o modelo abaixo.</div>`
-    : placa.erro ? html`<div class="achou nao" role="status">${placa.erro}</div>` : null;
-  return html`<${Cartao} titulo=${titulo}>${linha}
-    <${Campo} id=${id} rotulo="Placa"><div class="linha"><input id=${id} ref=${campo} class="inp placa" autocomplete="off" autocapitalize="characters" maxlength="8" placeholder="ABC1D23" value=${t}
-        onInput=${e => setT(e.target.value)} onKeyDown=${e => { if (e.key === "Enter") buscarAgora(); }} onBlur=${e => { const x = e.target.value; if (normPlaca(x).length === 7 && normPlaca(x) !== placa.texto && !placa.buscando) buscar(x); }} />
-      <button type="button" class="btn-busca g" aria-label="Buscar pela placa" onClick=${buscarAgora}><${Ic} n="search" t=${22} /></button>
-      ${t ? html`<button type="button" class="btn-busca g" style="background:#fff;color:#6b727b;border:1px solid #d3d7dc" aria-label="Limpar a placa" onClick=${() => { setT(""); limpar(); }}><${Ic} n="trash" t=${20} /></button>` : null}</div></${Campo}>
-    <div class="nota">Placa já gravada não gera nova consulta paga. Placa nova é consultada uma vez e fica salva.</div></${Cartao}>`;
-}
-function Veiculo({ v }) {
-  if (!v) return null;
-  return html`<div class="veic" id="veic"><div class="lado"><${Ic} n="car" t=${44} sw=${1.6} /><small>${v.marca || "—"}</small></div>
-    <div class="dados"><div>Placa: <b>${exPlaca(v.placa)}</b></div><div>Marca: <b>${(v.marca || "—").toUpperCase()}</b></div><div>Modelo: <b>${(v.modelo || "—").toUpperCase()}</b></div><div>Ano: <b>${v.ano || "—"}</b></div>
-      ${v.cliente ? html`<div>Dono: <b>${v.cliente.nome}</b></div>` : null}</div></div>`;
-}
-/** quando a placa não está em lugar nenhum: modelo e ano à mão */
-function ModeloAMao({ valor, onMuda }) {
-  return html`<${Cartao} titulo="Carro"><div class="grade-cep" style="grid-template-columns:minmax(0,1fr) 110px">
-    <${Campo} id="mm-modelo" rotulo="Modelo do carro"><input id="mm-modelo" class="inp" autocomplete="off" placeholder="Ex.: onix 1.0, hilux 2.8" value=${valor.modelo} onInput=${e => onMuda({ ...valor, modelo: e.target.value })} /></${Campo}>
-    <${Campo} id="mm-ano" rotulo="Ano"><input id="mm-ano" class="inp livre" inputmode="numeric" maxlength="4" placeholder="Opcional" value=${valor.ano} onInput=${e => onMuda({ ...valor, ano: e.target.value.replace(/\D/g, "").slice(0, 4) })} /></${Campo}></div></${Cartao}>`;
+  const meus = dados.meusAbertos || [];
+  const ordemDe = s => dados.ordens.find(o => o.id === s.ordem_id) || { numero: s.os_numero, veiculo: {} };
+  return html`<${Cartao} titulo="Meus serviços" id="ini-meus">
+    ${!meus.length ? html`<div class="nota">Nenhum serviço em andamento agora. Quando pegar um carro, use <b>Iniciar serviço</b>.</div>` : null}
+    ${meus.map(s => { const o = ordemDe(s), v = o.veiculo || {}; const pausado = s.situacao === "pausado";
+      return html`<button type="button" key=${s.id} class="item-linha toque" data-meu=${s.id} onClick=${() => ir("servico")}>
+        <span><b>${[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" ") || numOS(o.numero)}</b><br />
+          <span class="nota">${numOS(o.numero)} · ${tempoTxt(minutosAp(s))} · <span class=${pausado ? "selo atencao" : "selo"}>${pausado ? "Pausado" : "Em andamento"}</span></span></span><${Ic} n="down" t=${18} /></button>`; })}
+    <button type="button" class="link" id="ini-meus-ver" onClick=${() => ir("meus")}>${meus.length ? "Ver todos os meus serviços" : "Ver os meus serviços da quinzena"}</button>
+  </${Cartao}>`;
 }
 
-/* ---------------- INÍCIO ---------------- */
 function Inicio() {
   const { perfil, telas, dados, avisos, indicacoes, recarregarServicos } = useApp();
   const { placa, buscar, limpar } = usarPlaca(true);
@@ -200,7 +76,17 @@ function Inicio() {
           ${fechadas.length ? html`<div class="sec"><h3>Histórico de serviços</h3>${fechadas.slice(0, 5).map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => setOsAberta(o)}><span><b>${fmtData((o.criado_em || "").slice(0, 10))}</b>${o.km_entrada ? " · " + fmtKm(o.km_entrada) : ""}<br /><span class="nota">${numOS(o.numero)} · ${o.reclamacao ? String(o.reclamacao).slice(0, 70) : etapaTexto(o)}</span></span><${Ic} n="down" t=${18} /></button>`)}
             ${fechadas.length > 5 ? html`<button type="button" class="link" onClick=${() => ir("historico")}>Ver todo o histórico</button>` : null}</div>` : null}</${Cartao}>` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
-      ${TELAS.filter(b => telas.includes(b.r)).map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</button>`)}
+      ${telas.includes("meus") ? html`<${MeusAgora} />` : null}
+      ${GRUPOS.map(gr => {
+        // Do carro, o Início mostra só LER O CARRO: Módulos, Atuadores, Aprendizados, Programar bico e
+        // Parâmetros ficam DENTRO dele (botões Outros módulos e Serviços avançados) — pedido do Danilo, 21/11/2026.
+        const botoes = TELAS.filter(b => b.g === gr.g && telas.includes(b.r) && (b.g !== "diagnostico" || b.r === "obd" || !telas.includes("obd")));
+        if (!botoes.length) return null;
+        return html`<div key=${gr.g} class="grupo">
+          ${GRUPOS.filter(x => TELAS.some(b => b.g === x.g && telas.includes(b.r))).length > 1 ? html`<h3 class="grupo-t">${gr.t}</h3>` : null}
+          ${botoes.map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : b.r === "meus" && (dados.meusAbertos || []).length ? html`<span class="bolinha" aria-label=${(dados.meusAbertos || []).length + " serviço(s) em aberto"}>${(dados.meusAbertos || []).length}</span>` : null}</button>`)}
+        </div>`;
+      })}
       ${osAberta ? html`<${OSDetalhe} o=${osAberta} onFechar=${() => setOsAberta(null)} />` : null}
       ${!telas.length ? html`<div class="vazio">Nenhuma tela liberada para o seu login. Peça ao administrador (Sistema › Equipe).</div>` : null}
     </main>
@@ -210,16 +96,6 @@ function Inicio() {
       <p class="nota">Placa que está no cadastro não custa nada. Placa nova é consultada uma vez e fica gravada no banco da DTCar.</p>
       <button type="button" class="btn-acao" onClick=${() => setAjuda(false)}>Entendi</button></${Quadro}>` : null}
   </div>`;
-}
-function SairBotao() { const { sair } = useApp(); return html`<button type="button" class="sair" onClick=${sair}><${Ic} n="exit" t=${22} /> Sair</button>`; }
-
-/* ---------------- moldura das telas de dentro ---------------- */
-function Tela({ tela, acao, children, ajuda }) {
-  const [aj, setAj] = useState(false);
-  return html`<div class="app"><${Cabecalho} />
-    <main class="folha"><${Abas} ativa=${tela} /><${Titulo} tela=${tela} ajuda=${() => setAj(true)} />${children}</main>
-    <${Rodape} tela=${tela} acao=${acao} />
-    ${aj ? html`<${Quadro} titulo="Ajuda" onFechar=${() => setAj(false)}><p>${ajuda}</p><button type="button" class="btn-acao" onClick=${() => setAj(false)}>Entendi</button></${Quadro}>` : null}</div>`;
 }
 
 /* ---------------- CLIENTE: busca no cadastro (nome, telefone, CPF ou placa) ---------------- */
@@ -257,6 +133,12 @@ function PedidoNovo({ onFeito, onCancelar }) {
   useEffect(() => { let p = ""; try { p = sessionStorage.getItem(CH_PLACA_PEDIDO) || ""; sessionStorage.removeItem(CH_PLACA_PEDIDO); } catch (e) { /* nada */ } if (p) pl.buscar(p); }, []);
   const [mao, setMao] = useState({ modelo: "", ano: "" }), [nome, setNome] = useState(""), [whats, setWhats] = useState(""), [texto, setTexto] = useState(""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false), [itens, setItens] = useState([]);
   const v = pl.veic, trava = useRef(false);
+  // Corretor do app do mecânico, agora aqui (22/11/2026: o App DTCar absorve o app antigo).
+  // O vocabulário vem das descrições já lançadas; sem internet ou sem resposta, vale o glossário fixo.
+  // 23/11/2026: o "Segurar para falar" saiu a pedido do Danilo — quem quiser ditar usa o microfone do teclado.
+  const vocRef = useRef(novoVocabulario([]));
+  useEffect(() => { let vivo = true; api.descricoesItens && api.descricoesItens().then(l => { if (vivo && l && l.length) vocRef.current = novoVocabulario(l); }).catch(() => {}); return () => { vivo = false; }; }, []);
+  const arrumar = () => setTexto(t => String(t || "").split("\n").map(l => l.trim() && !l.startsWith("— ") ? corrigirFrase(vocRef.current, l) : l).join("\n"));
   const enviar = async () => {
     if (trava.current) return;
     const t = texto.trim();
@@ -286,7 +168,10 @@ function PedidoNovo({ onFeito, onCancelar }) {
       <${SistemasCarro} onMuda=${setItens} />
       ${itens.length ? html`<div class="lista-marcados" id="pd-marcados"><b>Marcados (${itens.length})</b>${itens.map((i, n) => html`<div key=${n} class=${i.falta ? "falta" : ""}>${i.qtd > 1 ? i.qtd + "× " : ""}${i.descricao}${i.falta ? " — falta a posição" : ""}</div>`)}</div>` : null}</${Cartao}>
     <${Cartao} titulo="Observação (opcional)" id="pd-texto">
-      <textarea id="pd-area" class="area" rows="4" placeholder="O que não está na lista, o que o cliente reclamou, o que você viu no carro" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea></${Cartao}>
+      <textarea id="pd-area" class="area" rows="4" placeholder="O que não está na lista, o que o cliente reclamou, o que você viu no carro" value=${texto} onInput=${e => setTexto(e.target.value)}></textarea>
+      <div class="fala-linha">
+        <button type="button" class="btn-arrumar" id="pd-arrumar" onClick=${arrumar} disabled=${!String(texto).trim()}>Arrumar a escrita</button>
+      </div></${Cartao}>
     <button type="button" class="link" onClick=${onCancelar}>Cancelar e voltar aos orçamentos</button>
   </${Tela}>`;
 }
@@ -847,21 +732,26 @@ function Ajuda() {
   </main><${Rodape} tela="ajuda" /></div>`;
 }
 
-/* ---------------- raiz: dados, rota, aviso ---------------- */
-const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta };
-// quadros abertos (lista de peças, cliente, confirmação): o botão Voltar do celular fecha o de cima antes de trocar de tela
-const quadros = [];
+/* ---------------- DIAGNÓSTICO OBD (18/11/2026) ----------------
+ * Etapa 1: só LEITURA. Nada é gravado no banco e nada é escrito no carro (não apaga falha).
+ * O adaptador é lido pelo plugin nativo do APK (app/plugins/obd/); quem entende de OBD é o js/obd.js.
+ * Serve para triagem na recepção e para conferir o reparo na entrega: é só motor e emissões.
+ * ABS, airbag, câmbio e imobilizador NÃO saem por aqui (protocolo próprio de cada montadora) e o
+ * OBD-II não tem quilometragem de painel. Isso está escrito na tela, para ninguém esperar o que não vem.
+ */
+const ROTAS = { inicio: Inicio, ajuda: Ajuda, servico: Servico, oleo: Oleo, orcamento: Orcamentos, agendar: Agendar, agenda: AgendaLista, peca: Peca, historico: Historico, meus: MeusServicos, osconsulta: OSConsulta,
+  obd: Obd, modulos: Modulos, atuadores: Atuadores, aprendizados: Aprendizados, bico: Bico, parametros: ParametrosTela };
 /** Pilha das telas visitadas: o botão Voltar do celular volta para a tela anterior, uma por vez, e só sai do app no Início
  *  (pedido do Danilo, 16/11/2026 à noite). "voltando" evita empilhar a própria volta. */
 const pilha = [];
 let voltando = false;
 function registrarRota(r) { if (voltando) { voltando = false; return; } if (r === "inicio") { pilha.length = 0; } if (pilha[pilha.length - 1] !== r) pilha.push(r); if (pilha.length > 30) pilha.splice(1, 1); }   // o Início é sempre o fundo da pilha
 /** passo dentro de uma tela (formulário aberto, sistema escolhido): o Voltar desfaz o passo antes de trocar de tela */
-function usarPasso(ativo, desfazer) {
-  useLayoutEffect(() => { if (!ativo) return; const f = () => desfazer(); quadros.push(f); return () => { const i = quadros.indexOf(f); if (i >= 0) quadros.splice(i, 1); }; }, [ativo]);
-}
 function App({ usuario, nativo }) {
   const [rota, setRota] = useState(rotaAtual());
+  // o aviso de "sem internet" some com um toque: na tela do OBD ele cobria os mostradores e assustava
+  // sem motivo, porque a leitura do carro não passa pelo servidor
+  const [semAviso, setSemAviso] = useState(false);
   const [dados, setDados] = useState({ clientes: [], veiculos: [], produtos: [], ordens: [], perfis: [], orcamentos: [], carregado: false, erro: "" });
   const [cfg, setCfg] = useState(cfgCompleta({})), [cfgOk, setCfgOk] = useState(false);
   const [placa, setPlaca] = useState({ texto: "" });
@@ -902,7 +792,9 @@ function App({ usuario, nativo }) {
   const ctx = { perfil: usuario, dados, cfg, telas, avisos, indicacoes, avisar, recarregar: carregar, recarregarOrcamentos, recarregarServicos, sair: nativo.sair, nativo };
   const Tela = (ROTAS[rota] && (rota === "inicio" || rota === "ajuda" || telas.includes(rota))) ? ROTAS[rota] : Inicio; // tela não liberada cai no Início
   return html`<${Ctx.Provider} value=${ctx}>
-    ${dados.erro ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px">${dados.erro}</div>` : null}
+    ${dados.erro && !semAviso ? html`<div class="toast erro" role="alert" style="bottom:auto;top:8px" onClick=${() => setSemAviso(true)}>
+      ${rota === "obd" ? "Sem internet agora: a leitura do carro funciona do mesmo jeito (ela sai do adaptador, não do servidor). Só as buscas do sistema ficam incompletas." : dados.erro}
+      <span class="toast-fechar">toque para fechar</span></div>` : null}
     <${Tela} key=${rota} />
     ${toast ? html`<div class=${"toast" + (toast.erro ? " erro" : "")} role="status">${toast.msg}</div>` : null}</${Ctx.Provider}>`;
 }
@@ -922,3 +814,4 @@ export function voltar() {
   if (rotaAtual() !== "inicio") { ir("inicio"); return true; }
   return false;
 }
+

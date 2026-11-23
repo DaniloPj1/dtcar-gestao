@@ -6,6 +6,10 @@ import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js"
 import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, lsSet, fmtTel, exPlaca, linkWhats } from "../util.js";
 import { STATUS, ABERTOS, ETAPAS, etapaOS, situacaoOS, pode } from "../regras.js";
 import { LS_NOVA } from "./entrada.js";
+import { ClimaJanela, NoticiasJanela, AtalhosJanela } from "./casa.js";
+import { PreviaOS } from "./previaos.js";
+const temPainelLado = () => typeof matchMedia === "function" && matchMedia("(min-width: 1100px)").matches;
+import { ResultadoMes, FluxoCaixaMes, AnalisePeriodo, CategoriasGasto, SubcategoriasGasto, PecasPorFornecedor } from "./painelnum.js";
 import { estoqueBaixo } from "./produtos.js";
 import { CancelarModal, EncerrarModal, MenuOS, proximaEtapa, avancarEtapa } from "./acoesos.js";
 import { situacaoParcela } from "./receber.js";
@@ -65,8 +69,16 @@ function serie(pontos, ini, fim, grupo) {
 // tam: colunas de 12 no computador (3 = ¼, 4 = ⅓, 6 = ½, 8 = ⅔, 12 = inteira)
 export const JANELAS = {
   busca: { t: "Busca rápida", tam: 12 },
-  hoje: { t: "Resumo do dia", tam: 12 },
-  patio: { t: "Pátio", tam: 12 },
+  acoes: { t: "Ações do dia a dia", tam: 12 },
+  atalhos: { t: "Atalhos", tam: 12 },
+  clima: { t: "Previsão do tempo — Colatina/ES", tam: 4 },
+  noticias: { t: "Notícias do Espírito Santo", tam: 8 },
+  resultado: { t: "Resultado do mês · regime de competência", tam: 12, valores: true, fin: true, obs: "O.S. entregues e balcão" },
+  caixames: { t: "Fluxo de caixa · regime de caixa", tam: 12, valores: true, fin: true, obs: "o que entrou e saiu no mês" },
+  analise: { t: "Análise no período · regime de caixa", tam: 12, valores: true, fin: true, obs: "mês a mês" },
+  gastos: { t: "Para onde foi o dinheiro", tam: 12, valores: true, fin: true, obs: "contas pagas neste mês" },
+  hoje: { t: "Oficina hoje", tam: 7 },
+  patio: { t: "Pátio", tam: 5 },
   agenda: { t: "Agenda da semana", tam: 12 },
   alertas: { t: "Precisa de atenção", tam: 8 },
   estoque: { t: "Estoque baixo", tam: 4 },
@@ -85,7 +97,7 @@ export const JANELAS = {
   aniversarios: { t: "Aniversariantes do mês", tam: 3, valores: true },
   contas: { t: "Contas a pagar", tam: 12, valores: true, fin: true },
 };
-export const LAYOUT_PADRAO = [["busca", 12], ["hoje", 12], ["patio", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
+export const LAYOUT_PADRAO = [["clima", 4], ["noticias", 8], ["busca", 12], ["acoes", 12], ["atalhos", 12], ["hoje", 7], ["patio", 5], ["resultado", 12], ["caixames", 12], ["analise", 12], ["gastos", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
   ["servicos", 4], ["pecas", 4], ["formas", 4], ["manutencao", 6], ["recuperar", 3], ["aniversarios", 3]].map(([k, tam]) => ({ k, tam }));
 const TAMANHOS = [[3, "¼"], [4, "⅓"], [6, "½"], [8, "⅔"], [12, "Inteira"]];
 
@@ -95,9 +107,9 @@ function ContasJanela({ l }) {
   const hoje = hojeISO(), sete = somaDiasISO(hoje, 7), soma = x => x.reduce((s, c) => s + Number(c.valor), 0);
   const venc = l.filter(c => c.vencimento < hoje), hj = l.filter(c => c.vencimento === hoje), sem = l.filter(c => c.vencimento > hoje && c.vencimento <= sete);
   return html`<div class="contas-janela"><div class="contas-mini">
-      <div class=${venc.length ? "c-bad" : ""}><span>Vencidas</span><b>${reais(soma(venc))}</b><small>${venc.length}</small></div>
-      <div class=${hj.length ? "c-warn" : ""}><span>Hoje</span><b>${reais(soma(hj))}</b><small>${hj.length}</small></div>
-      <div><span>Próximos 7 dias</span><b>${reais(soma(sem))}</b><small>${sem.length}</small></div></div>
+      <button type="button" class=${venc.length ? "c-bad" : ""} title="Abrir contas a pagar" onClick=${() => ir("/financeiro")}><span>Vencidas</span><b>${reais(soma(venc))}</b><small>${venc.length}</small></button>
+      <button type="button" class=${hj.length ? "c-warn" : ""} title="Abrir contas a pagar" onClick=${() => ir("/financeiro")}><span>Hoje</span><b>${reais(soma(hj))}</b><small>${hj.length}</small></button>
+      <button type="button" title="Abrir contas a pagar" onClick=${() => ir("/financeiro")}><span>Próximos 7 dias</span><b>${reais(soma(sem))}</b><small>${sem.length}</small></button></div>
     ${l.length ? html`<ul class="ranking">${l.slice(0, 5).map(c => html`<li key=${c.id}><span>${c.descricao}</span><b class=${c.vencimento < hoje ? "c-bad" : ""}>${reais(c.valor)}</b><small>${fmtData(c.vencimento).slice(0, 5)}</small></li>`)}</ul>` : html`<span class="dica">Nenhuma conta em aberto.</span>`}
     <div class="acoes"><button type="button" class="btn btn-sm" onClick=${() => ir("/financeiro")}>Contas a pagar</button><button type="button" class="btn btn-sm" onClick=${() => ir("/financeiro?nova=pdf")}>Lançar boleto</button></div>
     <span class="dica">Total em aberto: ${reais(soma(l))}</span></div>`;
@@ -155,9 +167,9 @@ function BuscaRapida() {
   const n = norm(q), p = normPlaca(q), d = soDig(q);
   const res = useMemo(() => {
     if (q.trim().length < 2) return [];
-    const os = dados.ordens.filter(o => (d && String(o.numero) === String(+d)) || (p.length >= 3 && (o.veiculo.placa || "").includes(p))).slice(0, 4).map(o => ({ k: "o" + o.id, t: numOS(o.numero) + " · " + (o.veiculo.placa || "") + " · " + o.cliente.nome, s: situacaoOS(o).curto, r: "/os/" + o.id }));
+    const os = dados.ordens.filter(o => (d && String(o.numero) === String(+d)) || (p.length >= 3 && (o.veiculo.placa || "").includes(p)) || (n.length >= 3 && norm((o.cliente && o.cliente.nome) || "").includes(n))).sort((x, y) => (ABERTOS.includes(y.status) ? 1 : 0) - (ABERTOS.includes(x.status) ? 1 : 0) || y.numero - x.numero).slice(0, 4).map(o => ({ k: "o" + o.id, t: numOS(o.numero) + " · " + (o.veiculo.placa || "") + " · " + o.cliente.nome, s: situacaoOS(o).curto, r: "/os/" + o.id }));
     const cl = n.length >= 3 ? dados.clientes.filter(c => norm(c.nome).includes(n) || (d.length >= 4 && soDig(c.telefone).includes(d))).slice(0, 4).map(c => ({ k: "c" + c.id, t: c.nome, s: c.telefone ? fmtTel(c.telefone) : "cliente", r: "/cliente/" + c.id })) : [];
-    const ve = p.length >= 3 ? dados.veiculos.filter(v => v.placa.includes(p)).slice(0, 3).map(v => ({ k: "v" + v.id, t: v.placa + " · " + v.marca + " " + v.modelo, s: "veículo", r: "/veiculo/" + v.id })) : [];
+    const ve = p.length >= 3 || n.length >= 3 ? dados.veiculos.filter(v => (p.length >= 3 && (v.placa || "").includes(p)) || (n.length >= 3 && norm([v.marca, v.modelo].filter(Boolean).join(" ")).includes(n))).slice(0, 3).map(v => ({ k: "v" + v.id, t: v.placa + " · " + v.marca + " " + v.modelo, s: "veículo", r: "/veiculo/" + v.id })) : [];
     const pr = n.length >= 3 ? dados.produtos.filter(x => x.ativo !== false && (norm(x.descricao).includes(n) || norm(x.referencia) === n)).slice(0, 3).map(x => ({ k: "p" + x.id, t: x.descricao, s: x.tipo === "produto" ? "estoque " + Number(x.estoque_atual).toLocaleString("pt-BR") : "serviço", r: "/cadastros?aba=produtos" })) : [];
     return [...os, ...ve, ...cl, ...pr].slice(0, 9);
   }, [q, dados.ordens, dados.clientes, dados.veiculos, dados.produtos]);
@@ -183,6 +195,30 @@ export function Painel() {
   if (!cfg.painelV5 && !salvo.some(j => j.k === "contas")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "contas", tam: 12 }, ...salvo.slice(i + 1)]; }
   // janela nova da versão 6 (agenda da semana, v54): entra uma vez no layout já salvo, logo depois do pátio
   if (!cfg.painelV6 && !salvo.some(j => j.k === "agenda")) { const i = salvo.findIndex(j => j.k === "patio"); salvo = [...salvo.slice(0, i + 1), { k: "agenda", tam: 12 }, ...salvo.slice(i + 1)]; }
+  // janela nova da versão 7 (ações do dia a dia, pedido do Danilo em 22/11/2026): entra uma vez, logo depois da busca
+  if (!cfg.painelV7 && !salvo.some(j => j.k === "acoes")) { const i = Math.max(0, salvo.findIndex(j => j.k === "busca")); salvo = [...salvo.slice(0, i + 1), { k: "acoes", tam: 12 }, ...salvo.slice(i + 1)]; }
+  // janelas novas da versão 9 (dinheiro no painel, pedido do Danilo em 23/11/2026): clima e notícias sobem para o
+  // topo e os seis blocos de dinheiro entram depois do pátio. Entra uma vez; depois o layout é de quem personalizar.
+  if (!cfg.painelV9) {
+    salvo = salvo.filter(j => j.k !== "clima" && j.k !== "noticias");
+    salvo = [{ k: "clima", tam: 4 }, { k: "noticias", tam: 8 }, ...salvo];
+    // o pátio e as ações do dia passam a viver dentro de "Oficina hoje" e das fichas de atalho:
+    // saem do layout salvo para não aparecer duas vezes (continuam na lista do Personalizar).
+    salvo = salvo.filter(j => j.k !== "patio" && j.k !== "acoes").map(j => j.k === "hoje" ? { ...j, tam: 12 } : j);
+    const novas = [["resultado", 12], ["caixames", 12], ["analise", 12], ["gastos", 12]]
+      .filter(([k]) => !salvo.some(j => j.k === k)).map(([k, tam]) => ({ k, tam }));
+    // as fichas de atalho ficam logo depois de "Oficina hoje", como no protótipo
+    const at = salvo.find(j => j.k === "atalhos");
+    if (at) { salvo = salvo.filter(j => j.k !== "atalhos"); const i = salvo.findIndex(j => j.k === "hoje");
+      const em = i < 0 ? salvo.length : i + 1; salvo = [...salvo.slice(0, em), at, ...salvo.slice(em)]; }
+    if (novas.length) { const i = salvo.findIndex(j => j.k === "atalhos"); const em = i < 0 ? salvo.length : i + 1;
+      salvo = [...salvo.slice(0, em), ...novas, ...salvo.slice(em)]; }
+  }
+  // janelas novas da versão 8 (atalhos, notícias e previsão do tempo, pedido do Danilo em 22/11/2026): entram uma vez
+  if (!cfg.painelV8) {
+    if (!salvo.some(j => j.k === "atalhos")) { const i = Math.max(0, salvo.findIndex(j => j.k === "acoes")); salvo = [...salvo.slice(0, i + 1), { k: "atalhos", tam: 12 }, ...salvo.slice(i + 1)]; }
+    if (!salvo.some(j => j.k === "noticias")) { const i = Math.max(0, salvo.findIndex(j => j.k === "agenda")); salvo = [...salvo.slice(0, i + 1), { k: "noticias", tam: 8 }, { k: "clima", tam: 4 }, ...salvo.slice(i + 1)]; }
+  }
   const layout = editar ? rascunho : salvo;
   let visiveis = layout.filter(j => (ver || !JANELAS[j.k].valores) && (fin || !JANELAS[j.k].fin));
   const [contasAb, setContasAb] = useState(null), [sefazNovas, setSefazNovas] = useState(0);
@@ -252,14 +288,42 @@ export function Painel() {
     : erroRes ? html`<div class="erros">Não foi possível calcular: ${erroRes}</div>` : html`<div class="esqueleto"></div>`;
   const conteudo = {
     busca: () => html`<${BuscaRapida} />`,
-    hoje: () => html`<div class="hoje">
-      <div><span>Entradas hoje</span><b>${entradasHoje}</b></div>
-      <div><span>Entregas hoje</span><b>${saidasHoje.length}</b>${ver && saidasHoje.length ? html`<small>${reaisCurto(saidasHoje.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</div>
-      <div><span>No pátio</span><b>${ativas.length}</b>${ver ? html`<small>${reaisCurto(ativas.reduce((s, o) => s + Number(o.total || 0), 0))}</small>` : null}</div>
-      <div class=${nAlerta ? "t-alerta" : ""}><span>Alertas</span><b>${nAlerta}</b></div></div>`,
-    patio: () => html`<div class="patio" role="group" aria-label="Situação do pátio">
-      ${["orcamento", "execucao", "pagamento"].map(s => { const n = naEtapaP(s).length; return html`<button type="button" key=${s} class=${"patio-item t-" + ET[s].cor + (foco === s ? " ativo" : "")} aria-pressed=${foco === s} onClick=${() => setFoco(foco === s ? "" : s)}>
-        <b>${n}</b><span>${ET[s].t}</span>${ver && n ? html`<small>${reaisCurto(valorDe(s))}</small>` : null}</button>`; })}</div>`,
+    acoes: () => html`<${AcoesDia} />`,
+    atalhos: () => html`<${AtalhosJanela} />`,
+    clima: () => html`<${ClimaJanela} />`,
+    noticias: () => html`<${NoticiasJanela} />`,
+    resultado: () => html`<${ResultadoMes} />`,
+    caixames: () => html`<${FluxoCaixaMes} />`,
+    analise: () => html`<${AnalisePeriodo} />`,
+    gastos: () => html`<div class="pn-g3">
+      <div class="pn-card"><h4>Categorias de gasto</h4><${CategoriasGasto} /></div>
+      <div class="pn-card"><h4>Gastos por subcategoria<small>dentro de cada categoria, quem recebeu</small></h4><${SubcategoriasGasto} /></div>
+      <div class="pn-card"><h4>Gasto com peças por fornecedor</h4><${PecasPorFornecedor} /></div></div>`,
+    hoje: () => { const A = (p, txt) => html`<svg class="pn-anel" viewBox="0 0 40 40" aria-hidden="true">
+        <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(255,255,255,.32)" stroke-width="5"></circle>
+        <circle cx="20" cy="20" r="16" fill="none" stroke="#fff" stroke-width="5" pathLength="100"
+          stroke-dasharray=${Math.max(0, Math.min(100, p)) + " " + (100 - Math.max(0, Math.min(100, p)))} transform="rotate(-90 20 20)"></circle>
+        <text x="20" y="24" text-anchor="middle">${txt}</text></svg>`;
+      const totPatio = ativas.reduce((s, o) => s + Number(o.total || 0), 0);
+      return html`<div class="hoje">
+      <button type="button" class="pn-kpi pn-az6" title="Abrir as ordens de serviço" onClick=${() => ir("/ordens")}>
+        ${A(Math.min(100, entradasHoje * 25), entradasHoje)}<div class="pn-tx"><span>Entradas hoje</span><b>${entradasHoje}</b><small>O.S. abertas hoje</small></div></button>
+      <button type="button" class="pn-kpi pn-az7" title="Abrir as O.S. finalizadas" onClick=${() => ir("/ordens?filtro=finalizadas")}>
+        ${A(Math.min(100, saidasHoje.length * 25), saidasHoje.length)}<div class="pn-tx"><span>Entregas hoje</span><b>${ver ? reaisCurto(saidasHoje.reduce((s, o) => s + Number(o.total || 0), 0)) : saidasHoje.length}</b><small>${saidasHoje.length} veículo(s) entregue(s)</small></div></button>
+      <button type="button" class="pn-kpi pn-az8" title="Abrir as O.S. em aberto" onClick=${() => ir("/ordens")}>
+        ${A(Math.min(100, ativas.length * 12), ativas.length)}<div class="pn-tx"><span>No pátio</span><b>${ver ? reaisCurto(totPatio) : ativas.length}</b><small>${ativas.length} O.S. em aberto</small></div></button>
+      <button type="button" class=${"pn-kpi " + (nAlerta ? "pn-am" : "pn-az9")} title="Ver o que precisa de atenção"
+        onClick=${() => { const j = document.querySelector(".j-alertas"); j ? j.scrollIntoView({ behavior: "smooth", block: "start" }) : ir("/ordens?filtro=atrasadas"); }}>
+        ${A(Math.min(100, nAlerta * 30), nAlerta)}<div class="pn-tx"><span>Precisa de atenção</span><b>${nAlerta}</b><small>${nAlerta ? "previsão e recebimento" : "tudo em dia"}</small></div></button>
+      ${conteudo.patio()}</div>`; },
+    patio: () => { const tot = ["orcamento", "execucao", "pagamento"].reduce((t, s) => t + valorDe(s), 0) || 1;
+      return html`<div class="patio" role="group" aria-label="Situação do pátio">
+      ${["orcamento", "execucao", "pagamento"].map(s => { const l = naEtapaP(s), v = valorDe(s);
+        return html`<button type="button" key=${s} class=${"patio-item t-" + ET[s].cor + (foco === s ? " ativo" : "")} aria-pressed=${foco === s} onClick=${() => setFoco(foco === s ? "" : s)}>
+        <span class="pi-t"><i aria-hidden="true"></i>${ET[s].t}<em>${l.length}</em></span>
+        <b>${ver ? reaisCurto(v) : l.length}</b>
+        <span class="pi-bar"><i style=${{ width: Math.max(2, Math.round((v / tot) * 100)) + "%" }}></i></span>
+        <small>${s === "orcamento" ? "aguardando o cliente" : s === "execucao" ? "no box" : "a receber"}</small></button>`; })}</div>`; },
     alertas: () => nAlerta ? html`<div class="lista">${extras.map((x, n) => html`<button type="button" key=${"x" + n} class="linha" onClick=${() => ir(x.r)}><span class=${"dot s-" + x.cor}></span><span class="meio"><strong>${x.t}</strong><span>${x.s}</span></span></button>`)}${(verTodos ? alertas : alertas.slice(0, 6)).map(([o, t, c], n) => html`<button type="button" key=${n} class="linha" onClick=${() => ir("/os/" + o.id)}><span class=${"dot s-" + c}></span><span class="meio"><strong>${t}</strong><span>${numOS(o.numero)} · ${exPlacaCurta(o)} · ${o.cliente.nome}</span></span></button>`)}
         ${antigas.length ? html`<button type="button" class="linha" onClick=${() => ir("/ordens?filtro=herdadas")}><span class="dot s-info"></span><span class="meio"><strong>${antigas.length} O.S. antigas do sistema anterior ainda abertas</strong><span>Revise e encerre: entregue, recuse ou cancele cada uma.</span></span></button>` : null}</div>
         ${alertas.length > 6 ? html`<button type="button" class="btn-link" onClick=${() => setVerTodos(!verTodos)}>${verTodos ? "Mostrar menos" : "Ver todos (" + alertas.length + ")"}</button>` : null}` : html`<span class="dica">Tudo em dia.</span>`,
@@ -292,7 +356,7 @@ export function Painel() {
   const mover = (i, d) => setRascunho(l => { const n = [...l], j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const soltar = (alvo) => { if (arrastando === null || arrastando === alvo) return; setRascunho(l => { const n = [...l]; const [x] = n.splice(arrastando, 1); n.splice(alvo, 0, x); return n; }); setArrastando(null); };
   const salvarLayout = async () => { setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
+    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true, painelV7: true, painelV8: true, painelV9: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
   const restaurar = async () => { if (await confirmar({ titulo: "Restaurar painel padrão", texto: "As janelas voltam para a organização original.", botao: "Restaurar" })) setRascunho(LAYOUT_PADRAO.map(j => ({ ...j }))); };
   const ocultas = Object.keys(JANELAS).filter(k => !(rascunho || []).some(j => j.k === k));
 
@@ -303,6 +367,7 @@ export function Painel() {
       <div><h1>${saud}, ${perfil.nome.split(" ")[0]}</h1><span class="sub">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</span></div>
       <div class="acoes">
         ${precisaRes ? html`<div class="periodo" role="group" aria-label="Período dos indicadores">${PERIODOS.map(([p, t]) => html`<button type="button" key=${p} aria-pressed=${per === p} onClick=${() => escolherPer(p)}>${t}</button>`)}</div>` : null}
+        ${!editar ? html`<${Tamanho} />` : null}
         ${admin && !editar ? html`<button type="button" class="btn btn-sm" onClick=${iniciarEdicao}>${I.editar} Personalizar</button>` : null}
         ${pode(perfil, "verValores") ? html`<button type="button" class="btn" onClick=${() => ir("/balcao")}>Venda de balcão</button>` : null}
         ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-pri" onClick=${() => ir("/entrada")}>${temRasc ? "Continuar O.S." : "+ Nova O.S."}</button>` : null}
@@ -314,7 +379,7 @@ export function Painel() {
       ${ocultas.length ? html`<div class="chips adicionar-janela"><span class="sub">Adicionar janela:</span>${ocultas.map(k => html`<button type="button" key=${k} class="chip-f" onClick=${() => setRascunho(l => [...l, { k, tam: JANELAS[k].tam }])}>+ ${JANELAS[k].t}</button>`)}</div>` : null}
     </div>` : null}
     <div class=${"grade-painel" + (editar ? " editando" : "")}>
-      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "hoje", "patio"].includes(j.k) && !editar;
+      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "acoes", "atalhos", "patio", "clima", "noticias"].includes(j.k) && !editar;
         return html`<section key=${j.k} class=${"janela t" + j.tam + " j-" + j.k + (semTitulo ? " sem-moldura" : "") + (arrastando === idx ? " arrastando" : "")} style=${{ "--tam": j.tam }}
           draggable=${editar ? "true" : "false"} onDragStart=${e => { setArrastando(idx); e.dataTransfer.effectAllowed = "move"; }} onDragOver=${e => editar && e.preventDefault()} onDrop=${e => { e.preventDefault(); soltar(idx); }} onDragEnd=${() => setArrastando(null)}
           aria-label=${def.t}>
@@ -322,20 +387,44 @@ export function Painel() {
             <select class="inp inp-curto" aria-label=${"Tamanho de " + def.t} value=${j.tam} onChange=${e => setRascunho(l => l.map(x => x.k === j.k ? { ...x, tam: +e.target.value } : x))}>${TAMANHOS.map(([v, t]) => html`<option value=${v}>${t}</option>`)}</select>
             <button type="button" class="btn btn-sm" aria-label="Mover para antes" onClick=${() => mover(idx, -1)}>↑</button><button type="button" class="btn btn-sm" aria-label="Mover para depois" onClick=${() => mover(idx, 1)}>↓</button>
             <button type="button" class="btn btn-sm btn-perigo" aria-label=${"Remover " + def.t} onClick=${() => setRascunho(l => l.filter(x => x.k !== j.k))}>Remover</button></div>`
-          : !semTitulo ? html`<header class="janela-cab"><h3>${def.t}</h3>${def.res ? html`<span class="sub">${PERIODOS.find(p => p[0] === per)[1]}</span>` : j.k === "alertas" && nAlerta ? html`<span class="pill p-warn">${nAlerta}</span>` : null}</header>` : null}
+          : !semTitulo ? html`<header class="janela-cab"><h3>${def.t}</h3>${def.res ? html`<span class="sub">${PERIODOS.find(p => p[0] === per)[1]}</span>` : def.obs ? html`<span class="sub">${def.obs}</span>` : j.k === "alertas" && nAlerta ? html`<span class="pill p-warn">${nAlerta}</span>` : null}</header>` : null}
           <div class="janela-corpo">${conteudo[j.k]()}</div></section>`; })}
     </div>
     ${ver ? html`<p class="dica rodape-painel">Faturamento não é lucro: a margem desconta só peças e terceiros. Impostos do Simples, salários, aluguel e taxas de cartão ainda saem dela.</p>` : null}
   </div>`;
 }
+/** Tamanho da tela no computador (pedido do Danilo em 23/11/2026): compacto junta tudo, largo usa o monitor inteiro.
+ *  Fica guardado NESTE aparelho (localStorage), porque cada monitor da oficina é de um tamanho. */
+const TAMANHOS_TELA = [["compacto", "Compacto"], ["medio", "Médio"], ["largo", "Largo"]];
+export function aplicarTamanhoTela(t) { document.documentElement.dataset.tela = t || "medio"; }
+export function Tamanho() {
+  const [t, setT] = useState(() => lsGet("dtcar-tela") || "medio");
+  useEffect(() => { aplicarTamanhoTela(t); }, [t]);
+  return html`<div class="tam-tela" role="group" aria-label="Tamanho da tela">
+    ${TAMANHOS_TELA.map(([k, rot]) => html`<button type="button" key=${k} aria-pressed=${t === k ? "true" : "false"}
+      onClick=${() => { setT(k); lsSet("dtcar-tela", k); aplicarTamanhoTela(k); }}>${rot}</button>`)}</div>`;
+}
+
+/** Ações do dia a dia (pedido do Danilo em 22/11/2026): os atalhos que mais se usam, em botões grandes como no app */
+function AcoesDia() {
+  const { ir, perfil } = useApp();
+  const B = ({ rota, rot, ic, p }) => !p || pode(perfil, p) ? html`<button type="button" class="acao-dia" onClick=${() => ir(rota)}>${I[ic]}<span>${rot}</span></button>` : null;
+  return html`<div class="acoes-dia">
+    <${B} rota="/entrada" rot="Nova O.S." ic="mais" p="entrada" />
+    <${B} rota="/orcamento/novo" rot="Novo orçamento" ic="nota" p="orcar" />
+    <${B} rota="/cadastros?novo=1" rot="Novo cliente" ic="pessoas" p="cadastrar" />
+    <${B} rota="/cadastros?aba=veiculos&novo=1" rot="Novo veículo" ic="carro" p="cadastrar" />
+  </div>`;
+}
 const exPlacaCurta = o => (o.veiculo && o.veiculo.placa) || "sem placa";
 
 /** Grade de O.S. no estilo do OS Oficina (modo balcão): abertas em amarelo, entregues em verde */
-function GradeOS({ lista, ver, ir, soma, total, acoesDe, prox = {} }) {
-  const cls = o => o._pendente ? "g-prov" : "";
+function GradeOS({ lista, ver, ir, soma, total, acoesDe, prox = {}, sel, onVer }) {
+  const abrir = o => onVer ? onVer(o.id) : ir("/os/" + o.id);
+  const cls = o => (o._pendente ? "g-prov" : "") + (sel === o.id ? " g-sel" : "");
   return html`<div class="grade-dados"><table><thead><tr><th>O.S.</th><th>Entrada</th><th>Hora</th><th>Previsão</th><th>Placa</th><th>Modelo</th><th>Nome do cliente</th><th>Telefone</th><th>Mecânico</th>
       ${ver ? html`<th class="num">Total</th><th class="num">Falta receber</th><th>Vence</th>` : null}<th>Situação</th><th></th></tr></thead>
-    <tbody>${lista.map(o => { const d = new Date(o.criado_em); return html`<tr key=${o.id} class=${cls(o)} tabindex="0" onClick=${() => ir("/os/" + o.id)} onKeyDown=${e => e.key === "Enter" && ir("/os/" + o.id)}>
+    <tbody>${lista.map(o => { const d = new Date(o.criado_em); return html`<tr key=${o.id} class=${cls(o)} tabindex="0" onClick=${() => abrir(o)} onKeyDown=${e => e.key === "Enter" && abrir(o)}>
       <td class="mono">${o._provisorio || String(o.numero).padStart(5, "0")}</td><td>${d.toLocaleDateString("pt-BR")}</td><td>${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}</td>
       <td class=${ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO() ? "c-bad" : ""}>${o.previsao_entrega && ABERTOS.includes(o.status) ? fmtData(o.previsao_entrega) : ""}</td>
       <td class="mono">${exPlaca(o.veiculo.placa)}</td><td>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ")}</td><td>${o.cliente.nome}</td><td>${o.cliente.telefone ? fmtTel(o.cliente.telefone) : ""}</td><td>${o.mecanico_nome || ""}</td>
@@ -347,18 +436,19 @@ function GradeOS({ lista, ver, ir, soma, total, acoesDe, prox = {} }) {
 
 /** O.S. em cards (só no computador): uma cor por etapa (classe e-*), o mesmo botão de avançar etapa e o mesmo menu da lista */
 const COR_ETAPA = { orcamento: "orc", execucao: "exe", pagamento: "pag", fechada: "fec", recusado: "rec", cancelado: "can" };
-function CardsOS({ lista, ver, ir, acoesDe, prox = {} }) {
+function CardsOS({ lista, ver, ir, acoesDe, prox = {}, sel, onVer }) {
+  const abrir = o => onVer ? onVer(o.id) : ir("/os/" + o.id);
   const hoje = hojeISO();
-  return html`<div class="os-cards">${lista.map(o => {
+  const carta = o => {
     const e = o._pendente ? "prov" : COR_ETAPA[etapaOS(o)] || "can", st = situacaoOS(o);
     const atrasada = ["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hoje;
     const aReceber = o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em;
     const parcVencida = ver && prox[o.id] && prox[o.id].vencimento < hoje;
     const ficha = [o.veiculo.ano, o.veiculo.cor, o.km_entrada ? Number(o.km_entrada).toLocaleString("pt-BR") + " km" : ""].filter(Boolean).join(", ");
     const quando = atrasada ? "previsão vencida" : parcVencida ? "recebimento vencido" : o.status === "entregue" && o.entregue_em ? "entregue em " + fmtData(o.entregue_em) : "há " + tempoDesde(o.criado_em);
-    return html`<article key=${o.id} class=${"os-card e-" + e}>
-      <button type="button" class="botao-limpo osc-corpo" onClick=${() => ir("/os/" + o.id)}>
-        <span class="osc-cab"><span class="osc-id"><small>${o._provisorio || numOS(o.numero)}, aberta em ${fmtData(o.criado_em)}</small>
+    return html`<article key=${o.id} class=${"os-card e-" + e + (sel === o.id ? " os-sel" : "")}>
+      <button type="button" class="botao-limpo osc-corpo" onClick=${() => abrir(o)}>
+        <span class="osc-cab"><span class="osc-id"><small><b class="osc-num">${o._provisorio || numOS(o.numero)}</b> · aberta em ${fmtData(o.criado_em)}</small>
           <strong>${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") || "Veículo"}</strong>${ficha ? html`<span>${ficha}</span>` : null}</span>
           <${Placa} placa=${o.veiculo.placa} /></span>
         <span class="osc-cli"><b>${o.cliente.nome}</b>${o.cliente.telefone ? html`<span>${fmtTel(o.cliente.telefone)}</span>` : null}</span>
@@ -368,7 +458,18 @@ function CardsOS({ lista, ver, ir, acoesDe, prox = {} }) {
           <span class="osc-valor"><small class=${atrasada || parcVencida ? "c-bad" : ""}>${quando}</small>
           ${ver && Number(o.total) > 0 ? html`<b>${aReceber ? "falta " + reais(faltaReceber(o)) : reais(o.total)}</b>` : null}</span></span>
       </button>
-      ${acoesDe ? html`<div class="osc-acoes">${acoesDe(o)}</div>` : null}</article>`; })}</div>`;
+      ${acoesDe ? html`<div class="osc-acoes">${acoesDe(o)}</div>` : null}</article>`; };
+  // 3 colunas por etapa, cada O.S. na sua (pedido do Danilo, 22/11/2026); o nome da etapa fica escrito no topo da coluna
+  const COLS = [["orcamento", "Orçamento"], ["execucao", "Em execução"], ["pagamento", "Aguardando pagamento"]];
+  const por = { orcamento: [], execucao: [], pagamento: [] }, resto = [];
+  for (const o of lista) (por[etapaOS(o)] || resto).push(o);
+  // até 4 colunas: a quarta aparece quando o filtro traz fechadas, recusadas ou canceladas
+  return html`<div class=${"os-colunas" + (resto.length ? " c4" : "")}>
+    ${COLS.map(([k, t]) => html`<section key=${k} class=${"os-col ec-" + COR_ETAPA[k]}><h3>${t}<span>${por[k].length}</span></h3>
+      <div class="os-col-lista">${por[k].length ? por[k].map(carta) : html`<p class="os-col-vazia">Nenhuma O.S. nesta etapa.</p>`}</div></section>`)}
+    ${resto.length ? html`<section class="os-col ec-fec"><h3>Fechadas, recusadas e canceladas<span>${resto.length}</span></h3>
+      <div class="os-col-lista">${resto.map(carta)}</div></section>` : null}
+  </div>`;
 }
 
 const ETAPAS_RESUMO = ETAPAS;
@@ -386,6 +487,7 @@ export function Ordens({ params = {} }) {
   const [ordem, setOrdem] = useState(() => lsGet("dtcar-os-ordem") || "recentes");
   const [cancelar, setCancelar] = useState(null), [encerrar, setEncerrar] = useState(null), [ocupado, setOcupado] = useState("");
   const [visao, setVisao, largo] = useVisao("os");
+  const [previa, setPrevia] = useState(null); // O.S. aberta no painel lateral (protótipo de 23/11/2026)
   const avancar = async (o, etapa) => {
     if (etapa.tipo === "abrir") return etapa.acao === "receber" || etapa.acao === "entregar" ? setEncerrar(o) : ir("/os/" + o.id + "?acao=" + etapa.acao);
     setOcupado(o.id);
@@ -394,23 +496,34 @@ export function Ordens({ params = {} }) {
   };
   const imprimir = (o, valores) => ir(`/imprimir/os/${o.id}?vias=${cfg.impressaoVias || 1}&valores=${valores ? 1 : 0}&formato=a4`);
   const podeEncerrar = o => !o._pendente && pode(perfil, "entregar") && naEtapa(o, "pagamento");
+  const infoDe = o => ({ et: proximaEtapa(o, perfil), podeCanc: pode(perfil, "aprovar") && !["entregue", "cancelado"].includes(o.status), enc: podeEncerrar(o) });
+  const itensMenu = (o, { et, podeCanc, enc }) => [
+    ["Abrir O.S.", () => ir("/os/" + o.id)],
+    ["Imprimir O.S.", () => imprimir(o, ver)],
+    ver ? ["Imprimir sem valores (mecânico)", () => imprimir(o, false)] : null,
+    o.cliente.telefone ? ["WhatsApp do cliente", () => window.open(linkWhats(o.cliente.telefone, "Olá, " + (o.cliente.nome || "").split(" ")[0] + "! "), "_blank", "noopener")] : null,
+    et && et.tipo === "abrir" && et.acao === "entregar" && o.status === "recusado" ? ["Registrar retirada", () => ir("/os/" + o.id + "?acao=entregar")] : null,
+    enc && o.status === "pronto" ? ["Entregar sem receber (prazo)", () => ir("/os/" + o.id + "?acao=entregar")] : null,
+    podeCanc ? ["Cancelar O.S.", () => setCancelar(o), true] : null,
+  ];
   const acoesDe = o => {
     if (o._pendente) return null;
-    const et = proximaEtapa(o, perfil), podeCanc = pode(perfil, "aprovar") && !["entregue", "cancelado"].includes(o.status);
-    const enc = podeEncerrar(o);
+    const i = infoDe(o), { et, enc } = i;
     // "Entregar"/"Receber" viram o botão Encerrar; o avanço fica para as etapas sem janela
     const mostraAvanco = et && et.tipo !== "abrir";
     return html`${mostraAvanco ? html`<button type="button" class="btn btn-sm btn-avancar" title=${et.dica} disabled=${ocupado === o.id} onClick=${() => avancar(o, et)}>${ocupado === o.id ? "…" : et.rot} →</button>` : null}
       ${enc ? html`<button type="button" class="btn btn-sm btn-encerrar" title="Registrar o pagamento e fechar a O.S." onClick=${() => setEncerrar(o)}>${o.status === "entregue" ? "Receber" : "Receber e fechar"}</button>` : null}
-      <${MenuOS} o=${o} itens=${[
-        ["Abrir O.S.", () => ir("/os/" + o.id)],
-        ["Imprimir O.S.", () => imprimir(o, ver)],
-        ver ? ["Imprimir sem valores (mecânico)", () => imprimir(o, false)] : null,
-        o.cliente.telefone ? ["WhatsApp do cliente", () => window.open(linkWhats(o.cliente.telefone, "Olá, " + (o.cliente.nome || "").split(" ")[0] + "! "), "_blank", "noopener")] : null,
-        et && et.tipo === "abrir" && et.acao === "entregar" && o.status === "recusado" ? ["Registrar retirada", () => ir("/os/" + o.id + "?acao=entregar")] : null,
-        enc && o.status === "pronto" ? ["Entregar sem receber (prazo)", () => ir("/os/" + o.id + "?acao=entregar")] : null,
-        podeCanc ? ["Cancelar O.S.", () => setCancelar(o), true] : null,
-      ]} />`;
+      <${MenuOS} o=${o} itens=${itensMenu(o, i)} />`;
+  };
+  // Tabela: linha curta — um só botão "Opções ▾" com TODAS as ações numa janela flutuante (pedido do Danilo, 22/11/2026)
+  const acoesTabela = o => {
+    if (o._pendente) return null;
+    const i = infoDe(o), { et, enc } = i;
+    const avancos = [
+      et && et.tipo !== "abrir" ? [et.rot + " →", () => avancar(o, et)] : null,
+      enc ? [(o.status === "entregue" ? "Receber" : "Receber e fechar"), () => setEncerrar(o)] : null,
+    ];
+    return html`<${MenuOS} o=${o} rotulo="Opções ▾" itens=${[...avancos, ...itensMenu(o, i)]} />`;
   };
   // próxima parcela em aberto de cada O.S. (contas a receber)
   const prox = useMemo(() => { const m = {}; (dados.receber || []).filter(p => p.status === "aberta").forEach(p => { if (!m[p.ordem_id] || p.vencimento < m[p.ordem_id].vencimento) m[p.ordem_id] = p; }); return m; }, [dados.receber]);
@@ -435,7 +548,7 @@ export function Ordens({ params = {} }) {
   const totalAberto = abertas.reduce((s, o) => s + (etapaOS(o) === "pagamento" ? faltaReceber(o) : Number(o.total || 0)), 0);
   const atrasadas = dados.ordens.filter(o => ABERTOS.includes(o.status) && o.status !== "pronto" && o.previsao_entrega && o.previsao_entrega < hojeISO()).length;
   const nRecVenc = ver ? dados.ordens.filter(recVencida).length : 0;
-  return html`<div class=${"pagina" + (visao === "tabela" ? " larga" : visao === "cards" ? " larga visao-cards" : " larga-media")}>
+  return html`<div class=${"pagina tela-ordens" + (visao === "tabela" ? " larga" : visao === "cards" ? " larga visao-cards" : " larga-media")}>
     <div class="os-resumo">${ver ? html`<button type="button" class=${"osr osr-total" + (filtro === "abertas" ? " ativo" : "")} onClick=${() => setFiltro("abertas")} title="Orçamento + em execução + o que falta receber das O.S. aguardando pagamento">
         <span>Total em aberto</span><b>${reais(totalAberto)}</b><small>${abertas.length} O.S.</small></button>` : null}
       ${resumo.map(r => html`<button type="button" key=${r.k} class=${"osr osr-" + r.k + (filtro === r.k ? " ativo" : "")} onClick=${() => setFiltro(filtro === r.k ? "abertas" : r.k)}>
@@ -449,19 +562,24 @@ export function Ordens({ params = {} }) {
       <select class="inp" aria-label="Ordenar" value=${ordem} onChange=${e => { setOrdem(e.target.value); lsSet("dtcar-os-ordem", e.target.value); }}>${ORDENS_OS.map(([k, t]) => html`<option value=${k}>${t}</option>`)}</select>
       ${largo ? html`<${TrocaVisao} visao=${visao} onTroca=${setVisao} cards />` : null}
     </div>
+    <div class=${"os-palco" + (previa ? "" : " so-lista")}>
+     <div class="os-lista-col">
     <section class="card"><div class="secao-topo"><h2>${lista.length} O.S.</h2><span class="sub">${ver && soma ? reais(soma) : ""}</span>
         ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${() => ir("/entrada")}>+ Nova O.S.</button>` : null}</div>
-      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} soma=${soma} total=${lista.length} acoesDe=${acoesDe} prox=${prox} />`
-      : lista.length && visao === "cards" ? html`<${CardsOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} acoesDe=${acoesDe} prox=${prox} />`
-      : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} parcela=${prox[o.id]} acoes=${acoesDe(o)} onClick=${() => ir("/os/" + o.id)} />`)}</div>`
+      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} onVer=${id => temPainelLado() ? setPrevia(id) : ir("/os/" + id)} soma=${soma} total=${lista.length} acoesDe=${acoesTabela} prox=${prox} sel=${previa} />`
+      : lista.length && visao === "cards" ? html`<${CardsOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} onVer=${id => temPainelLado() ? setPrevia(id) : ir("/os/" + id)} acoesDe=${acoesDe} prox=${prox} sel=${previa} />`
+      : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} parcela=${prox[o.id]} acoes=${acoesDe(o)} sel=${previa === o.id} onClick=${() => temPainelLado() ? setPrevia(o.id) : ir("/os/" + o.id)} />`)}</div>`
         : html`<${Vazio}>${dados.ordens.length ? "Nenhuma O.S. com esse filtro." : "Nenhuma O.S. ainda."}</${Vazio}>`}
       ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}
     </section>
+     </div>
+     <${PreviaOS} id=${previa} onFechar=${() => setPrevia(null)} acoes=${o => html`<div class="pv-acao">${acoesDe(o)}</div>`} />
+    </div>
     ${cancelar ? html`<${CancelarModal} o=${cancelar} onFechar=${() => setCancelar(null)} onFeito=${() => setCancelar(null)} />` : null}
     ${encerrar ? html`<${EncerrarModal} o=${encerrar} onFechar=${() => setEncerrar(null)} onFeito=${() => setEncerrar(null)} />` : null}</div>`;
 }
 
-export function LinhaOS({ o, verValores, onClick, acoes, parcela }) {
+export function LinhaOS({ o, verValores, onClick, acoes, parcela, sel }) {
   const atrasada = ["diagnostico", "aguardando", "execucao"].includes(o.status) && o.previsao_entrega && o.previsao_entrega < hojeISO();
   if (acoes) {
     const aReceber = o.status === "entregue" && o.recebido !== undefined && !o.finalizada_em;
@@ -471,7 +589,7 @@ export function LinhaOS({ o, verValores, onClick, acoes, parcela }) {
       verValores && aReceber ? ["Falta receber", reais(Math.max(0, Number(o.total || 0) - Number(o.recebido || 0))), true] : null,
       verValores && parcela ? ["Vencimento", fmtData(parcela.vencimento) + (parcela.parcelas > 1 ? " (" + parcela.parcela + "/" + parcela.parcelas + ")" : "") + " · " + situacaoParcela(parcela).t.toLowerCase(), parcela.vencimento <= hojeISO()] : null,
       verValores && aReceber && !parcela && o.recebido !== undefined ? ["Prazo", "não combinado", true] : null].filter(Boolean);
-    return html`<div class=${"linha linha-os-acoes" + (atrasada ? " atrasada" : "")}><button type="button" class="botao-limpo los-corpo" onClick=${onClick}><${Placa} placa=${o.veiculo.placa} />
+    return html`<div class=${"linha linha-os-acoes" + (atrasada ? " atrasada" : "") + (sel ? " os-sel" : "")}><button type="button" class="botao-limpo los-corpo" onClick=${onClick}><${Placa} placa=${o.veiculo.placa} />
       <span class="meio"><strong><span class="los-num">${o._provisorio || numOS(o.numero)}</span> ${[o.veiculo.marca, o.veiculo.modelo].filter(Boolean).join(" ") || "Veículo"}${o.veiculo.ano ? " " + o.veiculo.ano : ""}${o.situacao ? html` <em class="tag">${o.situacao}</em>` : null}</strong>
         <span>${o.cliente.nome}${o.cliente.telefone ? " · " + fmtTel(o.cliente.telefone) : ""}${o.contato ? " · contato: " + o.contato : ""}</span>
         ${o.reclamacao ? html`<span class="los-recl">${o.reclamacao}</span>` : null}

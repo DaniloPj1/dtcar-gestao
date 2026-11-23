@@ -1,0 +1,67 @@
+name: DTCar Clone (gerar APK)
+
+# Gera o APK do app DTCar Clone (pasta clone/) — a ferramenta de leitura/clone de módulos por OBD.
+# Como usar (só o Danilo): GitHub > Actions > "DTCar Clone (gerar APK)" > Run workflow.
+# O APK sai em "Artifacts" (DTCar-clone-apk). É de teste (assinatura de depuração): instala sem Play Store;
+# cada geração usa chave nova, então versão nova exige desinstalar a anterior.
+# Este app é SEPARADO do app do sistema: tem o seu próprio plugin, só de LEITURA. Não usa segredo.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: clone/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Prepara o Android SDK
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+
+      - name: Instala o Capacitor (versões travadas)
+        working-directory: clone
+        run: npm ci
+
+      - name: Cria o projeto Android
+        working-directory: clone
+        run: npx cap add android
+
+      - name: Ajusta ícone, versão e segurança
+        run: |
+          python3 -m pip install pillow
+          python3 clone/preparar_android.py ${{ github.run_number }}
+
+      - name: Copia as telas para o Android
+        working-directory: clone
+        run: npx cap sync android
+
+      - name: Gera o APK
+        working-directory: clone/android
+        run: ./gradlew assembleDebug --no-daemon
+
+      - name: Confere o APK
+        run: |
+          APK=clone/android/app/build/outputs/apk/debug/app-debug.apk
+          ls -l "$APK"
+          unzip -p "$APK" assets/public/index.html | grep -q "DTCar Clone"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DTCar-clone-apk
+          path: clone/android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 30

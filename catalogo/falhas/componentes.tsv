@@ -1,0 +1,663 @@
+a/c clutch relay	Relé da embreagem do compressor do ar-condicionado
+a/c control module requested mil illumination	O módulo do ar-condicionado pediu para acender a luz de injeção
+a/c evaporator temperature sensor	Sensor de temperatura do evaporador do ar-condicionado
+a/c refrigerant pressure sensor	Sensor de pressão do gás do ar-condicionado
+acceleration sensor failure (center offset failure)	Defeito no sensor de aceleração (erro de centro)
+active grill air shutter	Grade ativa do radiador
+active grill air shutter supply voltage	Tensão de alimentação da grade ativa do radiador
+active grille air shutter module	Módulo da grade ativa do radiador
+actuator supply voltage	Tensão de alimentação dos atuadores
+air-fuel ratio imbalance	Mistura ar-combustível desigual
+alternative fuel rail pressure sensor	Sensor de pressão do rail de combustível alternativo
+alternative fuel rail temperature sensor	Sensor de temperatura do rail de combustível alternativo
+alternative fuel rail/system pressure	Pressão do rail/sistema de combustível alternativo
+alternative fuel tank level sensor	Sensor de nível do tanque de combustível alternativo
+alternative fuel tank pressure sensor	Sensor de pressão do tanque de combustível alternativo
+ambient air temperature sensor	Sensor de temperatura externa
+ambient air temperature sensor circuit	Circuito do sensor de temperatura externa
+auto shift manual adaptive learning at limit	Aprendizado do câmbio automatizado no limite
+auto shift manual mode	Modo manual do câmbio automatizado
+barometric pressure	Pressão atmosférica
+barometric pressure - turbocharger/supercharger boost sensor	Pressão atmosférica x sensor de pressão do turbo/compressor
+battery charger control module	Módulo do carregador da bateria
+battery charger coupler temperature sensor	Sensor de temperatura do conector do carregador da bateria
+battery charger hybrid/ev battery output current sensor	Sensor de corrente de saída do carregador para a bateria híbrida/EV
+battery charger hybrid/ev battery output voltage sensor	Sensor de tensão de saída do carregador para a bateria híbrida/EV
+battery charger input current	Corrente de entrada do carregador da bateria
+battery charger input current sensor	Sensor de corrente de entrada do carregador da bateria
+battery charger input frequency incorrect	Frequência de entrada do carregador da bateria incorreta
+battery charger input voltage	Tensão de entrada do carregador da bateria
+battery charger input voltage sensor	Sensor de tensão de entrada do carregador da bateria
+battery charger output voltage	Tensão de saída do carregador da bateria
+battery charger temperature	Temperatura do carregador da bateria
+battery charging output voltage	Tensão de carga da bateria
+battery energy control module	Módulo de energia da bateria
+battery monitor module	Módulo monitor da bateria
+battery monitor module current monitoring	Monitoramento de corrente do módulo monitor da bateria
+battery voltage	Tensão da bateria
+brake booster pressure sensor	Sensor de pressão do servofreio
+brake diag circuit on failure	Circuito de diagnóstico do freio preso ligado
+brake fluid leak or seal failure	Vazamento de fluido de freio ou defeito de vedação
+brake light switch failure (stuck on)/brake pedal stroke sensor stuck (ebb)	Interruptor da luz de freio preso ligado / sensor de curso do pedal preso
+brake pad temperature	Temperatura das pastilhas de freio
+brake pedal position sensor	Sensor de posição do pedal do freio
+brake switch	Interruptor do freio
+brake switch signal circuit error	Erro no circuito de sinal do interruptor do freio
+brake system control module requested mil illumination	O módulo dos freios pediu para acender a luz de injeção
+camshaft position	Posição do comando de válvulas
+camshaft position - actuator	Atuador do comando de válvulas variável
+camshaft position - timing over-advanced or system	Comando de válvulas adiantado demais ou sistema
+camshaft position - timing over-retarded	Comando de válvulas atrasado demais
+camshaft position actuator	Atuador do comando de válvulas variável
+camshaft position sensor	Sensor de fase (posição do comando de válvulas)
+catalyst system efficiency below threshold	Eficiência do catalisador abaixo do limite
+center 2nd seat belt reminder transceiver not paired	Transmissor do aviso de cinto do banco central da 2ª fileira não pareado
+center 3rd seat belt reminder transceiver not paired	Transmissor do aviso de cinto do banco central da 3ª fileira não pareado
+charge air cooler coolant pump	Bomba de líquido do intercooler
+charge air cooler efficiency below threshold	Eficiência do intercooler abaixo do limite
+charge air cooler temperature sensor	Sensor de temperatura do intercooler
+charge air cooler temperature/intake air temperature	Temperatura do intercooler x temperatura do ar de admissão
+clutch	Embreagem
+clutch actuator	Atuador da embreagem
+clutch actuator temperature	Temperatura do atuador da embreagem
+clutch engagement time	Tempo de acoplamento da embreagem
+clutch pedal position sensor	Sensor de posição do pedal da embreagem
+clutch pedal switch	Interruptor do pedal da embreagem
+clutch position control error	Erro no controle de posição da embreagem
+clutch position sensor	Sensor de posição da embreagem
+clutch pressure engagement	Pressão de acoplamento da embreagem
+clutch switch input	Entrada do interruptor da embreagem
+clutch temperature	Temperatura da embreagem
+cold start camshaft position timing	Ponto do comando de válvulas na partida a frio
+cold start fuel injection	Injeção de combustível na partida a frio
+cold start fuel pressure	Pressão de combustível na partida a frio
+cold start idle air control system	Controle de marcha lenta na partida a frio
+cold start ignition timing	Ponto de ignição na partida a frio
+cold start rough idle	Marcha lenta irregular na partida a frio
+control module	Módulo de comando
+control module communication bus off	Módulo fora da rede de comunicação (bus off)
+control module input power	Alimentação do módulo
+control module power off timer	Temporizador de desligamento do módulo
+control module programming error	Erro de programação do módulo
+control module vehicle options error	Erro de configuração de opcionais do veículo no módulo
+control module wake-up	Circuito de despertar do módulo
+control pilot	Piloto de controle da recarga
+control pilot charging switch	Interruptor de carga do piloto de controle
+coolant pump	Bomba d'água
+coolant thermostat (coolant temperature below thermostat regulating temperature)	Válvula termostática (temperatura do motor abaixo da temperatura de regulagem)
+crankshaft position - camshaft position correlation sensor a	Sincronismo entre virabrequim e comando de válvulas (sensor A)
+crankshaft position - camshaft position correlation sensor b	Sincronismo entre virabrequim e comando de válvulas (sensor B)
+crankshaft position sensor	Sensor de rotação (posição do virabrequim)
+crankshaft position sensor - crankshaft direction incorrect	Sensor de rotação: sentido de giro do virabrequim incorreto
+crankshaft position sensor - crankshaft start position incorrect	Sensor de rotação: posição de partida do virabrequim incorreta
+cruise control front distance range sensor single sensor or center	Sensor de distância dianteiro do piloto automático (único ou central)
+cruise control multi-function input	Entrada multifunção do piloto automático
+cylinder deactivation system	Sistema de desativação de cilindros
+dc/dc converter	Conversor DC/DC
+dc/dc converter enable	Habilitação do conversor DC/DC
+dc/dc converter temperature sensor	Sensor de temperatura do conversor DC/DC
+dc/dc converter voltage sensor	Sensor de tensão do conversor DC/DC
+different diameter tire detection	Pneus de diâmetros diferentes detectados
+downshift switch	Interruptor de redução de marcha
+dpf differential pressure sensor	Sensor de pressão diferencial do filtro de partículas (DPF)
+dpf pressure sensor a	Sensor de pressão A do filtro de partículas (DPF)
+dpf restriction - ash accumulation	Filtro de partículas (DPF) entupido: acúmulo de cinzas
+drive motor	Motor de tração
+drive motor control module	Módulo do motor de tração
+drive motor inverter	Inversor do motor de tração
+drive motor inverter temperature sensor	Sensor de temperatura do inversor do motor de tração
+drive motor inverter voltage	Tensão do inversor do motor de tração
+drive motor inverter voltage sensor	Sensor de tensão do inversor do motor de tração
+drive motor phase u current	Corrente da fase U do motor de tração
+drive motor phase u current sensor	Sensor de corrente da fase U do motor de tração
+drive motor phase u-v-w current sensor	Sensores de corrente das fases U, V e W do motor de tração
+drive motor phase v current	Corrente da fase V do motor de tração
+drive motor phase v current sensor	Sensor de corrente da fase V do motor de tração
+drive motor phase w current	Corrente da fase W do motor de tração
+drive motor phase w current sensor	Sensor de corrente da fase W do motor de tração
+drive motor position exceeded learning limit	Posição do motor de tração passou do limite de aprendizado
+drive motor position sensor	Sensor de posição do motor de tração
+drive motor temperature sensor	Sensor de temperatura do motor de tração
+ecm/pcm internal engine off timer	Temporizador interno de motor desligado do módulo do motor
+ecm/pcm power relay	Relé de alimentação do módulo do motor
+ecm/pcm power relay de-energized performance - too early	Relé de alimentação do módulo do motor desligou cedo demais
+ecm/pcm power relay de-energized performance - too late	Relé de alimentação do módulo do motor desligou tarde demais
+ecm/pcm processor	Processador do módulo do motor
+egr	EGR
+egr control	Comando da EGR
+egr control position exceeded learning limit	Posição do comando da EGR passou do limite de aprendizado
+egr cooler	Resfriador da EGR
+egr cooler bypass	Desvio do resfriador da EGR
+egr flow insufficient detected	Fluxo da EGR insuficiente
+egr sensor	Sensor da EGR
+egr valve actuator jammed shut permanent	Atuador da válvula EGR travado fechado (permanente)
+electric/auxiliary transmission fluid pump	Bomba elétrica/auxiliar de óleo do câmbio
+electric/auxiliary transmission fluid pump driver	Acionador da bomba elétrica/auxiliar de óleo do câmbio
+electric/auxiliary transmission fluid pump motor stalled	Motor da bomba elétrica/auxiliar de óleo do câmbio travado
+engine coolant bypass valve	Válvula de desvio do líquido de arrefecimento
+engine coolant pump	Bomba d'água do motor
+engine coolant temperature	Temperatura do motor
+engine coolant temperature / intake air temperature	Temperatura do motor x temperatura do ar de admissão
+engine coolant temperature sensor {1}	Sensor de temperatura do motor {1}
+engine coolant temperature sensor {1}/{2}	Sensores de temperatura do motor {1}/{2}
+engine mount	Coxim do motor
+engine oil deteriorated	Óleo do motor deteriorado
+engine oil level sensor	Sensor de nível de óleo do motor
+engine oil pressure	Pressão do óleo do motor
+engine oil pressure out of range	Pressão do óleo do motor fora da faixa
+engine oil pressure sensor/switch	Sensor/interruptor de pressão do óleo do motor
+engine oil pressure sensor/switch high voltage	Sensor/interruptor de pressão do óleo do motor: tensão alta
+engine oil pressure sensor/switch low voltage	Sensor/interruptor de pressão do óleo do motor: tensão baixa
+engine oil temperature sensor	Sensor de temperatura do óleo do motor
+engine overspeed condition	Motor passou do limite de rotação
+engine speed input	Entrada de rotação do motor
+engine speed input circuit no signal	Entrada de rotação do motor sem sinal
+evap system high pressure purge line	Linha de purga de alta pressão do EVAP
+evap system leak detection pump pressure sensor	Sensor de pressão da bomba de detecção de vazamento do EVAP
+evap system leak detection pump switching valve	Válvula de comutação da bomba de detecção de vazamento do EVAP
+evap system leak detection reference orifice high flow	Orifício de referência da detecção de vazamento do EVAP: fluxo alto
+evap system leak detection reference orifice low flow	Orifício de referência da detecção de vazamento do EVAP: fluxo baixo
+evap system low pressure purge line	Linha de purga de baixa pressão do EVAP
+evap system pressure sensor/switch	Sensor/interruptor de pressão do sistema EVAP
+evap system purge control valve	Válvula de purga do canister (EVAP)
+evap system purge control valve performance/stuck open	Válvula de purga do canister (EVAP) com desempenho ruim ou presa aberta
+evap system switching valve	Válvula de comutação do EVAP
+evap system switching valve performance/stuck open	Válvula de comutação do EVAP com desempenho ruim ou presa aberta
+evap system very small leak detected - fresh air side	Vazamento muito pequeno no EVAP, lado do ar
+evap system very small leak detected - fuel tank side	Vazamento muito pequeno no EVAP, lado do tanque
+evaporative emission system	Sistema EVAP (canister)
+evaporative emission system high purge flow	Sistema EVAP: fluxo de purga alto
+evaporative emission system incorrect purge flow	Sistema EVAP: fluxo de purga incorreto
+evaporative emission system leak detected (fuel cap loose/off)	Vazamento no sistema EVAP (tampa do tanque solta ou sem tampa)
+evaporative emission system leak detected (large leak)	Vazamento no sistema EVAP (vazamento grande)
+evaporative emission system leak detected (small leak)	Vazamento no sistema EVAP (vazamento pequeno)
+evaporative emission system leak detected (very small leak)	Vazamento no sistema EVAP (vazamento muito pequeno)
+evaporative emission system leak detection pump	Bomba de detecção de vazamento do EVAP
+evaporative emission system low purge flow	Sistema EVAP: fluxo de purga baixo
+evaporative emission system pressure sensor/switch	Sensor/interruptor de pressão do sistema EVAP
+evaporative emission system purge control valve	Válvula de purga do canister (EVAP)
+evaporative emission system purge control valve circuit shorted	Circuito da válvula de purga do canister (EVAP) em curto
+evaporative emission system switching valve	Válvula de comutação do EVAP
+evaporative emission system vent valve	Válvula de respiro do canister (EVAP)
+evaporative emission system vent valve/solenoid	Válvula/solenoide de respiro do canister (EVAP)
+excessive clutch slippage	Embreagem patinando demais
+exhaust aftertreatment glow plug	Vela aquecedora do pós-tratamento de escape
+exhaust gas recirculation	EGR (recirculação dos gases de escape)
+exhaust gas recirculation flow	Fluxo da EGR
+exhaust gas recirculation flow excessive detected	Fluxo da EGR excessivo
+exhaust gas recirculation flow insufficient detected	Fluxo da EGR insuficiente
+exhaust gas recirculation sensor	Sensor da EGR
+exhaust gas recirculation system	Sistema EGR
+exhaust gas temperature sensor	Sensor de temperatura dos gases de escape
+exhaust gas temperature sensor {1}/{2}	Sensores de temperatura dos gases de escape {1}/{2}
+exhaust pressure control valve	Válvula de controle de pressão do escape
+f-can malfunction (pcu control module - ecm/pcm)	Defeito na rede F-CAN (módulo PCU x módulo do motor)
+fan {1}	Ventoinha {1}
+front passenger's weight sensor not calibrated	Sensor de peso do banco do passageiro dianteiro não calibrado
+fuel composition sensor	Sensor de composição do combustível (flex)
+fuel fill door open request sensor/switch	Sensor/interruptor de pedido de abertura da portinhola do tanque
+fuel fill door unlock	Destravamento da portinhola do tanque
+fuel injection quantity higher than expected	Quantidade de combustível injetada maior que a esperada
+fuel injector control module	Módulo de comando dos bicos injetores
+fuel injector group supply voltage	Tensão de alimentação do grupo de bicos injetores
+fuel injector offset learning at max limit	Aprendizado de correção do bico injetor no limite máximo
+fuel injector offset learning at min limit	Aprendizado de correção do bico injetor no limite mínimo
+fuel level sensor	Sensor de nível de combustível
+fuel pressure regulator solenoid supply voltage	Tensão de alimentação do solenoide do regulador de pressão de combustível
+fuel pressure regulator {1}	Regulador de pressão de combustível {1}
+fuel pressure regulator {1} exceeded learning limits	Regulador de pressão de combustível {1} passou do limite de aprendizado
+fuel pressure relief	Alívio de pressão de combustível
+fuel pump	Bomba de combustível
+fuel pump control module	Módulo da bomba de combustível
+fuel pump low flow	Vazão baixa da bomba de combustível
+fuel pump primary	Bomba de combustível principal
+fuel pump secondary	Bomba de combustível secundária
+fuel rail pressure sensor	Sensor de pressão do rail
+fuel rail/system pressure	Pressão do rail/sistema de combustível
+fuel shutoff valve	Válvula de corte de combustível
+fuel system over pressure relief valve activated	Válvula de alívio de sobrepressão do sistema de combustível atuou
+fuel temperature sensor a	Sensor de temperatura do combustível A
+fuel trim	Ajuste de combustível
+gate select actuator	Atuador de seleção de trilho
+gate select control error	Erro no controle de seleção de trilho
+gate select position	Posição de seleção de trilho
+gear shift actuator temperature	Temperatura do atuador de troca de marcha
+gear shift control module	Módulo de troca de marcha
+gear shift control module communication	Comunicação do módulo de troca de marcha
+gear shift forward actuator	Atuador de engate de marcha (para frente)
+gear shift module communication	Comunicação do módulo de troca de marcha
+gear shift position	Posição do engate de marcha
+gear shift position control error	Erro no controle de posição do engate de marcha
+gear {1} incorrect ratio	Relação incorreta na {1}ª marcha
+generator	Gerador
+generator control module	Módulo do gerador
+generator inverter	Inversor do gerador
+generator inverter temperature sensor	Sensor de temperatura do inversor do gerador
+generator phase u current	Corrente da fase U do gerador
+generator phase u current sensor	Sensor de corrente da fase U do gerador
+generator phase u-v-w current sensor	Sensores de corrente das fases U, V e W do gerador
+generator phase v current	Corrente da fase V do gerador
+generator phase v current sensor	Sensor de corrente da fase V do gerador
+generator phase w current	Corrente da fase W do gerador
+generator phase w current sensor	Sensor de corrente da fase W do gerador
+generator position exceeding learn limit	Posição do gerador passou do limite de aprendizado
+generator position sensor	Sensor de posição do gerador
+generator system	Sistema do gerador
+generator temperature sensor	Sensor de temperatura do gerador
+generator voltage sense	Leitura de tensão do gerador
+glow plug	Vela aquecedora
+glow plug control module {1}	Módulo {1} de comando das velas aquecedoras
+glow plug control module {1} system voltage	Tensão do sistema do módulo {1} das velas aquecedoras
+glow plug module	Módulo das velas aquecedoras
+glow plug/heater circuit	Circuito da vela aquecedora/aquecedor
+high voltage system interlock	Intertravamento do sistema de alta tensão
+ho2s heater	Aquecedor da sonda lambda
+ho2s heater resistance	Resistência do aquecedor da sonda lambda
+hybrid generator	Gerador híbrido
+hybrid/ev battery negative contactor	Contator negativo da bateria híbrida/EV
+hybrid/ev battery pack	Conjunto da bateria híbrida/EV
+hybrid/ev battery pack air temperature sensor	Sensor de temperatura do ar do conjunto da bateria híbrida/EV
+hybrid/ev battery pack cell voltage	Tensão de célula do conjunto da bateria híbrida/EV
+hybrid/ev battery pack cooling fan {1}	Ventoinha {1} de resfriamento da bateria híbrida/EV
+hybrid/ev battery pack current sensor	Sensor de corrente do conjunto da bateria híbrida/EV
+hybrid/ev battery pack deterioration	Conjunto da bateria híbrida/EV deteriorado
+hybrid/ev battery pack voltage sense	Leitura de tensão do conjunto da bateria híbrida/EV
+hybrid/ev battery positive contactor circuit	Circuito do contator positivo da bateria híbrida/EV
+hybrid/ev battery power off	Desligamento da bateria híbrida/EV
+hybrid/ev battery precharge contactor	Contator de pré-carga da bateria híbrida/EV
+hybrid/ev battery system current	Corrente do sistema da bateria híbrida/EV
+hybrid/ev battery system discharge time too long	Tempo de descarga do sistema da bateria híbrida/EV longo demais
+hybrid/ev battery system voltage	Tensão do sistema da bateria híbrida/EV
+hybrid/ev battery temperature sensor	Sensor de temperatura da bateria híbrida/EV
+hybrid/ev battery voltage	Tensão da bateria híbrida/EV
+hybrid/ev battery voltage isolation sensor	Sensor de isolamento da tensão da bateria híbrida/EV
+hybrid/ev battery voltage sense	Leitura de tensão da bateria híbrida/EV
+hybrid/ev battery voltage system isolation fault	Falha de isolamento da tensão da bateria híbrida/EV
+hybrid/ev battery voltage/drive motor inverter voltage	Tensão da bateria híbrida/EV x tensão do inversor do motor de tração
+hybrid/ev electronics coolant pump	Bomba de líquido de arrefecimento da eletrônica híbrida/EV
+hybrid/ev electronics coolant pump enable	Habilitação da bomba de líquido da eletrônica híbrida/EV
+hybrid/ev powertrain control module requested mil illumination	O módulo do conjunto híbrido/EV pediu para acender a luz de injeção
+hydraulic oil temperature sensor	Sensor de temperatura do óleo hidráulico
+hydraulic pressure sensor	Sensor de pressão hidráulica
+hydraulic pressure unit	Unidade de pressão hidráulica
+hydraulic pump relay	Relé da bomba hidráulica
+idle air	Ar de marcha lenta
+idle air control system	Sistema de controle da marcha lenta
+idle air control system rpm higher than expected	Marcha lenta mais alta que o esperado
+idle air control system rpm lower than expected	Marcha lenta mais baixa que o esperado
+ignition coil primary/secondary	Bobina de ignição (primário/secundário)
+ignition switch run position	Posição "ligado" da chave de ignição
+incorrect fuel composition	Composição do combustível incorreta
+incorrect gear ratio	Relação de marcha incorreta
+incorrect shift from gear {1}	Troca incorreta a partir da {1}ª marcha
+injection pump fuel metering control high (cam/rotor/injector)	Controle de dosagem da bomba injetora alto (came/rotor/bico)
+injection pump fuel metering control low (cam/rotor/injector)	Controle de dosagem da bomba injetora baixo (came/rotor/bico)
+injection timing	Ponto de injeção
+injector	Bico injetor
+injector control pressure regulator	Regulador de pressão de comando dos bicos
+injector data incompatible	Dados do bico injetor incompatíveis
+inlet solenoid (left front) circuit failure	Defeito no circuito do solenoide de entrada (dianteiro esquerdo)
+inlet solenoid (left rear) circuit failure	Defeito no circuito do solenoide de entrada (traseiro esquerdo)
+inlet solenoid (right front) circuit failure	Defeito no circuito do solenoide de entrada (dianteiro direito)
+inlet solenoid (right rear) circuit failure	Defeito no circuito do solenoide de entrada (traseiro direito)
+input/turbine shaft speed sensor	Sensor de rotação do eixo de entrada/turbina do câmbio
+input/turbine speed sensor	Sensor de rotação de entrada/turbina do câmbio
+input/turbine speed sensor circuit no signal	Sensor de rotação de entrada/turbina do câmbio sem sinal
+insufficient coolant temperature for closed loop fuel control	Temperatura do motor insuficiente para o controle de mistura em malha fechada
+insufficient coolant temperature for stable operation	Temperatura do motor insuficiente para funcionamento estável
+intake air system leak	Entrada de ar falso na admissão
+intake air temperature	Temperatura do ar de admissão
+intake air temperature sensor {1}	Sensor de temperatura do ar de admissão {1}
+intake air temperature sensor {1} / {2}	Sensores de temperatura do ar de admissão {1}/{2}
+intake manifold runner	Coletor de admissão variável
+intake manifold runner control	Comando do coletor de admissão variável
+intake manifold runner position sensor/switch	Sensor/interruptor de posição do coletor de admissão variável
+intake manifold tuning (imt) valve	Válvula de sintonia do coletor de admissão (IMT)
+intake manifold tuning valve	Válvula de sintonia do coletor de admissão
+intermediate shaft speed sensor	Sensor de rotação do eixo intermediário
+intermediate shaft speed sensor circuit no signal	Sensor de rotação do eixo intermediário sem sinal
+internal control module a/d processing	Processamento A/D interno do módulo
+internal control module accelerator pedal position	Posição do pedal do acelerador, interno ao módulo
+internal control module drive motor/generator - engine speed sensor	Sensor de rotação do motor de tração/gerador, interno ao módulo
+internal control module eeprom error	Erro de EEPROM interno do módulo
+internal control module fuel injector	Bico injetor, interno ao módulo
+internal control module hybrid/ev battery monitor	Monitor da bateria híbrida/EV, interno ao módulo
+internal control module keep alive memory (kam) error	Erro de memória permanente (KAM) interno do módulo
+internal control module knock/combustion vibration sensor processor {1}	Processador {1} do sensor de detonação, interno ao módulo
+internal control module main processor	Processador principal do módulo
+internal control module memory check sum error	Erro de soma de verificação da memória do módulo
+internal control module monitoring processor	Processador de monitoramento do módulo
+internal control module o2 sensor processor	Processador da sonda lambda, interno ao módulo
+internal control module random access memory (ram) error	Erro de memória RAM interno do módulo
+internal control module read only memory (rom) error	Erro de memória ROM interno do módulo
+internal control module software incompatibility	Incompatibilidade de software interna do módulo
+internal control module throttle actuator controller	Controlador da borboleta eletrônica, interno ao módulo
+internal control module torque	Torque, interno ao módulo
+internal control module torque calculation	Cálculo de torque interno do módulo
+internal control module transmission range sensor	Sensor de posição da alavanca, interno ao módulo
+internal control module vehicle speed	Velocidade do veículo, interno ao módulo
+internal failure of the front passenger's weight sensor (front inner side)	Defeito interno no sensor de peso do banco do passageiro (dianteiro, lado interno)
+internal failure of the front passenger's weight sensor (front outer side)	Defeito interno no sensor de peso do banco do passageiro (dianteiro, lado externo)
+internal failure of the front passenger's weight sensor (rear inner side)	Defeito interno no sensor de peso do banco do passageiro (traseiro, lado interno)
+internal failure of the front passenger's weight sensor (rear outer side)	Defeito interno no sensor de peso do banco do passageiro (traseiro, lado externo)
+invalid data received	Dado inválido recebido
+invalid data received from anti-lock brake system control module	Dado inválido recebido do módulo do ABS
+invalid data received from automatic lighting control module	Dado inválido recebido do módulo de iluminação automática
+invalid data received from body control module	Dado inválido recebido do módulo da carroceria (BCM)
+invalid data received from brake system control module	Dado inválido recebido do módulo dos freios
+invalid data received from cruise control module	Dado inválido recebido do módulo do piloto automático
+invalid data received from dc/dc converter control module	Dado inválido recebido do módulo do conversor DC/DC
+invalid data received from ecm/pcm	Dado inválido recebido do módulo do motor
+invalid data received from four-wheel drive clutch control module	Dado inválido recebido do módulo da embreagem do 4x4
+invalid data received from gateway	Dado inválido recebido da central de rede (gateway)
+invalid data received from gear shift control module	Dado inválido recebido do módulo de troca de marcha
+invalid data received from headlamp levelling control module	Dado inválido recebido do módulo de nivelamento dos faróis
+invalid data received from instrument panel control module	Dado inválido recebido do módulo do painel
+invalid data received from park brake control module	Dado inválido recebido do módulo do freio de estacionamento
+invalid data received from power steering control module	Dado inválido recebido do módulo da direção assistida
+invalid data received from restraints control module	Dado inválido recebido do módulo do airbag
+invalid data received from suspension control module	Dado inválido recebido do módulo da suspensão
+invalid data received from throttle actuator control module	Dado inválido recebido do módulo da borboleta eletrônica
+invalid data received from transmission control module	Dado inválido recebido do módulo do câmbio
+invalid data received from vehicle dynamics control module	Dado inválido recebido do módulo de estabilidade
+knock control system error	Erro no sistema de controle de detonação
+knock sensor {1}	Sensor de detonação {1}
+left front wheel speed sensor circuit failure (circuit short to ground or open)	Defeito no circuito do sensor de velocidade da roda dianteira esquerda (curto com a massa ou aberto)
+left rear wheel speed sensor circuit failure (circuit short to ground or open)	Defeito no circuito do sensor de velocidade da roda traseira esquerda (curto com a massa ou aberto)
+longitudinal acceleration sensor circuit short to battery or open	Circuito do sensor de aceleração longitudinal em curto com o positivo ou aberto
+lost communication with "digital audio control module a"	Sem comunicação com o módulo de áudio digital A
+lost communication with "door control module a"	Sem comunicação com o módulo de porta A
+lost communication with "door control module b"	Sem comunicação com o módulo de porta B
+lost communication with "seat control module a"	Sem comunicação com o módulo de banco A
+lost communication with active grill air shutter module	Sem comunicação com o módulo da grade ativa do radiador
+lost communication with air conditioning control module	Sem comunicação com o módulo do ar-condicionado
+lost communication with anti-lock brake system (abs) control module	Sem comunicação com o módulo do ABS
+lost communication with automatic lighting control module	Sem comunicação com o módulo de iluminação automática
+lost communication with battery charger control module	Sem comunicação com o módulo do carregador da bateria
+lost communication with battery energy control module	Sem comunicação com o módulo de energia da bateria
+lost communication with battery monitor module	Sem comunicação com o módulo monitor da bateria
+lost communication with body control module	Sem comunicação com o módulo da carroceria (BCM)
+lost communication with brake system control module	Sem comunicação com o módulo dos freios
+lost communication with cruise control module	Sem comunicação com o módulo do piloto automático
+lost communication with dc to ac converter control module	Sem comunicação com o módulo do conversor DC/AC
+lost communication with dc/dc converter control module	Sem comunicação com o módulo do conversor DC/DC
+lost communication with drive motor control module	Sem comunicação com o módulo do motor de tração
+lost communication with ecm/pcm	Sem comunicação com o módulo do motor
+lost communication with four-wheel drive clutch control module	Sem comunicação com o módulo da embreagem do 4x4
+lost communication with fuel injector control module	Sem comunicação com o módulo de comando dos bicos injetores
+lost communication with gateway	Sem comunicação com a central de rede (gateway)
+lost communication with gear shift control module	Sem comunicação com o módulo de troca de marcha
+lost communication with gear shift module	Sem comunicação com o módulo de troca de marcha
+lost communication with generator control module	Sem comunicação com o módulo do gerador
+lost communication with head up display	Sem comunicação com o head-up display
+lost communication with headlamp leveling control module	Sem comunicação com o módulo de nivelamento dos faróis
+lost communication with heated steering wheel module	Sem comunicação com o módulo do volante aquecido
+lost communication with hvac control module	Sem comunicação com o módulo do ar-condicionado
+lost communication with hybrid/ev battery pack sensor module	Sem comunicação com o módulo de sensores da bateria híbrida/EV
+lost communication with hybrid/ev powertrain control module	Sem comunicação com o módulo do conjunto híbrido/EV
+lost communication with image processing module	Sem comunicação com o módulo de processamento de imagem
+lost communication with instrument panel cluster (ipc) control module	Sem comunicação com o painel de instrumentos
+lost communication with navigation control module	Sem comunicação com o módulo de navegação
+lost communication with park brake control module	Sem comunicação com o módulo do freio de estacionamento
+lost communication with parking assist control module	Sem comunicação com o módulo de auxílio de estacionamento
+lost communication with pm sensor	Sem comunicação com o sensor de material particulado
+lost communication with power steering control module	Sem comunicação com o módulo da direção assistida
+lost communication with rain sensing module	Sem comunicação com o módulo do sensor de chuva
+lost communication with rear gate module	Sem comunicação com o módulo da tampa traseira
+lost communication with restraints control module	Sem comunicação com o módulo do airbag
+lost communication with ride level control module	Sem comunicação com o módulo de nivelamento da suspensão
+lost communication with seatbelt pretensioner module	Sem comunicação com o módulo do pré-tensionador do cinto
+lost communication with special purpose vehicle control module	Sem comunicação com o módulo de veículo de uso especial
+lost communication with steering angle sensor module	Sem comunicação com o módulo do sensor de ângulo do volante
+lost communication with tcm	Sem comunicação com o módulo do câmbio
+lost communication with telematic control module	Sem comunicação com o módulo de telemática
+lost communication with telephone control module	Sem comunicação com o módulo do telefone
+lost communication with throttle actuator control module	Sem comunicação com o módulo da borboleta eletrônica
+lost communication with tire pressure monitor module	Sem comunicação com o módulo de pressão dos pneus
+lost communication with transmission fluid pump module	Sem comunicação com o módulo da bomba de óleo do câmbio
+lost communication with vehicle dynamics control module	Sem comunicação com o módulo de estabilidade
+lost communication with vehicle immobilizer control module	Sem comunicação com o módulo do imobilizador
+lost communication with yaw rate sensor module	Sem comunicação com o módulo do sensor de guinada
+low pressure fuel system pressure - too low, low ambient temperature	Pressão baixa demais no sistema de combustível de baixa pressão, com temperatura ambiente baixa
+low tire air pressure	Pressão baixa nos pneus
+magnetic encoder (left front) failure (pulse missing)	Defeito no anel magnético (dianteiro esquerdo): pulso faltando
+magnetic encoder (left rear) failure (pulse missing)	Defeito no anel magnético (traseiro esquerdo): pulso faltando
+magnetic encoder (right front) failure (pulse missing)	Defeito no anel magnético (dianteiro direito): pulso faltando
+magnetic encoder (right rear) failure (pulse missing)	Defeito no anel magnético (traseiro direito): pulso faltando
+manifold absolute pressure - barometric pressure	Pressão do coletor (MAP) x pressão atmosférica
+manifold absolute pressure - turbocharger/supercharger boost sensor	Pressão do coletor (MAP) x sensor de pressão do turbo/compressor
+manifold absolute pressure/barometric pressure	Pressão do coletor (MAP)/pressão atmosférica
+manifold absolute pressure/mass air flow - throttle position correlation at higher load	MAP/MAF x posição da borboleta não batem em carga alta
+manifold absolute pressure/mass air flow - throttle position correlation at idle	MAP/MAF x posição da borboleta não batem em marcha lenta
+map - mass or volume air flow	Sensor MAP x fluxo de ar (MAF)
+map/maf - throttle position	MAP/MAF x posição da borboleta
+mass or volume air flow	Fluxo de ar (massa ou volume)
+mass or volume air flow circuit range/performance - air flow	Fluxo de ar (MAF) fora da faixa ou com desempenho ruim
+mass or volume air flow sensor	Sensor de fluxo de ar (MAF)
+master cylinder brake fluid pressure sensor circuit open/short	Circuito do sensor de pressão do cilindro mestre aberto ou em curto
+misfire detected	Falha de combustão detectada
+modulator unit failure	Defeito na unidade moduladora do ABS
+motor electronics coolant pump	Bomba de líquido de arrefecimento da eletrônica do motor elétrico
+motor electronics coolant temperature sensor	Sensor de temperatura do líquido da eletrônica do motor elétrico
+multiple gears engaged	Mais de uma marcha engatada
+neutral position sensor	Sensor de posição de neutro
+nox trap efficiency below threshold	Eficiência do catalisador de NOx abaixo do limite
+o2 sensor	Sonda lambda
+o2 sensor heater	Aquecedor da sonda lambda
+o2 sensor negative current	Corrente negativa da sonda lambda
+o2 sensor out of range during deceleration	Sonda lambda fora da faixa na desaceleração
+o2 sensor positive current	Corrente positiva da sonda lambda
+o2 sensor pumping current trim	Ajuste da corrente de bombeamento da sonda lambda
+o2 sensor reference voltage	Tensão de referência da sonda lambda
+o2 sensor signal circuit shorted to heater	Sinal da sonda lambda em curto com o circuito do aquecedor
+o2 sensor signal stuck lean	Sinal da sonda lambda preso em mistura pobre
+o2 sensor signal stuck rich	Sinal da sonda lambda preso em mistura rica
+open or short to ground in the front passenger's airbag on/off indicator	Circuito aberto ou em curto com a massa no indicador de airbag do passageiro ligado/desligado
+outlet solenoid (left front) circuit failure	Defeito no circuito do solenoide de saída (dianteiro esquerdo)
+outlet solenoid (left rear) circuit failure	Defeito no circuito do solenoide de saída (traseiro esquerdo)
+outlet solenoid (right front) circuit failure	Defeito no circuito do solenoide de saída (dianteiro direito)
+outlet solenoid (right rear) circuit failure	Defeito no circuito do solenoide de saída (traseiro direito)
+output shaft speed - wheel speed	Rotação do eixo de saída x velocidade das rodas
+output shaft speed sensor	Sensor de rotação do eixo de saída do câmbio
+output shaft speed sensor circuit - direction error	Sensor de rotação do eixo de saída: erro de sentido
+output speed sensor	Sensor de rotação de saída
+output speed sensor circuit no signal	Sensor de rotação de saída sem sinal
+park input	Entrada de P
+park pawl motor	Motor da trava de estacionamento (P)
+park pawl motor control circuit current	Corrente do circuito de comando do motor da trava de estacionamento (P)
+park pawl position sensor	Sensor de posição da trava de estacionamento (P)
+park/neutral switch input	Entrada do interruptor de P/N
+park/neutral switch output	Saída do interruptor de P/N
+particulate filter deteriorated/missing substrate	Filtro de partículas deteriorado ou sem o miolo
+particulate filter restriction - soot accumulation too high,	Filtro de partículas entupido: fuligem demais
+particulate matter sensor	Sensor de material particulado
+particulate matter sensor exhaust sample error	Erro de amostra de escape do sensor de material particulado
+particulate matter sensor heater	Aquecedor do sensor de material particulado
+particulate matter sensor heater resistance	Resistência do aquecedor do sensor de material particulado
+particulate matter sensor processor	Processador do sensor de material particulado
+particulate matter sensor regeneration incomplete	Regeneração do sensor de material particulado incompleta
+particulate matter sensor temperature	Temperatura do sensor de material particulado
+particulate trap efficiency below threshold	Eficiência do filtro de partículas abaixo do limite
+pcm/ecm/tcm internal temperature	Temperatura interna do módulo (motor/câmbio)
+pcm/ecm/tcm internal temperature sensor	Sensor de temperatura interna do módulo (motor/câmbio)
+post catalyst fuel trim system too lean	Ajuste de combustível depois do catalisador: mistura pobre demais
+post catalyst fuel trim system too rich	Ajuste de combustível depois do catalisador: mistura rica demais
+power source failure for wheel speed sensor (left front)	Falha de alimentação do sensor de velocidade da roda (dianteira esquerda)
+power source failure for wheel speed sensor (left rear)	Falha de alimentação do sensor de velocidade da roda (traseira esquerda)
+power source failure for wheel speed sensor (right rear)	Falha de alimentação do sensor de velocidade da roda (traseira direita)
+pressure control solenoid	Solenoide de controle de pressão
+pressure control solenoid electrical	Solenoide de controle de pressão (parte elétrica)
+proximity detection	Detecção de proximidade
+pump motor circuit failure (stuck on)	Defeito no circuito do motor da bomba do ABS (preso ligado)
+radiator coolant temperature / engine coolant temperature	Temperatura do líquido no radiador x temperatura do motor
+radiator coolant temperature sensor	Sensor de temperatura do líquido no radiador
+random/multiple cylinder misfire detected	Falha de combustão aleatória ou em vários cilindros
+reductant metering unit temperature sensor	Sensor de temperatura da unidade dosadora de redutor (Arla)
+replace hybrid/ev battery pack	Trocar o conjunto da bateria híbrida/EV
+reserved by document	Código reservado pela norma
+reverse incorrect ratio	Relação incorreta na marcha a ré
+reverse inhibit	Inibição da ré
+reverse input	Entrada de ré
+right front wheel speed sensor circuit failure	Defeito no circuito do sensor de velocidade da roda dianteira direita
+right front wheel speed sensor circuit failure (circuit short to ground or open)	Defeito no circuito do sensor de velocidade da roda dianteira direita (curto com a massa ou aberto)
+right rear wheel speed sensor circuit failure (circuit short to ground or open)	Defeito no circuito do sensor de velocidade da roda traseira direita (curto com a massa ou aberto)
+rocker arm actuator	Atuador do balancim
+rocker arm actuator system	Sistema do atuador do balancim
+secondary air injection system	Sistema de injeção de ar secundário
+secondary air injection system incorrect flow detected	Fluxo incorreto na injeção de ar secundário
+secondary air injection system pump	Bomba da injeção de ar secundário
+secondary air injection system switching valve	Válvula de comutação da injeção de ar secundário
+sensor power supply	Alimentação dos sensores
+sensor reference voltage	Tensão de referência dos sensores (5 V)
+serial communication link	Linha de comunicação serial
+shift error	Erro de troca de marcha
+shift fork position	Posição do garfo de engate
+shift fork position sensor incorrect neutral position indicated	Sensor de posição do garfo de engate indicando neutro errado
+shift solenoid	Solenoide de troca de marcha
+shift solenoid electrical	Solenoide de troca de marcha (parte elétrica)
+short in the front passenger's airbag on/off switch	Curto no interruptor liga/desliga do airbag do passageiro dianteiro
+short or decreased resistance in the driver's seat belt buckle switch	Curto ou resistência baixa no interruptor da fivela do cinto do motorista
+short or decreased resistance in the driver's seat position sensor	Curto ou resistência baixa no sensor de posição do banco do motorista
+short or decreased resistance in the front passenger's seat belt buckle switch	Curto ou resistência baixa no interruptor da fivela do cinto do passageiro dianteiro
+short or decreased resistance in the left rear second seat belt buckle switch	Curto ou resistência baixa no interruptor da fivela do cinto traseiro esquerdo (2ª fileira)
+short or decreased resistance in the left rear third seat belt buckle switch	Curto ou resistência baixa no interruptor da fivela do cinto traseiro esquerdo (3ª fileira)
+short or decreased resistance in the right rear second seat belt buckle switch	Curto ou resistência baixa no interruptor da fivela do cinto traseiro direito (2ª fileira)
+short or decreased resistance in the right rear third seat belt buckle switch	Curto ou resistência baixa no interruptor da fivela do cinto traseiro direito (3ª fileira)
+short to ground in the center rear seat belt tensioner	Curto com a massa no pré-tensionador do cinto traseiro central
+short to ground in the driver's airbag first inflator	Curto com a massa no primeiro estágio do airbag do motorista
+short to ground in the driver's airbag second inflator	Curto com a massa no segundo estágio do airbag do motorista
+short to ground in the driver's airbag third inflator	Curto com a massa no terceiro estágio do airbag do motorista
+short to ground in the driver's knee airbag inflator	Curto com a massa no airbag de joelho do motorista
+short to ground in the driver's seat belt buckle tensioner	Curto com a massa no pré-tensionador da fivela do cinto do motorista
+short to ground in the driver's seat belt outer lap tensioner	Curto com a massa no pré-tensionador abdominal externo do cinto do motorista
+short to ground in the driver's seat belt tensioner	Curto com a massa no pré-tensionador do cinto do motorista
+short to ground in the front impact sensor	Curto com a massa no sensor de impacto dianteiro
+short to ground in the front passenger's airbag active vent tether cutter	Curto com a massa no cortador da cinta do respiro ativo do airbag do passageiro
+short to ground in the front passenger's airbag first inflator	Curto com a massa no primeiro estágio do airbag do passageiro dianteiro
+short to ground in the front passenger's airbag second inflator	Curto com a massa no segundo estágio do airbag do passageiro dianteiro
+short to ground in the front passenger's knee airbag inflator	Curto com a massa no airbag de joelho do passageiro dianteiro
+short to ground in the front passenger's seat belt buckle tensioner	Curto com a massa no pré-tensionador da fivela do cinto do passageiro dianteiro
+short to ground in the front passenger's seat belt outer lap tensioner	Curto com a massa no pré-tensionador abdominal externo do cinto do passageiro dianteiro
+short to ground in the front passenger's seat belt tensioner	Curto com a massa no pré-tensionador do cinto do passageiro dianteiro
+short to ground in the left front impact sensor	Curto com a massa no sensor de impacto dianteiro esquerdo
+short to ground in the left rear seat belt tensioner	Curto com a massa no pré-tensionador do cinto traseiro esquerdo
+short to ground in the left rear seat belt tensioner (third seat)	Curto com a massa no pré-tensionador do cinto traseiro esquerdo (3ª fileira)
+short to ground in the left rear side airbag inflator	Curto com a massa no airbag lateral traseiro esquerdo
+short to ground in the left side airbag inflator	Curto com a massa no airbag lateral esquerdo
+short to ground in the left side curtain airbag first inflator	Curto com a massa no primeiro estágio do airbag de cortina esquerdo
+short to ground in the left side curtain airbag second inflator	Curto com a massa no segundo estágio do airbag de cortina esquerdo
+short to ground in the left side impact pressure sensor	Curto com a massa no sensor de pressão de impacto lateral esquerdo
+short to ground in the left side impact sensor (first)	Curto com a massa no sensor de impacto lateral esquerdo (primeiro)
+short to ground in the left side impact sensor (second)	Curto com a massa no sensor de impacto lateral esquerdo (segundo)
+short to ground in the left side impact sensor (third)	Curto com a massa no sensor de impacto lateral esquerdo (terceiro)
+short to ground in the right front impact sensor	Curto com a massa no sensor de impacto dianteiro direito
+short to ground in the right rear seat belt tensioner	Curto com a massa no pré-tensionador do cinto traseiro direito
+short to ground in the right rear seat belt tensioner (third seat)	Curto com a massa no pré-tensionador do cinto traseiro direito (3ª fileira)
+short to ground in the right rear side airbag inflator	Curto com a massa no airbag lateral traseiro direito
+short to ground in the right side airbag inflator	Curto com a massa no airbag lateral direito
+short to ground in the right side curtain airbag first inflator	Curto com a massa no primeiro estágio do airbag de cortina direito
+short to ground in the right side curtain airbag second inflator	Curto com a massa no segundo estágio do airbag de cortina direito
+short to ground in the right side impact pressure sensor	Curto com a massa no sensor de pressão de impacto lateral direito
+short to ground in the right side impact sensor (first)	Curto com a massa no sensor de impacto lateral direito (primeiro)
+short to ground in the right side impact sensor (second)	Curto com a massa no sensor de impacto lateral direito (segundo)
+short to ground in the right side impact sensor (third)	Curto com a massa no sensor de impacto lateral direito (terceiro)
+short to ground in the selectable energy absorption device of the driver's seat belt tensioner	Curto com a massa no limitador de força selecionável do pré-tensionador do cinto do motorista
+short to ground in the selectable energy absorption device of the front passenger's seat belt tensioner	Curto com a massa no limitador de força selecionável do pré-tensionador do cinto do passageiro dianteiro
+software incompatibility with battery energy control module a	Software incompatível com o módulo de energia da bateria A
+software incompatibility with drive motor control module	Software incompatível com o módulo do motor de tração
+software incompatibility with ecm/pcm	Software incompatível com o módulo do motor
+software incompatibility with hybrid/ev battery pack sensor module	Software incompatível com o módulo de sensores da bateria híbrida/EV
+software incompatibility with instrument panel control module	Software incompatível com o módulo do painel
+software incompatibility with throttle actuator control module	Software incompatível com o módulo da borboleta eletrônica
+software incompatibility with transmission control module	Software incompatível com o módulo do câmbio
+software incompatibility with vehicle dynamics control module	Software incompatível com o módulo de estabilidade
+starter relay	Relé de partida
+starter request	Pedido de partida
+stuck in neutral	Preso em neutro
+stuck in park	Preso em P
+system too lean	Mistura pobre demais
+system too lean at higher load	Mistura pobre demais em carga alta
+system too lean at idle	Mistura pobre demais em marcha lenta
+system too rich	Mistura rica demais
+system too rich at higher load	Mistura rica demais em carga alta
+system voltage	Tensão do sistema
+tcm communication	Comunicação do módulo do câmbio
+tcm power input signal	Sinal de alimentação do módulo do câmbio
+tcm processor	Processador do módulo do câmbio
+the functional abnormalities of steering angle sensor	Funcionamento anormal do sensor de ângulo do volante
+thermostat heater	Aquecedor da válvula termostática
+throttle actuator control	Comando da borboleta eletrônica
+throttle actuator control module	Módulo da borboleta eletrônica
+throttle actuator control motor	Motor do corpo de borboleta
+throttle actuator control motor current	Corrente do motor do corpo de borboleta
+throttle actuator control system	Sistema de comando da borboleta eletrônica
+throttle actuator control system - forced engine shutdown	Borboleta eletrônica: motor desligado por segurança
+throttle actuator control system - forced idle	Borboleta eletrônica: marcha lenta forçada
+throttle actuator control system - forced limited power	Borboleta eletrônica: potência limitada por segurança
+throttle actuator control system - forced limited rpm	Borboleta eletrônica: rotação limitada por segurança
+throttle actuator control system - high airflow detected	Borboleta eletrônica: fluxo de ar alto detectado
+throttle actuator control system - idle position not learned	Borboleta eletrônica: posição de marcha lenta não aprendida
+throttle actuator control system - low airflow detected	Borboleta eletrônica: fluxo de ar baixo detectado
+throttle actuator control system - stuck close	Borboleta eletrônica presa fechada
+throttle actuator control throttle body	Corpo de borboleta eletrônico
+throttle/fuel inhibit	Inibição de borboleta/combustível
+throttle/pedal position sensor minimum stop	Batente mínimo do sensor de posição da borboleta/pedal
+throttle/pedal position sensor/switch	Sensor de posição da borboleta/pedal
+throttle/pedal position sensor/switch circuit range	Sensor de posição da borboleta/pedal: circuito fora da faixa
+throttle/pedal position sensor/switch voltage	Tensão do sensor de posição da borboleta/pedal
+torque converter clutch	Embreagem do conversor de torque
+torque converter clutch circuit	Circuito da embreagem do conversor de torque
+torque converter clutch circuit electrical	Circuito da embreagem do conversor de torque (parte elétrica)
+torque converter clutch pressure control solenoid	Solenoide de pressão da embreagem do conversor de torque
+torque management feedback signal	Sinal de retorno do gerenciamento de torque
+torque management system - forced engine shutdown	Gerenciamento de torque: motor desligado por segurança
+transmission adaptive values not learned	Valores adaptativos do câmbio não aprendidos
+transmission component slipping	Componente do câmbio patinando
+transmission control system	Sistema de controle do câmbio
+transmission control system (mil request)	Sistema de controle do câmbio (pedido de luz de injeção)
+transmission control system electrical	Sistema de controle do câmbio (parte elétrica)
+transmission fluid pressure sensor/switch	Sensor/interruptor de pressão do óleo do câmbio
+transmission fluid temperature sensor	Sensor de temperatura do óleo do câmbio
+transmission friction element	Elemento de atrito do câmbio
+transmission park position sensor/switch	Sensor/interruptor da posição P do câmbio
+transmission park position sensor/switch circuit performance	Sensor/interruptor da posição P do câmbio: circuito com desempenho ruim
+transmission park position sensor/switch circuit performance/low	Sensor/interruptor da posição P do câmbio: circuito com desempenho ruim ou sinal baixo
+transmission range control module system voltage	Tensão do sistema do módulo de posição do câmbio
+transmission range sensor	Sensor de posição da alavanca do câmbio
+transmission range sensor circuit (prndl input)	Circuito do sensor de posição da alavanca (entrada PRNDL)
+transmission range sensor circuit malfunction (prndl input)	Defeito no circuito do sensor de posição da alavanca (entrada PRNDL)
+turbo charger bypass valve	Válvula de desvio do turbo
+turbo/super charger boost control solenoid	Solenoide de controle de pressão do turbo/compressor
+turbo/super charger boost sensor	Sensor de pressão do turbo/compressor
+turbo/super charger boost system	Sistema de pressão do turbo/compressor
+turbo/super charger bypass valve - mechanical	Válvula de desvio do turbo/compressor: defeito mecânico
+turbo/super charger overboost condition	Pressão do turbo/compressor acima do limite (overboost)
+turbo/super charger underboost	Pressão do turbo/compressor abaixo do esperado (underboost)
+turbo/super charger wastegate solenoid	Solenoide da wastegate do turbo/compressor
+turbocharger boost control position sensor	Sensor de posição do controle de pressão do turbo
+turbocharger boost control position sensor performance - stuck	Sensor de posição do controle de pressão do turbo com desempenho ruim (preso)
+turbocharger turbine inlet valve	Válvula de entrada da turbina do turbo
+turbocharger turbine inlet valve position sensor	Sensor de posição da válvula de entrada da turbina do turbo
+turbocharger/supercharger boost control	Controle de pressão do turbo/compressor
+turbocharger/supercharger boost control module	Módulo de controle de pressão do turbo/compressor
+turbocharger/supercharger boost control position exceeded learning limit	Posição do controle de pressão do turbo passou do limite de aprendizado
+turbocharger/supercharger boost control supply voltage	Tensão de alimentação do controle de pressão do turbo/compressor
+turbocharger/supercharger boost pressure too high - mechanical	Pressão do turbo/compressor alta demais: causa mecânica
+turbocharger/supercharger bypass valve	Válvula de desvio do turbo/compressor
+turbocharger/supercharger overboost condition	Pressão do turbo/compressor acima do limite (overboost)
+unable to engage gear {1}	Não engata a {1}ª marcha
+unable to engage park	Não engata P
+unable to engage reverse	Não engata a ré
+unexpected mechanical gear disengagement	Marcha desengatou sozinha (mecânico)
+upshift switch	Interruptor de subida de marcha
+vehicle communication bus a	Rede de comunicação A do veículo
+vehicle communication bus b	Rede de comunicação B do veículo
+vehicle communication bus b (-)	Rede de comunicação B (-) do veículo
+vehicle communication bus c	Rede de comunicação C do veículo
+vehicle communication bus c (-) open	Rede de comunicação C (-) do veículo aberta
+vehicle communication bus d	Rede de comunicação D do veículo
+vehicle communication bus e	Rede de comunicação E do veículo
+vehicle speed sensor	Sensor de velocidade do veículo
+vehicle speed sensor intermittent/erratic/high	Sensor de velocidade do veículo: intermitente, instável ou sinal alto
+vin not programmed or incompatible - ecm/pcm	Chassi (VIN) não programado ou incompatível no módulo do motor
+yaw rate sensor gain error	Erro de ganho do sensor de guinada

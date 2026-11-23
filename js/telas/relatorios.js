@@ -35,7 +35,7 @@ const TITULO = Object.fromEntries(RELATORIOS.flatMap(([, l]) => l.map(([k, t]) =
 const isoDia = d => d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
 const diaDe = iso => iso ? isoDia(new Date(iso)) : "";
 const n = v => Number(v) || 0;
-const valorItem = i => i.fornecida_cliente || i.aprovado === false ? 0 : n(i.qtd) * n(i.valor_unit) - n(i.desconto);
+export const valorItem = i => i.fornecida_cliente || i.aprovado === false ? 0 : n(i.qtd) * n(i.valor_unit) - n(i.desconto);
 const custoItem = i => i.fornecida_cliente || i.aprovado === false ? 0 : n(i.qtd) * n(i.custo_unit);
 const pctF = v => v === null || v === undefined || !isFinite(v) ? "—" : Math.round(v) + "%";
 const FMT = { reais: v => reais(v), qtd: v => qtdFmt(v), data: v => v ? fmtData(v) : "—", pct: pctF, txt: v => v ?? "" };
@@ -104,7 +104,7 @@ function useCarga(fn, deps) {
 }
 const Carregando = ({ erro }) => erro ? html`<div class="erros">Não foi possível carregar: ${erro}</div>` : html`<section class="card"><div class="esqueleto"></div></section>`;
 /** agrupa as linhas da função relatorio_itens por O.S. */
-function agruparOS(linhas) {
+export function agruparOS(linhas) {
   const m = new Map();
   for (const l of linhas || []) {
     let o = m.get(l.ordem_id);
@@ -119,7 +119,7 @@ function agruparOS(linhas) {
   }
   return [...m.values()];
 }
-const faturadas = l => l.filter(o => ["entregue", "recusado"].includes(o.status) && o.total > 0);
+export const faturadas = l => l.filter(o => ["entregue", "recusado"].includes(o.status) && o.total > 0);
 
 /* =================== relatórios =================== */
 function RelHistorico() {

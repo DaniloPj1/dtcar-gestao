@@ -25,7 +25,7 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere } from "./whats.js";
 
-export const VERSAO = "3.4";
+export const VERSAO = "3.5";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
 export const PACOTE_MAX = 8;              // tentativas por sinal (envios + esperas curtas)

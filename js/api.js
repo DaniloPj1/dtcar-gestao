@@ -114,6 +114,25 @@ function criarApiSupabase() {
       guardadaVencida: s => !!(s && s.expires_at && s.expires_at * 1000 < Date.now() + 60000),
       aoMudar: cb => { const { data } = sb.auth.onAuthStateChange((evento, s) => cb(s, evento)); return () => data.subscription.unsubscribe(); },
       entrar: async (email, senha) => ok(await sb.auth.signInWithPassword({ email, password: senha })),
+      /**
+       * Confere se o login e a senha digitados AGORA são de um administrador ativo, sem trocar quem
+       * está logado no aparelho. Usado para autorizar a gravação de dado no módulo do carro (decisão
+       * do Danilo, 21/11/2026). Abre uma sessão à parte, que não é guardada, e a encerra em seguida.
+       * A senha não é guardada em lugar nenhum: vai do campo para o Supabase e some.
+       */
+      conferirAdmin: async (email, senha) => {
+        const outro = window.supabase.createClient(cx.url, cx.key, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "dtcar-autoriza" },
+          global: { fetch: fetchComLimite } });   // mesma regra de rede do resto: tempo-limite, nunca fica pendurado (Codex, 21/11/2026)
+        try {
+          const r = await outro.auth.signInWithPassword({ email: String(email || "").trim(), password: senha });
+          if (r.error || !r.data || !r.data.user) return { ok: false, motivo: "Login ou senha não conferem." };
+          const p = await outro.from("perfis").select("id,nome,papel,ativo").eq("id", r.data.user.id).maybeSingle();
+          if (p.error || !p.data) return { ok: false, motivo: "Não deu para conferir o perfil deste login." };
+          if (p.data.papel !== "admin" || p.data.ativo === false) return { ok: false, motivo: "Este login não é de administrador." };
+          return { ok: true, id: p.data.id, nome: p.data.nome || "" };
+        } catch (e) { return { ok: false, motivo: "Sem internet: a autorização do administrador precisa de conexão." }; }
+        finally { outro.auth.signOut({ scope: "local" }).catch(() => {}); }   // não espera: a sessão à parte não é guardada e some sozinha
+      },
       cadastrar: async (nome, email, senha) => ok(await sb.auth.signUp({ email, password: senha, options: { data: { nome }, emailRedirectTo: location.origin + location.pathname } })),
       recuperar: async email => ok(await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + location.pathname })),
       novaSenha: async senha => ok(await sb.auth.updateUser({ password: senha })),
@@ -157,6 +176,11 @@ function criarApiSupabase() {
     alterados: async (nome, desde) => todos(() => sb.from(nome).select("*").gt("atualizado_em", desde).order("id")),
     idsDe: async nome => todos(() => sb.from(nome).select("id").order("id")).then(r => r.map(x => x.id)),
     recibos: {
+      /** das vendas dadas, as que têm recibo NÃO cancelado em qualquer data (o recibo pode vir noutro mês/ano);
+          usado pelo caixa para a venda de balcão entrar uma vez só (achado do Codex, 22/11/2026) */
+      dasVendas: async ids => { const out = new Set(); for (let i = 0; i < (ids || []).length; i += 200) {
+        const r = ok(await sb.from("recibos").select("venda_id,cancelado").in("venda_id", ids.slice(i, i + 200)));
+        for (const x of r) if (x.venda_id && !x.cancelado) out.add(x.venda_id); } return [...out]; },
       listar: async ({ ordemId, de, ate } = {}) => { let q = sb.from("recibos").select("*"); if (ordemId) q = q.eq("ordem_id", ordemId); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
       um: async id => ok(await sb.from("recibos").select("*").eq("id", id).single()),
       /** todos os recibos a partir de uma data, sem limite (saldo por conta) */
@@ -316,6 +340,8 @@ function criarApiSupabase() {
     },
     vendas: {
       listar: async ({ de, ate } = {}) => { let q = sb.from("vendas").select("*"); if (de) q = q.gte("criado_em", de); if (ate) q = q.lt("criado_em", ate); return ok(await q.order("numero", { ascending: false }).limit(1000)); },
+      /** o período inteiro, sem o teto de 1.000 (Painel Financeiro, DRE e Inteligência leem o ano todo) */
+      periodo: async ({ de, ate } = {}) => todos(() => { let q = sb.from("vendas").select("*"); if (de) q = q.gte("criado_em", de); if (ate) q = q.lt("criado_em", ate); return q.order("numero"); }),
       uma: async id => { const v = ok(await sb.from("vendas").select("*").eq("id", id).single()); v.itens = ok(await sb.from("venda_itens").select("*").eq("venda_id", id).order("posicao")); return v; },
       finalizar: async p => ok(await sb.rpc("finalizar_venda", { p })),
       cancelar: async (id, motivo) => ok(await sb.rpc("cancelar_venda", { p_id: id, p_motivo: motivo || "" })),
@@ -351,6 +377,25 @@ function criarApiSupabase() {
       excluir: async id => { ok(await sb.from("orcamentos").delete().eq("id", id)); },
     },
     // agenda da oficina (v54). A tela grava direto na tabela (regras de acesso e gatilho do v54 decidem remarcação e quem criou)
+    /** Diagnóstico OBD pelo app (v62, pedido do Danilo em 19/11/2026): registro de quem apagou a falha de qual carro.
+     *  Linha gravada não muda mais (o banco não tem política de update). Sem o v62 rodado, listar devolve vazio e
+     *  registrar avisa com todas as letras — apagar sem registrar é justamente o que não pode acontecer. */
+    obd: {
+      listar: async ({ placa, desde, limite = 20, tipo } = {}) => {
+        let q = sb.from("obd_leituras").select("*").order("criado_em", { ascending: false }).limit(limite);
+        if (tipo) q = q.eq("tipo", tipo);
+        if (placa) q = q.eq("placa", String(placa).toUpperCase());
+        if (desde) q = q.gte("criado_em", desde);
+        const r = await q;
+        if (r.error && /obd_leituras|schema cache|PGRST205/i.test(r.error.message || "")) return [];
+        return ok(r);
+      },
+      registrar: async linha => { const r = await sb.from("obd_leituras").insert(linha).select().single();
+        if (r.error && /obd_leituras|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("O registro do OBD ainda não foi ligado no banco: falta rodar o supabase/v62.sql.");
+        if (r.error && /obd_leituras_tipo_check|column .*(dados|selo)|violates check/i.test(r.error.message || "")) throw new Error("O banco ainda não aceita este tipo de registro: falta rodar o supabase/v63.sql.");
+        return ok(r); },
+    },
+
     /** Serviço pelo mecânico no app (v60, pedido do Danilo em 16/11/2026 à noite): apontamentos de início, pausa, fim, itens executados e
      *  indicações de responsável. Só online. Sem o v60 no banco, "listar" devolve [] (a tela avisa) e as gravações explicam. */
     apontamentos: {
@@ -603,6 +648,8 @@ function criarApiSupabase() {
         return data;
       },
     },
+    /** descrições já lançadas (sem preço), para o corretor do pedido no App DTCar (22/11/2026) — as mesmas que o app do mecânico lê */
+    descricoesItens: async () => ok(await sb.from("os_itens").select("descricao,tipo").order("criado_em", { ascending: false }).limit(3000)),
     relatorioItens: async (ini, fim, base) => todos(() => sb.rpc("relatorio_itens", { p_ini: ini, p_fim: fim, p_base: base || "entrega" }).order("numero").order("item_id")),
     /** réplica no banco do PC (etapa 2): o que mudou desde uma data e o que foi apagado (supabase/v13.sql) */
     replica: {
@@ -813,6 +860,7 @@ function comBancoDoPC(a) {
       aprovar: soOnline(a.orcamentos.aprovar, "Sem conexão com a internet: aprovar o orçamento cria a O.S. no servidor e precisa de internet."),
       excluir: soOnline(a.orcamentos.excluir, "Sem conexão com a internet: o orçamento só pode ser excluído com internet.") },
     // agenda: sem internet, só consulta (do banco do PC); gravar precisa de internet
+    obd: { ...a.obd, registrar: soOnline(a.obd.registrar, "Sem conexão com a internet: o apagamento precisa ficar registrado, então só com internet.") },
     apontamentos: { ...a.apontamentos, abrir: soOnline(a.apontamentos.abrir, "Sem conexão com a internet: o serviço só pode ser iniciado com internet."),
       atualizar: soOnline(a.apontamentos.atualizar, "Sem conexão com a internet: tente de novo quando a internet voltar."), visto: soOnline(a.apontamentos.visto, "Sem conexão com a internet.") },
     // comissão: lançar e cancelar mexem em O.S. e na folha no servidor; sem internet, nem consulta (não vai para o banco do PC)
@@ -831,7 +879,7 @@ function comBancoDoPC(a) {
     contas: { ...a.contas, listar: ler(a.contas.listar, L.contasListar), abertas: ler(a.contas.abertas, L.contasAbertas), pagasDesde: ler(a.contas.pagasDesde, de => L.contasListar({ de, campo: "pago_em", status: "paga" })),
       ...(a.contas.fixas ? { fixas: ler(a.contas.fixas, L.contasFixas) } : {}) },
     receber: { ...a.receber, abertas: ler(a.receber.abertas, L.receberAbertas), listar: ler(a.receber.listar, L.receberListar), daOrdem: ler(a.receber.daOrdem, L.receberDaOrdem) },
-    vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },
+    vendas: { ...a.vendas, listar: ler(a.vendas.listar, L.vendasListar), periodo: ler(a.vendas.periodo, L.vendasListar), uma: ler(a.vendas.uma, L.vendaUma) },
     funcionarios: { ...a.funcionarios, listar: ler(a.funcionarios.listar, L.funcionarios), lancamentos: ler(a.funcionarios.lancamentos, L.lancamentos), ordensEntregues: ler(a.funcionarios.ordensEntregues, L.ordensEntregues) },
     estoque: { ...a.estoque, movimentos: ler(a.estoque.movimentos, L.movimentos) },
     sefaz: { ...a.sefaz, notas: ler(a.sefaz.notas, L.sefazNotas), config: ler(a.sefaz.config, async () => null), novas: ler(a.sefaz.novas, async () => (await tabelaLocal("nfe_recebidas")).filter(n => n.status === "nova" && n.situacao !== "cancelada").length) },

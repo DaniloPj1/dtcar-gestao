@@ -38,6 +38,11 @@ const msgRetorno = (c, v, cfg, ultima) => `Olá, ${c.nome.split(" ")[0]}! Aqui �
   `Que tal agendarmos uma revisão? É só responder esta mensagem que combinamos o melhor dia e horário.`;
 export const SitCliente = ({ c }) => c && c.situacao && c.situacao !== "liberado" ? html`<span class=${"pill p-" + SITUACAO_CLIENTE[c.situacao].cor}>${SITUACAO_CLIENTE[c.situacao].t}</span>` : null;
 
+const temPainelLado = () => typeof matchMedia === "function" && matchMedia("(min-width: 1100px)").matches;
+
+/* Sem caixa: o formulário sai do Modal e entra no painel lateral dos Cadastros (protótipo de 23/11/2026) */
+const SemCaixa = ({ children }) => children;
+
 /* =================== FICHA DO CLIENTE (formulário) =================== */
 const FICHA_VAZIA = { sexo: "", estado_civil: "", pai: "", mae: "", naturalidade: "", nacionalidade: "", conjuge: "", escolaridade: "", profissao: "", trabalho: "", tel_trabalho: "", melhor_horario: "", renda: 0, limite: 0, avaliador: "", ocorrencia: "" };
 const CLIENTE_VAZIO = { nome: "", fantasia: "", telefone: "", telefone2: "", telefone3: "", email: "", contato: "", doc: "", rg: "", orgao_emissor: "", ie: "", im: "", nascimento: "",
@@ -46,7 +51,7 @@ export const edCliente = c => c ? { tipo: "cliente", id: c.id, d: { ...CLIENTE_V
   : { tipo: "cliente", d: { ...CLIENTE_VAZIO, data: hojeISO() }, erros: [] };
 
 /** naOS: aberto de dentro da O.S. (só o cadastro: sem excluir e sem sair da O.S.) */
-export function FormCliente({ ed, setEd, onSalvo, naOS }) {
+export function FormCliente({ ed, setEd, onSalvo, naOS, embutido }) {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const [aba, setAba] = useState("end");
   const pode_ = pode(perfil, "cadastrar"), d = ed.d;
@@ -106,7 +111,8 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
   // (nada some sem a pessoa ver) e nada é apagado: o que não aparece é gravado como estava.
   const empresa = soDig(d.doc).length === 14;
   const mostra = k => empresa || !!String(aoAbrir.current[k] || "").trim();
-  return html`<${Modal} titulo=${ed.id ? "Cadastro de cliente" : "Novo cliente"} largo onFechar=${() => setEd(null)}>
+  const Caixa = embutido ? SemCaixa : Modal;
+  return html`<${Caixa} titulo=${ed.id ? "Cadastro de cliente" : "Novo cliente"} largo onFechar=${() => setEd(null)}>
     ${ed.erros.length ? html`<div class="erros">${ed.erros.join(" ")}</div>` : null}
     <fieldset disabled=${!pode_} class="sem-borda form-ficha">
       <div class="grade ficha-topo">
@@ -156,8 +162,8 @@ export function FormCliente({ ed, setEd, onSalvo, naOS }) {
     </fieldset>
     <div class="acoes">${ed.id && !naOS && pode(perfil, "excluir") ? html`<button type="button" class="btn btn-perigo" onClick=${excluir}>Excluir</button>` : null}
       ${ed.id && !naOS ? html`<button type="button" class="btn" onClick=${() => { setEd(null); ir("/imprimir/cliente/" + ed.id); }}>Imprimir ficha</button>` : null}<span class="espaco"></span>
-      <button type="button" class="btn" onClick=${() => setEd(null)}>${pode_ ? "Cancelar" : "Fechar"}</button>${pode_ ? html`<button type="button" class="btn btn-pri" onClick=${salvar}>Salvar cadastro</button>` : null}</div>
-  </${Modal}>`;
+      <button type="button" class="btn" onClick=${() => setEd(null)}>${pode_ ? "Cancelar" : "Fechar"}</button>${pode_ ? html`<button type="button" class="btn btn-pri" onClick=${salvar}>${embutido ? "Salvar alterações" : "Salvar cadastro"}</button>` : null}</div>
+  </${Caixa}>`;
 }
 
 /* =================== FICHA CADASTRAL DO VEÍCULO =================== */
@@ -167,7 +173,7 @@ export const edVeiculo = (v, clienteId) => v ? { tipo: "veiculo", id: v.id, plac
   : { tipo: "veiculo", d: { ...VEICULO_VAZIO, cliente_id: clienteId || "", data: hojeISO() }, erros: [] };
 export const anoVeiculo = (f, m) => { f = +f || 0; m = +m || 0; return f && m && f !== m ? `${f}/${m}` : String(m || f || ""); };
 
-export function FormVeiculo({ ed, setEd, onSalvo }) {
+export function FormVeiculo({ ed, setEd, onSalvo, embutido }) {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const pode_ = pode(perfil, "cadastrar"), d = ed.d;
   const set = (k, v) => setEd(o => o && ({ ...o, erros: [], d: { ...o.d, [k]: v } }));
@@ -255,7 +261,8 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
     try { await api.veiculos.excluir(ed.id); setEd(null); avisar("Veículo excluído."); recarregar(["veiculos"], { completo: true }); } catch (e) { setEd({ ...ed, erros: [e.message] }); }
   };
   const marcas = useMemo(() => [...new Set(dados.veiculos.map(v => v.marca).filter(Boolean))].sort(), [dados.veiculos]);
-  return html`<${Modal} titulo=${ed.id ? "Ficha cadastral do veículo" : "Novo veículo"} largo onFechar=${() => setEd(null)}>
+  const Caixa = embutido ? SemCaixa : Modal;
+  return html`<${Caixa} titulo=${ed.id ? "Ficha cadastral do veículo" : "Novo veículo"} largo onFechar=${() => setEd(null)}>
     ${ed.erros.length ? html`<div class="erros">${ed.erros.join(" ")}</div>` : null}
     <fieldset disabled=${!pode_} class="sem-borda form-ficha">
       <div class="grade">
@@ -295,8 +302,53 @@ export function FormVeiculo({ ed, setEd, onSalvo }) {
     </fieldset>
     <div class="acoes">${ed.id && pode(perfil, "excluir") ? html`<button type="button" class="btn btn-perigo" onClick=${excluir}>Excluir</button>` : null}
       ${ed.id ? html`<button type="button" class="btn" onClick=${() => { setEd(null); ir("/veiculo/" + ed.id); }}>Serviços executados</button><button type="button" class="btn" onClick=${() => { setEd(null); ir("/imprimir/veiculo/" + ed.id); }}>Imprimir ficha</button>` : null}
-      <span class="espaco"></span><button type="button" class="btn" onClick=${() => setEd(null)}>${pode_ ? "Cancelar" : "Fechar"}</button>${pode_ ? html`<button type="button" class="btn btn-pri" onClick=${salvar}>Salvar cadastro</button>` : null}</div>
-  </${Modal}>`;
+      <span class="espaco"></span><button type="button" class="btn" onClick=${() => setEd(null)}>${pode_ ? "Cancelar" : "Fechar"}</button>${pode_ ? html`<button type="button" class="btn btn-pri" onClick=${salvar}>${embutido ? "Salvar alterações" : "Salvar cadastro"}</button>` : null}</div>
+  </${Caixa}>`;
+}
+
+/* =================== PAINEL LATERAL DOS CADASTROS (protótipo aprovado em 23/11/2026) ===================
+   Um terço à direita: a ficha do cliente abre aqui, já editável, com os veículos e o histórico — sem sair da lista. */
+export function PainelCadastro({ clienteId, veiculoId, onFechar }) {
+  const { dados, ir } = useApp();
+  const [aba, setAba] = useState("ficha");
+  const [ed, setEd] = useState(null);
+  const cliente = clienteId ? dados.clientes.find(c => c.id === clienteId) : null;
+  const veiculo = veiculoId ? dados.veiculos.find(v => v.id === veiculoId) : null;
+  // ao trocar de cadastro, o formulário recomeça do registro novo (nada de rascunho de outro cliente)
+  useEffect(() => { setAba("ficha"); setEd(veiculoId ? edVeiculo(veiculo) : cliente ? edCliente(cliente) : null); }, [clienteId, veiculoId]);
+  if (!clienteId && !veiculoId) return html`<aside class="pc pc-vazio"><b>Nenhum cadastro aberto</b><span>Clique em um cliente da lista para ver e alterar a ficha aqui, sem abrir outra tela.</span></aside>`;
+  if (veiculoId) {
+    if (!veiculo) return html`<aside class="pc pc-vazio"><b>Veículo não encontrado</b></aside>`;
+    return html`<aside class="pc">
+      <div class="pc-cab"><div class="pc-id"><strong>${[veiculo.marca, veiculo.modelo].filter(Boolean).join(" ") || "Veículo"}</strong>
+        <em>${[anoVeiculo(veiculo.ano_fab, veiculo.ano_mod), veiculo.cor, veiculo.km_atual ? fmtKm(veiculo.km_atual) + " km" : ""].filter(Boolean).join(" · ") || "—"}</em></div>
+        ${veiculo.placa ? html`<${Placa} placa=${veiculo.placa} />` : null}
+        <button type="button" class="pc-fechar" aria-label="Fechar" onClick=${onFechar}>×</button></div>
+      <div class="pc-corpo">${ed ? html`<${FormVeiculo} ed=${ed} setEd=${x => x ? setEd(x) : onFechar()} embutido />` : null}</div>
+      <div class="pc-pe"><button type="button" class="btn btn-sm" onClick=${() => ir("/veiculo/" + veiculo.id)}>Abrir a ficha inteira →</button></div>
+    </aside>`;
+  }
+  if (!cliente) return html`<aside class="pc pc-vazio"><b>Cliente não encontrado</b></aside>`;
+  const veics = dados.veiculos.filter(v => v.cliente_id === cliente.id);
+  const oss = dados.ordens.filter(o => o.cliente_id === cliente.id).slice().sort((a, b) => String(b.aberta_em || "").localeCompare(String(a.aberta_em || "")));
+  const gasto = oss.reduce((t, o) => t + (Number(o.total) || 0), 0);
+  return html`<aside class="pc">
+    <div class="pc-cab"><div class="pc-id"><strong>${cliente.nome}</strong>
+      <em>${[cliente.telefone ? fmtTel(cliente.telefone) : "sem telefone", cliente.fantasia].filter(Boolean).join(" · ")}</em></div>
+      <button type="button" class="pc-fechar" aria-label="Fechar" onClick=${onFechar}>×</button></div>
+    <div class="pc-res"><div><span>Veículos</span><b>${veics.length}</b></div><div><span>O.S.</span><b>${oss.length}</b></div><div><span>Total gasto</span><b>${reais(gasto)}</b></div></div>
+    <div class="pc-abas">${[["ficha", "Ficha do cliente"], ["veiculos", "Veículos (" + veics.length + ")"], ["hist", "Histórico"]].map(([k, t]) =>
+      html`<button type="button" key=${k} class=${"pc-aba" + (aba === k ? " ativo" : "")} onClick=${() => setAba(k)}>${t}</button>`)}</div>
+    <div class="pc-corpo">
+      ${aba === "ficha" ? (ed ? html`<${FormCliente} ed=${ed} setEd=${x => x ? setEd(x) : onFechar()} embutido />` : null)
+      : aba === "veiculos" ? (veics.length ? html`<div class="lista">${veics.map(v => html`<button type="button" key=${v.id} class="linha" onClick=${() => ir("/veiculo/" + v.id)}>
+          <${Placa} placa=${v.placa} /><div class="meio"><strong>${[v.marca, v.modelo].filter(Boolean).join(" ")}</strong><span>${[anoVeiculo(v.ano_fab, v.ano_mod), v.cor, v.km_atual ? fmtKm(v.km_atual) + " km" : ""].filter(Boolean).join(" · ")}</span></div></button>`)}</div>`
+        : html`<${Vazio}>Este cliente ainda não tem veículo.</${Vazio}>`)
+      : (oss.length ? html`<div class="lista">${oss.slice(0, 30).map(o => html`<${LinhaOS} key=${o.id} o=${o} ver onClick=${() => ir("/os/" + o.id)} />`)}</div>`
+        : html`<${Vazio}>Este cliente ainda não tem O.S.</${Vazio}>`)}
+    </div>
+    <div class="pc-pe"><button type="button" class="btn btn-sm" onClick=${() => ir("/cliente/" + cliente.id)}>Abrir a ficha inteira →</button></div>
+  </aside>`;
 }
 
 /** compatibilidade: abre o formulário certo pelo tipo */
@@ -306,9 +358,12 @@ export function FormCadastro(p) { return p.ed.tipo === "cliente" ? html`<${FormC
 export function Cadastros({ params }) {
   const { dados, perfil, cfg, ir } = useApp();
   const [aba, setAba] = useState(params && ["veiculos", "produtos", "fornecedores"].includes(params.aba) ? params.aba : "clientes");
-  const [q, setQ] = useState(""), [ed, setEd] = useState(null);
+  const [q, setQ] = useState(""), [ed, setEd] = useState(() => params && params.novo && pode(perfil, "cadastrar")
+    ? (params.aba === "veiculos" ? edVeiculo() : edCliente()) : null); // ?novo=1: quadro "Ações do dia a dia" do painel
   const [filtro, setFiltro] = useState(params && params.filtro === "recuperar" ? "recuperar" : "todos"), [ordem, setOrdem] = useState(params && params.filtro === "recuperar" ? "ultima" : "nome");
   const [lim, setLim] = useState(80);
+  const [lado, setLado] = useState(null); // cadastro aberto no painel lateral (protótipo de 23/11/2026)
+  useEffect(() => { if (params && params.novo) history.replaceState(null, "", "#/cadastros" + (params.aba ? "?aba=" + params.aba : "")); }, []); // o F5 não deve reabrir o formulário
   const podeCad = pode(perfil, "cadastrar"), ver = pode(perfil, "verValores");
   const res = useMemo(() => resumoClientes(dados.ordens), [dados.ordens]);
   const n = norm(q), qd = soDig(q), p = normPlaca(q);
@@ -350,21 +405,27 @@ export function Cadastros({ params }) {
         <div class="chips rolagem">${[["todos", "Todos"], ["aberta", "Com O.S. aberta"], ["recuperar", "Para recuperar"], ["semtel", "Sem telefone"], ["restricao", "Restritos e bloqueados"]].map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (filtro === k ? " ativo" : "")} onClick=${() => setFiltro(k)}>${t}</button>`)}</div>
         <select class="inp inp-curto" aria-label="Ordenar" value=${ordem} onChange=${e => setOrdem(e.target.value)}><option value="nome">Nome A–Z</option><option value="codigo">Código</option><option value="ultima">Última visita</option>${ver ? html`<option value="gasto">Maior gasto</option>` : null}</select>
       </div>
-      ${filtro === "recuperar" ? html`<div class="info">Clientes com última visita entre 6 meses e 2 anos e sem O.S. aberta. Use o botão de WhatsApp para enviar um convite de revisão.</div>` : null}
+      ${filtro === "recuperar" ? html`<div class="info">Clientes com última visita entre 6 meses e 2 anos e sem O.S. aberta. Use o botão de WhatsApp para enviar um convite de revisão.</div>` : null}` : null}
+    <div class=${"cad-palco" + (lado ? "" : " so-lista")}>
+      <div class="cad-lista-col">
+        ${aba === "clientes" ? html`
       <section class="card"><div class="secao-topo"><h3>${clientes.length} cliente(s)</h3>${ver ? html`<button type="button" class="btn btn-sm" onClick=${exportar}>Exportar planilha</button>` : null}</div>
-        ${clientes.length ? html`<div class="lista">${clientes.slice(0, lim).map(c => { const r = res.get(c.id) || { n: 0, gasto: 0, ultima: "" }; return html`<div class="linha linha-cli" key=${c.id}>
+        ${clientes.length ? html`<div class="lista">${clientes.slice(0, lim).map(c => { const r = res.get(c.id) || { n: 0, gasto: 0, ultima: "" }; return html`<div class=${"linha linha-cli" + (lado && lado.cliente === c.id ? " cad-sel" : "")} key=${c.id}>
           <span class="cod">${c.codigo ?? ""}</span>
-          <button type="button" class="meio botao-limpo" onClick=${() => ir("/cliente/" + c.id)}><strong>${c.nome} <${SitCliente} c=${c} /></strong><span>${c.telefone ? fmtTel(c.telefone) : "sem telefone"}${c.fantasia ? " · " + c.fantasia : ""}${r.ultima ? " · última visita " + fmtData(r.ultima) : " · sem O.S."}</span></button>
+          <button type="button" class="meio botao-limpo" onClick=${() => temPainelLado() ? setLado({ cliente: c.id }) : ir("/cliente/" + c.id)}><strong>${c.nome} <${SitCliente} c=${c} /></strong><span>${c.telefone ? fmtTel(c.telefone) : "sem telefone"}${c.fantasia ? " · " + c.fantasia : ""}${r.ultima ? " · última visita " + fmtData(r.ultima) : " · sem O.S."}</span></button>
           <span class="dir">${ver && r.gasto ? html`<b>${reais(r.gasto)}</b>` : null}<small>${r.n} O.S.</small></span>
           ${filtro === "recuperar" && soDig(c.telefone).length >= 10 ? html`<button type="button" class="btn btn-sm btn-whats" aria-label=${"WhatsApp para " + c.nome} onClick=${() => chamar(c)}>${I.whats}</button>` : null}</div>`; })}</div>
           ${clientes.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 200)}>Mostrar mais (${clientes.length - lim})</button>` : null}`
           : html`<${Vazio}>Nenhum cliente encontrado.</${Vazio}>`}
       </section>`
-    : html`<section class="card"><h3>${veiculos.length} veículo(s)</h3>
-        ${veiculos.length ? html`<div class="lista">${veiculos.slice(0, lim).map(v => html`<button type="button" key=${v.id} class="linha" onClick=${() => ir("/veiculo/" + v.id)}>
+        : html`<section class="card"><h3>${veiculos.length} veículo(s)</h3>
+        ${veiculos.length ? html`<div class="lista">${veiculos.slice(0, lim).map(v => html`<button type="button" key=${v.id} class=${"linha" + (lado && lado.veiculo === v.id ? " cad-sel" : "")} onClick=${() => temPainelLado() ? setLado({ veiculo: v.id }) : ir("/veiculo/" + v.id)}>
           <${Placa} placa=${v.placa} /><span class="meio"><strong>${v.marca} ${v.modelo} ${v.ano}</strong><span>${nomeCli(v.cliente_id)} · ${fmtKm(v.km_atual)}${v.combustivel ? " · " + v.combustivel : ""}</span></span><span class="sub">${dados.ordens.filter(o => o.veiculo_id === v.id).length} O.S.</span></button>`)}</div>
           ${veiculos.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 200)}>Mostrar mais (${veiculos.length - lim})</button>` : null}`
-          : html`<${Vazio}>Nenhum veículo encontrado.</${Vazio}>`}</section>`}`}
+          : html`<${Vazio}>Nenhum veículo encontrado.</${Vazio}>`}</section>`}
+      </div>
+      <${PainelCadastro} clienteId=${lado && lado.cliente} veiculoId=${lado && lado.veiculo} onFechar=${() => setLado(null)} />
+    </div>`}
     ${ed ? html`<${FormCadastro} ed=${ed} setEd=${setEd} onSalvo=${r => r && r.id && ir((ed.tipo === "cliente" ? "/cliente/" : "/veiculo/") + r.id)} />` : null}
   </div>`;
 }

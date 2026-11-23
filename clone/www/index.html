@@ -1,0 +1,319 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DTCar Clone</title>
+<style>
+  :root{ --preto:#16191d; --azul:#174f94; --azul2:#2f6fb5; --fundo:#eceef0; --cinza:#6b7280; --borda:#d4d8dd; --ok:#1f8a4c; --ruim:#b23b3b; }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; background:var(--fundo); color:var(--preto); font-family:Barlow,system-ui,Arial,sans-serif; }
+  header{ background:var(--preto); color:#fff; padding:14px 16px; font-weight:700; letter-spacing:.3px; display:flex; align-items:center; gap:10px; }
+  header small{ font-weight:400; color:#9aa3ad; }
+  main{ padding:16px; max-width:620px; margin:0 auto; }
+  .cartao{ background:#fff; border:1px solid var(--borda); border-radius:12px; padding:14px; margin:0 0 14px; }
+  .cartao h2{ margin:0 0 10px; font-size:15px; color:var(--azul); }
+  label{ display:block; font-size:13px; color:var(--cinza); margin:10px 0 4px; }
+  select,input,textarea{ width:100%; padding:10px; border:1px solid var(--borda); border-radius:8px; font-size:15px; font-family:inherit; background:#fff; }
+  .linha{ display:flex; gap:8px; }
+  .linha > *{ flex:1; }
+  button{ width:100%; padding:14px; border:0; border-radius:10px; background:var(--azul); color:#fff; font-size:16px; font-weight:700; font-family:inherit; }
+  button.sec{ background:#fff; color:var(--azul); border:1px solid var(--azul); }
+  button:disabled{ opacity:.5; }
+  .barra{ height:16px; background:#e3e6ea; border-radius:8px; overflow:hidden; margin:12px 0 6px; }
+  .barra > div{ height:100%; width:0; background:var(--azul2); transition:width .2s; }
+  .passo{ font-size:13px; color:var(--cinza); min-height:18px; }
+  .pct{ font-weight:700; font-size:15px; }
+  .aviso{ font-size:12px; color:var(--cinza); line-height:1.4; margin-top:8px; }
+  .trava{ background:#eef4ec; border:1px solid #cfe2cf; color:#2c5c38; font-size:12px; border-radius:8px; padding:8px 10px; margin-top:10px; line-height:1.4; }
+  textarea{ height:150px; font-family:ui-monospace,Menlo,monospace; font-size:11px; white-space:pre; }
+  .nums{ display:flex; gap:10px; flex-wrap:wrap; font-size:12px; color:var(--cinza); margin-top:8px; }
+  .nums b{ color:var(--preto); }
+  .esconde{ display:none; }
+</style>
+</head>
+<body>
+<header>🔧 DTCar Clone <small>— leitura de módulos</small></header>
+<main>
+
+  <div class="cartao" id="c-adaptador">
+    <h2>1 · Adaptador OBD</h2>
+    <div class="passo" id="bt-estado">Procurando adaptadores pareados…</div>
+    <label>Adaptador (ELM327)</label>
+    <select id="bt-lista"></select>
+    <div class="linha" style="margin-top:10px">
+      <button class="sec" id="bt-recarregar">Atualizar lista</button>
+      <button id="bt-conectar">Conectar</button>
+    </div>
+    <div class="trava">Este app só <b>lê</b>. Ele nunca apaga falha, grava ou regrava módulo — isso é barrado no próprio app, não dá para um site mandar.</div>
+  </div>
+
+  <div class="cartao esconde" id="c-condicao">
+    <h2>2 · Carro e condição da leitura</h2>
+    <label>Placa</label>
+    <input id="f-placa" placeholder="ABC1D23" autocapitalize="characters" maxlength="8">
+    <div class="linha">
+      <div>
+        <label>Motor</label>
+        <select id="f-motor"><option value="frio">Frio (parado a noite)</option><option value="quente">Quente</option></select>
+      </div>
+      <div>
+        <label>Estado</label>
+        <select id="f-estado"><option value="ligado">Ligado</option><option value="parado">Chave ligada, motor parado</option></select>
+      </div>
+    </div>
+    <label>Observação (opcional)</label>
+    <input id="f-obs" placeholder="ex.: acusando temperatura negativa">
+    <button id="bt-clonar" style="margin-top:14px">CLONE RÁPIDO</button>
+    <button class="sec" id="bt-completo" style="margin-top:10px">CLONE COMPLETO</button>
+    <div class="aviso"><b>Rápido:</b> OBD padrão + faixas conhecidas de cada módulo. Alguns minutos.<br>
+    <b>Completo:</b> varre todos os identificadores de cada módulo. Mais de 1 hora por módulo — carro no carregador de bateria.</div>
+    <div class="trava" style="background:#fdf3e7;border-color:#efd3a8;color:#7a4a12">O clone também <b>mapeia as saídas</b> (ventoinha, relés…) mandando o pedido <b>incompleto</b>, que o módulo só pode recusar. Mesmo assim, faça o primeiro mapeamento num carro seu ou módulo de bancada, motor desligado — nem todo módulo confere o pedido do mesmo jeito.</div>
+  </div>
+
+  <div class="cartao esconde" id="c-progresso">
+    <h2>3 · Clonando…</h2>
+    <div class="pct"><span id="p-pct">0</span>%</div>
+    <div class="barra"><div id="p-barra"></div></div>
+    <div class="passo" id="p-passo">—</div>
+    <div class="nums" id="p-nums"></div>
+    <button class="sec" id="bt-parar" style="margin-top:12px">Parar e guardar o que já leu</button>
+  </div>
+
+  <div class="cartao esconde" id="c-fim">
+    <h2>4 · Clone pronto</h2>
+    <div class="nums" id="r-nums"></div>
+    <div class="linha" style="margin-top:12px">
+      <button id="bt-compartilhar">Enviar arquivo</button>
+      <button class="sec" id="bt-copiar">Copiar texto</button>
+    </div>
+    <label style="margin-top:12px">Prévia do arquivo</label>
+    <textarea id="r-texto" readonly></textarea>
+    <button class="sec" id="bt-novo" style="margin-top:10px">Clonar outro carro</button>
+  </div>
+
+</main>
+
+<script type="module">
+const Cap = window.Capacitor || {};
+const Plug = (Cap.Plugins && Cap.Plugins.DtcarObd) || (Cap.registerPlugin && Cap.registerPlugin("DtcarObd")) || null;
+const Fs = Cap.Plugins && Cap.Plugins.Filesystem;
+const Sh = Cap.Plugins && Cap.Plugins.Share;
+const $ = id => document.getElementById(id);
+const semApp = !Plug;
+
+/* ---------- ponte ---------- */
+let bruto = [], t0 = 0, gravarBruto = true;
+async function cmd(c, esperaMs=3000){
+  const ini=Date.now(); let resp="", erro=null;
+  try{ const r=await Plug.comando({cmd:c,esperaMs}); resp=(r&&r.resposta)||""; }
+  catch(e){ erro=(e&&(e.message||e.code||e.errorMessage))||String(e); }
+  const r=limpa(resp), ms=Date.now()-ini;
+  if(gravarBruto) bruto.push({t:ini-t0, ms, req:c, resp:r, erro});
+  ultimoMs=ms;
+  return r;
+}
+let ultimoMs=0;
+const limpa = s => (s||"").replace(/\r/g,"\n").split("\n").map(x=>x.trim()).filter(Boolean).join(" | ");
+const hx = s => (s||"").replace(/[^0-9A-Fa-f]/g,"").toUpperCase();
+const hex2txt = h => { let o=""; for(let i=0;i<h.length-1;i+=2){ const v=parseInt(h.substr(i,2),16); o+=(v>=32&&v<127)?String.fromCharCode(v):""; } return o; };
+const dorme = ms => new Promise(r=>setTimeout(r,ms));
+
+/* junta os quadros ISO-TP de um cabeçalho e devolve só os bytes de dados */
+function isotp(raw, hdr){
+  let out="";
+  for(const f of (raw||"").split("|")){ let h=hx(f); if(!h.startsWith(hdr)) continue; h=h.slice(hdr.length);
+    const p=h[0]; out += p==="0"?h.slice(2) : p==="1"?h.slice(4) : p==="2"?h.slice(2) : h; }
+  return out;
+}
+/* classifica a resposta de UM módulo a UM serviço: positiva, negativa (com código) ou nada */
+function analisa(raw, hdr, serv){
+  const d=isotp(raw,hdr);
+  if(!d) return {tipo:"nada"};
+  const pos=(parseInt(serv,16)+0x40).toString(16).toUpperCase().padStart(2,"0");
+  if(d.startsWith("7F"+serv)) return {tipo:"neg", nrc:d.substr(4,2)};
+  if(d.startsWith(pos)) return {tipo:"pos", dados:d.slice(2)};
+  return {tipo:"outro", dados:d};
+}
+const NRC={ "10":"recusado","11":"serviço não suportado","12":"subfunção não suportada","13":"tamanho errado (EXISTE)",
+  "22":"condição não atendida","24":"sequência errada","31":"fora da faixa (não existe)","33":"exige segurança",
+  "78":"aguarde (pendente)","7E":"não nesta sessão","7F":"serviço não nesta sessão" };
+
+/* ---------- plano ---------- */
+const PID_BASES=["00","20","40","60","80","A0","C0"];
+function faixa(a,b){ const r=[]; for(let i=a;i<=b;i++) r.push(i.toString(16).toUpperCase().padStart(4,"0")); return r; }
+const FAIXAS_RAPIDAS=[ ...faixa(0xF180,0xF1FF), ...faixa(0xF400,0xF4FF), ...faixa(0xFA00,0xFAFF),
+                      ...faixa(0x0000,0x00FF), ...faixa(0x1000,0x10FF), ...faixa(0x2000,0x20FF), ...faixa(0xD000,0xD0FF) ];
+const TODAS=faixa(0x0000,0xFFFF);
+const BYTE=[...Array(256).keys()].map(i=>i.toString(16).toUpperCase().padStart(2,"0"));
+
+let previstos=1, feitos=0, cancelar=false;
+function passo(t){ $("p-passo").textContent=t; }
+function avanca(n=1){ feitos+=n; const p=Math.min(99,Math.floor(feitos/Math.max(previstos,feitos)*100)); $("p-pct").textContent=p; $("p-barra").style.width=p+"%"; }
+
+async function clonar(completo){
+  bruto=[]; t0=Date.now(); feitos=0; cancelar=false; gravarBruto=true;
+  const A={ modo:completo?"completo":"rapido", adaptador:{}, enumeracao:{}, obd2:{}, obd2_lido:{}, modulos:[] };
+
+  passo("Preparando o adaptador…");
+  for(const c of ["ATZ","ATE0","ATL0","ATS0","ATSP0"]) await cmd(c,3000);
+  A.adaptador.id=await cmd("ATI"); A.adaptador.voltagem=await cmd("ATRV");
+  await cmd("ATH1"); await cmd("ATCAF1");
+  passo("Descobrindo o protocolo…");
+  await cmd("0100",6000);
+  A.adaptador.protocolo=await cmd("ATDP"); A.adaptador.protocoloNum=await cmd("ATDPN");
+
+  // --- quem responde de verdade ---
+  passo("Procurando os módulos…");
+  await cmd("ATAR");
+  const rOBD=await cmd("0100",4000), rUDS=await cmd("1003",4000);
+  const hdrs=new Set();
+  for(const raw of [rOBD,rUDS]) for(const f of raw.split("|")){ const m=hx(f).match(/^(7E[89A-F])/); if(m) hdrs.add(m[1]); }
+  // o adaptador obedece ao endereço? pede a um endereço que quase nunca existe e vê se alguém "responde"
+  await cmd("ATSH7E7"); await cmd("ATCRA7EF");
+  const tst=await cmd("0100",2500);
+  A.adaptador.obedece_endereco = !/7E8/.test(hx(tst));
+  await cmd("ATAR"); await cmd("ATSH7DF");
+  A.enumeracao={ obd_0100:rOBD, funcional_1003:rUDS, respondem:[...hdrs], teste_endereco:tst };
+
+  // --- OBD padrão ---
+  passo("Lendo OBD padrão…");
+  const pids=[];
+  for(const b of PID_BASES){ const r=await cmd("01"+b,4000); A.obd2["sup_01"+b]=r; const bm=bitmap(r,"41",b); pids.push(...bm.pids); if(!bm.mais) break; }
+  for(const p of pids) A.obd2["01"+p]=await cmd("01"+p);
+  for(const m9 of ["00","02","04","06","08","0A"]) A.obd2["09"+m9]=await cmd("09"+m9,4000);
+  for(const s of ["03","07","0A"]) A.obd2[s]=await cmd(s,4000);
+  A.obd2["020200"]=await cmd("020200",4000); A.obd2["0600"]=await cmd("0600",4000); A.obd2["0800"]=await cmd("0800");
+  const e="7E8";
+  A.obd2_lido={ VIN:hex2txt(isotp(A.obd2["0902"],e).replace(/^4902../,"")),
+    CALID:hex2txt(isotp(A.obd2["0904"],e).replace(/^4904../,"")).trim(),
+    CVN:isotp(A.obd2["0906"],e).replace(/^4906../,""),
+    ECU:hex2txt(isotp(A.obd2["090A"],e).replace(/^490A../,"")).trim() };
+
+  // --- cada módulo de verdade ---
+  const lista=completo?TODAS:FAIXAS_RAPIDAS;
+  const presentes=[...hdrs].sort();
+  previstos = feitos + presentes.length*(lista.length + 256 + 256 + 20);
+  gravarBruto=false; // as varreduras vão para o mapa de cada módulo (o bruto ficaria gigante)
+  for(const resp of presentes){
+    if(cancelar) break;
+    const base=(parseInt(resp,16)-8).toString(16).toUpperCase();
+    const M={ endereco:base, resposta:resp, sessoes:{}, mapa22:{}, mapa1A:{}, saidasAE:{}, saidas2F:{}, falhas:null, memoria:null,
+              silencio:{ "22":0, "1A":0, "AE":0, "2F":0 } };
+    await cmd("ATSH"+base); await cmd("ATCRA"+resp);
+    gravarBruto=true;
+    for(const s of ["1001","1003"]){ const r=await cmd(s,2500); M.sessoes[s]={raw:r,...analisa(r,resp,"10"),ms:ultimoMs}; }
+    M.falhas=await cmd("1902FF",3500);
+    M.memoria=await cmd("23140000000001",3000);
+    gravarBruto=false;
+    let n=0;
+    // leitura: 22 (UDS e GMLAN)
+    for(const id of lista){
+      if(cancelar) break;
+      if(++n%40===0){ await cmd("3E00",800); passo(`Módulo ${base}: lendo ${id} (${completo?"completo":"rápido"})`); }
+      const r=await cmd("22"+id,1200); const a=analisa(r,resp,"22");
+      if(a.tipo==="nada") M.silencio["22"]++; else M.mapa22[id]={...a,ms:ultimoMs};
+      avanca(1);
+    }
+    // leitura: 1A (GMLAN/KWP)
+    passo(`Módulo ${base}: identificadores GMLAN…`);
+    for(const id of BYTE){ if(cancelar) break; const r=await cmd("1A"+id,1200); const a=analisa(r,resp,"1A");
+      if(a.tipo==="nada") M.silencio["1A"]++; else M.mapa1A[id]={...a,ms:ultimoMs}; avanca(1); }
+    // saídas: AE incompleto (GMLAN device control)
+    passo(`Módulo ${base}: mapeando saídas…`);
+    await cmd("1003",2000);
+    for(const id of BYTE){ if(cancelar) break; const r=await cmd("AE"+id,1200); const a=analisa(r,resp,"AE");
+      if(a.tipo==="nada") M.silencio["AE"]++; else M.saidasAE[id]={...a,existe:a.nrc==="13",ms:ultimoMs}; avanca(1); }
+    // saídas: 2F incompleto (UDS) — nos identificadores que o módulo deixou ler
+    for(const id of Object.keys(M.mapa22).filter(k=>M.mapa22[k].tipo==="pos").slice(0,256)){
+      if(cancelar) break; const r=await cmd("2F"+id,1200); const a=analisa(r,resp,"2F");
+      if(a.tipo==="nada") M.silencio["2F"]++; else M.saidas2F[id]={...a,existe:a.nrc==="13",ms:ultimoMs};
+    }
+    A.modulos.push(M);
+  }
+  gravarBruto=true;
+  await cmd("ATAR"); await cmd("ATSH7DF");
+  $("p-pct").textContent=100; $("p-barra").style.width="100%"; passo(cancelar?"Interrompido (o que já leu foi guardado).":"Concluído.");
+  return montarArquivo(A);
+}
+
+function bitmap(resp, servResp, base){
+  const h=hx(resp); const i=h.indexOf(servResp+base); const pids=[]; let mais=false;
+  if(i>=0){ const d=h.substr(i+4,8); if(d.length===8){ const n=parseInt(d,16), ini=parseInt(base,16);
+    for(let b=0;b<32;b++) if(n&(1<<(31-b))){ const p=ini+1+b; if((p&0x1F)!==0) pids.push(p.toString(16).toUpperCase().padStart(2,"0")); }
+    mais=(n&1)===1; } }
+  return { pids, mais };
+}
+
+/* ---------- arquivo ---------- */
+let arquivoTexto="", arquivoNome="";
+function montarArquivo(A){
+  const placa=($("f-placa").value||"SEM-PLACA").toUpperCase().replace(/[^A-Z0-9]/g,"");
+  const conta=(o,f)=>Object.values(o).filter(f).length;
+  const obj={
+    formato:"dtcar-clone-obd/2", gerado_em:new Date().toISOString(), app:"DTCar Clone 0.2.0", modo:A.modo,
+    carro:{ placa, condicao:{ motor:$("f-motor").value, estado:$("f-estado").value, obs:$("f-obs").value||null } },
+    adaptador:A.adaptador,
+    resumo:{
+      vin:A.obd2_lido.VIN, calid:A.obd2_lido.CALID, ecu:A.obd2_lido.ECU,
+      adaptador_obedece_endereco:A.adaptador.obedece_endereco,
+      modulos:A.modulos.map(m=>({ endereco:m.endereco+"→"+m.resposta,
+        leitura22:conta(m.mapa22,x=>x.tipo==="pos"), leitura1A:conta(m.mapa1A,x=>x.tipo==="pos"),
+        saidasAE:conta(m.saidasAE,x=>x.existe), saidas2F:conta(m.saidas2F,x=>x.existe),
+        memoria:(m.memoria||"").slice(0,40) })),
+      total_trocas_gravadas:bruto.length
+    },
+    codigos_recusa:NRC, obd2_lido:A.obd2_lido, enumeracao:A.enumeracao, obd2:A.obd2, modulos:A.modulos, bruto
+  };
+  arquivoTexto=JSON.stringify(obj);
+  arquivoNome="clone-"+A.modo+"-"+placa+"-"+new Date().toISOString().replace(/[:.]/g,"-").slice(0,19)+".json";
+  return obj;
+}
+
+/* ---------- UI ---------- */
+async function listar(){
+  if(semApp){ $("bt-estado").textContent="Abra pelo APK (fora do APK não há Bluetooth)."; return; }
+  $("bt-estado").textContent="Procurando adaptadores pareados…";
+  try{
+    const perm=await Plug.permissao();
+    if(!perm.concedida){ const p=await Plug.pedirPermissao(); if(!p.concedida){ $("bt-estado").textContent="Permita o Bluetooth para continuar."; return; } }
+    const r=await Plug.listar(); const sel=$("bt-lista"); sel.innerHTML="";
+    (r.aparelhos||[]).forEach(a=>{ const o=document.createElement("option"); o.value=a.endereco; o.textContent=a.nome; sel.appendChild(o); });
+    $("bt-estado").textContent=(r.aparelhos||[]).length?"Escolha o adaptador e conecte.":"Nenhum adaptador pareado. Pareie o ELM327 nos Ajustes do Android.";
+  }catch(e){ $("bt-estado").textContent="Erro: "+(e.message||e.code||e); }
+}
+$("bt-recarregar").onclick=listar;
+$("bt-conectar").onclick=async()=>{
+  const end=$("bt-lista").value; if(!end) return;
+  $("bt-estado").textContent="Conectando…"; $("bt-conectar").disabled=true;
+  try{ await Plug.conectar({endereco:end}); $("c-condicao").classList.remove("esconde"); $("bt-estado").textContent="Conectado."; }
+  catch(e){ $("bt-estado").textContent="Não conectou: "+(e.message||e.code||e); }
+  $("bt-conectar").disabled=false;
+};
+async function rodar(completo){
+  $("c-condicao").classList.add("esconde"); $("c-progresso").classList.remove("esconde");
+  try{
+    const o=await clonar(completo);
+    const lin=o.resumo.modulos.map(m=>`<span>${m.endereco}: lê <b>${m.leitura22+m.leitura1A}</b> · saídas <b>${m.saidasAE+m.saidas2F}</b></span>`).join("");
+    $("r-nums").innerHTML=`<span>VIN: <b>${o.resumo.vin||"—"}</b></span><span>Endereçamento: <b>${o.resumo.adaptador_obedece_endereco?"ok":"adaptador ignora"}</b></span>${lin}`;
+    $("r-texto").value=arquivoTexto.slice(0,3000)+(arquivoTexto.length>3000?"\n… (completo no botão Enviar)":"");
+    $("c-progresso").classList.add("esconde"); $("c-fim").classList.remove("esconde");
+  }catch(e){ passo("Erro: "+(e.message||e.code||e)); }
+}
+$("bt-clonar").onclick=()=>rodar(false);
+$("bt-completo").onclick=()=>{ if(confirm("Clone completo: mais de 1 hora por módulo. Carro no carregador de bateria. Continuar?")) rodar(true); };
+$("bt-compartilhar").onclick=async()=>{
+  try{
+    if(Fs&&Sh){ await Fs.writeFile({path:arquivoNome,data:arquivoTexto,directory:"DOCUMENTS",encoding:"utf8"}); const uri=await Fs.getUri({path:arquivoNome,directory:"DOCUMENTS"}); await Sh.share({title:"Clone OBD "+arquivoNome,url:uri.uri}); }
+    else if(navigator.share){ await navigator.share({title:arquivoNome,text:arquivoTexto}); } else baixar();
+  }catch(e){ baixar(); }
+};
+function baixar(){ const b=new Blob([arquivoTexto],{type:"application/json"}); const a=document.createElement("a"); a.href=URL.createObjectURL(b); a.download=arquivoNome; a.click(); }
+$("bt-copiar").onclick=async()=>{ try{ await navigator.clipboard.writeText(arquivoTexto); $("bt-copiar").textContent="Copiado!"; setTimeout(()=>$("bt-copiar").textContent="Copiar texto",1500);}catch(e){} };
+$("bt-novo").onclick=()=>{ $("c-fim").classList.add("esconde"); $("c-condicao").classList.remove("esconde"); $("p-pct").textContent=0; $("p-barra").style.width="0%"; };
+$("bt-parar").onclick=()=>{ cancelar=true; passo("Parando… guardando o que já leu."); };
+document.addEventListener("keydown",ev=>{ if(ev.key==="Escape") cancelar=true; });
+listar();
+</script>
+</body>
+</html>

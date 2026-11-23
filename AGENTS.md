@@ -13,7 +13,7 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   `js/pasta.js` grava a cópia na pasta "DTCar Gestão" do computador.
 
 ## Onde fica cada coisa
-- `js/app.js`: menu lateral (`LATERAL`), rotas, carga e sincronização dos dados, permissões por rota (`restrito`).
+- `js/app.js`: menu do computador (`LATERAL`; desde 22/11/2026 é uma BARRA PRETA NO TOPO, layout aberto: os grupos descem com as opções no hover/foco — o menu lateral acabou e com ele o limite de altura em 1366x768), rotas, carga e sincronização dos dados, permissões por rota (`restrito`).
 - `js/api.js`: todas as chamadas ao Supabase. Telas não falam com o Supabase diretamente.
 - `js/regras.js`: regras do negócio: status e **etapas da O.S.**, papéis e permissões (`pode(perfil, acao)`), textos padrão.
 - `js/ui.js`: componentes comuns (Campo, Modal, Seg, Dinheiro, Status…). `js/util.js`: formatação (reais, datas, placa, telefone).
@@ -227,6 +227,31 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   acaba, saem mesmo fora do horário comercial (sem o motor, o agendamento de 1 min acorda a zap para elas: v39). IA: depois de uma falha, nova tentativa só depois de 45 s. Configuração em `whatsapp_conexao.avisos`
   (padrões em `whatsapp_avisos_cfg()`). Tabelas fora do backup, do banco do PC e do espelho. Mudou `paraGuardar`/`mensagemCitada`? Mude
   as duas cópias e marque `motor-vX.Y`. Testes: `python3 teste/teste_v36.py` (Postgres local) e `deno run -A teste/teste_zap.ts`.
+  **Agente de mensagens (23/11/2026, sem SQL): o texto que manda na FORMA das mensagens.** O Danilo dita o conteúdo; o agente dá a forma.
+  O molde que ele aprovou: título em negrito com **um** ícone (o único da mensagem, escolhido pelo assunto), saudação pela hora do envio
+  ("Sr."/"Sra." + primeiro nome; empresa = o contato pelo nome, com a empresa junto do veículo; "Boa noite" das 18h em diante), informações
+  em tópicos `• ` quando há duas ou mais, negrito só em três lugares (título, valor total de orçamento/cobrança e a última linha) e a
+  assinatura de duas linhas no fim de TODA mensagem (`ASSINATURA_1`/`ASSINATURA_2` em `zap/index.ts`, a última sempre em negrito).
+  `SISTEMA_ASSISTENTE` é só o PADRÃO: vale o texto que o Danilo gravar em **Sistema › WhatsApp › Agente de mensagens**
+  (`cfg.zapAgente.texto`, tabela config, de 40 a 6.000 caracteres; fora disso ou sem a chave, volta o padrão — `textoDoAgente`), então
+  mudar o jeito das mensagens **não precisa de atualização do sistema**. A ação `agente` da zap entrega o texto e o padrão para a tela;
+  quem grava é a tela, nunca a função. **O conector não mexe nessa chave:** o `agente_ajustes` (v50) só aceita a lista fechada de ajustes
+  e recusa qualquer outra — mesma proteção do número dos avisos, contra ordem falsa vinda de e-mail ou mensagem. `garantirAssinatura`
+  completa as duas linhas finais quando a IA esquece (só se couber nos 1.400 do rascunho; não inventa conteúdo nenhum). Nada muda no
+  caminho do OK: o rascunho continua voltando para o Danilo e nada vai ao cliente sem ele.
+  **Modelos no mesmo molde (23/11/2026, motor 3.5, sem SQL):** os textos de `js/mensagens.js` (entrada, orçamento, adicionais, pronto,
+  entrega, cobrança, `msgCobrancaParcela` e `msgBoasVindas`) passaram a sair no molde do agente — eles são a MAIORIA das mensagens que o
+  cliente recebe, e são montados por regra, não pela IA (texto de modelo é sempre a mesma estrutura com dados do sistema: mandar à IA
+  custaria por envio, demoraria e faria o texto variar). `montar(icone, titulo, nome, cfg, linhas, agora)` monta tudo; `topicos()` só usa
+  `• ` com duas informações ou mais; a assinatura é `cfg.nome` + a linha fixa em negrito. **Tratamento deduzido do primeiro nome**
+  (`tratamento`): o cadastro não guarda sexo (decisão do Danilo, 23/11: deduzir e aceitar o erro raro) — termina em A é "Sra.", fora
+  `MASC_EM_A`, mais a lista `FEM_SEM_A`; empresa não leva tratamento e vem sem o tipo societário, em até 3 palavras (`nomeEmpresa`).
+  O cadastro grava em MAIÚSCULAS, então o nome é escrito normal na mensagem (`capitalizar`, com as preposições em minúscula).
+  **Saudação resolvida na HORA DO ENVIO** (`comSaudacaoDoEnvio` em `motor-zap/whats.js` e a cópia na `zap/index.ts`, aplicada dentro do
+  `enviarTexto`): a mensagem é montada quando o Danilo clica, mas a fila segura fora do horário comercial — uma montada às 19h sairia
+  "Boa noite" às 8h da manhã. Corrige só a PRIMEIRA saudação, nas 4 primeiras linhas (o título vem antes), e não toca em texto que não
+  tem saudação. `horaBrasilia` cai em UTC−3 se o aparelho não tiver a tabela de fusos. Motor antigo (3.4) manda como foi montado —
+  é o comportamento de hoje, nada quebra. Testes: `node teste/teste_mensagens.mjs` e `deno run -A teste/teste_whatsapp_pdf.ts`.
   **v38 (05/11/2026): pacote de mensagens para o mesmo número.** O intervalo de 25–70 s vale entre contatos; se a próxima que a fila vai
   pegar (mesma ordem da `whatsapp_pegar_proxima`: `interno` primeiro, depois `id`) é para o MESMO número e entrou até 5 min depois da que
   acabou de sair e pode sair agora (PARAR, horário e limites, como na retirada), o intervalo é 3 s (`whatsapp_pacote_segue`, usada pela `whatsapp_resultado` e pelo gatilho `whatsapp_fila_pacote`, que
@@ -639,6 +664,203 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - **Quem entra e o que vê é definido pelo administrador em Sistema › Equipe** (pedido do Danilo, 16/11/2026): bloco "App do celular" em cada pessoa — chave entra/não entra e as telas marcadas — gravado em `cfg.appAcessos[id]` (tabela config, sem SQL; `js/appacesso.js`: `acessoApp(cfg, perfil)`, `TELAS_APP`). Sem nada gravado vale o padrão do papel: administrador e consultor entram com todas as telas, mecânico não entra; mecânico liberado consulta sem ver valores (papel `leitura_sem_valores` em `perfilNoApp`) e nunca ganha + Orçamento (`telasDoPapel`). O app lê `config` no login (`app/app.js`) e de novo ao carregar os dados (`app/telas.js`): Início, abas e rotas mostram só as telas liberadas; tela não liberada cai no Início. Vale na próxima vez que a pessoa abrir o app.
 - Sem SQL novo. Testes: `python3 teste/teste_app_sistema.py` (Supabase de mentira: login, digital, as telas gravando, Voltar) e `python3 teste/teste_app_modo.py`. Versão do app: `version` em `app/package.json` e `VERSAO` em `app/app.js`.
 
+### Diagnóstico OBD pelo adaptador ELM327 (18/11/2026, etapa 1 de 3, sem SQL)
+- **Pedido do Danilo:** cada mecânico lê o carro em que está mexendo pelo próprio celular, sem depender do Raven, que é um só e vira fila. O Raven continua para o que só ele faz (programação, atuação e as marcas que ainda não cobrimos).
+- **Etapa 1 = SÓ LEITURA.** Nada é gravado no banco e **nada é escrito no carro**. A gravação na O.S. é a etapa 2 e precisa de SQL novo (`obd_leituras`).
+- **ARMADILHA, leia antes de criar qualquer plugin nativo:** o `app/.gitignore` tinha `android/` **sem barra inicial**, e isso engolia também `app/plugins/obd/android/` — o plugin inteiro ficou fora do primeiro commit e o `npx cap add android` quebrava com ENOENT num clone limpo, derrubando a geração do APK. Agora é `/android/`, que ignora só o `app/android/` gerado. Qualquer plugin local novo depende disso.
+- **Esta é a primeira tela do app que depende de parte NATIVA.** O ELM327 fala Bluetooth clássico (perfil serial, SPP) e isso não existe dentro do WebView, então **exige APK novo** (`app/package.json` 1.5.0, `VERSAO` em `app/app.js`). O APK é de depuração: **desinstalar o anterior antes de instalar**. Depois do plugin dentro, as telas voltam a chegar pelo site, como o resto do app.
+- **Plugin local `app/plugins/obd/`**, declarado em `app/package.json` como `"dtcar-obd": "file:plugins/obd"`. A pasta `app/android/` é criada a cada build, então código nativo solto seria apagado: plugin é o único jeito que sobrevive. Conferido: `npx cap add android` acha 3 plugins (`@capacitor/app`, biometria e `dtcar-obd`) e escreve `include ':dtcar-obd'` no `capacitor.settings.gradle`.
+- **Em Java, não Kotlin**, porque o projeto Android gerado é Java puro e trazer o toolchain do Kotlin só por causa deste plugin arriscaria a geração do APK.
+- **SEGURANÇA — lista branca no NATIVO (`SERVICOS_LEITURA` e `AT_PERMITIDOS` em `ObdPlugin.java`).** O app abre um SITE, então todo método do plugin fica alcançável por qualquer script daquela página: sem a lista, um `Capacitor.Plugins.DtcarObd.comando({cmd:'04'})` apagaria as falhas do carro. Passam só os AT que o app usa e os serviços de LEITURA (01, 02, 03, 06, 07, 09, 0A). O **04 (apagar falha) está fora de propósito e CONTINUOU fora** quando a etapa 2 trouxe o apagar: ele ganhou método próprio (`apagar`), de modo que a regra "nada que passa pelo `comando()` escreve no carro" segue valendo inteira. O comando é **normalizado antes de ser conferido E enviado** (`normalizar`), então o que foi aprovado e o que vai ao carro são o mesmo texto. Teste: `bash teste/teste_obd_java.sh` (59 conferências; compila o plugin com stubs do Android e as fontes de verdade do Capacitor, porque aqui não há SDK).
+- **Permissão: só `BLUETOOTH_CONNECT`** (manifesto do próprio plugin, que o Android junta ao do app; as antigas com `maxSdkVersion="30"`). **Não pedir `BLUETOOTH_SCAN`:** o app não procura aparelho, usa os já pareados nos Ajustes do Android (`getBondedDevices`), e pedir scan faria o Android escrever "determinar a posição de aparelhos próximos" no aviso, assustando o mecânico por nada. Nenhuma permissão de localização. O teste confere a lista exata de permissões declaradas.
+- **A parte nativa é burra de propósito:** só abre o Bluetooth, manda uma linha e devolve o que o adaptador respondeu até o sinal de pronto (`>`). Métodos: `permissao`, `pedirPermissao`, `listar`, `situacao`, `conectar`, `comando`, `desconectar`. Uma conexão por vez e comandos em fila. Campos compartilhados são `volatile`, os streams são copiados para variáveis locais dentro da tarefa, e **toda tarefa da fila é embrulhada em `naFila`**: qualquer falha inesperada REJEITA a chamada, senão a promessa do JavaScript nunca terminaria e a tela ficaria em "Lendo as falhas…" para sempre. O `js/obd.js` ainda põe um tempo-limite próprio por cima, como rede de segurança.
+- **Quem entende de OBD é `js/obd.js`**, no site. Por isso quase tudo é testado sem celular e sem carro, e melhorar a interpretação **não exige APK novo**.
+- **UMA LINHA POR MÓDULO, nunca colar tudo (o defeito mais grave que a revisão pegou):** num carro com motor e câmbio no barramento o ELM327 imprime uma linha por módulo. Colar as linhas num hex só fazia o começo da resposta do segundo módulo ser lido como dado do primeiro, e saíam **códigos de falha que não existem no carro** (`4300` + `430201710300` produzia P0043, P0201 e C3103). Agora `juntarLinhas` devolve `respostas` (uma por módulo; só os pedaços numerados `0:`/`1:` são juntados, porque são de um módulo só), `dadosDa` exige que o serviço esteja no **começo** da resposta, `codigosDeTodas` junta os códigos de verdade de cada módulo e a tela avisa quando mais de um respondeu. Num laudo de oficina, inventar código é o pior defeito possível.
+- **ANDAR NAS FAIXAS:** o pedido `0100` só cobre os PIDs $01–$20 e o `0600` só os MIDs $01–$20; a última posição de cada faixa é o aviso de que existe a seguinte. Sem andar (`suportadosEmFaixas`), a tensão do módulo ($42) e as distâncias desde o apagamento ($21 e $31) nunca apareceriam, e os testes de bordo nunca chegariam ao catalisador (de $21 em diante). O teste do app confere que os comandos `0120`, `0140`, `0142` e `0131` realmente saem.
+- **O que lê:** falhas dos serviços 03/07/0A com a situação sempre escrita; dados ao vivo (lista `PIDS`, só os que o carro informa ter) **girando sem parar**; chassi (09 02) confrontado com o do cadastro, lido da ficha do veículo porque a busca por placa não carrega esse campo; prontidão dos monitores (01 01), o detector de "falha apagada antes de o carro chegar"; a foto do momento da falha (serviço 02, só os PIDs que o carro tem — senão são 15 pedidos de 4 s para dar NO DATA); e os testes de bordo (serviço 06).
+- **DADOS AO VIVO GIRAM DE VERDADE (pedido do Danilo, 19/11/2026):** uma leitura por toque não é "ao vivo" — para ver o motor trabalhando (temperatura subindo, borboleta abrindo, ajuste de combustível corrigindo) o valor tem de mudar na tela sozinho. `lerAoVivoSeguido` fica dando voltas na lista até o mecânico mandar parar, e **avisa cada valor na hora em que ele chega**, não no fim da volta, senão a tela daria saltos de 12 leituras. Três regras que nasceram do uso: PID marcado `vivo: false` (distâncias e aquecimentos desde o apagamento) é lido **só na primeira volta**, porque não muda com o carro na rampa e cada pedido rouba tempo de quem muda; PID que falha duas vezes (`PACIENCIA`) sai da roda, senão um PID mudo derrubaria o ritmo para sempre; tempo-limite curto (`ESPERA_VIVO`, 1,5 s) e um respiro entre voltas (`PAUSA_VOLTA`). Quem manda parar é a caixa `rodando` (um `useRef`, **não** estado: a função já começou e continuaria lendo o valor antigo do estado, nunca parando). Para ao desconectar e ao sair da tela. Enquanto gira, os outros botões ficam travados — o adaptador atende um pedido por vez. O teste do app prova o essencial: o adaptador de mentira devolve uma rotação que sobe a cada leitura, e o teste confere que **o número na tela muda sozinho**, sem tocar em nada, e que depois de parar ele para de mudar.
+- **PAINEL OU LISTA, por filtro (pedido do Danilo, 19/11/2026: "o bom é ter as duas opções e escolher através de um filtro"):** o painel são mostradores de scanner (`Mostrador` em `app/telas.js`): arco de 270° em SVG com o número grande dentro, dois por linha no celular, com o começo e o fim da escala escritos no pé. A escala de cada PID (`de`/`ate` na tabela `PIDS`, levados adiante por `valorPid`) é só para desenhar o ponteiro — **não é faixa de normalidade e a tela não diz se o valor é bom ou ruim**: isso depende do motor e inventar seria pior que não mostrar. Por isso o arco é sempre azul, nunca verde/vermelho. **O rótulo é sempre escrito**, como o nome da etapa da O.S.: quem lê está embaixo do carro, com pressa. PID sem escala (as distâncias desde o apagamento) não vira mostrador: fica em lista embaixo. A LISTA é a tela antiga, com todos os valores em linha. A escolha fica guardada no aparelho (`localStorage`, `obd_jeito`): quem gosta de um não quer trocar a cada carro.
+- **ESCOLHER O QUE APARECE, UMA LEITURA POR VEZ E FALHA VIGIADA (pedido do Danilo, 19/11/2026).** Quatro coisas numa só mudança:
+  (1) **Quem decide o que aparece é o CARRO.** A lista que ele responde em `0100`/`0120`/`0140` é a palavra final: nenhuma consulta de placa sabe
+  quais sensores aquele módulo expõe. A placa serve para outra coisa — `tipoDeMotor` (do combustível do cadastro) só ORDENA os grupos e evita
+  oferecer, antes de ligar, o que não existe naquele motor (num flex não se oferece rail nem DPF; num diesel não se oferece sonda nem cânister).
+  (2) **Grupos** (`GRUPOS` em `js/obd.js`, campo `grupo` em cada PID): Motor, Ar e admissão, Combustível, Sondas, Catalisador, Injeção/EGR/turbo,
+  Tanque e cânister, Elétrico, Contadores. `leiturasPara(suportados, escolhidos)` e `gruposPara(suportados, combustivel)` resolvem tudo num lugar só.
+  (3) **Filtro com caixas** (`#obd-escolha`): marcar o que ver agora ou "TODAS AS QUE O CARRO TIVER". A escolha fica **por placa** no aparelho
+  (`localStorage`, `obd_leituras_<PLACA>`), junto com o que aquele carro respondeu (`obd_suportados_<PLACA>`, só para montar o filtro antes de ligar).
+  Marcar nunca ACRESCENTA o que o carro não tem — só reduz.
+  (4) **Uma leitura por vez na tela:** `res` virou `{ o, d }`. Abrir falhas tira os dados ao vivo da frente e para a roda; cada leitura nova troca a
+  anterior em vez de empilhar cartão. Os outros botões não ficam mais travados durante a roda: eles a interrompem.
+  (5) **Falha vigiada durante a leitura ao vivo:** a cada `VOLTAS_ATE_FALHA` (8) voltas a roda pergunta `03` sem parar (um pedido contra as 12 da
+  volta) e chama `aoFalhas`. Apareceu código, o botão de falhas fica **vermelho** com a contagem; código que não existia quando a roda começou é
+  "FALHA NOVA AGORA". A referência é a leitura de falhas anterior, se houve; senão a primeira olhada vira a referência. Falha que nasce com o motor
+  trabalhando é justamente a que interessa, e antes ela só apareceria se alguém lembrasse de abrir a tela de falhas.
+  Teste: o adaptador de mentira ganha `window.__obd.falhaNova` e o teste confere o botão ficando vermelho, o código aparecendo e o botão voltando ao normal.
+- **40 LEITURAS NOVAS (19/11/2026, pedido do Danilo: "quero todas as leituras possíveis").** De 15 para 55. Todas com a fórmula conferida contra a
+  tabela do J1979 e com um teste de valor que um mecânico reconhece (rail a 500 bar, catalisador a 450 °C, odômetro em 150.000 km), para conta
+  errada doer no teste e não no laudo. As que entraram: **velocidade**; carga absoluta; temperatura do óleo; torque pedido, entregue e de
+  referência; borboleta relativa, absoluta B e C, comandada pelo módulo, pedais D, E, F e relativo; pressão barométrica; temperatura do ar de fora;
+  **ajuste curto e longo do banco 2** (só havia o banco 1); mistura comandada (lambda); pressão de combustível; nível do tanque; **etanol no
+  tanque**; **temperatura do catalisador nos quatro pontos**; **pressão do rail** (gauge, absoluta e sobre o vácuo); **tempo de injeção** (não
+  confundir com o avanço de ignição, que já havia); consumo em L/h; EGR comandada e erro da EGR; purga do cânister; pressão de vapor do tanque
+  (duas escalas, **com sinal** — vácuo é negativo); tempo com a luz acesa e desde o apagamento; **odômetro do módulo** (4 bytes).
+  **FAIXAS ATÉ $C0:** `FAIXAS_PID` passou de `[00,20,40,60]` para `[00,20,40,60,80,A0,C0]`, senão o odômetro ($A6) nunca apareceria. Andar não
+  custa: a varredura para na primeira faixa que não avisa a seguinte.
+  **O grupo "diesel" virou "Injeção, EGR e turbo", sem restrição de combustível:** o PID da pressão do rail é "diesel OU gasolina de injeção
+  direta", e EGR e turbo existem nos dois. Restringir por combustível esconderia leitura que o carro tem.
+  Conferências novas no `teste_obd.mjs`: a conta de cada PID tem de caber nos bytes que ele declara (ler `d[2]` num PID de 2 bytes daria NaN no
+  carro e a leitura sumiria da tela sem motivo aparente), escala completa ou ausente, fim maior que o começo e nenhum rótulo repetido.
+- **UM PEDIDO, VÁRIOS NÚMEROS — sondas e temperatura do escape (19/11/2026).** A sonda manda lambda E tensão na mesma resposta, e a temperatura do
+  escape manda até quatro sensores. Por isso `valorPid` passou a devolver uma **LISTA** de leituras em vez de uma só, e a tabela aceita `partes`;
+  cada leitura ganha `chave` (pid × 100 + a posição), que é por onde a tela identifica cada mostrador. PID simples devolve lista de um.
+  `partes` aceita `quando(dados)`: a parte só existe se o próprio carro disser que existe — é assim que a sonda com `0xFF` no segundo byte (não
+  entra na conta do ajuste) e o sensor de escape ausente **somem em vez de virar zero**.
+  O que entrou: **sondas de banda estreita** ($14–$1B: tensão A÷200 e o ajuste daquela sonda), **sondas de banda larga** ($24–$2B: lambda e
+  tensão) e a **temperatura dos gases de escape** ($78/$79, 9 bytes, o primeiro é o mapa de quais dos quatro sensores existem). Plantas de bytes
+  conferidas contra o J1979. Total: 73 PIDs, 95 leituras possíveis.
+  **O QUE NÃO ENTROU, E POR QUÊ:** rotação do turbo ($74), pressão de escape ($73), temperatura do intercooler ($77), pressão do DPF ($7A/$7B),
+  temperatura do DPF ($7C) e NOx ($83). A fonte pública dá só o tamanho em bytes, **sem a planta de bytes nem a fórmula** — e o $7C tem 9 bytes
+  como o escape, onde o primeiro byte é mapa de sensores, então aplicar "(256A+B)/10−40" daria temperatura errada. Inventar aqui é pior que não
+  mostrar: entram quando conferirmos contra o Raven num carro que os tenha.
+  **Vírgula decimal:** os valores saíam com ponto ("3.14 g/s"). `numBR` no `app/telas.js` escreve do jeito daqui, no mostrador, na lista e na
+  foto da falha.
+  **Escala do lambda comandado corrigida:** ia de 0,7 a 1,3, e um valor de corte (1,5) encostaria no fim do arco como se fosse o máximo. Agora 0 a 2.
+- **LEITURA DE COMBUSTÍVEL — a leitura do primeiro contato (19/11/2026).** Pedido do Danilo: *"a maioria dos carros chega com falha de
+  reconhecimento do combustível pela má qualidade no Brasil e já ter essa ideia no primeiro contato com o carro ajuda muito"*.
+  Botão próprio `#obd-combustivel`, na frente de "Dados ao vivo": a roda gira só com `PIDS_COMBUSTIVEL` (ajuste dos dois bancos, etanol, lambda
+  comandado, sondas, pressão de combustível e de rail, tempo de injeção, consumo, nível, carga, MAF, rotação, temperatura) e o cartão troca de
+  nome para "Combustível".
+  `leituraCombustivel(valores)` em `js/obd.js` (função pura, testada sem carro) devolve a conversa pronta: **o número que importa é a SOMA do
+  ajuste curto com o longo** — positivo = o módulo está PONDO combustível (mistura pobre), negativo = TIRANDO (rica). Faixas gerais do OBD
+  (`AJUSTE_ATENCAO` 10%, `AJUSTE_GRAVE` 25%), **não** faixa de normalidade do motor. Com dois bancos, avisa a diferença entre eles e manda
+  procurar do lado que corrige mais. Lista as causas que costumam explicar cada lado, **incluindo combustível com mais/menos álcool do que o
+  módulo calculou**, sempre marcadas como lista geral — a tela **nunca dá veredito**, porque isso depende do motor e quem decide é o mecânico.
+  Carro que não informa o etanol recebe a frase explicando (a maioria dos flex calcula pela sonda e nem todo módulo publica a conta).
+  **O que o OBD genérico NÃO faz, conferido em 19/11/2026:** declarar o combustível e mandar o módulo reaprender (o que o Raven faz) é rotina de
+  montadora com **troca de desafio e resposta validada no servidor do fabricante do aparelho** — a conta não sai de capturas, então não dá para
+  replicar. O que dá é o serviço 04, que zera as adaptações e obriga o módulo a refazer a conta com o que está no tanque (PR seguinte).
+- **Lista de dados ao vivo redesenhada (19/11/2026):** a visão LISTA deixou de ser "rótulo: valor" e virou `LinhaViva` — separada por grupo, com o
+  valor grande à direita e uma barra fina mostrando a posição na escala (a mesma `de`/`ate` do mostrador; continua sem dizer se é bom ou ruim).
+- **Serviço 06, honestidade e sinal:** na tabela de escalas do J1979 os identificadores de **$80 em diante são valores COM SINAL** — lendo tudo como sem sinal, um valor negativo virava ~65000 e o passou/não passou **invertia**. `comSinal`/`inteiro16` tratam isso. A escala para mostrar em unidade de verdade só existe onde está conferida (`ESCALAS`); o resto aparece como número cru, sem unidade inventada, e pode crescer conferindo contra o Raven. Mesma regra nos nomes: `nomeMid` só nomeia sonda ($01–$08) e catalisador ($21–$24).
+- **FALHA DE COMBUSTÃO POR CILINDRO (19/11/2026, sem SQL e sem APK).** Pedido do Danilo depois de perguntar o que dá para fazer
+  em atuadores: **é o número que o corte de bico procura, sem cortar nada** — o próprio módulo conta. Botão `#obd-cilindros`.
+  Serviço 06, **MID $A1 geral e $A2 em diante um por cilindro** ($A2 = cilindro 1, até $AD = 12), com **TID $0B** (média dos
+  últimos 10 ciclos) e **TID $0C** (ciclo atual); escala UASID $24 = contagens. Conferido contra as tabelas de mode 06 das
+  montadoras, não de memória.
+  **Duas coisas impediam isso de aparecer e foram corrigidas:** `FAIXAS_MID` ia só até $60 (os MIDs de falha são $A1-$AD, nunca
+  chegavam) e a trava de 32 MIDs cortava justamente o fim da lista — agora os MIDs de falha são lidos **na frente** e a trava é 48.
+  O botão lê só os 13 MIDs de falha, não varre o serviço 06 inteiro.
+  **Como a tela lê (`falhaPorCilindro`):** compara os cilindros ENTRE SI. Número absoluto não diz nada (depende do motor e de
+  quanto andou desde o apagamento). Aponta um cilindro só quando ele tem pelo menos `FALHA_MINIMA` (10) contagens E é
+  `FALHA_DESTAQUE` (3) vezes o segundo pior; senão diz "espalhada" e manda procurar o que é comum a todos. Nunca receita peça.
+  Avisos fixos: comparar entre cilindros, a contagem é desde o último apagamento, e **alguns módulos mandam na ordem de ignição**
+  (não na ordem dos cilindros) e há motor que lista cilindro que não existe — por isso a tela manda conferir no carro.
+- **ODÔMETRO DO MÓDULO CONTRA O KM DO CADASTRO (19/11/2026, sem SQL e sem APK).** No cartão "Chassi, monitores e odômetro":
+  o PID $A6 (poucos carros publicam) ao lado do `km_atual` do cadastro. `conferirOdometro`: acima = normal (diz quanto andou
+  desde a última visita); até `ODOMETRO_TOLERANCIA` (1.000 km) abaixo = arredondamento; mais que isso manda **conferir** — e
+  **não acusa ninguém**, porque módulo trocado, painel trocado e módulo que conta a própria distância dão nisso. Carro que não
+  publica recebe a frase explicando, não um zero.
+- **A LISTA DO FILTRO PRECISA SER MESMO A DO CARRO (20/11/2026, achado pelo Danilo num Honda City 2016 flex).** Ele viu EGR
+  oferecida num carro que não tem válvula de EGR. O furo: `leiturasPara(suportados)` devolve o catálogo INTEIRO quando a lista
+  vem vazia, e a tela, conectada, dizia assim mesmo "a lista acima é a que ESTE carro respondeu". Módulo que conecta mas não
+  devolve o `0100` caía nisso — catálogo geral passando por lista do carro, que é exatamente o que a etapa 1 prometeu não fazer.
+  Agora `listaDoCarro` exige lista NÃO VAZIA, e o texto diz de onde ela veio: do carro agora, do carro da última vez
+  (`obd_suportados_<PLACA>`) ou do catálogo geral — este em vermelho, mandando conectar. **O painel ao vivo nunca teve esse
+  problema** (lê pelos PIDs suportados de verdade); era só a tela de escolha.
+  Vale o registro técnico: **EGR declarada em carro sem válvula é comum** (o mesmo software roda em versões com e sem, e
+  devolve valor fixo), e o monitor do serviço 01 se chama "EGR e/ou VVT" no padrão — num motor com comando variável ele
+  aparece com razão. Nada disso é erro de leitura.
+- **O aviso de "sem internet" não pode cobrir a leitura (20/11/2026).** O toast vermelho de `dados.erro` ficava fixo no topo,
+  em cima dos mostradores. Agora fecha com um toque (`semAviso`) e, na rota `obd`, troca o texto: a leitura do carro sai do
+  adaptador e não passa pelo servidor; sem internet só as buscas do sistema ficam incompletas.
+- **PADRÃO NA TELA, O RESTO NO FILTRO (regra do Danilo, 20/11/2026).** *"colocar na tela as leituras padrões e deixar em
+  filtro as outras leituras disponíveis para poder adicionar, e uma opção no filtro de adicionar todas."* Quarenta mostradores
+  de uma vez é o mesmo que nenhum: ninguém acha o que procura com o carro ligado na frente. E cada leitura a menos na roda faz
+  as que ficaram atualizarem mais rápido.
+  `PIDS_PADRAO` (12): rotação, temperatura do motor, carga, borboleta, ajuste curto e longo, avanço, temperatura do ar,
+  pressão no coletor, MAF, velocidade e tensão do módulo. `PIDS_PADRAO_DIESEL` troca os ajustes (que não existem no diesel)
+  pela **pressão do rail nas duas formas que o módulo pode publicar** ($23 medida e $59 absoluta — o carro tem uma ou outra,
+  a que faltar some sozinha) e pela temperatura do óleo. É a pressão do rail que diz se a bomba de alta está entregando;
+  **pressão PEDIDA pelo módulo e comando do regulador da bomba (IMV/MPROP) não têm PID genérico** — isso é dado de montadora.
+  `padraoPara(suportados, combustivel)` corta o que o carro não tem — **a lista do carro manda sempre**, como na etapa 1.
+  **`tipoPeloModulo` (20/11/2026):** quando o cadastro não diz o combustível (carro novo na oficina, campo vazio, placa não
+  consultada), o tipo sai do que o módulo publica — rail SEM ajuste de combustível é diesel; rail COM ajuste é injeção direta
+  a gasolina, que também tem rail; sem os dois sinais não chuta. Sem isso, diesel sem cadastro ficava com a lista de gasolina
+  e não via o rail, que é justamente a leitura que interessa. O cadastro, quando diz, manda.
+  Filtro com dois botões, `#obd-padrao` ("SÓ AS PADRÃO") e `#obd-todas` ("TODAS DO CARRO"), mais as caixas uma a uma; marcar
+  ou desmarcar parte do que está na tela agora e vira escolha à mão. Guardado por placa como `{ modo, pids }`
+  (`escolhaGuardada` aceita o formato antigo, que era só a lista de PIDs: lista vazia era "todas").
+- **SERVIÇOS AVANÇADOS (20/11/2026, sem SQL e sem APK).** Quadro próprio (`#obd-avancado`), separado do "Ler do carro",
+  com as leituras de perícia. Saíram de uma pesquisa em fontes estrangeiras (GM, Ford, Toyota, CARB, EPA, UE, datasheet da
+  ELM Electronics) — nenhuma precisa de hardware melhor:
+  (1) **Calibração do módulo** (serviço 09 $04 CALID e $06 CVN): a impressão digital do que está gravado. Guardada por placa
+  (`obd_calib_<PLACA>`) e comparada na visita seguinte — mesma calibração com CVN diferente é reprogramação ou remap.
+  **Não existe lista pública do CVN certo de cada carro** (a CARB obriga a montadora a dar a lista às autoridades, não ao
+  público), então a comparação só vale contra a leitura anterior DESTE carro, e a tela diz isso.
+  (2) **Teste drive** (PID $41): os monitores DESTE ciclo de condução, que zeram a cada vez que a chave liga. Serve para
+  provar o reparo rodando o carro, **sem apagar nada** — apagar zeraria a prontidão e o histórico. "Completou" não é "passou".
+  (3) **Contadores de uso** (serviço 09 $08 Otto / $0B diesel): quantas vezes cada monitor rodou contra quantas poderia ter
+  rodado. Razão abaixo de `RAZAO_MINIMA` (0,336 pela CARB e pela UE) explica o carro que nunca fica pronto. **A ordem dos
+  campos da resposta só foi conferida em fonte secundária**, então cada linha mostra também a posição e a tela avisa.
+- **TRÊS CORREÇÕES QUE A PESQUISA TROUXE (20/11/2026).**
+  (1) **GM, crítico:** a própria GM publica, nas tabelas do serviço 06 por motor, que em parte dos motores os MIDs de falha de
+  combustão vêm com os **cilindros trocados** ($A3 é o cilindro 3, $A4 o 4, $A5 o 2) e que o TID $0B pode sair dividido por 10.
+  Como varia por motor e ano, aplicar automático seria pior: `avisoMidDaMarca` mostra o aviso quando a marca é Chevrolet/GM —
+  um terço do pátio. (2) **Valor padrão de monitor que nunca rodou:** a Ford documenta que o EVAP não executado devolve um
+  valor de fábrica, não uma medição; a tela manda conferir a prontidão antes de usar número do serviço 06. (3) **Clone:**
+  `adaptadorSuspeito` lê o `ATI` na conexão e avisa quando o adaptador se diz **"v1.5"**, versão que a ELM Electronics nunca
+  lançou (foram 1.0 a 1.4b e 2.0 a 2.3) — é clone, perde quadro e lê errado.
+- **PARÂMETROS DE REFERÊNCIA COM NÍVEL DE CONFIANÇA (`js/obdparam.js`, 20/11/2026).** O Danilo tem o Raven como contraprova e
+  o foco dele é o desenvolvimento, então a regra deixou de ser "omitir o que não tem fonte" e passou a ser **mostrar com o
+  nível escrito**. Quatro níveis: `conferido` (o que ele conferiu, vale mais que tudo), `norma` (CARB, EPA, UE), `montadora`
+  (Ford, GM, Toyota — documentado) e `suposto` (reparação, sem documento; entra JUSTAMENTE para ser conferido no Raven).
+  25 parâmetros; 5 o app usa para decidir (ajuste de combustível atenção/grave, falha por cilindro mínima/destaque, razão dos
+  contadores) e o resto é referência. `leituraCombustivel` e `falhaPorCilindro` aceitam os limites de fora.
+  **QUEM CORRIGE É O CLAUDE, NO ARQUIVO (decisão do Danilo, 20/11/2026 à tarde):** *"eu confiro no Raven e te envio aqui no
+  chat para que você corrija"*. Não há formulário no app — a aba `#obd-parametros` é só de LEITURA. O valor conferido entra no
+  campo `conferido` do próprio parâmetro (`{ valor | de/ate, carro, em, obs }`), com a procedência escrita, e `nivelDe` o sobe
+  para "conferido". Assim cada correção fica no histórico do repositório, dá para rever de onde veio, e ninguém digita número
+  errado no celular com o carro ligado na frente. `limites()` entrega ao app os cinco valores que ele usa para decidir.
+  **Visual (pedido do Danilo):** a distinção é **discreta** — tonalidade de cinza do mais firme (conferido) ao mais apagado
+  (suposto), com o nível **sempre escrito** miúdo ao lado (a regra da casa é nunca deixar só a cor falando) e uma legenda
+  pequena no rodapé. **Não existe tabela pública de faixa normal para motor flex brasileiro** — nem GM, nem Fiat, nem VW, nem
+  Honda —, então o que ele conferir vira a referência desta oficina.
+- **APAGAR A FALHA, COM REGISTRO (19/11/2026, `supabase/v62.sql`, APK 1.5.1) — etapa 2.** Decisão do Danilo: *"deixar essas
+  opções reservadas para o adm e no painel do sistema o adm permite ou não o acesso por mecânico"*.
+  **Quem pode:** o administrador sempre; qualquer outra pessoa só com a chave "Pode apagar falha no OBD" ligada nela em
+  Sistema › Equipe (`cfg.appAcessos[id].obd_apagar`, tabela config, sem SQL; `podeApagarObd` em `js/appacesso.js`). Sem a tela
+  do OBD liberada não existe a chave. Sem a chave, o botão **não aparece** — não é botão que avisa "você não pode".
+  **O 04 NÃO entrou na lista branca do `comando()`.** Ele ganhou **método próprio no nativo** (`apagar` em `ObdPlugin.java`,
+  com o `"04"` escrito no código). Assim continua valendo a regra que vale desde a etapa 1: **nada que passa pelo `comando()`
+  escreve no carro**, e o único jeito de apagar tem nome, aparece sozinho no código e se acha numa busca. APK antigo não tem o
+  método: a tela diz para instalar o novo, em vez de falhar sem explicação.
+  **A ordem do fluxo é o que dá valor ao registro:** lê as falhas → lê o ajuste de combustível (passada curta,
+  `lerCombustivelRapido`, 5 pedidos) → mostra a confirmação com os `AVISOS_APAGAR` e o campo de KM → apaga → espera 1,5 s →
+  lê falhas e ajuste **de novo** → grava. O "depois" é o que mostra se o código voltou na hora (defeito acontecendo agora, não
+  falha antiga) e o módulo recomeçando a aprender o combustível do zero.
+  **A tela avisa antes, não depois:** apagar não conserta; a foto do momento da falha some junto (anote ANTES); zera as
+  adaptações, inclusive o aprendizado de combustível; a prontidão dos monitores volta a zero e o carro precisa rodar para
+  voltar (quem vai para a inspeção reprova até lá).
+  **Módulo que recusa** (resposta negativa `7F 04 xx`) não vira "apagou": o 0x22, o mais comum, manda ligar a chave com o
+  **motor desligado**. `respostaApagar` lê isso; um módulo que aceita entre dois já basta.
+  **Registro (`obd_leituras`, v62):** quem, quando, placa, veículo, KM digitado, chassi lido, os códigos de ANTES, os de
+  DEPOIS e o ajuste de combustível antes e depois. **Ninguém altera** (o banco não tem política de update); cada um grava o
+  seu; a equipe toda lê (o mecânico precisa saber se este carro já foi apagado antes — monitor "não terminou" costuma ser
+  disto, e a tela mostra os últimos 5 apagamentos da placa); só o administrador apaga. Preservada pelo espelho; entra em
+  backup, banco do PC e exclusões. A mesma tabela vai guardar a LEITURA gravada na O.S. (etapa 3), por isso o campo `tipo`.
+  **Apagou e a internet caiu:** o registro fica no aparelho (`localStorage`, `obd_pendentes`) e sobe sozinho na próxima vez
+  que a tela abrir com internet — a tela diz, em vermelho, que apagou e ainda não registrou. Apagamento sem registro é
+  justamente o que não pode sobrar; por isso `api.obd.registrar` também é `soOnline`.
+  Testes: `bash teste/teste_v62.sh` (banco inteiro, Postgres local: RLS, registro que não muda, exclusões e espelho),
+  `node teste/teste_obd.mjs`, `bash teste/teste_obd_java.sh` e `python3 teste/teste_app_sistema.py` (apaga no adaptador de
+  mentira, confere o registro gravado, a recusa do módulo e o mecânico sem permissão).
+- **O que NÃO sai por aqui, escrito na tela:** ABS, airbag, câmbio e imobilizador (protocolo próprio de montadora), quilometragem de painel (não existe no OBD-II) e qualquer atuação ou programação.
+- **Tela:** `Obd` em `app/telas.js` (rota `#/obd`, botão no Início e aba), liberável por pessoa em Sistema › Equipe (`obd` em `TELAS_APP` de `js/appacesso.js` — são 10 telas agora). Sem o plugin (navegador ou APK antigo) a tela explica que precisa do APK novo em vez de quebrar. Sair da tela desconecta o adaptador.
+- **Hardware:** comprar vLinker ou OBDLink. Os ELM327 "v1.5" baratos são clones com firmware quebrado: perdem conexão e dão leitura errada, o que num laudo é pior que não ter laudo.
+- **Período de transição:** não cria tabela nem dado operacional e não grava nada, então se comporta igual antes e depois da virada.
+- Testes: `node teste/teste_obd.mjs` (259, interpretação, com respostas de adaptador de verdade e torcidas), `bash teste/teste_obd_java.sh` (59, lista branca + compilação do plugin; precisa de `cd app && npm ci`) e `python3 teste/teste_app_sistema.py` (395, adaptador ELM327 de mentira que responde como um de verdade, com dois módulos e as faixas de PID; confere que nada é gravado e que nenhum comando de escrita sai). **Não há SDK do Android no ambiente de desenvolvimento:** o `gradlew assembleDebug` só roda no Actions, que é a primeira compilação de verdade do APK.
+- **Ainda não feito:** ligar o registro do OBD à O.S. e ao histórico do veículo e mostrá-lo no sistema (hoje a tabela já guarda `ordem_id`/`os_numero`, mas só o app grava); leitura de entrada e de saída como prova do reparo, impressa no orçamento e no O.S. Recibo (etapa 3); leitura de ABS/airbag/câmbio por UDS em sessão default, começando por Chevrolet, que é um terço do pátio (etapa 4).
+
 ## Como trabalhar
 1. Crie uma branch (`codex/assunto` ou `claude/assunto`) e abra um Pull Request para a `main` explicando em português o que muda para a oficina.
    Não faça push direto na `main` sem o Danilo pedir.
@@ -789,3 +1011,66 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
 - `avisoOleo(resumo)`: quando o resumo tem, para a mesma cilindrada (turbo e aspirado juntos), respostas sem viscosidade em comum, devolve o texto "Atenção: …" com a resposta de cima e as outras (motor, período e fonte). Aparece na tela Óleo e filtros (`#of-atencao`), no quadro "Preencher pelo catálogo" da ficha (`#fo-atencao`) e no conector (`oleo_atencao`, PR seguinte, com o commit do catálogo trocado).
 - Ordem do resumo: linha cujo período contém o ano vem antes; depois o período mais curto; depois a fonte mais nova (a tabela nova às vezes estica o período).
 - `CORRECOES_OLEO` em `catalogo/gerar.py`: correções de período conferidas (Onix 1.0 3 cilindros da Texaco: 2020 em diante, não 2015). Regenerar com `python3 catalogo/gerar.py catalogo js/catalogodados.js && python3 tools_sw.py`.
+
+## Diagnóstico OBD: etapas 1 a 4, o que está construído (21/11/2026)
+
+Branch `obd-etapas-1-4`, PR #167. **Não está na main.** Depende do `supabase/v63.sql` (o Danilo roda) e de APK novo.
+
+### O que o app passa a fazer
+
+**Ler o carro (OBD)**
+- Código de falha explicado: descrição, causas prováveis e a fonte escrita (`js/obdfalhas.js`, dados em `js/falhas/`).
+- Falhas separadas por módulo quando mais de um responde (ATH1 + junção ISO-TP). Só aparece quem respondeu.
+- Dados ao vivo em LISTA, PONTEIRO, DIGITAL e GRÁFICO. Gráfico: até 3 gráficos, leituras da mesma unidade juntas (até 4 linhas).
+- "Esta leitura vale?": adaptador, chassi lido x cadastro (`js/obdconfere.js`).
+- O carro comparado com ele mesmo: resumo por sinal e regime, guardado sozinho; compara a partir da 3ª leitura (`js/obdcompara.js`).
+- Laudo selado (SHA-256) com PDF (`js/obdlaudo.js`, `js/pdflaudo.js`).
+
+**Módulos do carro**
+- LER TODOS OS MÓDULOS: pelo mapa do modelo (76 modelos do OBDb, `tools_obdb.py` → `js/modelos/`) mais os endereços padrão.
+- Leituras ao vivo de cada módulo; as 4 rodas do ABS lado a lado e no mesmo gráfico (56 dos 76 modelos têm).
+- Carro sem mapa: mapeamento em segundo plano, só leitura, só com o carro parado (`js/obdmapa.js`). Sem botão.
+- O caderno do carro: toda conversa de leitura com módulo é anotada e gravada sozinha (tipo `mapa`).
+
+**Atuadores e aprendizados**
+- Honda com nome (`js/obdhonda.js`): 4 atuadores e 10 funções (VTC, CVT 1ª etapa, manutenção A e 1 a 5, pastilha entrar/sair).
+  Condições confirmadas uma a uma, valor antigo lido e guardado, item do painel só se o carro disser que tem.
+- Todo teste, aprendizado e apagamento por módulo fica registrado.
+
+**Programar bico**
+- Gravação voltou, no módulo do motor apenas, com login do administrador na hora.
+- A opção de gravar só aparece depois de o módulo dizer que aceita (pergunta que não grava: `sondarGravacao`).
+- Lê e guarda o valor antigo, confere lendo de volta, DESFAZER.
+
+### O que NÃO existe, e por quê
+- Tabela de "em que campo cada ECU guarda o código do bico": nenhuma base aberta tem. O campo é digitado, do manual.
+- Destravar módulo (0x27): o app não tem a chave de nenhuma família. Módulo que exige destravar não ganha o botão de gravar.
+- Conversão do código Delphi de 20 caracteres: não feita.
+- Segunda etapa do aprendizado do CVT: a ferramenta de origem não reproduz.
+- Tradução: 3.276 de 11.275 descrições genéricas e 67% das linhas de causa estão em português conferido
+  (665 de 1.462 códigos com causa inteiros em português). O resto aparece em inglês, marcado. Códigos de montadora (31.267) em inglês.
+- Dados baixados que NÃO servem pelo adaptador da tomada OBD: os 48.799 sinais de rede CAN (precisam escutar o barramento, que o
+  gateway do carro não entrega na tomada) e as 16.176 faixas VAG (são blocos de medição do protocolo antigo da VW, que o ELM327 não fala).
+- Laudo pelo WhatsApp da oficina como anexo do conector: não feito (o PDF sai pelo compartilhar do celular).
+- Carro gravado para reproduzir no teste: o caderno já guarda a conversa crua; falta gravar um carro de verdade.
+- Nada disto foi testado em carro de verdade. Tudo foi conferido contra adaptador e módulos simulados.
+
+### Segurança (portão no Android, `ObdPlugin.java`)
+- `comando()` só lê: 01, 02, 03, 06, 07, 09, 0A, 19, 21 (1 byte), 22, 24, 3E.
+- Métodos próprios: `apagar`, `atuar`, `rotina` (0x0200–0xDFFF), `reiniciarModulo`, `gravarDado`, `sondarGravacao`.
+- `gravarDado`: só módulo do motor (7E0 ou 18DA10F1), nunca F180–F1FF, lê o valor antigo antes, até 32 bytes.
+- Proibidos: 34/35/36/37, sessão de programação (10 02), destravar (27).
+
+### Banco
+`supabase/v63.sql`: tipos novos na `obd_leituras` (atuar, aprender, apagar_modulo, gravar_bico, sessao, laudo, mapa) e colunas
+`dados` e `selo`. Sem tabela nova. Antes do SQL o app funciona: o que o banco recusa fica no aparelho e sobe sozinho.
+
+### Estrutura
+`app/telas.js` (oficina e rotas), `app/comum.js` (moldura), `app/diag.js` (telas do carro), `app/diagpartes.js`, `app/diagcarro.js`,
+`app/diaghonda.js`.
+
+### Testes
+`teste_app_sistema.py` 544 · `teste_obd_java.sh` 448 · `teste_obd.mjs` 259 · `teste_uds.mjs` 130 · `teste_bico.mjs` 105 ·
+`teste_obdextra.mjs` · `teste_obdmodelo.mjs` 28 · `teste_obdfalhas.mjs` 16 · `teste_v63.sh` (banco inteiro) · `teste_celular.py`.
+
+- **Mudou `catalogo/falhas/*.tsv` ou `catalogo/traduz_sae.py`?** `python3 -I catalogo/gerar_falhasdados.py`. **Modelo novo do OBDb?** baixe o `signalsets/v3/default.json` como `<Marca-Modelo>.json` e rode `python3 -I tools_obdb.py <pasta>`.

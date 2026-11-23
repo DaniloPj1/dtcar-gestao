@@ -25,11 +25,13 @@ function regrasTexto(r) {
 const SIT = { desligado: ["Desligado", "muted"], pareando: ["Pareando…", "info"], conectado: ["Vinculado", "ok"], erro: ["Com problema", "bad"] };
 
 export function WhatsApp() {
-  const { avisar, confirmar } = useApp();
+  const { avisar, confirmar, recarregar } = useApp();
   const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
   const [pediu, setPediu] = useState(false), [teste, setTeste] = useState(null), [chave, setChave] = useState("");
   const [fila, setFila] = useState(null), [conversas, setConversas] = useState(null);
   const [resumo, setResumo] = useState(null), [fotos, setFotos] = useState(null), [telAlerta, setTelAlerta] = useState(null);
+  // texto do agente de mensagens (o que manda na forma dos rascunhos); txtAgente = null quando ninguém editou o campo
+  const [agente, setAgente] = useState(null), [txtAgente, setTxtAgente] = useState(null);
   const vivo = useRef(true);
   const ler = async (limparErro = false) => {
     try {
@@ -48,6 +50,12 @@ export function WhatsApp() {
   };
   // a situação do motor muda sozinha (sinal a cada 30 s): a tela acompanha
   useEffect(() => { ler(true); const t = setInterval(() => ler(), 20000); return () => { vivo.current = false; clearInterval(t); }; }, []);
+  // texto do agente: lido uma vez (não muda sozinho). Função antiga sem a ação "agente": o cartão explica e não quebra a tela
+  const lerAgente = async () => {
+    try { const r = await api.whatsapp.chamar({ acao: "agente" }); if (vivo.current) setAgente(r && r.padrao ? r : { texto: "", padrao: "", proprio: false, erro: true }); }
+    catch (e) { if (vivo.current) setAgente({ texto: "", padrao: "", proprio: false, erro: true, detalhe: e.message }); }
+  };
+  useEffect(() => { lerAgente(); }, []);
   // enquanto pareia, confere a situação a cada 3 s: o QR muda a cada 20–60 s e o pareamento termina no celular
   // (também quando a tela é reaberta no meio de um pareamento)
   const pareando = pediu || !!(st && st.situacao === "pareando");
@@ -77,6 +85,30 @@ export function WhatsApp() {
     try { const r = await api.whatsapp.alertaTelefone(telAlerta === null ? (st.alerta_telefone || "") : telAlerta); setTelAlerta(null); await ler(true);
       avisar(r && r.alerta_telefone ? "Os avisos vão para " + r.alerta_telefone + "." : "Avisos pelo WhatsApp desligados (só a faixa na tela)."); }
     catch (e) { setErro(e.message); } finally { setFazendo(""); }
+  };
+  // texto do agente de mensagens: gravado em cfg.zapAgente (tabela config, sem SQL novo), como os outros ajustes da casa
+  const gravarAgente = async (texto, msg, qual) => {
+    setFazendo(qual); setErro("");
+    try {
+      const atual = await api.config();
+      const novo = { ...atual };
+      if (texto === null) delete novo.zapAgente; // "voltar ao padrão": a chave sai da config, não fica texto vazio
+      else novo.zapAgente = { ...(atual.zapAgente || {}), texto, em: new Date().toISOString() };
+      await api.salvarConfig(novo);
+      await recarregar(["config"]);
+      setTxtAgente(null); await lerAgente(); avisar(msg);
+    } catch (e) { setErro(e.message); } finally { setFazendo(""); }
+  };
+  const salvarAgente = async () => {
+    const t = (txtAgente === null ? (agente && agente.texto) || "" : txtAgente).trim();
+    if (t.length < 40) { setErro("O texto do agente precisa ter pelo menos 40 caracteres: sem molde, ele não teria o que seguir."); return; }
+    if (t.length > 6000) { setErro("O texto do agente passou de 6.000 caracteres. Encurte: ele vai em cada pedido à IA."); return; }
+    if (agente && agente.padrao && t === agente.padrao.trim()) { await gravarAgente(null, "Texto igual ao padrão: voltou a valer o padrão do sistema.", "agente"); return; }
+    await gravarAgente(t, "Texto do agente salvo. Vale para os rascunhos seguintes.", "agente");
+  };
+  const voltarPadrao = async () => {
+    if (!await confirmar({ titulo: "Voltar ao padrão", texto: "O seu texto é apagado e volta a valer o padrão do sistema. Copie antes se quiser guardar.", botao: "Voltar ao padrão", perigo: true })) return;
+    await gravarAgente(null, "Voltou a valer o padrão do sistema.", "padrao");
   };
   const copiar = async (txt, msg) => { try { await navigator.clipboard.writeText(txt); avisar(msg); } catch (e) { avisar("Não foi possível copiar: selecione o texto e copie.", true); } };
   const gerarChave = async () => {
@@ -216,5 +248,25 @@ export function WhatsApp() {
         <input id="zap-tel-alerta" class="inp" inputmode="tel" value=${telAlerta === null ? (st.alerta_telefone || "") : telAlerta} onInput=${e => setTelAlerta(e.target.value)} /></div>
       <div class="acoes"><button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${salvarAlerta}>${fazendo === "alerta" ? "Salvando…" : "Salvar número"}</button></div>
     </div>` : null}
+
+    <div class="card">
+      <h3>6. Agente de mensagens</h3>
+      <p class="sub">O texto abaixo é o que manda na forma das mensagens: quando você responde o aviso pelo seu WhatsApp, o agente escreve o rascunho seguindo estas regras (molde, saudação pela hora, tratamento, tópicos e assinatura). O conteúdo continua sendo o seu — ele não acrescenta preço, prazo nem diagnóstico. <b>Nada vai ao cliente sem o seu OK.</b></p>
+      <p class="sub">Só muda por aqui: o conector não mexe neste texto, como já acontece com o número dos avisos (proteção contra ordem falsa vinda de e-mail ou mensagem).</p>
+      ${agente === null ? html`<p class="sub">Carregando…</p>`
+      : agente.erro ? html`<div class="aviso">A função zap publicada ainda não conhece o agente de mensagens. Publique a função zap de novo (Supabase › Edge Functions) para editar o texto por aqui.${agente.detalhe ? " — " + agente.detalhe : ""}</div>`
+      : html`
+        ${agente.tem_chave === false ? html`<div class="aviso">Falta a chave da IA (<b>ANTHROPIC_API_KEY</b>) nos segredos da função zap. Sem ela o rascunho volta com o seu texto como você escreveu, marcado "sem revisão da IA".</div>` : null}
+        <p class="sub">Está valendo: <b>${agente.proprio ? "o seu texto" : "o padrão do sistema"}</b>${agente.modelo ? " · IA: " + agente.modelo : ""}</p>
+        <div class="campo"><label for="zap-agente">Texto do agente</label>
+          <textarea id="zap-agente" class="inp zap-agente-txt" rows="18" spellcheck="false"
+            value=${txtAgente === null ? agente.texto : txtAgente} onInput=${e => setTxtAgente(e.target.value)}></textarea></div>
+        <div class="acoes">
+          <button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${salvarAgente}>${fazendo === "agente" ? "Salvando…" : "Salvar texto"}</button>
+          <button type="button" class="btn" disabled=${!!fazendo} onClick=${() => setTxtAgente(agente.padrao)}>Pôr o padrão do sistema no campo</button>
+          ${agente.proprio ? html`<button type="button" class="btn btn-perigo" disabled=${!!fazendo} onClick=${voltarPadrao}>${fazendo === "padrao" ? "Voltando…" : "Voltar ao padrão"}</button>` : null}
+        </div>
+        <p class="sub">A mudança vale para os rascunhos seguintes. Texto muito curto não é aceito (menos de 40 caracteres): sem molde, o agente não teria o que seguir.</p>`}
+    </div>
   </div>`;
 }

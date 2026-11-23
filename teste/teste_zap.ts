@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo, assistente, reescrever, limparProposta, pedidoAssistente, SISTEMA_ASSISTENTE } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, enviarTexto, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo, assistente, reescrever, limparProposta, pedidoAssistente, SISTEMA_ASSISTENTE, textoDoAgente, garantirAssinatura, ASSINATURA, comSaudacaoDoEnvio, horaBrasilia } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -119,11 +119,39 @@ for (const c of casos.midiaParaBaixar) {
 }
 for (const c of casos.variacoes) confere("variações " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado));
 confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] }, "5527999112233")) === "552799112233@s.whatsapp.net");
+// saudação corrigida na hora do envio (23/11/2026): a mensagem é montada quando o Danilo clica, mas a fila pode segurar
+{
+  const manha = new Date("2026-11-23T11:00:00Z"); // 08:00 em Brasília
+  const noite = new Date("2026-11-24T01:00:00Z"); // 22:00 em Brasília
+  confere("hora de Brasília a partir do UTC", horaBrasilia(manha) === 8 && horaBrasilia(noite) === 22);
+  const msg = "🚗 *Veículo pronto — OS 01934*\n\nBoa noite, Sr. Marcos!\n\nPode buscar hoje.";
+  confere("saudação montada à noite sai como Bom dia de manhã", comSaudacaoDoEnvio(msg, manha).includes("\nBom dia, Sr. Marcos!\n")
+    && !comSaudacaoDoEnvio(msg, manha).includes("Boa noite"), comSaudacaoDoEnvio(msg, manha).slice(0, 80));
+  confere("saudação já certa não muda nada", comSaudacaoDoEnvio(msg, noite) === msg);
+  confere("corrige só a primeira saudação", comSaudacaoDoEnvio("Boa noite, Sr. Marcos!\n\nBoa noite também para a dona Maria.", manha)
+    === "Bom dia, Sr. Marcos!\n\nBoa noite também para a dona Maria.");
+  confere("texto sem saudação não é tocado", comSaudacaoDoEnvio("Segue o PDF do orçamento.", manha) === "Segue o PDF do orçamento.");
+  confere("saudação depois da 4ª linha não é mexida", comSaudacaoDoEnvio("a\nb\nc\nd\nBoa noite, Sr. Marcos!", manha).endsWith("Boa noite, Sr. Marcos!"));
+  confere("texto vazio continua vazio", comSaudacaoDoEnvio("", manha) === "" && comSaudacaoDoEnvio(null as any, manha) === "");
+  // o envio de verdade manda o texto já corrigido
+  const saiu: string[] = [];
+  const sock = { presenceSubscribe: async () => {}, sendPresenceUpdate: async () => {}, sendMessage: async (_j: string, c: any) => { saiu.push(c.text); return { key: { id: "S1" } }; } };
+  await enviarTexto(sock, "x@s.whatsapp.net", "Boa noite, Sr. Marcos!", async () => {});
+  confere("enviarTexto manda o texto com a saudação da hora do envio", saiu.length === 1 && /^(Bom dia|Boa tarde|Boa noite), Sr\. Marcos!$/.test(saiu[0]), saiu[0]);
+}
+
+// as duas cópias corrigem a saudação na hora do envio (enviarTexto não entra na comparação: o parâmetro "esperar" sempre diferiu)
+{
+  const mJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
+  const zTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
+  const aplica = (t: string) => { const i = t.indexOf("function enviarTexto("); return i > 0 && t.slice(i, i + 400).includes("texto = comSaudacaoDoEnvio(texto);"); };
+  confere("saudação do envio aplicada no motor e na zap", aplica(mJs) && aplica(zTs));
+}
 // cópia igual à do motor (mesmo código, fora a tipagem)
 const motorJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
 const zapTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
 const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar|: \(ms: number\) => Promise<void>| as string/g, "").replace(/\s+/g, " "); };
-for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemCitada", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo"]) {
+for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemCitada", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo", "horaBrasilia", "comSaudacaoDoEnvio"]) {
   const a = nucleo(motorJs, f).replace(/\(x\)/g, "x"), b = nucleo(zapTs, f).replace(/\(x\)/g, "x").replace(/x =>/g, "x =>");
   confere("cópia igual no motor e na zap: " + f, a.length > 50 && a.replace(/[()]/g, "") === b.replace(/[()]/g, ""), a.length + "/" + b.length);
 }
@@ -230,7 +258,7 @@ for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemC
   const corpo = JSON.parse(pedidos[0].init.body);
   confere("v36: chama a API da Anthropic com a chave e o modelo Haiku", pedidos[0].url === "https://api.anthropic.com/v1/messages" && pedidos[0].init.headers["x-api-key"] === "sk-ant-teste"
     && pedidos[0].init.headers["anthropic-version"] === "2023-06-01" && corpo.model === "claude-haiku-5-5" && corpo.system === SISTEMA_ASSISTENTE, JSON.stringify(corpo).slice(0, 200));
-  confere("v36: devolve a proposta", r.proposta === "Boa tarde, Luiz! Seu carro fica pronto amanhã à tarde." && r.modelo === "claude-haiku-5-5", JSON.stringify(r));
+  confere("v36: devolve a proposta, com a assinatura completada", r.proposta === "Boa tarde, Luiz! Seu carro fica pronto amanhã à tarde.\n\n" + ASSINATURA && r.modelo === "claude-haiku-5-5", JSON.stringify(r));
   r = await reescrever(item, ia({ error: { message: "invalid x-api-key" } }, 401));
   confere("v36: chave recusada: erro final", r.final === true && /invalid x-api-key/.test(r.erro || ""), JSON.stringify(r));
   r = await reescrever(item, ia({ error: { message: "Overloaded" } }, 529));
@@ -250,7 +278,7 @@ for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemC
   const resp = await assistente(adm, (async () => new Response(JSON.stringify(n++ === 0 ? { content: [{ type: "text", text: "Boa tarde!" }] } : { error: { message: "Overloaded" } }), { status: n === 1 ? 200 : 529 })) as any);
   const j = await resp.json();
   const res = chamadas.filter((c) => c[0] === "whatsapp_assistente_resultado").map((c) => c[1]);
-  confere("v36: assistente grava um resultado por rascunho", j.feitos === 1 && j.falhas === 1 && res.length === 2 && res[0].p_proposta === "Boa tarde!" && res[1].p_proposta === null && res[1].p_final === false, JSON.stringify([j, res]));
+  confere("v36: assistente grava um resultado por rascunho", j.feitos === 1 && j.falhas === 1 && res.length === 2 && res[0].p_proposta === "Boa tarde!\n\n" + ASSINATURA && res[1].p_proposta === null && res[1].p_final === false, JSON.stringify([j, res]));
   const adm2 = { rpc: async () => ({ data: null, error: { message: "Could not find the function public.whatsapp_assistente_pegar" } }) };
   const r2 = await assistente(adm2, fetch);
   confere("v36: banco sem o v36: avisa", r2.status === 500 && /v36/.test((await r2.json()).erro));
@@ -261,6 +289,46 @@ for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemC
   confere("v36: agendamento chama o assistente", r3.status === 200 && (await r3.json()).ok === true);
   const r4 = await atenderAgendamento(new Request("https://x/zap", { method: "POST", headers: { "x-dtcar-cron": "errado" }, body: JSON.stringify({ acao: "assistente" }) }), adm3);
   confere("v36: sem o segredo do cron, não roda", r4.status === 401);
+  Deno.env.delete("ANTHROPIC_API_KEY");
+}
+
+// ---------- agente de mensagens (23/11/2026): molde no texto padrão, texto próprio na config e assinatura garantida ----------
+{
+  // o padrão traz o molde que o Danilo aprovou
+  confere("agente: o padrão traz o molde (título com ícone, tópicos e assinatura)",
+    /MOLDE/.test(SISTEMA_ASSISTENTE) && /• <informação>/.test(SISTEMA_ASSISTENTE) && SISTEMA_ASSISTENTE.includes(ASSINATURA)
+    && /Bom dia/.test(SISTEMA_ASSISTENTE) && /"Sra\."/.test(SISTEMA_ASSISTENTE) && /Boa noite/.test(SISTEMA_ASSISTENTE));
+  confere("agente: o padrão manda um emoji só, no título", /um emoji só na mensagem toda/i.test(SISTEMA_ASSISTENTE));
+  confere("agente: o padrão proíbe marca de peça", /marca de peça/.test(SISTEMA_ASSISTENTE));
+
+  // assinatura: completa quando falta, não repete quando já está, conserta a que veio pela metade
+  const corpo = "🚗 *Veículo pronto*\n\nBoa tarde, Sr. Marcos!\n\nPode buscar hoje até as 18h.";
+  confere("agente: completa a assinatura que faltou", garantirAssinatura(corpo) === corpo + "\n\n" + ASSINATURA);
+  confere("agente: não repete a assinatura que já veio", garantirAssinatura(corpo + "\n\n" + ASSINATURA) === corpo + "\n\n" + ASSINATURA);
+  confere("agente: última linha sem negrito é corrigida",
+    garantirAssinatura(corpo + "\n\nDTCar Centro Automotivo\nMensagem gerada pelo sistema Gestão DTCar") === corpo + "\n\n" + ASSINATURA);
+  confere("agente: só o nome da oficina ainda recebe a linha em negrito",
+    garantirAssinatura(corpo + "\n\nDTCar Centro Automotivo") === corpo + "\n\n" + ASSINATURA);
+  confere("agente: texto vazio fica vazio", garantirAssinatura("") === "" && garantirAssinatura("   ") === "");
+
+  // texto do agente: o que está na config vence o padrão; curto, longo, vazio ou sem a config caem no padrão
+  const admCfg = (dados: unknown) => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: async () => ({ data: { dados } }) }) }) }) });
+  const meu = "Escreva as mensagens da oficina assim: título em negrito, tópicos e a assinatura no fim de tudo.";
+  confere("agente: usa o texto gravado na tela", await textoDoAgente(admCfg({ zapAgente: { texto: meu } })) === meu);
+  confere("agente: texto curto demais não vale (cai no padrão)", await textoDoAgente(admCfg({ zapAgente: { texto: "seja breve" } })) === SISTEMA_ASSISTENTE);
+  confere("agente: texto gigante não vale (cai no padrão)", await textoDoAgente(admCfg({ zapAgente: { texto: "x".repeat(6001) } })) === SISTEMA_ASSISTENTE);
+  confere("agente: sem a chave na config, vale o padrão", await textoDoAgente(admCfg({})) === SISTEMA_ASSISTENTE);
+  confere("agente: config ilegível não derruba o rascunho", await textoDoAgente({ from: () => { throw new Error("sem config"); } }) === SISTEMA_ASSISTENTE);
+
+  // o pedido à IA vai com o texto do Danilo, não com o padrão
+  Deno.env.set("ANTHROPIC_API_KEY", "sk-ant-teste");
+  const vistos: any[] = [];
+  const iaOk = (async (_u: string, init: any) => { vistos.push(JSON.parse(init.body)); return new Response(JSON.stringify({ content: [{ type: "text", text: "Boa tarde!" }] })); }) as any;
+  const admMeu = { ...admCfg({ zapAgente: { texto: meu } }), rpc: async (f: string) => ({ data: f === "whatsapp_assistente_pegar" ? [] : true, error: null }) };
+  await assistente(admMeu, iaOk);
+  confere("agente: sem rascunho pendente, nem chama a IA", vistos.length === 0);
+  await reescrever({ id: 1, base: "avisa que ficou pronto" }, iaOk, await textoDoAgente(admMeu));
+  confere("agente: o pedido à IA leva o texto gravado na tela", vistos.length === 1 && vistos[0].system === meu, JSON.stringify(vistos[0] || {}).slice(0, 120));
   Deno.env.delete("ANTHROPIC_API_KEY");
 }
 

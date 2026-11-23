@@ -93,6 +93,11 @@
         if (b.acao === "processar") return { ok: true, iniciado: true, detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." };
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }
+        // agente de mensagens (23/11/2026): o padrão vem da função; o texto que vale é o da config, quando o Danilo gravou um
+        if (b.acao === "agente") { if (window.__ZAP_SEM_AGENTE) throw new Error("Ação desconhecida.");
+          const meu = ((db.config || {}).zapAgente || {}).texto || "";
+          const padrao = window.__ZAP_AGENTE_PADRAO || "MOLDE: título com ícone em negrito, saudação pela hora, tópicos com • e a assinatura no fim.\nDTCar Centro Automotivo\n*Mensagem gerada pelo sistema Gestão DTCar*";
+          return { padrao, texto: meu || padrao, proprio: !!meu, modelo: "claude-haiku-5-5", tem_chave: window.__ZAP_SEM_CHAVE_IA !== true }; }
         throw new Error("Ação desconhecida."); } },
     // NF anexada à O.S. (v33)
     notasOS: { listar: async n => (window.__NOTAS = window.__NOTAS || []).filter(x => x.os_numero === n),
@@ -201,7 +206,7 @@
       if (o.status === "entregue") o.finalizada_em = (o.recebido || 0) >= (o.total || 0) ? (o.finalizada_em || new Date().toISOString()) : null; },
     salvarItens: async (oid, itens, rem) => { db.os_itens = db.os_itens.filter(i => !(rem || []).includes(i.id)); for (const it of itens) { const k = db.os_itens.findIndex(x => x.id === it.id); if (k >= 0) db.os_itens[k] = { ...it, ordem_id: oid }; else db.os_itens.push({ ...it, ordem_id: oid }); } },
     enviarArquivo: async c => c, incluirFotos: async () => {},
-    recibos: { desde: async de => { if (window.__FALHA_RECIBOS) throw new Error("falha simulada"); return (db.recibos || []).filter(r => !r.data || r.data >= de); }, listar: async ({ ordemId } = {}) => (db.recibos || []).filter(r => !ordemId || r.ordem_id === ordemId), salvar: async r => { if (r.id) { const o = db.recibos.find(y => y.id === r.id); if (r.cancelado && !o.cancelado && o.conta_destino) (db.estornos = db.estornos || []).push({ id: "e" + Date.now(), conta: o.conta_destino, valor: -o.valor, origem: "recibo", registro: o.id, original_em: o.criado_em, registrado_em: new Date().toISOString() }); Object.assign(o, r); return o; } const x = { id: "r" + Date.now(), numero: 1, criado_em: new Date().toISOString(), ...r }; (db.recibos = db.recibos || []).push(x); const o = db.ordens.find(y => y.id === r.ordem_id); if (o) { o.recebido = (o.recebido || 0) + Number(r.valor); if (o.status === "entregue" && o.recebido >= o.total) o.finalizada_em = new Date().toISOString(); } return x; }, um: async id => db.recibos.find(x => x.id === id) }, criarOrdem: async d => { net(); window.__SEQ = (window.__SEQ || 1898) + 1; const o = { id: "n" + window.__SEQ, numero: window.__SEQ, ...d }; db.ordens.unshift(o); return o; },
+    recibos: { dasVendas: async ids => [...new Set((db.recibos || []).filter(r => r.venda_id && !r.cancelado && (ids || []).includes(r.venda_id)).map(r => r.venda_id))], desde: async de => { if (window.__FALHA_RECIBOS) throw new Error("falha simulada"); return (db.recibos || []).filter(r => !r.data || r.data >= de); }, listar: async ({ ordemId, de, ate } = {}) => (db.recibos || []).filter(r => (!ordemId || r.ordem_id === ordemId) && (!de || String(r.data || r.criado_em || "").slice(0, 10) >= de) && (!ate || String(r.data || r.criado_em || "").slice(0, 10) <= ate)), salvar: async r => { if (r.id) { const o = db.recibos.find(y => y.id === r.id); if (r.cancelado && !o.cancelado && o.conta_destino) (db.estornos = db.estornos || []).push({ id: "e" + Date.now(), conta: o.conta_destino, valor: -o.valor, origem: "recibo", registro: o.id, original_em: o.criado_em, registrado_em: new Date().toISOString() }); Object.assign(o, r); return o; } const x = { id: "r" + Date.now(), numero: 1, criado_em: new Date().toISOString(), ...r }; (db.recibos = db.recibos || []).push(x); const o = db.ordens.find(y => y.id === r.ordem_id); if (o) { o.recebido = (o.recebido || 0) + Number(r.valor); if (o.status === "entregue" && o.recebido >= o.total) o.finalizada_em = new Date().toISOString(); } return x; }, um: async id => db.recibos.find(x => x.id === id) }, criarOrdem: async d => { net(); window.__SEQ = (window.__SEQ || 1898) + 1; const o = { id: "n" + window.__SEQ, numero: window.__SEQ, ...d }; db.ordens.unshift(o); return o; },
     ordem: async id => { net(); const o = db.ordens.find(x => x.id === id); return { ...o, itens: db.os_itens.filter(i => i.ordem_id === id), fotos: [], eventos: (db.eventos || []).filter(e => e.ordem_id === id) }; },
     // orçamento separado da O.S. (v52): mesma conta e mesmas recusas da orcamento_salvar
     orcamentos: { listar: async () => { net(); if (window.__SEM_V52) throw new Error("Could not find the table 'public.orcamentos' in the schema cache"); return (db.orcamentos = db.orcamentos || []).slice().sort((a, b) => b.numero - a.numero); },
@@ -347,7 +352,20 @@
     transferencias: { listar: async ({ de, ate } = {}) => (db.transferencias || []).filter(t => (!de || t.data >= de) && (!ate || t.data <= ate)), salvar: async t => { const x = { id: uid(), criado_em: now(), ...t }; (db.transferencias = db.transferencias || []).push(x); return x; }, excluir: async id => { db.transferencias = db.transferencias.filter(t => t.id !== id); } },
     temV18: () => true,
     // mesmas regras da função saldos_contas do v18 (no servidor, numa consulta só)
-    saldosContas: async () => { if (window.__FALHA_RECIBOS) throw new Error("sem conexão"); const dia = em => em ? new Date(em).toISOString().slice(0, 10) : "";
+    // vendas de balcão e relatorio_itens de mentira (Painel Financeiro e relatórios)
+    vendas: { listar: async ({ de, ate } = {}) => (db.vendas || []).filter(v => (!de || (v.criado_em || "") >= de) && (!ate || (v.criado_em || "") <= ate)), periodo: async o => window.__API_MOCK.vendas.listar(o), uma: async id => (db.vendas || []).find(v => v.id === id) },
+    relatorioItens: async (ini, fim, base) => { const campo = base === "abertura" ? "criado_em" : "entregue_em";
+      const linhas = [];
+      for (const o of db.ordens.filter(o => ["entregue", "recusado"].includes(o.status) && (o[campo] || "") >= ini && (o[campo] || "") < fim)) {
+        const cab = { ordem_id: o.id, numero: o.numero, status: o.status, criado_em: o.criado_em, entregue_em: o.entregue_em, cliente_id: o.cliente_id, cliente: (o.cliente || {}).nome, placa: (o.veiculo || {}).placa, veiculo: ((o.veiculo || {}).marca || "") + " " + ((o.veiculo || {}).modelo || ""), km: o.km_entrada, mecanico: o.mecanico_nome || "", forma_pagamento: o.forma_pagamento || "", ordem_total: o.total, ordem_desconto: o.desconto || 0, legado: o.legado };
+        const its = db.os_itens.filter(i => i.ordem_id === o.id);
+        if (!its.length) linhas.push({ ...cab });
+        for (const i of its) linhas.push({ ...cab, item_id: i.id, tipo: i.tipo, descricao: i.descricao, qtd: i.qtd, valor_unit: i.valor_unit, desconto: i.desconto, custo_unit: i.custo_unit, aprovado: i.aprovado, horas: i.horas, fornecida_cliente: i.fornecida_cliente });
+      }
+      return linhas; },
+    saldosContas: async () => { if (window.__FALHA_RECIBOS) throw new Error("sem conexão");
+      // dia LOCAL, como o saldos_contas() de verdade (v18: at time zone America/Sao_Paulo) — em UTC o teste falhava depois das 21h de Brasília
+      const dia = em => { if (!em) return ""; const d = new Date(em); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
       return (db.config.contasFinanceiras || []).map(c => { const em = c.em, d0 = dia(em), dep = (data, reg) => !em || (reg ? reg > em && data >= d0 : data > d0);
         const s = l => l.reduce((t, x) => t + Number(x), 0);
         const ent = s((db.recibos || []).filter(r => !r.cancelado && r.conta_destino === c.nome && dep(r.data, r.criado_em || "9")).map(r => r.valor));

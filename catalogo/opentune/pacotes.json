@@ -1,0 +1,5407 @@
+{
+ "_template": {
+  "_ficticio": false,
+  "loggers": {
+   "example": {
+    "format": "rom_raider_logger",
+    "protocols": [
+     {
+      "ecus": [
+       {
+        "params": [
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 12
+          },
+          "conversion": {
+           "expr": "X/4",
+           "fit": {
+            "factor": 0.25,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "rpm"
+          },
+          "description": "SAE J1979 PID 0x0C",
+          "endian": "big",
+          "id": "rpm",
+          "name": "Engine speed",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "rpm"
+         }
+        ]
+       }
+      ],
+      "id": "OBD",
+      "kind": {
+       "kind": "obd2_mode01"
+      }
+     }
+    ]
+   }
+  },
+  "modules": {
+   "example": {
+    "modules": [
+     {
+      "addr": 224,
+      "name": "Engine",
+      "protocol": "uds",
+      "req_id": 2016,
+      "resp_id": 2024,
+      "source": "ISO 15765-4"
+     }
+    ],
+    "vehicle": "Example vehicle"
+   }
+  },
+  "services": {
+   "example": {
+    "description": "Read-only example. Writes/actions need requires_security + a security_access step only when the module demands it; OpenTune ships no seed/key algorithms.",
+    "id": "my-pack-read-vin",
+    "name": "Example: read VIN (DID F190)",
+    "requires_security": false,
+    "steps": [
+     {
+      "did": 61840,
+      "op": "read_data_by_identifier"
+     }
+    ]
+   }
+  }
+ },
+ "community-drivetrain": {
+  "_ficticio": false,
+  "controllers": {
+   "hyundai-kia-4wd": {
+    "adaptations": [],
+    "buses": [
+     {
+      "bitrate": 500000,
+      "description": "Hyundai / Kia classic CAN (C-CAN) as opendbc's hyundai_can.dbc describes it",
+      "frames": [
+       {
+        "dlc": 8,
+        "id": "0x428",
+        "min_len": 8,
+        "name": "_4WD11",
+        "notes": "4WD controller status 1 (hyundai_can.dbc, node _4WD).",
+        "sender": "4WD",
+        "signals": [
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "_4WD_TYPE",
+          "notes": "4WD system type (2 bits; values not documented in the source).",
+          "start": 0
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "_4WD_SUPPORT",
+          "notes": "4WD support state (2 bits; values not documented in the source).",
+          "start": 2
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "_4WD_ERR",
+          "notes": "4WD error code byte (values not documented in the source).",
+          "start": 8
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "CLU_DUTY",
+          "notes": "Coupling clutch duty, % (DBC range 0-64).",
+          "start": 16,
+          "unit": "%"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "R_TIRE",
+          "notes": "Rolling tyre radius used by the controller (raw + 200 mm).",
+          "offset": 200.0,
+          "start": 24,
+          "unit": "mm"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "_4WD_SW",
+          "notes": "4WD switch / mode-selector state (values not documented in the source).",
+          "start": 32
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "_2H_ACT",
+          "notes": "2H active.",
+          "start": 40
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "_4H_ACT",
+          "notes": "4H active.",
+          "start": 41
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "LOW_ACT",
+          "notes": "Low range active.",
+          "start": 42
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "AUTO_ACT",
+          "notes": "Auto (on-demand) mode active.",
+          "start": 43
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "LOCK_ACT",
+          "notes": "Lock mode active (coupling held closed).",
+          "start": 44
+         },
+         {
+          "kind": "number",
+          "len": 16,
+          "name": "_4WD_TQC_CUR",
+          "notes": "Coupling torque currently transferred, Nm (meaning from the DBC name).",
+          "start": 48,
+          "unit": "Nm"
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 8,
+        "id": "0x429",
+        "min_len": 8,
+        "name": "_4WD12",
+        "notes": "4WD controller status 2 (hyundai_can.dbc): the inputs it reports to the ESC.",
+        "sender": "4WD",
+        "signals": [
+         {
+          "kind": "number",
+          "len": 16,
+          "name": "Ster_Pos",
+          "notes": "Steering angle (raw - 600 deg).",
+          "offset": -600.0,
+          "start": 0,
+          "unit": "deg"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "FRSS",
+          "notes": "Wheel speed front right, whole km/h.",
+          "start": 16,
+          "unit": "km/h"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "FLSS",
+          "notes": "Wheel speed front left, whole km/h.",
+          "start": 24,
+          "unit": "km/h"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "RRSS",
+          "notes": "Wheel speed rear right, whole km/h.",
+          "start": 32,
+          "unit": "km/h"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "RLSS",
+          "notes": "Wheel speed rear left, whole km/h.",
+          "start": 40,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.0625,
+          "kind": "number",
+          "len": 16,
+          "name": "CLU_PRES",
+          "notes": "Coupling clutch pressure (raw x 0.0625 - 50 bar).",
+          "offset": -50.0,
+          "start": 48,
+          "unit": "bar"
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 6,
+        "id": "0x42A",
+        "min_len": 6,
+        "name": "_4WD13",
+        "notes": "4WD controller status 3 (hyundai_can.dbc), 6-byte frame.",
+        "sender": "4WD",
+        "signals": [
+         {
+          "factor": 0.390625,
+          "kind": "number",
+          "len": 8,
+          "name": "_4WD_CURRENT",
+          "notes": "Coupling actuator current (raw x 0.390625 A).",
+          "start": 0,
+          "unit": "A"
+         },
+         {
+          "factor": 0.015625,
+          "kind": "number",
+          "len": 16,
+          "name": "_4WD_POSITION",
+          "notes": "Actuator position (raw x 0.015625 deg).",
+          "start": 8,
+          "unit": "deg"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "_4WD_CLU_THERM_STR",
+          "notes": "Clutch thermal stress, % (meaning from the DBC name).",
+          "start": 24,
+          "unit": "%"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "_4WD_STATUS",
+          "notes": "4WD status byte (DBC range 0-15; values not documented in the source).",
+          "start": 32
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 8,
+        "id": "0x386",
+        "min_len": 8,
+        "name": "WHL_SPD11",
+        "notes": "Wheel speeds from the ABS/ESC (hyundai_can.dbc), the reference the coupling works against.",
+        "sender": "ABS",
+        "signals": [
+         {
+          "factor": 0.03125,
+          "kind": "number",
+          "len": 14,
+          "name": "WHL_SPD_FL",
+          "notes": "Wheel speed front left (raw / 32 km/h).",
+          "start": 0,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.03125,
+          "kind": "number",
+          "len": 14,
+          "name": "WHL_SPD_FR",
+          "notes": "Wheel speed front right (raw / 32 km/h).",
+          "start": 16,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.03125,
+          "kind": "number",
+          "len": 14,
+          "name": "WHL_SPD_RL",
+          "notes": "Wheel speed rear left (raw / 32 km/h).",
+          "start": 32,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.03125,
+          "kind": "number",
+          "len": 14,
+          "name": "WHL_SPD_RR",
+          "notes": "Wheel speed rear right (raw / 32 km/h).",
+          "start": 48,
+          "unit": "km/h"
+         }
+        ],
+        "validation": "synthetic-tested"
+       }
+      ],
+      "name": "ccan",
+      "notes": "500 kbit/s is assumed (the OBD-II CAN rate of ISO 15765-4); opendbc does not state bus rates."
+     }
+    ],
+    "checksum": null,
+    "diagnostics": [],
+    "ecudefs": [],
+    "family": "4WD coupling controller (classic CAN)",
+    "flash": null,
+    "gearsets": [],
+    "id": "hyundai-kia-4wd",
+    "identify": {
+     "gearbox_codes": [],
+     "part_numbers": [],
+     "sw_numbers": []
+    },
+    "kind": "awd",
+    "live": [
+     {
+      "name": "coupling torque",
+      "source": {
+       "bus": "ccan",
+       "frame": "_4WD11",
+       "kind": "can_signal",
+       "signal": "_4WD_TQC_CUR"
+      },
+      "unit": "Nm"
+     },
+     {
+      "name": "clutch duty",
+      "source": {
+       "bus": "ccan",
+       "frame": "_4WD11",
+       "kind": "can_signal",
+       "signal": "CLU_DUTY"
+      },
+      "unit": "%"
+     },
+     {
+      "name": "lock mode",
+      "source": {
+       "bus": "ccan",
+       "frame": "_4WD11",
+       "kind": "can_signal",
+       "signal": "LOCK_ACT"
+      },
+      "unit": ""
+     },
+     {
+      "name": "clutch pressure",
+      "source": {
+       "bus": "ccan",
+       "frame": "_4WD12",
+       "kind": "can_signal",
+       "signal": "CLU_PRES"
+      },
+      "unit": "bar"
+     },
+     {
+      "name": "actuator current",
+      "source": {
+       "bus": "ccan",
+       "frame": "_4WD13",
+       "kind": "can_signal",
+       "signal": "_4WD_CURRENT"
+      },
+      "unit": "A"
+     },
+     {
+      "name": "clutch thermal stress",
+      "source": {
+       "bus": "ccan",
+       "frame": "_4WD13",
+       "kind": "can_signal",
+       "signal": "_4WD_CLU_THERM_STR"
+      },
+      "unit": "%"
+     },
+     {
+      "name": "wheel speed FL",
+      "source": {
+       "bus": "ccan",
+       "frame": "WHL_SPD11",
+       "kind": "can_signal",
+       "signal": "WHL_SPD_FL"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "wheel speed FR",
+      "source": {
+       "bus": "ccan",
+       "frame": "WHL_SPD11",
+       "kind": "can_signal",
+       "signal": "WHL_SPD_FR"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "wheel speed RL",
+      "source": {
+       "bus": "ccan",
+       "frame": "WHL_SPD11",
+       "kind": "can_signal",
+       "signal": "WHL_SPD_RL"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "wheel speed RR",
+      "source": {
+       "bus": "ccan",
+       "frame": "WHL_SPD11",
+       "kind": "can_signal",
+       "signal": "WHL_SPD_RR"
+      },
+      "unit": "km/h"
+     }
+    ],
+    "maker": "Hyundai / Kia",
+    "name": "Hyundai / Kia 4WD / AWD coupling controller (classic CAN, _4WD11-_4WD13 broadcast)",
+    "notes": "The 4WD controller frames (_4WD11/_4WD12/_4WD13, node _4WD) of opendbc's hyundai_can.dbc plus the ABS wheel-speed frame they work against. opendbc defines but does not use these frames, so which models send them is unknown. The 2H/4H/LOW flags suggest the same frames also cover part-time transfer-case systems; the source does not say. No diagnostic channel is declared: no open source documents the 4WD unit's diagnostic ids. Signal meanings beyond the DBC names and scales are marked per signal.",
+    "safety": [
+     "Changing how an AWD system engages changes how the car drives. OpenTune only decodes these frames; it never commands the coupling.",
+     "Do not transmit on a drivetrain CAN bus of a moving car: these frames feed the engine, brakes and instrument cluster. Log with a listen-only adapter."
+    ],
+    "sources": [
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/dbc/generator/hyundai/hyundai_can.dbc @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/dbc/generator/hyundai/hyundai_can.dbc",
+      "used_for": "_4WD11/_4WD12/_4WD13 and WHL_SPD11 signal layouts, names and scales"
+     }
+    ],
+    "tables": [],
+    "units": [],
+    "validation": "synthetic-tested",
+    "vehicles": [
+     "Hyundai / Kia models with an electronically controlled 4WD coupling on classic (non-CAN-FD) CAN; the source does not list models"
+    ]
+   },
+   "hyundai-kia-tcu": {
+    "adaptations": [],
+    "buses": [
+     {
+      "bitrate": 500000,
+      "description": "Hyundai / Kia classic CAN (C-CAN) as opendbc's hyundai_can.dbc describes it",
+      "frames": [
+       {
+        "dlc": 8,
+        "id": "0x111",
+        "min_len": 8,
+        "name": "TCU11",
+        "notes": "TCU status 1 (hyundai_can.dbc).",
+        "sender": "TCU",
+        "signals": [
+         {
+          "factor": 0.390625,
+          "kind": "number",
+          "len": 8,
+          "name": "TQI_TCU_INC",
+          "notes": "Torque-increase request to the engine, in % (meaning from the DBC name).",
+          "start": 0,
+          "unit": "%"
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "G_SEL_DISP",
+          "notes": "Selector position for the cluster display. opendbc has no value table for it, so raw values are shown as numbers.",
+          "start": 8
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "F_TCU",
+          "notes": "TCU fault/status field (2 bits); meaning not documented in the source.",
+          "start": 12
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "TCU_TYPE",
+          "notes": "TCU type (2 bits); values not documented in the source.",
+          "start": 14
+         },
+         {
+          "kind": "number",
+          "len": 3,
+          "name": "TCU_OBD",
+          "notes": "TCU OBD status (3 bits); values not documented in the source.",
+          "start": 16
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "SWI_GS",
+          "notes": "Gear-select switch flag (meaning from the DBC name).",
+          "start": 19
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "GEAR_TYPE",
+          "notes": "Gearbox type (4 bits); values not documented in the source.",
+          "start": 20
+         },
+         {
+          "factor": 0.390625,
+          "kind": "number",
+          "len": 8,
+          "name": "TQI_TCU",
+          "notes": "Torque request to the engine, in % (meaning from the DBC name).",
+          "start": 24,
+          "unit": "%"
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "TEMP_AT",
+          "notes": "Automatic-transmission fluid temperature, raw - 40 (DBC unit 'deg', read as degC).",
+          "offset": -40.0,
+          "start": 32,
+          "unit": "degC"
+         },
+         {
+          "factor": 0.25,
+          "kind": "number",
+          "len": 16,
+          "name": "N_TC",
+          "notes": "Torque-converter turbine speed (raw x 0.25).",
+          "start": 40,
+          "unit": "rpm"
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "SWI_CC",
+          "notes": "Cruise-control related switch (2 bits); values not documented in the source.",
+          "start": 56
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "CF_Tcu_Alive1",
+          "notes": "Alive counter.",
+          "start": 58
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "CF_Tcu_ChkSum1",
+          "notes": "Checksum nibble (algorithm not documented in the source; not verified).",
+          "start": 60
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 8,
+        "id": "0x112",
+        "min_len": 8,
+        "name": "TCU12",
+        "notes": "TCU status 2 (hyundai_can.dbc). opendbc reads the current gear from CUR_GR on platforms with its TCU_GEARS flag.",
+        "sender": "TCU",
+        "signals": [
+         {
+          "factor": 2.0,
+          "kind": "number",
+          "len": 8,
+          "name": "ETL_TCU",
+          "notes": "Engine torque limit requested by the TCU (raw x 2 Nm).",
+          "start": 0,
+          "unit": "Nm"
+         },
+         {
+          "kind": "enum",
+          "len": 4,
+          "name": "CUR_GR",
+          "notes": "Current gear. opendbc's value table names 0 P, 1-8 D and 14 R; the forward gear number is kept in the name here (D1..D8).",
+          "start": 8,
+          "values": [
+           {
+            "name": "P",
+            "raw": 0
+           },
+           {
+            "name": "D1",
+            "raw": 1
+           },
+           {
+            "name": "D2",
+            "raw": 2
+           },
+           {
+            "name": "D3",
+            "raw": 3
+           },
+           {
+            "name": "D4",
+            "raw": 4
+           },
+           {
+            "name": "D5",
+            "raw": 5
+           },
+           {
+            "name": "D6",
+            "raw": 6
+           },
+           {
+            "name": "D7",
+            "raw": 7
+           },
+           {
+            "name": "D8",
+            "raw": 8
+           },
+           {
+            "name": "R",
+            "raw": 14
+           }
+          ]
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "CF_Tcu_Alive",
+          "notes": "Alive counter.",
+          "start": 12
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "CF_Tcu_ChkSum",
+          "notes": "Checksum (2 bits; algorithm not documented in the source).",
+          "start": 14
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "VS_TCU",
+          "notes": "Vehicle speed seen by the TCU, whole km/h (VS_TCU_DECIMAL adds the fraction).",
+          "start": 16,
+          "unit": "km/h"
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "FUEL_CUT_TCU",
+          "notes": "Fuel-cut request (meaning from the DBC name).",
+          "start": 28
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "INH_FUEL_CUT",
+          "notes": "Fuel-cut inhibit (meaning from the DBC name).",
+          "start": 29
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "IDLE_UP_TCU",
+          "notes": "Idle-up request (meaning from the DBC name).",
+          "start": 30
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "N_INC_TCU",
+          "notes": "Engine-speed increase request (meaning from the DBC name).",
+          "start": 31
+         },
+         {
+          "factor": 0.375,
+          "kind": "number",
+          "len": 8,
+          "name": "SPK_RTD_TCU",
+          "notes": "Spark-retard request (raw x 0.375 - 23.625; the DBC gives no unit).",
+          "offset": -23.625,
+          "start": 32
+         },
+         {
+          "factor": 0.25,
+          "kind": "number",
+          "len": 16,
+          "name": "N_TC_RAW",
+          "notes": "Turbine speed, unfiltered (raw x 0.25).",
+          "start": 40,
+          "unit": "rpm"
+         },
+         {
+          "factor": 0.0078125,
+          "kind": "number",
+          "len": 8,
+          "name": "VS_TCU_DECIMAL",
+          "notes": "Fractional part of the vehicle speed (raw / 128 km/h).",
+          "start": 56,
+          "unit": "km/h"
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 8,
+        "id": "0x113",
+        "min_len": 8,
+        "name": "TCU13",
+        "notes": "TCU status 3 (hyundai_can.dbc).",
+        "sender": "TCU",
+        "signals": [
+         {
+          "factor": 10.0,
+          "kind": "number",
+          "len": 8,
+          "name": "N_TGT_LUP",
+          "notes": "Target lock-up speed (raw x 10 + 500 rpm; meaning from the DBC name).",
+          "offset": 500.0,
+          "start": 0,
+          "unit": "rpm"
+         },
+         {
+          "factor": 0.5,
+          "kind": "number",
+          "len": 6,
+          "name": "SLOPE_TCU",
+          "notes": "Road slope estimated by the TCU (raw x 0.5 - 16 %).",
+          "offset": -16.0,
+          "start": 8,
+          "unit": "%"
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "CF_Tcu_TarGr",
+          "notes": "Target gear (4 bits; no value table in the source).",
+          "start": 20
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "CF_Tcu_ShfPatt",
+          "notes": "Shift pattern / drive mode (4 bits; no value table in the source).",
+          "start": 24
+         },
+         {
+          "factor": 10.0,
+          "kind": "number",
+          "len": 8,
+          "name": "CF_Tcu_TqGrdLim",
+          "notes": "Torque-gradient limit (raw x 10 Nm/s).",
+          "start": 32,
+          "unit": "Nm/s"
+         },
+         {
+          "factor": 20.0,
+          "kind": "number",
+          "len": 8,
+          "name": "CR_Tcu_IsgTgtRPM",
+          "notes": "Idle stop-and-go target engine speed (raw x 20 rpm).",
+          "start": 40,
+          "unit": "rpm"
+         },
+         {
+          "kind": "bool",
+          "len": 1,
+          "name": "CF_Tcu_SptRdy",
+          "notes": "Sport mode ready (meaning from the DBC name).",
+          "start": 48
+         },
+         {
+          "kind": "number",
+          "len": 2,
+          "name": "CF_Tcu_Alive3",
+          "notes": "Alive counter.",
+          "start": 58
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "CF_Tcu_ChkSum3",
+          "notes": "Checksum nibble (algorithm not documented in the source).",
+          "start": 60
+         }
+        ],
+        "validation": "synthetic-tested"
+       }
+      ],
+      "name": "ccan",
+      "notes": "500 kbit/s is assumed (the OBD-II CAN rate of ISO 15765-4); opendbc does not state bus rates."
+     }
+    ],
+    "checksum": null,
+    "diagnostics": [
+     {
+      "bitrate": 500000,
+      "identification": "22F100",
+      "layer": "uds",
+      "name": "uds",
+      "notes": "Request id from opendbc car/hyundai/fingerprints.py (Ecu.transmission 0x7E1), response = request + 8 (ISO 15765-4, opendbc's default rx_offset). 22 F100 is the 'long description' identification opendbc's firmware query sends (HYUNDAI_VERSION_REQUEST_LONG). Not tried on a car.",
+      "rx_id": "0x7E9",
+      "transport": "iso_tp",
+      "tx_id": "0x7E1",
+      "validation": "implemented"
+     }
+    ],
+    "ecudefs": [],
+    "family": "TCU (classic CAN)",
+    "flash": null,
+    "gearsets": [],
+    "id": "hyundai-kia-tcu",
+    "identify": {
+     "gearbox_codes": [],
+     "part_numbers": [],
+     "sw_numbers": []
+    },
+    "kind": "tcu",
+    "live": [
+     {
+      "name": "current gear",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU12",
+       "kind": "can_signal",
+       "signal": "CUR_GR"
+      },
+      "unit": ""
+     },
+     {
+      "name": "target gear",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU13",
+       "kind": "can_signal",
+       "signal": "CF_Tcu_TarGr"
+      },
+      "unit": ""
+     },
+     {
+      "name": "selector (cluster)",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU11",
+       "kind": "can_signal",
+       "signal": "G_SEL_DISP"
+      },
+      "unit": ""
+     },
+     {
+      "name": "ATF temperature",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU11",
+       "kind": "can_signal",
+       "signal": "TEMP_AT"
+      },
+      "unit": "degC"
+     },
+     {
+      "name": "turbine speed",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU11",
+       "kind": "can_signal",
+       "signal": "N_TC"
+      },
+      "unit": "rpm"
+     },
+     {
+      "name": "vehicle speed (TCU)",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU12",
+       "kind": "can_signal",
+       "signal": "VS_TCU"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "TCU torque limit",
+      "source": {
+       "bus": "ccan",
+       "frame": "TCU12",
+       "kind": "can_signal",
+       "signal": "ETL_TCU"
+      },
+      "unit": "Nm"
+     }
+    ],
+    "maker": "Hyundai / Kia",
+    "name": "Hyundai / Kia automatic transmission controller (classic CAN, TCU11-TCU13 broadcast)",
+    "notes": "The TCU broadcast frames of opendbc's hyundai_can.dbc (the DBC opendbc uses for every non-CAN-FD Hyundai / Kia / Genesis platform). 'vehicles' lists the platforms whose gear opendbc reads from TCU12 (flag TCU_GEARS in car/hyundai/values.py); other platforms of that DBC may send the frames too, which the source does not say. Signal meanings beyond the DBC names and scales are not documented upstream and are marked so per signal; checksums are not verified. No gearbox codes, part numbers or flash layout are claimed: there is no open source for them, so identify is empty and the definition is chosen by id. The UDS channel is untested (validation: implemented).",
+    "safety": [
+     "OpenTune only listens to these broadcast frames (and, where a diagnostic channel is listed, reads identification); it never writes to this controller.",
+     "Do not transmit on a drivetrain CAN bus of a moving car: these frames feed the engine, brakes and instrument cluster. Log with a listen-only adapter."
+    ],
+    "sources": [
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/dbc/generator/hyundai/hyundai_can.dbc @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/dbc/generator/hyundai/hyundai_can.dbc",
+      "used_for": "TCU11/TCU12/TCU13 signal layouts, names, scales and the CUR_GR value table"
+     },
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/car/hyundai/values.py @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/car/hyundai/values.py",
+      "used_for": "platforms that read the gear from TCU12 (TCU_GEARS) and the 22 F100 identification request"
+     },
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/car/hyundai/fingerprints.py @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/car/hyundai/fingerprints.py",
+      "used_for": "transmission request id 0x7E1"
+     },
+     {
+      "license": "standard (identifiers only)",
+      "title": "ISO 15765-4 (OBD-II on CAN: 500 kbit/s, physical request 0x7E0-0x7E7, response = request + 8)",
+      "url": "https://www.iso.org/standard/78384.html",
+      "used_for": "response id = request id + 8 and the assumed 500 kbit/s bus rate"
+     }
+    ],
+    "tables": [],
+    "units": [],
+    "validation": "synthetic-tested",
+    "vehicles": [
+     "Hyundai Sonata 2018-19",
+     "Hyundai Tucson 2019 (diesel) and 2021",
+     "Hyundai Veloster 2019-20",
+     "Kia Optima 2017 and 2019-20"
+    ]
+   },
+   "subaru-global-tcu": {
+    "adaptations": [],
+    "buses": [
+     {
+      "bitrate": 500000,
+      "description": "Subaru Global platform CAN as opendbc's subaru_global_2017.dbc describes it",
+      "frames": [
+       {
+        "dlc": 8,
+        "id": "0x048",
+        "min_len": 8,
+        "name": "Transmission",
+        "notes": "Transmission status (subaru_global_2017.dbc). opendbc reads the shifter position from Gear.",
+        "sender": "TCU",
+        "signals": [
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "CHECKSUM",
+          "notes": "Checksum byte (algorithm in opendbc's Subaru CAN code; not verified here).",
+          "start": 0
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "COUNTER",
+          "notes": "Alive counter.",
+          "start": 8
+         },
+         {
+          "kind": "enum",
+          "len": 8,
+          "name": "Gear",
+          "notes": "Selector / gear: opendbc's value table (1-6 are the manual-mode steps).",
+          "start": 24,
+          "values": [
+           {
+            "name": "N",
+            "raw": 2
+           },
+           {
+            "name": "R",
+            "raw": 3
+           },
+           {
+            "name": "P",
+            "raw": 4
+           },
+           {
+            "name": "D",
+            "raw": 121
+           },
+           {
+            "name": "1",
+            "raw": 137
+           },
+           {
+            "name": "2",
+            "raw": 145
+           },
+           {
+            "name": "3",
+            "raw": 153
+           },
+           {
+            "name": "4",
+            "raw": 161
+           },
+           {
+            "name": "5",
+            "raw": 169
+           },
+           {
+            "name": "6",
+            "raw": 177
+           }
+          ]
+         },
+         {
+          "kind": "number",
+          "len": 15,
+          "name": "RPM",
+          "notes": "15-bit speed value; the DBC gives no unit or scale and opendbc does not read it.",
+          "start": 40
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 8,
+        "id": "0x049",
+        "min_len": 8,
+        "name": "CVT",
+        "notes": "CVT status (subaru_global_2017.dbc).",
+        "sender": "TCU",
+        "signals": [
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "CHECKSUM",
+          "notes": "Checksum byte (not verified here).",
+          "start": 0
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "COUNTER",
+          "notes": "Alive counter.",
+          "start": 8
+         },
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "CVT_Gear",
+          "notes": "CVT gear byte; no value table in the source (opendbc does not read it).",
+          "start": 24
+         }
+        ],
+        "validation": "synthetic-tested"
+       },
+       {
+        "dlc": 8,
+        "id": "0x13A",
+        "min_len": 8,
+        "name": "Wheel_Speeds",
+        "notes": "Wheel speeds (_subaru_global.dbc). On Global Gen2 platforms opendbc reads this frame from its second bus.",
+        "sender": "ABS",
+        "signals": [
+         {
+          "kind": "number",
+          "len": 8,
+          "name": "CHECKSUM",
+          "notes": "Checksum byte (not verified here).",
+          "start": 0
+         },
+         {
+          "kind": "number",
+          "len": 4,
+          "name": "COUNTER",
+          "notes": "Alive counter.",
+          "start": 8
+         },
+         {
+          "factor": 0.057,
+          "kind": "number",
+          "len": 13,
+          "name": "FR",
+          "notes": "Wheel speed front right (raw x 0.057 km/h).",
+          "start": 12,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.057,
+          "kind": "number",
+          "len": 13,
+          "name": "RR",
+          "notes": "Wheel speed rear right (raw x 0.057 km/h).",
+          "start": 25,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.057,
+          "kind": "number",
+          "len": 13,
+          "name": "FL",
+          "notes": "Wheel speed front left (raw x 0.057 km/h).",
+          "start": 51,
+          "unit": "km/h"
+         },
+         {
+          "factor": 0.057,
+          "kind": "number",
+          "len": 13,
+          "name": "RL",
+          "notes": "Wheel speed rear left (raw x 0.057 km/h).",
+          "start": 38,
+          "unit": "km/h"
+         }
+        ],
+        "validation": "synthetic-tested"
+       }
+      ],
+      "name": "global",
+      "notes": "500 kbit/s is assumed (the OBD-II CAN rate of ISO 15765-4); opendbc does not state bus rates."
+     }
+    ],
+    "checksum": null,
+    "diagnostics": [
+     {
+      "bitrate": 500000,
+      "identification": "22F182",
+      "layer": "uds",
+      "name": "uds",
+      "notes": "Request id from opendbc car/subaru/fingerprints.py (Ecu.transmission 0x7E1; two platforms use 0x7A3), response = request + 8 (ISO 15765-4, opendbc's default rx_offset). 22 F182 is the application-data identification opendbc's firmware query sends (SUBARU_VERSION_REQUEST). Not tried on a car.",
+      "rx_id": "0x7E9",
+      "transport": "iso_tp",
+      "tx_id": "0x7E1",
+      "validation": "implemented"
+     }
+    ],
+    "ecudefs": [],
+    "family": "Global platform transmission",
+    "flash": null,
+    "gearsets": [],
+    "id": "subaru-global-tcu",
+    "identify": {
+     "gearbox_codes": [],
+     "part_numbers": [],
+     "sw_numbers": []
+    },
+    "kind": "tcu",
+    "live": [
+     {
+      "name": "gear",
+      "source": {
+       "bus": "global",
+       "frame": "Transmission",
+       "kind": "can_signal",
+       "signal": "Gear"
+      },
+      "unit": ""
+     },
+     {
+      "name": "wheel speed FL",
+      "source": {
+       "bus": "global",
+       "frame": "Wheel_Speeds",
+       "kind": "can_signal",
+       "signal": "FL"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "wheel speed FR",
+      "source": {
+       "bus": "global",
+       "frame": "Wheel_Speeds",
+       "kind": "can_signal",
+       "signal": "FR"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "wheel speed RL",
+      "source": {
+       "bus": "global",
+       "frame": "Wheel_Speeds",
+       "kind": "can_signal",
+       "signal": "RL"
+      },
+      "unit": "km/h"
+     },
+     {
+      "name": "wheel speed RR",
+      "source": {
+       "bus": "global",
+       "frame": "Wheel_Speeds",
+       "kind": "can_signal",
+       "signal": "RR"
+      },
+      "unit": "km/h"
+     }
+    ],
+    "maker": "Subaru",
+    "name": "Subaru Global platform transmission controller (CAN broadcast)",
+    "notes": "The transmission frames of opendbc's subaru_global_2017.dbc (the DBC of every non-hybrid Subaru Global platform in car/subaru/values.py; hybrids use another DBC and are not covered) plus the wheel-speed frame. Only Transmission.Gear has a value table upstream; the CVT frame and the RPM field are layout-only. Checksums are not verified. No gearbox codes, part numbers or flash layout are claimed, so identify is empty. The UDS channel is untested (validation: implemented); some fingerprints answer at 0x7A3 instead of 0x7E1.",
+    "safety": [
+     "OpenTune only listens to these broadcast frames (and, where a diagnostic channel is listed, reads identification); it never writes to this controller.",
+     "Do not transmit on a drivetrain CAN bus of a moving car: these frames feed the engine, brakes and instrument cluster. Log with a listen-only adapter."
+    ],
+    "sources": [
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/dbc/generator/subaru/subaru_global_2017.dbc @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/dbc/generator/subaru/subaru_global_2017.dbc",
+      "used_for": "Transmission and CVT signal layouts and the Gear value table"
+     },
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/dbc/generator/subaru/_subaru_global.dbc @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/dbc/generator/subaru/_subaru_global.dbc",
+      "used_for": "Wheel_Speeds signal layout and scale"
+     },
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/car/subaru/values.py @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/car/subaru/values.py",
+      "used_for": "platforms using subaru_global_2017.dbc and the 22 F182 identification request"
+     },
+     {
+      "license": "MIT",
+      "title": "commaai/opendbc opendbc/car/subaru/fingerprints.py @ 27fa1c5d8eed (Copyright (c) 2020, Comma.ai, Inc.)",
+      "url": "https://github.com/commaai/opendbc/blob/27fa1c5d8eed3238a0a78c52ff5abb6cdc807bd2/opendbc/car/subaru/fingerprints.py",
+      "used_for": "transmission request ids 0x7E1 / 0x7A3"
+     },
+     {
+      "license": "standard (identifiers only)",
+      "title": "ISO 15765-4 (OBD-II on CAN: 500 kbit/s, physical request 0x7E0-0x7E7, response = request + 8)",
+      "url": "https://www.iso.org/standard/78384.html",
+      "used_for": "response id = request id + 8 and the assumed 500 kbit/s bus rate"
+     }
+    ],
+    "tables": [],
+    "units": [],
+    "validation": "synthetic-tested",
+    "vehicles": [
+     "Subaru Impreza 2017-22",
+     "Subaru Crosstrek / XV 2018-23",
+     "Subaru Forester 2019-24",
+     "Subaru Outback 2020-23",
+     "Subaru Legacy 2020-22",
+     "Subaru Ascent 2019-23"
+    ]
+   }
+  }
+ },
+ "generic-obd2": {
+  "_ficticio": false,
+  "loggers": {
+   "obd2-mode01": {
+    "format": "rom_raider_logger",
+    "protocols": [
+     {
+      "ecus": [
+       {
+        "params": [
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 1
+          },
+          "description": "Raw 4-byte bitfield: A7 = MIL on, A0-A6 = number of emission-related DTCs, B-D = readiness (monitor supported / incomplete) bits. Decode the bits; the numeric value itself is not a quantity.",
+          "endian": "big",
+          "id": "obd01_01_monitor_status",
+          "name": "Monitor status since DTCs cleared",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u32",
+          "units": "bitfield"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 4
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x04.",
+          "endian": "big",
+          "id": "obd01_04_calc_load",
+          "name": "Calculated engine load",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 5
+          },
+          "conversion": {
+           "expr": "X-40",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": -40.0
+           },
+           "units": "°C"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x05.",
+          "endian": "big",
+          "id": "obd01_05_coolant_temp",
+          "name": "Engine coolant temperature",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "°C"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 6
+          },
+          "conversion": {
+           "expr": "X*100/128-100",
+           "fit": {
+            "factor": 0.78125,
+            "fit": "linear",
+            "offset": -100.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x06.",
+          "endian": "big",
+          "id": "obd01_06_stft_b1",
+          "name": "Short-term fuel trim — bank 1",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 7
+          },
+          "conversion": {
+           "expr": "X*100/128-100",
+           "fit": {
+            "factor": 0.78125,
+            "fit": "linear",
+            "offset": -100.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x07.",
+          "endian": "big",
+          "id": "obd01_07_ltft_b1",
+          "name": "Long-term fuel trim — bank 1",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 8
+          },
+          "conversion": {
+           "expr": "X*100/128-100",
+           "fit": {
+            "factor": 0.78125,
+            "fit": "linear",
+            "offset": -100.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x08.",
+          "endian": "big",
+          "id": "obd01_08_stft_b2",
+          "name": "Short-term fuel trim — bank 2",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 9
+          },
+          "conversion": {
+           "expr": "X*100/128-100",
+           "fit": {
+            "factor": 0.78125,
+            "fit": "linear",
+            "offset": -100.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x09.",
+          "endian": "big",
+          "id": "obd01_09_ltft_b2",
+          "name": "Long-term fuel trim — bank 2",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 10
+          },
+          "conversion": {
+           "expr": "X*3",
+           "fit": {
+            "factor": 3.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "kPa"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x0A.",
+          "endian": "big",
+          "id": "obd01_0a_fuel_pressure",
+          "name": "Fuel pressure (gauge)",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "kPa"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 11
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "kPa"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x0B.",
+          "endian": "big",
+          "id": "obd01_0b_map",
+          "name": "Intake manifold absolute pressure",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "kPa"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 12
+          },
+          "conversion": {
+           "expr": "X/4",
+           "fit": {
+            "factor": 0.25,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "rpm"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x0C.",
+          "endian": "big",
+          "id": "obd01_0c_rpm",
+          "name": "Engine speed",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "rpm"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 13
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "km/h"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x0D.",
+          "endian": "big",
+          "id": "obd01_0d_speed",
+          "name": "Vehicle speed",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "km/h"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 14
+          },
+          "conversion": {
+           "expr": "X/2-64",
+           "fit": {
+            "factor": 0.5,
+            "fit": "linear",
+            "offset": -64.0
+           },
+           "units": "° BTDC"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x0E.",
+          "endian": "big",
+          "id": "obd01_0e_timing_advance",
+          "name": "Timing advance (cylinder 1)",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "° BTDC"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 15
+          },
+          "conversion": {
+           "expr": "X-40",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": -40.0
+           },
+           "units": "°C"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x0F.",
+          "endian": "big",
+          "id": "obd01_0f_iat",
+          "name": "Intake air temperature",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "°C"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 16
+          },
+          "conversion": {
+           "expr": "X/100",
+           "fit": {
+            "factor": 0.01,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "g/s"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x10.",
+          "endian": "big",
+          "id": "obd01_10_maf",
+          "name": "Mass air flow rate",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "g/s"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 17
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x11.",
+          "endian": "big",
+          "id": "obd01_11_throttle",
+          "name": "Throttle position",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 31
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "s"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x1F.",
+          "endian": "big",
+          "id": "obd01_1f_run_time",
+          "name": "Run time since engine start",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "s"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 33
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "km"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x21.",
+          "endian": "big",
+          "id": "obd01_21_dist_mil_on",
+          "name": "Distance travelled with MIL on",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "km"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 47
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x2F.",
+          "endian": "big",
+          "id": "obd01_2f_fuel_level",
+          "name": "Fuel tank level input",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 48
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "count"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x30.",
+          "endian": "big",
+          "id": "obd01_30_warmups_since_clear",
+          "name": "Warm-ups since DTCs cleared",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "count"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 49
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "km"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x31.",
+          "endian": "big",
+          "id": "obd01_31_dist_since_clear",
+          "name": "Distance travelled since DTCs cleared",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "km"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 51
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "kPa"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x33.",
+          "endian": "big",
+          "id": "obd01_33_baro",
+          "name": "Absolute barometric pressure",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "kPa"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 66
+          },
+          "conversion": {
+           "expr": "X/1000",
+           "fit": {
+            "factor": 0.001,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "V"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x42.",
+          "endian": "big",
+          "id": "obd01_42_module_voltage",
+          "name": "Control module voltage",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "V"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 67
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x43.",
+          "endian": "big",
+          "id": "obd01_43_abs_load",
+          "name": "Absolute load value",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 68
+          },
+          "conversion": {
+           "expr": "X/32768",
+           "fit": {
+            "factor": 3.0517578125e-05,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "ratio"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x44.",
+          "endian": "big",
+          "id": "obd01_44_lambda_cmd",
+          "name": "Commanded air-fuel equivalence ratio (lambda)",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "ratio"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 69
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x45.",
+          "endian": "big",
+          "id": "obd01_45_rel_throttle",
+          "name": "Relative throttle position",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 70
+          },
+          "conversion": {
+           "expr": "X-40",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": -40.0
+           },
+           "units": "°C"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x46.",
+          "endian": "big",
+          "id": "obd01_46_ambient_temp",
+          "name": "Ambient air temperature",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "°C"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 71
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x47.",
+          "endian": "big",
+          "id": "obd01_47_abs_throttle_b",
+          "name": "Absolute throttle position B",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 73
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x49.",
+          "endian": "big",
+          "id": "obd01_49_pedal_d",
+          "name": "Accelerator pedal position D",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 74
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x4A.",
+          "endian": "big",
+          "id": "obd01_4a_pedal_e",
+          "name": "Accelerator pedal position E",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 76
+          },
+          "conversion": {
+           "expr": "X*100/255",
+           "fit": {
+            "factor": 0.39215686274509803,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "%"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x4C.",
+          "endian": "big",
+          "id": "obd01_4c_throttle_cmd",
+          "name": "Commanded throttle actuator",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "%"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 77
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "min"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x4D.",
+          "endian": "big",
+          "id": "obd01_4d_time_mil_on",
+          "name": "Time run with MIL on",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "min"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 78
+          },
+          "conversion": {
+           "expr": "X",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "min"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x4E.",
+          "endian": "big",
+          "id": "obd01_4e_time_since_clear",
+          "name": "Time since DTCs cleared",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "min"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 92
+          },
+          "conversion": {
+           "expr": "X-40",
+           "fit": {
+            "factor": 1.0,
+            "fit": "linear",
+            "offset": -40.0
+           },
+           "units": "°C"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x5C.",
+          "endian": "big",
+          "id": "obd01_5c_oil_temp",
+          "name": "Engine oil temperature",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u8",
+          "units": "°C"
+         },
+         {
+          "addressing": {
+           "addressing": "obd_pid",
+           "pid": 94
+          },
+          "conversion": {
+           "expr": "X/20",
+           "fit": {
+            "factor": 0.05,
+            "fit": "linear",
+            "offset": 0.0
+           },
+           "units": "L/h"
+          },
+          "description": "SAE J1979 / ISO 15031-5 service 01 PID 0x5E.",
+          "endian": "big",
+          "id": "obd01_5e_fuel_rate",
+          "name": "Engine fuel rate",
+          "protocol": {
+           "kind": "obd2_mode01"
+          },
+          "storagetype": "u16",
+          "units": "L/h"
+         }
+        ]
+       }
+      ],
+      "id": "OBD",
+      "kind": {
+       "kind": "obd2_mode01"
+      }
+     }
+    ],
+    "source": "SAE J1979 / ISO 15031-5 service 01 PID definitions (formulas as published in the standard; also tabulated at https://en.wikipedia.org/wiki/OBD-II_PIDs)",
+    "version": "1.0.0"
+   }
+  },
+  "modules": {
+   "obd2-functional": {
+    "addr_note": "A functional request reaches every OBD ECU; this entry listens only on 0x7E8 (ECU #1). Use obd2-physical.json to see each ECU separately.",
+    "modules": [
+     {
+      "addr": 223,
+      "name": "OBD functional broadcast (0x7DF -> 0x7E8)",
+      "protocol": "obd",
+      "req_id": 2015,
+      "resp_id": 2024
+     }
+    ],
+    "source": "ISO 15765-4 (11-bit OBD-on-CAN identifiers); SAE J1979 / ISO 15031-5",
+    "vehicle": "Generic OBD-II — ISO 15765-4 functional broadcast (0x7DF, first reply on 0x7E8)"
+   },
+   "obd2-physical": {
+    "addr_note": "addr = low byte of the 11-bit request id (11-bit normal addressing has no separate logical address).",
+    "modules": [
+     {
+      "addr": 224,
+      "name": "OBD ECU #1 (0x7E0) — usually the engine",
+      "protocol": "obd",
+      "req_id": 2016,
+      "resp_id": 2024
+     },
+     {
+      "addr": 225,
+      "name": "OBD ECU #2 (0x7E1) — usually the transmission",
+      "protocol": "obd",
+      "req_id": 2017,
+      "resp_id": 2025
+     },
+     {
+      "addr": 226,
+      "name": "OBD ECU #3 (0x7E2)",
+      "protocol": "obd",
+      "req_id": 2018,
+      "resp_id": 2026
+     },
+     {
+      "addr": 227,
+      "name": "OBD ECU #4 (0x7E3)",
+      "protocol": "obd",
+      "req_id": 2019,
+      "resp_id": 2027
+     },
+     {
+      "addr": 228,
+      "name": "OBD ECU #5 (0x7E4)",
+      "protocol": "obd",
+      "req_id": 2020,
+      "resp_id": 2028
+     },
+     {
+      "addr": 229,
+      "name": "OBD ECU #6 (0x7E5)",
+      "protocol": "obd",
+      "req_id": 2021,
+      "resp_id": 2029
+     },
+     {
+      "addr": 230,
+      "name": "OBD ECU #7 (0x7E6)",
+      "protocol": "obd",
+      "req_id": 2022,
+      "resp_id": 2030
+     },
+     {
+      "addr": 231,
+      "name": "OBD ECU #8 (0x7E7)",
+      "protocol": "obd",
+      "req_id": 2023,
+      "resp_id": 2031
+     }
+    ],
+    "source": "ISO 15765-4 (11-bit OBD-on-CAN identifiers); SAE J1979 / ISO 15031-5",
+    "vehicle": "Generic OBD-II — ISO 15765-4 11-bit physical addresses (0x7E0-0x7E7 / 0x7E8-0x7EF)"
+   }
+  },
+  "services": {
+   "obd-clear-dtcs": {
+    "description": "WRITES TO THE ECU. Clears emission-related DTCs, freeze-frame data and test results, turns the MIL off and RESETS ALL READINESS MONITORS to 'incomplete' (the car may fail an inspection until they complete again). Engine off, ignition on. Only runs after the operator ticks the confirmation box. Mode 04 sent physically clears only the addressed ECU; use Auto-scan → Clear with obd2-physical.json to clear every OBD ECU. Defaults to OBD ECU #1 (0x7E0/0x7E8, ISO 15765-4); enter another ECU's ids in the Target fields to address it instead.",
+    "id": "obd2-clear-dtcs",
+    "name": "OBD: clear DTCs and stored values (mode 04) — WRITE",
+    "req_id": "0x7E0",
+    "requires_security": false,
+    "resp_id": "0x7E8",
+    "steps": [
+     {
+      "mode": 4,
+      "op": "obd_request"
+     }
+    ]
+   },
+   "obd-read-pending-dtcs": {
+    "description": "Read-only. Pending (current / last drive cycle) emission-related DTCs. Defaults to OBD ECU #1 (0x7E0/0x7E8, ISO 15765-4); enter another ECU's ids in the Target fields to address it instead.",
+    "id": "obd2-read-pending-dtcs",
+    "name": "OBD: read pending DTCs (mode 07)",
+    "req_id": "0x7E0",
+    "requires_security": false,
+    "resp_id": "0x7E8",
+    "steps": [
+     {
+      "mode": 7,
+      "op": "obd_request"
+     }
+    ]
+   },
+   "obd-read-permanent-dtcs": {
+    "description": "Read-only. Permanent DTCs (cannot be erased by mode 04; they clear themselves after the monitor passes). Not supported by older ECUs. Defaults to OBD ECU #1 (0x7E0/0x7E8, ISO 15765-4); enter another ECU's ids in the Target fields to address it instead.",
+    "id": "obd2-read-permanent-dtcs",
+    "name": "OBD: read permanent DTCs (mode 0A)",
+    "req_id": "0x7E0",
+    "requires_security": false,
+    "resp_id": "0x7E8",
+    "steps": [
+     {
+      "mode": 10,
+      "op": "obd_request"
+     }
+    ]
+   },
+   "obd-read-stored-dtcs": {
+    "description": "Read-only. Confirmed emission-related DTCs as 2-byte codes (CAN responses carry a leading count byte). Defaults to OBD ECU #1 (0x7E0/0x7E8, ISO 15765-4); enter another ECU's ids in the Target fields to address it instead.",
+    "id": "obd2-read-stored-dtcs",
+    "name": "OBD: read stored DTCs (mode 03)",
+    "req_id": "0x7E0",
+    "requires_security": false,
+    "resp_id": "0x7E8",
+    "steps": [
+     {
+      "mode": 3,
+      "op": "obd_request"
+     }
+    ]
+   },
+   "obd-read-vin": {
+    "description": "Read-only. Vehicle identification number; on CAN the response is `49 02 01` followed by 17 ASCII characters. Defaults to OBD ECU #1 (0x7E0/0x7E8, ISO 15765-4); enter another ECU's ids in the Target fields to address it instead.",
+    "id": "obd2-read-vin",
+    "name": "OBD: read VIN (mode 09 InfoType 02)",
+    "req_id": "0x7E0",
+    "requires_security": false,
+    "resp_id": "0x7E8",
+    "steps": [
+     {
+      "mode": 9,
+      "op": "obd_request",
+      "pid": 2
+     }
+    ]
+   },
+   "obd-readiness": {
+    "description": "Read-only. Monitor status since DTCs cleared: byte A bit 7 = MIL on, bits 0-6 = DTC count; bytes B-D = which readiness monitors are supported and which are still incomplete. Defaults to OBD ECU #1 (0x7E0/0x7E8, ISO 15765-4); enter another ECU's ids in the Target fields to address it instead.",
+    "id": "obd2-read-readiness",
+    "name": "OBD: read readiness / MIL status (mode 01 PID 01)",
+    "req_id": "0x7E0",
+    "requires_security": false,
+    "resp_id": "0x7E8",
+    "steps": [
+     {
+      "mode": 1,
+      "op": "obd_request",
+      "pid": 1
+     }
+    ]
+   }
+  },
+  "triggers": {
+   "wot-pull": {
+    "description": "Records wide-open-throttle pulls from the SAE J1979 mode-01 channels and marks coolant over-temperature. Channel ids list the loggers/obd2-mode01.json id first and the `opentune obd read` key second, so the file works with both. Use: opentune obd read --driver <id> --rounds 0 --out pulls.csv --trigger packs/generic-obd2/triggers/wot-pull.json --split 0C 11 05",
+    "format": "opentune-triggers",
+    "id": "wot-pull",
+    "max_pre_rows": 20000,
+    "name": "WOT pull + over-temperature marks (generic OBD-II)",
+    "triggers": [
+     {
+      "action": "record",
+      "arm_ms": 300,
+      "description": "Engine speed (PID 0x0C) above 3000 rpm with throttle position (PID 0x11) above 90 % for 300 ms. Released after 1 s below either threshold; keeps 3 s before the fire and 5 s after the release.",
+      "name": "wot-pull",
+      "post_ms": 5000,
+      "pre_ms": 3000,
+      "release_ms": 1000,
+      "when": {
+       "all": [
+        {
+         "channel": [
+          "obd01_0c_rpm",
+          "rpm"
+         ],
+         "op": ">",
+         "units": "rpm",
+         "value": 3000
+        },
+        {
+         "channel": [
+          "obd01_11_throttle",
+          "throttle_pos"
+         ],
+         "op": ">",
+         "units": "%",
+         "value": 90
+        }
+       ]
+      }
+     },
+     {
+      "action": "mark",
+      "arm_ms": 1000,
+      "description": "Coolant temperature (PID 0x05) above 105 °C for 1 s; re-arms after 5 s below.",
+      "name": "coolant-hot",
+      "release_ms": 5000,
+      "when": {
+       "channel": [
+        "obd01_05_coolant_temp",
+        "coolant_temp"
+       ],
+       "op": ">",
+       "units": "°C",
+       "value": 105
+      }
+     }
+    ],
+    "version": 1
+   }
+  }
+ },
+ "iso14229-identification": {
+  "_ficticio": false,
+  "loggers": {
+   "uds-identification": {
+    "format": "rom_raider_logger",
+    "protocols": [
+     {
+      "ecus": [
+       {
+        "params": [
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61824
+          },
+          "description": "ISO 14229-1 identification DID 0xF180. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f180_boot_sw_id",
+          "name": "Boot software identification",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61825
+          },
+          "description": "ISO 14229-1 identification DID 0xF181. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f181_app_sw_id",
+          "name": "Application software identification",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61826
+          },
+          "description": "ISO 14229-1 identification DID 0xF182. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f182_app_data_id",
+          "name": "Application data identification",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61827
+          },
+          "description": "ISO 14229-1 identification DID 0xF183. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f183_boot_sw_fingerprint",
+          "name": "Boot software fingerprint",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61828
+          },
+          "description": "ISO 14229-1 identification DID 0xF184. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f184_app_sw_fingerprint",
+          "name": "Application software fingerprint",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61829
+          },
+          "description": "ISO 14229-1 identification DID 0xF185. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f185_app_data_fingerprint",
+          "name": "Application data fingerprint",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61830
+          },
+          "description": "ISO 14229-1 identification DID 0xF186. 1 byte: the active diagnostic session (0x01 default, 0x02 programming, 0x03 extended, …).",
+          "endian": "big",
+          "id": "uds_f186_active_session",
+          "name": "Active diagnostic session",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": ""
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61831
+          },
+          "description": "ISO 14229-1 identification DID 0xF187. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f187_spare_part_number",
+          "name": "Vehicle manufacturer spare part number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61832
+          },
+          "description": "ISO 14229-1 identification DID 0xF188. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f188_vm_ecu_sw_number",
+          "name": "Vehicle manufacturer ECU software number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61833
+          },
+          "description": "ISO 14229-1 identification DID 0xF189. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f189_vm_ecu_sw_version",
+          "name": "Vehicle manufacturer ECU software version number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61834
+          },
+          "description": "ISO 14229-1 identification DID 0xF18A. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f18a_supplier_id",
+          "name": "System supplier identifier",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61835
+          },
+          "description": "ISO 14229-1 identification DID 0xF18B. Date, typically BCD-encoded (e.g. YY MM DD); the exact layout is manufacturer-defined; the live logger shows the BCD digits (e.g. 241118 for 2024-11-18).",
+          "endian": "big",
+          "id": "uds_f18b_ecu_mfg_date",
+          "name": "ECU manufacturing date",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "bcd",
+          "value_kind": "bcd"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61836
+          },
+          "description": "ISO 14229-1 identification DID 0xF18C. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f18c_ecu_serial",
+          "name": "ECU serial number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61837
+          },
+          "description": "ISO 14229-1 identification DID 0xF18D. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f18d_supported_functional_units",
+          "name": "Supported functional units",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61838
+          },
+          "description": "ISO 14229-1 identification DID 0xF18E. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f18e_kit_assembly_part_number",
+          "name": "Vehicle manufacturer kit assembly part number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61840
+          },
+          "description": "ISO 14229-1 identification DID 0xF190. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f190_vin",
+          "name": "VIN (vehicle identification number)",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61841
+          },
+          "description": "ISO 14229-1 identification DID 0xF191. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f191_vm_ecu_hw_number",
+          "name": "Vehicle manufacturer ECU hardware number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61842
+          },
+          "description": "ISO 14229-1 identification DID 0xF192. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f192_supplier_ecu_hw_number",
+          "name": "System supplier ECU hardware number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61843
+          },
+          "description": "ISO 14229-1 identification DID 0xF193. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f193_supplier_ecu_hw_version",
+          "name": "System supplier ECU hardware version number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61844
+          },
+          "description": "ISO 14229-1 identification DID 0xF194. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f194_supplier_ecu_sw_number",
+          "name": "System supplier ECU software number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61845
+          },
+          "description": "ISO 14229-1 identification DID 0xF195. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f195_supplier_ecu_sw_version",
+          "name": "System supplier ECU software version number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61846
+          },
+          "description": "ISO 14229-1 identification DID 0xF196. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f196_type_approval_number",
+          "name": "Exhaust regulation or type approval number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61847
+          },
+          "description": "ISO 14229-1 identification DID 0xF197. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f197_system_name",
+          "name": "System name or engine type",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61848
+          },
+          "description": "ISO 14229-1 identification DID 0xF198. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f198_repair_shop_code",
+          "name": "Repair shop code or tester serial number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61849
+          },
+          "description": "ISO 14229-1 identification DID 0xF199. Date, typically BCD-encoded (e.g. YY MM DD); the exact layout is manufacturer-defined; the live logger shows the BCD digits (e.g. 241118 for 2024-11-18).",
+          "endian": "big",
+          "id": "uds_f199_programming_date",
+          "name": "Programming date",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "bcd",
+          "value_kind": "bcd"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61850
+          },
+          "description": "ISO 14229-1 identification DID 0xF19A. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f19a_cal_repair_shop_code",
+          "name": "Calibration repair shop code or calibration equipment serial number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61851
+          },
+          "description": "ISO 14229-1 identification DID 0xF19B. Date, typically BCD-encoded (e.g. YY MM DD); the exact layout is manufacturer-defined; the live logger shows the BCD digits (e.g. 241118 for 2024-11-18).",
+          "endian": "big",
+          "id": "uds_f19b_calibration_date",
+          "name": "Calibration date",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "bcd",
+          "value_kind": "bcd"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61852
+          },
+          "description": "ISO 14229-1 identification DID 0xF19C. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f19c_cal_equipment_sw_number",
+          "name": "Calibration equipment software number",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61853
+          },
+          "description": "ISO 14229-1 identification DID 0xF19D. Date, typically BCD-encoded (e.g. YY MM DD); the exact layout is manufacturer-defined; the live logger shows the BCD digits (e.g. 241118 for 2024-11-18).",
+          "endian": "big",
+          "id": "uds_f19d_ecu_install_date",
+          "name": "ECU installation date",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "bcd",
+          "value_kind": "bcd"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61854
+          },
+          "description": "ISO 14229-1 identification DID 0xF19E. Usually an ASCII string. The live logger decodes the whole record as text (non-printable bytes shown as '.').",
+          "endian": "big",
+          "id": "uds_f19e_odx_file",
+          "name": "ODX file identifier",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "text",
+          "value_kind": "text"
+         },
+         {
+          "addressing": {
+           "addressing": "uds_did",
+           "did": 61855
+          },
+          "description": "ISO 14229-1 identification DID 0xF19F. Manufacturer-defined byte record; shown as hex by the live logger (the whole record).",
+          "endian": "big",
+          "id": "uds_f19f_entity",
+          "name": "Entity identifier",
+          "protocol": {
+           "kind": "uds_mode22"
+          },
+          "units": "hex",
+          "value_kind": "hex"
+         }
+        ]
+       }
+      ],
+      "id": "UDS",
+      "kind": {
+       "kind": "uds_mode22"
+      }
+     }
+    ],
+    "source": "ISO 14229-1 Annex C.1 identification DIDs 0xF180-0xF19F (0xF18F is reserved and omitted); names cross-checked with commaai/opendbc opendbc/car/uds.py (MIT)",
+    "version": "1.1.0"
+   }
+  },
+  "services": {
+   "uds-read-active-session": {
+    "description": "Read-only: one ReadDataByIdentifier (0x22) of ISO 14229-1 DID 0xF186 in the current session. Works on any UDS ECU that implements the DID (a negative response means it does not). Enter the module's request/response CAN ids in the Target fields.",
+    "id": "uds-read-active-session",
+    "name": "UDS: read active diagnostic session (DID F186)",
+    "requires_security": false,
+    "steps": [
+     {
+      "did": 61830,
+      "op": "read_data_by_identifier"
+     }
+    ]
+   },
+   "uds-read-ecu-serial": {
+    "description": "Read-only: one ReadDataByIdentifier (0x22) of ISO 14229-1 DID 0xF18C in the current session. Works on any UDS ECU that implements the DID (a negative response means it does not). Enter the module's request/response CAN ids in the Target fields.",
+    "id": "uds-read-ecu-serial",
+    "name": "UDS: read ECU serial number (DID F18C)",
+    "requires_security": false,
+    "steps": [
+     {
+      "did": 61836,
+      "op": "read_data_by_identifier"
+     }
+    ]
+   },
+   "uds-read-spare-part-number": {
+    "description": "Read-only: one ReadDataByIdentifier (0x22) of ISO 14229-1 DID 0xF187 in the current session. Works on any UDS ECU that implements the DID (a negative response means it does not). Enter the module's request/response CAN ids in the Target fields.",
+    "id": "uds-read-spare-part-number",
+    "name": "UDS: read spare part number (DID F187)",
+    "requires_security": false,
+    "steps": [
+     {
+      "did": 61831,
+      "op": "read_data_by_identifier"
+     }
+    ]
+   },
+   "uds-read-vin": {
+    "description": "Read-only: one ReadDataByIdentifier (0x22) of ISO 14229-1 DID 0xF190 in the current session. Works on any UDS ECU that implements the DID (a negative response means it does not). Enter the module's request/response CAN ids in the Target fields.",
+    "id": "uds-read-vin",
+    "name": "UDS: read VIN (DID F190)",
+    "requires_security": false,
+    "steps": [
+     {
+      "did": 61840,
+      "op": "read_data_by_identifier"
+     }
+    ]
+   }
+  }
+ },
+ "vag-mib2-coding": {
+  "_ficticio": false,
+  "coding": {
+   "mib2-high-5f": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vag-mib2-high-5f",
+    "module": "MQB-era MIB2 High infotainment unit, VAG module 5F (Information Electronics). Long coding read/written as UDS DID 0x0600. Byte/bit/option table from jilleb/mib2-toolbox (MIT), which edits the same coding from the unit's own engineering menu. Labels are the toolbox's (English, a few German). Synthetic-tested only: never checked against a real unit over UDS.",
+    "name": "VAG MIB2 High infotainment (5F) - long coding",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "enum",
+      "len": 4,
+      "name": "Brand",
+      "options": [
+       {
+        "label": "no Brand",
+        "value": 0
+       },
+       {
+        "label": "Audi",
+        "value": 1
+       },
+       {
+        "label": "VW",
+        "value": 2
+       },
+       {
+        "label": "Skoda",
+        "value": 3
+       },
+       {
+        "label": "Seat",
+        "value": 4
+       },
+       {
+        "label": "Bentley",
+        "value": 5
+       },
+       {
+        "label": "VW-NFZ",
+        "value": 6
+       },
+       {
+        "label": "Porsche",
+        "value": 7
+       }
+      ],
+      "source": "mqb-coding.esd key 0x5018000F"
+     },
+     {
+      "bit": 0,
+      "byte": 1,
+      "kind": "number",
+      "len": 4,
+      "name": "Car Class",
+      "source": "mqb-coding.esd key 0x5018040F"
+     },
+     {
+      "bit": 4,
+      "byte": 1,
+      "kind": "number",
+      "len": 4,
+      "name": "Car Generation",
+      "source": "mqb-coding.esd key 0x501804F0"
+     },
+     {
+      "bit": 0,
+      "byte": 2,
+      "kind": "number",
+      "len": 4,
+      "name": "Car Derivate",
+      "source": "mqb-coding.esd key 0x5018080F"
+     },
+     {
+      "bit": 4,
+      "byte": 2,
+      "kind": "number",
+      "len": 4,
+      "name": "Car Derivate Supplement",
+      "source": "mqb-coding.esd key 0x501808F0"
+     },
+     {
+      "bit": 0,
+      "byte": 3,
+      "kind": "enum",
+      "len": 8,
+      "name": "Country Navigation",
+      "options": [
+       {
+        "label": "None",
+        "value": 0
+       },
+       {
+        "label": "EU",
+        "value": 1
+       },
+       {
+        "label": "NAR",
+        "value": 2
+       },
+       {
+        "label": "MSA",
+        "value": 3
+       },
+       {
+        "label": "Korea",
+        "value": 4
+       },
+       {
+        "label": "China",
+        "value": 5
+       },
+       {
+        "label": "Japan",
+        "value": 6
+       },
+       {
+        "label": "AsiaPacific",
+        "value": 7
+       },
+       {
+        "label": "Australia",
+        "value": 8
+       },
+       {
+        "label": "South Africa",
+        "value": 9
+       },
+       {
+        "label": "NEAST",
+        "value": 10
+       },
+       {
+        "label": "NMAfrica",
+        "value": 11
+       },
+       {
+        "label": "MEAST",
+        "value": 12
+       },
+       {
+        "label": "CentralAsia",
+        "value": 13
+       },
+       {
+        "label": "India",
+        "value": 14
+       },
+       {
+        "label": "Israel",
+        "value": 15
+       },
+       {
+        "label": "Taiwan",
+        "value": 16
+       },
+       {
+        "label": "MSA 2 (Chile)",
+        "value": 17
+       },
+       {
+        "label": "China 2",
+        "value": 18
+       },
+       {
+        "label": "China 3",
+        "value": 19
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50180CFF"
+     },
+     {
+      "bit": 0,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 1 HT",
+      "source": "mqb-coding.esd key 0x50181001"
+     },
+     {
+      "bit": 1,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 1 TT",
+      "source": "mqb-coding.esd key 0x50181002"
+     },
+     {
+      "bit": 2,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 2 HT",
+      "source": "mqb-coding.esd key 0x50181004"
+     },
+     {
+      "bit": 3,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 2 TT",
+      "source": "mqb-coding.esd key 0x50181008"
+     },
+     {
+      "bit": 4,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 3 HT",
+      "source": "mqb-coding.esd key 0x50181010"
+     },
+     {
+      "bit": 5,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 3 TT",
+      "source": "mqb-coding.esd key 0x50181020"
+     },
+     {
+      "bit": 6,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 4 HT",
+      "source": "mqb-coding.esd key 0x50181040"
+     },
+     {
+      "bit": 7,
+      "byte": 4,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 4 TT",
+      "source": "mqb-coding.esd key 0x50181080"
+     },
+     {
+      "bit": 0,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 5 HT",
+      "source": "mqb-coding.esd key 0x50181401"
+     },
+     {
+      "bit": 1,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 5 TT",
+      "source": "mqb-coding.esd key 0x50181402"
+     },
+     {
+      "bit": 2,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 6 HT",
+      "source": "mqb-coding.esd key 0x50181404"
+     },
+     {
+      "bit": 3,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 6 TT",
+      "source": "mqb-coding.esd key 0x50181408"
+     },
+     {
+      "bit": 4,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 7 HT",
+      "source": "mqb-coding.esd key 0x50181410"
+     },
+     {
+      "bit": 5,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 7 TT",
+      "source": "mqb-coding.esd key 0x50181420"
+     },
+     {
+      "bit": 6,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 8 HT",
+      "source": "mqb-coding.esd key 0x50181440"
+     },
+     {
+      "bit": 7,
+      "byte": 5,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 8 TT",
+      "source": "mqb-coding.esd key 0x50181480"
+     },
+     {
+      "bit": 0,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 9 HT",
+      "source": "mqb-coding.esd key 0x50181801"
+     },
+     {
+      "bit": 1,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 9 TT",
+      "source": "mqb-coding.esd key 0x50181802"
+     },
+     {
+      "bit": 2,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 10 HT",
+      "source": "mqb-coding.esd key 0x50181804"
+     },
+     {
+      "bit": 3,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 10 TT",
+      "source": "mqb-coding.esd key 0x50181808"
+     },
+     {
+      "bit": 4,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 11 HT",
+      "source": "mqb-coding.esd key 0x50181810"
+     },
+     {
+      "bit": 5,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 11 TT",
+      "source": "mqb-coding.esd key 0x50181820"
+     },
+     {
+      "bit": 6,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 12 HT",
+      "source": "mqb-coding.esd key 0x50181840"
+     },
+     {
+      "bit": 7,
+      "byte": 6,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 12 TT",
+      "source": "mqb-coding.esd key 0x50181880"
+     },
+     {
+      "bit": 0,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 13 HT",
+      "source": "mqb-coding.esd key 0x50181C01"
+     },
+     {
+      "bit": 1,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 13 TT",
+      "source": "mqb-coding.esd key 0x50181C02"
+     },
+     {
+      "bit": 2,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 14 HT",
+      "source": "mqb-coding.esd key 0x50181C04"
+     },
+     {
+      "bit": 3,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 14 TT",
+      "source": "mqb-coding.esd key 0x50181C08"
+     },
+     {
+      "bit": 4,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 15 HT",
+      "source": "mqb-coding.esd key 0x50181C10"
+     },
+     {
+      "bit": 5,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 15 TT",
+      "source": "mqb-coding.esd key 0x50181C20"
+     },
+     {
+      "bit": 6,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 16 HT",
+      "source": "mqb-coding.esd key 0x50181C40"
+     },
+     {
+      "bit": 7,
+      "byte": 7,
+      "kind": "bool",
+      "len": 1,
+      "name": "Channel 16 TT",
+      "source": "mqb-coding.esd key 0x50181C80"
+     },
+     {
+      "bit": 0,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "Microphone 1",
+      "source": "mqb-coding.esd key 0x50182001"
+     },
+     {
+      "bit": 1,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "Microphone 2",
+      "source": "mqb-coding.esd key 0x50182002"
+     },
+     {
+      "bit": 2,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "Headphones Output 1",
+      "source": "mqb-coding.esd key 0x50182004"
+     },
+     {
+      "bit": 3,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "Headphones Output 2",
+      "source": "mqb-coding.esd key 0x50182008"
+     },
+     {
+      "bit": 4,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "AUX IN",
+      "source": "mqb-coding.esd key 0x50182010"
+     },
+     {
+      "bit": 5,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "AMI/MDI interface",
+      "source": "mqb-coding.esd key 0x50182020"
+     },
+     {
+      "bit": 6,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "VDA-NF IN (TEL IN)",
+      "source": "mqb-coding.esd key 0x50182040"
+     },
+     {
+      "bit": 7,
+      "byte": 8,
+      "kind": "bool",
+      "len": 1,
+      "name": "Wake Up Over ECL",
+      "source": "mqb-coding.esd key 0x50182080"
+     },
+     {
+      "bit": 0,
+      "byte": 9,
+      "kind": "enum",
+      "len": 4,
+      "name": "Bandsettings FM",
+      "options": [
+       {
+        "label": "no setting",
+        "value": 0
+       },
+       {
+        "label": "EU (RdW)",
+        "value": 1
+       },
+       {
+        "label": "NAR",
+        "value": 2
+       },
+       {
+        "label": "JP",
+        "value": 3
+       },
+       {
+        "label": "KOR",
+        "value": 4
+       },
+       {
+        "label": "China",
+        "value": 5
+       }
+      ],
+      "source": "mqb-coding.esd key 0x5018240F"
+     },
+     {
+      "bit": 4,
+      "byte": 9,
+      "kind": "enum",
+      "len": 4,
+      "name": "Bandsettings AM",
+      "options": [
+       {
+        "label": "no setting",
+        "value": 0
+       },
+       {
+        "label": "EU (RdW)",
+        "value": 1
+       },
+       {
+        "label": "NAR",
+        "value": 2
+       },
+       {
+        "label": "JP",
+        "value": 3
+       },
+       {
+        "label": "EU",
+        "value": 4
+       },
+       {
+        "label": "AUS",
+        "value": 5
+       }
+      ],
+      "source": "mqb-coding.esd key 0x501824F0"
+     },
+     {
+      "bit": 0,
+      "byte": 10,
+      "kind": "enum",
+      "len": 4,
+      "name": "Bandsettings DAB Band 1",
+      "options": [
+       {
+        "label": "OFF",
+        "value": 0
+       },
+       {
+        "label": "EU Band III -N",
+        "value": 1
+       },
+       {
+        "label": "EU Band III",
+        "value": 2
+       },
+       {
+        "label": "CANADA L-Band",
+        "value": 3
+       },
+       {
+        "label": "KOREA Band III",
+        "value": 4
+       },
+       {
+        "label": "CHINA Band III",
+        "value": 5
+       },
+       {
+        "label": "Download Table 1",
+        "value": 6
+       },
+       {
+        "label": "NEW ZEALAND Band III",
+        "value": 7
+       }
+      ],
+      "source": "mqb-coding.esd key 0x5018280F"
+     },
+     {
+      "bit": 4,
+      "byte": 10,
+      "kind": "enum",
+      "len": 4,
+      "name": "Bandsettings DAB Band 2",
+      "options": [
+       {
+        "label": "OFF",
+        "value": 0
+       },
+       {
+        "label": "L-Band",
+        "value": 1
+       },
+       {
+        "label": "Download Table 2",
+        "value": 2
+       }
+      ],
+      "source": "mqb-coding.esd key 0x501828F0"
+     },
+     {
+      "bit": 0,
+      "byte": 11,
+      "kind": "enum",
+      "len": 8,
+      "name": "Amplifier",
+      "options": [
+       {
+        "label": "no assign",
+        "value": 0
+       },
+       {
+        "label": "intern",
+        "value": 1
+       },
+       {
+        "label": "external MOST",
+        "value": 2
+       },
+       {
+        "label": "reserved",
+        "value": 3
+       },
+       {
+        "label": "external BAP",
+        "value": 4
+       },
+       {
+        "label": "internal Individual",
+        "value": 5
+       },
+       {
+        "label": "external BOOSTER",
+        "value": 6
+       },
+       {
+        "label": "external BAP with presets",
+        "value": 7
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50182CFF"
+     },
+     {
+      "bit": 0,
+      "byte": 12,
+      "kind": "bool",
+      "len": 1,
+      "name": "FM Antenna",
+      "source": "mqb-coding.esd key 0x50183001"
+     },
+     {
+      "bit": 1,
+      "byte": 12,
+      "kind": "enum",
+      "len": 3,
+      "name": "HD FM Antenna Mode",
+      "options": [
+       {
+        "label": "AM FM ANT",
+        "value": 0
+       },
+       {
+        "label": "Switching",
+        "value": 1
+       },
+       {
+        "label": "FM ANT",
+        "value": 2
+       },
+       {
+        "label": "MRC",
+        "value": 3
+       },
+       {
+        "label": "Testmode",
+        "value": 4
+       }
+      ],
+      "source": "mqb-coding.esd key 0x5018300E"
+     },
+     {
+      "bit": 0,
+      "byte": 13,
+      "kind": "bool",
+      "len": 1,
+      "name": "RDS",
+      "source": "mqb-coding.esd key 0x50183401"
+     },
+     {
+      "bit": 1,
+      "byte": 13,
+      "kind": "enum",
+      "len": 1,
+      "name": "AF",
+      "options": [
+       {
+        "label": "persistent",
+        "value": 0
+       },
+       {
+        "label": "temporary",
+        "value": 1
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50183402"
+     },
+     {
+      "bit": 2,
+      "byte": 13,
+      "kind": "bool",
+      "len": 1,
+      "name": "HD radio coding",
+      "source": "mqb-coding.esd key 0x50183404"
+     },
+     {
+      "bit": 3,
+      "byte": 13,
+      "kind": "bool",
+      "len": 1,
+      "name": "Radiotext+",
+      "source": "mqb-coding.esd key 0x50183408"
+     },
+     {
+      "bit": 4,
+      "byte": 13,
+      "kind": "bool",
+      "len": 1,
+      "name": "PI ignore",
+      "source": "mqb-coding.esd key 0x50183410"
+     },
+     {
+      "bit": 5,
+      "byte": 13,
+      "kind": "enum",
+      "len": 2,
+      "name": "BWS",
+      "options": [
+       {
+        "label": "no BWS",
+        "value": 0
+       },
+       {
+        "label": "restricted",
+        "value": 1
+       },
+       {
+        "label": "unrestricted",
+        "value": 2
+       },
+       {
+        "label": "rest/unrest",
+        "value": 3
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50183460"
+     },
+     {
+      "bit": 7,
+      "byte": 13,
+      "kind": "bool",
+      "len": 1,
+      "name": "DAB alarm",
+      "source": "mqb-coding.esd key 0x50183480"
+     },
+     {
+      "bit": 0,
+      "byte": 14,
+      "kind": "bool",
+      "len": 1,
+      "name": "FM PTY31 off/on",
+      "source": "mqb-coding.esd key 0x50183801"
+     },
+     {
+      "bit": 1,
+      "byte": 14,
+      "kind": "bool",
+      "len": 1,
+      "name": "AM sperre off/on",
+      "source": "mqb-coding.esd key 0x50183802"
+     },
+     {
+      "bit": 2,
+      "byte": 14,
+      "kind": "bool",
+      "len": 1,
+      "name": "HD radio coding AM",
+      "source": "mqb-coding.esd key 0x50183804"
+     },
+     {
+      "bit": 3,
+      "byte": 14,
+      "kind": "bool",
+      "len": 1,
+      "name": "Multiple entry switch",
+      "source": "mqb-coding.esd key 0x50183808"
+     },
+     {
+      "bit": 4,
+      "byte": 14,
+      "kind": "bool",
+      "len": 1,
+      "name": "RDS deactivation",
+      "source": "mqb-coding.esd key 0x50183810"
+     },
+     {
+      "bit": 5,
+      "byte": 14,
+      "kind": "bool",
+      "len": 1,
+      "name": "AF deactivation",
+      "source": "mqb-coding.esd key 0x50183820"
+     },
+     {
+      "bit": 0,
+      "byte": 15,
+      "kind": "bool",
+      "len": 1,
+      "name": "Baseplate",
+      "source": "mqb-coding.esd key 0x50183C01"
+     },
+     {
+      "bit": 1,
+      "byte": 15,
+      "kind": "bool",
+      "len": 1,
+      "name": "Ant. Baseplate",
+      "source": "mqb-coding.esd key 0x50183C02"
+     },
+     {
+      "bit": 2,
+      "byte": 15,
+      "kind": "bool",
+      "len": 1,
+      "name": "Force Cradle",
+      "source": "mqb-coding.esd key 0x50183C04"
+     },
+     {
+      "bit": 3,
+      "byte": 15,
+      "kind": "bool",
+      "len": 1,
+      "name": "Handy in Cradle",
+      "source": "mqb-coding.esd key 0x50183C08"
+     },
+     {
+      "bit": 4,
+      "byte": 15,
+      "kind": "bool",
+      "len": 1,
+      "name": "Telefon Modul",
+      "source": "mqb-coding.esd key 0x50183C10"
+     },
+     {
+      "bit": 5,
+      "byte": 15,
+      "kind": "bool",
+      "len": 1,
+      "name": "Wireless Charger",
+      "source": "mqb-coding.esd key 0x50183C20"
+     },
+     {
+      "bit": 0,
+      "byte": 16,
+      "kind": "bool",
+      "len": 1,
+      "name": "BT available",
+      "source": "mqb-coding.esd key 0x50184001"
+     },
+     {
+      "bit": 1,
+      "byte": 16,
+      "kind": "bool",
+      "len": 1,
+      "name": "BT Multimedia",
+      "source": "mqb-coding.esd key 0x50184002"
+     },
+     {
+      "bit": 2,
+      "byte": 16,
+      "kind": "bool",
+      "len": 1,
+      "name": "BT phone",
+      "source": "mqb-coding.esd key 0x50184004"
+     },
+     {
+      "bit": 3,
+      "byte": 16,
+      "kind": "bool",
+      "len": 1,
+      "name": "BT audio",
+      "source": "mqb-coding.esd key 0x50184008"
+     },
+     {
+      "bit": 4,
+      "byte": 16,
+      "kind": "enum",
+      "len": 2,
+      "name": "BT visibility",
+      "options": [
+       {
+        "label": "off",
+        "value": 0
+       },
+       {
+        "label": "auto",
+        "value": 1
+       },
+       {
+        "label": "on",
+        "value": 2
+       },
+       {
+        "label": "limited",
+        "value": 3
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184030"
+     },
+     {
+      "bit": 6,
+      "byte": 16,
+      "kind": "bool",
+      "len": 1,
+      "name": "BT headphones",
+      "source": "mqb-coding.esd key 0x50184040"
+     },
+     {
+      "bit": 7,
+      "byte": 16,
+      "kind": "bool",
+      "len": 1,
+      "name": "legal RVC",
+      "source": "mqb-coding.esd key 0x50184080"
+     },
+     {
+      "bit": 0,
+      "byte": 17,
+      "kind": "enum",
+      "len": 8,
+      "name": "Skin",
+      "options": [
+       {
+        "label": "no Skin",
+        "value": 0
+       },
+       {
+        "label": "Skin 1",
+        "value": 1
+       },
+       {
+        "label": "Skin 2",
+        "value": 2
+       },
+       {
+        "label": "Skin 3",
+        "value": 3
+       },
+       {
+        "label": "Skin 4",
+        "value": 4
+       },
+       {
+        "label": "Skin 5",
+        "value": 5
+       }
+      ],
+      "source": "mqb-coding.esd key 0x501844FF"
+     },
+     {
+      "bit": 0,
+      "byte": 18,
+      "kind": "number",
+      "len": 8,
+      "name": "Screenings",
+      "source": "mqb-coding.esd key 0x501848FF"
+     },
+     {
+      "bit": 0,
+      "byte": 19,
+      "kind": "enum",
+      "len": 1,
+      "name": "Boardbook",
+      "options": [
+       {
+        "label": "not displayed",
+        "value": 0
+       },
+       {
+        "label": "displayed",
+        "value": 1
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184C01"
+     },
+     {
+      "bit": 1,
+      "byte": 19,
+      "kind": "enum",
+      "len": 1,
+      "name": "Suspension arm",
+      "options": [
+       {
+        "label": "links",
+        "value": 0
+       },
+       {
+        "label": "rechts",
+        "value": 1
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184C02"
+     },
+     {
+      "bit": 2,
+      "byte": 19,
+      "kind": "enum",
+      "len": 2,
+      "name": "Kombi Track",
+      "options": [
+       {
+        "label": "n/a",
+        "value": 0
+       },
+       {
+        "label": "long",
+        "value": 1
+       },
+       {
+        "label": "short",
+        "value": 2
+       },
+       {
+        "label": "reserved",
+        "value": 3
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184C0C"
+     },
+     {
+      "bit": 4,
+      "byte": 19,
+      "kind": "enum",
+      "len": 1,
+      "name": "RVC",
+      "options": [
+       {
+        "label": "not active",
+        "value": 0
+       },
+       {
+        "label": "active",
+        "value": 1
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184C10"
+     },
+     {
+      "bit": 5,
+      "byte": 19,
+      "kind": "enum",
+      "len": 1,
+      "name": "MOST",
+      "options": [
+       {
+        "label": "off",
+        "value": 0
+       },
+       {
+        "label": "on",
+        "value": 1
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184C20"
+     },
+     {
+      "bit": 6,
+      "byte": 19,
+      "kind": "enum",
+      "len": 2,
+      "name": "USB",
+      "options": [
+       {
+        "label": "off",
+        "value": 0
+       },
+       {
+        "label": "charge",
+        "value": 1
+       },
+       {
+        "label": "full",
+        "value": 2
+       },
+       {
+        "label": "ipod",
+        "value": 3
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50184CC0"
+     },
+     {
+      "bit": 0,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Display 1",
+      "source": "mqb-coding.esd key 0x50185001"
+     },
+     {
+      "bit": 1,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Display 2",
+      "source": "mqb-coding.esd key 0x50185002"
+     },
+     {
+      "bit": 2,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Display 3",
+      "source": "mqb-coding.esd key 0x50185004"
+     },
+     {
+      "bit": 3,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Display 4",
+      "source": "mqb-coding.esd key 0x50185008"
+     },
+     {
+      "bit": 4,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Dashboard Audio Slide",
+      "source": "mqb-coding.esd key 0x50185010"
+     },
+     {
+      "bit": 5,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Dashboard Phone Slide",
+      "source": "mqb-coding.esd key 0x50185020"
+     },
+     {
+      "bit": 6,
+      "byte": 20,
+      "kind": "bool",
+      "len": 1,
+      "name": "Dashboard Nav Slide",
+      "source": "mqb-coding.esd key 0x50185040"
+     },
+     {
+      "bit": 7,
+      "byte": 20,
+      "kind": "enum",
+      "len": 1,
+      "name": "Dashboard Communication",
+      "options": [
+       {
+        "label": "BAP",
+        "value": 0
+       },
+       {
+        "label": "DDP",
+        "value": 1
+       }
+      ],
+      "source": "mqb-coding.esd key 0x50185080"
+     },
+     {
+      "bit": 0,
+      "byte": 21,
+      "kind": "bool",
+      "len": 1,
+      "name": "VIWI",
+      "source": "mqb-coding.esd key 0x50185401"
+     },
+     {
+      "bit": 4,
+      "byte": 21,
+      "kind": "bool",
+      "len": 1,
+      "name": "Scrolling",
+      "source": "mqb-coding.esd key 0x50185410"
+     },
+     {
+      "bit": 5,
+      "byte": 21,
+      "kind": "bool",
+      "len": 1,
+      "name": "Messaging via MAP",
+      "source": "mqb-coding.esd key 0x50185420"
+     },
+     {
+      "bit": 6,
+      "byte": 21,
+      "kind": "bool",
+      "len": 1,
+      "name": "Pagewise scrolling",
+      "source": "mqb-coding.esd key 0x50185440"
+     },
+     {
+      "bit": 7,
+      "byte": 21,
+      "kind": "bool",
+      "len": 1,
+      "name": "GPS Antenna Availability",
+      "source": "mqb-coding.esd key 0x50185480"
+     },
+     {
+      "bit": 0,
+      "byte": 22,
+      "kind": "bool",
+      "len": 1,
+      "name": "Dashboard Graphic Variant",
+      "source": "mqb-coding.esd key 0x50185801"
+     },
+     {
+      "bit": 1,
+      "byte": 22,
+      "kind": "bool",
+      "len": 1,
+      "name": "Dashboard Text Replace",
+      "source": "mqb-coding.esd key 0x50185802"
+     },
+     {
+      "bit": 2,
+      "byte": 22,
+      "kind": "bool",
+      "len": 1,
+      "name": "SDS (byte 22)",
+      "source": "mqb-coding.esd key 0x50185804"
+     },
+     {
+      "bit": 3,
+      "byte": 22,
+      "kind": "bool",
+      "len": 1,
+      "name": "OnlineFunctions",
+      "source": "mqb-coding.esd key 0x50185808"
+     },
+     {
+      "bit": 4,
+      "byte": 22,
+      "kind": "bool",
+      "len": 1,
+      "name": "Touch Screen Remote",
+      "source": "mqb-coding.esd key 0x50185810"
+     },
+     {
+      "bit": 5,
+      "byte": 22,
+      "kind": "bool",
+      "len": 1,
+      "name": "Keypad Rear Keys",
+      "source": "mqb-coding.esd key 0x50185820"
+     },
+     {
+      "bit": 0,
+      "byte": 23,
+      "kind": "bool",
+      "len": 1,
+      "name": "Speller",
+      "source": "mqb-coding.esd key 0x50185C01"
+     },
+     {
+      "bit": 1,
+      "byte": 23,
+      "kind": "bool",
+      "len": 1,
+      "name": "Initial Disclaimer",
+      "source": "mqb-coding.esd key 0x50185C02"
+     },
+     {
+      "bit": 2,
+      "byte": 23,
+      "kind": "bool",
+      "len": 1,
+      "name": "Legal Disclaimer",
+      "source": "mqb-coding.esd key 0x50185C04"
+     },
+     {
+      "bit": 3,
+      "byte": 23,
+      "kind": "bool",
+      "len": 1,
+      "name": "Display Turnout Speed",
+      "source": "mqb-coding.esd key 0x50185C08"
+     },
+     {
+      "bit": 0,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "Emergency Call",
+      "source": "mqb-coding.esd key 0x50186001"
+     },
+     {
+      "bit": 1,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "SDS (byte 24)",
+      "source": "mqb-coding.esd key 0x50186002"
+     },
+     {
+      "bit": 2,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "Navigation",
+      "source": "mqb-coding.esd key 0x50186004"
+     },
+     {
+      "bit": 3,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "WLAN",
+      "source": "mqb-coding.esd key 0x50186008"
+     },
+     {
+      "bit": 4,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "Import media",
+      "source": "mqb-coding.esd key 0x50186010"
+     },
+     {
+      "bit": 5,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "Ripping",
+      "source": "mqb-coding.esd key 0x50186020"
+     },
+     {
+      "bit": 6,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "VZA",
+      "source": "mqb-coding.esd key 0x50186040"
+     },
+     {
+      "bit": 7,
+      "byte": 24,
+      "kind": "bool",
+      "len": 1,
+      "name": "PSD",
+      "source": "mqb-coding.esd key 0x50186080"
+     }
+    ],
+    "requires_security": false,
+    "source": "jilleb/mib2-toolbox Toolbox/GEM/mqb-coding.esd @ a8e2f08 (MIT, (c) 2019 Chillout): persistence key 0x5018BBMM = coding byte BB/4, mask MM; DID 0x0600 'VW Coding Value' from bri3d/VW_Flash lib/constants.py @ 293f46d (BSD-2-Clause)"
+   }
+  }
+ },
+ "vag-modules": {
+  "_ficticio": false,
+  "modules": {
+   "vag-uds-can": {
+    "addr_note": "addr = low byte of the 11-bit request id. It is NOT the VAG address word.",
+    "modules": [
+     {
+      "addr": 224,
+      "name": "Engine",
+      "protocol": "uds",
+      "req_id": 2016,
+      "resp_id": 2024,
+      "source": "opendbc (Ecu.engine 0x7e0, OBD rx offset +8); VW_Flash lib/constants.py ecu_control_module_identifier(0x7E8, 0x7E0)"
+     },
+     {
+      "addr": 225,
+      "name": "Transmission (DSG DQ250-MQB / DQ381)",
+      "protocol": "uds",
+      "req_id": 2017,
+      "resp_id": 2025,
+      "source": "opendbc (Ecu.transmission 0x7e1); VW_Flash lib/modules/dq250mqb.py + dq381.py dsg_control_module_identifier(0x7E9, 0x7E1)"
+     },
+     {
+      "addr": 21,
+      "name": "Airbag / SRS",
+      "protocol": "uds",
+      "req_id": 1813,
+      "resp_id": 1919,
+      "source": "opendbc (Ecu.srs 0x715, rx offset 0x6A)"
+     },
+     {
+      "addr": 18,
+      "name": "Electric power steering",
+      "protocol": "uds",
+      "req_id": 1810,
+      "resp_id": 1916,
+      "source": "opendbc (Ecu.eps 0x712, rx offset 0x6A)"
+     },
+     {
+      "addr": 87,
+      "name": "Forward radar (ACC)",
+      "protocol": "uds",
+      "req_id": 1879,
+      "resp_id": 1985,
+      "source": "opendbc (Ecu.fwdRadar 0x757, rx offset 0x6A)"
+     },
+     {
+      "addr": 79,
+      "name": "Forward camera",
+      "protocol": "uds",
+      "req_id": 1871,
+      "resp_id": 1977,
+      "source": "opendbc values.py extra_ecus (Ecu.fwdCamera 0x74f, rx offset 0x6A)"
+     },
+     {
+      "addr": 15,
+      "name": "AWD coupling (Haldex Gen5, MQB 4Motion)",
+      "protocol": "uds",
+      "req_id": 1807,
+      "resp_id": 1913,
+      "source": "VW_Flash lib/modules/haldex4motion.py haldex_control_module_identifier(0x779, 0x70F)"
+     }
+    ],
+    "vehicle": "VAG — UDS on CAN (MQB / MEB / late PQ), open-source-sourced subset"
+   }
+  }
+ },
+ "vcar-demo": {
+  "_ficticio": true,
+  "adaptation": {
+   "abs": {
+    "channels": [
+     {
+      "did": 1552,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "mm"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 5,
+      "min": 2,
+      "name": "Pad wear warning threshold",
+      "note": "DID 0x0610"
+     },
+     {
+      "did": 1553,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 100.0,
+        "offset": 0.0,
+        "unit": "ms"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 30,
+      "min": 5,
+      "name": "Hill-hold release delay",
+      "note": "DID 0x0611"
+     },
+     {
+      "id": 544,
+      "kind": "routine",
+      "name": "Brake bleed sequence",
+      "note": "RoutineControl 0x0220; result 00 = OK",
+      "result": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     },
+     {
+      "did": 1312,
+      "kind": "actuator",
+      "max_duration_ms": 3000,
+      "name": "Return pump motor",
+      "note": "IO control 0x0520; 01 = on, control returned to the ECU afterwards",
+      "state": [
+       1
+      ],
+      "status": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     }
+    ],
+    "id": "vcar-abs-adaptation",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - ABS / ESC adaptation",
+    "req_id": "713",
+    "requires_security": false,
+    "resp_id": "77D"
+   },
+   "airbag": {
+    "channels": [
+     {
+      "did": 1552,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 3,
+      "min": 0,
+      "name": "Seat-belt chime volume",
+      "note": "DID 0x0610"
+     },
+     {
+      "did": 1553,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "s"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 20,
+      "min": 0,
+      "name": "Seat-belt warning delay",
+      "note": "DID 0x0611"
+     },
+     {
+      "id": 549,
+      "kind": "routine",
+      "name": "Occupant sensor zero-point calibration",
+      "note": "RoutineControl 0x0225; result 00 = OK",
+      "result": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     },
+     {
+      "did": 1328,
+      "kind": "actuator",
+      "max_duration_ms": 10000,
+      "name": "Airbag warning lamp",
+      "note": "IO control 0x0530; 01 = on, control returned to the ECU afterwards",
+      "options": [
+       "short_term_adjustment",
+       "reset_to_default"
+      ],
+      "state": [
+       1
+      ],
+      "status": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     }
+    ],
+    "id": "vcar-airbag-adaptation",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Airbag adaptation",
+    "req_id": "715",
+    "requires_security": true,
+    "resp_id": "77F"
+   },
+   "body": {
+    "channels": [
+     {
+      "did": 1552,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "km/h"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 40,
+      "min": 5,
+      "name": "Auto-lock speed",
+      "note": "DID 0x0610"
+     },
+     {
+      "did": 1553,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "s"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 90,
+      "min": 0,
+      "name": "Coming-home light duration",
+      "note": "DID 0x0611"
+     },
+     {
+      "id": 560,
+      "kind": "routine",
+      "name": "Window position initialisation",
+      "note": "RoutineControl 0x0230; result 00 = OK",
+      "result": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     },
+     {
+      "did": 1360,
+      "kind": "actuator",
+      "max": 3,
+      "max_duration_ms": 20000,
+      "min": 0,
+      "name": "Interior light",
+      "note": "IO control 0x0550; brightness step 0..3 (01 = default test state); timed tests return control to the ECU at the end",
+      "options": [
+       "short_term_adjustment",
+       "reset_to_default",
+       "freeze_current_state"
+      ],
+      "state": [
+       1
+      ],
+      "status": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      },
+      "value": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "step"
+       },
+       "width": 1
+      }
+     }
+    ],
+    "id": "vcar-body-adaptation",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Body / central adaptation",
+    "req_id": "70E",
+    "requires_security": false,
+    "resp_id": "778"
+   },
+   "cluster": {
+    "channels": [
+     {
+      "did": 1552,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 0.39215686274509803,
+        "offset": 0.0,
+        "unit": "%"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 255,
+      "min": 25,
+      "name": "Display brightness",
+      "note": "DID 0x0610"
+     },
+     {
+      "did": 1553,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1000.0,
+        "offset": 0.0,
+        "unit": "km"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 30,
+      "min": 10,
+      "name": "Service interval",
+      "note": "DID 0x0611"
+     },
+     {
+      "id": 576,
+      "kind": "routine",
+      "name": "Service interval reset",
+      "note": "RoutineControl 0x0240; result 00 = OK",
+      "result": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     },
+     {
+      "did": 1344,
+      "kind": "actuator",
+      "max_duration_ms": 8000,
+      "name": "Gauge sweep test",
+      "note": "IO control 0x0540; 01 = on, control returned to the ECU afterwards",
+      "state": [
+       1
+      ],
+      "status": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     }
+    ],
+    "id": "vcar-cluster-adaptation",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Instrument cluster adaptation",
+    "req_id": "714",
+    "requires_security": false,
+    "resp_id": "77E"
+   },
+   "engine": {
+    "channels": [
+     {
+      "did": 1552,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "rpm"
+       },
+       "width": 2
+      },
+      "kind": "value",
+      "max": 1000,
+      "min": 650,
+      "name": "Idle speed target",
+      "note": "DID 0x0610"
+     },
+     {
+      "did": 1553,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "s"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 120,
+      "min": 0,
+      "name": "Fan run-on time",
+      "note": "DID 0x0611"
+     },
+     {
+      "id": 515,
+      "kind": "routine",
+      "name": "Throttle body adaptation",
+      "note": "RoutineControl 0x0203; result 00 = OK",
+      "result": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     },
+     {
+      "did": 1280,
+      "kind": "actuator",
+      "max": 100,
+      "max_duration_ms": 10000,
+      "min": 0,
+      "name": "Radiator fan",
+      "note": "IO control 0x0500; fan duty 0..100 % (01 = default test state); timed tests return control to the ECU at the end",
+      "options": [
+       "short_term_adjustment",
+       "reset_to_default",
+       "freeze_current_state"
+      ],
+      "state": [
+       1
+      ],
+      "status": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      },
+      "value": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "%"
+       },
+       "width": 1
+      }
+     }
+    ],
+    "id": "vcar-engine-adaptation",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Engine adaptation",
+    "req_id": "7E0",
+    "requires_security": false,
+    "resp_id": "7E8"
+   },
+   "gearbox": {
+    "channels": [
+     {
+      "did": 1552,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 10,
+      "min": 0,
+      "name": "Shift firmness",
+      "note": "DID 0x0610"
+     },
+     {
+      "did": 1553,
+      "field": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": "%"
+       },
+       "width": 1
+      },
+      "kind": "value",
+      "max": 100,
+      "min": 50,
+      "name": "Kick-down threshold",
+      "note": "DID 0x0611"
+     },
+     {
+      "id": 528,
+      "kind": "routine",
+      "name": "Reset clutch adaptation",
+      "note": "RoutineControl 0x0210; result 00 = OK",
+      "result": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     },
+     {
+      "did": 1296,
+      "kind": "actuator",
+      "max_duration_ms": 5000,
+      "name": "Shift-lock solenoid",
+      "note": "IO control 0x0510; 01 = on, control returned to the ECU afterwards",
+      "state": [
+       1
+      ],
+      "status": {
+       "offset": 0,
+       "scaling": {
+        "factor": 1.0,
+        "offset": 0.0,
+        "unit": ""
+       },
+       "width": 1
+      }
+     }
+    ],
+    "id": "vcar-gearbox-adaptation",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Gearbox adaptation",
+    "req_id": "7E1",
+    "requires_security": false,
+    "resp_id": "7E9"
+   }
+  },
+  "coding": {
+   "abs": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vcar-abs",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - ABS / ESC",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Hill hold",
+      "note": ""
+     },
+     {
+      "bit": 1,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "ESC off button",
+      "note": ""
+     },
+     {
+      "bit": 2,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Tyre pressure monitoring",
+      "note": ""
+     },
+     {
+      "bit": 0,
+      "byte": 1,
+      "kind": "enum",
+      "len": 8,
+      "name": "Brake disc size",
+      "note": "",
+      "options": [
+       {
+        "label": "small",
+        "value": 0
+       },
+       {
+        "label": "standard",
+        "value": 1
+       },
+       {
+        "label": "large",
+        "value": 2
+       }
+      ]
+     }
+    ],
+    "req_id": "713",
+    "requires_security": false,
+    "resp_id": "77D"
+   },
+   "airbag": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vcar-airbag",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Airbag",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Passenger airbag deactivation switch",
+      "note": ""
+     },
+     {
+      "bit": 1,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Rear seat-belt reminder",
+      "note": ""
+     },
+     {
+      "bit": 2,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Seat occupancy sensor",
+      "note": ""
+     }
+    ],
+    "req_id": "715",
+    "requires_security": true,
+    "resp_id": "77F"
+   },
+   "body": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vcar-body",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Body / central",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Auto-lock when driving",
+      "note": ""
+     },
+     {
+      "bit": 1,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Comfort opening via remote",
+      "note": ""
+     },
+     {
+      "bit": 2,
+      "byte": 0,
+      "kind": "enum",
+      "len": 2,
+      "name": "Daytime running lights",
+      "note": "",
+      "options": [
+       {
+        "label": "off",
+        "value": 0
+       },
+       {
+        "label": "on",
+        "value": 1
+       },
+       {
+        "label": "automatic",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "bit": 0,
+      "byte": 1,
+      "kind": "bool",
+      "len": 1,
+      "name": "Rear fog lamp",
+      "note": ""
+     }
+    ],
+    "req_id": "70E",
+    "requires_security": false,
+    "resp_id": "778"
+   },
+   "cluster": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vcar-cluster",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Instrument cluster",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "enum",
+      "len": 1,
+      "name": "Units",
+      "note": "",
+      "options": [
+       {
+        "label": "metric",
+        "value": 0
+       },
+       {
+        "label": "imperial",
+        "value": 1
+       }
+      ]
+     },
+     {
+      "bit": 1,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Digital speed display",
+      "note": ""
+     },
+     {
+      "bit": 2,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Service interval display",
+      "note": ""
+     },
+     {
+      "bit": 0,
+      "byte": 1,
+      "kind": "enum",
+      "len": 8,
+      "name": "Language",
+      "note": "",
+      "options": [
+       {
+        "label": "English",
+        "value": 0
+       },
+       {
+        "label": "Norwegian",
+        "value": 1
+       },
+       {
+        "label": "German",
+        "value": 2
+       },
+       {
+        "label": "French",
+        "value": 3
+       }
+      ]
+     }
+    ],
+    "req_id": "714",
+    "requires_security": false,
+    "resp_id": "77E"
+   },
+   "engine": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vcar-engine",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Engine",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Start-stop",
+      "note": ""
+     },
+     {
+      "bit": 1,
+      "byte": 0,
+      "kind": "enum",
+      "len": 2,
+      "name": "Fuel type",
+      "note": "",
+      "options": [
+       {
+        "label": "petrol",
+        "value": 0
+       },
+       {
+        "label": "diesel",
+        "value": 1
+       },
+       {
+        "label": "hybrid",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "bit": 0,
+      "byte": 1,
+      "kind": "bool",
+      "len": 1,
+      "name": "Cruise control",
+      "note": ""
+     },
+     {
+      "bit": 1,
+      "byte": 1,
+      "kind": "enum",
+      "len": 2,
+      "name": "Gearbox type",
+      "note": "",
+      "options": [
+       {
+        "label": "manual",
+        "value": 0
+       },
+       {
+        "label": "automatic",
+        "value": 1
+       },
+       {
+        "label": "dual-clutch",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "bit": 0,
+      "byte": 2,
+      "kind": "bool",
+      "len": 1,
+      "name": "Speed limiter",
+      "note": ""
+     }
+    ],
+    "req_id": "7E0",
+    "requires_security": false,
+    "resp_id": "7E8"
+   },
+   "gearbox": {
+    "addressing": {
+     "dids": [
+      1536
+     ],
+     "kind": "did"
+    },
+    "id": "vcar-gearbox",
+    "module": "OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "name": "Virtual car - Gearbox",
+    "params": [
+     {
+      "bit": 0,
+      "byte": 0,
+      "kind": "enum",
+      "len": 2,
+      "name": "Drive layout",
+      "note": "",
+      "options": [
+       {
+        "label": "front-wheel",
+        "value": 0
+       },
+       {
+        "label": "all-wheel",
+        "value": 1
+       },
+       {
+        "label": "rear-wheel",
+        "value": 2
+       }
+      ]
+     },
+     {
+      "bit": 2,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Sport mode button",
+      "note": ""
+     },
+     {
+      "bit": 3,
+      "byte": 0,
+      "kind": "bool",
+      "len": 1,
+      "name": "Tow mode",
+      "note": ""
+     },
+     {
+      "bit": 0,
+      "byte": 1,
+      "kind": "number",
+      "len": 8,
+      "name": "Tyre circumference",
+      "note": "centimetres"
+     }
+    ],
+    "req_id": "7E1",
+    "requires_security": false,
+    "resp_id": "7E9"
+   }
+  },
+  "modules": {
+   "vcar-demo": {
+    "modules": [
+     {
+      "addr": 1,
+      "name": "Engine",
+      "protocol": "uds",
+      "req_id": 2016,
+      "resp_id": 2024
+     },
+     {
+      "addr": 2,
+      "name": "Gearbox",
+      "protocol": "uds",
+      "req_id": 2017,
+      "resp_id": 2025
+     },
+     {
+      "addr": 3,
+      "name": "ABS / ESC",
+      "protocol": "uds",
+      "req_id": 1811,
+      "resp_id": 1917
+     },
+     {
+      "addr": 4,
+      "name": "Airbag",
+      "protocol": "uds",
+      "req_id": 1813,
+      "resp_id": 1919
+     },
+     {
+      "addr": 5,
+      "name": "Body / central",
+      "protocol": "uds",
+      "req_id": 1806,
+      "resp_id": 1912
+     },
+     {
+      "addr": 6,
+      "name": "Instrument cluster",
+      "protocol": "uds",
+      "req_id": 1812,
+      "resp_id": 1918
+     },
+     {
+      "addr": 1,
+      "name": "Engine (OBD-II)",
+      "protocol": "obd",
+      "req_id": 2015,
+      "resp_id": 2024
+     },
+     {
+      "addr": 7,
+      "name": "Parking assist (not fitted)",
+      "protocol": "uds",
+      "req_id": 1898,
+      "resp_id": 2004
+     }
+    ],
+    "vehicle": "OpenTune virtual car (demo)"
+   }
+  },
+  "services": {
+   "airbag-lamp-test": {
+    "description": "Airbag (715/77F): extended session, SecurityAccess level 01 with the virtual car's TEST-ONLY XOR key, lamp IO 0x0530 on, then control returned. Needs a key provider for the test algorithm (see docs/VIRTUAL-CAR.md). OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "id": "vcar-airbag-lamp-test",
+    "name": "Virtual car - airbag lamp test (secured)",
+    "req_id": "715",
+    "requires_security": true,
+    "resp_id": "77F",
+    "steps": [
+     {
+      "op": "diagnostic_session",
+      "subfunction": 3
+     },
+     {
+      "level": 1,
+      "op": "security_access"
+     },
+     {
+      "control": 3,
+      "data": [
+       1
+      ],
+      "did": 1328,
+      "op": "io_control"
+     },
+     {
+      "op": "expect_positive"
+     },
+     {
+      "control": 0,
+      "did": 1328,
+      "op": "io_control"
+     },
+     {
+      "op": "expect_positive"
+     }
+    ]
+   },
+   "cluster-service-reset": {
+    "description": "Instrument cluster (714/77E): extended session, start routine 0x0240, confirm, read the service interval DID 0x0611. OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "id": "vcar-cluster-service-reset",
+    "name": "Virtual car - service interval reset",
+    "req_id": "714",
+    "requires_security": false,
+    "resp_id": "77E",
+    "steps": [
+     {
+      "op": "diagnostic_session",
+      "subfunction": 3
+     },
+     {
+      "control_type": 1,
+      "op": "routine_control",
+      "routine_id": 576
+     },
+     {
+      "op": "expect_positive"
+     },
+     {
+      "did": 1553,
+      "op": "read_data_by_identifier"
+     }
+    ]
+   },
+   "engine-fan-test": {
+    "description": "Engine (7E0/7E8): extended session, drive IO 0x0500 on, wait, return control to the ECU. OpenTune virtual car only (driver 'vcar'): fictional addresses and data, not any real vehicle.",
+    "id": "vcar-engine-fan-test",
+    "name": "Virtual car - radiator fan test",
+    "req_id": "7E0",
+    "requires_security": false,
+    "resp_id": "7E8",
+    "steps": [
+     {
+      "op": "diagnostic_session",
+      "subfunction": 3
+     },
+     {
+      "control": 3,
+      "data": [
+       1
+      ],
+      "did": 1280,
+      "op": "io_control"
+     },
+     {
+      "op": "expect_positive"
+     },
+     {
+      "ms": 500,
+      "op": "wait"
+     },
+     {
+      "control": 0,
+      "did": 1280,
+      "op": "io_control"
+     },
+     {
+      "op": "expect_positive"
+     }
+    ]
+   }
+  }
+ }
+}

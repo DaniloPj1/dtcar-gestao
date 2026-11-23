@@ -53,7 +53,7 @@ function Mostrador({ l, f }) {
   const tem = typeof l.de === "number" && typeof l.ate === "number" && l.ate > l.de;
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
   const zs = tem ? zonasDe(l, f) : null;
-  return html`<div class=${"mostrador" + (zs ? " com-faixa" : "")} data-situacao=${f ? f.situacao : null} title=${f ? f.fonte : null} data-pid=${l.pid} data-chave=${l.chave}>
+  return html`<div class=${"mostrador" + (zs ? " com-faixa" : "") + (f && !f.aplica ? " faixa-nao-julga" : "")} data-situacao=${f && f.aplica ? f.situacao : null} title=${f ? f.fonte : null} data-pid=${l.pid} data-chave=${l.chave}>
     <div class="mostrador-rot">${l.rotulo}</div>
     ${tem ? html`<svg class="mostrador-arco" viewBox="0 0 86 86" aria-hidden="true">
       <g transform="rotate(135 43 43)">
@@ -82,7 +82,7 @@ function LinhaViva({ l, f }) {
   const parte = tem ? Math.max(0, Math.min(1, (l.valor - l.de) / (l.ate - l.de))) : 0;
   const zs = tem ? zonasDe(l, f) : null;
   const pc = x => (x * 100).toFixed(1) + "%";
-  return html`<div class="linha-viva" data-situacao=${f ? f.situacao : null} title=${f ? f.fonte : null} data-pid=${l.pid} data-chave=${l.chave}>
+  return html`<div class=${"linha-viva" + (f && !f.aplica ? " faixa-nao-julga" : "")} data-situacao=${f && f.aplica ? f.situacao : null} title=${f ? f.fonte : null} data-pid=${l.pid} data-chave=${l.chave}>
     <div class="linha-viva-topo">
       <span class="linha-viva-rot">${l.rotulo}</span>
       <b class="linha-viva-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
@@ -216,6 +216,25 @@ function Obd() {
   // não pode custar um desenho a mais. A escolha fica guardada: quem acompanha rotação e sonda num
   // carro quer as mesmas no próximo.
   const historia = useRef({});
+  // Acumulador do ao vivo: o valor chega aqui na hora e vai para a tela no próximo desenho.
+  const pendentes = useRef({}), voltaPend = useRef(0), relogioDesenho = useRef(null), ultimoDesenho = useRef(0);
+  const MS_ENTRE_DESENHOS = 250;
+  const despejar = (minha, modo) => {
+    relogioDesenho.current = null;
+    if (rodada.current !== minha) return;
+    const novos = pendentes.current; pendentes.current = {};
+    if (!Object.keys(novos).length) return;
+    ultimoDesenho.current = Date.now();
+    setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, novos), volta: voltaPend.current, rodando: true, modo }));
+  };
+  const desenhar = (minha, modo) => {
+    if (relogioDesenho.current) return;                               // já há um desenho marcado
+    const falta = MS_ENTRE_DESENHOS - (Date.now() - ultimoDesenho.current);
+    if (falta <= 0) { despejar(minha, modo); return; }
+    relogioDesenho.current = setTimeout(() => despejar(minha, modo), falta);
+  };
+  // Sair da tela ou parar a roda não pode deixar um desenho marcado para trás.
+  useEffect(() => () => { if (relogioDesenho.current) { clearTimeout(relogioDesenho.current); relogioDesenho.current = null; } }, []);
   const [noGrafico, setNoGrafico] = useState(() => { try { const l = JSON.parse(window.localStorage.getItem("obd_grafico") || "[]"); return Array.isArray(l) ? l.slice(0, grafico.GRAFICOS_MAX * grafico.LINHAS_MAX) : []; } catch (e) { return []; } });
   const [graficoRecusa, setGraficoRecusa] = useState("");
   const trocarGrafico = chave => {
@@ -228,9 +247,6 @@ function Obd() {
   // deste carro. Precisa da placa: sem saber qual é o carro não há com quem comparar.
   const sessaoCmp = useRef(null);
   const [comparado, setComparado] = useState(null);     // { achados, sessoes, guardou } | { semPlaca } | { pouco }
-  // A FAIXA DE TRABALHO ao lado de cada leitura (pedido do Danilo, 21/11/2026): as leituras anteriores
-  // DESTE carro, carregadas quando a placa é conhecida. Sem elas vale a referência da tabela.
-  const [anteriores, setAnteriores] = useState([]);
   const [vivo, setVivo] = useState(null);       // { valores: {chave: leitura}, volta, rodando, modo }
   // Falhas vigiadas DURANTE a leitura ao vivo: a roda pergunta de tempos em tempos e, se o módulo
   // gravar código com o motor trabalhando, o botão de falhas fica vermelho na hora.
@@ -362,7 +378,12 @@ function Obd() {
   // Guardar uma leitura TROCA o que está na tela: é o "uma de cada vez". E qualquer leitura nova
   // para a roda antes, porque o adaptador atende um pedido por vez.
   const guardar = (o, d) => { setVivo(null); setRes({ o, d }); };
-  const pararVivo = () => { rodada.current = 0; };
+  const pararVivo = () => {
+    if (relogioDesenho.current) { clearTimeout(relogioDesenho.current); relogioDesenho.current = null; }
+    const novos = pendentes.current; pendentes.current = {};
+    if (Object.keys(novos).length) setVivo(x => (x ? { ...x, valores: Object.assign({}, x.valores, novos) } : x));
+    rodada.current = 0;
+  };
 
   const lerFalhas = () => { pararVivo(); return rodar("Lendo as falhas…", async () => {
     const f = await obd.lerFalhas();
@@ -386,6 +407,7 @@ function Obd() {
     setErro("");
     setRes(null);                                                   // uma leitura por vez na tela
     historia.current = {};
+    pendentes.current = {}; ultimoDesenho.current = 0;
     // Trocar de modo com uma leitura em curso: o resumo do que já foi lido é guardado ANTES de a
     // sessão nova tomar o lugar (senão as amostras anteriores sumiam sem registro).
     const anterior = sessaoCmp.current; sessaoCmp.current = null;
@@ -401,7 +423,18 @@ function Obd() {
     try {
       await obd.lerAoVivoSeguido(
         lig.pidsSuportados,
-        (v, volta) => { if (rodada.current === minha) { grafico.anotarPonto(historia.current, v); if (sessaoCmp.current) compara.anotar(sessaoCmp.current, v); } if (rodada.current === minha) setVivo(x => ({ valores: Object.assign({}, (x && x.valores) || {}, { [v.chave]: v }), volta, rodando: true, modo })); },
+        (v, volta) => {
+          if (rodada.current !== minha) return;
+          grafico.anotarPonto(historia.current, v);
+          if (sessaoCmp.current) compara.anotar(sessaoCmp.current, v);
+          // A TELA REDESENHA NO MÁXIMO 4 VEZES POR SEGUNDO. Antes era UM desenho por valor lido: com
+          // 20 leituras por volta e o gráfico aberto (3 SVGs de até 120 pontos cada), o celular não
+          // acompanhava e a tela parecia TRAVADA — só voltava ao sair e entrar, que é quando a
+          // história é zerada (defeito que o Danilo viu no carro, 23/11/2026). O valor nunca se
+          // perde: ele é guardado na hora e entra no próximo desenho.
+          pendentes.current[v.chave] = v; voltaPend.current = volta;
+          desenhar(minha, modo);
+        },
         () => rodada.current === minha,
         {
           escolhidos: modo === "combustivel" ? obd.PIDS_COMBUSTIVEL : () => escolhidasAgora.current,
@@ -497,12 +530,6 @@ function Obd() {
     guardar("conf", { monitores, chassi, odometro, conferencia: confere.conferir({ avisoAdaptador: lig.aviso, versao: lig.versao, vinLido: chassi, chassiCadastro }) });
   }); };
 
-  useEffect(() => {
-    let vivoAqui = true; setAnteriores([]);
-    if (!placa) return undefined;
-    api.obd.listar({ placa, tipo: "sessao", limite: 8 }).then(l => { if (vivoAqui) setAnteriores((l || []).map(x => x.dados).filter(Boolean)); }).catch(() => {});
-    return () => { vivoAqui = false; };
-  }, [placa]);
   // A roda parou: fecha o resumo, compara com as leituras anteriores DESTE carro e guarda sozinho.
   const rodandoAgora = !!(vivo && vivo.rodando);
   // Saiu da tela com a leitura ao vivo ainda rodando: o resumo é guardado na saída (uma vez só —
@@ -675,7 +702,7 @@ function Obd() {
             ${g.leituras.map(l => html`<label key=${l.pid} class="obd-cx">
               <input type="checkbox" data-pid=${l.pid} checked=${!escolhidas || escolhidas.includes(l.pid)}
                 onChange=${e => marcar(l.pid, e.target.checked)} />
-              <span>${l.rotulo}${l.unidade ? " (" + l.unidade + ")" : ""}</span></label>`)}
+              <span>${obd.nomeDaLeitura(l)}</span></label>`)}
           </div>`)}
           <div class=${listaDoCarro ? "nota" : "erro"}>${listaDoCarro
             ? "A lista acima é a que ESTE carro respondeu agora: o que ele não tem não aparece aqui, por mais que o modelo costume ter."
@@ -778,7 +805,7 @@ function Obd() {
           // em que regime o carro está AGORA, para escolher a faixa que se aplica
           const ag = k => (vivo.valores[k] && typeof vivo.valores[k].valor === "number" ? vivo.valores[k].valor : undefined);
           const estadoAgora = (sessaoCmp.current && sessaoCmp.current.estado) || { rpm: ag(0x0c * 100), velocidade: ag(0x0d * 100), temperatura: ag(0x05 * 100) };
-          const ctxFaixa = { rpm: ag(0x0c * 100), regime: vivo.rodando ? compara.regimeDe(estadoAgora) : null, sessoes: anteriores, carro: { modelo: (v && v.modelo) || "", motor: (v && v.motor) || "" } };
+          const ctxFaixa = { rpm: ag(0x0c * 100), regime: vivo.rodando ? compara.regimeDe(estadoAgora) : null, carro: { modelo: (v && v.modelo) || "", motor: (v && v.motor) || "" } };
           const fx = l => faixas.faixaPara(l, ctxFaixa);
           const comFaixa = lidos.filter(l => typeof l.de === "number");
           const resto = lidos.filter(l => typeof l.de !== "number");

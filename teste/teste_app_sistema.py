@@ -877,6 +877,11 @@ try:
 
         # LEITURA DE COMBUSTÍVEL (pedido do Danilo em 19/11/2026): a do primeiro contato
         pg.click('#obd-combustivel'); pg.wait_for_selector('#obd-comb', timeout=30000)
+        # a tela redesenha no máximo 4x por segundo (23/11/2026): o cartão aparece antes de a volta inteira chegar
+        for _ in range(60):
+            tc = pg.inner_text('#obd-comb')
+            if 'PONDO' in tc or 'TIRANDO' in tc or 'ordem' in tc: break
+            pg.wait_for_timeout(250)
         tc = pg.inner_text('#obd-comb')
         t('Combustível' in pg.inner_text('#obd-r-vivo'), 'o cartão troca de nome no modo combustível')
         t('PONDO' in tc or 'TIRANDO' in tc or 'ordem' in tc, 'diz quanto o módulo está corrigindo: %s' % tc.replace('\n', ' ')[:120])
@@ -907,6 +912,9 @@ try:
         t(risco and float(risco.split()[0]) > 0, 'o arco está preenchido conforme o valor: %s' % risco)
         t('8000' in pg.inner_text('#obd-r-vivo [data-pid="12"]'), 'o fim da escala da rotação aparece no mostrador')
         pg.click('#obd-jeito-lista'); pg.wait_for_timeout(300)
+        # o segundo toque acima PAROU a roda: religa antes de conferir o filtro com ela girando
+        if 'PARAR' not in pg.inner_text('#obd-vivo'): pg.click('#obd-vivo'); pg.wait_for_timeout(900)
+        t('PARAR' in pg.inner_text('#obd-vivo'), 'a roda está girando antes do teste do filtro')
         # O FILTRO VALE NA HORA (falha apontada pelo Danilo, 22/11/2026): marcar uma leitura com o ao vivo rodando faz ela aparecer
         pg.click('#obd-escolher'); pg.wait_for_selector('#obd-escolha input[data-pid]', timeout=5000)
         pg.click('#obd-padrao'); pg.wait_for_timeout(400)
@@ -921,19 +929,25 @@ try:
         pg.click('#obd-padrao'); pg.wait_for_timeout(200); pg.click('#obd-escolher'); pg.wait_for_timeout(200)
         # FAIXA DE TRABALHO ao lado da leitura (pedido do Danilo, 21/11/2026)
         lv5 = pg.locator('#obd-r-vivo .linha-viva[data-pid="5"]')
-        t(lv5.get_attribute('data-situacao') in ('dentro', 'acima', 'abaixo') and 'suposto' in (lv5.get_attribute('title') or ''), 'a temperatura do motor tem faixa de trabalho; de onde ela veio fica no toque longo')
+        t('referência' in (lv5.get_attribute('title') or '') and 'suposto' in (lv5.get_attribute('title') or ''), 'a faixa da temperatura vem SEMPRE da tabela de referência, e de onde ela veio fica no toque longo: ' + str(lv5.get_attribute('title')))
         t(lv5.locator('.faixa-txt').count() == 0 and not any(p in lv5.inner_text() for p in ('DENTRO', 'ACIMA', 'ABAIXO', 'Faixa de trabalho')), 'sem texto embaixo: a cor e os números bastam (pedido do Danilo)')
         bz = pg.locator('#obd-r-vivo [data-pid="5"] .barra-zonas')
         t(bz.count() == 1 and bz.locator('.zona.antes').count() == 1 and bz.locator('.zona.trabalho').count() == 1 and bz.locator('.zona.depois').count() == 1 and bz.locator('.agulha').count() == 1, 'a barra tem as três zonas (antes, faixa de trabalho, depois) e a agulha do valor de agora')
         cores = pg.evaluate("() => ['antes','trabalho','depois'].map(k => getComputedStyle(document.querySelector('#obd-r-vivo [data-pid=\"5\"] .barra-zonas .zona.' + k)).backgroundColor)")
         t(len(set(cores)) == 3, 'cada zona tem a sua tonalidade: ' + str(cores))
         t(cores[2] == 'rgb(179, 38, 30)', 'acima do limite é vermelho: ' + cores[2])
+        # A FAIXA NÃO MUDA COM O ACELERADOR (defeito da Amarok, 23/11/2026): mesma faixa em lenta e acelerando
+        faixa_lenta = bz.locator('.barra-zonas-pes').inner_text()
+        pg.evaluate("() => { window.__obd.rpmAlta = true; }")
+        pg.wait_for_timeout(1200)
+        t(pg.locator('#obd-r-vivo [data-pid="5"] .barra-zonas .barra-zonas-pes').inner_text() == faixa_lenta, 'a faixa da temperatura é a MESMA com o motor acelerado: ' + faixa_lenta)
+        pg.evaluate("() => { window.__obd.rpmAlta = false; }")
         lz = pg.evaluate("() => { const q = k => document.querySelector('#obd-r-vivo [data-pid=\"5\"] .barra-zonas .zona.' + k).getBoundingClientRect(); const a = q('antes'), w = q('trabalho'), d = q('depois'); const tot = a.width + w.width + d.width; return [a.width / tot, w.width / tot, d.width / tot]; }")
         t(all(abs(v - 1 / 3) < 0.02 for v in lz), 'a barra aproxima: a faixa 85 a 105 ocupa o terço do meio (escala 65 a 125): ' + str([round(v, 3) for v in lz]))
-        t(bz.locator('.barra-zonas-pes').inner_text().split() == ['85', '105'], 'os dois limites vêm escritos embaixo da barra')
+        t(bz.locator('.barra-zonas-pes').inner_text().split() == ['80', '105'], 'os dois limites vêm escritos embaixo da barra')
         pg.click('#obd-jeito-painel'); pg.wait_for_timeout(300)
         corp = pg.evaluate("() => { const e = document.querySelector('#obd-r-vivo .mostrador[data-pid=\"5\"] .zona.depois'); return e ? getComputedStyle(e).stroke : ''; }")
-        t(corp == 'rgb(179, 38, 30)' and pg.locator('#obd-r-vivo .mostrador[data-pid="5"] .agulha').count() == 1 and pg.locator('#obd-r-vivo .mostrador[data-pid="5"] .mostrador-pes').inner_text().split() == ['85', 'a', '105'], 'no ponteiro também: zona acima do limite em vermelho e a agulha: ' + corp)
+        t(corp == 'rgb(179, 38, 30)' and pg.locator('#obd-r-vivo .mostrador[data-pid="5"] .agulha').count() == 1 and pg.locator('#obd-r-vivo .mostrador[data-pid="5"] .mostrador-pes').inner_text().split() == ['80', 'a', '105'], 'no ponteiro também: zona acima do limite em vermelho e a agulha: ' + corp)
         pg.click('#obd-jeito-lista'); pg.wait_for_timeout(300)
         t(pg.locator('#obd-r-vivo [data-pid="12"] .barra-zonas').count() == 0 and pg.locator('#obd-r-vivo [data-pid="12"] .linha-viva-barra').count() == 1, 'sem faixa, a barra continua a simples')
         t(pg.locator('#obd-r-vivo .linha-viva[data-pid="12"]').get_attribute('data-situacao') is None, 'leitura sem referência nem histórico fica sem faixa: nada inventado')
@@ -977,7 +991,8 @@ try:
         # acontece com adaptador lento, que este de mentira não imita — por isso a defesa é o
         # número da rodada em app/telas.js; aqui conferimos o que o mecânico vê.)
         pg.click('#obd-vivo'); pg.wait_for_timeout(1200)
-        t('AO VIVO' in pg.inner_text('#obd-r-vivo'), 'ligar de novo volta a girar')
+        if 'PARAR' not in pg.inner_text('#obd-vivo'): pg.click('#obd-vivo'); pg.wait_for_timeout(1200)   # estava girando: o primeiro toque parou
+        t('AO VIVO' in pg.inner_text('#obd-r-vivo') and 'PARAR' in pg.inner_text('#obd-vivo'), 'ligar de novo volta a girar')
         c = rpm_na_tela(); pg.wait_for_timeout(1200)
         t(c and rpm_na_tela() != c, 'depois de parar e ligar, o valor volta a mudar sozinho')
         pg.click('#obd-vivo'); pg.wait_for_timeout(600)

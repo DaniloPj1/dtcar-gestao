@@ -746,6 +746,23 @@ export async function lerAoVivo(pidsSuportados) {
  * `suportados` é o que o CARRO respondeu (manda sempre); `escolhidos` é o que o mecânico marcou no
  * filtro (vazio = todas as que o carro tiver).
  */
+/**
+ * O NOME de uma leitura na lista do filtro. Os PIDs que trazem mais de um dado (as sondas: tensão e
+ * lambda no mesmo pedido) não têm rótulo próprio, só as partes — e a caixa do filtro saía EM BRANCO.
+ * Era por isso que "não aparecia a sonda 2" (achado com o Danilo, 23/11/2026).
+ */
+export function nomeDaLeitura(p) {
+  if (!p) return "";
+  if (p.rotulo) return p.rotulo + (p.unidade ? " (" + p.unidade + ")" : "");
+  const ps = p.partes || [];
+  if (!ps.length) return "PID " + p.pid.toString(16).toUpperCase().padStart(2, "0");
+  // "Sonda larga 1 (lambda)" + "Sonda larga 1 (tensão)" → "Sonda larga 1 (lambda, tensão)"
+  const corte = ps[0].rotulo.indexOf(" (");
+  const base = corte > 0 ? ps[0].rotulo.slice(0, corte) : ps[0].rotulo;
+  const caudas = ps.map(x => (x.rotulo.startsWith(base) ? x.rotulo.slice(base.length) : x.rotulo).replace(/^\s*\(|\)\s*$/g, "").trim()).filter(Boolean);
+  return caudas.length ? base + " (" + caudas.join(", ") + ")" : base;
+}
+
 export function leiturasPara(suportados, escolhidos) {
   const temLista = suportados && suportados.length;
   const marcou = escolhidos && escolhidos.length;
@@ -862,6 +879,7 @@ export function tipoDeMotor(combustivel) {
 }
 
 /** quantas vezes um PID pode não responder antes de sair da roda */
+const VAZIAS_ATE_PARAR = 3;   // voltas seguidas sem resposta nenhuma antes de a roda desistir
 const PACIENCIA = 2;
 /** tempo de espera de cada leitura da roda: curto, para um PID mudo não travar o ritmo */
 const ESPERA_VIVO = 1500;
@@ -892,7 +910,7 @@ export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc =
   const listaDeAgora = () => leiturasPara(pidsSuportados, typeof opc.escolhidos === "function" ? opc.escolhidos() : opc.escolhidos);
   if (!listaDeAgora().length) return 0;
   const mudos = {}, jaLidos = {};
-  let volta = 0;
+  let volta = 0, vazias = 0;
   while (continuar()) {
     volta++;
     let leuAlgo = false;
@@ -913,9 +931,20 @@ export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc =
         mudos[p.pid] = (mudos[p.pid] || 0) + 1;
       }
     }
-    // volta inteira sem ninguém responder: o carro desligou ou o adaptador saiu. Parar é melhor que
-    // girar à toa gastando bateria e deixando a tela mentindo que está lendo.
-    if (!leuAlgo) return volta;
+    // Volta inteira sem ninguém responder: o carro desligou, o adaptador saiu — ou o celular ficou
+    // ocupado demais desenhando (o gráfico aberto) e as respostas chegaram depois do tempo. Por isso
+    // NÃO desiste na primeira: só depois de VAZIAS_ATE_PARAR voltas seguidas sem nada. Antes bastava
+    // uma volta ruim para a leitura morrer sozinha e o mecânico achar que o app travou
+    // (defeito que o Danilo viu no carro, 23/11/2026).
+    if (!leuAlgo) {
+      if (++vazias >= VAZIAS_ATE_PARAR) return volta;
+      // Volta inteira vazia é a CONEXÃO, não a leitura: quem ficou mudo nessa volta ganha a paciência
+      // de volta, senão a roda sairia dela com todas as leituras marcadas como "este carro não tem".
+      for (const k of Object.keys(mudos)) delete mudos[k];
+      await new Promise(f => setTimeout(f, 300));
+      continue;
+    }
+    vazias = 0;
     // De vez em quando dá uma olhada nas falhas SEM parar a roda: falha que nasce com o motor
     // trabalhando (o mecânico acelerando, mexendo num chicote) é justamente a que interessa pegar,
     // e ela não apareceria até alguém lembrar de abrir a tela de falhas. Um pedido a cada

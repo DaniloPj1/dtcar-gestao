@@ -99,9 +99,9 @@ export const PARAMETROS = [
   { id: "maf_por_litro", nome: "MAF esperado em marcha lenta, por litro de cilindrada", valor: 1, unidade: "g/s por litro",
     nivel: "suposto", onde: "geral", usado: false,
     fonte: "Regra de oficina; as próprias fontes discordam (0,8–1,2 e 1,0–2,0). O único dado de montadora que achamos (Hilux 3.0 diesel: 5–12 g/s) já foge dela." },
-  { id: "arrefecimento_trabalho", nome: "Temperatura do motor em trabalho", de: 85, ate: 105, unidade: "°C",
+  { id: "arrefecimento_trabalho", nome: "Temperatura do motor em trabalho", de: 80, ate: 105, unidade: "°C",
     nivel: "suposto", onde: "geral", usado: false,
-    fonte: "Reparação. Não achamos faixa normal nem temperatura de dano publicada por montadora nenhuma. A conferir no Raven." },
+    fonte: "Reparação: do termostato abrindo (82 a 92 °C na maioria dos motores) até a ventoinha entrar (100 a 105 °C). Era de 85 a 105 e marcava ABAIXO um motor a 82 °C, que é normal (23/11/2026). Não achamos faixa normal nem temperatura de dano publicada por montadora nenhuma. A conferir no Raven." },
 ];
 
 export const porId = id => PARAMETROS.find(p => p.id === id) || null;

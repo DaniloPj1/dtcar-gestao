@@ -60,14 +60,14 @@ const numBR = n => String(n).replace(".", ",");
  */
 export function FaixaTxt({ f }) {
   if (!f) return null;
-  return html`<div class="faixa-txt" data-situacao=${f.situacao} title=${f.fonte}>${f.texto}</div>`;
+  return html`<div class=${"faixa-txt" + (f.aplica ? "" : " faixa-nao-julga")} data-situacao=${f.aplica ? f.situacao : null} title=${f.fonte}>${f.texto}</div>`;
 }
 
 /** Leitura em número grande, sem ponteiro: para ler de longe, com o celular apoiado no carro. */
 export function Digital({ l, f }) {
   return html`<div class="digital" data-pid=${l.pid} data-chave=${l.chave}>
     <div class="digital-rot">${l.rotulo}</div>
-    <div class=${"digital-num" + (f && f.situacao === "acima" ? " acima" : "")}><b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}</div>
+    <div class=${"digital-num" + (f && f.aplica && f.situacao === "acima" ? " acima" : "")}><b>${numBR(l.valor)}</b>${l.unidade ? html`<span>${l.unidade}</span>` : null}</div>
     <${FaixaTxt} f=${f} />
   </div>`;
 }
@@ -88,7 +88,7 @@ function UmGrafico({ g, historia, agora, faixaDe }) {
       <svg class="graf-amostra" viewBox="0 0 26 8" aria-hidden="true"><line x1="0" y1="4" x2="26" y2="4" stroke=${CORES[i]} stroke-width="2.4" stroke-dasharray=${TRACOS[i]} /></svg>
       <span class="graf-rot">${l.rotulo}</span>
       <b class="graf-num">${numBR(l.valor)}${l.unidade ? html`<span>${l.unidade}</span>` : null}</b>
-      ${faixaDe && faixaDe(l) ? html`<${FaixaTxt} f=${faixaDe(l)} />` : null}</div>`)}</div>
+      <${FaixaTxt} f=${faixaDe ? faixaDe(l) : null} /></div>`)}</div>
     <div class="graf-corpo">
       <div class="graf-esc"><span>${e.max == null ? "" : numBR(Math.round(e.max * 10) / 10)}</span><span>${e.min == null ? "" : numBR(Math.round(e.min * 10) / 10)}</span></div>
       <svg viewBox=${"0 0 " + G_L + " " + G_A} preserveAspectRatio="none" role="img" aria-label=${"Gráfico do último minuto: " + g.leituras.map(l => l.rotulo).join(", ")}>

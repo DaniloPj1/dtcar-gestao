@@ -1899,3 +1899,199 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pf-serie-bad{stroke:var(--pf-bad)}
 .lst-sec{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);margin:14px 2px 2px;padding-top:10px;border-top:1px solid var(--line)}
 .lst-sec:first-child{margin-top:0;padding-top:0;border-top:0}
+
+/* Refinamento para o computador: hierarquia com linhas, espaçamento e os azuis da oficina. */
+@media screen and (min-width:900px){
+  :root{--bg:#eceef0;--azul-acao:#174f94;--azul-acao-hover:#225da4;--grafite:#16191d}
+  .lateral{--steel:var(--grafite);--brand:#6399d1}
+  .lateral-user small{color:#a9b3c0}
+  .lat-menu{box-shadow:0 8px 22px rgba(0,0,0,.2)}
+  .lat-menu button:focus-visible{outline-offset:-2px}
+
+  .painel,.tela-ordens,.pf,.tela-ajustes,.tela-mais{font-variant-numeric:tabular-nums;gap:18px}
+  :is(.painel,.pf) .painel-topo{align-items:center;padding:4px 0 15px;border-bottom:1px solid var(--line)}
+  :is(.painel,.pf) .painel-topo h1{font-size:34px;font-weight:700;color:var(--ink);letter-spacing:.01em;text-wrap:wrap}
+  :is(.painel,.pf) .painel-topo .sub{margin-top:4px}
+
+  /* Painel: ações reunidas numa faixa, janelas separadas pelo cabeçalho. */
+  .painel .janela:not(.sem-moldura){padding:16px;gap:14px}
+  .painel .janela-cab{flex-wrap:wrap;padding-bottom:9px;border-bottom:1px solid var(--line)}
+  .painel .janela-cab h3{font-size:19px;text-wrap:wrap}
+  .painel .barra-edicao{top:120px}
+  .painel .acoes-dia{
+    grid-template-columns:repeat(auto-fit,minmax(min(100%,160px),1fr));
+    padding:10px;gap:8px;border-radius:var(--r);background:var(--grafite);
+  }
+  .painel .acao-dia{
+    flex-direction:row;justify-content:flex-start;min-height:58px;padding:9px 12px;
+    border-radius:8px;border-color:#4b535d;background:#24292f;color:#fff;text-align:left;
+  }
+  .painel .acao-dia svg{flex:none;width:24px;height:24px;padding:0;border-radius:0;background:none;color:#b8d2ef}
+  .painel .acao-dia:hover{border-color:#8bb4df;background:#303943;box-shadow:none}
+  .painel .acao-dia:hover svg{background:none;color:#fff}
+  .painel .acao-dia:focus-visible{outline-color:#b8d2ef;outline-offset:-3px}
+  .painel .acao-dia:first-child{background:var(--azul-acao);border-color:#5082b5}
+  .painel .acao-dia:first-child:hover{background:var(--azul-acao-hover)}
+  .painel .atalho{min-height:40px;padding:7px 12px;border-radius:8px}
+  .painel .atalho:hover{background:var(--brand-soft);color:var(--brand-strong)}
+  .painel .patio-item.t-info{border-top-color:var(--warn)}
+  .painel .patio-item.t-warn{border-top-color:var(--ok)}
+  .painel .clima-hoje{flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line)}
+  .painel .clima-hoje>b{font-size:46px;color:var(--brand-strong)}
+  .painel .clima-dias{grid-template-columns:repeat(auto-fit,minmax(min(100%,86px),1fr))}
+  .painel .clima-dias small{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+  .painel .noticias a{padding:10px 4px}
+  .painel .noticias a:first-child{padding-top:0}
+  .painel .noticias a:last-child{padding-bottom:0}
+  .painel .noticias strong{font-size:15px}
+  .painel .noticias a:hover strong{color:var(--brand-strong);text-decoration:underline}
+
+  /* O.S.: valor, etapa e opções na mesma posição em cada visão. */
+  .tela-ordens .os-resumo,.tela-ordens .os-filtros{margin-bottom:0}
+  .tela-ordens .osr{--cor-etapa:var(--line);border-top-color:var(--cor-etapa)}
+  .tela-ordens .osr-total{--cor-etapa:var(--ink)}
+  .tela-ordens .osr-orcamento{--cor-etapa:var(--warn)}
+  .tela-ordens .osr-execucao{--cor-etapa:var(--brand)}
+  .tela-ordens .osr-pagamento{--cor-etapa:var(--ok)}
+  .tela-ordens .osr-fechada{--cor-etapa:var(--muted)}
+  .tela-ordens .osr-atraso{--cor-etapa:var(--bad)}
+  .tela-ordens .osr b{font-size:27px}
+  .tela-ordens .osr:is(.ativo,:hover){border-color:var(--brand);border-top-color:var(--cor-etapa)}
+  .tela-ordens .os-filtros{
+    grid-template-columns:minmax(0,1fr) minmax(0,190px) minmax(0,175px) auto;
+    padding:10px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  }
+  .tela-ordens .troca-visao button{min-height:38px}
+  .tela-ordens .troca-visao button:focus-visible{outline-offset:-3px}
+  .tela-ordens .troca-visao button[aria-pressed="true"]{color:var(--brand-strong);font-weight:700}
+  .tela-ordens > .card > .secao-topo > .sub{font-weight:700;color:var(--ink)}
+  .tela-ordens .los-corpo{padding:12px;gap:14px}
+  .tela-ordens .los-corpo .dir{min-width:0}
+  .tela-ordens .los-num,.tela-ordens .osc-num{color:var(--brand-strong)}
+  .tela-ordens .los-recl,.tela-ordens .los-info i{white-space:normal;overflow-wrap:anywhere}
+  .tela-ordens .los-recl{overflow:visible}
+  .tela-ordens .los-acoes .btn-avancar{color:var(--brand-strong)}
+  .tela-ordens .los-acoes .btn-avancar:hover,.tela-ordens .los-acoes .btn-encerrar{background:var(--azul-acao);color:#fff}
+  .tela-ordens .grade-dados :is(th,td){padding-block:9px}
+  .tela-ordens .grade-dados td:is(:nth-child(6),:nth-child(7),:nth-child(9),:nth-last-child(2)){
+    min-width:100px;white-space:normal;overflow-wrap:anywhere;
+  }
+  .tela-ordens .grade-dados tbody td:first-child{color:var(--brand-strong);font-weight:700}
+  .tela-ordens .grade-dados tbody tr:nth-child(even):not(.g-prov,:hover,:focus) td{background:var(--surface-2)}
+  .tela-ordens .os-colunas{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+  .tela-ordens .os-colunas.c4{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .tela-ordens .os-col{padding:8px}
+  .tela-ordens .os-col.ec-orc{--colc:var(--warn)}
+  .tela-ordens .os-col>h3{font:700 15px var(--f-body);color:var(--ink);text-wrap:wrap}
+  .tela-ordens .os-col>h3 span{color:var(--muted)}
+  .tela-ordens .os-col .os-card{border-radius:8px}
+  .tela-ordens .os-card:is(.e-orc,.e-prov){--etapa:var(--warn)}
+  .tela-ordens .os-card.e-exe{--etapa:var(--brand-strong)}
+  .tela-ordens .osc-corpo:focus-visible{outline-offset:-3px}
+  .tela-ordens .osc-cab{
+    flex-wrap:wrap;gap:8px;padding:10px;border-color:var(--line);
+    background:color-mix(in srgb,var(--etapa) 8%,var(--surface));
+  }
+  .tela-ordens .osc-id{flex:1 1 100px}
+  .tela-ordens .osc-id small{flex-wrap:wrap;column-gap:4px;row-gap:0}
+  .tela-ordens .osc-id strong{font-size:20px}
+  .tela-ordens :is(.osc-id strong,.osc-cli b){white-space:normal;overflow:visible;overflow-wrap:anywhere}
+  .tela-ordens :is(.osc-cli,.osc-recl,.osc-meta,.osc-rodape){padding-inline:10px}
+  .tela-ordens :is(.osc-cli,.osc-valor,.osc-acoes){flex-wrap:wrap}
+  .tela-ordens .osc-recl{display:block;overflow:visible;overflow-wrap:anywhere}
+  .tela-ordens .osc-etapa{background:var(--etapa-soft);text-align:left}
+  .tela-ordens .osc-rodape{padding-block:6px 0}
+  .tela-ordens .osc-valor b{margin-left:auto;font-size:19px;white-space:normal;text-align:right}
+  .tela-ordens .osc-acoes{padding:8px 10px;background:var(--surface-2)}
+  .tela-ordens .osc-acoes .btn{min-height:34px}
+  .tela-ordens .osc-acoes .btn:is(.btn-avancar,.btn-encerrar){
+    background:var(--azul-acao);white-space:normal;line-height:1.2;
+  }
+  .tela-ordens .osc-acoes .btn:is(.btn-avancar,.btn-encerrar):hover{background:var(--azul-acao-hover)}
+  .tela-ordens .mol-lista{white-space:normal}
+
+  /* Financeiro: indicadores, gráficos e tabelas com hierarquias próprias. */
+  .pf-topo .pf-filtros{justify-content:flex-start}
+  .pf .pf-mes[aria-pressed="true"]{background:var(--azul-acao)}
+  .pf-ano{background:var(--surface);border:1px solid var(--line);color:var(--ink)}
+  .pf-ano button{font-family:"Segoe UI Symbol","DejaVu Sans",sans-serif;color:var(--brand-strong)}
+  .pf-ano button:hover{background:var(--brand-soft)}
+  .pf .pf-rotulo{font:700 15px var(--f-body);letter-spacing:0;text-transform:none;color:var(--ink);text-wrap:wrap}
+  .pf .pf-grupos{display:grid;gap:16px;margin-top:0}
+  .pf-grupos .pf-kpis{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .pf-grupos .pf-kpis-3{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .pf-grupos .dica{margin-top:8px}
+  .pf .pf-kpi{
+    --cor-indicador:var(--brand-strong);align-items:center;padding:12px;
+    border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--ink);
+  }
+  .pf .pf-kpi span,.pf .pf-kpi small{color:var(--muted);letter-spacing:0}
+  .pf .pf-kpi b{margin-top:4px;font-size:26px;font-weight:700;white-space:normal;overflow-wrap:anywhere}
+  .pf .pf-kpi.pf-ok{--cor-indicador:var(--ok)}
+  .pf .pf-kpi.pf-bad{--cor-indicador:var(--bad)}
+  .pf .pf-kpi.pf-az9{background:var(--azul-acao);border-color:var(--azul-acao);color:#fff}
+  .pf .pf-kpi.pf-az9 :is(span,small){color:#e2ecf7}
+  .pf .pf-kpi .pf-anel{color:var(--cor-indicador)}
+  .pf .pf-kpi .pf-anel text{fill:currentColor}
+  .pf .pf-kpi .pf-anel circle:first-child{stroke:var(--line)}
+  .pf .pf-kpi .pf-anel circle:nth-child(2){stroke:currentColor}
+  .pf .pf-kpis-col .pf-az8{background:var(--azul-acao);border-color:var(--azul-acao);color:#fff}
+  .pf .pf-kpis-col .pf-az8 span{color:#e2ecf7}
+  .pf .pf-linha{margin-top:0;gap:16px}
+  .pf .pf-resumo{border-radius:8px}
+  .pf .pf-bars{margin-top:4px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  .pf .pf-cats{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr) max-content;gap:8px;margin-top:0}
+  .pf .pf-cat,.pf .pf-cat-b{display:grid;grid-template-columns:subgrid}
+  .pf .pf-cat{grid-column:1/-1}
+  .pf .pf-cat-b{grid-column:2/-1}
+  .pf .pf-cat-n{text-align:left;white-space:normal;overflow:visible;overflow-wrap:anywhere}
+  .pf .pf-cat-b i{height:8px}
+  .pf .pf-cat-b b,.pf .tf-tile b{text-align:right}
+  .pf .pf-margem-caixa{border-color:var(--line);background:var(--surface-2)}
+  .pf .tf-tabela{border:1px solid var(--line);border-radius:8px}
+  /* A grade do DRE tem a descrição, 12 meses de 84 px e a coluna Total. */
+  .pf .tf-min{width:max(100%,1342px)}
+  .pf .tf-row{--fundo-linha:var(--surface);align-items:stretch;background:var(--fundo-linha)}
+  .pf .tf-cab{--fundo-linha:var(--azul-acao);border-radius:0}
+  .pf .tf-grupo{--fundo-linha:var(--brand-soft)}
+  .pf .tf-total,.pf .tf-margem{--fundo-linha:var(--surface-2)}
+  .pf .tf-final{--fundo-linha:var(--pf-az9)}
+  .pf .tf-total{border-top:1px solid var(--line)}
+  .pf .tf-margem :is(.tf-lab,.tf-cel){color:var(--brand-strong)}
+  .pf .tf-lab{
+    position:sticky;left:0;z-index:1;align-content:center;border-right:1px solid var(--line);
+    background:var(--fundo-linha);white-space:normal;overflow:visible;overflow-wrap:anywhere;
+  }
+  .pf .tf-cel{align-content:center;padding-inline:7px;white-space:normal;overflow-wrap:anywhere}
+  .pf .tf-min .tf-cel:last-child{border-left:1px solid var(--line);font-weight:700}
+  .pf .tf-tile{background:var(--surface-2);border-radius:8px}
+
+  /* Ajustes e Mais: seleção bem marcada e atalhos com descrições inteiras. */
+  .tela-ajustes .aj-botoes{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+  .tela-ajustes .aj-botoes button{
+    min-height:54px;padding:10px 14px;border-radius:8px;text-align:left;
+    box-shadow:inset 3px 0 0 transparent;
+  }
+  .tela-ajustes .aj-botoes button:hover{background:var(--brand-soft);color:var(--brand-strong)}
+  .tela-ajustes .aj-botoes button[aria-selected="true"]{
+    background:var(--brand-soft);border-color:var(--brand);color:var(--brand-strong);
+    box-shadow:inset 3px 0 0 var(--brand);
+  }
+  .tela-mais{display:grid;grid-template-columns:minmax(210px,1fr) minmax(0,3fr);align-items:start}
+  .tela-mais .perfil-linha{gap:4px;overflow-wrap:anywhere}
+  .tela-mais .perfil-linha b{font:700 21px var(--f-display)}
+  .tela-mais .lista{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}
+  .tela-mais .lista .lst-sec{grid-column:1/-1;margin:14px 0 4px;font:700 17px var(--f-display);color:var(--ink)}
+  .tela-mais .lista .lst-sec:first-child{margin-top:0}
+  .tela-mais .lista .linha{align-items:flex-start;padding:10px 6px;border-radius:6px}
+  .tela-mais .lista .linha:hover{background:var(--brand-soft)}
+  .tela-mais .lista .linha .ic{color:var(--brand-strong)}
+}
+
+@media screen and (min-width:1500px){
+  .painel .grade-painel{gap:20px}
+  .painel .janela:not(.sem-moldura){padding:18px}
+  .tela-ordens .os-colunas{gap:16px}
+  .pf .pf-linha{gap:20px}
+  .tela-ajustes .aj-botoes{grid-template-columns:repeat(6,minmax(0,1fr))}
+}

@@ -13,7 +13,7 @@ import { CartaoFornecedoresConectados } from "./compraspecas.js";
 export function Mais() {
   const { perfil, ir, sair } = useApp();
   const it = (rota, t, d, ic) => html`<button type="button" class="linha" onClick=${() => ir(rota)}><span class="ic">${ic}</span><span class="meio"><strong>${t}</strong><span>${d}</span></span></button>`;
-  return html`<div class="pagina">
+  return html`<div class="pagina tela-mais">
     <section class="card"><div class="perfil-linha"><b>${perfil.nome}</b><span class="sub">${perfil.email} · ${PAPEIS[perfil.papel]}</span></div><div class="acoes"><${BotaoTema} classe="btn btn-sm" comTexto /><${BotaoInstalar} texto="Instalar no aparelho" /></div></section>
     <section class="card"><div class="lista">
       <h3 class="lst-sec">Operação</h3>
@@ -206,7 +206,7 @@ export function Ajustes({ params }) {
       <button type="button" class="btn" onClick=${() => { const v = (novoTexto[k] || "").trim(); if (v && !(c[k] || []).includes(v)) set({ [k]: (c[k] || []).concat([v]) }); setNovoTexto(o => ({ ...o, [k]: "" })); }}>Adicionar</button></div></div>`;
   const termo = (k, rot, padrao, dica) => html`<${Campo} id=${"a-" + k} rotulo=${rot} dica=${dica}><${Area} id=${"a-" + k} style=${{ minHeight: "150px" }} valor=${c[k]} onMuda=${v => set({ [k]: v })} /></${Campo}>
     ${c[k] !== padrao ? html`<button type="button" class="btn-link" onClick=${() => set({ [k]: padrao })}>Restaurar texto padrão</button>` : null}`;
-  return html`<div class="pagina">
+  return html`<div class="pagina tela-ajustes">
     <div class="aj-botoes" role="tablist" aria-label="Tipos de ajuste">${ABAS.map(([k, t]) => html`<button type="button" key=${k} role="tab" aria-selected=${aba === k ? "true" : "false"} aria-expanded=${aba === k ? "true" : "false"} onClick=${() => setAba(aba === k ? null : k)}>${t}</button>`)}</div>
     ${aba !== "sistema" ? null : html`<section class="card"><h2>Mais do sistema</h2><span class="sub">Atalhos do sistema que se usam pouco no dia a dia.</span>
       <div class="lista">

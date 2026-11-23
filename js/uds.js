@@ -716,8 +716,47 @@ export const ENDERECOS_PADRAO = [
   { pedido: "7E7", resposta: "7EF", nome: "" },
 ];
 
-/** As famílias de módulo que o acervo tem, para a tela listar. */
-export const familias = () => Object.keys(acervo.modulos || {}).sort();
+/**
+ * As famílias do acervo, com nome de gente e na ordem que serve: primeiro a do carro que está na
+ * tomada, depois as de carro comum, e por último os elétricos do acervo OVMS. Antes a lista saía em
+ * ordem alfabética e com o nome do arquivo ("OVMS boltev"), então a família VAG — a que serve a toda
+ * Volkswagen, Audi, Seat e Škoda — ficava no fim de 22 nomes que não diziam nada (achado com o
+ * Danilo em 23/11/2026, procurando o ABS de uma Amarok).
+ */
+const NOME_FAMILIA = {
+  VAG: "Volkswagen, Audi, Seat, Škoda (VAG)",
+  "RENAULT Twingo 3 Ph2": "Renault Twingo 3 (fase 2)", "RENAULT Twizy": "Renault Twizy",
+  "RENAULT ZOE": "Renault Zoe", "RENAULT ZOE Ph2": "Renault Zoe (fase 2)",
+  "OVMS boltev": "Chevrolet Bolt (elétrico)", "OVMS byd_atto3": "BYD Atto 3 (elétrico)",
+  "OVMS fiatedoblo": "Fiat e-Doblò (elétrico)", "OVMS hyundai_ioniq5": "Hyundai Ioniq 5 (elétrico)",
+  "OVMS kianiroev": "Kia Niro EV (elétrico)", "OVMS kiasoulev": "Kia Soul EV (elétrico)",
+  "OVMS maxus_euniq6": "Maxus Euniq 6 (elétrico)", "OVMS maxus_t90": "Maxus T90 (elétrico)",
+  "OVMS mitsubishi": "Mitsubishi (elétrico)", "OVMS nissanleaf": "Nissan Leaf (elétrico)",
+  "OVMS renaulttwizy": "Renault Twizy (elétrico)", "OVMS renaultzoe": "Renault Zoe (elétrico)",
+  "OVMS renaultzoe_ph2": "Renault Zoe fase 2 (elétrico)", "OVMS smarted": "Smart ED (elétrico)",
+  "OVMS smarteq": "Smart EQ (elétrico)", "OVMS thinkcity": "Think City (elétrico)",
+  "OVMS voltampera": "Chevrolet Volt / Opel Ampera (elétrico)",
+};
+/** As marcas que cada família atende, para o app já escolher a família do carro da tomada. */
+const MARCAS_FAMILIA = {
+  VAG: /VOLKS|VW|AUDI|SEAT|SKODA|ŠKODA/i,
+  "RENAULT ZOE": /RENAULT/i,
+};
+export const nomeDaFamilia = f => NOME_FAMILIA[f] || f;
+/** A família do acervo que serve a este carro, ou "" quando não há. */
+export function familiaDoCarro(carro) {
+  const marca = String((carro && carro.marca) || "");
+  if (!marca) return "";
+  for (const f of Object.keys(MARCAS_FAMILIA)) if (MARCAS_FAMILIA[f].test(marca)) return f;
+  return "";
+}
+/** As famílias de módulo que o acervo tem, para a tela listar: as de carro comum primeiro. */
+export const familias = (carro = null) => {
+  const todas = Object.keys(acervo.modulos || {});
+  const doCarro = familiaDoCarro(carro);
+  const peso = f => (f === doCarro ? 0 : /^OVMS /.test(f) ? 2 : 1);
+  return todas.sort((a, b) => peso(a) - peso(b) || nomeDaFamilia(a).localeCompare(nomeDaFamilia(b), "pt"));
+};
 /** Os módulos de uma família: { pedido, resposta, nome }. */
 export const modulosDa = fam => ((acervo.modulos || {})[fam] || []).map(m => ({ pedido: m[0], resposta: m[1], nome: m[2] }));
 /** Quantos módulos o acervo conhece, no total. */

@@ -286,7 +286,21 @@ function Obd() {
   const guardado = (chave, valor) => {
     const k = "obd_" + chave + (placa ? "_" + placa : "");
     try {
-      if (valor === undefined) { const t = window.localStorage.getItem(k); return t ? JSON.parse(t) : null; }
+      if (valor === undefined) {
+        const t = window.localStorage.getItem(k);
+        if (t) return JSON.parse(t);
+        // O QUE FICOU NA PLACA ERRADA. Até 23/11/2026 um defeito gravava tudo na placa
+        // "OBJECTOBJECT" (ver o comentário de `placa`, acima). Quem já usava o app perdeu de uma vez
+        // a escolha de leituras — foi assim que as sondas sumiram da tela do Danilo, no carro.
+        // Então o que está lá é aproveitado uma vez, posto no lugar certo e apagado de lá.
+        const perdido = window.localStorage.getItem("obd_" + chave + "_OBJECTOBJECT");
+        if (perdido) {
+          window.localStorage.setItem(k, perdido);
+          window.localStorage.removeItem("obd_" + chave + "_OBJECTOBJECT");
+          return JSON.parse(perdido);
+        }
+        return null;
+      }
       window.localStorage.setItem(k, JSON.stringify(valor));
     } catch (e) { /* sem espaço ou JSON estragado: segue sem memória */ }
     return null;
@@ -1033,14 +1047,36 @@ const PrecisaApk = () => html`<div class="vazio" id="diag-apk">
 /** Escolha do módulo: os endereços padrão e, depois, o que o acervo conhece. */
 function EscolherModulo({ aoEscolher }) {
   const st = usarSessao();
+  const { perfil: perfilDaBusca } = useApp();
   const [fam, setFam] = useState("");
+  // a família do carro já vem escolhida: na Amarok, VAG
+  useEffect(() => { const f = uds.familiaDoCarro(st.carro); if (f && !fam) setFam(f); }, [st.carro && st.carro.marca]);
   const [ocupado, setOcupado] = useState("");
   const [achados, setAchados] = useState(null);
+  // ONDE PROCURAR. Os 8 endereços padrão (7E0 a 7E7) são SÓ o grupo motriz: motor e câmbio. ABS,
+  // airbag, painel e direção ficam de 700 a 7DF, e por isso não apareciam — o Danilo procurou o ABS
+  // de uma Amarok em 23/11/2026 e ele não estava lá. Agora, quando o acervo conhece a família do
+  // carro (VAG para a Amarok), os endereços dela entram na procura, do mais útil para o menos.
+  const famDoCarro = uds.familiaDoCarro(st.carro);
+  const ordemUtil = n => (/Motor|Câmbio|Freio|Airbag|Painel|Imobilizador|Gateway|Central|Tração|Direção|Suspensão|Pressão dos pneus/i.test(n) ? 0 : 1);
+  const ondeProcurar = () => {
+    const vistos = new Set(), fila = uds.ENDERECOS_PADRAO.slice();
+    for (const e of fila) vistos.add(e.pedido);
+    if (!famDoCarro) return fila;
+    const doAcervo = uds.modulosDa(famDoCarro).filter(m => !vistos.has(m.pedido) && !vistos.has(m.pedido) && vistos.add(m.pedido));
+    doAcervo.sort((a, b) => ordemUtil(a.nome) - ordemUtil(b.nome));
+    return fila.concat(doAcervo);
+  };
+  const parar = useRef(false);
   const procurar = async () => {
+    parar.current = false;
     setOcupado("Procurando módulos no carro…"); setAchados(null);
     const encontrados = [];
-    for (const e of uds.ENDERECOS_PADRAO) {
-      setOcupado("Perguntando em " + e.pedido + "…");
+    const lista = ondeProcurar();
+    for (let i = 0; i < lista.length; i++) {
+      const e = lista[i];
+      if (parar.current) break;
+      setOcupado("Perguntando em " + e.pedido + " (" + (i + 1) + " de " + lista.length + ")…");
       const r = await sessao.tomar("a procura de módulos", async () => {
         await uds.abrir({ pedido: e.pedido, resposta: e.resposta });
         // Abrir a sessão é a pergunta: módulo que está ali responde, mesmo que seja para recusar.
@@ -1050,25 +1086,38 @@ function EscolherModulo({ aoEscolher }) {
         // verdadeiro — a conferência não existia: achado da revisão independente de 20/11/2026.)
         const s = await uds.sessao(uds.SESSAO.comum);
         if (s.erro) return null;
-        return { respondeu: true, recusou: s.nrc != null, texto: s.texto || "" };
+        return { respondeu: true, recusou: s.nrc != null, nrc: s.nrc, texto: s.texto || "" };
       });
-      if (r.ok && r.r && r.r.respondeu) encontrados.push({ ...e, recusou: r.r.recusou });
+      if (r.ok && r.r && r.r.respondeu) {
+        // O MOTIVO DA RECUSA vai junto: o app recebia o código do módulo e jogava fora, e a tela
+        // dizia só "pode ser o gateway" — um palpite. Agora diz o que o módulo respondeu.
+        encontrados.push({ ...e, recusou: r.r.recusou, nrc: r.r.nrc, motivo: r.r.texto });
+        setAchados(encontrados.slice());                            // aparece na tela enquanto procura
+      }
     }
-    setAchados(encontrados); setOcupado("");
+    setOcupado("");
+    setAchados(encontrados.slice());
+    // Fica REGISTRADO: sem isto não dá para olhar depois e entender por que um módulo recusou
+    // (foi o que faltou na Amarok de 23/11/2026).
+    if (encontrados.length) {
+      registrarAcao("mapa", perfilDaBusca, { varredura: encontrados.map(m => ({ pedido: m.pedido, resposta: m.resposta, nome: m.nome || "", recusou: !!m.recusou, nrc: m.nrc == null ? null : m.nrc, motivo: m.motivo || "" })), familia: famDoCarro || "", perguntados: lista.length }).catch(() => {});
+    }
   };
   return html`<${Cartao} titulo="Com qual módulo falar" id="diag-modulo">
     ${!st.ligado ? html`<div class="nota">Conecte o adaptador primeiro.</div>` : html`
-      <button type="button" class="btn-barra" onClick=${procurar} disabled=${!!ocupado || !!st.dono}><${Ic} n="modulo" t=${22} />PROCURAR MÓDULOS NO CARRO</button>
-      ${ocupado ? html`<div class="carregando">${ocupado}</div>` : null}
+      <button type="button" class="btn-barra" onClick=${procurar} disabled=${!!ocupado || !!st.dono}><${Ic} n="modulo" t=${22} />
+        ${famDoCarro ? "PROCURAR MÓDULOS NO CARRO (COM ABS E AIRBAG)" : "PROCURAR MÓDULOS NO CARRO"}</button>
+      ${ocupado ? html`<div class="carregando">${ocupado}</div>
+        <button type="button" class="btn-barra claro" id="diag-parar-busca" style="justify-content:center" onClick=${() => { parar.current = true; }}>PARAR A PROCURA</button>` : null}
       ${achados && !achados.length ? html`<div class="vazio">Nenhum módulo respondeu nos endereços padrão. Escolha a família abaixo e tente pelo endereço do acervo.</div>` : null}
       ${achados && achados.length ? html`<div class="sec"><h3>Responderam</h3>
         ${achados.map(m => html`<button key=${m.pedido} type="button" class="obd-ap" onClick=${() => aoEscolher(m)}>
-          <b>${m.nome || "Módulo " + m.pedido}</b><span>pede em ${m.pedido} · responde em ${m.resposta}${m.recusou ? " · respondeu recusando (pode ser o gateway)" : ""}</span></button>`)}</div>` : null}
+          <b>${m.nome || "Módulo " + m.pedido}</b><span>pede em ${m.pedido} · responde em ${m.resposta}${m.recusou ? " · recusou: " + (m.motivo || "o módulo respondeu negando") : ""}</span></button>`)}</div>` : null}
       <div class="sec"><h3>Ou pelo acervo (${uds.quantosModulos()} módulos)</h3>
         <${Campo} id="diag-fam" rotulo="Família">
           <select id="diag-fam" value=${fam} onChange=${e => setFam(e.target.value)}>
             <option value="">Escolha a família…</option>
-            ${uds.familias().map(f => html`<option key=${f} value=${f}>${f}</option>`)}
+            ${uds.familias(st.carro).map(f => html`<option key=${f} value=${f}>${uds.nomeDaFamilia(f)}${f === famDoCarro ? " — deste carro" : ""}</option>`)}
           </select>
         </${Campo}>
         ${fam ? uds.modulosDa(fam).slice(0, 40).map(m => html`<button key=${m.pedido + m.resposta} type="button" class="obd-ap" onClick=${() => aoEscolher(m)}>

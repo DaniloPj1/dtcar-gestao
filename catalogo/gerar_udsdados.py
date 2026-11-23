@@ -22,7 +22,8 @@ que a tela usa de verdade:
 
 Uso: python3 catalogo/gerar_udsdados.py
 """
-import json, os, sys
+import json
+import re, os, sys
 
 AQUI = os.path.dirname(os.path.abspath(__file__))
 RAIZ = os.path.dirname(AQUI)
@@ -181,6 +182,59 @@ def endereco_valido(e):
     return 0x600 <= n <= 0x7FF
 
 
+# O nome de oficina de cada módulo da VAG. O acervo traz o nome abreviado da própria VW
+# ("LL_Brake1UDS"), que não serve para o mecânico escolher com qual módulo falar — ele quer ver
+# "Freio (ABS/ESP)". Pedido do Danilo em 23/11/2026, depois de procurar o ABS na Amarok e não achar.
+NOMES_VAG = {
+    "EnginContrModul1": "Motor", "EnginContrModul2": "Motor (segundo módulo)",
+    "TransContrModul": "Câmbio", "GearShiftContrModul": "Seletor de marchas",
+    "Brake1": "Freio (ABS/ESP)", "SensoBrakeSyste": "Sensores do freio",
+    "WheelBrakeRearRight": "Freio da roda traseira direita", "WheelBrakeRearLeft": "Freio da roda traseira esquerda",
+    "ParkiBrake": "Freio de estacionamento", "Airba": "Airbag",
+    "PreteFrontRight": "Pré-tensionador dianteiro direito", "PreteFrontLeft": "Pré-tensionador dianteiro esquerdo",
+    "DashBoard": "Painel", "DashBoardDisplUnit": "Tela do painel", "Tacho": "Painel (conta-giros)",
+    "Immob": "Imobilizador", "Gatew": "Gateway (central de rede)", "CentrElect": "Central elétrica",
+    "CentrModulComfoSyste": "Central de conforto", "CentrModulComfoSyste2": "Central de conforto (2)",
+    "AirCondi": "Ar-condicionado", "AirCondiCompr": "Compressor do ar-condicionado",
+    "ClimaContrUnitRear": "Ar-condicionado traseiro", "AuxilParkiHeate": "Aquecedor auxiliar",
+    "AllWheelContr": "Tração nas quatro rodas", "ReducContrModul": "Caixa de redução",
+    "SteerAngleSende": "Sensor de ângulo da direção", "SteerAssis": "Direção assistida",
+    "SteerColumElect": "Coluna de direção", "SteerColumLocki": "Trava da coluna de direção",
+    "ActivSteer": "Direção ativa", "TirePressMonit1": "Pressão dos pneus",
+    "AdaptCruisContr": "Piloto automático adaptativo", "AdaptCruisContr2": "Piloto automático adaptativo (2)",
+    "ParkiAssis": "Sensor de estacionamento", "ParkiAssis2": "Sensor de estacionamento (2)",
+    "LaneChangAssis": "Assistente de faixa", "FrontSensoDriveAssisSyste": "Sensor dianteiro dos assistentes",
+    "CamerSysteRearView": "Câmera de ré", "OnBoardCamer": "Câmera de bordo",
+    "ImageProceElect": "Processamento de imagem", "NightVisio": "Visão noturna",
+    "HighBeamAssis": "Assistente de farol alto", "HeadlRegul": "Regulagem dos faróis",
+    "LockElect": "Travas", "Kessy": "Entrada e partida sem chave", "AccesStartInter": "Acesso e partida",
+    "DoorElectDriveSide": "Porta do motorista", "DoorElectPasseSide": "Porta do passageiro",
+    "DoorElectRearDriveSide": "Porta traseira esquerda", "DoorElectRearPasseSide": "Porta traseira direita",
+    "SlidiDoorLeft": "Porta corrediça esquerda", "SlidiDoorRight": "Porta corrediça direita",
+    "DeckLidContrUnit": "Tampa traseira", "ElectRoofContr": "Teto solar", "ElectRoofContr2": "Teto solar (2)",
+    "SeatAdjusDriveSide": "Banco do motorista", "SeatAdjusPasseSide": "Banco do passageiro",
+    "MultiContoSeatDriveSide": "Banco multicontorno do motorista", "MultiContoSeatPasseSide": "Banco multicontorno do passageiro",
+    "MultiContoSeatRearDriveSide": "Banco traseiro esquerdo", "MultiContoSeatRearPasseSide": "Banco traseiro direito",
+    "Armre": "Apoio de braço", "Radio": "Rádio", "Navig": "Navegação", "SoundSyste": "Som",
+    "MediaPlayePosit1": "Tocador de mídia 1", "MediaPlayePosit3": "Tocador de mídia 3", "TVTuner": "Sintonizador de TV",
+    "InfotInter": "Interface do multimídia", "InforContrUnit1": "Central de informações",
+    "HeadUpDispl": "Projeção no para-brisa", "AuxilDisplContrUnit": "Tela auxiliar",
+    "Telem": "Telemetria", "Telep": "Telefone", "ExterCommuInter": "Comunicação externa",
+    "BatteRegul": "Regulagem da bateria", "BatteCharg": "Carregador da bateria",
+    "BatteEnergContrModul": "Gestão de energia da bateria", "DriveMotorContrModul": "Motor elétrico de tração",
+    "TrailFunct": "Engate de reboque", "RideContrSyste": "Suspensão", "WheelDampeElect": "Amortecedores",
+    "AssemMount": "Coxins do motor", "SensoElect": "Sensores", "MicroContrUnit": "Microfone",
+    "VehicPositDetec": "Posição do veículo", "ActuaForStrucBorneSound": "Gerador de som",
+    "SpeciFunct": "Funções especiais", "SpeciFunct2": "Funções especiais (2)",
+}
+
+
+def nome_vag(cru):
+    """"LL_Brake1UDS" vira "Freio (ABS/ESP)". Sem tradução, devolve o nome cru: inventar é pior."""
+    n = re.sub(r"UDS$", "", re.sub(r"^LL_", "", str(cru or "")))
+    return NOMES_VAG.get(n, cru or "")
+
+
 def modulos():
     """Mapa de módulos: endereço de pedido, de resposta e o nome, por família."""
     fam = {}
@@ -191,7 +245,7 @@ def modulos():
             ped = (m.get('pede_em') or [None])[0]
             resp = (m.get('responde_em') or [None])[0]
             if endereco_valido(ped) and endereco_valido(resp):
-                vag.append([ped.upper(), resp.upper(), m.get('nome') or ''])
+                vag.append([ped.upper(), resp.upper(), nome_vag(m.get('nome'))])
         if vag:
             fam['VAG'] = vag
     cam = os.path.join(UDS, 'modulos_renault.json')

@@ -222,7 +222,9 @@ window.Capacitor.Plugins.DtcarObd = {
     if (window.__obd.motorDesligado && c === '010C') return Promise.resolve({ resposta: '410C0000\\r\\r>' });   // chave ligada, motor parado
     if (window.__obd.motorDesligado && c === '010D') return Promise.resolve({ resposta: '410D00\\r\\r>' });
     if (c === '010C') {   // rotação sobe a cada leitura: é assim que o teste vê a tela se mexer
-      window.__obd.rpm = (window.__obd.rpm || 800) + 100;
+      // a rotação sobe e volta ao começo: subindo sem parar ela estourava os 2 bytes do PID e caía
+      // para um valor baixo, o que fazia o app achar que o motor estava desligado (23/11/2026)
+      window.__obd.rpm = (window.__obd.rpm || 800) + 100; if (window.__obd.rpm > 3000) window.__obd.rpm = 800;
       var cru = window.__obd.rpm * 4;
       return Promise.resolve({ resposta: '410C' + ('000' + cru.toString(16).toUpperCase()).slice(-4) + '\\r\\r>' });
     }
@@ -1146,6 +1148,13 @@ try:
         pg.click('#mod-vivo'); pg.wait_for_timeout(1500)
         pg.eval_on_selector('#mod-leituras', "e => e.scrollIntoView({block:'start'})"); pg.wait_for_timeout(300); pg.screenshot(path=os.path.join(raiz, 'teste', 'telas', 'modulo-rodas-celular.png'))
         pg.click('text=TROCAR DE MÓDULO'); pg.wait_for_selector('#diag-modulo', timeout=10000)
+        # O ABS APARECE (pedido do Danilo, 23/11/2026): com a marca conhecida, a procura passa dos 7E0–7E7
+        pg.evaluate("import('../js/obdsessao.js').then(m => m.definirCarro({ placa: 'ABC1D23', marca: 'Volkswagen', modelo: 'AMAROK CD 4X4', ano: '2017' }))"); pg.wait_for_timeout(400)
+        t('COM ABS E AIRBAG' in pg.inner_text('#diag-modulo'), 'num VW o botão diz que a procura passa do grupo motriz: ' + pg.inner_text('#diag-modulo')[:90].replace(chr(10), ' '))
+        fams = pg.evaluate("() => [...document.querySelectorAll('#diag-fam option')].map(o => o.textContent)")
+        t(len(fams) > 2 and 'Volkswagen' in fams[1] and 'deste carro' in fams[1], 'a família do carro vem primeiro e com nome de gente: ' + str(fams[1:3]))
+        t(pg.evaluate("() => document.querySelector('#diag-fam').value") == 'VAG', 'e já vem escolhida')
+        t(any('Freio (ABS/ESP)' in x for x in pg.evaluate("() => [...document.querySelectorAll('#diag-modulo .obd-ap b')].map(e => e.textContent)")), 'o acervo lista o Freio (ABS/ESP) com nome de oficina')
         pg.click('#diag-modulo .btn-barra'); pg.wait_for_timeout(2500)
         t(pg.locator('#diag-modulo .obd-ap').count() > 0, 'a procura acha módulo que responde')
         t('7E0' in pg.inner_text('#diag-modulo'), 'e mostra o endereço de quem respondeu')
@@ -1324,6 +1333,11 @@ try:
         # SEM PLACA, registro SEM PLACA (defeito achado na leitura da Amarok, 23/11/2026): o estado da busca
         # virava a string "[object Object]" e a sessão era gravada na placa OBJECTOBJECT.
         t(pg.evaluate("() => Object.keys(window.localStorage).some(k => /OBJECTOBJECT/.test(k))") is False, 'sem placa puxada, nada é guardado em OBJECTOBJECT')
+        # A ESCOLHA QUE FICOU NA PLACA ERRADA (23/11/2026): o app aproveita uma vez e limpa — senão quem já
+        # usava o app perdia a escolha de leituras de uma vez (as sondas sumiram da tela do Danilo, no carro).
+        pg.evaluate("() => window.localStorage.setItem('obd_leituras_OBJECTOBJECT', JSON.stringify({ modo: 'todas', pids: [] }))")
+        tela(pg, 'modulos'); tela(pg, 'obd'); pg.wait_for_timeout(600)
+        t(pg.evaluate("() => window.localStorage.getItem('obd_leituras')") is not None and pg.evaluate("() => window.localStorage.getItem('obd_leituras_OBJECTOBJECT')") is None, 'a escolha perdida volta para o lugar certo e sai do lugar errado')
         # A PLACA FICA (pedido do Danilo, 21/11/2026): puxou uma vez, vale nas outras telas do carro até trocar ou tirar o adaptador
         pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
         pg.goto(URL + '#/bico'); pg.wait_for_selector('#bico-placa', timeout=10000); pg.wait_for_timeout(400)

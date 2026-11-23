@@ -2352,3 +2352,25 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pc-pe{padding:12px 16px;background:var(--surface-2);border-top:1px solid var(--line)}
 .pc-pe .btn{width:100%;justify-content:center}
 .cad-sel{outline:2px solid var(--brand);outline-offset:-2px}
+
+/* RH › Comissões por serviço (v64, 23/11/2026): rateio de cada linha de mão de obra entre os mecânicos */
+.com-linha{border-top:1px solid var(--line);padding:12px 0;display:grid;gap:8px}
+.com-linha:first-of-type{border-top:0}
+.com-linha.com-ok{border-left:3px solid var(--ok);padding-left:10px}
+.com-serv{display:flex;flex-direction:column;gap:2px}
+.com-rateio{display:grid;gap:8px}
+.com-rat{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.com-rat select{flex:1 1 200px;min-width:0}
+.com-pct{display:flex;align-items:center;gap:4px}
+.com-pct .inp{width:76px;text-align:right}
+.com-val{min-width:92px;text-align:right}
+.com-marca{background:var(--ok-soft);color:var(--ok);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700}
+.com-chk{display:flex;align-items:center;gap:8px;cursor:pointer}
+.selo{background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:3px 12px;font-size:13px;font-weight:700;white-space:nowrap}
+.selo-ok{background:var(--ok-soft);color:var(--ok);border-color:var(--ok)}
+.selo-aviso{background:var(--warn-soft);color:var(--warn);border-color:var(--warn)}
+@media (max-width:700px){
+  .com-rat{display:grid;grid-template-columns:1fr auto;align-items:center}
+  .com-rat select{grid-column:1 / -1}
+  .com-val{text-align:left}
+}

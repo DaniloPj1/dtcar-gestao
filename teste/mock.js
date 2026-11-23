@@ -251,6 +251,18 @@
         return { ...resumo, pode_aprovar: true, gravado: true, ordem_id: os.id, os_numero: os.numero }; } },
     // agenda da oficina (v54): mesmas regras do gatilho agendamentos_regras (remarcação, motivo só no cancelado)
     // apontamentos de serviço pelo app (v60) de mentira: só leitura para o relatório
+    // comissão por linha de serviço (v64): o Danilo lança o percentual por serviço em RH › Comissões
+    comissoes: {
+      listar: async ({ ordem_id, ordens, funcionario_id, competencia } = {}) => { net(); if (window.__SEM_V64) return [];
+        return (db.os_item_comissoes = db.os_item_comissoes || []).filter(c => (!ordem_id || c.ordem_id === ordem_id) && (!ordens || ordens.includes(c.ordem_id))
+          && (!funcionario_id || c.funcionario_id === funcionario_id) && (!competencia || c.competencia === competencia)); },
+      salvarItem: async (item_id, linhas) => { net(); if (window.__SEM_V64) throw new Error("A comissão por serviço ainda não foi ligada: falta rodar o supabase/v64.sql no banco.");
+        db.os_item_comissoes = (db.os_item_comissoes || []).filter(c => c.item_id !== item_id);
+        const novas = (linhas || []).map(l => ({ id: uid(), criado_em: now(), atualizado_em: now(), ...l }));
+        db.os_item_comissoes.push(...novas); window.__COMISSOES = (window.__COMISSOES || []).concat([{ item_id, linhas: novas.length }]); return novas; },
+      excluirDaOS: async ordem_id => { net(); db.os_item_comissoes = (db.os_item_comissoes || []).filter(c => c.ordem_id !== ordem_id); },
+      semV64: () => !!window.__SEM_V64,
+    },
     apontamentos: { listar: async ({ perfil_id } = {}) => { net(); return (db.apontamentos = db.apontamentos || [{ id: "ap1", ordem_id: (db.ordens[0] || {}).id, os_numero: (db.ordens[0] || {}).numero, perfil_id: "p2", perfil_nome: "Carlos Mecânico", situacao: "finalizado", inicio: new Date(Date.now() - 3 * 3600000).toISOString(), fim: new Date(Date.now() - 3600000).toISOString(), motivo_pausa: "", pausas: [{ em: new Date(Date.now() - 2 * 3600000).toISOString(), motivo: "Aguardando peças", retomado_em: new Date(Date.now() - 1.5 * 3600000).toISOString() }], itens_executados: ["i1"], indicacoes: [{ item_id: "i2", descricao: "ALINHAMENTO", para_id: "p1", para_nome: "Danilo", em: new Date().toISOString(), visto_em: null }] }]).filter(a => !perfil_id || a.perfil_id === perfil_id); },
       abrir: async () => { throw new Error("só no app"); }, atualizar: async () => { throw new Error("só no app"); }, visto: async () => {}, indicadasPara: async () => [] },
     semV60: () => false,

@@ -54,13 +54,25 @@ try:
     pc.screenshot(path=os.path.join(RAIZ, "teste", "telas", "os-cards-pc.png"), full_page=True)
     pc.reload(); pc.wait_for_timeout(1800)
     chk("PC: lembra a opção Cards", pc.query_selector(".os-card") is not None)
+    # 23/11/2026: no PC o card abre a pré-visualização ao lado (1/3); a O.S. inteira abre pelo botão do rodapé
     pc.click(".os-card:has-text('01896') .osc-corpo"); pc.wait_for_timeout(1200)
-    chk("PC: clicar no card abre a O.S.", "#/os/o4" in pc.url)
+    chk("PC: clicar no card abre a pré-visualização ao lado", pc.query_selector(".pv .pv-cab") is not None and "01896" in pc.inner_text(".pv-cab") and "#/ordens" in pc.url)
+    chk("PC: a lista continua à esquerda com o card marcado", pc.query_selector(".os-palco .os-lista-col .os-card.os-sel") is not None)
+    pc.click(".pv-pe button:has-text('Abrir a O.S. inteira')"); pc.wait_for_timeout(1200)
+    chk("PC: 'Abrir a O.S. inteira' abre a O.S.", "#/os/o4" in pc.url)
     cel = b.new_context(viewport={"width": 393, "height": 852}).new_page()
     cel.add_init_script("try { localStorage.setItem('dtcar-visao-os', 'cards') } catch (e) {}")
     cel.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js"))
     cel.goto(U + "#/ordens"); cel.wait_for_timeout(2000)
     chk("celular: continua na lista mesmo com Cards escolhido no aparelho", cel.query_selector(".linha-os-acoes") is not None and not cel.query_selector(".os-card") and not cel.query_selector(".troca-visao"))
+    # 23/11/2026: o painel lateral é só do PC — no celular a linha continua abrindo a O.S. inteira
+    chk("celular: sem painel de pré-visualização", cel.evaluate("[...document.querySelectorAll('.pv')].every(e => getComputedStyle(e).display === 'none')"))
+    cel.click(".linha-os-acoes .los-corpo"); cel.wait_for_timeout(1200)
+    chk("celular: clicar na linha abre a O.S.", "#/os/" in cel.url)
+    cel.goto(U + "#/cadastros"); cel.wait_for_timeout(1800)
+    cel.click(".linha-cli .meio"); cel.wait_for_timeout(1200)
+    chk("celular: clicar no cliente abre a ficha inteira", "#/cliente/" in cel.url)
+    cel.goto(U + "#/ordens"); cel.wait_for_timeout(1500)
     # faixa do período de transição (12/11/2026): só com o espelho ligado de verdade; desligado ou ainda sem os Ajustes, não aparece
     for nome, cfgjs in [("espelho desligado", "{ espelhoLegado: false }"), ("Ajustes sem a informação", "{}")]:
       sf = b.new_context(viewport={"width": 1366, "height": 768}).new_page()

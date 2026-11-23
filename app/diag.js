@@ -263,7 +263,10 @@ function Obd() {
     () => { /* a volta é por conta do mecânico: religar a roda sozinho assustaria */ },
   ), []);
 
-  const placa = String((pl.veic && pl.veic.placa) || pl.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  // pl.placa é o ESTADO da busca ({ texto, veic }), não o texto: sem placa puxada, String(objeto)
+  // virava "[object Object]" e a sessão era gravada na placa "OBJECTOBJECT" (achado em 23/11/2026,
+  // na leitura da Amarok). Sem placa, placa = "" e o registro sai sem placa, como deve ser.
+  const placa = String((pl.veic && pl.veic.placa) || (pl.placa && pl.placa.texto) || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
   const guardado = (chave, valor) => {
     const k = "obd_" + chave + (placa ? "_" + placa : "");
     try {

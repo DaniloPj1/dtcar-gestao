@@ -20,6 +20,12 @@ import * as param from "./obdparam.js";
 //   quando: "ligado" = motor funcionando; "lenta" = só em marcha lenta com motor quente.
 //   simetrico: a tabela guarda UM número (10 %) e a faixa é de −10 a +10.
 const LIGACAO = [
+  // Conferido no Raven, no carro: vem antes da suposição geral (23/11/2026).
+  { pids: [0x05], id: "arrefecimento_edc17cp54", quando: "ligado", rotulo: "motor quente" },
+  { pids: [0x0c], id: "lenta_edc17cp54", quando: "lenta", rotulo: "marcha lenta" },
+  { pids: [0x0f], id: "iat_edc17cp54", quando: "ligado", rotulo: "motor ligado" },
+  { pids: [0x23, 0x59], id: "rail_lenta_edc17cp54", quando: "lenta", rotulo: "marcha lenta" },
+  { pids: [0x42], id: "bateria_motor_ligado", quando: "ligado", rotulo: "motor ligado" },
   { pids: [0x05], id: "arrefecimento_trabalho", quando: "ligado", rotulo: "motor quente" },
   { pids: [0x06, 0x07, 0x08, 0x09], id: "ajuste_atencao", quando: "ligado", simetrico: true, rotulo: "antes de chamar atenção" },
   { pids: [0x23, 0x59], id: "rail_lenta_1kd", quando: "lenta", rotulo: "marcha lenta" },
@@ -27,7 +33,9 @@ const LIGACAO = [
   { pids: [0x10], id: "maf_lenta_1kd", quando: "lenta", rotulo: "marcha lenta" },
 ];
 // Parâmetro que só vale para um motor: confere pelo cadastro. Sem cadastro que case, não é usado.
-const SO_PARA = { rail_lenta_1kd: c => /HILUX|SW4/i.test(c.modelo || "") && /3[.,]0/.test((c.modelo || "") + " " + (c.motor || "")), maf_lenta_1kd: c => /HILUX|SW4/i.test(c.modelo || "") && /3[.,]0/.test((c.modelo || "") + " " + (c.motor || "")) };
+// O motor conferido no Raven: Amarok 2.0 bi-turbo diesel com Bosch EDC17CP54 (2016 em diante).
+const E_AMAROK_20 = c => /AMAROK/i.test(c.modelo || "") && /2[.,]0/.test((c.modelo || "") + " " + (c.motor || ""));
+const SO_PARA = { arrefecimento_edc17cp54: E_AMAROK_20, rail_lenta_edc17cp54: E_AMAROK_20, lenta_edc17cp54: E_AMAROK_20, iat_edc17cp54: E_AMAROK_20, rail_lenta_1kd: c => /HILUX|SW4/i.test(c.modelo || "") && /3[.,]0/.test((c.modelo || "") + " " + (c.motor || "")), maf_lenta_1kd: c => /HILUX|SW4/i.test(c.modelo || "") && /3[.,]0/.test((c.modelo || "") + " " + (c.motor || "")) };
 const BAR_PARA_KPA = 100;   // a tabela guarda o rail em bar; o PID entrega em kPa
 
 /** A referência da tabela para esta leitura, ou null. `ctx` = { rpm, regime, carro }. */

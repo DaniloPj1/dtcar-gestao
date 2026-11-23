@@ -258,3 +258,20 @@ console.log(m7 + " conferências da faixa de trabalho passaram.");
   if (!(p1 && p1.tipo === "dado" && (!p2 || p2.did !== p1.did))) { console.error("FALHOU: o mapeamento repete o mesmo identificador: " + JSON.stringify([p1, p2])); process.exit(1); }
   console.log("mapa: identificador calado é anotado e o mapeamento segue.");
 }
+
+/* ---- as faixas conferidas no Raven, na Amarok (23/11/2026) ---- */
+{
+  const fx2 = await import("../js/obdfaixa.js");
+  const ok2 = (c, msg) => { if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
+  const amarok = { modelo: "AMAROK CD 4X4 HIGH", motor: "2.0" }, outro = { modelo: "GOL 1.0" };
+  const t = (v, carro) => fx2.faixaPara({ pid: 0x05, parte: 0, chave: 500, unidade: "°C", valor: v }, { rpm: 897, regime: "lenta", carro });
+  ok2(t(75, amarok).de === 80 && t(75, amarok).ate === 100 && t(75, amarok).nivel === "conferido" && t(75, amarok).situacao === "abaixo",
+    "Amarok 2.0: temperatura 80 a 100 °C CONFERIDA no Raven, e 75 °C está abaixo");
+  ok2(t(75, outro).ate === 105 && t(75, outro).nivel === "suposto", "outro carro continua na faixa geral, marcada como suposta");
+  const rail = (v, carro) => fx2.faixaPara({ pid: 0x23, parte: 0, chave: 3500, unidade: "bar", valor: v }, { rpm: 897, regime: "lenta", carro });
+  ok2(rail(330, amarok).de === 280 && rail(330, amarok).ate === 360 && rail(330, amarok).situacao === "dentro", "Amarok: rail 280 a 360 bar em lenta, e 330 está dentro");
+  ok2(rail(330, outro).de === 250 && rail(330, outro).ate === 550, "outro carro: a geral de 250 a 550");
+  const bat = fx2.faixaPara({ pid: 0x42, parte: 0, chave: 6600, unidade: "V", valor: 14 }, { rpm: 897, regime: "lenta", carro: outro });
+  ok2(bat.de === 12.5 && bat.ate === 14.7 && bat.nivel === "conferido", "tensão da bateria 12,5 a 14,7 V vale para qualquer carro");
+  console.log("faixas conferidas no Raven: 5 conferências passaram.");
+}

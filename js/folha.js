@@ -89,16 +89,10 @@ function salarioDoMes(f, ym) {
 
 /**
  * Resumo do mês de um funcionário.
- * lancs: lançamentos da competência.
- * baseComissao: mão de obra das O.S. entregues em que ele foi o mecânico (percentual cheio, regra de sempre).
- *   A partir do v64 também aceita { base, porLinha }, onde `porLinha` é a comissão por linha de serviço JÁ EM REAIS
- *   (a tela de Comissões gravou valor e percentual de cada serviço) e `base` continua sendo a mão de obra das O.S.
- *   que NÃO têm rateio por linha. As duas somam: O.S. rateada conta pelas linhas, o resto pelo percentual cheio.
- *   Número solto continua valendo (O.S. antigas, e a função "agente" enquanto estiver no commit anterior).
+ * lancs: lançamentos da competência; baseComissao: mão de obra das O.S. entregues em que ele foi o mecânico.
  */
 export function calcularMes(f, ym, lancs, baseComissao, encargos) {
   const enc = { ...ENCARGOS_PADRAO, ...(encargos || {}) };
-  const cm = baseComissao && typeof baseComissao === "object" ? baseComissao : { base: baseComissao, porLinha: 0 };
   const sal = salarioDoMes(f, ym);
   const vh = Number(f.horas_mes) > 0 ? (Number(f.salario) || 0) / Number(f.horas_mes) : 0;
   const soma = t => lancs.filter(l => l.tipo === t);
@@ -109,14 +103,11 @@ export function calcularMes(f, ym, lancs, baseComissao, encargos) {
     return 0;
   };
   const tot = t => arred(soma(t).reduce((s, l) => s + valorDe(l), 0));
-  const comissaoPct = arred((Number(cm.base) || 0) * (Number(f.comissao_pct) || 0) / 100);
-  const comissaoLinhas = arred(Number(cm.porLinha) || 0);
-  const comissaoAuto = arred(comissaoPct + comissaoLinhas);
+  const comissaoAuto = arred((Number(baseComissao) || 0) * (Number(f.comissao_pct) || 0) / 100);
   const r = {
     salario: sal.valor, diasSalario: sal.dias, valorHora: arred(vh),
     horasExtras: tot("hora_extra"), qtdHorasExtras: soma("hora_extra").reduce((s, l) => s + (Number(l.qtd) || 0), 0),
-    comissao: arred(comissaoAuto + tot("comissao")), comissaoAuto, comissaoPct, comissaoLinhas,
-    baseComissao: arred(cm.base || 0), bonus: tot("bonus"),
+    comissao: arred(comissaoAuto + tot("comissao")), comissaoAuto, baseComissao: arred(baseComissao || 0), bonus: tot("bonus"),
     faltas: tot("falta"), qtdFaltas: soma("falta").reduce((s, l) => s + (Number(l.qtd) || 0), 0),
     vales: arred(tot("vale") + tot("adiantamento")), descontos: tot("desconto"), inss: tot("inss"), pagos: tot("pagamento"),
   };

@@ -36,7 +36,7 @@ export function traduzErro(e) {
 
 const COLS_ORDENS = "id,numero,status,cliente,veiculo,cliente_id,veiculo_id,km_entrada,total,custo,desconto,criado_em,atualizado_em,entregue_em,consultor_nome,mecanico_id,mecanico_nome,previsao_entrega,previsao_hora,orcamento_enviado_em,validade_orcamento,reclamacao,forma_pagamento,garantia_dias,km_saida,box,situacao,contato,ck_feito:checkin->feito,legado:checkin->legado->numero,legado_receber:checkin->legado->a_receber";
 const COLS_V11 = ",recebido,finalizada_em,motivo_cancelamento"; // colunas do supabase/v11.sql
-let temV11 = true, temReceber = true, temV18 = null, temBoletos = null, semV60 = false, semV64 = false;   // semV60: v60 (mecânico no agendamento, serviço pelo app) ainda não rodado, descoberto na 1ª gravação; semV64: comissão por linha de serviço
+let temV11 = true, temReceber = true, temV18 = null, temBoletos = null, semV60 = false;   // semV60: v60 (mecânico no agendamento, serviço pelo app) ainda não rodado, descoberto na 1ª gravação
 let temFixas = null, fixasGeradasEm = 0; // despesa fixa (supabase/v43.sql)
 /** grava sem a coluna nova da v18 (conta de origem/destino) se o banco ainda não tiver o supabase/v18.sql */
 async function semColunaV18(linha, coluna, gravar) {
@@ -416,35 +416,6 @@ function criarApiSupabase() {
       /** indicações feitas PARA esta pessoa ainda não vistas (aviso no app) */
       indicadasPara: async perfil_id => { const l = await metodos.apontamentos.listar({ desde: new Date(Date.now() - 60 * 86400000).toISOString() });
         return l.flatMap(s => (Array.isArray(s.indicacoes) ? s.indicacoes : []).filter(i => i.para_id === perfil_id && !i.visto_em).map(i => ({ ...i, apontamento_id: s.id, ordem_id: s.ordem_id, os_numero: s.os_numero, de_nome: s.perfil_nome }))); },
-    },
-    /** Comissão por linha de serviço (v64, pedido do Danilo em 23/11/2026). Só o administrador lê e grava (é salário).
-     *  Sem o v64 no banco, "listar" devolve [] (a tela avisa) e as gravações explicam o que falta. */
-    comissoes: {
-      listar: async ({ ordem_id, ordens, funcionario_id, competencia, de, ate } = {}) => {
-        let q = sb.from("os_item_comissoes").select("*");
-        if (ordem_id) q = q.eq("ordem_id", ordem_id);
-        if (ordens && ordens.length) q = q.in("ordem_id", ordens);
-        if (funcionario_id) q = q.eq("funcionario_id", funcionario_id);
-        if (competencia) q = q.eq("competencia", competencia);
-        if (de) q = q.gte("competencia", de); if (ate) q = q.lte("competencia", ate);
-        const r = await q.order("criado_em").limit(5000);
-        if (r.error && /os_item_comissoes|schema cache|PGRST205/i.test(r.error.message || "")) { semV64 = true; return []; }
-        semV64 = false;
-        return ok(r);
-      },
-      /** O banco já tem a tabela do v64? Descoberto na 1ª leitura; a tela avisa quando falta. */
-      semV64: () => semV64,
-      /** Grava o rateio de UM serviço: a lista que vier substitui o que estava naquele item (nada fica pela metade). */
-      salvarItem: async (item_id, linhas) => {
-        const del = await sb.from("os_item_comissoes").delete().eq("item_id", item_id);
-        if (del.error && /os_item_comissoes|schema cache|PGRST205/i.test(del.error.message || "")) throw new Error("A comissão por serviço ainda não foi ligada: falta rodar o supabase/v64.sql no banco.");
-        if (del.error) throw traduzErro(del.error);
-        if (!linhas || !linhas.length) return [];
-        const r = await sb.from("os_item_comissoes").insert(linhas).select();
-        if (r.error && /os_item_comissoes|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("A comissão por serviço ainda não foi ligada: falta rodar o supabase/v64.sql no banco.");
-        return ok(r);
-      },
-      excluirDaOS: async ordem_id => { ok(await sb.from("os_item_comissoes").delete().eq("ordem_id", ordem_id)); },
     },
     agenda: {
       listar: async ({ de, ate } = {}) => todos(() => { let q = sb.from("agendamentos").select("*"); if (de) q = q.gte("data", de); if (ate) q = q.lte("data", ate);
@@ -867,10 +838,6 @@ function comBancoDoPC(a) {
     obd: { ...a.obd, registrar: soOnline(a.obd.registrar, "Sem conexão com a internet: o apagamento precisa ficar registrado, então só com internet.") },
     apontamentos: { ...a.apontamentos, abrir: soOnline(a.apontamentos.abrir, "Sem conexão com a internet: o serviço só pode ser iniciado com internet."),
       atualizar: soOnline(a.apontamentos.atualizar, "Sem conexão com a internet: tente de novo quando a internet voltar."), visto: soOnline(a.apontamentos.visto, "Sem conexão com a internet.") },
-    // comissão por linha (v64): lançar comissão mexe no que a pessoa vai receber, então só com internet
-    comissoes: { ...a.comissoes,
-      salvarItem: soOnline(a.comissoes.salvarItem, "Sem conexão com a internet: a comissão só pode ser lançada com internet."),
-      excluirDaOS: soOnline(a.comissoes.excluirDaOS, "Sem conexão com a internet: a comissão só pode ser alterada com internet.") },
     agenda: { ...a.agenda, listar: ler(a.agenda.listar, L.agenda), um: ler(a.agenda.um, L.agendaUm),
       salvar: soOnline(a.agenda.salvar, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),
       excluir: soOnline(a.agenda.excluir, "Sem conexão com a internet: a agenda só pode ser alterada com internet."),

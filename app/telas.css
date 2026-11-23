@@ -532,12 +532,9 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 #obd-adaptador-abrir .selo{margin-right:2px}
 #obd-acoes .nota:empty{display:none}
 /* Segurar para falar e corretor no pedido (22/11/2026: o App DTCar absorve o app do mecânico) */
-.fala-linha{display:flex;gap:8px;margin-top:8px}
-.btn-fala{flex:2;min-height:48px;border:0;border-radius:10px;background:#2f6fb5;color:#fff;font-weight:700;font-size:15px;touch-action:none;-webkit-user-select:none;user-select:none}
-.btn-fala.on{background:#174f94}
+.fala-linha{display:flex;gap:8px;margin-top:8px}  /* 23/11/2026: o ditado saiu; sobrou o Arrumar a escrita */
 .btn-arrumar{flex:1;min-height:48px;border:1px solid #c9ced4;border-radius:10px;background:#fff;color:#16191d;font-weight:600}
 .btn-arrumar:disabled{opacity:.5}
-#pd-ouvindo{margin-top:6px;font-style:normal;color:#174f94;font-weight:600}
 
 /* A faixa é a mesma sempre, mas fora da condição dela (faixa de marcha lenta com o motor acelerado)
    ela não julga: tudo cinza, sem vermelho. Acusar defeito numa acelerada seria mentira. */

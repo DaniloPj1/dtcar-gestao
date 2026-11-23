@@ -16,7 +16,8 @@ UID = '22222222-2222-2222-2222-222222222222'
 import datetime; HOJE = datetime.date.today().isoformat()
 # Desde 20/11/2026 o Início separa por grupo: primeiro o que se faz na oficina, depois o que se faz
 # no carro (o diagnóstico, que deixou de ser uma tela e virou família de seis).
-ROTULOS_OFICINA = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.']
+# 23/11/2026: MEUS SERVIÇOS virou o 2º botão (pedido do Danilo: o mecânico acompanha o serviço dele)
+ROTULOS_OFICINA = ['INICIAR SERVIÇO', 'MEUS SERVIÇOS', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.']
 # No Início, do carro aparece só LER O CARRO: as outras telas ficam dentro dele (pedido do Danilo, 21/11/2026)
 ROTULOS_CARRO = ['LER O CARRO (OBD)']
 ROTULOS = ROTULOS_OFICINA + ROTULOS_CARRO
@@ -384,9 +385,9 @@ try:
         t(not f.escritas(), 'não grava nada no banco: %s' % f.escritas())
         # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
         # cada botão abre a tela do app correspondente (desenho do protótipo), sem sair do app
-        TITULOS = ['INICIAR SERVIÇO', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'MEUS SERVIÇOS', 'CONSULTAR O.S.',
+        TITULOS = ['INICIAR SERVIÇO', 'MEUS SERVIÇOS', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.',
                    'LER O CARRO (OBD)', 'MÓDULOS DO CARRO', 'TESTE DE ATUADOR', 'APRENDIZADOS E CALIBRAÇÕES', 'PROGRAMAR BICO', 'PARÂMETROS DE REFERÊNCIA']
-        ROTAS = ['servico', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'meus', 'osconsulta',
+        ROTAS = ['servico', 'meus', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'osconsulta',
                  'obd', 'modulos', 'atuadores', 'aprendizados', 'bico', 'parametros']
         for i, rota in enumerate(ROTAS):
             # do carro, o Início tem só LER O CARRO (botão 10); as outras telas abrem pelas abas de dentro dele
@@ -634,6 +635,13 @@ try:
         pg.click('[data-iniciar="o2"]'); pg.wait_for_selector('[data-pausar]', timeout=8000); pg.wait_for_timeout(400)
         t(f.apont and f.apont[-1]['ordem_id'] == 'o2' and f.apont[-1]['perfil_id'] == UID and f.apont[-1]['situacao'] == 'andamento', 'Iniciar grava o apontamento em andamento: %s' % (f.apont[-1:] or None))
         t('Em andamento · OS 01920' in textos(pg) and pg.locator('#sv-placa').count() == 1, 'o serviço em andamento aparece no topo e ainda dá para buscar outro carro')
+        # MEUS SERVIÇOS no Início (23/11/2026): o mecânico vê na abertura o carro que está na mão dele
+        pg.goto(URL + '#/inicio'); pg.wait_for_selector('#ini-meus'); pg.wait_for_timeout(1200); tx = textos(pg)
+        t('Meus serviços' in tx and 'ABC1D23' in tx.split('Meus serviços')[1][:200] and 'Em andamento' in tx.split('Meus serviços')[1][:200], 'o Início mostra o serviço que está na mão da pessoa: %s' % tx.split('Meus serviços')[1][:140])
+        t(pg.locator('.barra:has-text("MEUS SERVIÇOS") .bolinha').inner_text() == '1', 'a bolinha do botão MEUS SERVIÇOS conta os serviços em aberto')
+        t([b.strip().split(chr(10))[0] for b in pg.locator('.grupo .barra').all_inner_texts()][:2] == ['INICIAR SERVIÇO', 'MEUS SERVIÇOS'], 'MEUS SERVIÇOS é o 2º botão do Início')
+        pg.click('#ini-meus [data-meu]'); pg.wait_for_selector('[data-pausar]', timeout=8000); pg.wait_for_timeout(600)
+        t(pg.url.endswith('#/servico'), 'tocar no serviço do Início leva para Iniciar serviço, onde se pausa e finaliza')
         # outro carro com O.S. aberta não inicia enquanto há um em andamento
         f_ord = ORD[1]; pg.fill('#sv-placa', 'abc1d23'); pg.keyboard.press('Enter'); pg.wait_for_timeout(800)
         t(pg.locator('[data-iniciar]').count() == 0, 'a O.S. que já está em andamento não aparece de novo para iniciar')

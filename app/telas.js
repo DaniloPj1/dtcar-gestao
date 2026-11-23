@@ -28,6 +28,25 @@ const ORC_ABERTO = o => o.situacao === "elaboracao" || o.situacao === "enviado";
 const ORC_MEU = (o, perfil) => perfil.papel !== "mecanico" || o.consultor_id === perfil.id || o.criado_por === perfil.id;
 const etapaTexto = o => (situacaoOS(o) || STATUS[o.status] || {}).t || o.status;
 const SIT_ORC = { elaboracao: "Em elaboração no sistema", enviado: "Enviado ao cliente", aprovado: "Aprovado · virou O.S.", recusado: "Recusado" };
+/* ---- MEUS SERVIÇOS no Início (pedido do Danilo, 23/11/2026) ----
+ * O mecânico abria o app e não via em que carro estava: MEUS SERVIÇOS era o 8º botão da lista.
+ * Agora o que está na mão dele aparece no alto do Início, com o tempo correndo, e um toque leva
+ * para Iniciar serviço, que é onde se pausa e se finaliza. Sem nada aberto, o cartão continua
+ * aparecendo com o caminho para o histórico da quinzena: é o acompanhamento dele, não um aviso. */
+function MeusAgora() {
+  const { dados } = useApp();
+  const meus = dados.meusAbertos || [];
+  const ordemDe = s => dados.ordens.find(o => o.id === s.ordem_id) || { numero: s.os_numero, veiculo: {} };
+  return html`<${Cartao} titulo="Meus serviços" id="ini-meus">
+    ${!meus.length ? html`<div class="nota">Nenhum serviço em andamento agora. Quando pegar um carro, use <b>Iniciar serviço</b>.</div>` : null}
+    ${meus.map(s => { const o = ordemDe(s), v = o.veiculo || {}; const pausado = s.situacao === "pausado";
+      return html`<button type="button" key=${s.id} class="item-linha toque" data-meu=${s.id} onClick=${() => ir("servico")}>
+        <span><b>${[exPlaca(v.placa), v.marca, v.modelo].filter(Boolean).join(" ") || numOS(o.numero)}</b><br />
+          <span class="nota">${numOS(o.numero)} · ${tempoTxt(minutosAp(s))} · <span class=${pausado ? "selo atencao" : "selo"}>${pausado ? "Pausado" : "Em andamento"}</span></span></span><${Ic} n="down" t=${18} /></button>`; })}
+    <button type="button" class="link" id="ini-meus-ver" onClick=${() => ir("meus")}>${meus.length ? "Ver todos os meus serviços" : "Ver os meus serviços da quinzena"}</button>
+  </${Cartao}>`;
+}
+
 function Inicio() {
   const { perfil, telas, dados, avisos, indicacoes, recarregarServicos } = useApp();
   const { placa, buscar, limpar } = usarPlaca(true);
@@ -57,6 +76,7 @@ function Inicio() {
           ${fechadas.length ? html`<div class="sec"><h3>Histórico de serviços</h3>${fechadas.slice(0, 5).map(o => html`<button type="button" key=${o.id} class="item-linha toque" onClick=${() => setOsAberta(o)}><span><b>${fmtData((o.criado_em || "").slice(0, 10))}</b>${o.km_entrada ? " · " + fmtKm(o.km_entrada) : ""}<br /><span class="nota">${numOS(o.numero)} · ${o.reclamacao ? String(o.reclamacao).slice(0, 70) : etapaTexto(o)}</span></span><${Ic} n="down" t=${18} /></button>`)}
             ${fechadas.length > 5 ? html`<button type="button" class="link" onClick=${() => ir("historico")}>Ver todo o histórico</button>` : null}</div>` : null}</${Cartao}>` : null}
       <div class="nota" style="padding:0 6px">Olá, <b>${perfil.nome.split(" ")[0]}</b> · ${papel}</div>
+      ${telas.includes("meus") ? html`<${MeusAgora} />` : null}
       ${GRUPOS.map(gr => {
         // Do carro, o Início mostra só LER O CARRO: Módulos, Atuadores, Aprendizados, Programar bico e
         // Parâmetros ficam DENTRO dele (botões Outros módulos e Serviços avançados) — pedido do Danilo, 21/11/2026.
@@ -64,7 +84,7 @@ function Inicio() {
         if (!botoes.length) return null;
         return html`<div key=${gr.g} class="grupo">
           ${GRUPOS.filter(x => TELAS.some(b => b.g === x.g && telas.includes(b.r))).length > 1 ? html`<h3 class="grupo-t">${gr.t}</h3>` : null}
-          ${botoes.map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</button>`)}
+          ${botoes.map(b => html`<button type="button" key=${b.r} class="barra" onClick=${() => ir(b.r)}><span class="bola"><${Ic} n=${b.ic} t=${20} sw=${1.9} /></span><span>${b.barra}</span>${b.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : b.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : b.r === "meus" && (dados.meusAbertos || []).length ? html`<span class="bolinha" aria-label=${(dados.meusAbertos || []).length + " serviço(s) em aberto"}>${(dados.meusAbertos || []).length}</span>` : null}</button>`)}
         </div>`;
       })}
       ${osAberta ? html`<${OSDetalhe} o=${osAberta} onFechar=${() => setOsAberta(null)} />` : null}

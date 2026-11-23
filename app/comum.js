@@ -53,13 +53,15 @@ const GRUPOS = [
 ];
 const TELAS = [
   { r: "servico", g: "oficina", ic: "os", barra: "INICIAR SERVIÇO", aba: "Iniciar serviço", titulo: "INICIAR SERVIÇO" },
+  // 23/11/2026: MEUS SERVIÇOS subiu para o 2º lugar, a pedido do Danilo — o mecânico acompanha o
+  // serviço dele sem caçar o botão no fim da lista.
+  { r: "meus", g: "oficina", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
   { r: "oleo", g: "oficina", ic: "oleo", barra: "ÓLEO (APLICAÇÃO)", aba: "Óleo (aplicação)", titulo: "ÓLEO (APLICAÇÃO)" },
   { r: "orcamento", g: "oficina", ic: "orc", barra: "ORÇAMENTOS", aba: "Orçamentos", titulo: "ORÇAMENTOS" },
   { r: "agendar", g: "oficina", ic: "ag", barra: "AGENDAR", aba: "Agendar", titulo: "AGENDAR SERVIÇO" },
   { r: "agenda", g: "oficina", ic: "ag", barra: "AGENDA", aba: "Agenda", titulo: "AGENDA" },
   { r: "peca", g: "oficina", ic: "peca", barra: "CONSULTAR PEÇA POR CATÁLOGO", aba: "Consultar peça por catálogo", titulo: "CONSULTAR PEÇA POR CATÁLOGO" },
   { r: "historico", g: "oficina", ic: "hist", barra: "HISTÓRICO DE SERVIÇOS", aba: "Histórico de serviços", titulo: "HISTÓRICO DE SERVIÇOS" },
-  { r: "meus", g: "oficina", ic: "hist", barra: "MEUS SERVIÇOS", aba: "Meus serviços", titulo: "MEUS SERVIÇOS" },
   { r: "osconsulta", g: "oficina", ic: "clip", barra: "CONSULTAR O.S.", aba: "Consultar O.S.", titulo: "CONSULTAR O.S." },
   { r: "obd", g: "diagnostico", ic: "obd", barra: "LER O CARRO (OBD)", aba: "Ler o carro", titulo: "LER O CARRO (OBD)" },
   { r: "modulos", g: "diagnostico", ic: "modulo", barra: "MÓDULOS DO CARRO", aba: "Módulos", titulo: "MÓDULOS DO CARRO" },
@@ -82,10 +84,11 @@ function Cabecalho() {
 /** A tira de abas mostra só as telas do grupo em que a pessoa está: com 15 telas, a tira inteira
  *  deixaria de ser navegação e viraria uma régua de rolar. */
 function Abas({ ativa }) {
-  const { telas, avisos, indicacoes } = useApp();
+  const { telas, avisos, indicacoes, dados } = useApp();
+  const meusAbertos = (dados && dados.meusAbertos || []).length;   // 23/11/2026: o mecânico vê na aba quantos serviços estão na mão dele
   const g = grupoDa(ativa);
   const minhas = TELAS.filter(t => t.g === g && telas.includes(t.r));
-  return html`<nav class="abas" aria-label="Telas">${minhas.map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : t.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : null}</a>`)}</nav>`;
+  return html`<nav class="abas" aria-label="Telas">${minhas.map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === ativa ? "page" : undefined}><${Ic} n=${t.ic} t=${18} sw=${1.9} /><span>${t.aba}</span>${t.r === "orcamento" && avisos.length ? html`<span class="bolinha" aria-label=${avisos.length + " aviso(s)"}>${avisos.length}</span>` : t.r === "servico" && indicacoes.length ? html`<span class="bolinha" aria-label=${indicacoes.length + " indicação(ões)"}>${indicacoes.length}</span>` : t.r === "meus" && meusAbertos ? html`<span class="bolinha" aria-label=${meusAbertos + " serviço(s) em aberto"}>${meusAbertos}</span>` : null}</a>`)}</nav>`;
 }
 function Titulo({ tela, ajuda }) {
   const t = TELAS.find(x => x.r === tela);

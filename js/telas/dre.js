@@ -17,7 +17,8 @@ const mesDe = s => { const str = String(s || ""); if (!str) return null;
   const m = Number(str.slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
 const din = v => reais(v).replace("R$ ", "");
 /** categoria que é compra de peça/insumo (fica fora da conta do resultado: o custo do item já conta) */
-export const ehCompraDePeca = c => /fornecedor|pe[çc]a|insumo|mercadoria|terceir|prestador/i.test(String(c || ""));
+export { ehCompraDePeca } from "../numeros.js";
+import { ehCompraDePeca } from "../numeros.js";
 
 const COLS = "minmax(230px, 1.6fr) repeat(12, minmax(84px, 1fr)) minmax(104px, 1.1fr)";
 function Linha({ cls, label, vals }) {

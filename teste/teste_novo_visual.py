@@ -83,11 +83,14 @@ try:
 
     # ----- Painel: quadro Ações do dia a dia -----
     pg = abrir(b, "#/painel")
-    chk("painel: quadro de ações com os 4 botões", pg.eval_on_selector_all(".acao-dia", "l => l.map(e => e.textContent)") == ["Nova O.S.", "Novo orçamento", "Novo cliente", "Novo veículo"], pg.eval_on_selector_all(".acao-dia", "l => l.map(e => e.textContent)"))
-    pg.click(".acao-dia:has-text('Novo cliente')"); pg.wait_for_timeout(900)
+    # 23/11/2026: as quatro ações do dia a dia passaram a ser as PRIMEIRAS fichas de atalho (protótipo aprovado);
+    # a janela "Ações do dia a dia" continua existindo e pode voltar pelo Personalizar.
+    quatro = pg.eval_on_selector_all(".atalho", "l => l.slice(0, 4).map(e => e.textContent.trim())")
+    chk("painel: as 4 ações do dia a dia abrem a lista de fichas", quatro == ["Nova O.S.", "Novo orçamento", "Novo cliente", "Novo veículo"], quatro)
+    pg.click(".atalho:has-text('Novo cliente')"); pg.wait_for_timeout(900)
     chk("painel: Novo cliente abre o cadastro direto no formulário", pg.query_selector(".modal:has-text('Novo cliente')") is not None)
     pg.goto(U + "#/painel"); pg.wait_for_timeout(900)
-    pg.click(".acao-dia:has-text('Novo veículo')"); pg.wait_for_timeout(900)
+    pg.click(".atalho:has-text('Novo veículo')"); pg.wait_for_timeout(900)
     chk("painel: Novo veículo abre a ficha de veículo novo", pg.query_selector(".modal:has-text('Novo veículo')") is not None)
 
     # ----- menu novo: telas financeiras no grupo, pelo hover -----

@@ -10,13 +10,11 @@ import { useApp, Vazio } from "../ui.js";
 import { reais, parseValor } from "../util.js";
 import { pode } from "../regras.js";
 import { agruparOS, faturadas } from "./relatorios.js";
+import { carregarAno, porMes as numPorMes, mesDe as numMesDe, n as numN } from "../numeros.js";
 
 const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const MESES_EXT = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
-const n = v => Number(v) || 0;
-const mesDe = s => { const str = String(s || ""); if (!str) return null;
-  if (str.length > 10) { const d = new Date(str); return isNaN(d) ? null : d.getMonth(); } // timestamp: mês no fuso daqui
-  const m = Number(str.slice(5, 7)); return m >= 1 && m <= 12 ? m - 1 : null; };
+const n = numN, mesDe = numMesDe;
 
 /** Anel de percentual com o número dentro (o rótulo do cartão fica sempre escrito ao lado). */
 function Anel({ pct, cor, trilha, texto }) {
@@ -41,34 +39,14 @@ export function PainelFinanceiro() {
   useEffect(() => {
     let vivo = true; setD(null); setErro("");
     (async () => {
-      const ini = ano + "-01-01", fim = ano + "-12-31";
-      const iniISO = new Date(ini + "T00:00:00").toISOString(), fimISO = new Date(new Date(fim + "T00:00:00").getTime() + 86400000).toISOString();
-      const [recibos, pagas, itens, vendas, saldos] = await Promise.all([
-        api.recibos.desde ? api.recibos.desde(ini) : api.recibos.listar({ de: ini, ate: fim }),
-        api.contas.listar({ de: ini, ate: fim, campo: "pago_em", status: "paga" }),
-        api.relatorioItens(iniISO, fimISO, "entrega"),
-        api.vendas && (api.vendas.periodo || api.vendas.listar) ? (api.vendas.periodo || api.vendas.listar)({ de: iniISO, ate: fimISO }).catch(() => []) : [],
-        cfg.contasFinanceiras && cfg.contasFinanceiras.length && api.saldosContas ? api.saldosContas().catch(() => null) : null,
-      ]);
-      const rs = (recibos || []).filter(r => !r.cancelado && String(r.data || r.criado_em || "").slice(0, 10) <= fim);
-      const conc = (vendas || []).filter(v => v.status === "concluida");
-      // venda com recibo entra pelo recibo — em QUALQUER data: o recibo pode vir noutro mês ou ano (achados do Codex, 22/11/2026)
-      const comRecibo = new Set(api.recibos.dasVendas ? await api.recibos.dasVendas(conc.map(v => v.id)).catch(() => rs.map(r => r.venda_id).filter(Boolean)) : rs.map(r => r.venda_id).filter(Boolean));
-      if (vivo) setD({ recibos: rs, pagas: pagas || [], oss: faturadas(agruparOS(itens)), vendas: conc, vendasCaixa: conc.filter(v => !comRecibo.has(v.id)), saldos });
+      const dd = await carregarAno(ano, cfg, { agruparOS, faturadas });
+      if (vivo) setD(dd);
     })().catch(e => { if (vivo) { setErro(e.message); setD(false); } });
     return () => { vivo = false; };
   }, [ano]);
 
   const t = useMemo(() => {
-    const zero = () => Array.from({ length: 12 }, () => 0);
-    const entra = zero(), sai = zero(), fat = zero(), custo = zero();
-    if (d) {
-      for (const r of d.recibos) { const m = mesDe(r.data || r.criado_em); if (m != null) entra[m] += n(r.valor); }
-      for (const c of d.pagas) { const m = mesDe(c.pago_em); if (m != null) sai[m] += n(c.valor_pago != null ? c.valor_pago : c.valor); }
-      for (const o of d.oss) { const m = mesDe(o.entregue_em); if (m != null) { fat[m] += o.total; custo[m] += o.custo; } }
-      for (const v of d.vendas) { const m = mesDe(v.criado_em); if (m != null) { fat[m] += n(v.total); custo[m] += n(v.custo); } }
-      for (const v of d.vendasCaixa) { const m = mesDe(v.criado_em); if (m != null) entra[m] += n(v.total); } // balcão sem recibo entra no caixa pela venda
-    }
+    const { entra, sai, fat, custo } = numPorMes(d);
     const saldo = entra.map((e, i) => e - sai[i]);
     let acc = 0; const acum = saldo.map(s => (acc += s));
     const margem = fat.map((f, i) => f - custo[i]);

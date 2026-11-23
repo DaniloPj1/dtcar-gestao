@@ -13,6 +13,7 @@ import { Ctx, Modal, I } from "./ui.js";
 import { cfgCompleta, pode, etapaOS } from "./regras.js";
 import { Conexao, Login, Pendente, GuardarAcessoModal } from "./telas/login.js";
 import { Painel, Ordens } from "./telas/painel.js";
+import { aplicarTamanhoTela } from "./telas/painel.js";
 import { NovaOS, ChecklistOS } from "./telas/entrada.js";
 import { Ordem } from "./telas/ordem.js";
 import { Cadastros, ClienteTela, VeiculoTela } from "./telas/cadastros.js";
@@ -105,6 +106,7 @@ function App() {
   const [pend, setPend] = useState([]); // fila de envio deste aparelho (O.S. abertas sem internet)
   const [pasta, setPasta] = useState(null), [assistente, setAssistente] = useState(false);
   const [novaVersao, setNovaVersao] = useState(() => !!window.__dtcarNovaVersao || !!(window.dtcarDesktop && window.dtcarDesktop.novaVersao && window.dtcarDesktop.novaVersao()));
+  useEffect(() => { try { aplicarTamanhoTela(lsGet("dtcar-tela") || "medio"); } catch (e) {} }, []);
   useEffect(() => { const f = () => setNovaVersao(true); window.addEventListener("dtcar-nova-versao", f); return () => window.removeEventListener("dtcar-nova-versao", f); }, []);
   useEffect(() => ouvirPasta(setPasta), []);
   useEffect(() => { iniciarPasta().then(async st => {

@@ -381,7 +381,7 @@ button.linha:disabled{cursor:default;opacity:1}
 .patio-item b{font-family:var(--f-display);font-size:34px;line-height:1;font-variant-numeric:tabular-nums}
 .patio-item span{font-size:12.5px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;line-height:1.2}
 .patio-item small{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
-.patio-item.t-info{border-top-color:var(--brand)} .patio-item.t-warn{border-top-color:var(--warn)} .patio-item.t-brand{border-top-color:var(--brand-strong)} .patio-item.t-ok{border-top-color:var(--ok)}
+
 .patio-item.ativo{outline:2px solid var(--brand);outline-offset:1px}
 @media (max-width:560px){.patio{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .colunas.uma{grid-template-columns:1fr!important}
@@ -462,13 +462,6 @@ ol.ranking li::before{counter-increment:r;content:counter(r);font-weight:700;col
 .tab-mov td:nth-child(3),.tab-mov td:nth-child(4){text-align:right;white-space:nowrap}
 .tab-mov small{display:block;color:var(--muted)}
 .hoje{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
-.hoje>div,.hoje>button{text-align:left;border:0;cursor:pointer;transition:box-shadow .12s ease,transform .12s ease}
-.hoje>button:hover{box-shadow:0 4px 12px rgba(14,21,32,.25);transform:translateY(-1px)}
-.hoje>div,.hoje>button{background:var(--steel);color:var(--on-steel);border-radius:var(--r);padding:10px 12px;display:flex;flex-direction:column;gap:1px;min-width:0}
-.hoje span{font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--steel-muted);font-weight:600}
-.hoje b{font-family:var(--f-display);font-size:28px;line-height:1.05;font-variant-numeric:tabular-nums}
-.hoje small{font-size:12px;color:var(--steel-muted);font-variant-numeric:tabular-nums}
-.hoje .t-alerta b{color:#ffb547}
 @media (max-width:560px){.hoje{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .contas-mini>button{text-align:left;border:1px solid var(--line);cursor:pointer}
 .contas-mini>button:hover{border-color:var(--brand)}
@@ -623,22 +616,98 @@ body{font-size:15px}
 .atalho{display:inline-flex;align-items:center;gap:8px;padding:9px 14px;border:1px solid var(--line);border-radius:99px;background:var(--surface);color:var(--ink);font-weight:600;font-size:13.5px;cursor:pointer}
 .atalho svg{width:17px;height:17px;color:var(--brand)}
 .atalho:hover{border-color:var(--brand);color:var(--brand)}
-.clima{display:flex;flex-direction:column;gap:12px}
-.clima-hoje{display:flex;align-items:center;gap:14px}
-.clima-hoje>b{font-family:var(--f-display);font-size:40px;line-height:1;font-variant-numeric:tabular-nums}
-.clima-hoje strong{display:block;font-size:15px}
-.clima-hoje span{font-size:13px;color:var(--muted)}
-.clima-dias{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
-.clima-dias>div{display:flex;flex-direction:column;gap:2px;background:var(--surface-2);border-radius:10px;padding:8px 10px;min-width:0}
-.clima-dias span{font-size:12px;color:var(--muted);font-weight:700}
-.clima-dias strong{font-size:14px;font-variant-numeric:tabular-nums}
-.clima-dias small{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.noticias{display:flex;flex-direction:column}
-.noticias a{display:flex;flex-direction:column;gap:2px;padding:9px 2px;border-top:1px solid var(--line);color:var(--ink);text-decoration:none}
-.noticias a:first-child{border-top:0;padding-top:2px}
-.noticias a:hover strong{color:var(--brand)}
-.noticias strong{font-size:14px;line-height:1.3}
-.noticias span{font-size:12px;color:var(--muted)}
+/* Tamanho da tela no computador (pedido do Danilo em 23/11/2026): o próprio dono escolhe quanto a tela abre.
+   Guardado no aparelho; o celular (até 640px) NÃO é afetado — lá a largura é sempre a do aparelho. */
+.tam-tela{display:none}
+@media (min-width:900px){
+  .tam-tela{display:inline-flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px}
+  .tam-tela button{border:0;background:none;padding:6px 12px;border-radius:7px;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer}
+  .tam-tela button[aria-pressed="true"]{background:var(--pf-az8);color:#fff}
+  :root[data-tela="compacto"] .pagina,:root[data-tela="compacto"] .pagina.larga,:root[data-tela="compacto"] .pagina.larga-media{max-width:1340px}
+  :root[data-tela="compacto"] main{padding:18px 22px 110px}
+  :root[data-tela="compacto"] .grade-painel{gap:10px}
+  :root[data-tela="largo"] .pagina,:root[data-tela="largo"] .pagina.larga,:root[data-tela="largo"] .pagina.larga-media{max-width:none}
+}
+
+/* ================= Painel novo (23/11/2026, protótipo aprovado) ================= */
+/* Blocos de dinheiro na escala do Painel Financeiro; cartões brancos só para os gráficos. */
+.pn-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.pn-g2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px}
+.pn-kpi{border-radius:14px;padding:13px 15px;color:#fff;display:flex;align-items:center;gap:11px;min-width:0}
+.pn-kpi .pn-tx{flex:1;min-width:0}
+.pn-kpi span{display:block;font-size:12px;font-weight:600;letter-spacing:.03em;color:rgba(255,255,255,.88)}
+.pn-kpi b{display:block;font-family:var(--f-display);font-size:25px;font-weight:700;text-align:right;margin-top:9px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pn-kpi small{display:block;font-size:11.5px;text-align:right;color:rgba(255,255,255,.78);margin-top:2px}
+.pn-az6{background:var(--pf-az6)}.pn-az7{background:var(--pf-az7)}.pn-az8{background:var(--pf-az8)}.pn-az9{background:var(--pf-az9)}
+.pn-ok{background:var(--pf-ok)}.pn-bad{background:var(--pf-bad)}
+.pn-anel{width:46px;height:46px;flex:0 0 46px}
+.pn-anel text{font:700 10px var(--f-corpo,Barlow,sans-serif);fill:#fff}
+.pn-card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;min-width:0}
+.pn-card h4{font-size:14px;font-weight:700;margin-bottom:10px}
+.pn-rosca{display:flex;align-items:center;gap:14px;min-width:0}
+.pn-rosca svg{flex:none;width:104px;height:104px}
+.pn-cen{font:700 13px var(--f-display);fill:var(--ink)}
+.pn-cen2{font:600 8.5px var(--f-corpo,Barlow,sans-serif);fill:var(--muted)}
+.pn-leg{display:flex;flex-direction:column;gap:6px;flex:1;min-width:0}
+.pn-leg div{display:flex;align-items:center;gap:8px;font-size:13.5px;min-width:0}
+.pn-leg i{width:10px;height:10px;border-radius:3px;flex:none}
+.pn-leg span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pn-leg em{font-style:normal;color:var(--muted);font-size:12px;flex:none}
+.pn-leg b{margin-left:auto;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pn-barras{display:grid;grid-template-columns:minmax(0,1fr) 1.6fr max-content;gap:7px 10px;align-items:center;font-size:13.5px}
+.pn-n{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}
+.pn-n.pn-filho{padding-left:14px;color:var(--muted);font-weight:400;position:relative}
+.pn-n.pn-filho::before{content:"";position:absolute;left:4px;top:50%;width:5px;height:1px;background:var(--line)}
+.pn-t{height:7px;border-radius:99px;background:var(--surface-2);overflow:hidden}
+.pn-t i{display:block;height:100%;border-radius:99px}
+.pn-barras b{font-weight:700;text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.pn-leg2{display:flex;gap:14px;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:4px}
+.pn-leg2 i{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px}
+.pn-cols{display:flex;align-items:flex-end;gap:8px;height:132px}
+.pn-m{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%;justify-content:flex-end;min-width:0}
+.pn-par{display:flex;align-items:flex-end;gap:3px;height:100%;width:100%;justify-content:center}
+.pn-par i{width:10px;border-radius:3px 3px 0 0;background:#34b37e}
+.pn-par i.s{background:#e2645c}
+.pn-m span{font-size:11.5px;font-weight:600;color:var(--muted)}
+.pn-m.on span{color:#fff;background:var(--pf-az8);border-radius:99px;padding:1px 8px}
+.pn-linha{width:100%;height:130px}
+.pn-pe{display:flex;align-items:baseline;gap:10px;padding-top:8px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+.pn-pe b{margin-left:auto;font-family:var(--f-display);font-size:19px;font-variant-numeric:tabular-nums}
+@media (max-width:1280px){.pn-g4{grid-template-columns:repeat(2,minmax(0,1fr))}.pn-g2{grid-template-columns:minmax(0,1fr)}}
+
+/* Previsão do tempo: cartão azul com o desenho flutuando, no estilo dos celulares */
+.clima{position:relative;overflow:hidden;border-radius:14px;padding:16px 18px;color:#fff;
+  background:linear-gradient(135deg,#1f5fa8 0%,#2f6fb5 45%,#5b9ad8 100%)}
+.clima::after{content:"";position:absolute;right:-60px;bottom:-84px;width:230px;height:230px;border-radius:50%;background:rgba(255,255,255,.07)}
+.clima.clima-off{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.clima-ln{display:flex;align-items:center;gap:14px;position:relative;z-index:1}
+.clima-ic{filter:drop-shadow(0 8px 14px rgba(0,0,0,.22));animation:clima-flut 5s ease-in-out infinite;flex:none}
+@keyframes clima-flut{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@media (prefers-reduced-motion:reduce){.clima-ic{animation:none}}
+.clima-ag{min-width:0}
+.clima-t{font-family:var(--f-display);font-size:46px;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
+.clima-t sup{font-size:21px;vertical-align:super}
+.clima-ag strong{display:block;font-size:15px;margin-top:2px}
+.clima-ag span{font-size:12.5px;color:#d4e4f6}
+.clima-mais{margin-left:auto;text-align:right;font-size:12.5px;color:#d4e4f6;line-height:1.7;flex:none}
+.clima-mais b{color:#fff}
+.clima-dias{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;position:relative;z-index:1}
+.clima-dias>div{background:rgba(255,255,255,.14);border-radius:10px;padding:7px 9px;display:flex;align-items:center;gap:8px;min-width:0}
+.clima-dias>div>div{min-width:0}
+.clima-dias span{display:block;font-size:12px;font-weight:700;color:#d4e4f6}
+.clima-dias b{display:block;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.clima-dias small{display:block;font-size:11px;color:#cfe0f3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Notícias: hora à esquerda, manchete à direita */
+.noticias{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column}
+.not-cab{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;margin-bottom:6px}
+.not-cab i{width:7px;height:7px;border-radius:50%;background:var(--bad);flex:none}
+.not-cab span{margin-left:auto;font-size:12px;font-weight:600;color:var(--muted)}
+.noticias a{display:flex;gap:12px;align-items:baseline;padding:9px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none}
+.noticias a:first-of-type{border-top:0}
+.noticias a:hover strong{color:var(--brand);text-decoration:underline}
+.not-h{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;flex:none;min-width:40px}
+.noticias strong{font-size:14px;font-weight:600;line-height:1.35}
 .aj-botoes{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
 .aj-botoes button{padding:16px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-weight:700;font-size:14.5px;cursor:pointer;text-align:center}
 .aj-botoes button:hover{border-color:var(--brand);color:var(--brand)}
@@ -1796,7 +1865,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
    Tonalidades do azul do app (#2f6fb5) nos cartões; verde = entradas e vermelho = saídas,
    sempre com o nome escrito ao lado (a cor nunca fala sozinha). Cartões coloridos são
    fixos nos dois temas (texto branco conferido); o resto usa as variáveis do tema. */
-:root{--pf-az6:#2f6fb5;--pf-az7:#225da4;--pf-az8:#174f94;--pf-az9:#0d2c52;--pf-ok:#2e7d4f;--pf-bad:#a63a31}
+:root{--pf-az6:#2f6fb5;--pf-az7:#225da4;--pf-az8:#174f94;--pf-az9:#0d2c52;--pf-ok:#2e7d4f;--pf-bad:#a63a31;--pf-am:#9a6410}
 .pf-topo{align-items:flex-end}
 .pf-filtros{display:flex;align-items:center;gap:10px;flex-wrap:wrap;justify-content:flex-end}
 .pf-ano{display:inline-flex;align-items:center;gap:2px;background:var(--pf-az8);border-radius:999px;padding:2px 4px;color:#fff}
@@ -2094,4 +2163,94 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .tela-ordens .os-colunas{gap:16px}
   .pf .pf-linha{gap:20px}
   .tela-ajustes .aj-botoes{grid-template-columns:repeat(6,minmax(0,1fr))}
+}
+
+/* ---- Painel igual ao protótipo: faixas de seção, blocos preenchidos e cartões brancos ---- */
+@media (min-width:900px){
+  /* o título de cada janela vira a faixa do protótipo: rótulo apagado + linha fina */
+  .painel .janela-cab{align-items:center;gap:12px;padding-bottom:0;border-bottom:0}
+  .painel .janela-cab h3{font-family:var(--f-corpo,Barlow,sans-serif);font-size:11.5px;font-weight:800;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--muted);margin-right:0;white-space:nowrap}
+  .painel .janela-cab::after{content:"";flex:1;height:1px;background:var(--line)}
+  .painel .janela-cab .sub,.painel .janela-cab .pill{order:3;margin-left:0}
+  .painel .janela:not(.sem-moldura){background:none;border:0;box-shadow:none;padding:0;gap:10px}
+}
+/* "Oficina hoje": quatro blocos preenchidos com anel */
+.hoje{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.hoje>.pn-kpi{border:0;cursor:pointer;text-align:left;font-family:inherit;transition:box-shadow .12s ease,transform .12s ease}
+.hoje>.pn-kpi:hover{box-shadow:0 6px 18px rgba(14,21,32,.18);transform:translateY(-1px)}
+.pn-am{background:var(--pf-am)}
+@media (max-width:860px){.hoje{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Pátio: cartão branco com ponto da etapa, contagem, valor e barra */
+.patio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.patio-item{display:flex;flex-direction:column;gap:7px;background:var(--surface);border:1px solid var(--line);border-top:1px solid var(--line);
+  border-radius:14px;padding:13px 15px;text-align:left;color:var(--ink);min-width:0;cursor:pointer}
+.patio-item .pi-t{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:700;text-transform:none;letter-spacing:0;color:var(--ink)}
+.patio-item .pi-t i{width:9px;height:9px;border-radius:50%;flex:none}
+.patio-item .pi-t em{margin-left:auto;font-style:normal;font-size:12px;font-weight:700;color:#fff;border-radius:99px;padding:1px 9px}
+.patio-item b{font-family:var(--f-display);font-size:22px;line-height:1;font-variant-numeric:tabular-nums}
+.patio-item .pi-bar{height:6px;border-radius:99px;background:var(--surface-2);overflow:hidden;display:block}
+.patio-item .pi-bar i{display:block;height:100%;border-radius:99px}
+.patio-item small{font-size:12.5px;color:var(--muted)}
+/* orçamento = âmbar, em execução = azul, aguardando pagamento = verde (igual aos cards da O.S.) */
+.patio-item.t-info .pi-t i,.patio-item.t-info .pi-t em,.patio-item.t-info .pi-bar i{background:#e8a33d}
+.patio-item.t-info b{color:var(--warn)}
+.patio-item.t-brand .pi-t i,.patio-item.t-brand .pi-t em,.patio-item.t-brand .pi-bar i{background:var(--brand)}
+.patio-item.t-brand b{color:var(--brand-strong)}
+.patio-item.t-warn .pi-t i,.patio-item.t-warn .pi-t em,.patio-item.t-warn .pi-bar i{background:#34b37e}
+.patio-item.t-warn b{color:var(--ok)}
+.patio-item.t-ok .pi-t i,.patio-item.t-ok .pi-t em,.patio-item.t-ok .pi-bar i{background:var(--muted)}
+.patio-item:hover{border-color:var(--brand);box-shadow:0 3px 10px rgba(14,21,32,.07)}
+@media (max-width:860px){.patio{grid-template-columns:repeat(1,minmax(0,1fr))}}
+/* Ações do dia: cartões claros com o ícone num círculo azul (protótipo) */
+@media (min-width:900px){
+  .painel .acoes-dia{background:none;padding:0;gap:10px;grid-template-columns:repeat(auto-fit,minmax(min(100%,200px),1fr))}
+  .painel .acao-dia{flex-direction:column;justify-content:center;min-height:92px;padding:12px;border:1px solid var(--line);
+    border-radius:14px;background:var(--surface);color:var(--ink);text-align:center;gap:9px}
+  .painel .acao-dia svg{width:40px;height:40px;padding:9px;box-sizing:border-box;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong)}
+  .painel .acao-dia:hover{border-color:var(--brand);background:var(--surface);box-shadow:0 3px 10px rgba(14,21,32,.07)}
+  .painel .acao-dia:hover svg{background:var(--brand);color:#fff}
+  .painel .acao-dia:first-child{background:var(--pf-az8);border-color:var(--pf-az8);color:#fff}
+  .painel .acao-dia:first-child svg{background:rgba(255,255,255,.18);color:#fff}
+  .painel .acao-dia:first-child:hover{background:var(--pf-az7);border-color:var(--pf-az7)}
+}
+
+
+@media (min-width:900px){
+  .painel .hoje>.pn-kpi.pn-az6{background:var(--pf-az6)}
+  .painel .hoje>.pn-kpi.pn-az7{background:var(--pf-az7)}
+  .painel .hoje>.pn-kpi.pn-az8{background:var(--pf-az8)}
+  .painel .hoje>.pn-kpi.pn-az9{background:var(--pf-az9)}
+  .painel .hoje>.pn-kpi.pn-am{background:var(--pf-am)}
+  .painel .acoes-dia{background:none;padding:0}
+  .painel .acao-dia{border:1px solid var(--line);background:var(--surface);color:var(--ink);flex-direction:column;justify-content:center;text-align:center;min-height:92px;gap:9px}
+  .painel .acao-dia svg{width:40px;height:40px;padding:9px;box-sizing:border-box;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong)}
+  .painel .acao-dia:first-child{background:var(--pf-az8);border-color:var(--pf-az8);color:#fff}
+  .painel .acao-dia:first-child svg{background:rgba(255,255,255,.18);color:#fff}
+  .painel .acao-dia:hover{background:var(--surface);border-color:var(--brand)}
+  .painel .acao-dia:hover svg{background:var(--brand);color:#fff}
+  .painel .acao-dia:first-child:hover{background:var(--pf-az7);border-color:var(--pf-az7)}
+  .painel .acao-dia:first-child:hover svg{background:rgba(255,255,255,.26)}
+}
+
+/* o texto dentro dos blocos preenchidos é sempre branco, venha de onde vier a regra anterior */
+.pn-kpi span,.hoje .pn-kpi span,.painel .hoje .pn-kpi span{color:rgba(255,255,255,.88)}
+.pn-kpi small,.hoje .pn-kpi small,.painel .hoje .pn-kpi small{color:rgba(255,255,255,.78)}
+.pn-kpi b,.hoje .pn-kpi b,.painel .hoje .pn-kpi b{color:#fff}
+
+/* os três quadros de gasto lado a lado, como no protótipo */
+.pn-g3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.pn-card h4{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.pn-card h4 small{font-size:12px;font-weight:600;color:var(--muted);margin-left:auto}
+@media (max-width:1100px){.pn-g3{grid-template-columns:minmax(0,1fr)}}
+/* a faixa da seção leva o texto da direita (como "O.S. entregues e balcão") */
+@media (min-width:900px){
+  .painel .janela-cab .sub{font-size:12.5px;color:var(--muted);white-space:nowrap}
+  .painel .janela-cab .sub::first-letter{text-transform:none}
+}
+
+/* Oficina hoje: 4 blocos + 3 cartões de etapa numa linha só (proporção do protótipo) */
+@media (min-width:900px){
+  .painel .j-hoje .hoje{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:10px;align-items:stretch}
+  .painel .j-hoje .patio{display:contents}
 }

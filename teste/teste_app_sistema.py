@@ -1306,6 +1306,9 @@ try:
         pg.click('#obd-desligar'); pg.wait_for_selector('#obd-outro', timeout=10000); pg.click('#obd-outro'); pg.wait_for_selector('.obd-ap', timeout=10000)
         t(pg.locator('.obd-ap').count() >= 1 and pg.locator('#obd-acoes').count() == 0, 'OUTRO ADAPTADOR mostra a lista para escolher')
         pg.click('.obd-ap'); pg.wait_for_selector('#obd-acoes', timeout=15000)
+        # SEM PLACA, registro SEM PLACA (defeito achado na leitura da Amarok, 23/11/2026): o estado da busca
+        # virava a string "[object Object]" e a sessão era gravada na placa OBJECTOBJECT.
+        t(pg.evaluate("() => Object.keys(window.localStorage).some(k => /OBJECTOBJECT/.test(k))") is False, 'sem placa puxada, nada é guardado em OBJECTOBJECT')
         # A PLACA FICA (pedido do Danilo, 21/11/2026): puxou uma vez, vale nas outras telas do carro até trocar ou tirar o adaptador
         pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
         pg.goto(URL + '#/bico'); pg.wait_for_selector('#bico-placa', timeout=10000); pg.wait_for_timeout(400)

@@ -229,6 +229,8 @@ button.linha:disabled{cursor:default;opacity:1}
 .zap-fotos figure{margin:0}
 .zap-fotos img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:8px;border:1px solid var(--line);display:block}
 .zap-fotos figcaption{margin-top:4px;font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* texto do agente de mensagens: linhas longas sem quebrar o molde, em fonte de largura fixa para alinhar os tópicos */
+.zap-agente-txt{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;line-height:1.5;min-height:300px;white-space:pre;overflow-wrap:normal;overflow-x:auto}
 .faixa-zap{max-width:1180px;margin:0 auto 14px;padding:10px 14px;border-radius:10px;background:var(--bad-soft);border:1px solid var(--bad);color:var(--bad);font-size:14px}
 .erro-zap{color:var(--bad)}
 .zap-fila .btn-sm{margin-top:6px}

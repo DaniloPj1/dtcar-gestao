@@ -80,7 +80,9 @@ chk("consultor entra por padrão mas não age no carro sem marca",
 chk("mecânico sem nada gravado não entra", !acessoApp({}, mec).entra);
 
 /* ---------------- as telas liberadas por padrão ---------------- */
-chk("o papel não limita quais telas existem", telasDoPapel("mecanico").length === TELAS_APP.length);
+chk("administrador e consultor têm todas as telas", telasDoPapel("admin").length === TELAS_APP.length && telasDoPapel("consultor").length === TELAS_APP.length);
+chk("mecânico não ganha Agendar: o banco recusa a gravação desse papel (revisão do Codex, 23/11/2026)",
+  !telasDoPapel("mecanico").includes("agendar") && telasDoPapel("mecanico").length === TELAS_APP.length - 1);
 chk("administrador por padrão tem todas", acessoApp({}, adm).telas.length === TELAS_APP.length);
 
 /* ---------------- nada explode com entrada estranha ---------------- */

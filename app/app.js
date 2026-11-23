@@ -316,7 +316,19 @@
     }
     var digital = digitalLigada();
     // a sessão é a mesma do sistema (mesmo armazenamento do Supabase); com a digital ligada o app pede a digital a cada vez que é aberto
-    sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false } });
+    // A MESMA regra de rede do sistema: todo pedido tem tempo-limite. Sem isso, uma conexão que
+    // aceita o pedido e não responde deixava o login pendurado em ENTRANDO (revisão do Codex, 23/11/2026).
+    var fetchComPrazo = function (url, opts) {
+      opts = opts || {};
+      if (!navigator.onLine) return Promise.reject(new TypeError('sem internet'));
+      var ctl = new AbortController();
+      var t = setTimeout(function () { ctl.abort(); }, 20000);
+      if (opts.signal) { if (opts.signal.aborted) ctl.abort(); else opts.signal.addEventListener('abort', function () { ctl.abort(); }); }
+      var o = Object.assign({}, opts, { signal: ctl.signal });
+      return fetch(url, o).then(function (r) { clearTimeout(t); return r; },
+        function (e) { clearTimeout(t); throw (e && e.name === 'AbortError' && !(opts.signal && opts.signal.aborted)) ? new TypeError('sem resposta do servidor') : e; });
+    };
+    sb = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }, global: { fetch: fetchComPrazo } });
     // o Supabase troca a chave de renovação de tempos em tempos: o cofre acompanha
     sb.auth.onAuthStateChange(function (evento, sessao) {
       if (evento === 'TOKEN_REFRESHED' && sessao) setTimeout(function () { guardarToken(sessao.refresh_token); }, 0);

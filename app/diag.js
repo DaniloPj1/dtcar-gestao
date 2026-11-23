@@ -314,7 +314,14 @@ function Obd() {
     // E não fala por cima de uma ação em curso (atuador, aprendizado, gravação): os pedidos se misturariam
     // aos dela, no módulo dela. soltarModulo() não espera ação — por isso a recusa é aqui.
     if (sessao.estado().acaoCorrendo) { setOcupado(""); setErro("O adaptador está ocupado com uma ação em outro módulo (atuador, aprendizado ou gravação). Espere terminar."); return; }
-    try { await sessao.soltarModulo(); await fn(); } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
+    // E roda COM A VEZ do adaptador (sessao.tomar): sem ela, uma pergunta do mapeamento de fundo ainda
+    // em andamento (a pessoa acabou de sair de Módulos) se intercalava com estes pedidos — achado da
+    // revisão do Codex, 23/11/2026. tomar espera a pergunta de fundo terminar e recusa o resto.
+    try {
+      await sessao.soltarModulo();                                  // espera a vez e volta ao OBD genérico
+      const r = await sessao.tomar("a leitura do OBD", fn);
+      if (!r.ok) setErro(r.texto || "O adaptador está ocupado. Espere terminar.");
+    } catch (e) { setErro(obd.motivoDe(e)); } finally { setOcupado(""); }
   }
 
   const procurar = (outro = false) => rodar("Procurando o adaptador…", async () => {
@@ -367,6 +374,9 @@ function Obd() {
       await new Promise(r => setTimeout(r, 120));
     }
     if (sessao.estado().acaoCorrendo) { setErro("O adaptador está ocupado com uma ação em outro módulo (atuador, aprendizado ou gravação). Espere terminar."); return; }
+    // espera uma pergunta de fundo em andamento terminar (até ~4 s) antes de começar a roda
+    for (let e9 = 0; sessao.estado().dono && e9 < 40; e9++) await new Promise(f => setTimeout(f, 100));
+    if (sessao.estado().dono) { setErro("O adaptador está ocupado com " + sessao.estado().dono + ". Espere terminar."); return; }
     await sessao.soltarModulo();                                    // idem: o ao vivo é OBD-II genérico
     const minha = ++contador.current;
     rodada.current = minha;
@@ -1254,7 +1264,8 @@ function Atuadores() {
   </${Tela}>`;
 }
 // Tirou o adaptador (ou desconectou): a placa puxada deixa de valer — o próximo carro é outro.
-{ let estavaLigado = false; sessao.observar(st => { if (estavaLigado && !st.ligado) { esquecerPlacaDoCarro(); sessao.definirCarro({ placa: "", marca: "", modelo: "", ano: "", veiculo_id: null, vin: "" }); } estavaLigado = !!st.ligado; }); }
+let geracaoConexao = 0;
+{ let estavaLigado = false; sessao.observar(st => { if (estavaLigado && !st.ligado) { geracaoConexao++; esquecerPlacaDoCarro(); sessao.definirCarro({ placa: "", marca: "", modelo: "", ano: "", veiculo_id: null, vin: "" }); } estavaLigado = !!st.ligado; }); }
 
 /**
  * AS CONDIÇÕES, CONFERIDAS PELO APP (pedido do Danilo, 21/11/2026): em vez de um questionário para o
@@ -1415,6 +1426,7 @@ function Bico() {
   const [autoriza, setAutoriza] = useState(null);      // { email, senha, erro, conferindo }
   const [andando, setAndando] = useState(null);        // { passos: [], fim }
   const [feito, setFeito] = useState(null);            // [{ cilindro, campo, antes, ok, texto }]
+  const feitoDe = useRef(null);                        // { geracao, placa }: de que carro/conexão é a recuperação
   const pode = podeGravarObd(cfg, perfil);
   usarPasso(!!autoriza, () => cancelarAutorizacao());
 
@@ -1442,7 +1454,9 @@ function Bico() {
   const moduloAceita = aceiteVale && aceite.itens.length > 0 && aceite.itens.every(x => x.aceita === true);
   const [conferindo, setConferindo] = useState(false);
   const conferirModulo = async () => {
-    setConferindo(true); setFeito(null); setAndando(null);
+    // A sondagem NÃO apaga a recuperação: o DESFAZER da gravação anterior continua valendo até os
+    // valores antigos voltarem para a ECU (revisão do Codex, 23/11/2026).
+    setConferindo(true); setAndando(null);
     const itensAceite = []; let modulo = null;
     const r = await sessao.comAcao("a conferência do módulo", async () => {
       for (const m of [{ pedido: "7E0", resposta: "7E8" }, { pedido: "18DA10F1", resposta: "18DAF110" }]) {
@@ -1525,6 +1539,9 @@ function Bico() {
     setFeito(ant => resultado.concat((ant || []).filter(x => x.antes && x.gravou && !resultado.some(y => y.gravou && y.campo === x.campo))));
     setAndando({ passos: passos.slice(), fim: true, erro: r.ok ? "" : (r.texto || "Não deu para gravar.") });
     if (resultado.length) {
+      // A recuperação pertence a ESTE carro e a ESTA conexão: desconectar e plugar noutro carro não
+      // pode deixar o DESFAZER gravar os valores antigos na ECU errada (revisão do Codex, 23/11/2026).
+      feitoDe.current = { geracao: geracaoConexao, placa: (sessao.carro().placa || "").toUpperCase() };
       const reg = registro.linha("gravar_bico", perfil, sessao.carro(), { autorizado_por: { id: adm.id, nome: adm.nome }, cilindros: resultado });
       const g = await registro.guardar(api.obd.registrar, registro.cofreDe(window.localStorage), reg);
       setAndando(a => ({ ...a, registro: g.gravado ? "Registrado no banco." : g.pendente ? "Registro guardado no aparelho: sobe quando o banco aceitar (falta rodar o v63.sql ou não há internet)." : "NÃO deu para registrar: anote na O.S." }));
@@ -1532,6 +1549,13 @@ function Bico() {
   };
   /** Desfazer: grava de volta o valor que estava lá. Só existe porque o valor antigo foi guardado. */
   const desfazer = async () => {
+    // Só desfaz no MESMO carro da gravação: se o adaptador desconectou desde então, a placa de agora
+    // tem de ser a mesma — sem placa não há como ter certeza, e gravar bico em carro errado é prejuízo.
+    const de = feitoDe.current;
+    if (de && de.geracao !== geracaoConexao && (!de.placa || (sessao.carro().placa || "").toUpperCase() !== de.placa)) {
+      setAndando({ passos: [], fim: true, erro: "O adaptador desconectou depois da gravação e o app não tem certeza de que este é o MESMO carro. Puxe a placa " + (de.placa || "do carro da gravação") + " e tente de novo; os valores antigos também estão no registro." });
+      return;
+    }
     const voltar = (feito || []).filter(x => x.antes && x.gravou);
     const passos = [], anota = t => { passos.push(t); setAndando({ passos: passos.slice() }); };
     const voltaram = new Set();

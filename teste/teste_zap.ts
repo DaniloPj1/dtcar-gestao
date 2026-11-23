@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo, assistente, reescrever, limparProposta, pedidoAssistente, SISTEMA_ASSISTENTE, textoDoAgente, garantirAssinatura, ASSINATURA } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, enviarTexto, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo, assistente, reescrever, limparProposta, pedidoAssistente, SISTEMA_ASSISTENTE, textoDoAgente, garantirAssinatura, ASSINATURA, comSaudacaoDoEnvio, horaBrasilia } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -119,11 +119,39 @@ for (const c of casos.midiaParaBaixar) {
 }
 for (const c of casos.variacoes) confere("variações " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado));
 confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] }, "5527999112233")) === "552799112233@s.whatsapp.net");
+// saudação corrigida na hora do envio (23/11/2026): a mensagem é montada quando o Danilo clica, mas a fila pode segurar
+{
+  const manha = new Date("2026-11-23T11:00:00Z"); // 08:00 em Brasília
+  const noite = new Date("2026-11-24T01:00:00Z"); // 22:00 em Brasília
+  confere("hora de Brasília a partir do UTC", horaBrasilia(manha) === 8 && horaBrasilia(noite) === 22);
+  const msg = "🚗 *Veículo pronto — OS 01934*\n\nBoa noite, Sr. Marcos!\n\nPode buscar hoje.";
+  confere("saudação montada à noite sai como Bom dia de manhã", comSaudacaoDoEnvio(msg, manha).includes("\nBom dia, Sr. Marcos!\n")
+    && !comSaudacaoDoEnvio(msg, manha).includes("Boa noite"), comSaudacaoDoEnvio(msg, manha).slice(0, 80));
+  confere("saudação já certa não muda nada", comSaudacaoDoEnvio(msg, noite) === msg);
+  confere("corrige só a primeira saudação", comSaudacaoDoEnvio("Boa noite, Sr. Marcos!\n\nBoa noite também para a dona Maria.", manha)
+    === "Bom dia, Sr. Marcos!\n\nBoa noite também para a dona Maria.");
+  confere("texto sem saudação não é tocado", comSaudacaoDoEnvio("Segue o PDF do orçamento.", manha) === "Segue o PDF do orçamento.");
+  confere("saudação depois da 4ª linha não é mexida", comSaudacaoDoEnvio("a\nb\nc\nd\nBoa noite, Sr. Marcos!", manha).endsWith("Boa noite, Sr. Marcos!"));
+  confere("texto vazio continua vazio", comSaudacaoDoEnvio("", manha) === "" && comSaudacaoDoEnvio(null as any, manha) === "");
+  // o envio de verdade manda o texto já corrigido
+  const saiu: string[] = [];
+  const sock = { presenceSubscribe: async () => {}, sendPresenceUpdate: async () => {}, sendMessage: async (_j: string, c: any) => { saiu.push(c.text); return { key: { id: "S1" } }; } };
+  await enviarTexto(sock, "x@s.whatsapp.net", "Boa noite, Sr. Marcos!", async () => {});
+  confere("enviarTexto manda o texto com a saudação da hora do envio", saiu.length === 1 && /^(Bom dia|Boa tarde|Boa noite), Sr\. Marcos!$/.test(saiu[0]), saiu[0]);
+}
+
+// as duas cópias corrigem a saudação na hora do envio (enviarTexto não entra na comparação: o parâmetro "esperar" sempre diferiu)
+{
+  const mJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
+  const zTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
+  const aplica = (t: string) => { const i = t.indexOf("function enviarTexto("); return i > 0 && t.slice(i, i + 400).includes("texto = comSaudacaoDoEnvio(texto);"); };
+  confere("saudação do envio aplicada no motor e na zap", aplica(mJs) && aplica(zTs));
+}
 // cópia igual à do motor (mesmo código, fora a tipagem)
 const motorJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
 const zapTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
 const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar|: \(ms: number\) => Promise<void>| as string/g, "").replace(/\s+/g, " "); };
-for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemCitada", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo"]) {
+for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemCitada", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo", "horaBrasilia", "comSaudacaoDoEnvio"]) {
   const a = nucleo(motorJs, f).replace(/\(x\)/g, "x"), b = nucleo(zapTs, f).replace(/\(x\)/g, "x").replace(/x =>/g, "x =>");
   confere("cópia igual no motor e na zap: " + f, a.length > 50 && a.replace(/[()]/g, "") === b.replace(/[()]/g, ""), a.length + "/" + b.length);
 }

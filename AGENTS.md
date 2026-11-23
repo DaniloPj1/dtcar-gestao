@@ -239,6 +239,19 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   e recusa qualquer outra — mesma proteção do número dos avisos, contra ordem falsa vinda de e-mail ou mensagem. `garantirAssinatura`
   completa as duas linhas finais quando a IA esquece (só se couber nos 1.400 do rascunho; não inventa conteúdo nenhum). Nada muda no
   caminho do OK: o rascunho continua voltando para o Danilo e nada vai ao cliente sem ele.
+  **Modelos no mesmo molde (23/11/2026, motor 3.5, sem SQL):** os textos de `js/mensagens.js` (entrada, orçamento, adicionais, pronto,
+  entrega, cobrança, `msgCobrancaParcela` e `msgBoasVindas`) passaram a sair no molde do agente — eles são a MAIORIA das mensagens que o
+  cliente recebe, e são montados por regra, não pela IA (texto de modelo é sempre a mesma estrutura com dados do sistema: mandar à IA
+  custaria por envio, demoraria e faria o texto variar). `montar(icone, titulo, nome, cfg, linhas, agora)` monta tudo; `topicos()` só usa
+  `• ` com duas informações ou mais; a assinatura é `cfg.nome` + a linha fixa em negrito. **Tratamento deduzido do primeiro nome**
+  (`tratamento`): o cadastro não guarda sexo (decisão do Danilo, 23/11: deduzir e aceitar o erro raro) — termina em A é "Sra.", fora
+  `MASC_EM_A`, mais a lista `FEM_SEM_A`; empresa não leva tratamento e vem sem o tipo societário, em até 3 palavras (`nomeEmpresa`).
+  O cadastro grava em MAIÚSCULAS, então o nome é escrito normal na mensagem (`capitalizar`, com as preposições em minúscula).
+  **Saudação resolvida na HORA DO ENVIO** (`comSaudacaoDoEnvio` em `motor-zap/whats.js` e a cópia na `zap/index.ts`, aplicada dentro do
+  `enviarTexto`): a mensagem é montada quando o Danilo clica, mas a fila segura fora do horário comercial — uma montada às 19h sairia
+  "Boa noite" às 8h da manhã. Corrige só a PRIMEIRA saudação, nas 4 primeiras linhas (o título vem antes), e não toca em texto que não
+  tem saudação. `horaBrasilia` cai em UTC−3 se o aparelho não tiver a tabela de fusos. Motor antigo (3.4) manda como foi montado —
+  é o comportamento de hoje, nada quebra. Testes: `node teste/teste_mensagens.mjs` e `deno run -A teste/teste_whatsapp_pdf.ts`.
   **v38 (05/11/2026): pacote de mensagens para o mesmo número.** O intervalo de 25–70 s vale entre contatos; se a próxima que a fila vai
   pegar (mesma ordem da `whatsapp_pegar_proxima`: `interno` primeiro, depois `id`) é para o MESMO número e entrou até 5 min depois da que
   acabou de sair e pode sair agora (PARAR, horário e limites, como na retirada), o intervalo é 3 s (`whatsapp_pacote_segue`, usada pela `whatsapp_resultado` e pelo gatilho `whatsapp_fila_pacote`, que

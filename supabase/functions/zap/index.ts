@@ -220,7 +220,30 @@ export async function jidParaEnvio(sock: any, tel: string) {
   }
   return null;
 }
+/** (cópia de motor-zap/whats.js) Hora de Brasília (0–23); sem a tabela de fusos, cai em UTC−3. */
+export function horaBrasilia(agora: any = new Date()) {
+  try { return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(agora)); }
+  catch (_) { return new Date(agora.getTime() - 10800000).getUTCHours(); }
+}
+
+/** (cópia de motor-zap/whats.js) Corrige a saudação do começo da mensagem para a hora em que ela está SAINDO. */
+export function comSaudacaoDoEnvio(texto: string, agora: any = new Date()) {
+  const s = String(texto || "");
+  if (!s) return s;
+  const h = horaBrasilia(agora);
+  const certa = h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite";
+  const linhas = s.split("\n");
+  for (let i = 0; i < Math.min(linhas.length, 4); i++) {
+    const m = /^(Bom dia|Boa tarde|Boa noite)\b/.exec(linhas[i]);
+    if (!m) continue;
+    if (m[1] !== certa) linhas[i] = certa + linhas[i].slice(m[1].length);
+    return linhas.join("\n");
+  }
+  return s;
+}
+
 export async function enviarTexto(sock: any, jid: string, texto: string, esperarMs: (ms: number) => Promise<void> = esperar) {
+  texto = comSaudacaoDoEnvio(texto);
   try { await sock.presenceSubscribe(jid); } catch (_) { /* opcional */ }
   try { await sock.sendPresenceUpdate("composing", jid); } catch (_) { /* opcional */ }
   await esperarMs(Math.min(1500 + String(texto).length * 35, 6000));

@@ -15,14 +15,14 @@ import { McpServer } from "npm:@modelcontextprotocol/server@2.4.0";
 import { z } from "npm:zod@4.3.6";
 // v50: cálculo da folha do mês (o mesmo js/folha.js da tela Funcionários), do GitHub NUMA VERSÃO TRAVADA (commit).
 // Mudou js/folha.js (ou o util.js que ele usa)? Troque o commit abaixo pelo da main com a mudança e publique a função "agente" de novo.
-import { calcularMes, eMecanicoDa, periodo, quintoDiaUtil, nomeMes } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/folha.js";
+import { calcularMes, eMecanicoDa, periodo, quintoDiaUtil, nomeMes } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/4217d9d488069febad1de351d0474feb7bb36e21/js/folha.js";
 
 // v58 (14/11/2026): oleo_filtros — litros/viscosidade do óleo e filtros do carro (catálogo + estoque), as mesmas regras da tela "Óleo e filtros".
 // Os módulos do site vêm do GitHub NUMA VERSÃO TRAVADA (commit). Mudou js/catalogo.js, js/fichaos.js, js/util.js ou catalogo/*.csv (catalogodados.js)?
 // Troque o commit abaixo (e em CATALOGO_URL) pelo da main com a mudança e publique a função "agente" de novo.
-import { prepararCatalogo, pesquisarVeiculo, resumoOleo, avisoOleo, indiceEstoque, filtroParaMostrar, periodoTexto, TIPOS_FILTRO } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/catalogo.js";
-import { filtrosDaFicha, candidatosOleo, litrosDaFicha } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/fichaos.js";
-const CATALOGO_URL = "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/57a12181720ac6e17396757265438d8456bfe1c3/js/catalogodados.js";
+import { prepararCatalogo, pesquisarVeiculo, resumoOleo, avisoOleo, indiceEstoque, filtroParaMostrar, periodoTexto, TIPOS_FILTRO } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/4217d9d488069febad1de351d0474feb7bb36e21/js/catalogo.js";
+import { filtrosDaFicha, candidatosOleo, litrosDaFicha } from "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/4217d9d488069febad1de351d0474feb7bb36e21/js/fichaos.js";
+const CATALOGO_URL = "https://raw.githubusercontent.com/DaniloPj1/dtcar-gestao/4217d9d488069febad1de351d0474feb7bb36e21/js/catalogodados.js";
 
 export const SITE = "https://gestao.dtcarcentroautomotivo.com.br";
 

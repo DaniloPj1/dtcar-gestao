@@ -258,6 +258,12 @@ chk("o app sabe que não tem os anexos C e D", eptiTemAnexoCD() === false);
     com({ gravou: true, antes: "62 12 34 41 42", resposta: "7F 2E 78" });
     g = await u.gravarDado(0x1234, "4343");
     if (!(g.incerto === true && g.antes.length === 2)) falha("resposta 78 (processando) é incerta: " + JSON.stringify(g));
+    const rf = u.respostaDe({ resposta: "7F2278\r62F1904142" }, 0x22);
+    if (!(rf.nrc === null && rf.dados && rf.dados.length === 4)) falha("a resposta definitiva atrás do 78 no MESMO pacote vale: " + JSON.stringify(rf));
+    const rf2 = u.respostaDe({ resposta: "7F2E78" }, 0x2e);
+    if (rf2.nrc !== 0x78) falha("só o 78, sem resposta atrás, continua pendente: " + JSON.stringify(rf2));
+    const rf3 = u.respostaDe({ resposta: "7F2278\r62F19041\r7F2231" }, 0x22);
+    if (rf3.nrc !== 0x31) falha("a ÚLTIMA mensagem do serviço é a que vale: " + JSON.stringify(rf3));
     console.log("gravação: aceita, recusada e incerta distinguidas.");
   } finally { globalThis.window = antigo; }
 }

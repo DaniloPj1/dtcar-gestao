@@ -432,8 +432,11 @@ try:
         f = Fake('admin', True, {UID: {'entra': True, 'telas': ['oleo'], 'horario': fora}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         t(pg.locator('.barra').count() > 1 and pg.is_visible('#f-login') is False, 'administrador não tem limite de horário (e vê todas as telas)'); ctx.close()
         f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['oleo', 'agendar'], 'horario': dentro}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
-        t(pg.locator('.barra').count() == 2, 'mecânico dentro do horário entra'); tela(pg, 'agendar')
-        t(pg.locator('.zap-mini').count() == 0 and pg.locator('.marcar').count() == 0 and pg.locator('button:has-text("Agendar serviço")').count() == 1, 'mecânico agenda sem o aviso pelo WhatsApp (só o administrador avisa)'); ctx.close()
+        # Agendar deixou de valer para o mecânico (revisão do Codex, 23/11/2026): o banco recusa a gravação desse papel,
+        # então a tela nem é oferecida — melhor que um formulário que nunca grava.
+        t(pg.locator('.barra').count() == 1, 'mecânico dentro do horário entra, sem a tela Agendar (o banco recusa esse papel)')
+        pg.goto(URL + '#/agendar'); pg.wait_for_timeout(600)
+        t(pg.locator('#ag-nome').count() == 0, 'tentar abrir Agendar pela rota cai no Início'); ctx.close()
         f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['oleo', 'orcamento']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg)
         t(rotulos(pg) == ['ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS'], 'mecânico liberado pode pedir orçamento (o pedido não tem preço)'); ctx.close()
         # Ajustes fora do ar no login: não entra (nem libera por padrão)

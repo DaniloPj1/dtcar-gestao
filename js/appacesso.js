@@ -17,7 +17,12 @@ export const TELAS_APP = [
 const TODAS = TELAS_APP.map(t => t[0]);
 /** Telas que o papel pode usar. Desde 16/11/2026 (à tarde) o orçamento no app é só um PEDIDO (sem item e sem preço), então o mecânico
  *  liberado também pode pedir orçamento e acrescentar ao orçamento aberto; o sistema monta e aprova. */
-export const telasDoPapel = () => TODAS.slice();
+export const telasDoPapel = papel => {
+  // Agendar grava direto em `agendamentos`, e a política do banco (v54) só aceita administrador e
+  // consultor. Liberar a tela para o mecânico dava um formulário que nunca grava (revisão do Codex,
+  // 23/11/2026): a tela nem é oferecida. Se um dia o mecânico tiver de agendar, é SQL novo.
+  return papel === "mecanico" ? TODAS.filter(t => t !== "agendar") : TODAS.slice();
+};
 
 /* ---- Login por usuário, sem e-mail (pedido do Danilo, 16/11/2026 à noite) ----
  * O Supabase exige um e-mail por conta, então o usuário "joao" vira o e-mail interno joao@app.dtcarcentroautomotivo.com.br

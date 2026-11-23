@@ -176,9 +176,27 @@ export async function fechar() {
  *  - a resposta tem de COMEÇAR com o serviço + 0x40. Procurar no meio do texto é o que faz dado de
  *    um módulo ser lido como se fosse de outro (a mesma armadilha que o js/obd.js descreve).
  */
+/**
+ * A mensagem que VALE dentro de uma leitura com várias: o módulo pode mandar "7F xx 78" (recebi,
+ * estou trabalhando) e, logo atrás, no MESMO pacote, a resposta definitiva. Quem olhasse só a
+ * primeira reenviava o pedido à toa — e numa escrita classificava gravação confirmada como incerta
+ * (achado da revisão do Codex, 23/11/2026). Com o filtro ATCRA ligado todas as mensagens são do
+ * mesmo módulo; ainda assim só troca para mensagem DO MESMO SERVIÇO, nunca de outro.
+ */
+function mensagemFinal(r, servico) {
+  if (!r || r.erro || !Array.isArray(r.respostas) || r.respostas.length < 2) return r;
+  const positiva = hx(servico + 0x40, 2), negativa = "7F" + hx(servico, 2);
+  for (let i = r.respostas.length - 1; i >= 0; i--) {
+    const h = r.respostas[i];
+    if (h.startsWith(negativa + "78")) continue;                       // "estou trabalhando" não é final
+    if (h.startsWith(positiva) || h.startsWith(negativa)) return Object.assign({}, r, { hex: h });
+  }
+  return r;
+}
+
 export async function pedir(cmd, servico, esperaMs = 5000, tentativasPendente = 6) {
   const cru = await comando(cmd, esperaMs);
-  let r = juntarLinhas(cru);
+  let r = mensagemFinal(juntarLinhas(cru), servico);
   if (r.erro) return { dados: null, nrc: null, texto: r.erro, hex: "", erro: r.erro };
   // O 0x78 ("recebi e estou trabalhando") pede mais tempo. O ELM327 não tem comando de "só ler",
   // então insistir significa mandar o pedido DE NOVO — e isso só pode ser feito com pedido que não
@@ -192,7 +210,7 @@ export async function pedir(cmd, servico, esperaMs = 5000, tentativasPendente = 
     if (negativaDe(r.hex, servico) !== 0x78) break;
     await new Promise(f => setTimeout(f, 400));
     const outra = await comando(cmd, esperaMs).catch(() => "");
-    const nova = juntarLinhas(outra);
+    const nova = mensagemFinal(juntarLinhas(outra), servico);
     if (nova.erro) break;
     r = nova;
   }
@@ -424,7 +442,7 @@ export async function gravarDado(did, valorHex, esperaMs = 8000) {
 }
 
 export const respostaDe = (r, servico) => {
-  const j = juntarLinhas((r && r.resposta) || "");
+  const j = mensagemFinal(juntarLinhas((r && r.resposta) || ""), servico);
   if (j.erro) return { dados: null, nrc: null, texto: j.erro, hex: "", erro: j.erro };
   const n = negativaDe(j.hex, servico);
   if (n != null) return { dados: null, nrc: n, nomeNrc: nomeNrc(n), texto: textoNrc(n), hex: j.hex, erro: "" };

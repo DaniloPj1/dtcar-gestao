@@ -60,8 +60,13 @@ export async function guardar(registrar, cofre, l) {
     const motivo = (e && e.message) || "não deu para registrar";
     try {
       const fila = cofre.ler();
+      // Fila CHEIA não apaga o pendente mais antigo em silêncio: apagar registro que o app prometeu
+      // guardar é pior que recusar o novo dizendo a verdade (revisão do Codex, 23/11/2026).
+      if (fila.length >= MAX_PENDENTES) {
+        return { gravado: false, pendente: false, motivo: motivo + " — e a fila do aparelho está cheia (" + MAX_PENDENTES + " registros esperando subir). Conecte com internet para ela esvaziar." };
+      }
       fila.push(Object.assign({ guardado_em: new Date().toISOString() }, l));
-      cofre.escrever(fila.slice(-MAX_PENDENTES));
+      cofre.escrever(fila);
       return { gravado: false, pendente: true, motivo };
     } catch (e2) { return { gravado: false, pendente: false, motivo }; }
   }

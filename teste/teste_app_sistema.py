@@ -217,6 +217,8 @@ window.Capacitor.Plugins.DtcarObd = {
     if (window.__obd.h1 && !window.__obd.limpo && !window.__obd.falhaNova && (c === '03' || c === '07' || c === '0A')) {
       return Promise.resolve({ resposta: (c === '03' ? '7E8024300\\r7E906430201710300' : c === '07' ? '7E80447010130' : '7E8024A00') + '\\r\\r>' });
     }
+    // código teimoso: o defeito está acontecendo agora, o apagamento tira os outros e ele volta na hora
+    if (window.__obd.limpo && window.__obd.ficaP0171 && c === '03') return Promise.resolve({ resposta: '4301 0171\\r\\r>' });
     if (window.__obd.limpo && (c === '03' || c === '07' || c === '0A')) return Promise.resolve({ resposta: (c === '03' ? '4300' : c === '07' ? '4700' : '4A00') + '\\r\\r>' });
     if (window.__obd.limpo && (c === '0106' || c === '0107')) return Promise.resolve({ resposta: '41' + c.slice(2) + '80\\r\\r>' });   // ajuste zerado: o módulo recomeça
     if (c === '03' && window.__obd.falhaNova) return Promise.resolve({ resposta: '4301' + window.__obd.falhaNova + '\\r\\r>' });
@@ -1073,6 +1075,22 @@ try:
         # porque é o que se consulta para discutir um laudo. Aqui fica só o caminho para ela.
         t(pg.query_selector('#obd-ir-parametros'), 'a leitura tem o caminho para os parâmetros')
         t(not pg.query_selector('#obd-parametros'), 'e o cartão não está mais duplicado aqui dentro')
+        # APAGAR JUNTO COM A LEITURA (23/11/2026, pedido do Danilo): lendo a falha, o botão de apagar
+        # está no próprio cartão da falha — não é preciso sair e caçar o botão no meio das outras leituras.
+        pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=25000); pg.wait_for_timeout(600)
+        t(pg.query_selector('#obd-r-falhas #obd-r-apagar'), 'o botão de apagar fica no próprio cartão das falhas')
+        t('REGISTRADO' in pg.inner_text('#obd-r-apagar'), 'e também avisa que fica registrado: %s' % pg.inner_text('#obd-r-apagar'))
+        # um código que continua presente depois de apagar NÃO pode sumir da tela
+        pg.evaluate("window.__obd.ficaP0171 = true")
+        pg.click('#obd-r-apagar'); pg.wait_for_selector('#obd-apagar-cx', timeout=25000)
+        pg.click('#obd-apagar-ok'); pg.wait_for_selector('#obd-apagar-feito', timeout=30000); pg.wait_for_timeout(600)
+        rf = pg.inner_text('#obd-r-falhas')
+        t('P0171' in rf and 'P0300' not in rf and 'P0130' not in rf, 'apagou: só fica na lista o código que continuou no módulo: %s' % rf.replace('\n', ' ')[:110])
+        t('VOLTOU' in pg.inner_text('#obd-apagar-feito').upper(), 'e o resultado diz que o código voltou')
+        t(not pg.query_selector('#obd-r-apagar'), 'com a caixa do apagamento aberta, o botão de apagar não se repete')
+        pg.click('#obd-apagar-fim'); pg.wait_for_timeout(500)
+        pg.evaluate("window.__obd.ficaP0171 = false; window.__obd.limpo = false; window.__obd.apagados = 0")
+        pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=25000); pg.wait_for_timeout(600)
         # APAGAR A FALHA, COM REGISTRO (v62, decisão do Danilo em 19/11/2026)
         t(pg.query_selector('#obd-apagar'), 'o administrador tem o botão de apagar falhas')
         t('REGISTRADO' in pg.inner_text('#obd-apagar'), 'e o botão já avisa que fica registrado: %s' % pg.inner_text('#obd-apagar'))
@@ -1091,9 +1109,12 @@ try:
         t(pg.evaluate("window.__obd.apagados") == 1, 'apagou uma vez só')
         t('LIMPOU' in fe, 'diz o que sobrou: %s' % fe.replace('\n', ' ')[:90])
         t('Ajuste depois' in fe, 'mostra o ajuste de combustível antes e depois')
+        t('Nenhuma falha gravada' in pg.inner_text('#obd-r-falhas'), 'limpou de verdade: a lista de falhas na tela fica vazia')
         todos_reg = f.tabela('obd_leituras'); reg = [x for x in todos_reg if x.get('tipo') == 'apagar']
-        t(len(reg) == 1, 'gravou UM registro do apagamento: %d' % len(reg))
-        r0 = reg[0] if reg else {}
+        # dois registros: o apagamento com o código teimoso (acima) e este, que limpou
+        t(len(reg) == 2, 'cada apagamento gravou o seu registro: %d' % len(reg))
+        t([c['codigo'] for c in (reg[0].get('codigos_depois') or [])] == ['P0171'], 'o 1º registro guardou o código que continuou: %s' % reg[0].get('codigos_depois'))
+        r0 = reg[-1] if reg else {}
         t(r0.get('tipo') == 'apagar' and r0.get('perfil_nome') == 'Fulano de Teste', 'registro diz quem apagou: %s' % r0.get('perfil_nome'))
         t(r0.get('placa') == 'ABC1D23' and r0.get('km') == 152300, 'com a placa e o KM: %s / %s' % (r0.get('placa'), r0.get('km')))
         t([c['codigo'] for c in r0.get('codigos') or []] and 'P0171' in [c['codigo'] for c in r0.get('codigos') or []], 'e os códigos que estavam lá: %s' % r0.get('codigos'))
@@ -1107,7 +1128,7 @@ try:
         pg.click('#obd-apagar-ok'); pg.wait_for_timeout(2500)
         t(not pg.query_selector('#obd-apagar-feito'), 'módulo que recusa não vira "apagou"')
         t('MOTOR DESLIGADO' in pg.inner_text('#obd-apagar-cx'), 'e a tela diz o que fazer: %s' % [l for l in pg.inner_text('#obd-apagar-cx').split('\n') if 'MOTOR' in l][:1])
-        t(len([x for x in f.tabela('obd_leituras') if x.get('tipo') == 'apagar']) == 1, 'recusa não grava registro novo')
+        t(len([x for x in f.tabela('obd_leituras') if x.get('tipo') == 'apagar']) == 2, 'recusa não grava registro novo')
         pg.click('#obd-apagar-nao'); pg.evaluate("window.__obd.recusaApagar = false"); pg.wait_for_timeout(300)
 
         # o que esta etapa NÃO faz

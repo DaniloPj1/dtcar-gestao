@@ -482,8 +482,9 @@ function Obd() {
     if (!r.ok) { setApagar(a => Object.assign({}, a, { passo: "confirmar", erro: r.erro })); return; }
     // o módulo precisa de um instante para refazer a lista antes de valer a pena perguntar de novo
     await new Promise(x => setTimeout(x, 1500));
-    let depois = null, combDepois = null;
-    try { depois = (await obd.lerFalhas()).falhas; } catch (e) { depois = null; }
+    // a releitura inteira (e não só a lista): é ela que volta para a tela no lugar do que foi apagado
+    let fDepois = null, depois = null, combDepois = null;
+    try { fDepois = await obd.lerFalhas(); depois = fDepois.falhas; } catch (e) { fDepois = null; depois = null; }
     try { combDepois = await obd.lerCombustivelRapido(lig.pidsSuportados); } catch (e) { combDepois = null; }
     const chassi = await obd.lerChassi().catch(() => "");
     if (chassi) sessao.definirCarro({ vin: chassi });
@@ -497,6 +498,9 @@ function Obd() {
     try { await api.obd.registrar(registro); gravado = "ok"; }
     catch (e) { gravado = e.message || "não deu para registrar"; guardarPendente(registro); }
     setApagar({ passo: "feito", antes, comb, depois, combDepois, km, resultado: obd.resultadoApagar(antes, depois), gravado });
+    // 23/11/2026, pedido do Danilo: apagou, o código some da tela — e fica só o que continuou no módulo.
+    // Quem diz isso é a releitura feita depois de apagar, não a lista de antes.
+    if (fDepois) setRes({ o: "falhas", d: fDepois });
     setFalhasVivo(null); baseFalhas.current = null;
     if (placa) carregarAnteriores();
   });
@@ -774,8 +778,7 @@ function Obd() {
         <div class="kv"><span>Resultado:</span><i></i><b><span class=${"selo " + (apagar.resultado.situacao === "limpo" ? "" : apagar.resultado.situacao === "voltou" ? "ruim" : "atencao")}>${
           apagar.resultado.situacao === "limpo" ? "LIMPOU" : apagar.resultado.situacao === "voltou" ? "O CÓDIGO VOLTOU" : apagar.resultado.situacao === "sobrou" ? "SOBROU CÓDIGO" : "NÃO CONFERIDO"}</span></b></div>
         <div class="nota">${apagar.resultado.frase}</div>
-        ${apagar.depois && apagar.depois.length ? html`<div class="sec"><h3>O que ficou no módulo</h3>
-          ${apagar.depois.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc"><b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}</div>` : null}
+        ${apagar.depois && apagar.depois.length ? html`<div class="nota">O que continuou no módulo está na lista de falhas aqui embaixo, com a explicação de cada código.</div>` : null}
         ${apagar.comb && apagar.comb.pior ? html`<div class="kv"><span>Ajuste antes:</span><i></i><b>${numBR(apagar.comb.pior.total)}%</b></div>` : null}
         ${apagar.combDepois && apagar.combDepois.pior ? html`<div class="kv"><span>Ajuste depois:</span><i></i><b>${numBR(apagar.combDepois.pior.total)}%</b></div>` : null}
         ${apagar.combDepois ? html`<div class="nota">O módulo recomeçou a aprender: o ajuste só volta a dizer alguma coisa depois de o carro rodar. A prontidão dos monitores também zerou.</div>` : null}
@@ -803,6 +806,9 @@ function Obd() {
         ${res.d.variosModulos && res.d.porModulo && res.d.porModulo.length > 1 ? html`<div class="nota">Mais de um módulo respondeu: as falhas estão separadas por módulo. Só aparece quem respondeu.</div>` : null}
         ${res.d.variosModulos && !(res.d.porModulo && res.d.porModulo.length > 1) ? html`<div class="nota">Mais de um módulo do carro respondeu, mas este adaptador não deixou separar: a lista junta os códigos de todos.</div>` : null}
         ${res.d.erros.length ? html`<div class="nota">Não respondeu: ${res.d.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
+        ${/* 23/11/2026, pedido do Danilo: apagar fica ao lado do que se está lendo. Antes era preciso
+              sair da falha e caçar o botão lá em cima, no meio das outras leituras. */ ""}
+        ${podeApagar && res.d.falhas.length && !apagar ? html`<button type="button" class="btn-barra apagar" id="obd-r-apagar" onClick=${abrirApagar}>APAGAR ESTAS FALHAS (FICA REGISTRADO)</button>` : null}
       </${Cartao}>` : null}
 
       ${vivo ? html`<${Cartao} titulo=${vivo.modo === "combustivel" ? "Combustível" : "Dados ao vivo"} id="obd-r-vivo">

@@ -3,15 +3,15 @@
  * (Pedido do Danilo, 21/11/2026: "o parâmetro de trabalho de temperatura desse carro é de x a y e
  * a leitura ao vivo está em…".)
  *
- * DE ONDE VEM A FAIXA — e a tela escreve qual das duas é:
- *  1. DESTE CARRO: o que ele mesmo marcou nas leituras anteriores, no mesmo regime (marcha lenta ou
- *     cruzeiro, motor quente). É o parâmetro mais honesto que existe, porque não há tabela pública
- *     de faixa normal por motor — muito menos para flex brasileiro. Precisa de pelo menos 2
- *     leituras guardadas da placa (js/obdcompara.js guarda sozinho).
- *  2. REFERÊNCIA: a tabela de js/obdparam.js, com o NÍVEL DE CONFIANÇA escrito (conferido aqui,
- *     norma, montadora ou suposto). Só para as leituras que têm referência; as outras ficam sem.
+ * A FAIXA É SEMPRE A TABELA DE REFERÊNCIA (js/obdparam.js), com o nível de confiança escrito.
+ * Ordem do Danilo em 23/11/2026, depois do que aconteceu numa Amarok: até então a faixa saía do
+ * HISTÓRICO do próprio carro (o menor e o maior que ele já tinha marcado) e ganhava da referência.
+ * Isso deu 75 a 85 °C em marcha lenta e pintou de VERMELHO um motor normal a 86 °C — porque o
+ * mínimo e o máximo de duas leituras é uma coincidência, não um parâmetro de trabalho. Pior: ao
+ * acelerar, o regime mudava, o histórico sumia e a faixa "se corrigia" para a da referência, como
+ * se houvesse duas leituras do mesmo dado. Agora há uma faixa só, e ela não muda com o acelerador.
  *
- * Nada aqui é inventado: leitura sem histórico e sem referência aparece sem faixa.
+ * Leitura sem referência na tabela fica SEM faixa: inventar número é o que não pode.
  * Não tem window nem document: dá para testar sem navegador.
  */
 import * as param from "./obdparam.js";
@@ -32,54 +32,50 @@ const BAR_PARA_KPA = 100;   // a tabela guarda o rail em bar; o PID entrega em k
 
 /** A referência da tabela para esta leitura, ou null. `ctx` = { rpm, regime, carro }. */
 export function referencia(l, ctx = {}) {
-  const ligado = typeof ctx.rpm === "number" && ctx.rpm > 400;
   for (const g of LIGACAO) {
     if (!g.pids.includes(l.pid) || (l.parte || 0) !== 0) continue;
     if (SO_PARA[g.id] && !SO_PARA[g.id](ctx.carro || {})) continue;
-    if (g.quando === "ligado" && !ligado) continue;
-    if (g.quando === "lenta" && ctx.regime !== "lenta") continue;
     const p = param.porId(g.id);
     if (!p) continue;
     let f = param.faixaDe(g.id);
     if (!f && g.simetrico) { const v = param.valorDe(g.id); if (typeof v === "number") f = { de: -v, ate: v }; }
     if (!f) continue;
     const k = p.unidade === "bar" && l.unidade === "kPa" ? BAR_PARA_KPA : 1;
-    return { de: f.de * k, ate: f.ate * k, nivel: param.nivelDe(g.id), nivelNome: param.nivel(param.nivelDe(g.id)).nome, rotulo: g.rotulo, origem: "referencia" };
+    return { de: f.de * k, ate: f.ate * k, nivel: param.nivelDe(g.id), nivelNome: param.nivel(param.nivelDe(g.id)).nome, rotulo: g.rotulo, quando: g.quando, origem: "referencia" };
   }
   return null;
-}
-
-export const MIN_SESSOES = 2;
-/**
- * A faixa DESTE carro: o menor e o maior valor que ele marcou nas leituras anteriores, no regime
- * de agora. `sessoes` = resumos guardados (js/obdcompara.js). null sem regime ou com menos de 2.
- */
-export function doCarro(l, regime, sessoes) {
-  if (!regime) return null;
-  const rs = (sessoes || []).map(s => s && s.sinais && s.sinais[l.chave] && s.sinais[l.chave].r && s.sinais[l.chave].r[regime]).filter(Boolean);
-  if (rs.length < MIN_SESSOES) return null;
-  return { de: Math.min(...rs.map(r => r.min)), ate: Math.max(...rs.map(r => r.max)), leituras: rs.length, regime, origem: "carro" };
 }
 
 /** Onde o valor está em relação à faixa: "dentro" | "acima" | "abaixo". */
 export const situar = (valor, f) => (valor > f.ate ? "acima" : valor < f.de ? "abaixo" : "dentro");
 
 const n = x => String(Math.round(x * 10) / 10).replace(".", ",");
-const NOME_REGIME = { lenta: "marcha lenta", cruzeiro: "velocidade constante" };
 
 /**
- * O que a tela escreve embaixo da leitura. Devolve null (sem faixa) ou
- * { de, ate, origem, situacao, texto, fonte } — a faixa do carro ganha da referência.
+ * A faixa SE APLICA ao que o carro está fazendo agora? A faixa é sempre a mesma (não muda com o
+ * acelerador), mas o julgamento não vale fora da condição dela: a faixa do rail em marcha lenta
+ * não serve para julgar uma acelerada. Fora da condição a tela mostra a faixa em cinza, sem
+ * vermelho — em vez de acusar um defeito que não existe.
+ */
+function seAplica(f, ctx) {
+  if (!f) return false;
+  const ligado = typeof ctx.rpm === "number" ? ctx.rpm > 400 : null;
+  if (f.quando === "lenta") return ctx.regime === "lenta";
+  if (f.quando === "ligado") return ligado !== false;
+  return true;
+}
+
+/**
+ * O que a tela mostra embaixo da leitura. Devolve null (sem faixa) ou
+ * { de, ate, situacao, aplica, texto, fonte }. `situacao` é só onde o valor está; quem decide se
+ * pinta de vermelho é `aplica`.
  */
 export function faixaPara(l, ctx = {}) {
   if (!l || typeof l.valor !== "number") return null;
-  const c = doCarro(l, ctx.regime, ctx.sessoes), r = referencia(l, ctx);
-  const f = c || r;
+  const f = referencia(l, ctx);
   if (!f) return null;
   const u = l.unidade ? " " + l.unidade : "";
-  const situacao = situar(l.valor, f);
-  return { ...f, situacao,
+  return { ...f, situacao: situar(l.valor, f), aplica: seAplica(f, ctx),
     texto: n(f.de) + " a " + n(f.ate) + u,
-    fonte: f.origem === "carro" ? "este carro, em " + NOME_REGIME[f.regime] + " (" + f.leituras + " leituras)" : "referência, " + f.rotulo + " · " + f.nivelNome.toLowerCase(),
-    outra: c && r ? "Referência (" + r.nivelNome.toLowerCase() + "): " + n(r.de) + " a " + n(r.ate) + u : "" };
+    fonte: "referência, " + f.rotulo + " · " + f.nivelNome.toLowerCase() };
 }

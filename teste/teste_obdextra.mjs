@@ -199,25 +199,33 @@ console.log(m6 + " conferências da Honda passaram.");
   console.log("laudo com leitura que falhou: ok"); }
 
 /* ---- a faixa de trabalho ao lado da leitura ao vivo ---- */
+/* Desde 23/11/2026 a faixa é SEMPRE a tabela de referência: o histórico do carro saiu, porque o
+   mínimo e o máximo de duas leituras pintou de vermelho um motor normal a 86 °C (ordem do Danilo). */
 const fx = await import("../js/obdfaixa.js");
 let m7 = 0; const t7 = (c, msg) => { m7++; if (!c) { console.error("FALHOU: " + msg); process.exit(1); } };
 const temp = { pid: 0x05, parte: 0, chave: 500, unidade: "°C", valor: 92 };
-let f1 = fx.faixaPara(temp, { rpm: 800, regime: "lenta" });
-t7(f1 && f1.origem === "referencia" && f1.de === 85 && f1.ate === 105 && f1.situacao === "dentro" && /suposto/.test(f1.fonte) && f1.texto === "85 a 105 °C", "temperatura: referência da tabela, com o nível de confiança escrito");
-t7(fx.faixaPara({ ...temp, valor: 112 }, { rpm: 800 }).situacao === "acima" && fx.faixaPara({ ...temp, valor: 60 }, { rpm: 800 }).situacao === "abaixo", "acima e abaixo");
-t7(fx.faixaPara(temp, { rpm: 0 }) === null && fx.faixaPara(temp, {}) === null, "motor desligado: faixa de trabalho não se aplica");
-const ses = [{ sinais: { 500: { r: { lenta: { n: 20, min: 88, max: 93, media: 90 } } } } }, { sinais: { 500: { r: { lenta: { n: 20, min: 87, max: 95, media: 91 } } } } }];
-f1 = fx.faixaPara(temp, { rpm: 800, regime: "lenta", sessoes: ses });
-t7(f1.origem === "carro" && f1.de === 87 && f1.ate === 95 && /este carro, em marcha lenta \(2 leituras\)/.test(f1.fonte) && /Referência \(suposto/.test(f1.outra), "com histórico, a faixa é a DESTE carro, e a referência fica ao lado");
-t7(fx.faixaPara({ ...temp, valor: 99 }, { rpm: 800, regime: "lenta", sessoes: ses }).situacao === "acima", "acima do que este carro já marcou");
-t7(fx.doCarro(temp, "lenta", ses.slice(0, 1)) === null && fx.doCarro(temp, null, ses) === null && fx.doCarro(temp, "cruzeiro", ses) === null, "uma leitura só, sem regime ou regime sem histórico: não é faixa");
+let f1 = fx.faixaPara(temp, { rpm: 850, regime: "lenta" });
+t7(f1 && f1.origem === "referencia" && f1.de === 80 && f1.ate === 105 && f1.situacao === "dentro" && f1.aplica === true && /suposto/.test(f1.fonte) && f1.texto === "80 a 105 °C", "temperatura: a faixa é a da referência, com o nível de confiança escrito");
+t7(fx.faixaPara({ ...temp, valor: 112 }, { rpm: 850, regime: "lenta" }).situacao === "acima" && fx.faixaPara({ ...temp, valor: 60 }, { rpm: 850, regime: "lenta" }).situacao === "abaixo", "acima e abaixo");
+
+/* O DEFEITO DA AMAROK (23/11/2026): a faixa não pode mudar quando o mecânico acelera. */
+const naLenta = fx.faixaPara(temp, { rpm: 850, regime: "lenta" }), acelerando = fx.faixaPara(temp, { rpm: 2600, regime: null });
+t7(acelerando && naLenta.de === acelerando.de && naLenta.ate === acelerando.ate, "a faixa é a MESMA em marcha lenta e acelerando: " + naLenta.texto + " / " + (acelerando && acelerando.texto));
+const ses = [{ sinais: { 500: { r: { lenta: { n: 20, min: 75, max: 85, media: 80 } } } } }, { sinais: { 500: { r: { lenta: { n: 20, min: 76, max: 84, media: 80 } } } } }];
+const comHistorico = fx.faixaPara({ ...temp, valor: 86 }, { rpm: 850, regime: "lenta", sessoes: ses });
+t7(comHistorico.de === 80 && comHistorico.ate === 105 && comHistorico.situacao === "dentro", "o histórico do carro (75 a 85) NÃO vira faixa: 86 °C é normal, não vermelho");
+
+/* A faixa de marcha lenta continua desenhada ao acelerar, mas deixa de julgar (cinza, sem vermelho). */
+const rail = { pid: 0x23, parte: 0, chave: 3500, unidade: "bar", valor: 874 };
+const railLenta = fx.faixaPara(rail, { rpm: 850, regime: "lenta", carro: { modelo: "AMAROK CD 4X4" } });
+const railAcel = fx.faixaPara(rail, { rpm: 2600, regime: null, carro: { modelo: "AMAROK CD 4X4" } });
+t7(railLenta.de === 250 && railLenta.ate === 550 && railLenta.aplica === true && railLenta.situacao === "acima", "rail em lenta: faixa geral 250 a 550 bar, e 874 está acima");
+t7(railAcel && railAcel.de === 250 && railAcel.ate === 550 && railAcel.aplica === false, "acelerando: a MESMA faixa continua na tela, mas não julga (não pinta de vermelho uma acelerada)");
+t7(fx.faixaPara(rail, { rpm: 850, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).de === 300, "Hilux 3.0: vale a da montadora, não a geral");
 const aj = fx.faixaPara({ pid: 0x07, parte: 0, chave: 700, unidade: "%", valor: 14 }, { rpm: 900 });
 t7(aj.de === -10 && aj.ate === 10 && aj.situacao === "acima", "ajuste de combustível: de −10 a +10");
-t7(fx.faixaPara({ pid: 0x0c, parte: 0, chave: 1200, unidade: "rpm", valor: 800 }, { rpm: 800, regime: "lenta" }) === null, "leitura sem histórico e sem referência fica SEM faixa: nada inventado");
-const rail = { pid: 0x23, parte: 0, chave: 3500, unidade: "bar", valor: 350 };
-t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "ONIX 1.0" } }).de === 250, "rail em bar: carro qualquer usa a referência geral (250 a 550)");
-t7(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).de === 300 && /montadora/.test(fx.faixaPara(rail, { rpm: 800, regime: "lenta", carro: { modelo: "HILUX CD 3.0 SRV" } }).fonte), "Hilux 3.0: vale a da montadora, não a geral");
-t7(fx.faixaPara(rail, { rpm: 2500, regime: null }) === null, "rail fora da marcha lenta: a referência de lenta não se aplica");
+t7(fx.faixaPara({ pid: 0x0c, parte: 0, chave: 1200, unidade: "rpm", valor: 800 }, { rpm: 800, regime: "lenta" }) === null, "leitura sem referência fica SEM faixa: nada inventado");
+t7(fx.faixaPara(temp, { rpm: 0 }).aplica === false, "motor desligado: a faixa aparece, mas não julga");
 console.log(m7 + " conferências da faixa de trabalho passaram.");
 
 /* ---- pendentes: registro acrescentado DURANTE a subida não se perde (revisão do Codex) ---- */

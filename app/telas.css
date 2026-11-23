@@ -538,3 +538,11 @@ select.inp{appearance:none;-webkit-appearance:none;background-image:url("data:im
 .btn-arrumar{flex:1;min-height:48px;border:1px solid #c9ced4;border-radius:10px;background:#fff;color:#16191d;font-weight:600}
 .btn-arrumar:disabled{opacity:.5}
 #pd-ouvindo{margin-top:6px;font-style:normal;color:#174f94;font-weight:600}
+
+/* A faixa é a mesma sempre, mas fora da condição dela (faixa de marcha lenta com o motor acelerado)
+   ela não julga: tudo cinza, sem vermelho. Acusar defeito numa acelerada seria mentira. */
+.faixa-nao-julga .zona.trabalho{background:#aeb6bf}
+.faixa-nao-julga .zona.depois{background:#8a949e}
+.faixa-nao-julga .mostrador-arco .zona.trabalho{stroke:#aeb6bf}
+.faixa-nao-julga .mostrador-arco .zona.depois{stroke:#8a949e}
+.faixa-txt.faixa-nao-julga{color:#8a949e}

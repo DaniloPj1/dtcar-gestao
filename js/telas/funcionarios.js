@@ -15,7 +15,12 @@ const AVISO_V10 = html`<div class="aviso">O banco ainda não tem as tabelas de f
 /** Carrega lançamentos e base de comissão do mês para uma lista de funcionários */
 export async function dadosDoMes(ym, funcs) {
   const p = periodo(ym);
-  const [lancs, ordens] = await Promise.all([api.funcionarios.lancamentos(p.comp), api.funcionarios.ordensEntregues(p.ini + "T00:00:00-03:00", p.fim + "T00:00:00-03:00")]);
+  const [lancs, ordens, coms] = await Promise.all([api.funcionarios.lancamentos(p.comp),
+    api.funcionarios.ordensEntregues(p.ini + "T00:00:00-03:00", p.fim + "T00:00:00-03:00"),
+    // v61: comissão lançada por quinzena. Onde ela existe, o cálculo automático (mão de obra x comissao_pct) não vale mais.
+    api.comissao ? api.comissao.lancamentos({ competencia: p.comp }).catch(() => null) : []]);
+  // não deu para consultar? então NÃO se calcula a comissão automática: ela pode já ter sido lançada por quinzena
+  const lancado = coms === null ? null : new Set(coms.filter(c => c.situacao === "lancado").map(c => c.funcionario_id));
   const comComissao = funcs.filter(f => Number(f.comissao_pct) > 0);
   const relevantes = ordens.filter(o => comComissao.some(f => eMecanicoDa(f, o)));
   const itens = relevantes.length ? await api.itensDasOrdens(relevantes.map(o => o.id)) : [];
@@ -24,7 +29,7 @@ export async function dadosDoMes(ym, funcs) {
   const porFunc = {};
   for (const f of funcs) {
     const os = relevantes.filter(o => eMecanicoDa(f, o)).map(o => ({ ...o, maoDeObra: mo.get(o.id) || 0 }));
-    porFunc[f.id] = { lancs: lancs.filter(l => l.funcionario_id === f.id), os, base: os.reduce((s, o) => s + o.maoDeObra, 0) };
+    porFunc[f.id] = { lancs: lancs.filter(l => l.funcionario_id === f.id), os, base: os.reduce((s, o) => s + o.maoDeObra, 0), comissaoLancada: lancado === null ? "?" : lancado.has(f.id) };
   }
   return porFunc;
 }
@@ -47,7 +52,7 @@ export function Funcionarios({ params }) {
   if (erro) return html`<div class="pagina"><div class="erros">${erro}</div></div>`;
   if (!funcs) return html`<div class="carregando">Carregando funcionários…</div>`;
   const lista = funcs.filter(f => inativos || f.ativo);
-  const res = mes ? lista.map(f => ({ f, r: calcularMes(f, ym, mes[f.id].lancs, mes[f.id].base, cfg.encargos) })) : [];
+  const res = mes ? lista.map(f => ({ f, r: calcularMes(f, ym, mes[f.id].lancs, mes[f.id].base, cfg.encargos, mes[f.id].comissaoLancada) })) : [];
   const soma = k => res.reduce((s, x) => s + (typeof k === "function" ? k(x.r) : x.r[k]), 0);
   return html`<div class="pagina larga-media">
     <${AbasRH} ativa="funcionarios" />
@@ -207,7 +212,7 @@ function MesFuncionario({ f, ymInicial }) {
   const [ym, setYm] = useState(ymInicial), [m, setM] = useState(null), [novo, setNovo] = useState(null), [gerando, setGerando] = useState(false);
   const carregar = () => dadosDoMes(ym, [f]).then(x => setM(x[f.id])).catch(e => avisar(e.message, true));
   useEffect(() => { setM(null); carregar(); }, [ym, f.id]);
-  const r = m ? calcularMes(f, ym, m.lancs, m.base, cfg.encargos) : null;
+  const r = m ? calcularMes(f, ym, m.lancs, m.base, cfg.encargos, m.comissaoLancada) : null;
   const salvarLanc = async () => {
     const t = TIPOS_LANC[novo.tipo];
     if (!t.qtd && !(novo.valor > 0)) return avisar("Informe o valor.", true);
@@ -236,7 +241,7 @@ function MesFuncionario({ f, ymInicial }) {
       <div><h3>A pagar ao funcionário</h3>
         ${linha("Salário", r.salario, false, r.diasSalario < 30 ? r.diasSalario + " dias" : "")}
         ${linha("Horas extras", r.horasExtras, false, r.qtdHorasExtras ? fmtHoras(r.qtdHorasExtras) : "")}
-        ${linha("Comissão", r.comissao, false, r.comissaoAuto ? f.comissao_pct + "% de " + reais(r.baseComissao) : "")}
+        ${linha("Comissão", r.comissao, false, r.comissaoAuto ? f.comissao_pct + "% de " + reais(r.baseComissao) : (r.comissaoIncerta ? "não foi possível conferir a comissão da quinzena" : r.comissaoLancada ? "lançada por quinzena" : ""))}
         ${linha("Bônus / prêmios", r.bonus)}
         ${linha("Faltas", r.faltas, true, r.qtdFaltas ? r.qtdFaltas + " dia(s)" : "")}
         ${linha("Vales e adiantamentos", r.vales, true)}
@@ -261,9 +266,11 @@ function MesFuncionario({ f, ymInicial }) {
     : html`<div class="tabela-rolagem"><table class="tab-rel"><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th class="num">Qtd.</th><th class="num">Valor</th><th></th></tr></thead>
       <tbody>${m.lancs.map(l => html`<tr key=${l.id}><td>${fmtData(l.data)}</td><td>${TIPOS_LANC[l.tipo].t}</td><td>${l.descricao}</td>
         <td class="num">${Number(l.qtd) ? l.qtd + " " + (TIPOS_LANC[l.tipo].qtd || "") : ""}</td><td class="num">${TIPOS_LANC[l.tipo].sinal < 0 ? "− " : ""}${reais(r.valorDe(l))}</td>
-        <td><button type="button" class="btn-link" onClick=${() => excluirLanc(l)}>Excluir</button></td></tr>`)}</tbody></table></div>`}
+        <td>${l.tipo === "comissao" && r.comissaoLancada
+          ? html`<span class="dica">lançada na tela de Comissão</span>`
+          : html`<button type="button" class="btn-link" onClick=${() => excluirLanc(l)}>Excluir</button>`}</td></tr>`)}</tbody></table></div>`}
   </section>
-  ${m && Number(f.comissao_pct) > 0 ? html`<section class="card"><h3>O.S. entregues como mecânico (${m.os.length})</h3>
+  ${m && Number(f.comissao_pct) > 0 && !r.comissaoLancada && !r.comissaoIncerta ? html`<section class="card"><h3>O.S. entregues como mecânico (${m.os.length})</h3>
     ${!m.os.length ? html`<${Vazio}>Nenhuma O.S. entregue neste mês com ${f.apelido || f.nome} como mecânico.</${Vazio}>`
     : html`<div class="tabela-rolagem"><table class="tab-rel"><thead><tr><th>O.S.</th><th>Entrega</th><th>Cliente</th><th class="num">Mão de obra</th><th class="num">Comissão</th></tr></thead>
       <tbody>${m.os.map(o => html`<tr key=${o.id} class="clicavel" onClick=${() => ir("/os/" + o.id)}><td>${numOS(o.numero)}</td><td>${fmtData(o.entregue_em)}</td><td>${(o.cliente && o.cliente.nome) || ""}</td>

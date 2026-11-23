@@ -99,6 +99,29 @@ export const PARAMETROS = [
   { id: "maf_por_litro", nome: "MAF esperado em marcha lenta, por litro de cilindrada", valor: 1, unidade: "g/s por litro",
     nivel: "suposto", onde: "geral", usado: false,
     fonte: "Regra de oficina; as próprias fontes discordam (0,8–1,2 e 1,0–2,0). O único dado de montadora que achamos (Hilux 3.0 diesel: 5–12 g/s) já foge dela." },
+  /* ---- CONFERIDO NO RAVEN, no carro (23/11/2026) ----
+   * O Danilo pôs o Raven (Scanner 3) na Amarok QMT4A86 — VW Amarok 2.0 16V 4 cil. Bi-Turbo Diesel
+   * 180 cv 16-22, módulo Bosch EDC17CP54 — e filmou as leituras com as faixas que a ferramenta
+   * mostra. Estas são as primeiras faixas CONFERIDAS do app: não são suposição de reparação nem
+   * palpite nosso, são o que uma ferramenta de oficina mostra para este motor. */
+  { id: "arrefecimento_edc17cp54", nome: "Temperatura do motor em trabalho", de: 80, ate: 100, unidade: "°C",
+    nivel: "conferido", onde: "modelo", modelo: "VW Amarok 2.0 BiTDI (Bosch EDC17CP54, 2016-22)", usado: false,
+    fonte: "Raven Scanner 3 na Amarok QMT4A86, 23/11/2026. A leitura marcou 75 °C em vermelho, fora da faixa." },
+  { id: "rail_lenta_edc17cp54", nome: "Pressão do rail em marcha lenta", de: 280, ate: 360, unidade: "bar",
+    nivel: "conferido", onde: "modelo", modelo: "VW Amarok 2.0 BiTDI (Bosch EDC17CP54, 2016-22)", usado: false,
+    fonte: "Raven Scanner 3 na Amarok QMT4A86, 23/11/2026. O nosso app leu 327 a 332 bar em lenta no mesmo carro: dentro." },
+  { id: "lenta_edc17cp54", nome: "Rotação em marcha lenta", de: 750, ate: 930, unidade: "rpm",
+    nivel: "conferido", onde: "modelo", modelo: "VW Amarok 2.0 BiTDI (Bosch EDC17CP54, 2016-22)", usado: false,
+    fonte: "Raven Scanner 3 na Amarok QMT4A86, 23/11/2026." },
+  { id: "iat_edc17cp54", nome: "Temperatura do ar de admissão", de: 30, ate: 65, unidade: "°C",
+    nivel: "conferido", onde: "modelo", modelo: "VW Amarok 2.0 BiTDI (Bosch EDC17CP54, 2016-22)", usado: false,
+    fonte: "Raven Scanner 3 na Amarok QMT4A86, 23/11/2026." },
+  { id: "consumo_lenta_edc17cp54", nome: "Consumo em marcha lenta", de: 0.5, ate: 0.8, unidade: "L/h",
+    nivel: "conferido", onde: "modelo", modelo: "VW Amarok 2.0 BiTDI (Bosch EDC17CP54, 2016-22)", usado: false,
+    fonte: "Raven Scanner 3 na Amarok QMT4A86, 23/11/2026. Não sai por OBD genérico: fica aqui de referência." },
+  { id: "bateria_motor_ligado", nome: "Tensão da bateria com o motor ligado", de: 12.5, ate: 14.7, unidade: "V",
+    nivel: "conferido", onde: "geral", usado: false,
+    fonte: "Raven Scanner 3 na Amarok QMT4A86, 23/11/2026 (faixa que a ferramenta usa, não é de um motor só). O nosso app leu 14,0 V no mesmo carro." },
   { id: "arrefecimento_trabalho", nome: "Temperatura do motor em trabalho", de: 80, ate: 105, unidade: "°C",
     nivel: "suposto", onde: "geral", usado: false,
     fonte: "Reparação: do termostato abrindo (82 a 92 °C na maioria dos motores) até a ventoinha entrar (100 a 105 °C). Era de 85 a 105 e marcava ABAIXO um motor a 82 °C, que é normal (23/11/2026). Não achamos faixa normal nem temperatura de dano publicada por montadora nenhuma. A conferir no Raven." },

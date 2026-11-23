@@ -5,12 +5,12 @@ public class VerificaCloneLista {
   public static void main(String[] a){
     // LEITURA que o clone PRECISA poder mandar (o pátio bloqueia, aqui é liberado)
     for(String c : new String[]{
-        "ATZ","ATE0","ATL0","ATS0","ATH1","ATH0","ATCAF1","ATCAF0","ATSP0","ATDP","ATDPN","ATRV","ATI",
-        "ATSH7E0","ATCRA7E8","ATFCSH7E0","ATFCSD300000","ATFCSM1","ATST64","ATSP6","ATCM7E8","ATCF7E8",
+        "ATZ","ATE0","ATL0","ATS0","ATH1","ATH0","ATCAF1","ATSP0","ATDP","ATDPN","ATRV","ATI",
+        "ATSH7E0","ATSH7DF","ATSH7E7","ATCRA7E8","ATCRA7EF","ATFCSH7E0","ATFCSD300000","ATFCSM1","ATFCSM0","ATSP6",
         "0100","010C","03","07","0A","0902","0904","0906","0600",
         "22F190","22F18C","1902FF","1A90","23140000000001","1003","1001","3E00","3E80"})
       chk("permite leitura "+c, ObdPlugin.permitido(c));
-    chk("espaço/minúscula não mudam", ObdPlugin.permitido("22 f1 90") && ObdPlugin.permitido("at sh 7e0"));
+    chk("espaço/minúscula não mudam", ObdPlugin.permitido("22 f1 90") && ObdPlugin.permitido("at sh 7e0") && ObdPlugin.permitido("at fcsd 30 00 00"));
 
     // ESCRITA/AÇÃO no carro: RECUSADA de todo jeito (a trava do clone)
     for(String c : new String[]{
@@ -19,11 +19,15 @@ public class VerificaCloneLista {
         "ATMA","ATWS"})
       chk("RECUSA ação no carro "+c, !ObdPlugin.permitido(c));
 
-    // mapeamento de atuadores: SÓ o pedido incompleto passa
-    chk("permite sonda AE incompleta", ObdPlugin.permitido("AE12"));
-    chk("permite sonda 2F incompleta", ObdPlugin.permitido("2FF190"));
-    for(String c : new String[]{"AE1200000000","AE12FF","AE","2FF19003","2FF1900301","2FF19003FF00"})
-      chk("RECUSA acionamento completo "+c, !ObdPlugin.permitido(c));
+    // atuador: RECUSADO até incompleto (GMW3110: CPID sem bytes de controle executa; AE00 é comando)
+    for(String c : new String[]{"AE","AE00","AE12","AE1200000000","2FF190","2FF19003","2FF1900301",
+        "3B9000","A5","A501","A503","2801","1002","3DF19000"})
+      chk("RECUSA "+c, !ObdPlugin.permitido(c));
+    // AT: só no formato exato (revisão independente do PR #170)
+    for(String c : new String[]{"ATCAF0","ATAL","ATCSM0","ATCSM1","ATBI","ATST64","ATCM7E8","ATCF7E8",
+        "ATSH123","ATSH7E8","ATSH7DF0","ATSH18DB33F1","ATCRA123","ATCRA7E0",
+        "ATFCSH123","ATFCSH7E8","ATFCSM2","ATFCSD","ATFCSD3000","ATFCSD30000000","ATFCSD310000","ATFCSD020000"})
+      chk("RECUSA AT fora do formato "+c, !ObdPlugin.permitido(c));
     // 10 só sessão de leitura; 3E só padrão
     chk("RECUSA sessão de programação 1002", !ObdPlugin.permitido("1002"));
     chk("permite sessão estendida 1003", ObdPlugin.permitido("1003"));

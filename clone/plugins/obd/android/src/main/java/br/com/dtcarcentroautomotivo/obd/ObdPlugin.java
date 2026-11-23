@@ -43,8 +43,10 @@ import java.util.concurrent.Executors;
  *   - serviços UDS de LEITURA: 22 (ler dado por identificador), 19 (ler falhas), 1A (ler dado KWP),
  *     10 só nas sessões 01 (padrão) e 03 (estendida), 3E (tester present).
  *
+ * Os comandos AT só passam no formato exato de cada um (ver AT_FORMATOS).
+ *
  * CONTINUA BLOQUEADO, igual ao app do pátio, tudo que ESCREVE ou AGE no carro:
- *   04/14 (apagar falha), 2E/3D (gravar), 2F/AE completos (atuador), 31 (rotina), 34-37 (transferência de bloco),
+ *   04/14 (apagar falha), 2E/3D/3B (gravar), 2F/AE (atuador, mesmo incompleto), 31 (rotina), 34-37 (transferência),
  *   27 (destravar), 11/28/85 (reiniciar/comunicação), e a sessão de programação (10 02).
  * Este app NÃO tem o método apagar(): ele só lê.
  *
@@ -69,22 +71,28 @@ public class ObdPlugin extends Plugin {
     private static final int ESPERA_PADRAO = 5000;
     private static final int ESPERA_MAXIMA = 20000;
 
-    /** Comandos AT por IGUALDADE: ajustes do adaptador, nenhum chega ao carro. */
+    /**
+     * Comandos AT liberados, por IGUALDADE: só os que o app de fato usa e que não fazem o adaptador transmitir
+     * nada por conta própria. De fora, de propósito (revisão independente do PR #170):
+     *  - ATCAF0: com a formatação desligada o primeiro byte deixa de ser o serviço e a lista de serviços perde o sentido;
+     *  - ATAL, ATCSM*, ATCM/ATCF, ATBI: o app não usa.
+     */
     private static final Set<String> AT_EXATOS = new HashSet<>(Arrays.asList(
         "ATZ", "ATD", "ATE0", "ATE1", "ATL0", "ATL1", "ATS0", "ATS1",
-        "ATH0", "ATH1", "ATAL", "ATDP", "ATDPN", "ATRV", "ATI",
-        "ATCAF0", "ATCAF1", "ATAT0", "ATAT1", "ATAT2", "ATCSM0", "ATCSM1",
-        "ATAR", "ATCRA"
+        "ATH0", "ATH1", "ATDP", "ATDPN", "ATRV", "ATI",
+        "ATCAF1", "ATAT0", "ATAT1", "ATAT2", "ATAR", "ATCRA"
     ));
 
     /**
-     * Comandos AT por PREFIXO: levam um valor (hex) depois. São de ENDEREÇAMENTO/tempo do ELM327:
-     * ATSP escolhe o protocolo; ATSH o cabeçalho de quem envia; ATCRA o filtro de quem responde;
-     * ATFCSH/ATFCSD/ATFCSM o controle de fluxo do ISO-TP; ATST o tempo de espera; ATCM/ATCF a máscara
-     * e o filtro do CAN. Nada disso escreve no carro: é configuração da conversa.
+     * Comandos AT com valor, cada um com o FORMATO exato que pode ter:
+     *  - endereço de quem envia (ATSH) e do controle de fluxo (ATFCSH): só os endereços de diagnóstico 7DF e 7E0-7E7;
+     *  - filtro de recepção (ATCRA): só as respostas de diagnóstico 7E8-7EF (recepção não transmite nada);
+     *  - dados do controle de fluxo (ATFCSD): só um quadro de controle de fluxo de verdade, 30 + 2 bytes.
+     *    Com ATFCSM1 o adaptador transmite esses bytes sozinho, então eles não podem ser livres.
      */
-    private static final String[] AT_PREFIXOS = {
-        "ATSP", "ATSH", "ATCRA", "ATFCSH", "ATFCSD", "ATFCSM", "ATST", "ATCM", "ATCF", "ATAR", "ATBI"
+    private static final String[] AT_FORMATOS = {
+        "ATSP[0-9A-C]", "ATSH(7DF|7E[0-7])", "ATCRA7E[89A-F]",
+        "ATFCSH(7DF|7E[0-7])", "ATFCSD30[0-9A-F]{4}", "ATFCSM[01]"
     };
 
     /** Serviços OBD-II de LEITURA. 04 (apagar) de fora, de propósito. */
@@ -117,11 +125,7 @@ public class ObdPlugin extends Plugin {
         if (c.isEmpty()) return false;
         if (c.startsWith("AT")) {
             if (AT_EXATOS.contains(c)) return true;
-            for (String p : AT_PREFIXOS) {
-                if (c.startsWith(p) && c.length() > p.length() && c.substring(p.length()).matches("[0-9A-F]+")) {
-                    return true;
-                }
-            }
+            for (String f : AT_FORMATOS) if (c.matches(f)) return true;
             return false;
         }
         // pedido ao carro: só hexadecimal, em bytes inteiros, de 1 a 8 bytes
@@ -133,13 +137,9 @@ public class ObdPlugin extends Plugin {
         if (servico.equals("10")) return c.equals("1001") || c.equals("1003");
         // 3E (tester present) só nas duas formas padrão.
         if (servico.equals("3E")) return c.equals("3E00") || c.equals("3E80");
-        // MAPEAR ATUADORES sem acionar: o pedido sai INCOMPLETO de propósito, então o módulo só pode recusar.
-        // Se a saída existe, ele responde "tamanho errado" (13); se não existe, "fora da faixa" (31).
-        //  - GMLAN device control: só "AE" + CPID (2 bytes). O comando de verdade leva os bytes de controle.
-        //  - UDS controle de entrada/saída: só "2F" + identificador (3 bytes). O de verdade leva o parâmetro.
-        // Qualquer coisa a mais (que poderia acionar) continua RECUSADA.
-        if (servico.equals("AE")) return c.length() == 4;
-        if (servico.equals("2F")) return c.length() == 6;
+        // AE (device control GMLAN) e 2F (controle de E/S UDS) ficam FORA, inclusive "incompletos":
+        // pela GMW3110 §8.20.6 há CPIDs que executam com ZERO bytes de controle, e AE00 é comando válido
+        // (achado da revisão do Codex no PR #169). O clone só lê; mapear saída por sonda é coisa de bancada.
         return false;
     }
 
@@ -304,11 +304,16 @@ public class ObdPlugin extends Plugin {
                     return;
                 }
                 try {
+                    // resto de uma resposta atrasada não pode ser lido como resposta deste pedido
+                    byte[] lixo = new byte[256];
+                    while (in.available() > 0) { if (in.read(lixo) <= 0) break; }
                     out.write((limpo + "\r").getBytes(StandardCharsets.US_ASCII));
                     out.flush();
-                    String resposta = ler(in, espera);
+                    StringBuilder sb = new StringBuilder();
+                    boolean pronto = ler(in, espera, sb);
                     JSObject r = new JSObject();
-                    r.put("resposta", resposta);
+                    r.put("resposta", sb.toString());
+                    r.put("completo", pronto);
                     call.resolve(r);
                 } catch (IOException e) {
                     fechar();
@@ -332,8 +337,8 @@ public class ObdPlugin extends Plugin {
         }
     }
 
-    private String ler(InputStream in, int espera) throws IOException {
-        StringBuilder sb = new StringBuilder();
+    /** Lê até o sinal de pronto ('>') ou até acabar o tempo. Devolve se o adaptador terminou. */
+    private boolean ler(InputStream in, int espera, StringBuilder sb) throws IOException {
         byte[] balde = new byte[256];
         long limite = System.currentTimeMillis() + espera;
         while (System.currentTimeMillis() < limite) {
@@ -342,14 +347,14 @@ public class ObdPlugin extends Plugin {
                 if (lidos > 0) {
                     sb.append(new String(balde, 0, lidos, StandardCharsets.US_ASCII));
                     int fim = sb.indexOf(String.valueOf(PRONTO));
-                    if (fim >= 0) return sb.substring(0, fim);
+                    if (fim >= 0) { sb.setLength(fim); return true; }
                 }
             } else {
                 try { Thread.sleep(20); }
                 catch (InterruptedException e) { Thread.currentThread().interrupt(); break; }
             }
         }
-        return sb.toString();
+        return false;
     }
 
     @Override

@@ -3,6 +3,7 @@ import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Campo, Texto, Area, Abas, Modal, Vazio, Dinheiro } from "../ui.js";
 import { AbasRH } from "./rh.js";
+import { ordensComRateio, somarPorFuncionario } from "../comissoes.js";
 import { norm, reais, fmtData, fmtTel, fmtDoc, soDig, validaCPF, hojeISO, parseValor, totalItem, numOS } from "../util.js";
 import { DIAS, VINCULOS, TIPOS_LANC, ENCARGOS_PADRAO, JORNADA_PADRAO, minutosDia, horasSemana, fmtHoras, periodo, mesAtual, nomeMes,
   calcularMes, eMecanicoDa, quintoDiaUtil, com_encargos } from "../folha.js";
@@ -12,19 +13,27 @@ const VAZIO = { nome: "", apelido: "", cpf: "", rg: "", pis: "", ctps: "", nasci
 const semTabela = e => /funcionari.*(does not exist|não existe)|relation .*funcionari/i.test(e.message || "");
 const AVISO_V10 = html`<div class="aviso">O banco ainda não tem as tabelas de funcionários. Rode o arquivo <b>supabase/v10.sql</b> no SQL Editor do Supabase e recarregue a página.</div>`;
 
-/** Carrega lançamentos e base de comissão do mês para uma lista de funcionários */
+/** Carrega lançamentos, comissão por linha (v64) e base de comissão do mês para uma lista de funcionários.
+ *  Regra da comissão desde o v64: a O.S. que tem rateio POR LINHA conta pelas linhas (valor já gravado, percentual
+ *  lançado à mão em RH › Comissões por serviço); a O.S. sem rateio continua contando pelo percentual cheio do
+ *  cadastro sobre a mão de obra inteira, como sempre foi — por isso nada muda nas O.S. antigas. */
 export async function dadosDoMes(ym, funcs) {
   const p = periodo(ym);
   const [lancs, ordens] = await Promise.all([api.funcionarios.lancamentos(p.comp), api.funcionarios.ordensEntregues(p.ini + "T00:00:00-03:00", p.fim + "T00:00:00-03:00")]);
+  const comissoes = ordens.length && api.comissoes ? await api.comissoes.listar({ ordens: ordens.map(o => o.id) }).catch(() => []) : [];
+  const rateadas = ordensComRateio(comissoes);
+  const porLinha = somarPorFuncionario(comissoes);
   const comComissao = funcs.filter(f => Number(f.comissao_pct) > 0);
-  const relevantes = ordens.filter(o => comComissao.some(f => eMecanicoDa(f, o)));
+  const relevantes = ordens.filter(o => !rateadas.has(o.id) && comComissao.some(f => eMecanicoDa(f, o)));
   const itens = relevantes.length ? await api.itensDasOrdens(relevantes.map(o => o.id)) : [];
   const mo = new Map();
   for (const i of itens) if (i.tipo === "servico" && i.aprovado !== false) mo.set(i.ordem_id, (mo.get(i.ordem_id) || 0) + totalItem(i));
   const porFunc = {};
   for (const f of funcs) {
     const os = relevantes.filter(o => eMecanicoDa(f, o)).map(o => ({ ...o, maoDeObra: mo.get(o.id) || 0 }));
-    porFunc[f.id] = { lancs: lancs.filter(l => l.funcionario_id === f.id), os, base: os.reduce((s, o) => s + o.maoDeObra, 0) };
+    const linhas = comissoes.filter(c => c.funcionario_id === f.id);
+    porFunc[f.id] = { lancs: lancs.filter(l => l.funcionario_id === f.id), os, linhas,
+      base: { base: os.reduce((s, o) => s + o.maoDeObra, 0), porLinha: (porLinha[f.id] || { valor: 0 }).valor } };
   }
   return porFunc;
 }
@@ -236,7 +245,8 @@ function MesFuncionario({ f, ymInicial }) {
       <div><h3>A pagar ao funcionário</h3>
         ${linha("Salário", r.salario, false, r.diasSalario < 30 ? r.diasSalario + " dias" : "")}
         ${linha("Horas extras", r.horasExtras, false, r.qtdHorasExtras ? fmtHoras(r.qtdHorasExtras) : "")}
-        ${linha("Comissão", r.comissao, false, r.comissaoAuto ? f.comissao_pct + "% de " + reais(r.baseComissao) : "")}
+        ${linha("Comissão", r.comissao, false, [r.comissaoPct ? f.comissao_pct + "% de " + reais(r.baseComissao) : "",
+          r.comissaoLinhas ? reais(r.comissaoLinhas) + " por serviço" : ""].filter(Boolean).join(" + "))}
         ${linha("Bônus / prêmios", r.bonus)}
         ${linha("Faltas", r.faltas, true, r.qtdFaltas ? r.qtdFaltas + " dia(s)" : "")}
         ${linha("Vales e adiantamentos", r.vales, true)}
@@ -263,8 +273,15 @@ function MesFuncionario({ f, ymInicial }) {
         <td class="num">${Number(l.qtd) ? l.qtd + " " + (TIPOS_LANC[l.tipo].qtd || "") : ""}</td><td class="num">${TIPOS_LANC[l.tipo].sinal < 0 ? "− " : ""}${reais(r.valorDe(l))}</td>
         <td><button type="button" class="btn-link" onClick=${() => excluirLanc(l)}>Excluir</button></td></tr>`)}</tbody></table></div>`}
   </section>
-  ${m && Number(f.comissao_pct) > 0 ? html`<section class="card"><h3>O.S. entregues como mecânico (${m.os.length})</h3>
-    ${!m.os.length ? html`<${Vazio}>Nenhuma O.S. entregue neste mês com ${f.apelido || f.nome} como mecânico.</${Vazio}>`
+  ${m && m.linhas && m.linhas.length ? html`<section class="card"><div class="secao-topo"><h3>Comissão por serviço (${m.linhas.length})</h3>
+    <button type="button" class="btn btn-sm" onClick=${() => ir("/comissoes?mes=" + ym)}>Abrir Comissões</button></div>
+    <div class="tabela-rolagem"><table class="tab-rel"><thead><tr><th>O.S.</th><th>Serviço</th><th class="num">Mão de obra</th><th class="num">%</th><th class="num">Comissão</th></tr></thead>
+      <tbody>${m.linhas.map(c => html`<tr key=${c.id}><td>${numOS(c.os_numero)}</td><td>${c.descricao}</td>
+        <td class="num">${reais(c.base)}</td><td class="num">${Number(c.percentual).toLocaleString("pt-BR")}%</td><td class="num">${reais(c.valor)}</td></tr>`)}</tbody>
+      <tfoot><tr><th colspan="4">Total por serviço</th><th class="num">${reais(m.linhas.reduce((s, c) => s + (Number(c.valor) || 0), 0))}</th></tr></tfoot></table></div>
+  </section>` : null}
+  ${m && Number(f.comissao_pct) > 0 ? html`<section class="card"><h3>O.S. entregues pelo percentual cheio (${m.os.length})</h3>
+    ${!m.os.length ? html`<${Vazio}>Nenhuma O.S. entregue neste mês conta pelo percentual cheio${m.linhas && m.linhas.length ? " (as deste mês foram rateadas por serviço)" : ""}.</${Vazio}>`
     : html`<div class="tabela-rolagem"><table class="tab-rel"><thead><tr><th>O.S.</th><th>Entrega</th><th>Cliente</th><th class="num">Mão de obra</th><th class="num">Comissão</th></tr></thead>
       <tbody>${m.os.map(o => html`<tr key=${o.id} class="clicavel" onClick=${() => ir("/os/" + o.id)}><td>${numOS(o.numero)}</td><td>${fmtData(o.entregue_em)}</td><td>${(o.cliente && o.cliente.nome) || ""}</td>
         <td class="num">${reais(o.maoDeObra)}</td><td class="num">${reais(o.maoDeObra * f.comissao_pct / 100)}</td></tr>`)}</tbody></table></div>`}

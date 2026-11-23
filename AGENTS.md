@@ -324,6 +324,40 @@ Tudo o que aparece na tela, nos textos e nos comentários do código fica em **p
   chamada, vale `cfg.rh.remetentes`. **Conector (pedido do Danilo, "sem amarras"):** `rh_documentos` (ação `rh_listar`), `rh_abrir`
   (`rh_abrir`: texto do PDF com as guias conferidas) e `rh_buscar_contabilidade` (`importar_rh`), pela função "email" com o login do Danilo;
   o papel `agente_leitura` continua sem ler o RH. Testes: `deno run -A teste/teste_rh.ts`, `deno run -A teste/teste_email.ts` e `bash teste/teste_v30.sh`.
+- **Comissão por linha de serviço (v64, pedido do Danilo em 23/11/2026) e ABA DE RH PRÓPRIA.** Até aqui a comissão era um
+  percentual CHEIO sobre a mão de obra inteira da O.S., para uma pessoa só: o técnico responsável (v50). Na oficina um carro passa
+  pela mão de mais de um mecânico, e o que cada um fez está em linhas diferentes. Agora o rateio é **por linha**: cada serviço vai
+  para o nome de um (ou de dois) funcionários, e **o percentual é sempre lançado à mão pelo Danilo** — decisão dele: o sistema
+  sugere quem fez, nunca quanto vale.
+  **O app já sabia, o sistema é que não escutava.** O mecânico marca no celular os itens que executou e indica a outro responsável
+  as etapas que não são dele (`servico_apontamentos`, v60), mas isso ficava só naquela tabela: não escrevia `ordens.tecnico_id` nem
+  entrava na folha (`eMecanicoDa` em `js/folha.js` só olha o técnico da O.S.). Por isso a tela de comissão aparecia zerada mesmo com
+  o mecânico apontando certinho. A tela nova é a ponte: chega com as linhas **já sugeridas** pelo apontamento do app.
+  **Tabela `os_item_comissoes` (v64):** uma linha por (serviço + funcionário); índice único em (item_id, funcionario_id), então a
+  mesma linha pode ser dividida entre dois mecânicos mas a mesma pessoa não entra duas vezes. `base` (mão de obra da linha) e
+  `valor` ficam **gravados, não calculados na leitura**: mexer no preço do serviço meses depois não pode mudar sozinha uma comissão
+  já conferida e paga. `competencia` é o mês da ENTREGA da O.S. (a regra que a folha já usa), gravada para não mudar se a entrega
+  for refeita. `origem` diz se a sugestão veio do app ou da mão. **Só o administrador lê e grava: é valor de salário**, mesma regra
+  do RH (v30) — o mecânico não vê a comissão dos outros e o `agente_leitura` não lê a tabela. Preservada pelo espelho; backup,
+  banco do PC e restauração incluídos.
+  **Regras puras em `js/comissoes.js`** (sem window/document, como o `js/folha.js`): `servicosDaOS` (só mão de obra não recusada),
+  `baseDaLinha`, `valorComissao`, `competenciaDaOS` (desconta UTC−3: entrega às 22h30 do dia 30 não cai no mês seguinte),
+  `sugestoesDaOS` (itens executados → quem apontou; indicações → o indicado; o que ninguém apontou → o técnico da O.S.; avisa quando
+  um acesso apontou sem funcionário vinculado, em vez de perder a comissão em silêncio), `somarPorFuncionario`, `pendenciaDaOS`.
+  **A folha soma os dois mundos (`calcularMes`):** O.S. **com** rateio conta pelas linhas; O.S. **sem** rateio continua contando
+  pelo percentual cheio do cadastro, como sempre — por isso **nada muda nas O.S. antigas**. `baseComissao` passou a aceitar
+  `{ base, porLinha }` além do número solto, que continua valendo. `r.comissaoPct` e `r.comissaoLinhas` mostram a divisão na tela.
+  **MUDOU `js/folha.js`: troque o commit em `supabase/functions/agente/ferramentas.ts` e publique a função "agente" de novo**, senão
+  a folha pelo conector continua só com o percentual cheio (regra de sempre deste arquivo).
+  **Tela `js/telas/comissoes.js`** (`#/comissoes`, permissão `financeiro`, precisa de internet): O.S. entregues do mês, cada uma com
+  os serviços; por linha, o funcionário, o percentual e o valor, com "+ Dividir com outro"; selo de "Rateada" / "Faltam N de M";
+  filtro "só as que faltam ratear"; resumo por pessoa no topo. Lançar substitui o rateio daquele serviço (não duplica) e **não
+  fecha a O.S. aberta na tela**. Sem o v64 no banco a tela avisa qual arquivo rodar e o resto segue funcionando.
+  **Aba de RH separada (mesmo pedido):** o RH saiu de Cadastros e virou **grupo próprio no menu** ("RH": Funcionários e folha,
+  Comissões por serviço, Documentos do RH), e `AbasRH` em `js/telas/rh.js` ganhou a terceira aba.
+  Período de transição: não mexe em O.S., estoque nem financeiro; se comporta igual antes e depois da virada.
+  Testes: `node teste/teste_comissoes.mjs` (34, regras puras e a conta da folha) e `python3 teste/teste_comissoes_tela.py`
+  (32: sugestão do app, percentual à mão, divisão entre dois, relançar sem duplicar, ficha do funcionário, celular, sem o v64).
 - **Pedidos de compra por fornecedor (v31, pedido do Danilo em 04/11/2026):** cupons, pré-vendas e romaneios ficam na `pre_notas` (v19) **sem foto**:
   fornecedor (cadastro ou só o nome), documento, data, total já com desconto e a O.S. de destino. O Claude registra pelo conector
   (`registrar_pre_nota` → `agente_registrar_pre_nota`, prévia com confirmar=false; recusa o mesmo documento do mesmo fornecedor sem confirmação) e

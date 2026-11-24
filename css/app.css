@@ -2418,3 +2418,24 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cm-puxar-destino .campo{flex:1;min-width:200px;margin:0}
 .cm-puxar-destino .btn{white-space:nowrap}
 @media (max-width:640px){.cm-puxar-destino{flex-direction:column;align-items:stretch}.cm-puxar-destino .btn{width:100%}}
+
+/* Robô do e-mail (24/11/2026): monitor para ficar aberto no tablet da recepção — letra grande, sem alarde */
+.rb-ajustes{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin:10px 0 6px}
+.rb-ajustes .campo{margin:0;min-width:180px}
+.rb-marca{display:flex;gap:8px;align-items:center;padding-bottom:9px}
+.rb-email{margin-top:10px}
+.rb-com-prob{border-color:var(--bad)}
+.rb-cab{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.rb-de{font-size:17px}
+.rb-hora{margin-left:auto;white-space:nowrap}
+.rb-assunto{margin:6px 0 2px;font-size:17px}
+.rb-tag{display:inline-block;padding:2px 8px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid}
+.rb-ok{color:var(--ok);border-color:var(--ok)}
+.rb-bad{color:var(--bad);border-color:var(--bad)}
+.rb-warn{color:var(--warn);border-color:var(--warn)}
+.rb-muted{color:var(--muted);border-color:var(--muted)}
+.rb-anexos{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:4px}
+.rb-anexo{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;padding:6px 8px;border-radius:8px;background:var(--surface-2)}
+.rb-anexo-ruim{border:1px solid var(--bad)}
+.rb-sinal{margin-left:auto;font-size:13.5px}
+@media (max-width:640px){.rb-ajustes{flex-direction:column;align-items:stretch}.rb-hora,.rb-sinal{margin-left:0}}

@@ -121,6 +121,11 @@
           configurado: false, endereco_retorno: "https://exemplo.supabase.co/functions/v1/email",
           lista_regras: [{ id: 1, tipo: "fraude", alvo: "nome", valor: "sisbra", obs: "Cobrança fraudulenta no DDA (02/11/2026)", origem: "padrao" }, { id: 2, tipo: "importante", alvo: "dominio", valor: "sicredi.com.br", obs: "Banco", origem: "padrao" }] };
         if (b.acao === "situacao") return { ...e, regras: e.lista_regras.length, lista_regras: e.lista_regras.slice() };
+        // robô do e-mail (24/11/2026): caixa de mentira com um e-mail da contabilidade e os anexos que ele confere
+        if (b.acao === "buscar") return (window.__EMAIL_CAIXA || []).slice();
+        if (b.acao === "anexo") { const d = (window.__EMAIL_ANEXOS || {})[b.anexo_id];
+          if (!d) return { nome: "anexo", conteudo: "Este anexo não é um arquivo (é um e-mail ou link anexado): não dá para ler por aqui." };
+          return d; }
         if (b.acao === "conectar") { if (!e.configurado) throw new Error("Falta cadastrar o segredo MS_CLIENT_ID da função \"email\" no Supabase (Edge Functions › Secrets)."); window.__EMAIL_LOGIN = true; return { url: "about:blank#login-microsoft", validade_min: 10 }; }
         if (b.acao === "desconectar") { Object.assign(e, { situacao: "desligado", conta: "", nome: "" }); return { ok: true }; }
         if (b.acao === "regra") { if (b.alvo === "remetente" && !/@/.test(b.valor)) throw new Error("Remetente precisa ser um e-mail completo (nome@dominio)."); const r = { id: Date.now(), tipo: b.tipo, alvo: b.alvo, valor: String(b.valor).toLowerCase().trim(), obs: b.obs || "", origem: "danilo" }; e.lista_regras.push(r); return r; }
@@ -343,7 +348,9 @@
             Object.assign(p, patch, { atualizado_em: now() }); return p; } },
       };
     })(),
-    notas: { listar: async () => [] },
+    notas: { listar: async () => [],
+      // o robô do e-mail (24/11/2026) pergunta se a NF do anexo já entrou no sistema
+      existe: async chave => { net(); return (db.notas_entrada || []).find(x => x.chave === chave) || null; } },
     estoque: { movimentos: async () => [], movimentar: async (id, tipo, q) => { const p = db.produtos.find(x => x.id === id); p.estoque_atual = tipo === "entrada" ? +p.estoque_atual + q : tipo === "saida" ? +p.estoque_atual - q : q; return p.estoque_atual; } },
     contas: { abertas: async () => db.contas.filter(c => c.status === "aberta"),
       // despesa fixa (v43): mesma regra do tornar_despesa_fixa / gerar_despesas_fixas
@@ -387,7 +394,7 @@
       const novas = contas.map(c => ({ nome: c.nome, saldo: c.saldo == null ? ((at.find(x => x.nome === (c.antigo || c.nome)) || {}).atual || 0) : c.saldo, em, por }));
       db.config = { ...db.config, contasFinanceiras: novas, contaPagamento: pagar, contaRecebimento: receber, caixaSaldo: { valor: novas.reduce((t, c) => t + c.saldo, 0), em, por } }; return novas; },
     estornos: { desde: async (de, ate) => (db.estornos || []).filter(e => e.registrado_em >= de && (!ate || e.registrado_em <= ate)) },
-    sefaz: { novas: async () => 0, config: async () => null },
+    sefaz: { novas: async () => 0, config: async () => null, notas: async () => (db.nfe_recebidas || []).slice() },
     painel: async () => ({}), contasAbertas: async () => [],
     // comissão por quinzena (v61) de mentira, seguindo o v61.sql: desconto na mão de obra, fração limitada ao que sobrou,
     // custo que o item já tinha antes da comissão, e só serviço aprovado de O.S. que não foi cancelada.

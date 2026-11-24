@@ -2367,6 +2367,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cm-os{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
 .cm-os-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
 .cm-os-modelo{color:var(--muted);font-size:13.5px}
+.cm-os-tirar{margin-left:auto}
+.cm-acoes{display:flex;gap:6px;align-items:center;justify-self:end}
 /* valor da comissão digitado à mão, ao lado do percentual (24/11/2026) */
 .cm-valor-campo{display:flex;gap:4px;align-items:center;justify-self:end}
 .cm-valor-campo>span{color:var(--muted);font-size:13.5px}
@@ -2402,7 +2404,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .cm-mo{grid-column:1;text-align:left}
   .cm-valor-campo{grid-column:2;justify-self:end}
   .cm-pct-campo{grid-column:1}
-  .cm-linhas li>button{grid-column:2;justify-self:end}
+  .cm-linhas li>.cm-acoes{grid-column:2;justify-self:end}
 }
 
 /* Puxar O.S. (24/11/2026): a O.S. inteira vai para um mecânico, e depois se ajusta linha a linha na quinzena */

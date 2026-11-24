@@ -165,6 +165,26 @@ try:
     chk("desmarcando tudo, não há o que puxar", pg.locator("#cm-puxar-tudo").is_disabled())
     pg.keyboard.press("Escape"); pg.wait_for_timeout(400)
 
+    # tirar o que foi puxado para o mecânico errado (pedido do Danilo, 24/11/2026)
+    bloco = pg.locator(".cm-bloco:has-text('Beto')")
+    chk("o cartão da O.S. tem 'Tirar a O.S.'", bloco.locator(".cm-os-tirar").count() >= 1)
+    chk("cada linha tem 'Tirar' ao lado de 'Quem fez'",
+        bloco.locator(".cm-acoes button:has-text('Tirar')").count() >= 1
+        and bloco.locator(".cm-acoes button:has-text('Quem fez')").count() >= 1)
+    bloco.locator(".cm-acoes button:has-text('Tirar')").first.click(); pg.wait_for_timeout(700)
+    conf = txt(pg, ".modal")
+    chk("a confirmação diz que sai da quinzena e do histórico do app",
+        "serviços executados do app" in conf and "mão de obra não mudam" in conf, conf[:300])
+    pg.click(".modal .btn-perigo:has-text('Tirar')"); pg.wait_for_timeout(1800)
+    chk("o apontamento que ficou sem serviço é apagado",
+        not any(a["id"] == "apaberto" for a in pg.evaluate("window.__DB.apontamentos")),
+        pg.evaluate("(window.__DB.apontamentos || []).map(a => a.id)"))
+    chk("o serviço sai da comissão do mecânico",
+        "TROCA DE AMORTECEDORES DIANTEIROS" not in txt(pg, ".cm-bloco:has-text('Beto')")
+        if pg.locator(".cm-bloco:has-text('Beto')").count() else True, txt(pg)[:300])
+    chk("tirar não mexe na O.S. nem na mão de obra",
+        pg.evaluate("(window.__DB.os_itens.find(i => i.id === 'i4') || {}).descricao") == "TROCA DE AMORTECEDORES DIANTEIROS")
+
     # 8b. serviço dividido entre DOIS mecânicos: o percentual de um não pode vazar para o outro
     dois = b.new_context(viewport={"width": 1366, "height": 768}).new_page()
     dois.on("pageerror", lambda e: erros.append("PAGEERR dois " + str(e)))

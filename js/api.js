@@ -1,5 +1,5 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
-import { local, erroDeRede, semTabelaComissao } from "./local.js";
+import { local, erroDeRede, semTabelaComissao, semTabelaApontamentos } from "./local.js";
 import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
 import { versaoOS, tocarOS } from "./fila.js";
 import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente, comTrava, podeAlterarSemInternet } from "./alteracoes.js";
@@ -396,6 +396,7 @@ function criarApiSupabase() {
         return ok(r); },
     },
 
+    /** banco ainda sem o v60: a TABELA não existe. Erro de duplicidade ou de permissão não entra aqui — tem de aparecer como é. */
     /** Serviço pelo mecânico no app (v60, pedido do Danilo em 16/11/2026 à noite): apontamentos de início, pausa, fim, itens executados e
      *  indicações de responsável. Só online. Sem o v60 no banco, "listar" devolve [] (a tela avisa) e as gravações explicam. */
     apontamentos: {
@@ -404,12 +405,12 @@ function criarApiSupabase() {
         if (perfil_id) q = q.eq("perfil_id", perfil_id); if (ordem_id) q = q.eq("ordem_id", ordem_id); if (abertos) q = q.neq("situacao", "finalizado");
         if (desde) q = q.gte("inicio", desde); if (ate) q = q.lte("inicio", ate);
         const r = await q.order("inicio", { ascending: false }).limit(2000);
-        if (r.error && /servico_apontamentos|schema cache|PGRST205/i.test(r.error.message || "")) return [];
+        if (r.error && semTabelaApontamentos(r.error)) return [];
         return ok(r);
       },
       abrir: async d => { const r = await sb.from("servico_apontamentos").insert({ ordem_id: d.ordem_id, os_numero: d.os_numero || null, perfil_id: d.perfil_id, perfil_nome: d.perfil_nome || "", situacao: "andamento" }).select().single();
-        if (r.error && /servico_apontamentos|schema cache|PGRST205/i.test(r.error.message || "")) throw new Error("Iniciar serviço pelo app ainda não foi ligado: falta rodar o supabase/v60.sql no banco.");
-        if (r.error && /duplicate|unique|servico_apontamentos_aberto/i.test(r.error.message || "")) throw new Error("Você já tem este serviço aberto.");
+        if (r.error && /duplicate|unique|servico_apontamentos_aberto/i.test(r.error.message || "")) throw new Error("Este mecânico já tem um apontamento aberto nesta O.S.");
+        if (r.error && semTabelaApontamentos(r.error)) throw new Error("Iniciar serviço pelo app ainda não foi ligado: falta rodar o supabase/v60.sql no banco.");
         return ok(r); },
       atualizar: async (id, patch) => ok(await sb.from("servico_apontamentos").update(patch).eq("id", id).select().single()),
       visto: async id => { ok(await sb.rpc("apontamento_visto", { p_id: id })); },

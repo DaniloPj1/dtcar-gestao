@@ -11,7 +11,7 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Modal, Vazio, Placa, Campo, Texto } from "../ui.js";
-import { reais, fmtData, numOS, normPlaca, totalItem } from "../util.js";
+import { reais, fmtData, numOS, normPlaca, totalItem, parseValor } from "../util.js";
 import { pode, chaveGrupo, gruposDeProdutos } from "../regras.js";
 import { quinzenas, mesAtual, periodo, nomeMes, quintoDiaUtil } from "../folha.js";
 import { AbasRH } from "./rh.js";
@@ -131,14 +131,18 @@ function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
     setSalvando(true);
     try {
       if (semDono.length) {
-        const aps = (await api.apontamentos.listar({ ordem_id: achado.os.id })).filter(a => a.situacao === "finalizado");
-        const alvo = aps.find(a => a.perfil_id === destino.perfil_id);
+        const aps = await api.apontamentos.listar({ ordem_id: achado.os.id });
+        const dele = aps.filter(a => a.perfil_id === destino.perfil_id);
+        // o que ele deixou ABERTO no app (andamento/pausado) vem primeiro: a puxada fecha esse, em vez de abrir outro
+        // — o banco não aceita dois abertos do mesmo mecânico na mesma O.S., e era aí que a puxada travava.
+        const alvo = dele.find(a => a.situacao !== "finalizado") || dele.find(a => a.situacao === "finalizado");
         const ids = semDono.map(s => s.item.id);
         if (alvo) {
-          const juntos = [...new Set([...(alvo.itens_executados || []), ...ids])];
-          await api.apontamentos.atualizar(alvo.id, { itens_executados: juntos });
+          const patch = { itens_executados: [...new Set([...(alvo.itens_executados || []), ...ids])] };
+          // fecha DENTRO da quinzena aberta, senão os serviços cairiam noutra
+          if (alvo.situacao !== "finalizado") { patch.situacao = "finalizado"; patch.fim = dentroDaQuinzena(quinzena); }
+          await api.apontamentos.atualizar(alvo.id, patch);
         } else {
-          // o apontamento nasce DENTRO da quinzena aberta, senão os serviços cairiam noutra
           const novo = await api.apontamentos.abrir({ ordem_id: achado.os.id, os_numero: achado.os.numero, perfil_id: destino.perfil_id, perfil_nome: destino.apelido || destino.nome });
           await api.apontamentos.atualizar(novo.id, { situacao: "finalizado", fim: dentroDaQuinzena(quinzena), itens_executados: ids });
         }
@@ -243,11 +247,21 @@ export function Comissao() {
   const [quem, setQuem] = useState("");               // filtro de mecânico ("" = todos)
   // chaveados por mecânico + serviço: no serviço dividido o mesmo item aparece no bloco dos dois
   const [pcts, setPcts] = useState({});               // percentual digitado
+  const [vals, setVals] = useState({});               // valor em reais digitado à mão (vira percentual)
   const [fora, setFora] = useState({});               // serviços desmarcados
   const [puxados, setPuxados] = useState([]);
   const [verMatriz, setVerMatriz] = useState(false), [verPuxar, setVerPuxar] = useState(false), [verQuem, setVerQuem] = useState(null);
   const [lancando, setLancando] = useState("");
   const qs = useMemo(() => quinzenas(ym), [ym]);
+  // marca e modelo do carro, para ler o cartão sem decorar placa (pedido do Danilo, 24/11/2026)
+  const modeloDaOS = useMemo(() => {
+    const m = {};
+    for (const o of (dados.ordens || [])) {
+      const v = o.veiculo || {}, nome = [v.marca, v.modelo].filter(Boolean).join(" ").trim();
+      if (nome) m[o.numero] = nome;
+    }
+    return m;
+  }, [dados.ordens]);
   const q = qs[qz] || qs[0];
 
   useEffect(() => { api.funcionarios.listar("nome").then(setFuncs).catch(e => setErro(e.message)); }, []);
@@ -261,7 +275,7 @@ export function Comissao() {
     } catch (e) { setErro(e.message); }
   };
   useEffect(() => { if (funcs) carregar(); }, [funcs, ym, q.inicio, q.fim, puxados]);
-  useEffect(() => { setPcts({}); setFora({}); }, [q.inicio, q.fim]);
+  useEffect(() => { setPcts({}); setVals({}); setFora({}); }, [q.inicio, q.fim]);
 
   const grupos = useMemo(() => {
     const comServico = new Set((dados.produtos || []).filter(p => p.tipo === "servico" && p.categoria).map(p => chaveGrupo(p.categoria)));
@@ -281,6 +295,14 @@ export function Comissao() {
   const pctDe = (fid, l) => { const v = pcts[ch(fid, l)]; return v === undefined || v === "" ? Number(l.pct) || 0 : Number(v) || 0; };
   const pctOk = p => Number.isFinite(p) && p >= 0 && p <= 100;
   const valorDe = (fid, l) => n2(n2(l.base) * pctDe(fid, l) / 100);
+  /** valor digitado à mão: guarda o texto e grava o percentual equivalente (pedido do Danilo, 24/11/2026) */
+  const digitarValor = (fid, l, txt) => {
+    const k = ch(fid, l), base = n2(l.base);
+    setVals(o => ({ ...o, [k]: txt }));
+    if (!base) return;
+    const p = String(txt).trim() === "" ? "" : String(Math.round(parseValor(txt) / base * 1e6) / 1e4);
+    setPcts(o => ({ ...o, [k]: p }));
+  };
   const entra = (fid, l) => !l.ja_lancado && !l.sem_saldo && !fora[ch(fid, l)];
   const porOS = itens => { const m = new Map(); for (const l of itens) { const k = String(l.os_numero || "—"); if (!m.has(k)) m.set(k, []); m.get(k).push(l); } return [...m.entries()]; };
 
@@ -377,7 +399,7 @@ export function Comissao() {
           <div><span>Já lançados</span><b>${jaFoi}</b></div>
         </div>
         ${porOS(b.itens).map(([num, itens]) => html`<div class="cm-os" key=${num}>
-          <div class="cm-os-cab"><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b></div>
+          <div class="cm-os-cab"><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b>${modeloDaOS[num] ? html`<span class="cm-os-modelo">${modeloDaOS[num]}</span>` : null}</div>
           <ul class="cm-linhas">${itens.map(l => html`<li key=${l.item_id} class=${l.ja_lancado || l.sem_saldo ? "cm-ja" : (fora[ch(b.funcionario_id, l)] ? "cm-fora" : "")}>
             <label class="cm-marca">
               <input type="checkbox" disabled=${l.ja_lancado || l.sem_saldo} checked=${entra(b.funcionario_id, l)} aria-label=${"Incluir " + l.descricao}
@@ -388,8 +410,12 @@ export function Comissao() {
             <span class="cm-mo" title="Mão de obra do serviço">${reais(l.mao_de_obra)}${Number(l.fracao) < 1 ? html` <span class="sub">(parte dele: ${reais(l.base)})</span>` : null}</span>
             <span class="cm-pct-campo"><input class=${"inp inp-curto" + (pctOk(pctDe(b.funcionario_id, l)) ? "" : " inp-erro")} type="number" min="0" max="100" step="0.5"
               disabled=${l.ja_lancado || l.sem_saldo} aria-label=${"Percentual de " + l.descricao} value=${pcts[ch(b.funcionario_id, l)] ?? l.pct}
-              onInput=${e => setPcts(p => ({ ...p, [ch(b.funcionario_id, l)]: e.target.value }))} /><span>%</span></span>
-            <b class="cm-valor">${reais(valorDe(b.funcionario_id, l))}</b>
+              onInput=${e => { const k = ch(b.funcionario_id, l); setPcts(p => ({ ...p, [k]: e.target.value })); setVals(o => { const r = { ...o }; delete r[k]; return r; }); }} /><span>%</span></span>
+            <span class="cm-valor-campo"><span>R$</span><input class="inp inp-curto" inputmode="decimal"
+              disabled=${l.ja_lancado || l.sem_saldo || !n2(l.base)} aria-label=${"Valor da comissão de " + l.descricao}
+              value=${vals[ch(b.funcionario_id, l)] ?? String(valorDe(b.funcionario_id, l).toFixed(2)).replace(".", ",")}
+              onInput=${e => digitarValor(b.funcionario_id, l, e.target.value)}
+              onBlur=${() => setVals(o => { const r = { ...o }; delete r[ch(b.funcionario_id, l)]; return r; })} /></span>
             <button type="button" class="btn btn-sm" disabled=${l.ja_lancado || l.sem_saldo}
               onClick=${() => setVerQuem({ ...l, funcionario_id: b.funcionario_id, nome: b.nome })}>Quem fez</button>
           </li>`)}</ul>

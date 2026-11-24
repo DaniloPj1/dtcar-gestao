@@ -30,6 +30,11 @@ export function WhatsApp() {
   const [pediu, setPediu] = useState(false), [teste, setTeste] = useState(null), [chave, setChave] = useState("");
   const [fila, setFila] = useState(null), [conversas, setConversas] = useState(null);
   const [resumo, setResumo] = useState(null), [fotos, setFotos] = useState(null), [telAlerta, setTelAlerta] = useState(null);
+  // "4. Mensagens": conversa de cliente não fica à vista de quem passa na recepção. Começa SEMPRE fechado (não lembra a escolha:
+  // lembrar "aberto" acabaria com a proteção) e, fechado, nada do cliente é buscado do servidor. O ref é para o intervalo de 20 s,
+  // que guarda a função de leitura de quando a tela montou e não veria o estado novo.
+  const [verMsgs, setVerMsgs] = useState(false);
+  const verRef = useRef(false);
   // texto do agente de mensagens (o que manda na forma dos rascunhos); txtAgente = null quando ninguém editou o campo
   const [agente, setAgente] = useState(null), [txtAgente, setTxtAgente] = useState(null);
   const vivo = useRef(true);
@@ -37,7 +42,7 @@ export function WhatsApp() {
     try {
       const s = await api.whatsapp.situacao();
       if (vivo.current) { setSt(s); if (limparErro) setErro(""); }
-      if (s && "regras" in s) { // v25: fila e conversas
+      if (s && "regras" in s && verRef.current) { // v25: fila e conversas — só com o quadro de mensagens aberto
         const [f, c] = await Promise.all([api.whatsapp.fila().catch(() => null), api.whatsapp.conversas().catch(() => null)]);
         if (vivo.current) { setFila(f); setConversas(c); }
         if ("alertas" in s) { // v32: sem resposta e fotos recebidas
@@ -74,6 +79,12 @@ export function WhatsApp() {
     if (!r) return;
     if (r.ok === false) { setErro(r.detalhe || "Não foi possível desconectar agora. Tente de novo em 1 minuto."); return; }
     avisar(r.pedido ? r.detalhe : "WhatsApp desconectado.");
+  };
+  const alternarMsgs = async () => {
+    const abrir = !verMsgs;
+    verRef.current = abrir; setVerMsgs(abrir);
+    if (abrir) { await ler(); return; }
+    setFila(null); setConversas(null); setResumo(null); setFotos(null);
   };
   const processar = async () => { const r = await fazer("processar"); if (r) avisar(r.detalhe || "Pronto."); setTimeout(() => ler(), 15000); };
   const cancelar = async id => {
@@ -216,6 +227,8 @@ export function WhatsApp() {
         <p class="sub regras-envio">${regrasTexto(st.regras)}</p>
         ${!(st.dono === "android" && vale(st.dono_ate)) ? html`<div class="acoes"><button type="button" class="btn" disabled=${!!fazendo} onClick=${processar}>${fazendo === "processar" ? "Iniciando…" : "Buscar mensagens e enviar a fila agora"}</button></div>
           <p class="sub">Sem o motor do Android ligado, o envio e a busca de mensagens acontecem quando o Claude envia ou lê, ou por este botão (leva até 2 minutos).</p>` : null}
+        <div class="acoes"><button type="button" class="btn" id="zap-ver-msgs" aria-expanded=${verMsgs ? "true" : "false"} onClick=${alternarMsgs}>${verMsgs ? "Ocultar mensagens" : "Mostrar mensagens"}</button></div>
+        ${!verMsgs ? html`<p class="sub">As mensagens e as conversas dos clientes ficam escondidas até você clicar em <b>Mostrar mensagens</b>, para não ficarem à vista de quem passa pela recepção. Fechado, nada é buscado do servidor.</p>` : html`
         <h4>Fila</h4>
         ${fila === null ? html`<p class="sub">Carregando…</p>` : !fila.length ? html`<p class="sub">Nenhuma mensagem ainda.</p>` : html`<ul class="zap-fila">
           ${fila.map(f => { const [rot, cor] = FILA[f.status] || [f.status, "muted"]; return html`<li key=${f.id}>
@@ -237,7 +250,7 @@ export function WhatsApp() {
           ${resumo.sem_resposta.map(c => html`<li key=${c.telefone}><div><b>${c.cliente || c.nome_no_whatsapp || c.telefone}</b> <span class="sub">${c.telefone} · ${fmtDataHora(c.ultima_em)}</span></div><div class="zap-texto">${c.ultima_mensagem}</div></li>`)}</ul>` : null}
         ${fotos && fotos.length ? html`<h4>Fotos recebidas (guardadas por 30 dias)</h4><div class="zap-fotos">
           ${fotos.map(f => html`<figure key=${f.msg_id}>${f.url ? html`<a href=${f.url} target="_blank" rel="noopener"><img src=${f.url} alt=${"Foto de " + (f.nome || f.telefone)} loading="lazy" /></a>` : html`<div class="sub">sem link</div>`}
-            <figcaption class="sub">${f.nome || f.telefone} · ${fmtDataHora(f.em)}</figcaption></figure>`)}</div>` : null}`}
+            <figcaption class="sub">${f.nome || f.telefone} · ${fmtDataHora(f.em)}</figcaption></figure>`)}</div>` : null}`}`}
     </div>
 
     ${st && "alertas" in st ? html`<div class="card">

@@ -12,7 +12,7 @@ const ALVOS = { remetente: "E-mail de quem manda", dominio: "Domínio (empresa)"
 const EXEMPLO = { remetente: "cobranca@fornecedor.com.br", dominio: "fornecedor.com.br", nome: "nome da empresa", assunto: "segunda via" };
 
 /** WhatsApp e e-mail ficam juntos no menu lateral: abas para trocar entre as duas telas */
-export const AbasMensagens = ({ ativa }) => html`<${Abas} abas=${[["whatsapp", "WhatsApp"], ["email", "E-mail"]]} ativa=${ativa} onTroca=${k => { location.hash = "#/" + k; }} />`;
+export const AbasMensagens = ({ ativa }) => html`<${Abas} abas=${[["whatsapp", "WhatsApp"], ["email", "E-mail"], ["robo", "Robô"]]} ativa=${ativa} onTroca=${k => { location.hash = "#/" + k; }} />`;
 
 export function Email({ params = {} } = {}) {
   const { avisar, confirmar } = useApp();

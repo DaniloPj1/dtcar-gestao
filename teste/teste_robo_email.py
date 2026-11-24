@@ -1,6 +1,5 @@
-# Robô do e-mail (pedido do Danilo em 24/11/2026): tela que fica aberta no tablet da recepção conferindo a caixa.
-# Confere: a lista com a categoria escrita, os anexos (se abrem e se já estão no sistema), o aviso curto no WhatsApp,
-# o ligar/desligar que fica guardado no aparelho, e celular e PC.
+# Robô do e-mail (pedido do Danilo em 24/11/2026): quem roda é o MOTOR DO TABLET, o mesmo do WhatsApp.
+# Esta tela é só o painel: mostra o que o robô achou (email_robo, v64), liga/desliga e confere na hora.
 # Uso: python3 teste/teste_robo_email.py
 import subprocess, time, sys, os
 from playwright.sync_api import sync_playwright
@@ -10,7 +9,7 @@ time.sleep(1); ok = []; falhas = []; erros = []
 def chk(n, c, extra=''): (ok if c else falhas).append(n if c or not extra else n + ' :: ' + str(extra))
 def txt(pg, sel="main"): return pg.inner_text(sel).replace("\xa0", " ")
 U = "http://localhost:8791/"
-# a caixa de mentira: contabilidade com XML de NF que JÁ está no sistema, boleto que ainda NÃO está, e um link que não baixa
+# caixa de mentira: contabilidade com boleto que ainda NAO esta no sistema e um link que nao baixa; NF que JA esta
 SEMEAR = """
 window.__EMAIL_CAIXA = [
   { id: "m1", data: new Date().toISOString(), de: { nome: "Loredo Contabilidade", email: "dploredocontabilidade@gmail.com" },
@@ -37,32 +36,45 @@ try:
     pg.goto(U + "#/robo"); pg.wait_for_timeout(2200)
     t = txt(pg)
     chk("abre a tela do robô pelas abas de WhatsApp e e-mail", "Robô do e-mail" in t, t[:300])
-    chk("explica que só olha e avisa", "não lança" in t and "não responde" in t, t[:400])
-    chk("começa desligado e convida a ligar", "Ligar o robô" in t and "Desligado" in t, t[:400])
-    pg.fill("#rb-tel", "27999990000")
-    pg.click("button:has-text('Ligar o robô')"); pg.wait_for_timeout(3000)
+    chk("diz que quem roda é o programa do tablet, sem depender da tela",
+        "programa do tablet" in t and "tela" in t and "apagada" in t, t[:600])
+    chk("explica que só olha e avisa", "não lança" in t and "não responde" in t, t[:600])
+    chk("começa desligado", "Ligar o robô" in t and "Desligado" in t, t[:400])
+    chk("diz para onde vai o aviso", "número de alerta" in t, t[:700])
+    # ligar grava nos ajustes (é daí que o motor do tablet obedece)
+    pg.click("button:has-text('Ligar o robô')"); pg.wait_for_timeout(1200)
+    chk("ligar grava a chave nos ajustes, que é o que o motor lê",
+        pg.evaluate("((window.__DB.config || {}).roboEmail || {}).ligado") == True,
+        pg.evaluate("(window.__DB.config || {}).roboEmail"))
+    chk("a tela passa a dizer que o tablet está conferindo", "a cada 5 minutos" in txt(pg), txt(pg)[:500])
+    # conferir agora: o mesmo ciclo que o motor faz
+    pg.click("#rb-agora"); pg.wait_for_timeout(2000)
     t = txt(pg)
-    chk("lista os e-mails com a categoria escrita", "Importante" in t and "Útil" in t, t[:600])
-    chk("mostra remetente e assunto", "Loredo Contabilidade" in t and "Guias do mês" in t, t[:600])
-    chk("o anexo que é só link aparece como problema", "não dá para ler" in t or "não baixa" in t, t[:900])
-    chk("a NF que já está no sistema aparece como conferida", "NF já no sistema" in t, t[:900])
-    chk("o boleto que ainda não entrou aparece como pendência", "boleto falta lançar" in t, t[:900])
+    chk("lista os e-mails com a categoria escrita", "Importante" in t and "Útil" in t, t[:800])
+    chk("mostra remetente e assunto", "Loredo Contabilidade" in t and "Guias do mês" in t, t[:800])
+    chk("o anexo que é só link aparece como problema", "não dá para ler" in t or "não baixa" in t, t[:1200])
+    chk("a NF que já está no sistema aparece como conferida", "NF já no sistema" in t, t[:1200])
+    chk("o boleto que ainda não entrou aparece como pendência", "boleto falta lançar" in t, t[:1200])
     chk("o cartão com pendência fica marcado", pg.locator(".rb-com-prob").count() >= 1)
-    zaps = pg.evaluate("(window.__ZAP_ENVIOS || []).map(z => z.texto)")
-    chk("manda o aviso curto no WhatsApp, no estilo pedido", any('e-mail de Loredo Contabilidade "' in z for z in zaps), zaps)
-    chk("o aviso vai para o número digitado",
-        all(z.get("telefone") == "27999990000" for z in pg.evaluate("window.__ZAP_ENVIOS || []")), pg.evaluate("window.__ZAP_ENVIOS || []"))
-    chk("não reconfere o mesmo e-mail duas vezes",
-        pg.evaluate("(window.__EMAIL_CHAMADAS || []).filter(a => a === 'anexo').length") == 3,
-        pg.evaluate("window.__EMAIL_CHAMADAS || []"))
-    pg.click("button:has-text('Conferir agora')"); pg.wait_for_timeout(1500)
-    chk("conferir de novo não manda aviso repetido", len(pg.evaluate("window.__ZAP_ENVIOS || []")) == len(zaps), pg.evaluate("window.__ZAP_ENVIOS || []"))
-    # desligar fica guardado no tablet
-    pg.click("button:has-text('Desligar o robô')"); pg.wait_for_timeout(400)
-    pg.reload(); pg.wait_for_timeout(2000)
-    chk("ligado/desligado e telefone ficam guardados neste tablet",
-        "Ligar o robô" in txt(pg) and pg.input_value("#rb-tel") == "27999990000", txt(pg)[:300])
+    al = pg.evaluate("window.__ZAP_ALERTAS || []")
+    chk("manda o aviso curto no WhatsApp, no estilo pedido",
+        any('e-mail de Loredo Contabilidade "' in z for z in al), al)
+    chk("não confere nem avisa o mesmo e-mail duas vezes",
+        pg.evaluate("(window.__DB.email_robo || []).length") == 2 and len(al) == 2, al)
+    pg.click("#rb-agora"); pg.wait_for_timeout(1500)
+    chk("conferir de novo não repete nada", len(pg.evaluate("window.__ZAP_ALERTAS || []")) == 2,
+        pg.evaluate("window.__ZAP_ALERTAS || []"))
     ctx.close()
+
+    # sem o v64 no banco a tela avisa e não quebra
+    c2 = b.new_context(viewport={"width": 1366, "height": 768}); p2 = c2.new_page()
+    p2.on("pageerror", lambda e: erros.append("PAGEERR semv64 " + str(e)))
+    p2.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js")); p2.add_init_script(SEMEAR)
+    p2.add_init_script("window.__SEM_V64 = true;")
+    p2.goto(U + "#/robo"); p2.wait_for_timeout(2000)
+    chk("sem o v64 a tela manda rodar o SQL e trava os botões",
+        "v64.sql" in txt(p2) and p2.locator("#rb-agora").is_disabled(), txt(p2)[:400])
+    c2.close()
 
     cel = b.new_context(viewport={"width": 390, "height": 780}); pc = cel.new_page()
     pc.on("pageerror", lambda e: erros.append("PAGEERR cel " + str(e)))

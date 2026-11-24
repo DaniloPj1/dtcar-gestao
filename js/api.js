@@ -632,6 +632,12 @@ function criarApiSupabase() {
         if (r.error && /anexos/.test(r.error.message)) r = await q("id,em,tipo,para,assunto,resumo,resposta_a,por"); // antes do v33
         return ok(r) || []; },
       ligar: async v => { const r = await sb.rpc("email_ligar", { p_ligado: !!v }); if (r.error && /email_ligar|schema cache|404/i.test(r.error.message)) throw new Error("Falta rodar o supabase/v29.sql no Supabase."); return ok(r); },
+      /** o que o robô do e-mail já conferiu (v64). Sem o v64 devolve null: a tela avisa para rodar o SQL. */
+      robo: async (limite = 40) => {
+        const r = await sb.from("email_robo").select("*").order("conferido_em", { ascending: false }).limit(limite);
+        if (r.error && /email_robo|schema cache|does not exist|PGRST205/i.test(r.error.message || "")) return null;
+        return ok(r) || [];
+      },
     },
     sefaz: {
       config: async () => ok(await sb.from("sefaz_config").select("*").eq("id", 1).maybeSingle()),

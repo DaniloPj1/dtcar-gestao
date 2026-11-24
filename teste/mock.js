@@ -112,7 +112,8 @@
       atualizar: async (id, patch) => { const x = window.__RH.find(y => y.id === id); Object.assign(x, patch); return x; },
       excluir: async doc => { window.__RH = window.__RH.filter(y => y.id !== doc.id); } },
     // e-mail da oficina (v29 + função "email")
-    email: { chamar: async b => { (window.__EMAIL_CHAMADAS = window.__EMAIL_CHAMADAS || []).push(b.acao);
+    email: { robo: async () => { net(); if (window.__SEM_V64) return null; return (db.email_robo || []).slice(0, 40); },
+      chamar: async b => { (window.__EMAIL_CHAMADAS = window.__EMAIL_CHAMADAS || []).push(b.acao);
         if (b.acao === "whatsapp") { (window.__ZAP_ENVIOS = window.__ZAP_ENVIOS || []).push(JSON.parse(JSON.stringify(b)));
           return { gravado: b.confirmar === true, erros: [], avisos: ["Fora do horário comercial: a mensagem sai no próximo horário de envio."], telefone: "5527999990000", cliente: { nome: "Cliente Teste" },
             texto: b.texto || "Olá, Cliente! O orçamento do seu Fiat Uno está pronto (OS 0" + b.numero_os + ").", arquivo: b.anexo ? { nome: "Orcamento_0" + b.numero_os + "_ABC1D23.pdf", kb: 150 } : null,
@@ -121,11 +122,37 @@
           configurado: false, endereco_retorno: "https://exemplo.supabase.co/functions/v1/email",
           lista_regras: [{ id: 1, tipo: "fraude", alvo: "nome", valor: "sisbra", obs: "Cobrança fraudulenta no DDA (02/11/2026)", origem: "padrao" }, { id: 2, tipo: "importante", alvo: "dominio", valor: "sicredi.com.br", obs: "Banco", origem: "padrao" }] };
         if (b.acao === "situacao") return { ...e, regras: e.lista_regras.length, lista_regras: e.lista_regras.slice() };
-        // robô do e-mail (24/11/2026): caixa de mentira com um e-mail da contabilidade e os anexos que ele confere
+        // robô do e-mail (v64, 24/11/2026): quem roda é o motor do tablet; aqui a função faz o ciclo de mentira
         if (b.acao === "buscar") return (window.__EMAIL_CAIXA || []).slice();
         if (b.acao === "anexo") { const d = (window.__EMAIL_ANEXOS || {})[b.anexo_id];
           if (!d) return { nome: "anexo", conteudo: "Este anexo não é um arquivo (é um e-mail ou link anexado): não dá para ler por aqui." };
           return d; }
+        if (b.acao === "robo") {
+          if (window.__SEM_V64) throw new Error("Could not find the table 'public.email_robo' in the schema cache");
+          db.email_robo = db.email_robo || []; let novos = 0, avisados = 0, pend = 0;
+          for (const m of (window.__EMAIL_CAIXA || [])) {
+            if (db.email_robo.some(x => x.email_id === m.id)) continue;
+            const anexos = (m.anexos || []).map(a => { const d = (window.__EMAIL_ANEXOS || {})[a.id] || {};
+              const abre = !!(d.texto || d.nfe || d.imagem), r = { nome: a.nome, kb: a.tamanho_kb, baixa: abre };
+              if (!abre) r.aviso = d.conteudo || "não deu para abrir";
+              const chave = (d.nfe && d.nfe.chave) || (d.chaves_nfe || [])[0];
+              if (chave) r.nfe = { chave, no_sistema: (db.notas_entrada || []).some(x => x.chave === chave) };
+              const bol = (d.boletos || [])[0];
+              if (bol) r.boleto = { linha: bol.linha, no_sistema: (db.contas || []).some(c => c.status === "aberta" && c.linha_digitavel === bol.linha) };
+              return r; });
+            const p = []; for (const a of anexos) { if (!a.baixa) p.push("anexo que não abre");
+              if (a.nfe && a.nfe.no_sistema === false) p.push("NF fora do sistema");
+              if (a.boleto && a.boleto.no_sistema === false) p.push("boleto fora do sistema"); }
+            const ps = [...new Set(p)]; if (ps.length) pend++;
+            const avisar = (((db.config || {}).roboEmail) || {}).avisar !== false;
+            if (avisar) { (window.__ZAP_ALERTAS = window.__ZAP_ALERTAS || []).push('e-mail de ' + ((m.de || {}).nome || (m.de || {}).email) + ' "' + (ps.length ? ps.join(", ") : (m.anexos || []).length ? "anexos" : m.categoria) + '"'); avisados++; }
+            db.email_robo.unshift({ id: Date.now() + novos, email_id: m.id, recebido_em: m.data, de_nome: (m.de || {}).nome || "",
+              de_email: (m.de || {}).email || "", assunto: m.assunto, categoria: m.categoria, anexos, pendencias: ps,
+              avisado: avisar, avisado_em: avisar ? now() : null, conferido_em: now() });
+            novos++;
+          }
+          return { origem: b.origem || "tela", olhados: (window.__EMAIL_CAIXA || []).length, novos, avisados, pendencias: pend };
+        }
         if (b.acao === "conectar") { if (!e.configurado) throw new Error("Falta cadastrar o segredo MS_CLIENT_ID da função \"email\" no Supabase (Edge Functions › Secrets)."); window.__EMAIL_LOGIN = true; return { url: "about:blank#login-microsoft", validade_min: 10 }; }
         if (b.acao === "desconectar") { Object.assign(e, { situacao: "desligado", conta: "", nome: "" }); return { ok: true }; }
         if (b.acao === "regra") { if (b.alvo === "remetente" && !/@/.test(b.valor)) throw new Error("Remetente precisa ser um e-mail completo (nome@dominio)."); const r = { id: Date.now(), tipo: b.tipo, alvo: b.alvo, valor: String(b.valor).toLowerCase().trim(), obs: b.obs || "", origem: "danilo" }; e.lista_regras.push(r); return r; }

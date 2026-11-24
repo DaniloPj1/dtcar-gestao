@@ -25,9 +25,10 @@ import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
 import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere } from "./whats.js";
 
-export const VERSAO = "3.5";
+export const VERSAO = "3.6";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
+export const ROBO_EMAIL_MS = 5 * 60000; // robô do e-mail (v64): de quanto em quanto tempo dar o pulso na função "email"
 export const PACOTE_MAX = 8;              // tentativas por sinal (envios + esperas curtas)
 export const PACOTE_MS = 20000;          // não começa outra depois disso desde o último sinal (o seguinte continua o pacote)
 export const PACOTE_ESPERA_MS = 5000;    // só espera intervalo até isso (o do pacote é 3 s)
@@ -272,6 +273,35 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     } catch (e) { if (e.name === "AbortError") throw new Error("a função zap não respondeu a tempo"); throw e; }
     finally { clearTimeout(t); }
   }
+  // ---------- robô do e-mail (v64, 24/11/2026) ----------
+  // O mesmo tablet que roda o WhatsApp dá o pulso do robô do e-mail. Quem faz o trabalho é a função "email"
+  // (a chave da Microsoft nunca sai do servidor); aqui só chamamos de tempos em tempos, com a MESMA chave do motor.
+  // Fica ISOLADO de propósito: erro no e-mail não pode derrubar o WhatsApp, que é o serviço principal deste aparelho.
+  let roboEm = 0;
+  async function roboEmail() {
+    const ctl = new AbortController(); const t = setTimeout(() => ctl.abort(), 120000);
+    try {
+      const r = await buscar(`${config.url}/functions/v1/email`, { method: "POST", signal: ctl.signal,
+        headers: { apikey: config.publica, "content-type": "application/json", "x-dtcar-motor": config.chave },
+        body: JSON.stringify({ acao: "robo" }) });
+      const txt = await r.text(); let j = null; try { j = txt ? JSON.parse(txt) : null; } catch (_) { j = null; }
+      if (!r.ok) throw new Error((j && (j.erro || j.detalhe)) || `HTTP ${r.status}`);
+      return j || {};
+    } catch (e) { if (e.name === "AbortError") throw new Error("a função email não respondeu a tempo"); throw e; }
+    finally { clearTimeout(t); }
+  }
+  async function pulsoRoboEmail() {
+    if (agora() - roboEm < ROBO_EMAIL_MS) return;
+    roboEm = agora();
+    try {
+      const r = await roboEmail();
+      if (r && r.novos) log(`robô do e-mail: ${r.novos} novo(s), ${r.avisados || 0} avisado(s), ${r.pendencias || 0} com pendência`);
+    } catch (e) {
+      // função não publicada, e-mail desconectado, internet caindo: anota e tenta na volta seguinte
+      log("robô do e-mail:", e.message);
+    }
+  }
+
   function processarMidias() {
     if (processandoMidia || !st.midias.length || st.aGuardar.length || !st.sock || !st.aberto) return processandoMidia || Promise.resolve();
     const s = st.sock;
@@ -408,6 +438,8 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
 
   async function pulso() {
     if (st.parado) return;
+    // o robô do e-mail não depende da vez, do WhatsApp vinculado nem da conexão: vai antes e sem travar o resto
+    pulsoRoboEmail();
     if (st.chaveRuim) tentarChaveNova();
     let r;
     try { r = await rpc("whatsapp_motor_pulso", { ...base(), p_info: info() }); }
@@ -454,7 +486,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     try { await tentarPendentes(); await fila.catch(() => {}); await rpc("whatsapp_motor_soltar", base()); } catch (_) { /* a vez vence sozinha em 90 s */ }
   }
 
-  return { id, st, pulso, encerrar, info, rpc, pendentes, guardarMensagens, mandarEntregas, processarMidias, _aoMudarConexao: aoMudarConexao };
+  return { id, st, pulso, encerrar, info, rpc, pendentes, guardarMensagens, mandarEntregas, processarMidias, pulsoRoboEmail, _aoMudarConexao: aoMudarConexao };
 }
 
 // ---------- execução direta ----------

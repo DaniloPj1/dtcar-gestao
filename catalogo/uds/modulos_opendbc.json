@@ -1,0 +1,443 @@
+{
+ "STELLANTIS": [
+  {
+   "nome": "Painel",
+   "pede_em": "742",
+   "responde_em": "4C2"
+  },
+  {
+   "nome": "Airbag",
+   "pede_em": "744",
+   "responde_em": "4C4"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "747",
+   "responde_em": "4C7"
+  },
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "753",
+   "responde_em": "4D3"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "75A",
+   "responde_em": "4DA"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "761",
+   "responde_em": "4E1"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7E0",
+   "responde_em": "7E8"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "7E1",
+   "responde_em": "7E9"
+  },
+  {
+   "nome": "Comando do híbrido",
+   "pede_em": "7E2",
+   "responde_em": "7EA"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "7E4",
+   "responde_em": "564"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "18DA10F1",
+   "responde_em": "18DAF110"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "18DA18F1",
+   "responde_em": "18DAF118"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "18DA28F1",
+   "responde_em": "18DAF128"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "18DA30F1",
+   "responde_em": "18DAF130"
+  },
+  {
+   "nome": "Painel",
+   "pede_em": "18DA60F1",
+   "responde_em": "18DAF160"
+  },
+  {
+   "nome": "Airbag",
+   "pede_em": "18DAC0F1",
+   "responde_em": "18DAF1C0"
+  }
+ ],
+ "FORD": [
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "706",
+   "responde_em": "70E"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "730",
+   "responde_em": "738"
+  },
+  {
+   "nome": "Câmbio por fio",
+   "pede_em": "732",
+   "responde_em": "73A"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "760",
+   "responde_em": "768"
+  },
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "764",
+   "responde_em": "76C"
+  },
+  {
+   "nome": "Depuração",
+   "pede_em": "7D0",
+   "responde_em": "7D8"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7E0",
+   "responde_em": "7E8"
+  }
+ ],
+ "GM": [
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "24B",
+   "responde_em": "64B"
+  }
+ ],
+ "HONDA": [
+  {
+   "nome": "Câmbio por fio",
+   "pede_em": "18DA0BF1",
+   "responde_em": "18DAF10B"
+  },
+  {
+   "nome": "Motor (PGM-FI)",
+   "pede_em": "18DA10F1",
+   "responde_em": "18DAF110"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "18DA1EF1",
+   "responde_em": "18DAF11E"
+  },
+  {
+   "nome": "Controle de estabilidade",
+   "pede_em": "18DA28F1",
+   "responde_em": "18DAF128"
+  },
+  {
+   "nome": "Servo-freio elétrico",
+   "pede_em": "18DA2BF1",
+   "responde_em": "18DAF12B"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "18DA30F1",
+   "responde_em": "18DAF130"
+  },
+  {
+   "nome": "Airbag",
+   "pede_em": "18DA53F1",
+   "responde_em": "18DAF153"
+  },
+  {
+   "nome": "Painel",
+   "pede_em": "18DA60F1",
+   "responde_em": "18DAF160"
+  },
+  {
+   "nome": "Head-up display",
+   "pede_em": "18DA61F1",
+   "responde_em": "18DAF161"
+  },
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "18DAB0F1",
+   "responde_em": "18DAF1B0"
+  },
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "18DAB5F1",
+   "responde_em": "18DAF1B5"
+  },
+  {
+   "nome": "Gateway",
+   "pede_em": "18DAEFF1",
+   "responde_em": "18DAF1EF"
+  }
+ ],
+ "HYUNDAI": [
+  {
+   "nome": "ADAS (condução assistida)",
+   "pede_em": "730",
+   "responde_em": "738"
+  },
+  {
+   "nome": "Assistente de estacionamento",
+   "pede_em": "7B1",
+   "responde_em": "7B9"
+  },
+  {
+   "nome": "Ar-condicionado",
+   "pede_em": "7B3",
+   "responde_em": "7BB"
+  },
+  {
+   "nome": "Radar de canto",
+   "pede_em": "7B7",
+   "responde_em": "7BF"
+  },
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "7C4",
+   "responde_em": "7CC"
+  },
+  {
+   "nome": "Painel",
+   "pede_em": "7C6",
+   "responde_em": "7CE"
+  },
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "7D0",
+   "responde_em": "7D8"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "7D1",
+   "responde_em": "7D9"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "7D4",
+   "responde_em": "7DC"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "7E1",
+   "responde_em": "7E9"
+  }
+ ],
+ "MAZDA": [
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "706",
+   "responde_em": "70E"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "730",
+   "responde_em": "738"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "760",
+   "responde_em": "768"
+  },
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "764",
+   "responde_em": "76C"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7E0",
+   "responde_em": "7E8"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "7E1",
+   "responde_em": "7E9"
+  }
+ ],
+ "MG": [
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "721",
+   "responde_em": "729"
+  },
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "733",
+   "responde_em": "73B"
+  },
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "734",
+   "responde_em": "73C"
+  }
+ ],
+ "NISSAN": [
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "707",
+   "responde_em": "727"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "740",
+   "responde_em": "760"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "742",
+   "responde_em": "762"
+  },
+  {
+   "nome": "Painel",
+   "pede_em": "743",
+   "responde_em": "763"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7E0",
+   "responde_em": "800"
+  },
+  {
+   "nome": "Gateway",
+   "pede_em": "18DAD0F1",
+   "responde_em": "18DAF1D0"
+  }
+ ],
+ "PSA": [
+  {
+   "nome": "Radar dianteiro",
+   "pede_em": "6B6",
+   "responde_em": "6BE"
+  }
+ ],
+ "RIVIAN": [
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "733",
+   "responde_em": "773"
+  }
+ ],
+ "SUBARU": [
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "746",
+   "responde_em": "74E"
+  },
+  {
+   "nome": "Câmera dianteira",
+   "pede_em": "787",
+   "responde_em": "78F"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7A2",
+   "responde_em": "7AA"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "7A3",
+   "responde_em": "7AB"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "7B0",
+   "responde_em": "7B8"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7E0",
+   "responde_em": "7E8"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "7E1",
+   "responde_em": "7E9"
+  }
+ ],
+ "TESLA": [
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "730",
+   "responde_em": "738"
+  }
+ ],
+ "TOYOTA": [
+  {
+   "nome": "Motor",
+   "pede_em": "700",
+   "responde_em": "708"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "701",
+   "responde_em": "709"
+  },
+  {
+   "nome": "Airbag",
+   "pede_em": "780",
+   "responde_em": "788"
+  },
+  {
+   "nome": "Sensor de direção (DSU)",
+   "pede_em": "791",
+   "responde_em": "799"
+  },
+  {
+   "nome": "Direção elétrica",
+   "pede_em": "7A1",
+   "responde_em": "7A9"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "7B0",
+   "responde_em": "7B8"
+  },
+  {
+   "nome": "Ar-condicionado",
+   "pede_em": "7C4",
+   "responde_em": "7CC"
+  },
+  {
+   "nome": "Freio (ABS/ESP)",
+   "pede_em": "7D1",
+   "responde_em": "7D9"
+  },
+  {
+   "nome": "Comando do híbrido",
+   "pede_em": "7D2",
+   "responde_em": "7DA"
+  },
+  {
+   "nome": "Motor",
+   "pede_em": "7E0",
+   "responde_em": "7E8"
+  },
+  {
+   "nome": "Câmbio",
+   "pede_em": "7E1",
+   "responde_em": "7E9"
+  },
+  {
+   "nome": "Comando do híbrido",
+   "pede_em": "7E2",
+   "responde_em": "7EA"
+  }
+ ]
+}

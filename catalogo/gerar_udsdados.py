@@ -256,6 +256,16 @@ def modulos():
                  if endereco_valido(m.get('pede_em')) and endereco_valido(m.get('responde_em'))]
             if l:
                 fam['RENAULT ' + veic.replace('_', ' ')] = l
+    # opendbc (comma.ai, MIT): os endereços de módulo que eles levantaram para identificar o carro.
+    # É a única fonte aberta que temos para Toyota, Honda, Hyundai, Ford, Nissan, Subaru, Mazda e
+    # Stellantis — marcas que entram na oficina e que não existiam no acervo (24/11/2026).
+    cam = os.path.join(UDS, 'modulos_opendbc.json')
+    if os.path.exists(cam):
+        for marca, lista in json.load(open(cam, encoding='utf-8')).items():
+            l = [[m['pede_em'].upper(), m['responde_em'].upper(), m['nome']] for m in lista
+                 if endereco_valido(m.get('pede_em')) and endereco_valido(m.get('responde_em'))]
+            if l:
+                fam[marca] = l
     cam = os.path.join(UDS, 'modulos_ovms.json')
     if os.path.exists(cam):
         for veic, lista in json.load(open(cam, encoding='utf-8')).items():

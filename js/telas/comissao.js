@@ -11,7 +11,7 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Modal, Vazio, Placa, Campo, Texto } from "../ui.js";
-import { reais, fmtData, numOS, normPlaca } from "../util.js";
+import { reais, fmtData, numOS, normPlaca, totalItem } from "../util.js";
 import { pode, chaveGrupo, gruposDeProdutos } from "../regras.js";
 import { quinzenas, mesAtual, periodo, nomeMes, quintoDiaUtil } from "../folha.js";
 import { AbasRH } from "./rh.js";
@@ -95,11 +95,12 @@ function Matriz({ funcs, grupos, onFechar, onSalvou, avisar }) {
 function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
   const { dados } = useApp();
   const [busca, setBusca] = useState(""), [achados, setAchados] = useState(null), [carregando, setCarregando] = useState(false);
-  const [escolhido, setEscolhido] = useState({});     // item_id -> funcionario_id, para o serviço sem apontamento
-  const [salvando, setSalvando] = useState("");
+  const [paraQuem, setParaQuem] = useState("");       // o mecânico que vai receber a O.S.
+  const [fora, setFora] = useState([]);               // serviços que o Danilo tirou desta puxada
+  const [salvando, setSalvando] = useState(false);
   const procurar = async () => {
     const t = busca.trim(); if (!t) return;
-    setCarregando(true); setAchados(null);
+    setCarregando(true); setAchados(null); setFora([]);
     try {
       const num = /^\d+$/.test(t) ? Number(t) : null;
       const pl = normPlaca(t);
@@ -115,33 +116,46 @@ function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
       setAchados([{ os: o, servicos }]);
     } catch (e) { avisar(e.message, true); setAchados([]); } finally { setCarregando(false); }
   };
-  // Atribuir à mão: grava o apontamento (o mesmo caminho do "Quem executou este serviço?"), para o serviço entrar
-  // também no histórico do mecânico no app. O apontamento nasce DENTRO da quinzena aberta, senão o serviço cairia noutra.
-  const atribuir = async (item, destino) => {
-    setSalvando(item.id);
-    try {
-      const aps = (await api.apontamentos.listar({ ordem_id: achado.os.id })).filter(a => a.situacao === "finalizado");
-      const alvo = aps.find(a => a.perfil_id === destino.perfil_id);
-      if (alvo) {
-        if (!(alvo.itens_executados || []).includes(item.id))
-          await api.apontamentos.atualizar(alvo.id, { itens_executados: [...(alvo.itens_executados || []), item.id] });
-      } else {
-        const novo = await api.apontamentos.abrir({ ordem_id: achado.os.id, os_numero: achado.os.numero, perfil_id: destino.perfil_id, perfil_nome: destino.apelido || destino.nome });
-        await api.apontamentos.atualizar(novo.id, { situacao: "finalizado", fim: dentroDaQuinzena(quinzena), itens_executados: [item.id] });
-      }
-      avisar("Serviço apontado para " + (destino.apelido || destino.nome) + ".");
-      onPuxar(item.id);
-      if (onAtribuido) await onAtribuido();
-      onFechar();
-    } catch (e) { avisar(e.message, true); } finally { setSalvando(""); }
-  };
 
   const achado = (achados || [])[0];
   const comApontamento = achado ? achado.servicos.filter(s => s.quem.length) : [];
+  const vao = achado ? achado.servicos.filter(s => !fora.includes(s.item.id)) : [];
+  const semDono = vao.filter(s => !s.quem.length);     // só estes precisam de apontamento novo
+  const destino = (funcs || []).find(f => f.id === paraQuem);
+
+  /** Puxa a O.S. INTEIRA para um mecânico: o que ninguém apontou passa a ser dele (apontamento gravado, para entrar
+   *  no histórico do app), e o que já tem dono vem como está. Depois é na lista da quinzena que o Danilo ajusta o
+   *  percentual de cada linha e diz, pelo "Quem executou este serviço?", se outro mecânico fez algum deles. */
+  const puxarTudo = async () => {
+    if (!destino || !vao.length) return;
+    setSalvando(true);
+    try {
+      if (semDono.length) {
+        const aps = (await api.apontamentos.listar({ ordem_id: achado.os.id })).filter(a => a.situacao === "finalizado");
+        const alvo = aps.find(a => a.perfil_id === destino.perfil_id);
+        const ids = semDono.map(s => s.item.id);
+        if (alvo) {
+          const juntos = [...new Set([...(alvo.itens_executados || []), ...ids])];
+          await api.apontamentos.atualizar(alvo.id, { itens_executados: juntos });
+        } else {
+          // o apontamento nasce DENTRO da quinzena aberta, senão os serviços cairiam noutra
+          const novo = await api.apontamentos.abrir({ ordem_id: achado.os.id, os_numero: achado.os.numero, perfil_id: destino.perfil_id, perfil_nome: destino.apelido || destino.nome });
+          await api.apontamentos.atualizar(novo.id, { situacao: "finalizado", fim: dentroDaQuinzena(quinzena), itens_executados: ids });
+        }
+      }
+      for (const s of vao) onPuxar(s.item.id);
+      avisar(numOS(achado.os.numero) + ": " + vao.length + " serviço" + (vao.length === 1 ? "" : "s") + " na quinzena"
+        + (semDono.length ? ", " + semDono.length + " apontado" + (semDono.length === 1 ? "" : "s") + " para " + (destino.apelido || destino.nome) : "") + ".");
+      if (onAtribuido) await onAtribuido();
+      onFechar();
+    } catch (e) { avisar(e.message, true); } finally { setSalvando(false); }
+  };
+
   return html`<${Modal} titulo="Puxar O.S. para o mecânico" onFechar=${onFechar} largo>
-    <p class="sub">Para trazer um serviço de outra quinzena, de O.S. já fechada, ou para adiantar um serviço para esta quinzena.
-      Serviço que ninguém apontou no app: escolha quem fez e o sistema aponta para ele — isso entra também nos serviços
-      executados dele no app.</p>
+    <p class="sub">Para trazer uma O.S. de outra quinzena, já fechada, ou para adiantar o serviço dela para esta quinzena.
+      Escolha o mecânico: o que ninguém apontou no app passa a ser dele (entra também nos serviços executados dele no app)
+      e o que já tem dono vem como está. Depois, na lista da quinzena, você ajusta o percentual de cada linha e troca
+      quem fez, como nas O.S. apontadas pelo app.</p>
     <div class="cm-puxar-busca">
       <${Texto} id="cm-busca" valor=${busca} onMuda=${setBusca} placeholder="Número da O.S. ou placa" onKeyDown=${e => e.key === "Enter" && procurar()} />
       <button type="button" class="btn btn-pri" onClick=${procurar} disabled=${carregando}>${carregando ? "Procurando…" : "Procurar"}</button>
@@ -149,25 +163,28 @@ function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
     ${achados && !achado ? html`<${Vazio}>Nenhuma O.S. com esse número ou placa.</${Vazio}>` : null}
     ${achado ? html`<div class="cm-puxar-res">
       <div class="cm-puxar-cab"><b>${numOS(achado.os.numero)}</b><${Placa} placa=${(achado.os.veiculo || {}).placa} />
-        <span class="sub">${achado.servicos.length} serviço${achado.servicos.length === 1 ? "" : "s"} · ${comApontamento.length} apontado${comApontamento.length === 1 ? "" : "s"}</span></div>
-      ${!comApontamento.length ? html`<div class="aviso">Nenhum serviço desta O.S. foi apontado no app. Escolha quem fez cada um
-        na lista ao lado: o serviço é apontado para ele e entra na comissão desta quinzena.</div>` : null}
-      <ul class="cm-puxar-itens">${achado.servicos.map(s => html`<li key=${s.item.id} class=${s.quem.length ? "" : "cm-sem-ap"}>
-        <span>${s.item.descricao}</span>
-        ${s.quem.length
-          ? html`<span class="sub">${s.quem.map(q => q.nome).join(" e ")}</span>
-            <button type="button" class="btn btn-sm" onClick=${() => { onPuxar(s.item.id); onFechar(); }}>Puxar</button>`
-          : html`<span class="cm-puxar-quem">
-            <select class="inp" aria-label=${"Quem executou " + s.item.descricao} value=${escolhido[s.item.id] || ""}
-              onChange=${e => setEscolhido(o => ({ ...o, [s.item.id]: e.target.value }))}>
-              <option value="">— quem executou? —</option>
+        <span class="sub">${(achado.os.cliente || {}).nome || ""} · ${achado.servicos.length} serviço${achado.servicos.length === 1 ? "" : "s"}
+          · ${comApontamento.length} apontado${comApontamento.length === 1 ? "" : "s"} no app</span></div>
+      ${!achado.servicos.length ? html`<${Vazio}>Esta O.S. não tem mão de obra aprovada.</${Vazio}>` : html`
+        <div class="cm-puxar-destino">
+          <${Campo} id="cm-para" rotulo="Puxar para o mecânico" obrig>
+            <select id="cm-para" class="inp" value=${paraQuem} onChange=${e => setParaQuem(e.target.value)}>
+              <option value="">— escolha o mecânico —</option>
               ${(funcs || []).map(f => html`<option value=${f.id}>${f.apelido || f.nome}</option>`)}
-            </select>
-            <button type="button" class="btn btn-sm btn-pri" disabled=${!escolhido[s.item.id] || salvando === s.item.id}
-              onClick=${() => atribuir(s.item, (funcs || []).find(f => f.id === escolhido[s.item.id]))}>
-              ${salvando === s.item.id ? "Apontando…" : "Apontar e puxar"}</button>
-          </span>`}
-      </li>`)}</ul>
+            </select></${Campo}>
+          <button type="button" class="btn btn-pri" id="cm-puxar-tudo" disabled=${!destino || !vao.length || salvando} onClick=${puxarTudo}>
+            ${salvando ? "Puxando…" : "Puxar " + vao.length + " serviço" + (vao.length === 1 ? "" : "s")}</button>
+        </div>
+        <p class="sub">Desmarque o que não for desta puxada.</p>
+        <ul class="cm-puxar-itens">${achado.servicos.map(s => html`<li key=${s.item.id} class=${fora.includes(s.item.id) ? "cm-sem-ap" : ""}>
+          <label class="cm-marca">
+            <input type="checkbox" class="chk-exec" checked=${!fora.includes(s.item.id)}
+              onChange=${e => setFora(l => e.target.checked ? l.filter(x => x !== s.item.id) : [...l, s.item.id])} />
+            <span>${s.item.descricao}</span>
+          </label>
+          <span class="cm-mo">${reais(totalItem(s.item))}</span>
+          <span class="sub">${s.quem.length ? s.quem.map(q => q.nome).join(" e ") : (destino ? "vai para " + (destino.apelido || destino.nome) : "sem apontamento")}</span>
+        </li>`)}</ul>`}
     </div>` : null}
   </${Modal}>`;
 }

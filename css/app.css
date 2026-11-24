@@ -2399,7 +2399,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .cm-linhas li>button{grid-column:2;justify-self:end}
 }
 
-/* Puxar O.S. (24/11/2026): escolher quem executou o serviço que ninguém apontou no app */
-.cm-puxar-quem{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
-.cm-puxar-quem .inp{min-width:180px}
-@media (max-width:640px){.cm-puxar-quem{width:100%}.cm-puxar-quem .inp{flex:1;min-width:0}}
+/* Puxar O.S. (24/11/2026): a O.S. inteira vai para um mecânico, e depois se ajusta linha a linha na quinzena */
+.cm-puxar-destino{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin:10px 0 6px}
+.cm-puxar-destino .campo{flex:1;min-width:200px;margin:0}
+.cm-puxar-destino .btn{white-space:nowrap}
+@media (max-width:640px){.cm-puxar-destino{flex-direction:column;align-items:stretch}.cm-puxar-destino .btn{width:100%}}

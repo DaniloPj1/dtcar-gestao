@@ -89,30 +89,40 @@ try:
     t = txt(pg)
     chk("o novo padrão vale na quinzena (45% de 600 = 270)", "R$ 270,00" in t, t[:400])
 
-    # 7. puxar O.S. — inclusive serviço que NINGUÉM apontou no app (pedido do Danilo, 24/11/2026)
+    # 7. puxar O.S. INTEIRA para um mecânico (pedido do Danilo, 24/11/2026)
     pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
     m = txt(pg, ".modal")
-    chk("puxar O.S.: diz para que serve (outra quinzena, O.S. fechada, adiantar)",
+    chk("puxar O.S.: diz para que serve (outra quinzena, fechada, adiantar)",
         "outra quinzena" in m and "fechada" in m and "adiantar" in m, m[:400])
     # a O.S. 1898 tem um serviço e nenhum apontamento: é o caso que antes ficava de fora
     pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
     m = txt(pg, ".modal")
-    chk("acha a O.S. pelo número e lista o serviço", "TROCA DE AMORTECEDORES DIANTEIROS" in m, m[:400])
-    chk("serviço sem apontamento agora oferece escolher quem fez", pg.locator(".modal .cm-puxar-quem select").count() == 1, m[:400])
+    chk("acha a O.S. pelo número e lista o serviço com a mão de obra",
+        "TROCA DE AMORTECEDORES DIANTEIROS" in m and "R$ 350,00" in m, m[:400])
     chk("peça não entra na comissão", "AMORTECEDOR DIANT TOYOTA HILUX" not in m, m[:400])
-    chk("o botão só libera depois de escolher o mecânico",
-        pg.locator(".modal .cm-puxar-quem button:has-text('Apontar e puxar')").is_disabled())
-    pg.select_option(".modal .cm-puxar-quem select", label="Beto"); pg.wait_for_timeout(300)
-    chk("escolhido o mecânico, o botão libera",
-        not pg.locator(".modal .cm-puxar-quem button:has-text('Apontar e puxar')").is_disabled())
-    pg.click(".modal .cm-puxar-quem button:has-text('Apontar e puxar')"); pg.wait_for_timeout(1800)
+    chk("um seletor só, para a O.S. inteira", pg.locator(".modal #cm-para").count() == 1 and pg.locator(".modal .cm-puxar-quem").count() == 0)
+    chk("o botão só libera depois de escolher o mecânico", pg.locator("#cm-puxar-tudo").is_disabled())
+    pg.select_option("#cm-para", label="Beto"); pg.wait_for_timeout(300)
+    m = txt(pg, ".modal")
+    chk("escolhido o mecânico, o botão diz quantos serviços vão", not pg.locator("#cm-puxar-tudo").is_disabled()
+        and "Puxar 1 serviço" in pg.locator("#cm-puxar-tudo").inner_text(), pg.locator("#cm-puxar-tudo").inner_text())
+    chk("a linha mostra para quem o serviço vai", "vai para Beto" in m, m[:400])
+    pg.click("#cm-puxar-tudo"); pg.wait_for_timeout(1800)
     aps = pg.evaluate("(window.__DB.apontamentos || []).filter(a => a.perfil_id === 'p3' && (a.itens_executados || []).includes('i4'))")
     chk("gravou o apontamento no nome do mecânico escolhido", len(aps) == 1, aps)
     chk("o apontamento nasce finalizado, para entrar no histórico do app",
         bool(aps) and aps[0]["situacao"] == "finalizado" and bool(aps[0]["fim"]), aps)
     chk("o apontamento fica na O.S. certa", bool(aps) and aps[0]["ordem_id"] == "o2" and aps[0]["os_numero"] == 1898, aps)
     t = txt(pg)
-    chk("o serviço puxado entra na quinzena", "TROCA DE AMORTECEDORES DIANTEIROS" in t and "Beto" in t, t[:600])
+    chk("a O.S. puxada entra na quinzena no nome dele", "TROCA DE AMORTECEDORES DIANTEIROS" in t and "Beto" in t, t[:600])
+
+    # desmarcar tira o serviço da puxada
+    pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    pg.select_option("#cm-para", label="Carlos"); pg.wait_for_timeout(200)
+    pg.locator(".modal .cm-puxar-itens input[type=checkbox]").first.uncheck(); pg.wait_for_timeout(300)
+    chk("desmarcando tudo, não há o que puxar", pg.locator("#cm-puxar-tudo").is_disabled())
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(400)
 
     # 8b. serviço dividido entre DOIS mecânicos: o percentual de um não pode vazar para o outro
     dois = b.new_context(viewport={"width": 1366, "height": 768}).new_page()

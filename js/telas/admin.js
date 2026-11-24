@@ -99,11 +99,21 @@ function CampoSenha({ id, valor, onMuda }) {
     <div class="linha-add"><input id=${id} class="inp" type=${ver ? "text" : "password"} autocomplete="new-password" value=${valor} onInput=${e => onMuda(e.target.value)} />
       <button type="button" class="btn" onClick=${() => setVer(!ver)}>${ver ? "Ocultar" : "Mostrar"}</button><button type="button" class="btn" id=${id + "-gerar"} onClick=${() => { onMuda(gerarSenha()); setVer(true); }}>Gerar</button></div></${Campo}>`;
 }
-/** Criar o login e a senha do colaborador pelo sistema (pedido do Danilo, 16/11/2026) — função "equipe" */
+/** Criar o login e a senha do colaborador pelo sistema (pedido do Danilo, 16/11/2026) — função "equipe".
+ *  24/11/2026 (pedido do Danilo): o acesso já nasce ligado à FICHA do colaborador (funcionarios.perfil_id).
+ *  Sem esse vínculo, o apontamento do app e a comissão não caem no nome do funcionário — foi o que aconteceu
+ *  com o Diego: o acesso existia, a ficha existia, e os dois não se falavam. */
 function NovoAcessoModal({ onFechar, onFeito }) {
   const { avisar } = useApp();
-  const [f, setF] = useState({ nome: "", email: "", senha: "", papel: "consultor" }), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const [f, setF] = useState({ nome: "", email: "", senha: "", papel: "consultor", funcionario: "" }), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const [fichas, setFichas] = useState(null);
   const set = p => setF(o => ({ ...o, ...p }));
+  // fichas ativas ainda sem acesso ligado: são as que faz sentido oferecer
+  useEffect(() => { api.funcionarios.listar("nome").then(l => setFichas((l || []).filter(x => x.ativo !== false && !x.perfil_id))).catch(() => setFichas([])); }, []);
+  const escolherFicha = id => {
+    const x = (fichas || []).find(y => y.id === id);
+    set({ funcionario: id, nome: x && !f.nome.trim() ? x.nome : f.nome });
+  };
   const salvar = async () => {
     const nome = f.nome.trim(), login = f.email.trim().toLowerCase(), email = emailDoLogin(login);
     if (nome.length < 2) return setErro("Informe o nome do colaborador.");
@@ -112,12 +122,27 @@ function NovoAcessoModal({ onFechar, onFeito }) {
     if (login.includes("@") && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(email)) return setErro("Informe um e-mail válido: é o login da pessoa.");
     if (!senhaOk(f.senha)) return setErro("A senha precisa ter 8 ou mais caracteres, com letras e números.");
     setErro(""); setSalvando(true);
-    try { const r = await api.equipe.criar({ nome, login, senha: f.senha, papel: f.papel }); onFeito(r, { nome, email, login, senha: f.senha }); }
+    try {
+      const r = await api.equipe.criar({ nome, login, senha: f.senha, papel: f.papel });
+      // liga o acesso à ficha do colaborador; se isto falhar, o acesso já existe e a tela avisa o que fazer à mão
+      if (f.funcionario && r && r.id) {
+        const ficha = (fichas || []).find(x => x.id === f.funcionario);
+        try { await api.funcionarios.salvar({ ...ficha, perfil_id: r.id }); }
+        catch (e) { avisar("O acesso foi criado, mas não deu para ligar à ficha de " + ((ficha || {}).nome || "") + ": " + e.message + " Ligue à mão em Funcionários.", true); }
+      }
+      onFeito(r, { nome, email, login, senha: f.senha });
+    }
     catch (e) { setErro(e.message); } finally { setSalvando(false); }
   };
   return html`<${Modal} titulo="Criar acesso para um colaborador" onFechar=${onFechar}>
     <p class="sub">A pessoa entra no sistema e no app do celular com este usuário e esta senha. Não precisa de e-mail nem de confirmação.</p>
     ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
+    <${Campo} id="na-ficha" rotulo="Colaborador" dica="Liga o acesso à ficha dele. Sem isso, o que ele apontar no app não cai no nome dele na comissão nem na folha.">
+      <select id="na-ficha" class="inp" value=${f.funcionario} onChange=${e => escolherFicha(e.target.value)}>
+        <option value="">— sem ficha (ligar depois em Funcionários) —</option>
+        ${(fichas || []).map(x => html`<option value=${x.id}>${x.nome}${x.funcao ? " · " + x.funcao.trim() : ""}</option>`)}
+      </select></${Campo}>
+    ${fichas && !fichas.length ? html`<p class="sub">Todas as fichas ativas já têm acesso ligado.</p>` : null}
     <${Campo} id="na-nome" rotulo="Nome" obrig><${Texto} id="na-nome" valor=${f.nome} onMuda=${v => set({ nome: v })} /></${Campo}>
     <${Campo} id="na-email" rotulo="Usuário (login)" obrig dica="Ex.: joao.silva. Só letras minúsculas, números, ponto, traço ou sublinhado. Se preferir, pode ser um e-mail de verdade."><input id="na-email" class="inp" type="text" inputmode="email" autocomplete="off" autocapitalize="none" spellcheck="false" value=${f.email} onInput=${e => set({ email: e.target.value.toLowerCase().replace(/\s/g, "") })} /></${Campo}>
     <${CampoSenha} id="na-senha" valor=${f.senha} onMuda=${v => set({ senha: v })} />

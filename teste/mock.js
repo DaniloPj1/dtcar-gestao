@@ -16,7 +16,7 @@
       { id: "o4", numero: 1896, status: "aguardando", cliente_id: "c1", veiculo_id: "v1", criado_em: "2026-10-28T10:00:00-03:00", cliente: { nome: "Cliente Teste", telefone: "27999990000" }, veiculo: { placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015" }, km_entrada: 1100, total: 500, recebido: 0, checkin: { feito: true }, tabela_preco: "vista" },
       { id: "o5", numero: 1745, status: "entregue", legado: 1745, legado_receber: true, recebido: 3854.84, finalizada_em: null, entregue_em: "2026-07-29T12:00:00-03:00", criado_em: "2026-07-29T12:00:00-03:00", cliente: { nome: "Marbrasa Norte Mineradora Ltda" }, veiculo: { placa: "PWE7D33" }, total: 5354.84 },
       { id: "o6", numero: 1700, status: "entregue", legado: 1700, recebido: 0, finalizada_em: "2026-06-01T12:00:00-03:00", entregue_em: "2026-06-01T12:00:00-03:00", criado_em: "2026-06-01T10:00:00-03:00", cliente: { nome: "Cliente Antigo" }, veiculo: { placa: "AAA1B22" }, total: 400 },
-      { id: "o1", numero: 1890, status: "entregue", garantia_dias: 90, mecanico_id: "p2", mecanico_nome: "Carlos Mecânico", entregue_em: "2026-10-10T15:00:00-03:00", criado_em: "2026-10-09T10:00:00-03:00", cliente: { nome: "Cliente Teste" }, veiculo: { placa: "ABC1D23" }, total: 900 }],
+      { id: "o1", numero: 1890, status: "entregue", garantia_dias: 90, mecanico_id: "p2", mecanico_nome: "Carlos Mecânico", entregue_em: "2026-10-10T15:00:00-03:00", criado_em: "2026-10-09T10:00:00-03:00", cliente: { nome: "Cliente Teste" }, veiculo: { placa: "ABC1D23", marca: "Fiat", modelo: "Uno", ano: "2015" }, total: 900 }],
     os_itens: [{ id: "i6", ordem_id: "o3", tipo: "servico", descricao: "REVISÃO", qtd: 1, valor_unit: 300, desconto: 0, aprovado: true, executado: true, posicao: 0 },
       { id: "i7", ordem_id: "o4", tipo: "peca", descricao: "PASTILHA", qtd: 1, valor_unit: 200, desconto: 0, aprovado: null, posicao: 0 }, { id: "i8", ordem_id: "o4", tipo: "servico", descricao: "TROCA DE PASTILHAS", qtd: 1, valor_unit: 300, desconto: 0, aprovado: null, posicao: 1 },{ id: "i3", ordem_id: "o2", tipo: "peca", codigo: "KYB-334", descricao: "AMORTECEDOR DIANT TOYOTA HILUX", qtd: 2, valor_unit: 890, desconto: 0, aprovado: true, executado: false, posicao: 0 },
       { id: "i4", ordem_id: "o2", tipo: "servico", descricao: "TROCA DE AMORTECEDORES DIANTEIROS", qtd: 1, valor_unit: 350, desconto: 0, aprovado: true, executado: true, posicao: 1 },
@@ -121,6 +121,11 @@
           configurado: false, endereco_retorno: "https://exemplo.supabase.co/functions/v1/email",
           lista_regras: [{ id: 1, tipo: "fraude", alvo: "nome", valor: "sisbra", obs: "Cobrança fraudulenta no DDA (02/11/2026)", origem: "padrao" }, { id: 2, tipo: "importante", alvo: "dominio", valor: "sicredi.com.br", obs: "Banco", origem: "padrao" }] };
         if (b.acao === "situacao") return { ...e, regras: e.lista_regras.length, lista_regras: e.lista_regras.slice() };
+        // robô do e-mail (24/11/2026): caixa de mentira com um e-mail da contabilidade e os anexos que ele confere
+        if (b.acao === "buscar") return (window.__EMAIL_CAIXA || []).slice();
+        if (b.acao === "anexo") { const d = (window.__EMAIL_ANEXOS || {})[b.anexo_id];
+          if (!d) return { nome: "anexo", conteudo: "Este anexo não é um arquivo (é um e-mail ou link anexado): não dá para ler por aqui." };
+          return d; }
         if (b.acao === "conectar") { if (!e.configurado) throw new Error("Falta cadastrar o segredo MS_CLIENT_ID da função \"email\" no Supabase (Edge Functions › Secrets)."); window.__EMAIL_LOGIN = true; return { url: "about:blank#login-microsoft", validade_min: 10 }; }
         if (b.acao === "desconectar") { Object.assign(e, { situacao: "desligado", conta: "", nome: "" }); return { ok: true }; }
         if (b.acao === "regra") { if (b.alvo === "remetente" && !/@/.test(b.valor)) throw new Error("Remetente precisa ser um e-mail completo (nome@dominio)."); const r = { id: Date.now(), tipo: b.tipo, alvo: b.alvo, valor: String(b.valor).toLowerCase().trim(), obs: b.obs || "", origem: "danilo" }; e.lista_regras.push(r); return r; }
@@ -253,8 +258,18 @@
         return { ...resumo, pode_aprovar: true, gravado: true, ordem_id: os.id, os_numero: os.numero }; } },
     // agenda da oficina (v54): mesmas regras do gatilho agendamentos_regras (remarcação, motivo só no cancelado)
     // apontamentos de serviço pelo app (v60) de mentira: só leitura para o relatório
-    apontamentos: { listar: async ({ perfil_id } = {}) => { net(); return (db.apontamentos = db.apontamentos || [{ id: "ap1", ordem_id: (db.ordens[0] || {}).id, os_numero: (db.ordens[0] || {}).numero, perfil_id: "p2", perfil_nome: "Carlos Mecânico", situacao: "finalizado", inicio: new Date(Date.now() - 3 * 3600000).toISOString(), fim: new Date(Date.now() - 3600000).toISOString(), motivo_pausa: "", pausas: [{ em: new Date(Date.now() - 2 * 3600000).toISOString(), motivo: "Aguardando peças", retomado_em: new Date(Date.now() - 1.5 * 3600000).toISOString() }], itens_executados: ["i1"], indicacoes: [{ item_id: "i2", descricao: "ALINHAMENTO", para_id: "p1", para_nome: "Danilo", em: new Date().toISOString(), visto_em: null }] }]).filter(a => !perfil_id || a.perfil_id === perfil_id); },
-      abrir: async () => { throw new Error("só no app"); }, atualizar: async () => { throw new Error("só no app"); }, visto: async () => {}, indicadasPara: async () => [] },
+    apontamentos: { listar: async ({ perfil_id, ordem_id } = {}) => { net(); return (db.apontamentos = db.apontamentos || [{ id: "ap1", ordem_id: (db.ordens[0] || {}).id, os_numero: (db.ordens[0] || {}).numero, perfil_id: "p2", perfil_nome: "Carlos Mecânico", situacao: "finalizado", inicio: new Date(Date.now() - 3 * 3600000).toISOString(), fim: new Date(Date.now() - 3600000).toISOString(), motivo_pausa: "", pausas: [{ em: new Date(Date.now() - 2 * 3600000).toISOString(), motivo: "Aguardando peças", retomado_em: new Date(Date.now() - 1.5 * 3600000).toISOString() }], itens_executados: ["i1"], indicacoes: [{ item_id: "i2", descricao: "ALINHAMENTO", para_id: "p1", para_nome: "Danilo", em: new Date().toISOString(), visto_em: null }] }]).filter(a => (!perfil_id || a.perfil_id === perfil_id) && (!ordem_id || a.ordem_id === ordem_id)); },
+      // o sistema grava apontamento desde o "Quem executou este serviço?" (v61) e o "Puxar O.S." (24/11/2026)
+      abrir: async d => { net(); db.apontamentos = db.apontamentos || [];
+        if (db.apontamentos.some(x => x.ordem_id === d.ordem_id && x.perfil_id === d.perfil_id && x.situacao !== "finalizado"))
+          throw new Error("Este mecânico já tem um apontamento aberto nesta O.S.");
+        const a = { id: uid(), ordem_id: d.ordem_id, os_numero: d.os_numero || null, perfil_id: d.perfil_id, perfil_nome: d.perfil_nome || "", situacao: "andamento", inicio: now(), fim: null, motivo_pausa: "", pausas: [], itens_executados: [], indicacoes: [], obs: "", criado_em: now(), atualizado_em: now() };
+        db.apontamentos.push(a); window.__APONT = (window.__APONT || []).concat([{ acao: "abrir", ...d }]); return { ...a }; },
+      atualizar: async (id, patch) => { net(); const a = (db.apontamentos || []).find(x => x.id === id); if (!a) throw new Error("apontamento não existe");
+        Object.assign(a, patch, { atualizado_em: now() }); window.__APONT = (window.__APONT || []).concat([{ acao: "atualizar", id, patch }]); return { ...a }; },
+      excluir: async id => { net(); db.apontamentos = (db.apontamentos || []).filter(a => a.id !== id);
+        window.__APONT = (window.__APONT || []).concat([{ acao: "excluir", id }]); },
+      visto: async () => {}, indicadasPara: async () => [] },
     semV60: () => false,
     agenda: { listar: async ({ de, ate } = {}) => { net(); if (window.__SEM_V54) throw new Error("Could not find the table 'public.agendamentos' in the schema cache");
         return (db.agendamentos = db.agendamentos || []).filter(a => (!de || a.data >= de) && (!ate || a.data <= ate)).map(a => ({ ...a })); },
@@ -333,7 +348,9 @@
             Object.assign(p, patch, { atualizado_em: now() }); return p; } },
       };
     })(),
-    notas: { listar: async () => [] },
+    notas: { listar: async () => [],
+      // o robô do e-mail (24/11/2026) pergunta se a NF do anexo já entrou no sistema
+      existe: async chave => { net(); return (db.notas_entrada || []).find(x => x.chave === chave) || null; } },
     estoque: { movimentos: async () => [], movimentar: async (id, tipo, q) => { const p = db.produtos.find(x => x.id === id); p.estoque_atual = tipo === "entrada" ? +p.estoque_atual + q : tipo === "saida" ? +p.estoque_atual - q : q; return p.estoque_atual; } },
     contas: { abertas: async () => db.contas.filter(c => c.status === "aberta"),
       // despesa fixa (v43): mesma regra do tornar_despesa_fixa / gerar_despesas_fixas
@@ -377,7 +394,7 @@
       const novas = contas.map(c => ({ nome: c.nome, saldo: c.saldo == null ? ((at.find(x => x.nome === (c.antigo || c.nome)) || {}).atual || 0) : c.saldo, em, por }));
       db.config = { ...db.config, contasFinanceiras: novas, contaPagamento: pagar, contaRecebimento: receber, caixaSaldo: { valor: novas.reduce((t, c) => t + c.saldo, 0), em, por } }; return novas; },
     estornos: { desde: async (de, ate) => (db.estornos || []).filter(e => e.registrado_em >= de && (!ate || e.registrado_em <= ate)) },
-    sefaz: { novas: async () => 0, config: async () => null },
+    sefaz: { novas: async () => 0, config: async () => null, notas: async () => (db.nfe_recebidas || []).slice() },
     painel: async () => ({}), contasAbertas: async () => [],
     // comissão por quinzena (v61) de mentira, seguindo o v61.sql: desconto na mão de obra, fração limitada ao que sobrou,
     // custo que o item já tinha antes da comissão, e só serviço aprovado de O.S. que não foi cancelada.

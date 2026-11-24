@@ -34,12 +34,50 @@ try:
     chk("menu lateral cabe sem rolar", pg.evaluate("(() => { const l = document.querySelector('.lateral'); return l.scrollHeight <= l.clientHeight + 1; })()"))
     chk("cartão mostra a comissão de 40% de 600 = 240", "R$ 240,00" in t, t[:400])
     chk("mão de obra do serviço aparece", "R$ 600,00" in t, t[:400])
+    # barras que recolhem (pedido do Danilo, 24/11/2026)
+    chk("linhas da O.S. aparecem antes de recolher", pg.locator(".cm-linhas").count() >= 1)
+    pg.locator(".cm-os-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar na barra da placa recolhe os serviços da O.S.", pg.locator(".cm-linhas").count() == 0)
+    chk("recolhida, a barra resume quantos serviços e quanto dá",
+        "1 serviço" in txt(pg, ".cm-os-cab") and "R$ 240,00" in txt(pg, ".cm-os-cab"), txt(pg, ".cm-os-cab")[:200])
+    pg.locator(".cm-os-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar de novo devolve os serviços", pg.locator(".cm-linhas").count() >= 1)
+    pg.locator(".cm-bloco .cm-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar no nome do mecânico recolhe o bloco dele",
+        pg.locator(".cm-bloco .cm-cartoes").count() == 0 and pg.locator(".cm-os").count() == 0)
+    chk("mesmo recolhido, o botão de lançar continua na barra",
+        pg.locator(".cm-bloco button:has-text('Lançar')").count() >= 1)
+    pg.locator(".cm-bloco .cm-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar de novo devolve os dados do mecânico",
+        pg.locator(".cm-bloco .cm-cartoes").count() >= 1 and pg.locator(".cm-linhas").count() >= 1)
+    # modelo do carro junto da placa, discreto (pedido do Danilo, 24/11/2026)
+    cabs = " | ".join(pg.locator(".cm-os-cab").all_inner_texts()).replace("\n", " ")
+    chk("cabeçalho da O.S. traz placa, número e modelo do carro",
+        any("01890" in c and "ABC1D23" in c and "Fiat Uno" in c for c in pg.locator(".cm-os-cab").all_inner_texts()), cabs[:300])
+    chk("o modelo é discreto, não concorre com o número",
+        pg.evaluate("(() => { const e = document.querySelector('.cm-os-modelo'); if (!e) return null;"
+                    " const s = getComputedStyle(e); return { fs: s.fontSize, fw: s.fontWeight }; })()")
+        == {"fs": "13.5px", "fw": "400"})
 
     # 1. percentual digitado na hora vence a matriz
     pct = pg.locator(".cm-linhas li .cm-pct-campo input").first
     pct.fill("50"); pg.wait_for_timeout(500)
     t = txt(pg)
     chk("digitar 50% recalcula para R$ 300,00", "R$ 300,00" in t, t[:400])
+    # valor direto: digita o que paga e o percentual se preenche sozinho (pedido do Danilo, 24/11/2026)
+    cv = pg.locator(".cm-linhas li .cm-valor-campo .inp").first
+    chk("cada linha tem campo de valor ao lado do percentual", cv.count() == 1 and pg.locator(".cm-valor-campo >span").first.inner_text() == "R$")
+    cv.fill("90"); cv.dispatch_event("input"); pg.wait_for_timeout(500)
+    chk("digitar R$ 90,00 de 600 preenche 15% no percentual",
+        pg.locator(".cm-linhas li .cm-pct-campo .inp").first.input_value() == "15",
+        pg.locator(".cm-linhas li .cm-pct-campo .inp").first.input_value())
+    chk("o total do mecânico acompanha o valor digitado", "Lançar R$ 90,00" in txt(pg), txt(pg)[:300])
+    cv.fill("123,45"); cv.dispatch_event("input"); pg.wait_for_timeout(500)
+    chk("aceita vírgula e fecha a conta no valor digitado",
+        "Lançar R$ 123,45" in txt(pg), txt(pg)[:300])
+    pg.locator(".cm-linhas li .cm-pct-campo .inp").first.fill("50")
+    pg.locator(".cm-linhas li .cm-pct-campo .inp").first.dispatch_event("input"); pg.wait_for_timeout(500)
+    chk("voltar a digitar o percentual manda no valor", "Lançar R$ 300,00" in txt(pg), txt(pg)[:300])
     chk("o botão de lançar mostra o total", pg.locator(".cm-bloco button:has-text('Lançar R$ 300,00')").count() == 1)
 
     # 2. desmarcar tira do lançamento
@@ -89,12 +127,79 @@ try:
     t = txt(pg)
     chk("o novo padrão vale na quinzena (45% de 600 = 270)", "R$ 270,00" in t, t[:400])
 
-    # 7. puxar O.S.
+    # 7. puxar O.S. INTEIRA para um mecânico (pedido do Danilo, 24/11/2026)
     pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
     m = txt(pg, ".modal")
-    chk("puxar O.S.: explica que só entra serviço apontado", "apontou no app" in m, m[:300])
-    pg.click(".modal .fechar") if pg.locator(".modal .fechar").count() else pg.keyboard.press("Escape")
-    pg.wait_for_timeout(400)
+    chk("puxar O.S.: diz para que serve (outra quinzena, fechada, adiantar)",
+        "outra quinzena" in m and "fechada" in m and "adiantar" in m, m[:400])
+    # a O.S. 1898 tem um serviço e nenhum apontamento: é o caso que antes ficava de fora
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    m = txt(pg, ".modal")
+    chk("acha a O.S. pelo número e lista o serviço com a mão de obra",
+        "TROCA DE AMORTECEDORES DIANTEIROS" in m and "R$ 350,00" in m, m[:400])
+    chk("peça não entra na comissão", "AMORTECEDOR DIANT TOYOTA HILUX" not in m, m[:400])
+    chk("um seletor só, para a O.S. inteira", pg.locator(".modal #cm-para").count() == 1 and pg.locator(".modal .cm-puxar-quem").count() == 0)
+    chk("o botão só libera depois de escolher o mecânico", pg.locator("#cm-puxar-tudo").is_disabled())
+    pg.select_option("#cm-para", label="Beto"); pg.wait_for_timeout(300)
+    m = txt(pg, ".modal")
+    chk("escolhido o mecânico, o botão diz quantos serviços vão", not pg.locator("#cm-puxar-tudo").is_disabled()
+        and "Puxar 1 serviço" in pg.locator("#cm-puxar-tudo").inner_text(), pg.locator("#cm-puxar-tudo").inner_text())
+    chk("a linha mostra para quem o serviço vai", "vai para Beto" in m, m[:400])
+    pg.click("#cm-puxar-tudo"); pg.wait_for_timeout(1800)
+    aps = pg.evaluate("(window.__DB.apontamentos || []).filter(a => a.perfil_id === 'p3' && (a.itens_executados || []).includes('i4'))")
+    chk("gravou o apontamento no nome do mecânico escolhido", len(aps) == 1, aps)
+    chk("o apontamento nasce finalizado, para entrar no histórico do app",
+        bool(aps) and aps[0]["situacao"] == "finalizado" and bool(aps[0]["fim"]), aps)
+    chk("o apontamento fica na O.S. certa", bool(aps) and aps[0]["ordem_id"] == "o2" and aps[0]["os_numero"] == 1898, aps)
+    t = txt(pg)
+    chk("a O.S. puxada entra na quinzena no nome dele", "TROCA DE AMORTECEDORES DIANTEIROS" in t and "Beto" in t, t[:600])
+
+    # mecânico com serviço ABERTO no app na mesma O.S.: a puxada fecha o que ele deixou aberto, em vez de travar
+    # (24/11/2026: era aqui que aparecia "falta rodar o supabase/v60.sql")
+    pg.evaluate("""(() => { const o = window.__DB.ordens.find(x => x.numero === 1898);
+      window.__DB.apontamentos = (window.__DB.apontamentos || []).filter(a => !(a.ordem_id === o.id && a.perfil_id === "p3"));
+      window.__DB.apontamentos.push({ id: "apaberto", ordem_id: o.id, os_numero: 1898, perfil_id: "p3", perfil_nome: "Beto",
+        situacao: "andamento", inicio: new Date(Date.now() - 86400000).toISOString(), fim: null, pausas: [], itens_executados: [], indicacoes: [] }); })()""")
+    pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    pg.select_option("#cm-para", label="Beto"); pg.wait_for_timeout(200)
+    pg.click("#cm-puxar-tudo"); pg.wait_for_timeout(1800)
+    t = txt(pg)
+    chk("puxar não acusa falta do v60 quando o mecânico tem serviço aberto na O.S.", "v60" not in t, t[:400])
+    ab = pg.evaluate("(window.__DB.apontamentos || []).find(a => a.id === 'apaberto')")
+    chk("fecha o apontamento que ele deixou aberto no app",
+        bool(ab) and ab["situacao"] == "finalizado" and bool(ab["fim"]), ab)
+    chk("e o serviço entra nesse mesmo apontamento, sem abrir outro",
+        bool(ab) and "i4" in (ab["itens_executados"] or [])
+        and len([a for a in pg.evaluate("window.__DB.apontamentos") if a["perfil_id"] == "p3" and a["os_numero"] == 1898]) == 1, ab)
+
+    # desmarcar tira o serviço da puxada
+    pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    pg.select_option("#cm-para", label="Carlos"); pg.wait_for_timeout(200)
+    pg.locator(".modal .cm-puxar-itens input[type=checkbox]").first.uncheck(); pg.wait_for_timeout(300)
+    chk("desmarcando tudo, não há o que puxar", pg.locator("#cm-puxar-tudo").is_disabled())
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(400)
+
+    # tirar o que foi puxado para o mecânico errado (pedido do Danilo, 24/11/2026)
+    bloco = pg.locator(".cm-bloco:has-text('Beto')")
+    chk("o cartão da O.S. tem 'Tirar a O.S.'", bloco.locator(".cm-os-tirar").count() >= 1)
+    chk("cada linha tem 'Tirar' ao lado de 'Quem fez'",
+        bloco.locator(".cm-acoes button:has-text('Tirar')").count() >= 1
+        and bloco.locator(".cm-acoes button:has-text('Quem fez')").count() >= 1)
+    bloco.locator(".cm-acoes button:has-text('Tirar')").first.click(); pg.wait_for_timeout(700)
+    conf = txt(pg, ".modal")
+    chk("a confirmação diz que sai da quinzena e do histórico do app",
+        "serviços executados do app" in conf and "mão de obra não mudam" in conf, conf[:300])
+    pg.click(".modal .btn-perigo:has-text('Tirar')"); pg.wait_for_timeout(1800)
+    chk("o apontamento que ficou sem serviço é apagado",
+        not any(a["id"] == "apaberto" for a in pg.evaluate("window.__DB.apontamentos")),
+        pg.evaluate("(window.__DB.apontamentos || []).map(a => a.id)"))
+    chk("o serviço sai da comissão do mecânico",
+        "TROCA DE AMORTECEDORES DIANTEIROS" not in txt(pg, ".cm-bloco:has-text('Beto')")
+        if pg.locator(".cm-bloco:has-text('Beto')").count() else True, txt(pg)[:300])
+    chk("tirar não mexe na O.S. nem na mão de obra",
+        pg.evaluate("(window.__DB.os_itens.find(i => i.id === 'i4') || {}).descricao") == "TROCA DE AMORTECEDORES DIANTEIROS")
 
     # 8b. serviço dividido entre DOIS mecânicos: o percentual de um não pode vazar para o outro
     dois = b.new_context(viewport={"width": 1366, "height": 768}).new_page()

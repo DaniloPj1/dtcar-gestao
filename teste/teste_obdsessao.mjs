@@ -8,8 +8,8 @@ const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undef
 const espera = ms => new Promise(f => setTimeout(f, ms));
 
 /* ---------------- a família de telas ---------------- */
-chk("a família tem as seis telas do diagnóstico", sessao.FAMILIA.length === 6);
-for (const r of ["obd", "modulos", "atuadores", "aprendizados", "bico", "parametros"])
+chk("a família tem as cinco telas do diagnóstico", sessao.FAMILIA.length === 5);
+for (const r of ["obd", "modulos", "atuadores", "aprendizados", "bico"])
   chk("na família: " + r, sessao.naFamilia(r));
 for (const r of ["inicio", "oleo", "orcamento", "servico"])
   chk("fora da família: " + r, !sessao.naFamilia(r));

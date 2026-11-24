@@ -1290,22 +1290,6 @@ export function adaptadorSuspeito(versao) {
   return "";
 }
 
-/* ------------------------------------------------------------------ Apagar as falhas (serviço 04)
- * Pedido do Danilo em 19/11/2026. É o ÚNICO comando que o app manda PARA o carro: tudo o mais aqui é leitura.
- * Três coisas que o mecânico precisa saber, e que a tela escreve antes de perguntar "apagar?":
- *   (O aviso "apagar não conserta" saiu em 21/11/2026, a pedido do Danilo: é óbvio para um mecânico.
- *    Ficam só as consequências que não estão na cara: o que some e o que zera.)
- *   2. Some a foto do momento da falha (serviço 02) e os contadores de quando ela apareceu: anote ANTES, não depois.
- *   3. Zera as adaptações do módulo, incluindo o aprendizado de combustível, e a prontidão dos monitores volta para
- *      "não terminou" — o carro precisa rodar um ciclo para voltar. Carro que vai para a inspeção reprova até lá.
- * A conversa de "declarar o combustível e mandar o módulo reaprender" (o que o Raven faz) é outra coisa, de montadora,
- * com senha e contra-senha conferidas no servidor do fabricante; não sai por aqui e não se contorna. O que sai é este 04,
- * que zera e obriga o módulo a refazer a conta com o que está no tanque agora. */
-export const AVISOS_APAGAR = [
-  "Some a foto do momento da falha e os contadores: anote antes.",
-  "Zera as adaptações, inclusive o aprendizado de combustível.",
-  "A prontidão dos monitores volta a zero: o carro precisa rodar para voltar.",
-];
 /** Motivos de recusa do módulo (resposta negativa 7F 04 xx). O mais comum é o 22 com o motor ligado. */
 const RECUSA_APAGAR = {
   0x11: "O módulo não aceita apagar por aqui.", 0x12: "O módulo não aceita apagar por aqui.",

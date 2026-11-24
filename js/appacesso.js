@@ -12,7 +12,6 @@ export const TELAS_APP = [
   ["atuadores", "Atuadores (aciona saída no carro)"],
   ["aprendizados", "Aprendizados e calibrações"],
   ["bico", "Programar bico (grava na ECU)"],
-  ["parametros", "Parâmetros de referência"],
 ];
 const TODAS = TELAS_APP.map(t => t[0]);
 /** Telas que o papel pode usar. Desde 16/11/2026 (à tarde) o orçamento no app é só um PEDIDO (sem item e sem preço), então o mecânico

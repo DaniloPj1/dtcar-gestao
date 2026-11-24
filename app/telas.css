@@ -32,6 +32,8 @@
 
 /* barras do Início */
 .barra{height:52px;padding:0 10px;border-radius:10px;background:var(--azul);color:#fff;text-decoration:none;display:flex;align-items:center;gap:12px;flex-shrink:0;border:0;width:100%;text-align:left}
+/* 23/11/2026: MEUS SERVIÇOS em outro tom, o azul da casa — é o botão do próprio mecânico */
+.barra.meu{background:#174f94}
 .barra .bola{width:36px;height:36px;border-radius:50%;background:#fff;color:var(--tinta);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .barra span:last-child{font-size:15px;font-weight:700;letter-spacing:.02em}
 

@@ -401,15 +401,27 @@ try:
     # etapa 3: fila e conversas
     chk("whatsapp fila: sem o v25 avisa", "Falta rodar o supabase/v25.sql" in pg.inner_text("main"))
     pg.evaluate("""(() => { const z = window.__ZAP; z.regras = { inicio: '08:00', fim: '18:00', sabado_fim: '12:00', dias: [1,2,3,4,5,6], intervalo_min: 25, intervalo_max: 70, por_hora: 20, por_dia: 80 };
-      z.dono = 'supabase'; z.dono_ate = null; const t = new Date().toISOString();
+      z.dono = 'supabase'; z.dono_ate = null; window.__ZAP_LEU = 0; const t = new Date().toISOString();
       window.__ZAP_FILA = [{ id: 3, telefone: '5527999112233', cliente_nome: 'Maria Souza', texto: 'Seu orçamento ficou em R$ 850,00.', status: 'pendente', criado_em: t, ordem_numero: 1904 },
         { id: 2, telefone: '5527999112233', cliente_nome: 'Maria Souza', texto: 'Seu carro está pronto.', status: 'enviada', criado_em: t, enviada_em: t },
         { id: 1, telefone: '5527988887777', cliente_nome: 'João', texto: 'Oi', status: 'erro', erro: 'Número sem WhatsApp.', criado_em: t }];
       window.__ZAP_CONVERSAS = [{ telefone: '5527999112233', cliente: 'Maria Souza', ultima_em: t, nao_lidas: 2, ultima_mensagem: 'Pode fazer!', ultima_de_mim: false }]; })()""")
     pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(700)
     tx = pg.inner_text("main")
+    chk("whatsapp mensagens: o quadro começa fechado e não busca nada do servidor",
+        "Na fila" not in tx and "Pode fazer!" not in tx and "escondidas até você clicar" in tx
+        and pg.inner_text("#zap-ver-msgs").strip() == "Mostrar mensagens" and pg.evaluate("window.__ZAP_LEU || 0") == 0, tx[:200])
+    pg.screenshot(path=SAIDA + "/u5e1-whatsapp-fechado.png", full_page=True)
+    pg.click("#zap-ver-msgs"); pg.wait_for_timeout(600)
+    tx = pg.inner_text("main")
+    chk("whatsapp mensagens: Mostrar abre e só então busca", pg.evaluate("window.__ZAP_LEU || 0") > 0
+        and pg.inner_text("#zap-ver-msgs").strip() == "Ocultar mensagens")
     chk("whatsapp fila: regras, fila e conversas", "sábado até 12:00" in tx and "Na fila" in tx and "O.S. 1904" in tx and "Número sem WhatsApp" in tx and "Pode fazer!" in tx and "2 novas" in tx)
     pg.screenshot(path=SAIDA + "/u5e-whatsapp-fila.png", full_page=True)
+    pg.click("#zap-ver-msgs"); pg.wait_for_timeout(400)
+    chk("whatsapp mensagens: Ocultar esconde de novo", "Pode fazer!" not in pg.inner_text("main")
+        and pg.query_selector(".zap-fila") is None and "escondidas até você clicar" in pg.inner_text("main"))
+    pg.click("#zap-ver-msgs"); pg.wait_for_timeout(600)
     pg.click(".zap-fila button:has-text('Cancelar')"); pg.wait_for_timeout(200); pg.click("[role=dialog] button:has-text('Cancelar mensagem')"); pg.wait_for_timeout(500)
     chk("whatsapp fila: cancela pendente", "Cancelada" in pg.inner_text(".zap-fila") and pg.query_selector(".zap-fila button:has-text('Cancelar')") is None)
     pg.click("button:has-text('Buscar mensagens e enviar a fila agora')"); pg.wait_for_timeout(500)
@@ -426,6 +438,7 @@ try:
       window.__ZAP_SEM_RESPOSTA = [{ telefone: '5521900001111', nome_no_whatsapp: 'Pedro', ultima_em: t, ultima_mensagem: '[áudio 0:12] quanto fica o alinhamento?' }];
       window.__ZAP_FOTOS = [{ msg_id: 'F1', telefone: '5527999112233', nome: 'Maria', em: t, url: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E' }]; })()""")
     pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(700)
+    pg.click("#zap-ver-msgs"); pg.wait_for_timeout(600)
     tx = pg.inner_text("main")
     chk("whatsapp v32: alerta aparece no topo da tela", "Motor do tablet:" in tx and "sem sinal desde 04/11 08:53" in tx)
     chk("whatsapp v32: tiques na fila (lida, entregue)", "✓✓ Lida" in pg.inner_text(".zap-fila") and "✓✓ Entregue" in pg.inner_text(".zap-fila"))

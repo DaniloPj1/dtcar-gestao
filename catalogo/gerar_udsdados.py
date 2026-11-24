@@ -160,6 +160,20 @@ SITUACAO = [
 ]
 
 
+def resposta_valida(e):
+    """Diz se é endereço de RESPOSTA que dá para usar.
+
+    A resposta não precisa estar na faixa de diagnóstico: ela só é escutada (ATCRA), nunca é
+    destino de pedido. Stellantis responde 0x280 ABAIXO do pedido — o ABS pede em 747 e responde em
+    4C7 —, e exigir 600 a 7FF aqui jogava fora sete módulos de Jeep, Fiat, Dodge e RAM, o ABS e o
+    airbag entre eles (apontado pelo Codex em 24/11/2026).
+    """
+    e = (e or '').strip().upper()
+    if not e or not all(c in '0123456789ABCDEF' for c in e):
+        return False
+    return len(e) in (3, 8)
+
+
 def endereco_valido(e):
     """Diz se é endereço de diagnóstico que dá para usar.
 
@@ -262,8 +276,11 @@ def modulos():
     cam = os.path.join(UDS, 'modulos_opendbc.json')
     if os.path.exists(cam):
         for marca, lista in json.load(open(cam, encoding='utf-8')).items():
+            # O PEDIDO tem de ser endereço de diagnóstico (o plugin do APK recusa ATSH fora de
+            # 600–7FF): é por isso que a câmera da GM, que pede em 24B, fica de fora. A RESPOSTA só
+            # é escutada, então vale qualquer endereço bem formado.
             l = [[m['pede_em'].upper(), m['responde_em'].upper(), m['nome']] for m in lista
-                 if endereco_valido(m.get('pede_em')) and endereco_valido(m.get('responde_em'))]
+                 if endereco_valido(m.get('pede_em')) and resposta_valida(m.get('responde_em'))]
             if l:
                 fam[marca] = l
     cam = os.path.join(UDS, 'modulos_ovms.json')

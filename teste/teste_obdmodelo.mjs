@@ -73,6 +73,15 @@ console.log("rodas do ABS: " + [...new Set(rodas)].join("; "));
   for (const f of ["TOYOTA", "HONDA", "HYUNDAI", "FORD", "NISSAN", "SUBARU", "MAZDA", "STELLANTIS"])
     c("o acervo tem a família " + f, fams.includes(f));
   c("o acervo passou de 300 módulos", u.quantosModulos() >= 300);
+  // apontado pelo Codex em 24/11/2026: a resposta pode estar FORA da faixa de diagnóstico.
+  // A Stellantis responde 0x280 abaixo do pedido, e exigir 600–7FF ali jogava fora o ABS e o airbag.
+  const st = u.modulosDa("STELLANTIS");
+  c("Stellantis: o ABS 747 responde em 4C7", st.some(m => m.pedido === "747" && m.resposta === "4C7" && /Freio/.test(m.nome)));
+  c("Stellantis: o airbag 744 responde em 4C4", st.some(m => m.pedido === "744" && m.resposta === "4C4"));
+  c("Stellantis tem 16 módulos, com os de resposta baixa", st.length === 16);
+  // e Peugeot/Citroën vão para a PSA, que tem módulo próprio
+  c("Peugeot cai na PSA, não na Stellantis", u.familiaDoCarro({ marca: "PEUGEOT" }) === "PSA");
+  c("Citroën também", u.familiaDoCarro({ marca: "CITROEN" }) === "PSA");
   // a família do carro sai da marca do cadastro
   c("Honda City cai na família HONDA", u.familiaDoCarro({ marca: "HONDA" }) === "HONDA");
   c("Amarok continua caindo na VAG", u.familiaDoCarro({ marca: "VOLKSWAGEN" }) === "VAG");
@@ -93,5 +102,5 @@ console.log("rodas do ABS: " + [...new Set(rodas)].join("; "));
     if (!okEnd(p) || !/^[0-9A-F]{3}$|^[0-9A-F]{8}$/.test(r) || !m.nome) ruim.push(f + " " + p + "/" + r + " " + m.nome);
   }
   c("nenhuma entrada inválida ou sem nome nas famílias novas: " + ruim.slice(0, 3).join("; "), !ruim.length);
-  console.log("acervo do opendbc: 14 conferências passaram.");
+  console.log("acervo do opendbc: 19 conferências passaram.");
 }

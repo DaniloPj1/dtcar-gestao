@@ -793,7 +793,9 @@ const MARCAS_FAMILIA = {
   NISSAN: /NISSAN|INFINITI/i,
   SUBARU: /SUBARU/i,
   MAZDA: /MAZDA/i,
-  STELLANTIS: /JEEP|CHRYSLER|DODGE|RAM\b|FIAT|PEUGEOT|CITRO/i,
+  // Peugeot e Citroën ficam na PSA, que tem módulo próprio no acervo. Se entrassem aqui, a
+  // primeira expressão que casa venceria e a família PSA nunca seria alcançada (Codex, 24/11/2026).
+  STELLANTIS: /JEEP|CHRYSLER|DODGE|RAM\b|FIAT/i,
   TESLA: /TESLA/i,
   RIVIAN: /RIVIAN/i,
   MG: /\bMG\b/i,

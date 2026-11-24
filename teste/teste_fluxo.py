@@ -498,15 +498,22 @@ try:
       { competencia: '2026-10', tipo: 'recibo', titulo: 'RECIBO 10.2026 - DTCAR', arquivo: '2026-10/b.pdf', nome_arquivo: 'RECIBO 10.2026 - DTCAR.pdf', email_data: '2026-11-04T16:38:00Z' },
       { competencia: '2026-09', tipo: 'darf', titulo: 'DARF 09.2026 - DTCAR', arquivo: '2026-09/c.pdf', nome_arquivo: 'DARF 09.2026 - DTCAR.pdf', email_data: '2026-10-14T12:00:00Z' }]""")
     pg.goto(U + "#/funcionarios"); pg.wait_for_timeout(700)
-    pg.hover(lat + " .lateral-grupo:nth-of-type(2) .lateral-grupo-tit"); pg.wait_for_timeout(250)
-    chk("rh: menu 'Funcionários e RH' e aba Documentos do RH", "Funcionários e RH" in pg.inner_text(lat) and pg.query_selector("[role=tab]:has-text('Documentos do RH')") is not None)
+    # 24/11/2026: o RH saiu de Cadastros e virou grupo próprio no menu, com as três telas dele
+    pg.hover(lat + " .lateral-grupo:nth-of-type(4) .lateral-grupo-tit"); pg.wait_for_timeout(250)
+    gr = pg.inner_text(lat + " .lateral-grupo:nth-of-type(4)")
+    chk("rh: grupo próprio no menu com Funcionários, Comissão e Documentos",
+        "RH" in gr and "Funcionários e folha" in gr and "Comissão" in gr and "Documentos do RH" in gr, gr[:200])
+    chk("rh: o RH não está mais dentro de Cadastros", "Funcionários e RH" not in pg.inner_text(lat))
+    chk("rh: as três abas continuam na tela", pg.query_selector("[role=tab]:has-text('Documentos do RH')") is not None and pg.query_selector("[role=tab]:has-text('Comissão')") is not None)
     pg.mouse.move(400, 500)
     pg.click("[role=tab]:has-text('Documentos do RH')"); pg.wait_for_timeout(1500)
     tx = pg.inner_text("main")
     chk("rh: busca sozinha na contabilidade até não restar nada (3 documentos, 2 chamadas)", tx.count("Imprimir") == 3 and len(pg.evaluate("window.__RH_IMPORT")) == 2, tx[:300])
     chk("rh: usa o e-mail da Loredo por padrão", pg.evaluate("window.__RH_IMPORT[0][0]") == "dploredocontabilidade@gmail.com")
     chk("rh: agrupa por mês, mais novo primeiro", tx.index("outubro de 2026") < tx.index("setembro de 2026") and "Pró-labore" in tx and "DARF (impostos)" in tx)
-    chk("rh: menu continua marcado em 'Funcionários e RH'", "Funcionários e RH" in pg.inner_text(lat + " [aria-current=page]"))
+    chk("rh: menu marcado no grupo RH e na tela Documentos do RH",
+        "RH" in pg.inner_text(lat + " .lateral-grupo-tit[aria-current=page]")
+        and "Documentos do RH" in pg.inner_text(lat + " .lat-menu button[aria-current=page]"))
     pg.select_option(".rh-filtros select >> nth=1", "darf"); pg.wait_for_timeout(300)
     chk("rh: filtro por tipo", pg.inner_text("main").count("Imprimir") == 1)
     pg.select_option(".rh-filtros select >> nth=1", "todos"); pg.wait_for_timeout(200)

@@ -89,12 +89,30 @@ try:
     t = txt(pg)
     chk("o novo padrão vale na quinzena (45% de 600 = 270)", "R$ 270,00" in t, t[:400])
 
-    # 7. puxar O.S.
+    # 7. puxar O.S. — inclusive serviço que NINGUÉM apontou no app (pedido do Danilo, 24/11/2026)
     pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
     m = txt(pg, ".modal")
-    chk("puxar O.S.: explica que só entra serviço apontado", "apontou no app" in m, m[:300])
-    pg.click(".modal .fechar") if pg.locator(".modal .fechar").count() else pg.keyboard.press("Escape")
-    pg.wait_for_timeout(400)
+    chk("puxar O.S.: diz para que serve (outra quinzena, O.S. fechada, adiantar)",
+        "outra quinzena" in m and "fechada" in m and "adiantar" in m, m[:400])
+    # a O.S. 1898 tem um serviço e nenhum apontamento: é o caso que antes ficava de fora
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    m = txt(pg, ".modal")
+    chk("acha a O.S. pelo número e lista o serviço", "TROCA DE AMORTECEDORES DIANTEIROS" in m, m[:400])
+    chk("serviço sem apontamento agora oferece escolher quem fez", pg.locator(".modal .cm-puxar-quem select").count() == 1, m[:400])
+    chk("peça não entra na comissão", "AMORTECEDOR DIANT TOYOTA HILUX" not in m, m[:400])
+    chk("o botão só libera depois de escolher o mecânico",
+        pg.locator(".modal .cm-puxar-quem button:has-text('Apontar e puxar')").is_disabled())
+    pg.select_option(".modal .cm-puxar-quem select", label="Beto"); pg.wait_for_timeout(300)
+    chk("escolhido o mecânico, o botão libera",
+        not pg.locator(".modal .cm-puxar-quem button:has-text('Apontar e puxar')").is_disabled())
+    pg.click(".modal .cm-puxar-quem button:has-text('Apontar e puxar')"); pg.wait_for_timeout(1800)
+    aps = pg.evaluate("(window.__DB.apontamentos || []).filter(a => a.perfil_id === 'p3' && (a.itens_executados || []).includes('i4'))")
+    chk("gravou o apontamento no nome do mecânico escolhido", len(aps) == 1, aps)
+    chk("o apontamento nasce finalizado, para entrar no histórico do app",
+        bool(aps) and aps[0]["situacao"] == "finalizado" and bool(aps[0]["fim"]), aps)
+    chk("o apontamento fica na O.S. certa", bool(aps) and aps[0]["ordem_id"] == "o2" and aps[0]["os_numero"] == 1898, aps)
+    t = txt(pg)
+    chk("o serviço puxado entra na quinzena", "TROCA DE AMORTECEDORES DIANTEIROS" in t and "Beto" in t, t[:600])
 
     # 8b. serviço dividido entre DOIS mecânicos: o percentual de um não pode vazar para o outro
     dois = b.new_context(viewport={"width": 1366, "height": 768}).new_page()

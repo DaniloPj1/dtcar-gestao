@@ -4,6 +4,10 @@
 // Decisões do Danilo: quinzena fixa (1 a 15 e 16 ao fim do mês); matriz editada nesta tela; percentual sobre a mão de obra;
 // serviço apontado por dois mecânicos é dividido em partes iguais, cada um com o percentual dele.
 // Ordem do percentual: exceção do mecânico naquele grupo → padrão do mecânico → comissao_pct da ficha → o que for digitado aqui.
+// 24/11/2026 (pedido do Danilo): "Puxar O.S." passa a aceitar serviço SEM apontamento no app. Antes, serviço que ninguém
+// apontou ficava fora da comissão e não havia como lançar na mão — e é justamente o caso das O.S. antigas e do mecânico
+// que esqueceu de apontar. Agora o Danilo escolhe quem fez e o sistema GRAVA O APONTAMENTO (decisão dele: tem de entrar
+// nos serviços executados do app, para o histórico do mecânico ficar certo), do mesmo jeito que "Quem executou este serviço?".
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Modal, Vazio, Placa, Campo, Texto } from "../ui.js";
@@ -88,9 +92,11 @@ function Matriz({ funcs, grupos, onFechar, onSalvou, avisar }) {
 
 /* =================== PUXAR O.S. PARA O MECÂNICO =================== */
 // Traz para a quinzena um serviço apontado fora dela (O.S. antiga, apontamento esquecido).
-function PuxarOS({ onFechar, onPuxar, avisar }) {
+function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
   const { dados } = useApp();
   const [busca, setBusca] = useState(""), [achados, setAchados] = useState(null), [carregando, setCarregando] = useState(false);
+  const [escolhido, setEscolhido] = useState({});     // item_id -> funcionario_id, para o serviço sem apontamento
+  const [salvando, setSalvando] = useState("");
   const procurar = async () => {
     const t = busca.trim(); if (!t) return;
     setCarregando(true); setAchados(null);
@@ -109,11 +115,33 @@ function PuxarOS({ onFechar, onPuxar, avisar }) {
       setAchados([{ os: o, servicos }]);
     } catch (e) { avisar(e.message, true); setAchados([]); } finally { setCarregando(false); }
   };
+  // Atribuir à mão: grava o apontamento (o mesmo caminho do "Quem executou este serviço?"), para o serviço entrar
+  // também no histórico do mecânico no app. O apontamento nasce DENTRO da quinzena aberta, senão o serviço cairia noutra.
+  const atribuir = async (item, destino) => {
+    setSalvando(item.id);
+    try {
+      const aps = (await api.apontamentos.listar({ ordem_id: achado.os.id })).filter(a => a.situacao === "finalizado");
+      const alvo = aps.find(a => a.perfil_id === destino.perfil_id);
+      if (alvo) {
+        if (!(alvo.itens_executados || []).includes(item.id))
+          await api.apontamentos.atualizar(alvo.id, { itens_executados: [...(alvo.itens_executados || []), item.id] });
+      } else {
+        const novo = await api.apontamentos.abrir({ ordem_id: achado.os.id, os_numero: achado.os.numero, perfil_id: destino.perfil_id, perfil_nome: destino.apelido || destino.nome });
+        await api.apontamentos.atualizar(novo.id, { situacao: "finalizado", fim: dentroDaQuinzena(quinzena), itens_executados: [item.id] });
+      }
+      avisar("Serviço apontado para " + (destino.apelido || destino.nome) + ".");
+      onPuxar(item.id);
+      if (onAtribuido) await onAtribuido();
+      onFechar();
+    } catch (e) { avisar(e.message, true); } finally { setSalvando(""); }
+  };
+
   const achado = (achados || [])[0];
   const comApontamento = achado ? achado.servicos.filter(s => s.quem.length) : [];
   return html`<${Modal} titulo="Puxar O.S. para o mecânico" onFechar=${onFechar} largo>
-    <p class="sub">Para trazer um serviço de outra quinzena (O.S. antiga ou apontamento feito depois). Só entra serviço que o
-      mecânico apontou no app: sem apontamento não há como saber quem fez.</p>
+    <p class="sub">Para trazer um serviço de outra quinzena, de O.S. já fechada, ou para adiantar um serviço para esta quinzena.
+      Serviço que ninguém apontou no app: escolha quem fez e o sistema aponta para ele — isso entra também nos serviços
+      executados dele no app.</p>
     <div class="cm-puxar-busca">
       <${Texto} id="cm-busca" valor=${busca} onMuda=${setBusca} placeholder="Número da O.S. ou placa" onKeyDown=${e => e.key === "Enter" && procurar()} />
       <button type="button" class="btn btn-pri" onClick=${procurar} disabled=${carregando}>${carregando ? "Procurando…" : "Procurar"}</button>
@@ -122,12 +150,23 @@ function PuxarOS({ onFechar, onPuxar, avisar }) {
     ${achado ? html`<div class="cm-puxar-res">
       <div class="cm-puxar-cab"><b>${numOS(achado.os.numero)}</b><${Placa} placa=${(achado.os.veiculo || {}).placa} />
         <span class="sub">${achado.servicos.length} serviço${achado.servicos.length === 1 ? "" : "s"} · ${comApontamento.length} apontado${comApontamento.length === 1 ? "" : "s"}</span></div>
-      ${!comApontamento.length ? html`<div class="aviso">Nenhum serviço desta O.S. foi apontado no app, então não dá para lançar comissão dela.
-        O mecânico precisa apontar o serviço no app primeiro.</div>` : null}
+      ${!comApontamento.length ? html`<div class="aviso">Nenhum serviço desta O.S. foi apontado no app. Escolha quem fez cada um
+        na lista ao lado: o serviço é apontado para ele e entra na comissão desta quinzena.</div>` : null}
       <ul class="cm-puxar-itens">${achado.servicos.map(s => html`<li key=${s.item.id} class=${s.quem.length ? "" : "cm-sem-ap"}>
         <span>${s.item.descricao}</span>
-        <span class="sub">${s.quem.length ? s.quem.map(q => q.nome).join(" e ") : "sem apontamento"}</span>
-        ${s.quem.length ? html`<button type="button" class="btn btn-sm" onClick=${() => { onPuxar(s.item.id); onFechar(); }}>Puxar</button>` : null}
+        ${s.quem.length
+          ? html`<span class="sub">${s.quem.map(q => q.nome).join(" e ")}</span>
+            <button type="button" class="btn btn-sm" onClick=${() => { onPuxar(s.item.id); onFechar(); }}>Puxar</button>`
+          : html`<span class="cm-puxar-quem">
+            <select class="inp" aria-label=${"Quem executou " + s.item.descricao} value=${escolhido[s.item.id] || ""}
+              onChange=${e => setEscolhido(o => ({ ...o, [s.item.id]: e.target.value }))}>
+              <option value="">— quem executou? —</option>
+              ${(funcs || []).map(f => html`<option value=${f.id}>${f.apelido || f.nome}</option>`)}
+            </select>
+            <button type="button" class="btn btn-sm btn-pri" disabled=${!escolhido[s.item.id] || salvando === s.item.id}
+              onClick=${() => atribuir(s.item, (funcs || []).find(f => f.id === escolhido[s.item.id]))}>
+              ${salvando === s.item.id ? "Apontando…" : "Apontar e puxar"}</button>
+          </span>`}
       </li>`)}</ul>
     </div>` : null}
   </${Modal}>`;
@@ -343,8 +382,8 @@ export function Comissao() {
 
     ${verMatriz ? html`<${Matriz} funcs=${mecanicos} grupos=${grupos} avisar=${avisar}
       onFechar=${() => setVerMatriz(false)} onSalvou=${async () => { setPcts({}); setFuncs(await api.funcionarios.listar("nome")); }} />` : null}
-    ${verPuxar ? html`<${PuxarOS} avisar=${avisar} onFechar=${() => setVerPuxar(false)}
-      onPuxar=${id => setPuxados(p => p.includes(id) ? p : [...p, id])} />` : null}
+    ${verPuxar ? html`<${PuxarOS} avisar=${avisar} onFechar=${() => setVerPuxar(false)} funcs=${mecanicos} quinzena=${q}
+      onAtribuido=${carregar} onPuxar=${id => setPuxados(p => p.includes(id) ? p : [...p, id])} />` : null}
     ${verQuem ? html`<${QuemFez} linha=${verQuem} quinzena=${q} funcs=${mecanicos} perfilDe=${perfilDe} avisar=${avisar}
       onFechar=${() => setVerQuem(null)} onFeito=${carregar} />` : null}
   </div>`;

@@ -2365,12 +2365,18 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cm-cartoes b{font-family:var(--f-display);font-size:20px;font-variant-numeric:tabular-nums}
 .cm-cartoes .cm-destaque{background:var(--brand-soft)}
 .cm-os{margin-top:12px;border-top:1px solid var(--line);padding-top:8px}
-.cm-os-cab{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+.cm-os-cab{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:4px}
+.cm-os-modelo{color:var(--muted);font-size:13.5px}
+/* valor da comissão digitado à mão, ao lado do percentual (24/11/2026) */
+.cm-valor-campo{display:flex;gap:4px;align-items:center;justify-self:end}
+.cm-valor-campo>span{color:var(--muted);font-size:13.5px}
+.cm-valor-campo .inp{width:88px;text-align:right;font-variant-numeric:tabular-nums}
 .cm-linhas{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px}
 .cm-linhas li{display:grid;grid-template-columns:1fr auto 86px auto auto;gap:8px;align-items:center;padding:6px 8px;border-radius:8px}
 .cm-linhas li:nth-child(odd){background:var(--surface-2)}
 .cm-linhas li.cm-ja{opacity:.6}
-.cm-linhas li.cm-fora .cm-valor,.cm-linhas li.cm-fora .cm-mo{text-decoration:line-through;color:var(--muted)}
+.cm-linhas li.cm-fora .cm-mo{text-decoration:line-through;color:var(--muted)}
+.cm-linhas li.cm-fora .cm-valor-campo{opacity:.5}
 .cm-marca{display:flex;gap:8px;align-items:flex-start;min-width:0;cursor:pointer}
 .cm-desc{display:flex;flex-direction:column;min-width:0}
 .cm-desc b{overflow-wrap:anywhere}
@@ -2394,7 +2400,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .cm-linhas li{grid-template-columns:1fr auto;row-gap:4px}
   .cm-marca{grid-column:1 / -1}
   .cm-mo{grid-column:1;text-align:left}
-  .cm-valor{grid-column:2}
+  .cm-valor-campo{grid-column:2;justify-self:end}
   .cm-pct-campo{grid-column:1}
   .cm-linhas li>button{grid-column:2;justify-self:end}
 }

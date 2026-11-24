@@ -34,12 +34,34 @@ try:
     chk("menu lateral cabe sem rolar", pg.evaluate("(() => { const l = document.querySelector('.lateral'); return l.scrollHeight <= l.clientHeight + 1; })()"))
     chk("cartão mostra a comissão de 40% de 600 = 240", "R$ 240,00" in t, t[:400])
     chk("mão de obra do serviço aparece", "R$ 600,00" in t, t[:400])
+    # modelo do carro junto da placa, discreto (pedido do Danilo, 24/11/2026)
+    cabs = " | ".join(pg.locator(".cm-os-cab").all_inner_texts()).replace("\n", " ")
+    chk("cabeçalho da O.S. traz placa, número e modelo do carro",
+        any("01890" in c and "ABC1D23" in c and "Fiat Uno" in c for c in pg.locator(".cm-os-cab").all_inner_texts()), cabs[:300])
+    chk("o modelo é discreto, não concorre com o número",
+        pg.evaluate("(() => { const e = document.querySelector('.cm-os-modelo'); if (!e) return null;"
+                    " const s = getComputedStyle(e); return { fs: s.fontSize, fw: s.fontWeight }; })()")
+        == {"fs": "13.5px", "fw": "400"})
 
     # 1. percentual digitado na hora vence a matriz
     pct = pg.locator(".cm-linhas li .cm-pct-campo input").first
     pct.fill("50"); pg.wait_for_timeout(500)
     t = txt(pg)
     chk("digitar 50% recalcula para R$ 300,00", "R$ 300,00" in t, t[:400])
+    # valor direto: digita o que paga e o percentual se preenche sozinho (pedido do Danilo, 24/11/2026)
+    cv = pg.locator(".cm-linhas li .cm-valor-campo .inp").first
+    chk("cada linha tem campo de valor ao lado do percentual", cv.count() == 1 and pg.locator(".cm-valor-campo >span").first.inner_text() == "R$")
+    cv.fill("90"); cv.dispatch_event("input"); pg.wait_for_timeout(500)
+    chk("digitar R$ 90,00 de 600 preenche 15% no percentual",
+        pg.locator(".cm-linhas li .cm-pct-campo .inp").first.input_value() == "15",
+        pg.locator(".cm-linhas li .cm-pct-campo .inp").first.input_value())
+    chk("o total do mecânico acompanha o valor digitado", "Lançar R$ 90,00" in txt(pg), txt(pg)[:300])
+    cv.fill("123,45"); cv.dispatch_event("input"); pg.wait_for_timeout(500)
+    chk("aceita vírgula e fecha a conta no valor digitado",
+        "Lançar R$ 123,45" in txt(pg), txt(pg)[:300])
+    pg.locator(".cm-linhas li .cm-pct-campo .inp").first.fill("50")
+    pg.locator(".cm-linhas li .cm-pct-campo .inp").first.dispatch_event("input"); pg.wait_for_timeout(500)
+    chk("voltar a digitar o percentual manda no valor", "Lançar R$ 300,00" in txt(pg), txt(pg)[:300])
     chk("o botão de lançar mostra o total", pg.locator(".cm-bloco button:has-text('Lançar R$ 300,00')").count() == 1)
 
     # 2. desmarcar tira do lançamento
@@ -115,6 +137,25 @@ try:
     chk("o apontamento fica na O.S. certa", bool(aps) and aps[0]["ordem_id"] == "o2" and aps[0]["os_numero"] == 1898, aps)
     t = txt(pg)
     chk("a O.S. puxada entra na quinzena no nome dele", "TROCA DE AMORTECEDORES DIANTEIROS" in t and "Beto" in t, t[:600])
+
+    # mecânico com serviço ABERTO no app na mesma O.S.: a puxada fecha o que ele deixou aberto, em vez de travar
+    # (24/11/2026: era aqui que aparecia "falta rodar o supabase/v60.sql")
+    pg.evaluate("""(() => { const o = window.__DB.ordens.find(x => x.numero === 1898);
+      window.__DB.apontamentos = (window.__DB.apontamentos || []).filter(a => !(a.ordem_id === o.id && a.perfil_id === "p3"));
+      window.__DB.apontamentos.push({ id: "apaberto", ordem_id: o.id, os_numero: 1898, perfil_id: "p3", perfil_nome: "Beto",
+        situacao: "andamento", inicio: new Date(Date.now() - 86400000).toISOString(), fim: null, pausas: [], itens_executados: [], indicacoes: [] }); })()""")
+    pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    pg.select_option("#cm-para", label="Beto"); pg.wait_for_timeout(200)
+    pg.click("#cm-puxar-tudo"); pg.wait_for_timeout(1800)
+    t = txt(pg)
+    chk("puxar não acusa falta do v60 quando o mecânico tem serviço aberto na O.S.", "v60" not in t, t[:400])
+    ab = pg.evaluate("(window.__DB.apontamentos || []).find(a => a.id === 'apaberto')")
+    chk("fecha o apontamento que ele deixou aberto no app",
+        bool(ab) and ab["situacao"] == "finalizado" and bool(ab["fim"]), ab)
+    chk("e o serviço entra nesse mesmo apontamento, sem abrir outro",
+        bool(ab) and "i4" in (ab["itens_executados"] or [])
+        and len([a for a in pg.evaluate("window.__DB.apontamentos") if a["perfil_id"] == "p3" and a["os_numero"] == 1898]) == 1, ab)
 
     # desmarcar tira o serviço da puxada
     pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)

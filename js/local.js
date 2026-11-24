@@ -29,6 +29,14 @@ export const semTabelaComissao = e => !!e && (/PGRST205/i.test(e.code || "") || 
   || /could not find the table[^\n]*comiss/i.test(e.message || "")
   || /schema cache[^\n]*comiss|comiss[^\n]*schema cache/i.test(e.message || ""));
 
+/** banco ainda sem o v60: a TABELA servico_apontamentos não existe. Duplicidade, permissão ou qualquer outro erro
+ *  NÃO entram aqui — precisam chegar ao usuário como são (24/11/2026: a puxada de O.S. acusava "falta rodar o v60"
+ *  quando na verdade o mecânico já tinha um apontamento aberto na O.S.). */
+export const semTabelaApontamentos = e => !!e && (/PGRST205/i.test(e.code || "") || /PGRST205/i.test(e.message || "")
+  || /(relation|table)[^\n]*servico_apontamentos[^\n]*does not exist/i.test(e.message || "")
+  || /could not find the table[^\n]*servico_apontamentos/i.test(e.message || "")
+  || /schema cache[^\n]*servico_apontamentos|servico_apontamentos[^\n]*schema cache/i.test(e.message || ""));
+
 /** Erro de rede (sem internet ou servidor fora do ar), e não erro de permissão ou de dados */
 export const erroDeRede = e => !navigator.onLine || /Failed to fetch|NetworkError|network|Load failed|Sem conexão|fetch failed|ERR_INTERNET/i.test(String((e && e.message) || e));
 

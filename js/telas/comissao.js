@@ -250,6 +250,7 @@ export function Comissao() {
   const [vals, setVals] = useState({});               // valor em reais digitado à mão (vira percentual)
   const [fora, setFora] = useState({});               // serviços desmarcados
   const [puxados, setPuxados] = useState([]);
+  const [tirando, setTirando] = useState(false);
   const [verMatriz, setVerMatriz] = useState(false), [verPuxar, setVerPuxar] = useState(false), [verQuem, setVerQuem] = useState(null);
   const [lancando, setLancando] = useState("");
   const qs = useMemo(() => quinzenas(ym), [ym]);
@@ -265,6 +266,41 @@ export function Comissao() {
   const q = qs[qz] || qs[0];
 
   useEffect(() => { api.funcionarios.listar("nome").then(setFuncs).catch(e => setErro(e.message)); }, []);
+  const perfilDeFunc = fid => ((funcs || []).find(f => f.id === fid) || {}).perfil_id;
+  /** Tira o serviço do nome do mecânico (pedido do Danilo, 24/11/2026): sai do apontamento dele — e o apontamento que
+   *  ficar sem serviço nenhum é apagado — então sai da comissão da quinzena e do histórico dele no app.
+   *  A O.S., a mão de obra e o que já foi lançado não mudam (lançamento errado se desfaz em "Cancelar"). */
+  const tirar = async (b, linhas) => {
+    const alvo = linhas.filter(l => !l.ja_lancado);
+    if (!alvo.length) { avisar("Esses serviços já foram lançados: use Cancelar no lançamento.", true); return; }
+    const perfil_id = perfilDeFunc(b.funcionario_id);
+    if (!perfil_id) { avisar("A ficha de " + b.nome + " não está ligada a um acesso do sistema.", true); return; }
+    const um = alvo.length === 1;
+    const ok = await confirmar({
+      titulo: um ? "Tirar este serviço de " + b.nome + "?" : "Tirar " + alvo.length + " serviços de " + b.nome + "?",
+      texto: (um ? "O serviço sai" : "Os serviços saem") + " da comissão desta quinzena e deixa" + (um ? "" : "m")
+        + " de ficar no nome dele nos serviços executados do app. A O.S. e a mão de obra não mudam.",
+      botao: "Tirar", perigo: true });
+    if (!ok) return;
+    setTirando(true);
+    try {
+      const porOrdem = {};
+      for (const l of alvo) (porOrdem[l.ordem_id] = porOrdem[l.ordem_id] || []).push(l.item_id);
+      for (const ordem_id of Object.keys(porOrdem)) {
+        const ids = porOrdem[ordem_id];
+        const aps = (await api.apontamentos.listar({ ordem_id })).filter(a => a.perfil_id === perfil_id);
+        for (const a of aps) {
+          const antes = a.itens_executados || [], restam = antes.filter(x => !ids.includes(x));
+          if (restam.length === antes.length) continue;
+          if (restam.length) await api.apontamentos.atualizar(a.id, { itens_executados: restam });
+          else await api.apontamentos.excluir(a.id);
+        }
+      }
+      setPuxados(p => p.filter(x => !alvo.some(l => l.item_id === x)));
+      avisar(um ? "Serviço tirado de " + b.nome + "." : alvo.length + " serviços tirados de " + b.nome + ".");
+      await carregar();
+    } catch (e) { avisar(e.message, true); } finally { setTirando(false); }
+  };
   const carregar = async () => {
     setLista(null);
     try {
@@ -399,7 +435,9 @@ export function Comissao() {
           <div><span>Já lançados</span><b>${jaFoi}</b></div>
         </div>
         ${porOS(b.itens).map(([num, itens]) => html`<div class="cm-os" key=${num}>
-          <div class="cm-os-cab"><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b>${modeloDaOS[num] ? html`<span class="cm-os-modelo">${modeloDaOS[num]}</span>` : null}</div>
+          <div class="cm-os-cab"><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b>${modeloDaOS[num] ? html`<span class="cm-os-modelo">${modeloDaOS[num]}</span>` : null}
+            ${itens.some(l => !l.ja_lancado) ? html`<button type="button" class="btn btn-sm cm-os-tirar" disabled=${tirando}
+              onClick=${() => tirar(b, itens)}>Tirar a O.S.</button>` : null}</div>
           <ul class="cm-linhas">${itens.map(l => html`<li key=${l.item_id} class=${l.ja_lancado || l.sem_saldo ? "cm-ja" : (fora[ch(b.funcionario_id, l)] ? "cm-fora" : "")}>
             <label class="cm-marca">
               <input type="checkbox" disabled=${l.ja_lancado || l.sem_saldo} checked=${entra(b.funcionario_id, l)} aria-label=${"Incluir " + l.descricao}
@@ -416,8 +454,11 @@ export function Comissao() {
               value=${vals[ch(b.funcionario_id, l)] ?? String(valorDe(b.funcionario_id, l).toFixed(2)).replace(".", ",")}
               onInput=${e => digitarValor(b.funcionario_id, l, e.target.value)}
               onBlur=${() => setVals(o => { const r = { ...o }; delete r[ch(b.funcionario_id, l)]; return r; })} /></span>
-            <button type="button" class="btn btn-sm" disabled=${l.ja_lancado || l.sem_saldo}
-              onClick=${() => setVerQuem({ ...l, funcionario_id: b.funcionario_id, nome: b.nome })}>Quem fez</button>
+            <span class="cm-acoes">
+              <button type="button" class="btn btn-sm" disabled=${l.ja_lancado || l.sem_saldo}
+                onClick=${() => setVerQuem({ ...l, funcionario_id: b.funcionario_id, nome: b.nome })}>Quem fez</button>
+              <button type="button" class="btn btn-sm" disabled=${l.ja_lancado || tirando}
+                onClick=${() => tirar(b, [l])}>Tirar</button></span>
           </li>`)}</ul>
         </div>`)}
       </section>`;

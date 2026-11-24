@@ -262,6 +262,8 @@
         db.apontamentos.push(a); window.__APONT = (window.__APONT || []).concat([{ acao: "abrir", ...d }]); return { ...a }; },
       atualizar: async (id, patch) => { net(); const a = (db.apontamentos || []).find(x => x.id === id); if (!a) throw new Error("apontamento não existe");
         Object.assign(a, patch, { atualizado_em: now() }); window.__APONT = (window.__APONT || []).concat([{ acao: "atualizar", id, patch }]); return { ...a }; },
+      excluir: async id => { net(); db.apontamentos = (db.apontamentos || []).filter(a => a.id !== id);
+        window.__APONT = (window.__APONT || []).concat([{ acao: "excluir", id }]); },
       visto: async () => {}, indicadasPara: async () => [] },
     semV60: () => false,
     agenda: { listar: async ({ de, ate } = {}) => { net(); if (window.__SEM_V54) throw new Error("Could not find the table 'public.agendamentos' in the schema cache");

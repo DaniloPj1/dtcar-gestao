@@ -413,6 +413,8 @@ function criarApiSupabase() {
         if (r.error && semTabelaApontamentos(r.error)) throw new Error("Iniciar serviço pelo app ainda não foi ligado: falta rodar o supabase/v60.sql no banco.");
         return ok(r); },
       atualizar: async (id, patch) => ok(await sb.from("servico_apontamentos").update(patch).eq("id", id).select().single()),
+      /** tira o apontamento (só administrador, pela política do v60): usado quando a O.S. foi puxada para o mecânico errado */
+      excluir: async id => { const r = await sb.from("servico_apontamentos").delete().eq("id", id); if (r.error) throw new Error(r.error.message); },
       visto: async id => { ok(await sb.rpc("apontamento_visto", { p_id: id })); },
       /** indicações feitas PARA esta pessoa ainda não vistas (aviso no app) */
       indicadasPara: async perfil_id => { const l = await metodos.apontamentos.listar({ desde: new Date(Date.now() - 60 * 86400000).toISOString() });

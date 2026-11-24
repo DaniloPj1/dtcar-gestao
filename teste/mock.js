@@ -254,7 +254,13 @@
     // agenda da oficina (v54): mesmas regras do gatilho agendamentos_regras (remarcação, motivo só no cancelado)
     // apontamentos de serviço pelo app (v60) de mentira: só leitura para o relatório
     apontamentos: { listar: async ({ perfil_id } = {}) => { net(); return (db.apontamentos = db.apontamentos || [{ id: "ap1", ordem_id: (db.ordens[0] || {}).id, os_numero: (db.ordens[0] || {}).numero, perfil_id: "p2", perfil_nome: "Carlos Mecânico", situacao: "finalizado", inicio: new Date(Date.now() - 3 * 3600000).toISOString(), fim: new Date(Date.now() - 3600000).toISOString(), motivo_pausa: "", pausas: [{ em: new Date(Date.now() - 2 * 3600000).toISOString(), motivo: "Aguardando peças", retomado_em: new Date(Date.now() - 1.5 * 3600000).toISOString() }], itens_executados: ["i1"], indicacoes: [{ item_id: "i2", descricao: "ALINHAMENTO", para_id: "p1", para_nome: "Danilo", em: new Date().toISOString(), visto_em: null }] }]).filter(a => !perfil_id || a.perfil_id === perfil_id); },
-      abrir: async () => { throw new Error("só no app"); }, atualizar: async () => { throw new Error("só no app"); }, visto: async () => {}, indicadasPara: async () => [] },
+      // o sistema grava apontamento desde o "Quem executou este serviço?" (v61) e o "Puxar O.S." (24/11/2026)
+      abrir: async d => { net(); db.apontamentos = db.apontamentos || [];
+        const a = { id: uid(), ordem_id: d.ordem_id, os_numero: d.os_numero || null, perfil_id: d.perfil_id, perfil_nome: d.perfil_nome || "", situacao: "andamento", inicio: now(), fim: null, motivo_pausa: "", pausas: [], itens_executados: [], indicacoes: [], obs: "", criado_em: now(), atualizado_em: now() };
+        db.apontamentos.push(a); window.__APONT = (window.__APONT || []).concat([{ acao: "abrir", ...d }]); return { ...a }; },
+      atualizar: async (id, patch) => { net(); const a = (db.apontamentos || []).find(x => x.id === id); if (!a) throw new Error("apontamento não existe");
+        Object.assign(a, patch, { atualizado_em: now() }); window.__APONT = (window.__APONT || []).concat([{ acao: "atualizar", id, patch }]); return { ...a }; },
+      visto: async () => {}, indicadasPara: async () => [] },
     semV60: () => false,
     agenda: { listar: async ({ de, ate } = {}) => { net(); if (window.__SEM_V54) throw new Error("Could not find the table 'public.agendamentos' in the schema cache");
         return (db.agendamentos = db.agendamentos || []).filter(a => (!de || a.data >= de) && (!ate || a.data <= ate)).map(a => ({ ...a })); },

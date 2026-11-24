@@ -2398,3 +2398,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .cm-pct-campo{grid-column:1}
   .cm-linhas li>button{grid-column:2;justify-self:end}
 }
+
+/* Puxar O.S. (24/11/2026): escolher quem executou o serviço que ninguém apontou no app */
+.cm-puxar-quem{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.cm-puxar-quem .inp{min-width:180px}
+@media (max-width:640px){.cm-puxar-quem{width:100%}.cm-puxar-quem .inp{flex:1;min-width:0}}

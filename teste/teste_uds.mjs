@@ -268,6 +268,28 @@ chk("o app sabe que não tem os anexos C e D", eptiTemAnexoCD() === false);
   } finally { globalThis.window = antigo; }
 }
 
+/* ---- a conta do endereço de resposta por marca (opendbc, 24/11/2026) ---- */
+{
+  const u = await import("../js/uds.js");
+  const r = (p, m) => u.respostaPara(p, m);
+  // o motor e o câmbio seguem o padrão OBD em TODA marca
+  chk(r("7E0", "") === "7E8" && r("7E0", "CHEVROLET") === "7E8" && r("7E0", "VOLKSWAGEN") === "7E8" && r("7E1", "NISSAN") === "7E9",
+    "motor e câmbio: 7E0→7E8 e 7E1→7E9 em qualquer marca");
+  // fora do motor, cada marca tem a sua conta
+  chk(r("713", "VOLKSWAGEN AMAROK") === "77D", "VAG: 713 responde em 77D (+0x6A) — é o ABS da Amarok");
+  chk(r("712", "AUDI") === "77C" && r("715", "SKODA") === "77F", "VAG: direção 712→77C e airbag 715→77F");
+  chk(r("24B", "CHEVROLET") === "64B", "GM: +0x400");
+  chk(r("740", "NISSAN") === "760" && r("742", "INFINITI") === "762", "Nissan: +0x20");
+  chk(r("747", "JEEP RENEGADE") === "4C7" && r("744", "FIAT") === "4C4", "Stellantis: -0x280");
+  chk(r("733", "RIVIAN") === "773", "Rivian: +0x40");
+  chk(r("7B0", "TOYOTA") === "7B8" && r("760", "FORD") === "768", "marca sem conta própria: padrão +8");
+  // 29 bits não depende de marca: troca os dois últimos bytes (ISO 15765-4)
+  chk(r("18DA10F1", "HONDA") === "18DAF110", "Honda em 29 bits: o motor 18DA10F1 responde em 18DAF110");
+  chk(r("18DAD0F1", "NISSAN") === "18DAF1D0" && r("18DA30F1", "") === "18DAF130", "29 bits: a conta é a mesma com ou sem marca");
+  // entrada ruim não inventa endereço
+  chk(r("", "VW") === "" && r("7", "VW") === "", "endereço fora de formato não vira resposta");
+}
 console.log(falhas.length ? ok.length + " ok, " + falhas.length + " FALHARAM:\n  " + falhas.join("\n  ")
                           : ok.length + " conferências do UDS passaram.");
 process.exit(falhas.length ? 1 : 0);
+

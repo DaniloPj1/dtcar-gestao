@@ -64,3 +64,43 @@ console.log("rodas do ABS: " + [...new Set(rodas)].join("; "));
   ok(um("celsius", 90).valor === 90 && um("bars", 3).unidade === "bar", "o que já é medida nossa não muda");
   console.log("medidas do Brasil: 6 conferências passaram.");
 }
+
+/* ---- acervo do opendbc: as marcas que entram na oficina (24/11/2026) ---- */
+{
+  const u = await import("../js/uds.js");
+  const c = (n, v) => { if (!v) { console.error("FALHOU: " + n); process.exit(1); } };
+  const fams = u.familias(null);
+  for (const f of ["TOYOTA", "HONDA", "HYUNDAI", "FORD", "NISSAN", "SUBARU", "MAZDA", "STELLANTIS"])
+    c("o acervo tem a família " + f, fams.includes(f));
+  c("o acervo passou de 300 módulos", u.quantosModulos() >= 300);
+  // apontado pelo Codex em 24/11/2026: a resposta pode estar FORA da faixa de diagnóstico.
+  // A Stellantis responde 0x280 abaixo do pedido, e exigir 600–7FF ali jogava fora o ABS e o airbag.
+  const st = u.modulosDa("STELLANTIS");
+  c("Stellantis: o ABS 747 responde em 4C7", st.some(m => m.pedido === "747" && m.resposta === "4C7" && /Freio/.test(m.nome)));
+  c("Stellantis: o airbag 744 responde em 4C4", st.some(m => m.pedido === "744" && m.resposta === "4C4"));
+  c("Stellantis tem 16 módulos, com os de resposta baixa", st.length === 16);
+  // e Peugeot/Citroën vão para a PSA, que tem módulo próprio
+  c("Peugeot cai na PSA, não na Stellantis", u.familiaDoCarro({ marca: "PEUGEOT" }) === "PSA");
+  c("Citroën também", u.familiaDoCarro({ marca: "CITROEN" }) === "PSA");
+  // a família do carro sai da marca do cadastro
+  c("Honda City cai na família HONDA", u.familiaDoCarro({ marca: "HONDA" }) === "HONDA");
+  c("Amarok continua caindo na VAG", u.familiaDoCarro({ marca: "VOLKSWAGEN" }) === "VAG");
+  c("Corolla cai na TOYOTA", u.familiaDoCarro({ marca: "TOYOTA" }) === "TOYOTA");
+  c("Renegade cai na STELLANTIS", u.familiaDoCarro({ marca: "JEEP" }) === "STELLANTIS");
+  // o motor do Honda é de 29 bits, que é o que faltava para atuador e aprendizado
+  const honda = u.modulosDa("HONDA");
+  const motor = honda.find(m => /Motor/.test(m.nome));
+  c("o motor do Honda está em 29 bits", !!motor && motor.pedido === "18DA10F1" && motor.resposta === "18DAF110");
+  c("a família Honda tem freio, direção e airbag", ["Controle de estabilidade", "Direção elétrica", "Airbag"].every(n => honda.some(m => m.nome === n)));
+  // toda entrada das famílias NOVAS tem endereço de diagnóstico de verdade e nome escrito.
+  // (As coleções do OVMS têm entradas sem nome desde antes; isso é pendência separada.)
+  const NOVAS = ["TOYOTA", "HONDA", "HYUNDAI", "FORD", "NISSAN", "SUBARU", "MAZDA", "STELLANTIS", "TESLA", "RIVIAN", "MG", "PSA", "BYD"];
+  const ruim = [];
+  for (const f of fams.filter(x => NOVAS.includes(x))) for (const m of u.modulosDa(f)) {
+    const p = m.pedido, r = m.resposta;
+    const okEnd = e => /^[0-9A-F]{3}$/.test(e) ? parseInt(e, 16) >= 0x600 && parseInt(e, 16) <= 0x7ff : /^[0-9A-F]{8}$/.test(e);
+    if (!okEnd(p) || !/^[0-9A-F]{3}$|^[0-9A-F]{8}$/.test(r) || !m.nome) ruim.push(f + " " + p + "/" + r + " " + m.nome);
+  }
+  c("nenhuma entrada inválida ou sem nome nas famílias novas: " + ruim.slice(0, 3).join("; "), !ruim.length);
+  console.log("acervo do opendbc: 19 conferências passaram.");
+}

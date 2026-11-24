@@ -251,6 +251,8 @@ export function Comissao() {
   const [fora, setFora] = useState({});               // serviços desmarcados
   const [puxados, setPuxados] = useState([]);
   const [tirando, setTirando] = useState(false);
+  const [recolhido, setRecolhido] = useState({});     // barras recolhidas: "m:<funcionario>" e "os:<funcionario>:<numero>"
+  const alternar = k => setRecolhido(r => ({ ...r, [k]: !r[k] }));
   const [verMatriz, setVerMatriz] = useState(false), [verPuxar, setVerPuxar] = useState(false), [verQuem, setVerQuem] = useState(null);
   const [lancando, setLancando] = useState("");
   const qs = useMemo(() => quinzenas(ym), [ym]);
@@ -424,21 +426,28 @@ export function Comissao() {
       const mo = dentro.reduce((s, l) => s + n2(l.base), 0);
       const temErro = dentro.some(l => !pctOk(pctDe(b.funcionario_id, l)));
       const jaFoi = b.itens.filter(l => l.ja_lancado).length;
+      const fechadoM = !!recolhido["m:" + b.funcionario_id];
       return html`<section class="card cm-bloco" key=${b.funcionario_id}>
-        <div class="secao-topo"><h2>${b.nome}</h2>
+        <div class="secao-topo"><h2><button type="button" class="cm-dobrar" aria-expanded=${!fechadoM}
+            onClick=${() => alternar("m:" + b.funcionario_id)}><span class="cm-seta" aria-hidden="true">${fechadoM ? "▸" : "▾"}</span>${b.nome}
+            ${fechadoM ? html`<span class="sub">${dentro.length} serviço${dentro.length === 1 ? "" : "s"}</span>` : null}</button></h2>
           <button type="button" class="btn btn-pri" disabled=${!dentro.length || temErro || lancando === b.funcionario_id}
             onClick=${() => lancar(b)}>${lancando === b.funcionario_id ? "Lançando…" : "Lançar " + reais(total)}</button></div>
-        <div class="cm-cartoes">
+        ${fechadoM ? null : html`<div class="cm-cartoes">
           <div><span>Serviços</span><b>${dentro.length}</b></div>
           <div><span>Mão de obra da parte dele</span><b>${reais(mo)}</b></div>
           <div class="cm-destaque"><span>Comissão</span><b>${reais(total)}</b></div>
           <div><span>Já lançados</span><b>${jaFoi}</b></div>
         </div>
-        ${porOS(b.itens).map(([num, itens]) => html`<div class="cm-os" key=${num}>
-          <div class="cm-os-cab"><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b>${modeloDaOS[num] ? html`<span class="cm-os-modelo">${modeloDaOS[num]}</span>` : null}
+        ${porOS(b.itens).map(([num, itens]) => { const kos = "os:" + b.funcionario_id + ":" + num, fechadaOS = !!recolhido[kos];
+          return html`<div class="cm-os" key=${num}>
+          <div class="cm-os-cab"><button type="button" class="cm-dobrar cm-os-dobrar" aria-expanded=${!fechadaOS} onClick=${() => alternar(kos)}>
+              <span class="cm-seta" aria-hidden="true">${fechadaOS ? "▸" : "▾"}</span><${Placa} placa=${(itens[0] || {}).placa} /><b>${numOS(Number(num))}</b>
+              ${modeloDaOS[num] ? html`<span class="cm-os-modelo">${modeloDaOS[num]}</span>` : null}
+              ${fechadaOS ? html`<span class="sub">${itens.length} serviço${itens.length === 1 ? "" : "s"} · ${reais(itens.reduce((x, l) => x + valorDe(b.funcionario_id, l), 0))}</span>` : null}</button>
             ${itens.some(l => !l.ja_lancado) ? html`<button type="button" class="btn btn-sm cm-os-tirar" disabled=${tirando}
               onClick=${() => tirar(b, itens)}>Tirar a O.S.</button>` : null}</div>
-          <ul class="cm-linhas">${itens.map(l => html`<li key=${l.item_id} class=${l.ja_lancado || l.sem_saldo ? "cm-ja" : (fora[ch(b.funcionario_id, l)] ? "cm-fora" : "")}>
+          ${fechadaOS ? null : html`<ul class="cm-linhas">${itens.map(l => html`<li key=${l.item_id} class=${l.ja_lancado || l.sem_saldo ? "cm-ja" : (fora[ch(b.funcionario_id, l)] ? "cm-fora" : "")}>
             <label class="cm-marca">
               <input type="checkbox" disabled=${l.ja_lancado || l.sem_saldo} checked=${entra(b.funcionario_id, l)} aria-label=${"Incluir " + l.descricao}
                 onChange=${e => setFora(f => ({ ...f, [ch(b.funcionario_id, l)]: !e.target.checked }))} />
@@ -459,8 +468,8 @@ export function Comissao() {
                 onClick=${() => setVerQuem({ ...l, funcionario_id: b.funcionario_id, nome: b.nome })}>Quem fez</button>
               <button type="button" class="btn btn-sm" disabled=${l.ja_lancado || tirando}
                 onClick=${() => tirar(b, [l])}>Tirar</button></span>
-          </li>`)}</ul>
-        </div>`)}
+          </li>`)}</ul>`}
+        </div>`; })}`}
       </section>`;
     })}
 

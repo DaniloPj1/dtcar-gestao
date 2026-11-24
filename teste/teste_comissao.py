@@ -34,6 +34,22 @@ try:
     chk("menu lateral cabe sem rolar", pg.evaluate("(() => { const l = document.querySelector('.lateral'); return l.scrollHeight <= l.clientHeight + 1; })()"))
     chk("cartão mostra a comissão de 40% de 600 = 240", "R$ 240,00" in t, t[:400])
     chk("mão de obra do serviço aparece", "R$ 600,00" in t, t[:400])
+    # barras que recolhem (pedido do Danilo, 24/11/2026)
+    chk("linhas da O.S. aparecem antes de recolher", pg.locator(".cm-linhas").count() >= 1)
+    pg.locator(".cm-os-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar na barra da placa recolhe os serviços da O.S.", pg.locator(".cm-linhas").count() == 0)
+    chk("recolhida, a barra resume quantos serviços e quanto dá",
+        "1 serviço" in txt(pg, ".cm-os-cab") and "R$ 240,00" in txt(pg, ".cm-os-cab"), txt(pg, ".cm-os-cab")[:200])
+    pg.locator(".cm-os-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar de novo devolve os serviços", pg.locator(".cm-linhas").count() >= 1)
+    pg.locator(".cm-bloco .cm-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar no nome do mecânico recolhe o bloco dele",
+        pg.locator(".cm-bloco .cm-cartoes").count() == 0 and pg.locator(".cm-os").count() == 0)
+    chk("mesmo recolhido, o botão de lançar continua na barra",
+        pg.locator(".cm-bloco button:has-text('Lançar')").count() >= 1)
+    pg.locator(".cm-bloco .cm-dobrar").first.click(); pg.wait_for_timeout(400)
+    chk("clicar de novo devolve os dados do mecânico",
+        pg.locator(".cm-bloco .cm-cartoes").count() >= 1 and pg.locator(".cm-linhas").count() >= 1)
     # modelo do carro junto da placa, discreto (pedido do Danilo, 24/11/2026)
     cabs = " | ".join(pg.locator(".cm-os-cab").all_inner_texts()).replace("\n", " ")
     chk("cabeçalho da O.S. traz placa, número e modelo do carro",

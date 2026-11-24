@@ -2369,6 +2369,12 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cm-os-modelo{color:var(--muted);font-size:13.5px}
 .cm-os-tirar{margin-left:auto}
 .cm-acoes{display:flex;gap:6px;align-items:center;justify-self:end}
+/* barras que recolhem: nome do mecânico e cabeçalho da O.S. (24/11/2026) */
+.cm-dobrar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;min-width:0;background:none;border:0;padding:2px 0;font:inherit;color:inherit;cursor:pointer;text-align:left}
+.cm-dobrar:hover{color:var(--brand-strong)}
+.cm-dobrar .sub{color:var(--muted)}
+.cm-os-dobrar{flex:1}
+.cm-seta{color:var(--muted);font-size:12px;line-height:1;width:12px;flex:0 0 12px}
 /* valor da comissão digitado à mão, ao lado do percentual (24/11/2026) */
 .cm-valor-campo{display:flex;gap:4px;align-items:center;justify-self:end}
 .cm-valor-campo>span{color:var(--muted);font-size:13.5px}

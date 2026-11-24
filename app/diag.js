@@ -738,6 +738,10 @@ function Obd() {
       </${Cartao}>` : null}
 
 
+      ${podeApagar && antesApagados && antesApagados.length && !apagar ? html`<${Cartao} titulo="Já foi apagado neste carro" id="obd-apagados">
+        ${antesApagados.map(a => html`<div key=${a.id} class="kv"><span>${fmtData(a.criado_em)}</span><i></i><b>${a.perfil_nome || "—"}${a.km ? " · " + a.km + " km" : ""}${(a.codigos || []).length ? " · " + (a.codigos || []).map(c => c.codigo).join(", ") : ""}</b></div>`)}
+      </${Cartao}>` : null}
+
       ${res && res.o === "falhas" ? html`<${Cartao} titulo=${(res.d.porModulo && res.d.porModulo.length > 1 ? "Falhas por módulo" : "Falhas do motor") + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">
         ${!res.d.falhas.length ? html`<div class="vazio">Nenhuma falha gravada no módulo do motor.</div>` : null}
         ${(res.d.porModulo && res.d.porModulo.length > 1 ? res.d.porModulo : [{ endereco: "", nome: "", falhas: res.d.falhas }]).map(m => html`<div key=${m.endereco} class=${m.nome ? "obd-mod" : ""} data-modulo=${m.endereco}>
@@ -798,6 +802,7 @@ function Obd() {
       ${res && res.o === "laudo" ? html`<${Cartao} titulo="Laudo do carro" id="obd-r-laudo">
         ${laudo.linhas(res.d.dados, "").map((l, i) => html`<div key=${i} class=${"laudo-" + l.t}>${l.x}</div>`)}
         <div class="laudo-selo" id="obd-laudo-selo"><b>SELADO</b> · ${res.d.selo.slice(0, 16)}…</div>
+        <div class="nota">${res.d.gravado}</div>
         <button type="button" class="btn-barra" id="obd-laudo-pdf" style="justify-content:center" onClick=${pdfDoLaudo}><${Ic} n="share" t=${20} />PDF DO LAUDO (COMPARTILHAR OU BAIXAR)</button>
       </${Cartao}>` : null}
 

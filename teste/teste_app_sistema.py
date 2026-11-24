@@ -1119,6 +1119,11 @@ try:
         t(r0.get('placa') == 'ABC1D23' and r0.get('km') == 152300, 'com a placa e o KM: %s / %s' % (r0.get('placa'), r0.get('km')))
         t([c['codigo'] for c in r0.get('codigos') or []] and 'P0171' in [c['codigo'] for c in r0.get('codigos') or []], 'e os códigos que estavam lá: %s' % r0.get('codigos'))
         t(r0.get('codigos_depois') == [], 'e o que sobrou depois (lista vazia, não nulo)')
+        # 23/11/2026: tirar os textos explicativos NÃO pode levar junto o que é dado (apontado pelo Codex).
+        # A lista dos apagamentos anteriores deste carro continua na tela; só a explicação embaixo saiu.
+        ap = pg.query_selector('#obd-apagados')
+        t(ap is None or ('Fulano' in pg.inner_text('#obd-apagados') and 'Monitor que ainda não terminou' not in pg.inner_text('#obd-apagados')),
+          'os apagamentos anteriores do carro continuam listados, sem a nota explicativa')
         t(r0.get('vin'), 'o chassi lido entra no registro: %s' % r0.get('vin'))
         t('04' not in pg.evaluate("window.__obd.cmds"), 'o 04 NÃO passou pelo comando: foi pelo método próprio do plugin')
         pg.click('#obd-apagar-fim'); pg.wait_for_timeout(300)

@@ -331,7 +331,7 @@ def abrir(br, fake, url, plugin=True, disponivel=True, antes=None):
     # TELA LIMPA (21/11/2026): no menu do OBD, o que não é do dia a dia fica dentro de um botão. O teste
     # abre o grupo antes de procurar o que está guardado nele, como a pessoa faz.
     GRUPOS_OBD = {'#obd-mais-abrir': ('#obd-foto', '#obd-cilindros', '#obd-testes', '#obd-apagar'),
-                  '#obd-avancado-abrir': ('#obd-conf', '#obd-laudo', '#obd-calib', '#obd-ciclo', '#obd-contadores', '#obd-ir-parametros', '#obd-escolh', '#obd-padrao', '#obd-todas'),
+                  '#obd-avancado-abrir': ('#obd-conf', '#obd-laudo', '#obd-calib', '#obd-ciclo', '#obd-contadores', '#obd-escolh', '#obd-padrao', '#obd-todas'),
                   '#obd-adaptador-abrir': ('#obd-desligar',)}
     def abre_grupo(sel):
         if not isinstance(sel, str) or '#obd-' not in sel: return
@@ -388,9 +388,9 @@ try:
         # cada botão abre a tela real do sistema, no modo app (?app=1), levando a marca de modo app
         # cada botão abre a tela do app correspondente (desenho do protótipo), sem sair do app
         TITULOS = ['INICIAR SERVIÇO', 'MEUS SERVIÇOS', 'ÓLEO (APLICAÇÃO)', 'ORÇAMENTOS', 'AGENDAR SERVIÇO', 'AGENDA', 'CONSULTAR PEÇA POR CATÁLOGO', 'HISTÓRICO DE SERVIÇOS', 'CONSULTAR O.S.',
-                   'LER O CARRO (OBD)', 'MÓDULOS DO CARRO', 'TESTE DE ATUADOR', 'APRENDIZADOS E CALIBRAÇÕES', 'PROGRAMAR BICO', 'PARÂMETROS DE REFERÊNCIA']
+                   'LER O CARRO (OBD)', 'MÓDULOS DO CARRO', 'TESTE DE ATUADOR', 'APRENDIZADOS E CALIBRAÇÕES', 'PROGRAMAR BICO']
         ROTAS = ['servico', 'meus', 'oleo', 'orcamento', 'agendar', 'agenda', 'peca', 'historico', 'osconsulta',
-                 'obd', 'modulos', 'atuadores', 'aprendizados', 'bico', 'parametros']
+                 'obd', 'modulos', 'atuadores', 'aprendizados', 'bico']
         for i, rota in enumerate(ROTAS):
             # do carro, o Início tem só LER O CARRO (botão 10); as outras telas abrem pelas abas de dentro dele
             if i <= 9: pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra', timeout=10000); pg.click('.barra >> nth=%d' % i)
@@ -637,13 +637,16 @@ try:
         pg.click('[data-iniciar="o2"]'); pg.wait_for_selector('[data-pausar]', timeout=8000); pg.wait_for_timeout(400)
         t(f.apont and f.apont[-1]['ordem_id'] == 'o2' and f.apont[-1]['perfil_id'] == UID and f.apont[-1]['situacao'] == 'andamento', 'Iniciar grava o apontamento em andamento: %s' % (f.apont[-1:] or None))
         t('Em andamento · OS 01920' in textos(pg) and pg.locator('#sv-placa').count() == 1, 'o serviço em andamento aparece no topo e ainda dá para buscar outro carro')
-        # MEUS SERVIÇOS no Início (23/11/2026): o mecânico vê na abertura o carro que está na mão dele
-        pg.goto(URL + '#/inicio'); pg.wait_for_selector('#ini-meus'); pg.wait_for_timeout(1200); tx = textos(pg)
-        t('Meus serviços' in tx and 'ABC1D23' in tx.split('Meus serviços')[1][:200] and 'Em andamento' in tx.split('Meus serviços')[1][:200], 'o Início mostra o serviço que está na mão da pessoa: %s' % tx.split('Meus serviços')[1][:140])
-        t(pg.locator('.barra:has-text("MEUS SERVIÇOS") .bolinha').inner_text() == '1', 'a bolinha do botão MEUS SERVIÇOS conta os serviços em aberto')
+        # MEUS SERVIÇOS no Início (23/11/2026): o mecânico acompanha o serviço dele pelo 2º botão,
+        # em outro tom de azul, com a quantidade do que está na mão dele. Sem cartão: só o botão.
+        pg.goto(URL + '#/inicio'); pg.wait_for_selector('.barra'); pg.wait_for_timeout(1200)
         t([b.strip().split(chr(10))[0] for b in pg.locator('.grupo .barra').all_inner_texts()][:2] == ['INICIAR SERVIÇO', 'MEUS SERVIÇOS'], 'MEUS SERVIÇOS é o 2º botão do Início')
-        pg.click('#ini-meus [data-meu]'); pg.wait_for_selector('[data-pausar]', timeout=8000); pg.wait_for_timeout(600)
-        t(pg.url.endswith('#/servico'), 'tocar no serviço do Início leva para Iniciar serviço, onde se pausa e finaliza')
+        t(pg.locator('.barra:has-text("MEUS SERVIÇOS") .bolinha').inner_text() == '1', 'a bolinha do botão MEUS SERVIÇOS conta os serviços em aberto')
+        t(pg.locator('.barra.meu:has-text("MEUS SERVIÇOS")').count() == 1, 'o botão tem o tom próprio')
+        t(pg.evaluate("getComputedStyle(document.querySelector('.barra.meu')).backgroundColor") != pg.evaluate("getComputedStyle(document.querySelectorAll('.grupo .barra')[0]).backgroundColor"),
+          'e o tom é mesmo diferente do dos outros botões')
+        t(not pg.query_selector('#ini-meus'), 'sem cartão de Meus serviços no Início: só o botão')
+        pg.goto(URL + '#/servico'); pg.wait_for_selector('[data-pausar]', timeout=8000); pg.wait_for_timeout(600)
         # outro carro com O.S. aberta não inicia enquanto há um em andamento
         f_ord = ORD[1]; pg.fill('#sv-placa', 'abc1d23'); pg.keyboard.press('Enter'); pg.wait_for_timeout(800)
         t(pg.locator('[data-iniciar]').count() == 0, 'a O.S. que já está em andamento não aparece de novo para iniciar')
@@ -738,7 +741,7 @@ try:
         t(pg.locator('#obd-r-falhas .selo.ruim').count() == 2, 'as duas confirmadas vêm com o selo vermelho')
         # a falha vem explicada: descrição, causas prováveis e de onde o texto veio (js/obdfalhas.js)
         pg.wait_for_selector('#obd-r-falhas .fx-causas', timeout=15000); fx = pg.inner_text('#obd-r-falhas')
-        t('CAUSAS PROVÁVEIS' in fx.upper() and 'Honda' in fx and 'SAE' in fx and fx.count('servem de roteiro') == 1, 'a falha lida vem com causas prováveis e a origem escrita: ' + fx[:200])
+        t('CAUSAS PROVÁVEIS' in fx.upper() and 'Honda' in fx and 'SAE' in fx and 'servem de roteiro' not in fx, 'a falha lida vem com causas prováveis e a origem escrita, sem a nota geral das fontes: ' + fx[:200])
         t(pg.locator('#obd-r-falhas .fx-desc').count() >= 2, 'cada código tem a descrição embaixo')
         # UMA TELA POR VEZ (pedido do Danilo, 21/11/2026): com as falhas abertas, só elas na tela
         t(pg.locator('#obd-r-falhas').is_visible() and not pg.locator('#obd-placa').is_visible() and not pg.locator('#obd-adaptador').is_visible(), 'com as falhas abertas, a placa e o adaptador saem da frente')
@@ -758,7 +761,7 @@ try:
         t(len(lg) == 1 and len(lg[0].get('selo') or '') == 64 and lg[0]['dados']['carro']['placa'] == lg[0]['placa'], 'o laudo vai para o banco com o selo de 64 dígitos: %s' % [list(x.keys())[:4] for x in lg])
         pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=15000)
         t('P0043' not in tx and 'C3103' not in tx and 'P0201' not in tx, 'com dois módulos respondendo NÃO inventa código: %s' % tx.replace('\n', ' ')[:140])
-        t('Mais de um módulo' in tx, 'avisa que mais de um módulo respondeu')
+        t('Mais de um módulo' not in tx, 'sem a nota explicando que mais de um módulo respondeu (saiu a pedido do Danilo, 23/11/2026)')
         # SEPARADO POR MÓDULO (pedido do Danilo, 21/11/2026): só quem respondeu aparece, cada um com as suas falhas
         mods = pg.locator('#obd-r-falhas .obd-mod'); t(mods.count() == 2, 'as falhas vêm separadas pelos dois módulos que responderam: %d' % mods.count())
         t('MOTOR' in mods.nth(0).inner_text().upper() and 'P0130' in mods.nth(0).inner_text() and 'P0171' not in mods.nth(0).inner_text(), 'o motor fica só com o código dele: ' + mods.nth(0).inner_text()[:80].replace(chr(10), ' '))
@@ -768,7 +771,7 @@ try:
         pg.click('#obd-conf'); pg.wait_for_selector('#obd-r-conf', timeout=15000); tx = pg.inner_text('#obd-r-conf')
         t('9BWZZZ377VT004251' in tx and 'CONFERE' in tx, 'confronta o chassi do módulo com o do cadastro: %s' % tx.replace('\n', ' ')[:120])
         t('ACESA' in tx, 'diz que a luz de injeção está acesa')
-        t('NÃO PRONTO' in tx and 'apagada antes de o carro chegar' in tx, 'monitor não pronto avisa que a falha foi apagada há pouco')
+        t('NÃO PRONTO' in tx and 'apagada antes de o carro chegar' not in tx, 'monitor não pronto aparece escrito, sem a nota explicando (saiu a pedido do Danilo, 23/11/2026)')
         # chassi diferente do cadastro: a tela acusa
         VEI[0]['chassi'] = '9BWZZZ377VT999999'
         ctx.close(); f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False, antes=FAKE_OBD); entrar(pg); tela(pg, 'obd')
@@ -1009,7 +1012,7 @@ try:
         t(c and rpm_na_tela() != c, 'depois de parar e ligar, o valor volta a mudar sozinho')
         pg.click('#obd-vivo'); pg.wait_for_timeout(600)
         pg.click('#obd-foto'); pg.wait_for_selector('#obd-r-foto', timeout=20000)
-        t('instante em que a falha gravou' in pg.inner_text('#obd-r-foto'), 'foto do momento da falha explica para que serve')
+        t('instante em que a falha gravou' not in pg.inner_text('#obd-r-foto'), 'a foto do momento vem sem texto explicativo embaixo')
         pg.click('#obd-testes'); pg.wait_for_selector('#obd-r-testes', timeout=25000); tx = pg.inner_text('#obd-r-testes')
         t('Catalisador' in tx and 'PASSOU' in tx, 'testes de bordo chegam até o catalisador (faixa $21): %s' % tx.replace('\n', ' ')[:140])
         t('limite' in tx, 'mostra a margem que sobra até o limite')
@@ -1048,7 +1051,7 @@ try:
         t('ABC123DEF456GHI7' in tcal, 'lê a calibração do módulo: %s' % [l for l in tcal.split('\n') if 'ABC' in l][:1])
         t('1A2B3C4D' in tcal, 'e o CVN')
         t('Primeira leitura' in tcal, 'primeira vez: guarda para comparar depois')
-        t('lista pública' in tcal, 'e avisa que não existe lista pública do CVN certo')
+        t('lista pública' not in tcal, 'sem a nota explicando o CVN (saiu a pedido do Danilo, 23/11/2026)')
         pg.click('#obd-calib'); pg.wait_for_selector('#obd-r-calib', timeout=25000); pg.wait_for_timeout(300)
         t('SEM MUDANÇA' in pg.inner_text('#obd-r-calib'), 'lendo de novo, compara com a anterior: %s' % [l for l in pg.inner_text('#obd-r-calib').split('\n') if 'MUDAN' in l][:1])
         pg.evaluate("const k = Object.keys(window.localStorage).find(x => x.indexOf('obd_calib') === 0); const v = JSON.parse(window.localStorage.getItem(k)); v.cvn = ['99999999']; window.localStorage.setItem(k, JSON.stringify(v))")
@@ -1058,23 +1061,19 @@ try:
         pg.click('#obd-ciclo'); pg.wait_for_selector('#obd-r-ciclo', timeout=25000)
         tcic = pg.inner_text('#obd-r-ciclo')
         t('COMPLETOU' in tcic or 'NÃO RODOU' in tcic, 'teste drive lista os monitores deste ciclo')
-        t('provar o reparo' in tcic, 'e explica para que serve: %s' % [l for l in tcic.split('\n') if 'provar' in l][:1])
+        t('provar o reparo' not in tcic, 'sem a nota explicando para que serve o ciclo')
         t('0141' in pg.evaluate("window.__obd.cmds"), 'pede o PID $41 de verdade')
         pg.click('#obd-contadores'); pg.wait_for_selector('#obd-r-contadores', timeout=25000)
         tcon = pg.inner_text('#obd-r-contadores')
         t('Catalisador' in tcon and '0,2' in tcon, 'contadores mostram a razão de cada monitor: %s' % [l for l in tcon.split('\n') if 'Catalisador' in l][:1])
         t('RODA POUCO' in tcon, 'e marcam o que roda pouco (razão abaixo da mínima da CARB)')
-        t('fonte secundária' in tcon, 'avisando que a ordem dos campos não veio de fonte primária')
+        t('fonte secundária' not in tcon, 'sem a nota sobre a ordem dos campos (saiu a pedido do Danilo, 23/11/2026)')
         t('0908' in pg.evaluate("window.__obd.cmds"), 'pede os contadores de verdade')
 
         # CLONE: "v1.5" nunca existiu
         t(pg.query_selector('#obd-clone'), 'adaptador que se diz v1.5 é denunciado como clone')
         t('nunca existiu' in pg.inner_text('#obd-clone'), 'com o motivo escrito: %s' % pg.inner_text('#obd-clone')[:80])
 
-        # PARÂMETROS DE REFERÊNCIA: era um cartão escondido dentro desta tela e virou TELA (20/11/2026),
-        # porque é o que se consulta para discutir um laudo. Aqui fica só o caminho para ela.
-        t(pg.query_selector('#obd-ir-parametros'), 'a leitura tem o caminho para os parâmetros')
-        t(not pg.query_selector('#obd-parametros'), 'e o cartão não está mais duplicado aqui dentro')
         # APAGAR JUNTO COM A LEITURA (23/11/2026, pedido do Danilo): lendo a falha, o botão de apagar
         # está no próprio cartão da falha — não é preciso sair e caçar o botão no meio das outras leituras.
         pg.click('#obd-falhas'); pg.wait_for_selector('#obd-r-falhas', timeout=25000); pg.wait_for_timeout(600)
@@ -1097,9 +1096,10 @@ try:
         pg.click('#obd-apagar'); pg.wait_for_selector('#obd-apagar-cx', timeout=25000)
         cx = pg.inner_text('#obd-apagar-cx')
         t('P0171' in cx, 'a confirmação mostra o que vai ser apagado: %s' % cx.replace('\n', ' ')[:90])
-        t(pg.locator('#obd-apagar-cx .apg-avisos li').count() == 3, 'e os avisos antes do botão')
-        t('conserta' not in cx and 'adaptações' in cx, 'a confirmação traz só o que não é óbvio: o que some e o que zera')
-        t('prontidão' in cx.lower() and 'combustível' in cx.lower(), 'avisa que zera a prontidão e o aprendizado de combustível')
+        # 23/11/2026, pedido do Danilo: a caixa não traz mais a lista de avisos — fica só o que vai
+        # ser apagado, o KM e quem está apagando, que é o que o registro precisa.
+        t('prontidão' not in cx.lower() and 'adaptações' not in cx, 'a caixa não repete mais os avisos: %s' % cx.replace('\n', ' ')[:110])
+        t('Fica registrado quem apagou' in cx, 'mas continua dizendo que fica registrado')
         t('ABC1D23' in cx and 'Fulano' in cx, 'diz quem vai apagar e de qual carro: %s' % [l for l in cx.split('\n') if 'Fulano' in l][:1])
         t(pg.query_selector('#obd-km'), 'pede o KM do painel para o registro')
         pg.fill('#obd-km', '152300')
@@ -1119,6 +1119,11 @@ try:
         t(r0.get('placa') == 'ABC1D23' and r0.get('km') == 152300, 'com a placa e o KM: %s / %s' % (r0.get('placa'), r0.get('km')))
         t([c['codigo'] for c in r0.get('codigos') or []] and 'P0171' in [c['codigo'] for c in r0.get('codigos') or []], 'e os códigos que estavam lá: %s' % r0.get('codigos'))
         t(r0.get('codigos_depois') == [], 'e o que sobrou depois (lista vazia, não nulo)')
+        # 23/11/2026: tirar os textos explicativos NÃO pode levar junto o que é dado (apontado pelo Codex).
+        # A lista dos apagamentos anteriores deste carro continua na tela; só a explicação embaixo saiu.
+        ap = pg.query_selector('#obd-apagados')
+        t(ap is None or ('Fulano' in pg.inner_text('#obd-apagados') and 'Monitor que ainda não terminou' not in pg.inner_text('#obd-apagados')),
+          'os apagamentos anteriores do carro continuam listados, sem a nota explicativa')
         t(r0.get('vin'), 'o chassi lido entra no registro: %s' % r0.get('vin'))
         t('04' not in pg.evaluate("window.__obd.cmds"), 'o 04 NÃO passou pelo comando: foi pelo método próprio do plugin')
         pg.click('#obd-apagar-fim'); pg.wait_for_timeout(300)
@@ -1289,8 +1294,9 @@ try:
 
         # ---- PROGRAMAR BICO: a conferência de digitação, que é o que mais vale ----
         pg.goto(URL + '#/bico'); pg.wait_for_selector('#bico-codigos', timeout=10000)
-        t(pg.query_selector('#bico-limite'), 'a tela diz, antes de tudo, onde o app chega hoje')
-        t('NÃO tem tabela' in pg.inner_text('#bico-limite') and 'administrador' in pg.inner_text('#bico-limite'), 'e que o campo vem do manual e a gravação pede o administrador')
+        # 23/11/2026, pedido do Danilo: o cartão de avisos saiu. A tela abre direto nos códigos;
+        # o que protege a gravação continua sendo o "Confira antes" e o "O que vai acontecer no carro".
+        t(not pg.query_selector('#bico-limite'), 'a tela abre direto nos códigos, sem o cartão de avisos')
         pg.fill('.bico-cod >> nth=0', 'C2GKLL0'); pg.wait_for_timeout(300)
         t1 = pg.inner_text('#bico-codigos')
         t('não usa 0' in t1, 'zero no lugar do O é pego: %s' % [l for l in t1.split(chr(10)) if 'não usa' in l][:1])
@@ -1377,25 +1383,6 @@ try:
         pg.click('#obd-procurar'); pg.wait_for_selector('#obd-acoes', timeout=15000)
         pg.fill('#obd-placa', 'abc1d23'); pg.click('button[aria-label="Buscar pela placa"]'); pg.wait_for_selector('#veic', timeout=8000)
 
-        # ---- TELA DE PARÂMETROS (era um cartão dentro da leitura até 20/11/2026) ----
-        # Só de LEITURA: quem corrige é o Claude, no arquivo. Fica em tela porque é o que se
-        # consulta para discutir um laudo, e cartão escondido dentro da leitura ninguém abre.
-        pg.goto(URL + '#/parametros'); pg.wait_for_selector('#obd-parametros', timeout=15000)
-        t(pg.inner_text('.titulo b').strip() == 'PARÂMETROS DE REFERÊNCIA', 'a tela de parâmetros abre')
-        t(pg.query_selector('#param-escala'), 'e explica a diferença entre escala e faixa normal')
-        t('0x24' in pg.inner_text('#param-escala'), 'citando o serviço que pede a escala ao próprio módulo')
-        pg.click('#obd-param-abrir'); pg.wait_for_timeout(400)
-        tpar = pg.inner_text('#obd-parametros')
-        t(pg.locator('#obd-parametros .par-linha').count() >= 20, 'lista os parâmetros: %d' % pg.locator('#obd-parametros .par-linha').count())
-        t(pg.locator('#obd-parametros .nv-montadora').count() > 0 and pg.locator('#obd-parametros .nv-suposto').count() > 0 and pg.locator('#obd-parametros .nv-norma').count() > 0,
-          'com as tonalidades por nível de confiança')
-        t('SUPOSTO, A CONFERIR' in tpar.upper(), 'o nível vem ESCRITO, não só na cor')
-        t(pg.query_selector('#obd-parametros .par-legenda'), 'e tem legenda discreta')
-        t('Ford' in tpar and 'CARB' in tpar, 'cada número mostra a fonte: %s' % [l for l in tpar.split('\n') if 'Ford' in l][:1])
-        t('250 a 550 bar' in tpar, 'os valores sem documento aparecem marcados como suposto')
-        t(not pg.query_selector('[data-conferir]') and not pg.query_selector('[data-gravar]'),
-          'NÃO tem formulário: a correção vem pelo chat, não digitada no celular')
-        t('mande a foto no chat' in tpar, 'e a tela explica como se corrige: %s' % [l for l in tpar.split('\n') if 'chat' in l][:1])
         ctx.close()
         # MECÂNICO LIBERADO PARA O OBD, MAS SEM PERMISSÃO DE APAGAR (decisão do Danilo: apagar é do administrador,
         # que libera por pessoa em Sistema › Equipe). Sem a chave ligada, o botão nem existe na tela dele.

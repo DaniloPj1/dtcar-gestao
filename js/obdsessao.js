@@ -24,7 +24,7 @@ import * as obd from "./obd.js";
 import * as uds from "./uds.js";
 
 /** As telas que formam a família de diagnóstico. Sair de TODAS elas é que desliga o adaptador. */
-export const FAMILIA = ["obd", "modulos", "atuadores", "aprendizados", "bico", "parametros"];
+export const FAMILIA = ["obd", "modulos", "atuadores", "aprendizados", "bico"];
 export const naFamilia = rota => FAMILIA.includes(rota);
 
 const estadoInicial = () => ({

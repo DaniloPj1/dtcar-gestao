@@ -14,7 +14,7 @@ import * as varredura from "../js/obdvarredura.js";
 import * as grafico from "../js/obdgrafico.js";
 import * as cadernoRegras from "../js/obdmapa.js";
 import { Ic, Cartao, usarPlaca, BuscaPlaca, Veiculo } from "./comum.js";
-import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Grafico } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, Grafico } from "./diagpartes.js";
 
 /** O mapa do modelo do carro da vez (ou nada, se não há mapa para ele). */
 export function usarMapa(carro) {
@@ -94,7 +94,6 @@ export function CarroInteiro({ st, mapa, aoAbrir, aoVarrer }) {
         </div>`)}
         <button type="button" class="fx-mais abrir-mod" onClick=${() => aoAbrir(m)} disabled=${!!st.dono}>Abrir este módulo (leituras ao vivo, apagar)</button>
       </div>`)}
-      ${disponiveis.some(m => m.falhas.length) ? html`<${NotaDasFontes} />` : null}
       ${calados.length ? html`<button type="button" class="fx-mais" id="carro-calados" onClick=${() => setVerCalados(!verCalados)}>${calados.length} módulo(s) do mapa deste modelo não responderam ${verCalados ? "· esconder" : "· ver quais"}</button>` : null}
       ${verCalados ? html`<div class="nota">${calados.map(m => m.nome).join(", ")}. Pode ser módulo que este carro não tem, fusível ou ignição: fica anotado na conferência.</div>` : null}
     `}

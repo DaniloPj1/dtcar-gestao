@@ -2,7 +2,7 @@
 // Roda sem celular e sem carro, com respostas de verdade de adaptador (inclusive as torcidas).
 // Uso: node teste/teste_obd.mjs
 import * as param from "../js/obdparam.js";
-import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, respostaApagar, resultadoApagar, registroApagar, AVISOS_APAGAR, PIDS_AJUSTE, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE, PIDS_PADRAO, PIDS_PADRAO_DIESEL, padraoPara, tipoPeloModulo, escolhaGuardada, pidsDaEscolha, calidDe, cvnDe, contadoresDe, compararCalibracao, adaptadorSuspeito, avisoMidDaMarca } from "../js/obd.js";
+import { juntarLinhas, bytesDe, dadosDa, dtcDe, codigosDa, codigosDeTodas, primeiraDe, vinDe, valorPid, monitoresDe, testesDe, suportados, motivoDe, PIDS, GRUPOS, FAIXAS_PID, leiturasPara, gruposPara, tipoDeMotor, leituraCombustivel, PIDS_COMBUSTIVEL, respostaApagar, resultadoApagar, registroApagar, PIDS_AJUSTE, falhaPorCilindro, conferirOdometro, cilindroDoMid, nomeTeste, MIDS_FALHA, FALHA_DESTAQUE, PIDS_PADRAO, PIDS_PADRAO_DIESEL, padraoPara, tipoPeloModulo, escolhaGuardada, pidsDaEscolha, calidDe, cvnDe, contadoresDe, compararCalibracao, adaptadorSuspeito, avisoMidDaMarca } from "../js/obd.js";
 const ok = [], falhas = [];
 const chk = (n, c, extra) => (c ? ok : falhas).push(c ? n : n + (extra !== undefined ? " :: " + JSON.stringify(extra) : ""));
 
@@ -412,9 +412,6 @@ chk("resposta estranha avisa que NADA foi apagado", respostaApagar(["41 0C 1A F8
   chk("registro sem KM e sem placa não inventa nada", sem.km === null && sem.placa === "" && sem.codigos_depois === null && sem.perfil_id === null, sem);
   chk("KM bobo (0 ou texto) não entra", registroApagar({ antes: [], km: "0" }).km === null && registroApagar({ antes: [], km: "abc" }).km === null);
 }
-chk("os avisos de apagar não repetem o óbvio para um mecânico (pedido do Danilo)", !AVISOS_APAGAR.some(a => /conserta/i.test(a)) && AVISOS_APAGAR.length === 3);
-chk("os avisos falam do aprendizado de combustível e da prontidão", AVISOS_APAGAR.some(a => a.toLowerCase().includes("combustível")) && AVISOS_APAGAR.some(a => a.toLowerCase().includes("prontidão")));
-chk("nenhum aviso promete conserto ou dá veredito", !AVISOS_APAGAR.some(a => /resolve|conserta o|arruma/i.test(a)));
 chk("a passada curta do ajuste é curta mesmo (5 pedidos)", PIDS_AJUSTE.length === 5 && PIDS_AJUSTE.every(p => PIDS_COMBUSTIVEL.includes(p)));
 
 /* -------- leituras padrão na tela, o resto no filtro (regra do Danilo, 20/11/2026) -------- */

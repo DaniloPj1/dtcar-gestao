@@ -177,4 +177,3 @@ export function despejarCaderno() {
 }
 
 /** O aviso das fontes, uma vez por cartão de falhas. */
-export const NotaDasFontes = () => html`<div class="fx-nota-fontes">${falhasCat.NOTA_DAS_FONTES}</div>`;

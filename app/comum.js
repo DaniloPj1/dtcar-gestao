@@ -68,10 +68,9 @@ const TELAS = [
   { r: "atuadores", g: "diagnostico", ic: "atuador", barra: "ATUADORES", aba: "Atuadores", titulo: "TESTE DE ATUADOR" },
   { r: "aprendizados", g: "diagnostico", ic: "aprender", barra: "APRENDIZADOS", aba: "Aprendizados", titulo: "APRENDIZADOS E CALIBRAÇÕES" },
   { r: "bico", g: "diagnostico", ic: "bico", barra: "PROGRAMAR BICO", aba: "Programar bico", titulo: "PROGRAMAR BICO" },
-  { r: "parametros", g: "diagnostico", ic: "sliders", barra: "PARÂMETROS DE REFERÊNCIA", aba: "Parâmetros", titulo: "PARÂMETROS DE REFERÊNCIA" },
 ];
 const grupoDa = r => (TELAS.find(t => t.r === r) || {}).g || "oficina";
-const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta|obd|modulos|atuadores|aprendizados|bico|parametros)$/;
+const ROTAS_RE = /^#\/(inicio|ajuda|servico|oleo|orcamento|agendar|agenda|peca|historico|meus|osconsulta|obd|modulos|atuadores|aprendizados|bico)$/;
 const ir = r => { location.hash = "#/" + r; };
 const rotaAtual = () => { const m = /^#\/([a-z]+)/.exec(location.hash || ""); return m ? m[1] : "inicio"; };
 

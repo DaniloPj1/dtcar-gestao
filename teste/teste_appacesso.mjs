@@ -15,8 +15,8 @@ const pend = { id: "p1", papel: "pendente", ativo: true, nome: "Pendente" };
 const cfgCom = marcas => ({ appAcessos: { m1: { entra: true, telas: TELAS_APP.map(t => t[0]), ...marcas } } });
 
 /* ---------------- as telas ---------------- */
-chk("quinze telas no app", TELAS_APP.length === 15, TELAS_APP.length);
-for (const r of ["obd", "modulos", "atuadores", "aprendizados", "bico", "parametros"])
+chk("catorze telas no app", TELAS_APP.length === 14, TELAS_APP.length);
+for (const r of ["obd", "modulos", "atuadores", "aprendizados", "bico"])
   chk("a tela de diagnóstico está na lista: " + r, TELAS_APP.some(t => t[0] === r));
 chk("toda tela tem nome escrito", TELAS_APP.every(t => t[1] && t[1].length > 3));
 chk("os nomes dizem o que a tela FAZ no carro",
@@ -58,7 +58,7 @@ chk("marca de atuar SEM a tela de atuadores não vale",
 chk("marca de gravar SEM a tela do bico não vale",
   !podeGravarObd({ appAcessos: { m1: { entra: true, telas: ["obd", "atuadores"], obd_gravar: true } } }, mec));
 chk("marca de apagar SEM nenhuma tela que apaga não vale",
-  !podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["parametros", "atuadores"], obd_apagar: true } } }, mec));
+  !podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["aprendizados", "atuadores"], obd_apagar: true } } }, mec));
 // o apagar vale nas DUAS telas que apagam: a leitura comum e Módulos do carro
 chk("apagar vale com a tela do OBD",
   podeApagarObd({ appAcessos: { m1: { entra: true, telas: ["obd"], obd_apagar: true } } }, mec));
@@ -67,7 +67,7 @@ chk("apagar vale com a tela de Módulos (é onde apaga por módulo)",
 chk("cada permissão exige uma das telas dela", PERMISSOES_OBD.every(([marca, , tela]) => {
   const quais = Array.isArray(tela) ? tela : [tela];
   return quais.every(t => podeNoObd({ appAcessos: { m1: { entra: true, telas: [t], [marca]: true } } }, mec, marca, tela))
-    && !podeNoObd({ appAcessos: { m1: { entra: true, telas: ["parametros"], [marca]: true } } }, mec, marca, tela);
+    && !podeNoObd({ appAcessos: { m1: { entra: true, telas: ["oleo"], [marca]: true } } }, mec, marca, tela);
 }));
 
 /* ---------------- quem não entra no app não faz nada ---------------- */

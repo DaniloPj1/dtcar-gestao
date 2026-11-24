@@ -13,7 +13,7 @@ import * as uds from "../js/uds.js";
 import * as bico from "../js/bico.js";
 import * as sessao from "../js/obdsessao.js";
 import * as registro from "../js/obdregistro.js";
-import { usarExplicacoes, FalhaExplicada, NotaDasFontes, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
+import { usarExplicacoes, FalhaExplicada, Digital, Grafico, registrarAcao, ligarCaderno, subirPendentes, cadernoAtual } from "./diagpartes.js";
 import * as grafico from "../js/obdgrafico.js";
 import { usarMapa, CarroDaVez, CarroInteiro, LeiturasDoModulo, Mapeando } from "./diagcarro.js";
 import { HondaLista } from "./diaghonda.js";
@@ -123,49 +123,6 @@ function Combustivel({ v }) {
       <div class="nota">Lista geral do OBD, não é diagnóstico deste motor: a faixa de normalidade de cada modelo só a montadora publica. Confira com o carro na frente.</div>
     </div>` : null}
   </div>`;
-}
-
-/**
- * Parâmetros de referência (pedido do Danilo, 20/11/2026). Tela de LEITURA, sem formulário:
- * quem corrige é o Claude, no arquivo `js/obdparam.js` — o Danilo confere no Raven, manda a foto no chat
- * e o valor entra como conferido, com o carro e a data (decisão dele em 20/11/2026, à tarde).
- * Assim cada correção fica no histórico do repositório e ninguém digita número errado no celular.
- * A distinção entre o conferido e o suposto é DISCRETA, como ele pediu: tonalidade de cinza + a palavra
- * escrita miúda ao lado (a regra da casa é nunca deixar só a cor falando) e uma legenda no rodapé.
- */
-function Parametros() {
-  const [abrir, setAbrir] = useState(false);
-  const lista = param.lista();
-  const Linha = ({ p }) => html`<div class=${"par-linha nv-" + p.nivelAtual} data-param=${p.id}>
-    <div class="par-topo">
-      <span class="par-nome">${p.nome}</span>
-      <b class="par-valor">${param.textoDe(p)}</b>
-    </div>
-    <div class="par-pe">
-      <span class="par-nivel">${param.nivel(p.nivelAtual).nome}</span>
-      ${p.onde === "modelo" ? html`<span class="par-modelo">${p.modelo}</span>` : null}
-      ${p.usado ? html`<span class="par-usado">o app usa</span>` : null}
-    </div>
-    ${p.conferencia ? html`<div class="par-fonte">${param.textoConferencia(p.conferencia)}</div>` : null}
-    <div class="par-fonte">${p.fonte}</div>
-  </div>`;
-  const usados = lista.filter(p => p.usado);
-  const resto = lista.filter(p => !p.usado);
-  return html`<${Cartao} titulo="Parâmetros de referência" id="obd-parametros">
-    <button type="button" class="btn-barra claro" id="obd-param-abrir" onClick=${() => setAbrir(x => !x)}>
-      ${abrir ? "FECHAR OS PARÂMETROS" : "VER PARÂMETROS (" + lista.length + ")"}</button>
-    ${abrir ? html`
-      <div class="sec"><h3>O app decide por estes</h3>${usados.map(p => html`<${Linha} key=${p.id} p=${p} />`)}</div>
-      <div class="sec"><h3>Referência, só para comparar</h3>${resto.map(p => html`<${Linha} key=${p.id} p=${p} />`)}</div>
-      <div class="par-legenda">
-        <span class="nv-conferido">conferido aqui</span>
-        <span class="nv-norma">norma</span>
-        <span class="nv-montadora">montadora</span>
-        <span class="nv-suposto">suposto, a conferir</span>
-      </div>
-      <div class="par-fonte">Não existe tabela pública de faixa normal para motor flex brasileiro — nem GM, nem Fiat, nem VW, nem Honda. Confira no Raven e mande a foto no chat: o valor entra aqui com o carro e a data, e sobe para "conferido aqui".</div>
-    ` : null}
-  </${Cartao}>`;
 }
 
 function Obd() {
@@ -688,8 +645,7 @@ function Obd() {
         <button type="button" class="btn-barra claro" id="obd-testes" onClick=${lerTestes}>TESTES DE BORDO</button>
         ${podeApagar ? html`<button type="button" class="btn-barra apagar" id="obd-apagar" onClick=${abrirApagar}>APAGAR FALHAS (FICA REGISTRADO)</button>` : null}` : null}
         ${!foco ? html`<button type="button" class="btn-barra claro" id="obd-avancado-abrir" aria-expanded=${aberto.avancado} onClick=${() => abrirGrupo("avancado")}>SERVIÇOS AVANÇADOS</button>` : null}
-        ${!foco && aberto.avancado ? html`${botoesAvancados}
-          <button type="button" class="btn-barra claro" id="obd-ir-parametros" onClick=${() => ir("parametros")}>PARÂMETROS DE REFERÊNCIA</button>` : null}
+        ${!foco && aberto.avancado ? botoesAvancados : null}
         ${!foco && outrasTelas.length ? html`<button type="button" class="btn-barra claro" id="obd-outros-abrir" aria-expanded=${aberto.outros} onClick=${() => abrirGrupo("outros")}>OUTROS MÓDULOS</button>` : null}
         ${!foco && aberto.outros ? outrasTelas.map(o => html`<button key=${o.r} type="button" class="btn-barra claro" id=${"obd-ir-" + o.r} onClick=${() => ir(o.r)}>${o.rotulo}</button>`) : null}
         <div class="nota">${falhasVivo && falhasVivo.novas.length ? "Apareceu código com o motor trabalhando. Toque no botão vermelho para ver quais."
@@ -699,11 +655,6 @@ function Obd() {
 
       ${lig && !ocupado && foco ? html`<${Cartao} titulo="Serviços avançados" id="obd-avancado">${botoesAvancados}</${Cartao}>` : null}
 
-      ${/* Os parâmetros saíram daqui e viraram tela (20/11/2026): eram um cartão para abrir e fechar
-            no meio da leitura, e é o que se consulta para discutir um laudo — merece tela própria.
-            Aqui fica só o caminho, para quem está lendo o carro e quer conferir a referência. */
-        !ocupado && (!lig || foco) ? html`<button type="button" class="btn-barra claro" id="obd-ir-parametros" onClick=${() => ir("parametros")}>
-          <${Ic} n="sliders" t=${20} />VER OS PARÂMETROS DE REFERÊNCIA</button>` : null}
 
       ${lig && !ocupado && disponiveis.length && (foco || aberto.avancado) ? html`<${Cartao} titulo="Quais leituras mostrar" id="obd-escolha">
         <button type="button" class="btn-barra claro" id="obd-escolher" onClick=${() => setAbrirEscolha(x => !x)}>
@@ -748,7 +699,6 @@ function Obd() {
               });
             })()}
           </div>
-          ${res.d.cilindros.cilindros.some(c => typeof c.media === "number" && typeof c.ciclo === "number") ? html`<div class="nota">Número grande = falhas neste ciclo de condução. A média dos últimos 10 ciclos está nos detalhes abaixo.</div>` : null}
           ${res.d.cilindros.frases.map(f => html`<p key=${f} class="cil-frase">${f}</p>`)}
           <ul class="apg-avisos">${res.d.cilindros.avisos.map(a => html`<li key=${a}>${a}</li>`)}</ul>
           ${obd.avisoMidDaMarca(v && v.marca) ? html`<div class="erro" id="obd-aviso-gm">${obd.avisoMidDaMarca(v.marca)}</div>` : null}
@@ -765,7 +715,6 @@ function Obd() {
               ${apagar.antes.map(f => html`<div key=${f.codigo + f.situacao} class="obd-dtc"><b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>`)}`}
         </div>
         ${apagar.comb && apagar.comb.pior ? html`<div class="nota">Ajuste de combustível agora: ${numBR(apagar.comb.pior.total)}% — some com o apagamento e o módulo recomeça a aprender.</div>` : null}
-        <ul class="apg-avisos">${obd.AVISOS_APAGAR.map(a => html`<li key=${a}>${a}</li>`)}</ul>
         <${Campo} id="obd-km" rotulo="KM do painel (ajuda no registro)">
           <input id="obd-km" class="inp" type="number" inputmode="numeric" value=${apagar.km}
             onInput=${e => setApagar(a => Object.assign({}, a, { km: e.target.value }))} /></${Campo}>
@@ -788,9 +737,9 @@ function Obd() {
         <button type="button" class="btn-barra claro" id="obd-apagar-fim" style="justify-content:center" onClick=${() => setApagar(null)}>Pronto</button>
       </${Cartao}>` : null}
 
+
       ${podeApagar && antesApagados && antesApagados.length && !apagar ? html`<${Cartao} titulo="Já foi apagado neste carro" id="obd-apagados">
         ${antesApagados.map(a => html`<div key=${a.id} class="kv"><span>${fmtData(a.criado_em)}</span><i></i><b>${a.perfil_nome || "—"}${a.km ? " · " + a.km + " km" : ""}${(a.codigos || []).length ? " · " + (a.codigos || []).map(c => c.codigo).join(", ") : ""}</b></div>`)}
-        <div class="nota">Monitor que ainda não terminou e falha que "não existia" podem ser disto: o carro ainda não rodou o bastante depois do apagamento.</div>
       </${Cartao}>` : null}
 
       ${res && res.o === "falhas" ? html`<${Cartao} titulo=${(res.d.porModulo && res.d.porModulo.length > 1 ? "Falhas por módulo" : "Falhas do motor") + (res.d.falhas.length ? " (" + res.d.falhas.length + ")" : "")} id="obd-r-falhas">
@@ -801,10 +750,6 @@ function Obd() {
             <b>${f.codigo}</b><span class=${"selo " + SELO_DTC[f.situacao][1]}>${SELO_DTC[f.situacao][0]}</span></div>
             <${FalhaExplicada} e=${explicadas[f.codigo]} /></div>`)}
         </div>`)}
-        ${res.d.falhas.length ? html`<${NotaDasFontes} />` : null}
-        ${res.d.falhas.length ? html`<div class="nota">O código é o que o módulo gravou. ATUAL está confirmada, PENDENTE apareceu uma vez e ainda não confirmou, PERMANENTE só sai depois que o módulo refizer os testes.</div>` : null}
-        ${res.d.variosModulos && res.d.porModulo && res.d.porModulo.length > 1 ? html`<div class="nota">Mais de um módulo respondeu: as falhas estão separadas por módulo. Só aparece quem respondeu.</div>` : null}
-        ${res.d.variosModulos && !(res.d.porModulo && res.d.porModulo.length > 1) ? html`<div class="nota">Mais de um módulo do carro respondeu, mas este adaptador não deixou separar: a lista junta os códigos de todos.</div>` : null}
         ${res.d.erros.length ? html`<div class="nota">Não respondeu: ${res.d.erros.map(e => e.situacao + " (" + e.erro + ")").join("; ")}</div>` : null}
         ${/* 23/11/2026, pedido do Danilo: apagar fica ao lado do que se está lendo. Antes era preciso
               sair da falha e caçar o botão lá em cima, no meio das outras leituras. */ ""}
@@ -857,7 +802,7 @@ function Obd() {
       ${res && res.o === "laudo" ? html`<${Cartao} titulo="Laudo do carro" id="obd-r-laudo">
         ${laudo.linhas(res.d.dados, "").map((l, i) => html`<div key=${i} class=${"laudo-" + l.t}>${l.x}</div>`)}
         <div class="laudo-selo" id="obd-laudo-selo"><b>SELADO</b> · ${res.d.selo.slice(0, 16)}…</div>
-        <div class="nota">${res.d.gravado} Depois de guardado ninguém altera: o selo é a conta do conteúdo, e qualquer mudança faz ele deixar de conferir.</div>
+        <div class="nota">${res.d.gravado}</div>
         <button type="button" class="btn-barra" id="obd-laudo-pdf" style="justify-content:center" onClick=${pdfDoLaudo}><${Ic} n="share" t=${20} />PDF DO LAUDO (COMPARTILHAR OU BAIXAR)</button>
       </${Cartao}>` : null}
 
@@ -876,7 +821,6 @@ function Obd() {
         ${res.d.comparado ? html`<div class=${res.d.comparado.situacao === "igual" ? "nota" : "erro"}>
           <b>${res.d.comparado.situacao === "igual" ? "SEM MUDANÇA" : "MUDOU"}</b> — ${res.d.comparado.frase}${res.d.antes && res.d.antes.em ? " (leitura anterior em " + fmtData(res.d.antes.em) + ")" : ""}</div>`
           : res.d.cvn.length ? html`<div class="nota">Primeira leitura deste carro: guardei a calibração${placa ? " da placa " + placa : ""} para comparar na próxima vez.</div>` : null}
-        ${res.d.cvn.length ? html`<div class="nota">O CVN é a impressão digital do que está gravado no módulo: muda quando o módulo é reprogramado. <b>Não existe lista pública do CVN certo de cada carro</b> — a comparação só vale contra a leitura anterior deste mesmo carro. (Regra: CARB 13 CCR 1968.2.)</div>` : null}
       </${Cartao}>` : null}
 
       ${res && res.o === "ciclo" ? html`<${Cartao} titulo="Teste drive: monitores deste ciclo" id="obd-r-ciclo">
@@ -884,8 +828,6 @@ function Obd() {
         ${res.d.ciclo.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto
           ? html`<span class="selo">COMPLETOU</span>`
           : html`<span class="selo atencao">NÃO RODOU AINDA</span>`}${res.d.desde ? (res.d.desde.monitores.find(x => x.nome === m.nome) || {}).pronto === true ? " · pronto desde o apagamento" : "" : ""}</b></div>`)}
-        <div class="nota">Esta leitura zera a cada vez que a chave liga. Serve para <b>provar o reparo no test-drive</b>: conserte, rode o carro e veja o monitor fechar — sem precisar apagar nada.</div>
-        <div class="nota">"Completou" não quer dizer "passou": o resultado está nas falhas e nos testes de bordo.</div>
       </${Cartao}>` : null}
 
       ${res && res.o === "contadores" ? html`<${Cartao} titulo="Contadores de uso dos monitores" id="obd-r-contadores">
@@ -894,8 +836,7 @@ function Obd() {
           <${KV} a="Partidas" b=${numBR(res.d.ignicoes)} p />
           ${res.d.itens.map(i => html`<div key=${i.posicao} class="kv"><span>${i.nome}:</span><i></i><b>${
             i.razao === null ? "—" : html`${numBR(i.razao)}${i.razao < (param.limites().razao || obd.RAZAO_MINIMA) ? html` <span class="selo atencao">RODA POUCO</span>` : ""}`} <span class="sub">(${numBR(i.numerador)}/${numBR(i.denominador)})</span></b></div>`)}
-          <div class="nota">Quantas vezes cada monitor rodou contra quantas vezes poderia ter rodado. Razão baixa explica o carro que "nunca fica pronto" para inspeção. A referência de 0,336 é a mínima exigida pela CARB e pela regra europeia — <b>é referência, não reprovação</b>.</div>
-          <div class="nota">A ordem dos campos desta resposta foi conferida só em fonte secundária, então cada linha mostra também a posição. Confira o nome antes de pôr num laudo.</div>`}
+          `}
       </${Cartao}>` : null}
 
       ${res && res.o === "conf" ? html`<${Cartao} titulo="Chassi, monitores e odômetro" id="obd-r-conf">
@@ -920,15 +861,12 @@ function Obd() {
         <div class="kv"><span>Luz de injeção:</span><i></i><b>${res.d.monitores.luzAcesa ? html`<span class="selo ruim">ACESA</span>` : html`<span class="selo">APAGADA</span>`}${res.d.monitores.quantidade} código(s) no módulo</b></div>
         <div class="sec"><h3>Monitores de emissão (${res.d.monitores.prontos} de ${res.d.monitores.total} prontos)</h3>
           ${res.d.monitores.monitores.map(m => html`<div key=${m.nome} class="kv"><span>${m.nome}:</span><i></i><b>${m.pronto ? html`<span class="selo">PRONTO</span>` : html`<span class="selo atencao">NÃO PRONTO</span>`}</b></div>`)}
-          ${res.d.monitores.prontos < res.d.monitores.total ? html`<div class="nota">Monitor não pronto quer dizer que o módulo foi zerado há pouco e ainda não terminou os próprios testes: a falha foi apagada antes de o carro chegar. Confira a distância desde o apagamento em "Dados ao vivo".</div>` : null}
-          ${res.d.monitores.diesel ? html`<div class="nota">Motor a diesel: o padrão não define quais monitores existem além dos três de base, então só esses aparecem.</div>` : null}
         </div>
       </${Cartao}>` : null}
 
       ${res && res.o === "foto" ? html`<${Cartao} titulo="Foto do momento da falha" id="obd-r-foto">
         ${!res.d.length ? html`<div class="vazio">O módulo não guardou a foto do momento da falha.</div>` : null}
         ${res.d.map(l => html`<${KV} key=${l.chave} a=${l.rotulo} b=${numBR(l.valor) + (l.unidade ? " " + l.unidade : "")} />`)}
-        ${res.d.length ? html`<div class="nota">Como o carro estava no instante em que a falha gravou: diz se deu com o motor frio, em carga ou em marcha lenta.</div>` : null}
       </${Cartao}>` : null}
 
       ${res && res.o === "testes" ? html`<${Cartao} titulo="Testes de bordo" id="obd-r-testes">
@@ -941,8 +879,6 @@ function Obd() {
             ${t.passou ? html`<span class="selo">PASSOU</span>` : html`<span class="selo ruim">FORA DO LIMITE</span>`}</div>
           ${!t.escalaConhecida ? html`<div class="nota">Número cru: a escala deste teste não está conferida, então não inventamos unidade. O passou/não passou vem da comparação com o limite do próprio módulo e vale do mesmo jeito.</div>` : null}
         </div>`)}
-        ${res.d.testes.length ? html`<div class="nota">É aqui que o catalisador e a sonda aparecem piorando ANTES de dar código: veja quanta margem sobra até o limite.</div>` : null}
-        ${res.d.testes.length ? html`<div class="nota">Monitor que ainda não rodou costuma devolver um <b>valor padrão de fábrica</b>, não uma medição (a Ford documenta isso para o EVAP). Antes de usar um número daqui, veja em "Teste drive" se aquele monitor completou.</div>` : null}
       </${Cartao}>` : null}
 
 
@@ -1225,7 +1161,6 @@ function Modulos() {
               <${FalhaExplicada} e=${explicadasMod[f.codigo]} />
               <div class="diag-falha-tipo">${f.causa ? html`Tipo de falha: <b>${f.causa}</b>. ` : html`Tipo ${hexDoTipo(f.tipoFalha)}, que a tabela da norma do app não tem. `}Situação: ${f.situacaoTexto}.</div>
             </div>`)}
-          ${falhas.length ? html`<${NotaDasFontes} />` : null}
           ${falhas.length && podeApagar ? html`<button type="button" class="btn-barra claro" style="justify-content:center;margin-top:8px" onClick=${apagar} disabled=${!!ocupado || !!st.dono}>APAGAR AS FALHAS DESTE MÓDULO</button>` : null}
           ${falhas.length && !podeApagar ? html`<div class="nota">Apagar falha não está liberado para o seu login.</div>` : null}
           ${regApagar ? html`<p class="nota" id="mod-reg-apagar">Apagamento anterior: ${regApagar}</p>` : null}
@@ -1667,13 +1602,6 @@ function Bico() {
       ${pl.veic ? html`<${Veiculo} v=${pl.veic} />` : null}
       ${obd.disponivel() ? html`<${Adaptador} compacto=${!!st.ligado} />` : null}
 
-      <${Cartao} titulo="Antes de gravar, o que o app sabe e o que não sabe" id="bico-limite">
-        <div class="passo">1. O app NÃO tem tabela de em qual campo cada ECU guarda o código do bico: nenhuma base aberta tem. O campo (4 dígitos) vem do manual da ECU e é você quem informa. Campo errado não é tentativa, é prejuízo.</div>
-        <div class="passo">2. Muita ECU diesel exige destravar antes (resposta 33). O app não tem a chave de nenhuma família: nessas ele lê, tenta, mostra a recusa e não grava.</div>
-        <div class="passo">3. O valor que estava no campo é lido e guardado antes. Se o módulo não entregar o valor antigo, o app não grava.</div>
-        <p class="nota">A gravação só vai para o módulo do motor e só com o administrador autorizando com o login dele na hora.</p>
-      </${Cartao}>
-
       <${Cartao} titulo="Os códigos dos bicos" id="bico-codigos">
         <${Campo} id="bico-qtd" rotulo="Quantos cilindros">
           <select id="bico-qtd" value=${String(cilindros)} onChange=${e => trocarQtd(Number(e.target.value))}>
@@ -1751,16 +1679,4 @@ function Bico() {
   </${Tela}>`;
 }
 
-/* ---------------- PARÂMETROS (era um cartão dentro do OBD) ---------------- */
-function ParametrosTela() {
-  return html`<${Tela} tela="parametros" ajuda="A referência de faixa normal que o app usa para decidir se um valor está bom ou ruim, com a fonte de cada uma. Fica aqui, e não escondida dentro da leitura, porque é o que você consulta para discutir um laudo.">
-    <${Parametros} />
-    <${Cartao} titulo="Escala e faixa normal não são a mesma coisa" id="param-escala">
-      <p>Escala é o tamanho do mostrador: de onde até onde o ponteiro anda. Faixa normal é o que aquele motor deve marcar trabalhando bem. Misturar as duas é o jeito mais fácil de dar um laudo errado.</p>
-      <p class="nota">Desde 20/11/2026 o app também sabe PEDIR a escala ao próprio módulo, pelo serviço 0x24 do UDS. Quando o módulo responde, quem manda é ele; o catálogo fica só para a faixa normal, que nenhum módulo informa.</p>
-    </${Cartao}>
-  </${Tela}>`;
-}
-
-
-export { Obd, Modulos, Atuadores, Aprendizados, Bico, ParametrosTela };
+export { Obd, Modulos, Atuadores, Aprendizados, Bico };

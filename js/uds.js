@@ -124,6 +124,45 @@ export const ROTINA = { comecar: 0x01, parar: 0x02, resultado: 0x03 };
 
 const P = () => { const p = plugin(); if (!p) throw new Error("sem-plugin"); return p; };
 
+/*
+ * Onde o módulo responde, por marca (conferido no opendbc da comma.ai, MIT, commit c55bd39 de
+ * 22/11/2026, em opendbc/car/<marca>/values.py).
+ *
+ * "Resposta = pedido + 8" é a regra do OBD-II, e vale para o motor e o câmbio em todo carro. Para
+ * os OUTROS módulos — freio, airbag, direção, painel — cada marca tem a sua, e quem usar o +8 ali
+ * fala para o endereço certo e escuta no errado: o módulo responde e o app diz que não respondeu.
+ * Foi o que aconteceu com o ABS da Amarok, que pede em 713 e responde em 77D (713 + 0x6A).
+ */
+const RESPOSTA_DA_MARCA = [
+  { marca: /CHEVROLET|GM\b|GMC/i, desloca: 0x400 },
+  { marca: /VOLKS|VW\b|AUDI|SEAT|SKODA|ŠKODA/i, desloca: 0x6a },
+  { marca: /NISSAN|INFINITI/i, desloca: 0x20 },
+  { marca: /JEEP|CHRYSLER|DODGE|RAM\b|FIAT/i, desloca: -0x280 },
+  { marca: /RIVIAN/i, desloca: 0x40 },
+];
+/** O motor e o câmbio respondem pelo padrão OBD em TODA marca: 7E0→7E8, 7E1→7E9. A conta da
+ *  marca é para os outros módulos, que não estão no padrão e por isso cada uma fez a sua. */
+const E_POWERTRAIN = n => n >= 0x7e0 && n <= 0x7e7;
+
+/**
+ * O endereço de resposta de um pedido, pela marca do carro. Sem marca conhecida, o padrão OBD.
+ * Em 29 bits a conta é outra e não depende de marca: trocam-se os dois últimos bytes
+ * (18DA10F1 responde em 18DAF110), que é a regra da própria ISO 15765-4.
+ */
+export function respostaPara(pedido, marca = "") {
+  const ped = String(pedido || "").toUpperCase().replace(/[^0-9A-F]/g, "");
+  if (ped.length === 8) {
+    const n = parseInt(ped, 16);
+    return hx((n & 0xffff0000) + ((n << 8) & 0xff00) + ((n >>> 8) & 0xff), 8);
+  }
+  if (ped.length !== 3) return "";
+  const n = parseInt(ped, 16);
+  const r = RESPOSTA_DA_MARCA.find(x => x.marca.test(String(marca || "")));
+  const desloca = r && !E_POWERTRAIN(n) ? r.desloca : 8;
+  const resp = n + desloca;
+  return resp > 0 && resp <= 0x7ff ? hx(resp, 3) : hx(n + 8, 3);
+}
+
 /**
  * Prepara o adaptador para falar com UM módulo.
  *
@@ -134,10 +173,11 @@ const P = () => { const p = plugin(); if (!p) throw new Error("sem-plugin"); ret
  * O controle de fluxo (ATFC*) é o que faz resposta comprida chegar inteira: sem ele, o módulo manda
  * o primeiro quadro, fica esperando a autorização para continuar e a leitura volta pela metade.
  */
-export async function abrir({ pedido, resposta, bits29 = false, esperaMs = 1000 } = {}) {
+export async function abrir({ pedido, resposta, marca = "", bits29 = false, esperaMs = 1000 } = {}) {
   const ped = String(pedido || "").toUpperCase().replace(/[^0-9A-F]/g, "");
   if (!(ped.length === 3 || ped.length === 8)) throw new Error("endereco-invalido");
-  const resp = String(resposta || (ped.length === 3 ? hx(parseInt(ped, 16) + 8, 3) : "")).toUpperCase().replace(/[^0-9A-F]/g, "");
+  // Sem endereço de resposta dado, a conta é a da marca (respostaPara), não mais o +8 fixo.
+  const resp = String(resposta || respostaPara(ped, marca)).toUpperCase().replace(/[^0-9A-F]/g, "");
   // Endereço de 8 dígitos É de 29 bits: quem chama não precisa lembrar de avisar. (Antes dependia
   // do parâmetro, e apontar um módulo de Honda pela tela abria o protocolo de 11 bits.)
   await comando("ATSP" + (bits29 || ped.length === 8 ? "7" : "6"), 2000);   // CAN de 500 kbit, 29 ou 11 bits
@@ -725,6 +765,10 @@ export const ENDERECOS_PADRAO = [
  */
 const NOME_FAMILIA = {
   VAG: "Volkswagen, Audi, Seat, Škoda (VAG)",
+  TOYOTA: "Toyota e Lexus", HONDA: "Honda e Acura", HYUNDAI: "Hyundai, Kia e Genesis",
+  FORD: "Ford e Lincoln", NISSAN: "Nissan e Infiniti", SUBARU: "Subaru", MAZDA: "Mazda",
+  STELLANTIS: "Jeep, Fiat, Chrysler, Dodge e RAM", TESLA: "Tesla", RIVIAN: "Rivian",
+  MG: "MG", PSA: "Peugeot e Citroën", BYD: "BYD",
   "RENAULT Twingo 3 Ph2": "Renault Twingo 3 (fase 2)", "RENAULT Twizy": "Renault Twizy",
   "RENAULT ZOE": "Renault Zoe", "RENAULT ZOE Ph2": "Renault Zoe (fase 2)",
   "OVMS boltev": "Chevrolet Bolt (elétrico)", "OVMS byd_atto3": "BYD Atto 3 (elétrico)",
@@ -741,6 +785,22 @@ const NOME_FAMILIA = {
 const MARCAS_FAMILIA = {
   VAG: /VOLKS|VW|AUDI|SEAT|SKODA|ŠKODA/i,
   "RENAULT ZOE": /RENAULT/i,
+  // famílias do opendbc (24/11/2026)
+  TOYOTA: /TOYOTA|LEXUS/i,
+  HONDA: /HONDA|ACURA/i,
+  HYUNDAI: /HYUNDAI|KIA|GENESIS/i,
+  FORD: /FORD|LINCOLN/i,
+  NISSAN: /NISSAN|INFINITI/i,
+  SUBARU: /SUBARU/i,
+  MAZDA: /MAZDA/i,
+  // Peugeot e Citroën ficam na PSA, que tem módulo próprio no acervo. Se entrassem aqui, a
+  // primeira expressão que casa venceria e a família PSA nunca seria alcançada (Codex, 24/11/2026).
+  STELLANTIS: /JEEP|CHRYSLER|DODGE|RAM\b|FIAT/i,
+  TESLA: /TESLA/i,
+  RIVIAN: /RIVIAN/i,
+  MG: /\bMG\b/i,
+  PSA: /PEUGEOT|CITRO/i,
+  BYD: /BYD/i,
 };
 export const nomeDaFamilia = f => NOME_FAMILIA[f] || f;
 /** A família do acervo que serve a este carro, ou "" quando não há. */

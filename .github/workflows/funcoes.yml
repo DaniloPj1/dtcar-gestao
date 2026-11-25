@@ -1,0 +1,115 @@
+name: Funções do Supabase (publicar)
+# Publica as Edge Functions do DTCar Gestão direto da `main`, para o Danilo não precisar mais
+# colar o código no painel a cada mudança (pedido dele em 25/11/2026).
+#
+# Quando roda:
+#   * sozinho, quando um merge na `main` mexe em supabase/functions/** (publica SÓ as funções mexidas);
+#   * à mão, em Actions › "Funções do Supabase (publicar)" › Run workflow, escolhendo
+#     "mudadas" (padrão), "todas" ou os nomes separados por espaço (ex.: "zap agente").
+#
+# O que ele garante:
+#   * o "Verify JWT" continua DESLIGADO em todas — quem decide isso é o supabase/config.toml;
+#     função nova precisa entrar lá antes do primeiro deploy, senão sobe com JWT ligado e quebra;
+#   * a função `agente` vai com o index.ts e o ferramentas.ts juntos (o CLI resolve o import),
+#     então não é mais preciso montar o "arquivo único" à mão;
+#   * depois de publicar, confere que cada função responde (não é mais 404). O teste não executa
+#     ação nenhuma: vai um OPTIONS, sem login e sem corpo.
+#
+# Segredo necessário: SUPABASE_ACCESS_TOKEN (Supabase › Account › Access Tokens), em
+# Settings › Secrets and variables › Actions do repositório. Sem ele o workflow para no primeiro passo.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "supabase/functions/**"
+      - "supabase/config.toml"
+      - ".github/workflows/funcoes.yml"
+  workflow_dispatch:
+    inputs:
+      funcoes:
+        description: 'Quais publicar: "mudadas", "todas" ou nomes separados por espaço (ex.: zap agente)'
+        required: false
+        default: mudadas
+concurrency:
+  group: funcoes-supabase
+  cancel-in-progress: false
+permissions:
+  contents: read
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      PROJETO: vbbklawlbxznsemkgtvg
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Conferir o segredo e o projeto de destino
+        run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ]; then
+            echo "::error::Falta o segredo SUPABASE_ACCESS_TOKEN no repositório (Settings › Secrets and variables › Actions)."
+            exit 1
+          fi
+          echo "Projeto de destino: $PROJETO (dtcar-gestao)"
+          echo "Commit: ${{ github.sha }}"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Descobrir quais funções publicar
+        id: lista
+        run: |
+          set -euo pipefail
+          pedido="${{ github.event.inputs.funcoes || 'mudadas' }}"
+          todas=$(ls -1 supabase/functions | tr '\n' ' ')
+          case "$pedido" in
+            todas) alvo="$todas" ;;
+            mudadas)
+              mudados=$(git diff --name-only HEAD^ HEAD -- supabase/functions supabase/config.toml || true)
+              # config.toml mexido vale para todas (é ele que decide o Verify JWT)
+              if printf '%s\n' "$mudados" | grep -q '^supabase/config.toml$'; then
+                alvo="$todas"
+              else
+                alvo=$(printf '%s\n' "$mudados" | sed -n 's|^supabase/functions/\([^/]*\)/.*|\1|p' | sort -u | tr '\n' ' ')
+              fi
+              ;;
+            *) alvo="$pedido" ;;
+          esac
+          # só o que existe mesmo (nome digitado errado não faz o job falhar no meio do deploy)
+          final=""
+          for f in $alvo; do
+            if [ -d "supabase/functions/$f" ]; then final="$final $f"; else echo "::warning::Função \"$f\" não existe em supabase/functions: pulada."; fi
+          done
+          final=$(echo "$final" | xargs || true)
+          echo "funcoes=$final" >> "$GITHUB_OUTPUT"
+          if [ -z "$final" ]; then echo "Nenhuma função para publicar."; else echo "Vai publicar: $final"; fi
+
+      - name: Publicar
+        if: steps.lista.outputs.funcoes != ''
+        run: |
+          set -euo pipefail
+          for f in ${{ steps.lista.outputs.funcoes }}; do
+            echo "::group::$f"
+            supabase functions deploy "$f" --project-ref "$PROJETO"
+            echo "::endgroup::"
+          done
+
+      - name: Teste seguro (cada função responde?)
+        if: steps.lista.outputs.funcoes != ''
+        run: |
+          set -uo pipefail
+          falhou=0
+          for f in ${{ steps.lista.outputs.funcoes }}; do
+            cod=$(curl -s -o /dev/null -w "%{http_code}" -X OPTIONS --max-time 25 "https://$PROJETO.supabase.co/functions/v1/$f" || echo 000)
+            if [ "$cod" = "404" ] || [ "$cod" = "000" ]; then
+              echo "::error::A função $f respondeu $cod depois do deploy."
+              falhou=1
+            else
+              echo "$f: no ar (HTTP $cod)"
+            fi
+          done
+          exit $falhou

@@ -887,6 +887,9 @@ const ESPERA_VIVO = 1500;
 const PAUSA_VOLTA = 60;
 /** de quantas em quantas voltas a roda dá uma olhada nas falhas */
 const VOLTAS_ATE_FALHA = 8;
+// A falha por cilindro é mais cara que um PID (um pedido por cilindro), então vem de menos em menos:
+// no DTCar Scanner ela fica ao vivo junto dos mostradores (pedido do Danilo, 25/11/2026).
+const VOLTAS_ATE_CILINDRO = 12;
 
 /**
  * Dados ao vivo DE VERDADE: fica girando e avisando a cada valor que chega, até mandarem parar.
@@ -910,7 +913,7 @@ export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc =
   const listaDeAgora = () => leiturasPara(pidsSuportados, typeof opc.escolhidos === "function" ? opc.escolhidos() : opc.escolhidos);
   if (!listaDeAgora().length) return 0;
   const mudos = {}, jaLidos = {};
-  let volta = 0, vazias = 0;
+  let volta = 0, vazias = 0, midsCilindro = null;
   while (continuar()) {
     volta++;
     let leuAlgo = false;
@@ -955,6 +958,13 @@ export async function lerAoVivoSeguido(pidsSuportados, aoValor, continuar, opc =
         const { codigos, modulos } = codigosDeTodas(r.respostas, 0x03);
         if (modulos) opc.aoFalhas(codigos);
       }
+    }
+    // A CONTAGEM DE FALHA POR CILINDRO ao vivo, sem parar a roda. A descoberta dos MIDs é feita uma
+    // vez por carro e guardada aqui; depois só as contagens são relidas.
+    if (opc.aoCilindros && volta % VOLTAS_ATE_CILINDRO === 0 && continuar()) {
+      const c = await lerFalhaCilindros(opc.limitesCilindro || {}, midsCilindro);
+      if (c.mids) midsCilindro = c.mids;
+      if (!c.erro) opc.aoCilindros(c);
     }
     await new Promise(r => setTimeout(r, PAUSA_VOLTA));
   }
@@ -1094,19 +1104,24 @@ export function conferirOdometro(kmModulo, kmCadastro) {
 }
 
 /** Só as contagens de falha de combustão (13 MIDs em vez de varrer o serviço 06 inteiro). */
-export async function lerFalhaCilindros(limites) {
-  const base = await pedir("0600", 6000);
-  if (base.erro) return { testes: [], cilindros: null, erro: base.erro };
-  const primeira = suportados(primeiraDe(base.respostas, 0x06), 0x06, 0x00);
-  const resto = primeira.includes(0x20) ? await suportadosEmFaixas(0x06, FAIXAS_MID.slice(1)) : [];
-  const tem = primeira.concat(resto.filter(m => !primeira.includes(m))).filter(m => MIDS_FALHA.includes(m));
+export async function lerFalhaCilindros(limites, mids = null) {
+  // `mids` é a lista que uma leitura anterior já descobriu. Descobrir custa até 7 pedidos; relendo a
+  // contagem dentro da roda do ao vivo (DTCar Scanner, 25/11/2026) isso se paga uma vez só por carro.
+  let tem = mids;
+  if (!tem) {
+    const base = await pedir("0600", 6000);
+    if (base.erro) return { testes: [], cilindros: null, mids: null, erro: base.erro };
+    const primeira = suportados(primeiraDe(base.respostas, 0x06), 0x06, 0x00);
+    const resto = primeira.includes(0x20) ? await suportadosEmFaixas(0x06, FAIXAS_MID.slice(1)) : [];
+    tem = primeira.concat(resto.filter(m => !primeira.includes(m))).filter(m => MIDS_FALHA.includes(m));
+  }
   const testes = [];
   for (const mid of tem) {
     const r = await pedir("06" + mid.toString(16).toUpperCase().padStart(2, "0"), 5000);
     if (r.erro) continue;
     for (const t of testesDe(primeiraDe(r.respostas, 0x06))) testes.push(t);
   }
-  return { testes, cilindros: falhaPorCilindro(testes, limites), erro: "" };
+  return { testes, cilindros: falhaPorCilindro(testes, limites), mids: tem, erro: "" };
 }
 
 /** Odômetro do módulo (PID $A6), em km. Devolve null quando o carro não informa. */

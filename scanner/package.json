@@ -1,0 +1,16 @@
+{
+  "name": "dtcar-scanner",
+  "private": true,
+  "version": "0.1.0",
+  "description": "DTCar Scanner: APK do tablet da oficina, só de diagnóstico por OBD. As telas vêm do site (/scanner/), como no app do sistema: mudança de tela não exige APK novo. O APK carrega a parte nativa — Bluetooth do adaptador ELM327, ícone e permissões.",
+  "dependencies": {
+    "@capacitor/android": "6.2.1",
+    "@capacitor/core": "6.2.1",
+    "@capacitor/filesystem": "6.0.3",
+    "@capacitor/share": "6.0.3",
+    "dtcar-obd": "file:plugins/obd"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "6.2.1"
+  }
+}

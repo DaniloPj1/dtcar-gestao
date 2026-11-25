@@ -1,0 +1,4 @@
+# projeto Android gerado pelo Capacitor (só na hora de gerar o APK) e deps
+/node_modules/
+/android/
+/www/

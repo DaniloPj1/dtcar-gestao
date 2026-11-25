@@ -876,8 +876,16 @@ Segundo app mobile (separado do `mecanico/`), para **administrador e consultor**
    Mexeu no banco do PC (`desktop/banco.js`, `js/replica.js`, `comBancoDoPC`, `js/alteracoes.js`, `js/fila.js`)? Rode também
    `xvfb-run -a desktop/node_modules/electron/dist/electron teste/teste_banco_pc.cjs --no-sandbox` (programa real contra Supabase falso).
    Mexeu em `desktop/`? Rode também `xvfb-run -a node teste/teste_programa.js` (abre o programa sem internet), depois de `npm install` e `node preparar.js` em `desktop/`.
-5. Não mexer em `CNAME`, nas configurações do GitHub Pages, nem nos segredos do repositório.
-6. Revisão cruzada: quando um agente faz a mudança, o outro revisa o PR (regras acima, textos em português, teste passando) antes do Danilo aprovar.
+5. **Publicar função do Supabase (25/11/2026): é automático.** O merge na `main` que mexe em `supabase/functions/**`
+   dispara o workflow `.github/workflows/funcoes.yml`, que publica SÓ as funções mexidas com o CLI do Supabase
+   (segredo `SUPABASE_ACCESS_TOKEN` do repositório) e confere depois que cada uma responde. Para publicar à mão:
+   Actions › "Funções do Supabase (publicar)" › Run workflow ("mudadas", "todas" ou os nomes). Duas regras que não podem
+   quebrar: **função nova entra em `supabase/config.toml` com `verify_jwt = false` ANTES do primeiro deploy** (sem isso o
+   CLI publica com o Verify JWT ligado e a função para de atender), e a `agente` já vai com `index.ts` + `ferramentas.ts`
+   juntos — o CLI resolve o import, então não se monta mais o "arquivo único" à mão. Colar no painel continua valendo
+   como saída de emergência (o painel às vezes não carrega o código da função).
+6. Não mexer em `CNAME`, nas configurações do GitHub Pages, nem nos segredos do repositório.
+7. Revisão cruzada: quando um agente faz a mudança, o outro revisa o PR (regras acima, textos em português, teste passando) antes do Danilo aprovar.
 
 ### Compras — preço por fornecedor pela placa, carrinho e pedidos (v59 + v165, pedido do Danilo em 16/11/2026) — etapa 1
 - **Ideia do Danilo:** pesquisar a peça pela PLACA do carro (essencial) ou pelo código/descrição, ver o preço de cada fornecedor numa tela só para

@@ -1,0 +1,36 @@
+# Configuração do CLI do Supabase — usada pelo deploy automático das funções
+# (.github/workflows/funcoes.yml). Sem este arquivo o CLI publicaria as funções com
+# "Verify JWT" LIGADO, e todas elas quebrariam: cada uma confere o login no próprio código
+# (o retorno da Microsoft, o pareamento do WhatsApp e o conector do Claude chegam sem o JWT
+# do painel). Função nova entra aqui ANTES do primeiro deploy.
+project_id = "vbbklawlbxznsemkgtvg"
+
+[functions.agente]
+verify_jwt = false
+
+[functions.compras]
+verify_jwt = false
+
+[functions.cpf]
+verify_jwt = false
+
+[functions.email]
+verify_jwt = false
+
+[functions.equipe]
+verify_jwt = false
+
+[functions.pedido]
+verify_jwt = false
+
+[functions.placa]
+verify_jwt = false
+
+[functions.sefaz]
+verify_jwt = false
+
+[functions.sicredi]
+verify_jwt = false
+
+[functions.zap]
+verify_jwt = false

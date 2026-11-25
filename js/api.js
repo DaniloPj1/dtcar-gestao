@@ -546,7 +546,8 @@ function criarApiSupabase() {
     whatsapp: {
       // com o v24 a tela lê só as colunas liberadas (com o v25, também as regras de envio) (o resumo da chave do motor fica de fora); sem ele, lê tudo
       situacao: async () => {
-        let r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio,alertas,alerta_telefone,vigiado_em").eq("id", 1).maybeSingle();
+        let r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio,alertas,alerta_telefone,vigiado_em,grupos").eq("id", 1).maybeSingle();
+        if (r.error && /column|grupos/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio,alertas,alerta_telefone,vigiado_em").eq("id", 1).maybeSingle(); // sem o v65 (grupos)
         if (r.error && /column|alertas|alerta_telefone|vigiado_em/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select(COLS_ZAP + ",regras,proximo_envio").eq("id", 1).maybeSingle(); // sem o v32
         if (r.error && /column|regras|proximo_envio/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select(COLS_ZAP).eq("id", 1).maybeSingle(); // sem o v25
         if (r.error && /column|dono_ate|motor_|pedido/i.test(r.error.message) && !/whatsapp_conexao" does not exist|relation/i.test(r.error.message)) r = await sb.from("whatsapp_conexao").select("*").eq("id", 1).maybeSingle();
@@ -560,7 +561,8 @@ function criarApiSupabase() {
       // fila e mensagens (v25)
       fila: async () => {
         const cols = "id,telefone,cliente_nome,texto,status,erro,criado_em,enviada_em,origem,ordem_numero,fora_horario";
-        let r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em,arquivo,modelo").order("id", { ascending: false }).limit(20);
+        let r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em,arquivo,modelo,grupo_jid").order("id", { ascending: false }).limit(20);
+        if (r.error && /column|grupo_jid/i.test(r.error.message)) r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em,arquivo,modelo").order("id", { ascending: false }).limit(20); // sem o v65
         if (r.error && /column|arquivo|modelo/i.test(r.error.message)) r = await sb.from("whatsapp_fila").select(cols + ",entrega,entregue_em,lida_em").order("id", { ascending: false }).limit(20); // sem o v34
         if (r.error && /column|entrega|lida_em/i.test(r.error.message)) r = await sb.from("whatsapp_fila").select(cols).order("id", { ascending: false }).limit(20); // sem o v32
         return ok(r); },

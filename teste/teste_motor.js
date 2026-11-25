@@ -1,7 +1,7 @@
 // Teste do motor do WhatsApp (motor-zap/motor.js) sem rede: banco e WhatsApp simulados.
 // Rodar: (cd motor-zap && npm ci) && node teste/teste_motor.js
 import { criarMotor, vinculado, lerConfig } from "../motor-zap/motor.js";
-import { paraGuardar, variacoes, jidParaEnvio, enviarTexto, midiaParaBaixar, pdfConfere } from "../motor-zap/whats.js";
+import { paraGuardar, variacoes, jidParaEnvio, enviarTexto, midiaParaBaixar, pdfConfere, chaveTel, participantesDoGrupo, grupoLiberado, grupoIgualAoEscolhido, listarGrupos, conferirGrupoAgora } from "../motor-zap/whats.js";
 import { readFileSync } from "node:fs";
 import { DisconnectReason } from "../motor-zap/node_modules/baileys/lib/index.js";
 import { writeFileSync, mkdtempSync } from "node:fs";
@@ -350,6 +350,29 @@ function sessaoVinculada(b) {
   const sock = { onWhatsApp: async (n) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] };
   confere("jid: conta antiga sem o 9 é achada", (await jidParaEnvio(sock, "5527999112233")) === "552799112233@s.whatsapp.net");
   confere("jid: número sem WhatsApp devolve null", (await jidParaEnvio({ onWhatsApp: async () => [] }, "5527999112233")) === null);
+  // v65: grupo (mesmos casos do teste da função zap)
+  for (const c of casos.chaveTel) confere("chave do telefone " + (c.tel || "(vazio)"), chaveTel(c.tel) === c.esperado, chaveTel(c.tel));
+  for (const c of casos.grupos) {
+    const pp = participantesDoGrupo(c.meta);
+    const r = grupoLiberado({ participantes: pp, autorizados: c.autorizados, meuNumero: c.meu });
+    confere("grupo: " + c.nome, r.ok === c.ok && (!c.motivo || r.motivo.includes(c.motivo)), r.motivo);
+  }
+  for (const c of casos.grupoIgual) {
+    const r = grupoIgualAoEscolhido({ ids: c.agora }, c.escolhidos);
+    confere("grupo igual ao escolhido: " + c.nome, r.ok === c.ok, r.motivo);
+  }
+  {
+    const meta = {
+      "123@g.us": { subject: "Financeiro", participants: [{ id: "5527988881111@s.whatsapp.net" }, { id: "5527997696545@s.whatsapp.net" }] },
+      "456@g.us": { subject: "Clientes", participants: [{ id: "5527988881111@s.whatsapp.net" }, { id: "5527991234567@s.whatsapp.net" }] },
+    };
+    const sock = { groupFetchAllParticipating: async () => meta, groupMetadata: async (j) => meta[j], user: { id: "5527988881111:1@s.whatsapp.net" } };
+    const lista = await listarGrupos(sock, ["5527997696545"], "5527988881111");
+    confere("lista de grupos: autorizado primeiro, grupo com cliente barrado",
+      lista.length === 2 && lista[0].autorizado === true && lista[1].autorizado === false, JSON.stringify(lista.map(g => [g.nome, g.autorizado])));
+    const mudou = await conferirGrupoAgora(sock, { jid: "123@g.us", ids: ["5527988881111@s.whatsapp.net"], numeros: ["5527997696545"] }, "5527988881111");
+    confere("envio: grupo que mudou de participantes não recebe", mudou.ok === false && mudou.motivo.includes("mudou de participantes"), mudou.motivo);
+  }
 }
 
 // 2) quedas

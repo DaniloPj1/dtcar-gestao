@@ -669,7 +669,9 @@ export function criarServidor(db: Banco): McpServer {
       "(boletos em aberto da O.S. num PDF só), {fonte:\"nf\"} (PDF da NF anexada na O.S.) ou {fonte:\"resumo\", de: cliente|veiculo, orcamentos?, itens?} " +
       "(resumo das O.S. em aberto do cliente ou do veículo da O.S. da mensagem: itens, total, recebido e falta receber de cada uma e o total geral). " +
       "Par usual: orcamento + PDF do orçamento; entrega + PDF da O.S.; cobranca + boleto. " +
-      "Destinatário: telefone com DDD (qualquer número), cliente_id (veja buscar_cliente) ou numero_os (usa o cliente da O.S.). Nunca em massa.",
+      "Destinatário: telefone com DDD (qualquer número), cliente_id (veja buscar_cliente) ou numero_os (usa o cliente da O.S.). Nunca em massa. " +
+      "Grupo (v65, resumo interno da oficina — nunca para cliente): grupo=\"financeiro\" manda para o grupo que o Danilo escolheu em Sistema › WhatsApp, " +
+      "que só vale se os participantes forem ele e o sócio. Só texto (sem modelo e sem PDF); quem envia confere os participantes na hora e não manda se entrou alguém.",
     inputSchema: z.object({
       texto: z.string().max(2000).optional().describe("Mensagem exatamente como vai (ditada ou aprovada pelo Danilo). Vale por cima do modelo"),
       modelo: z.enum(["entrada", "orcamento", "adicionais", "pronto", "entrega", "cobranca", "boas_vindas"]).optional().describe("Texto pronto do sistema com os dados da O.S."),
@@ -686,12 +688,25 @@ export function criarServidor(db: Banco): McpServer {
         id: z.string().optional().describe("fonte nf: id da nota, se a O.S. tiver mais de uma"),
       }).optional().describe("Um PDF gerado pelo sistema (nunca caminho de arquivo); usa a O.S. de numero_os"),
       cliente_id: z.string().uuid().optional(), numero_os: z.number().int().positive().optional(), telefone: z.string().optional(),
+      grupo: z.string().max(40).optional().describe("Apelido do grupo escolhido na tela (ex.: financeiro) para resumo interno; não vai para cliente e não aceita modelo nem PDF"),
       fora_do_horario: z.boolean().default(false).describe("true só se o Danilo pediu para mandar agora, fora do horário comercial"),
       pedido: z.string().optional().describe("O pedido do Danilo, resumido, para o histórico"),
       confirmar: z.boolean().default(false),
     }),
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  }, async ({ texto: t, modelo, anexo, cliente_id, numero_os, telefone, fora_do_horario, pedido, confirmar }) => {
+  }, async ({ texto: t, modelo, anexo, cliente_id, numero_os, telefone, grupo, fora_do_horario, pedido, confirmar }) => {
+    if (grupo) {
+      // v65: grupo é resumo interno (Danilo e sócio). Sem modelo e sem PDF, e nunca junto de um destinatário de cliente.
+      if (cliente_id || numero_os || telefone) return falha("Grupo é só para resumo interno: mande para o grupo OU para um cliente, não para os dois.");
+      if (modelo || anexo) return falha("Para grupo, mande só o texto: modelo e PDF são para cliente.");
+      if (!t) return falha("Informe o texto da mensagem para o grupo.");
+      const pg = { texto: t, grupo, fora_horario: fora_do_horario, pedido, origem: "claude" };
+      const { data: dg, error: eg } = await db.rpc("whatsapp_enfileirar", { p: JSON.parse(JSON.stringify(pg)), p_gravar: confirmar === true });
+      if (eg) return falha(/whatsapp_enfileirar|schema cache|PGRST202/i.test(eg.message) ? "O envio pelo WhatsApp ainda não foi ligado (falta rodar o supabase/v25.sql e o v26.sql)." : eg.message);
+      const rg = dg as Record<string, unknown>;
+      if (rg.gravado) await acordarZap();
+      return texto(rg);
+    }
     if (!cliente_id && !numero_os && !telefone) return falha("Informe o telefone com DDD, o cliente (cliente_id) ou a O.S. (numero_os).");
     if (!t && !modelo && !anexo) return falha("Informe o texto, um modelo ou o PDF (anexo).");
     if (anexo && anexo.fonte === "orcamento") {

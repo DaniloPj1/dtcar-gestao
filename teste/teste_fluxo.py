@@ -359,6 +359,19 @@ try:
     pg.click("text=Mostrar QR Code para vincular"); pg.wait_for_timeout(600)
     chk("whatsapp: mostra o QR Code para vincular", pg.query_selector("img.qr-pareamento") is not None and "Aparelhos conectados" in pg.inner_text("main"))
     pg.screenshot(path=SAIDA + "/u5c-whatsapp.png")
+    # v65: grupo do WhatsApp para os resumos internos (só grupo com o número do Danilo e do sócio)
+    pg.fill("#zap-grupo-nums", "27997696545, 27999674855"); pg.click("text=Salvar números"); pg.wait_for_timeout(600)
+    chk("grupo: números autorizados gravados na config", pg.evaluate("(window.__DB.config.zapGrupos || {}).numeros || []") == ["5527997696545", "5527999674855"],
+        pg.evaluate("JSON.stringify(window.__DB.config.zapGrupos)"))
+    pg.click("#zap-buscar-grupos"); pg.wait_for_timeout(900)
+    t = pg.inner_text("main")
+    chk("grupo: a lista separa autorizado de não autorizado", "Financeiro" in t and "Autorizado" in t and "Não autorizado" in t and "participante não autorizado" in t)
+    pg.click(".zap-grupos li:has-text('Financeiro') button:has-text('Usar como Financeiro')"); pg.wait_for_timeout(300)
+    pg.click("[role=dialog] button.btn-pri"); pg.wait_for_timeout(700)
+    chk("grupo: escolhido vira o grupo Financeiro na config", pg.evaluate("((window.__DB.config.zapGrupos || {}).financeiro || {}).jid") == "120363000000000001@g.us",
+        pg.evaluate("JSON.stringify((window.__DB.config.zapGrupos || {}).financeiro)"))
+    chk("grupo: a tela diz quantos participantes foram conferidos", "3 participantes conferidos" in pg.inner_text("main"))
+    pg.screenshot(path=SAIDA + "/u5d-whatsapp-grupos.png")
     # tela reaberta no meio do pareamento (sem o código local): continua consultando e mostra quando terminar
     pg.evaluate("window.__ZAP.situacao = 'pareando'; window.__ZAP.atualizado_em = new Date().toISOString()")
     pg.goto(U + "#/painel"); pg.wait_for_timeout(300); pg.goto(U + "#/whatsapp"); pg.wait_for_timeout(500)

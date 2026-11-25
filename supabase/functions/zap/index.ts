@@ -220,6 +220,81 @@ export async function jidParaEnvio(sock: any, tel: string) {
   }
   return null;
 }
+// ---------------------------------------------------------------------
+// v65 (cópia de motor-zap/whats.js): GRUPO como destino. Regra do Danilo: "atender apenas grupos com
+// o meu número e do meu sócio". A conferência que vale é na hora do envio.
+// ---------------------------------------------------------------------
+export const conversaGrupo = (jid: string) => /@g\.us$/.test(String(jid || ""));
+export const numeroDoSock = (sock: any) => String((sock && sock.user && sock.user.id) || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+/** Chave de comparação de telefone, a MESMA da whatsapp_chave_tel do banco: DDD + últimos 8 dígitos. */
+export function chaveTel(tel: string) {
+  const d = String(tel || "").replace(/\D/g, "");
+  if (d.length < 10) return d.slice(-8);
+  const corte = d.length === 11 || d.length === 13 ? 10 : 9;
+  const i = d.length - corte - 1;
+  return d.slice(i, i + 2) + d.slice(-8);
+}
+export function telefoneDoParticipante(p: any) {
+  const cands = [p && p.phoneNumber, p && p.jid, p && p.id, p && p.lid];
+  for (const c of cands) { const s = String(c || ""); if (/@s\.whatsapp\.net$/.test(s)) return s.split("@")[0].split(":")[0].replace(/\D/g, ""); }
+  for (const c of cands) { const d = String(c || "").split("@")[0].split(":")[0].replace(/\D/g, ""); if (/^55\d{10,11}$/.test(d)) return d; }
+  return "";
+}
+export function participantesDoGrupo(meta: any) {
+  const lista = (meta && meta.participants) || [];
+  const ids: string[] = [], numeros: string[] = []; let semNumero = 0;
+  for (const p of lista) {
+    const id = String((p && (p.id || p.jid || p.lid)) || "");
+    if (!id) continue;
+    ids.push(id);
+    const t = telefoneDoParticipante(p);
+    if (t) numeros.push(t); else semNumero++;
+  }
+  ids.sort();
+  return { ids, numeros, semNumero, total: ids.length };
+}
+export function grupoLiberado({ participantes, autorizados, meuNumero }: any) {
+  const p = participantes || { ids: [], numeros: [], semNumero: 0, total: 0 };
+  const ok = (autorizados || []).map(chaveTel).filter(Boolean);
+  const meu = chaveTel(meuNumero);
+  if (!p.total) return { ok: false, motivo: "não deu para ler os participantes do grupo" };
+  if (!ok.length) return { ok: false, motivo: "nenhum número autorizado cadastrado em Sistema › WhatsApp" };
+  if (p.semNumero) return { ok: false, motivo: "o WhatsApp não informou o número de " + p.semNumero + " participante(s) deste grupo" };
+  const fora = p.numeros.filter((n: string) => { const k = chaveTel(n); return k !== meu && ok.indexOf(k) < 0; });
+  if (fora.length) return { ok: false, motivo: "participante não autorizado: " + fora.join(", ") };
+  return { ok: true, motivo: "" };
+}
+export function grupoIgualAoEscolhido(participantes: any, idsEscolhidos: any) {
+  const a = ((participantes && participantes.ids) || []).slice().sort();
+  const b = (idsEscolhidos || []).map(String).slice().sort();
+  if (!a.length || !b.length) return { ok: false, motivo: "sem a lista de participantes para conferir" };
+  if (a.length !== b.length || a.some((x: string, i: number) => x !== b[i])) {
+    return { ok: false, motivo: "o grupo mudou de participantes desde a escolha (eram " + b.length + ", agora são " + a.length + "): confira em Sistema › WhatsApp" };
+  }
+  return { ok: true, motivo: "" };
+}
+export async function listarGrupos(sock: any, autorizados: any, meuNumero: string) {
+  const todos = (await sock.groupFetchAllParticipating()) || {};
+  const lista: any[] = [];
+  for (const jid of Object.keys(todos)) {
+    if (!conversaGrupo(jid)) continue;
+    const meta = todos[jid] || {};
+    const p = participantesDoGrupo(meta);
+    const r = grupoLiberado({ participantes: p, autorizados, meuNumero });
+    lista.push({ jid, nome: String(meta.subject || "").slice(0, 120), participantes: p.total,
+                 ids: p.ids, numeros: p.numeros, autorizado: r.ok, motivo: r.motivo });
+  }
+  lista.sort((a, b) => (a.autorizado === b.autorizado ? String(a.nome).localeCompare(String(b.nome)) : a.autorizado ? -1 : 1));
+  return lista;
+}
+export async function conferirGrupoAgora(sock: any, grupo: any, meuNumero: string) {
+  const meta = await sock.groupMetadata((grupo && grupo.jid) || "");
+  const p = participantesDoGrupo(meta);
+  const mesmo = grupoIgualAoEscolhido(p, grupo && grupo.ids);
+  if (!mesmo.ok) return mesmo;
+  return grupoLiberado({ participantes: p, autorizados: (grupo && grupo.numeros) || [], meuNumero });
+}
+
 /** (cópia de motor-zap/whats.js) Hora de Brasília (0–23); sem a tabela de fusos, cai em UTC−3. */
 export function horaBrasilia(agora: any = new Date()) {
   try { return Number(new Intl.DateTimeFormat("en-GB", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(agora)); }
@@ -398,7 +473,7 @@ async function processar(adm: Db, ms: () => number): Promise<Response> {
         // banco sem o v34 (só a função de 2 parâmetros): pede como antes
         if (error && /function|does not exist|PGRST202/i.test(error.message)) ({ data: p, error } = await adm.rpc("whatsapp_pegar_proxima", { p_dono: "supabase", p_id: vez.id }));
         if (error) { motivo = /function|does not exist|PGRST202/i.test(error.message) ? "sem o v25" : error.message; break; }
-        const prox = p as { mensagem?: { id: number; telefone: string; texto: string; arquivo?: { path: string; nome: string; tipo: string; bytes: number } | null }; motivo?: string; proximo_envio?: string };
+        const prox = p as { mensagem?: { id: number; telefone: string; texto: string; grupo?: { jid: string; nome?: string; ids: string[]; numeros: string[] } | null; arquivo?: { path: string; nome: string; tipo: string; bytes: number } | null }; motivo?: string; proximo_envio?: string };
         if (!prox || !prox.mensagem) {
           motivo = (prox && prox.motivo) || "";
           const ate = prox && prox.motivo === "intervalo" && prox.proximo_envio ? new Date(prox.proximo_envio).getTime() : 0;
@@ -407,16 +482,25 @@ async function processar(adm: Db, ms: () => number): Promise<Response> {
         }
         const m = prox.mensagem; let res: Record<string, unknown> | null = null;
         try {
-          const jid = await jidParaEnvio(s, m.telefone);
-          if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
-          else {
+          // v65: destino pode ser um grupo — a conferência dos participantes é AGORA (entrou alguém
+          // que não é o Danilo nem o sócio, não sai nada)
+          let jid: string | null = null;
+          if (m.grupo && m.grupo.jid) {
+            const c = await conferirGrupoAgora(s, m.grupo, numeroDoSock(s));
+            if (c.ok) jid = m.grupo.jid;
+            else res = { p_ok: false, p_erro: "Grupo não liberado: " + c.motivo + ". Nada foi enviado." };
+          } else {
+            jid = await jidParaEnvio(s, m.telefone);
+            if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
+          }
+          if (!res) {
             // v34: PDF da pasta whatsapp-envio (baixado antes: sem o PDF, nada é enviado)
             let pdf: any = null;
             if (m.arquivo) {
               try { pdf = await pdfDaPasta(adm, m.arquivo); } catch (e) { res = { p_ok: false, p_erro: "PDF não baixado (nada foi enviado): " + (e as Error).message }; }
             }
             if (!res) {
-              try { res = { p_ok: true, p_msg_id: await enviarComArquivo(s, jid, m.texto, pdf), p_jid: jid }; }
+              try { res = { p_ok: true, p_msg_id: await enviarComArquivo(s, jid as string, m.texto, pdf), p_jid: jid }; }
               catch (e: any) { res = { p_ok: false, p_msg_id: e.idTexto || null, p_jid: jid, p_erro: e.idTexto ? e.message : "Falha ao enviar: " + e.message }; }
             }
           }
@@ -859,6 +943,34 @@ export const atender = withSupabase({ auth: "user" }, async (req, ctx) => {
       // pedido antigo ao motor não vale mais (sem o v24 a coluna não existe: ignora)
       await adm.from("whatsapp_conexao").update({ pedido: null }).eq("id", 1);
       return json({ ok: true, ms: ms() });
+    } finally { guarda.parar(); await vez.soltar(); }
+  }
+
+  // v65: buscar os grupos do WhatsApp da oficina para o Danilo escolher o grupo (Financeiro).
+  // Com o motor do Android na vez, quem lista é ele: a tela deixa o pedido e lê a lista depois.
+  if (acao === "grupos") {
+    const { data: aut } = await adm.from("config").select("dados").eq("id", 1).maybeSingle();
+    const autorizados: string[] = (((aut as any)?.dados?.zapGrupos?.numeros) || []).map(String);
+    if (!autorizados.length) return json({ erro: "Cadastre os números autorizados (o seu e o do sócio) antes de buscar os grupos." }, 400);
+    if ((await vez.motor()).ativo) {
+      const { error } = await adm.rpc("whatsapp_pedir_grupos");
+      if (error) return json({ erro: /function|does not exist|PGRST202/i.test(error.message) ? "Falta rodar o supabase/v65.sql no Supabase." : error.message }, 400);
+      return json({ ok: true, ms: ms(), pedido: true, detalhe: "Pedido enviado ao motor do tablet: a lista chega em até 30 segundos." });
+    }
+    if (!(await vez.pegar(60))) return json(ocupada(ms()));
+    const guarda = guardaDaVez(60);
+    try {
+      const { creds, keys, salvarCreds } = await sessao.carregar();
+      if (!vinculado(creds)) return json({ ok: false, ms: ms(), detalhe: "Nenhum celular vinculado ainda." });
+      if (!guarda.valida()) return json(ocupada(ms()));
+      const s = abrir(creds, keys, salvarCreds); guarda.vigiar(s);
+      const r = await proximo(s, 40000);
+      if (r.tipo !== "open") { fechar(s); return json({ ok: false, ms: ms(), detalhe: "Não conectou para listar os grupos: " + (r.msg || r.tipo) }); }
+      let lista: any[] = [];
+      try { lista = await listarGrupos(s, autorizados, numeroDoSock(s)); } finally { fechar(s); }
+      const { error } = await adm.rpc("whatsapp_grupos_gravar", { p_lista: lista });
+      if (error && /function|does not exist|PGRST202/i.test(error.message)) return json({ erro: "Falta rodar o supabase/v65.sql no Supabase." }, 400);
+      return json({ ok: true, ms: ms(), grupos: lista.length, lista });
     } finally { guarda.parar(); await vez.soltar(); }
   }
 

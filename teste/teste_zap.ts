@@ -25,7 +25,7 @@ const adm = { from: () => ({ select: () => q("select"), upsert: (d: unknown) => 
 Deno.env.set("SUPABASE_URL", "https://vbbklawlbxznsemkgtvg.supabase.co");
 Deno.env.set("SUPABASE_PUBLISHABLE_KEYS", JSON.stringify({ default: "sb_publishable_teste" }));
 Deno.env.set("SUPABASE_JWKS", JSON.stringify({ keys: [] }));
-const { sessaoNoBanco, atender, enviarTexto, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo, assistente, reescrever, limparProposta, pedidoAssistente, SISTEMA_ASSISTENTE, textoDoAgente, garantirAssinatura, ASSINATURA, comSaudacaoDoEnvio, horaBrasilia } = await import("../supabase/functions/zap/index.ts");
+const { sessaoNoBanco, atender, enviarTexto, vinculado, vezNoBanco, semV24, paraGuardar, variacoes, jidParaEnvio, guardaDaVez, midiaParaBaixar, tratarMidia, atenderMotor, atenderAgendamento, pdfDaPasta, enviarComArquivo, assistente, reescrever, limparProposta, pedidoAssistente, SISTEMA_ASSISTENTE, textoDoAgente, garantirAssinatura, ASSINATURA, comSaudacaoDoEnvio, horaBrasilia, chaveTel, participantesDoGrupo, grupoLiberado, grupoIgualAoEscolhido, listarGrupos, conferirGrupoAgora } = await import("../supabase/functions/zap/index.ts");
 const s = sessaoNoBanco(adm as any);
 
 let c = await s.carregar();
@@ -118,6 +118,33 @@ for (const c of casos.midiaParaBaixar) {
   confere("midiaParaBaixar: " + c.nome, c.esperado === null ? r === null : !!r && Object.entries(c.esperado).every(([k, v]) => (k === "pular" ? (v ? !!r.pular : !r.pular) : r[k] === v)), JSON.stringify(r));
 }
 for (const c of casos.variacoes) confere("variações " + c.tel, JSON.stringify(variacoes(c.tel)) === JSON.stringify(c.esperado));
+// v65: grupo só recebe mensagem se os participantes forem o Danilo e o sócio (mesmos casos do teste do motor)
+for (const c of casos.chaveTel) confere("chave do telefone " + (c.tel || "(vazio)"), chaveTel(c.tel) === c.esperado, chaveTel(c.tel));
+for (const c of casos.grupos) {
+  const p = participantesDoGrupo(c.meta);
+  const r = grupoLiberado({ participantes: p, autorizados: c.autorizados, meuNumero: c.meu });
+  confere("grupo: " + c.nome, r.ok === c.ok && (!c.motivo || r.motivo.includes(c.motivo)), r.motivo);
+}
+for (const c of casos.grupoIgual) {
+  const r = grupoIgualAoEscolhido({ ids: c.agora }, c.escolhidos);
+  confere("grupo igual ao escolhido: " + c.nome, r.ok === c.ok, r.motivo);
+}
+{
+  const meta: Record<string, any> = {
+    "123@g.us": { subject: "Financeiro", participants: [{ id: "5527988881111@s.whatsapp.net" }, { id: "5527997696545@s.whatsapp.net" }] },
+    "456@g.us": { subject: "Clientes", participants: [{ id: "5527988881111@s.whatsapp.net" }, { id: "5527991234567@s.whatsapp.net" }] },
+  };
+  const sock = { groupFetchAllParticipating: async () => meta, groupMetadata: async (j: string) => meta[j], user: { id: "5527988881111:1@s.whatsapp.net" } };
+  const lista = await listarGrupos(sock, ["5527997696545"], "5527988881111");
+  confere("lista de grupos: o autorizado vem primeiro e o de cliente é barrado",
+    lista.length === 2 && lista[0].jid === "123@g.us" && lista[0].autorizado === true && lista[1].autorizado === false, JSON.stringify(lista.map((g: any) => [g.nome, g.autorizado])));
+  const ok = await conferirGrupoAgora(sock, { jid: "123@g.us", ids: lista[0].ids, numeros: ["5527997696545"] }, "5527988881111");
+  confere("conferência na hora do envio: grupo intacto passa", ok.ok === true, ok.motivo);
+  const mudou = await conferirGrupoAgora(sock, { jid: "123@g.us", ids: ["5527988881111@s.whatsapp.net"], numeros: ["5527997696545"] }, "5527988881111");
+  confere("conferência na hora do envio: entrou alguém e não envia", mudou.ok === false && mudou.motivo.includes("mudou de participantes"), mudou.motivo);
+  const cliente = await conferirGrupoAgora(sock, { jid: "456@g.us", ids: ["5527988881111@s.whatsapp.net", "5527991234567@s.whatsapp.net"], numeros: ["5527997696545"] }, "5527988881111");
+  confere("conferência na hora do envio: grupo com cliente não envia", cliente.ok === false && cliente.motivo.includes("não autorizado"), cliente.motivo);
+}
 confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{ exists: n === "552799112233", jid: n + "@s.whatsapp.net" }] }, "5527999112233")) === "552799112233@s.whatsapp.net");
 // saudação corrigida na hora do envio (23/11/2026): a mensagem é montada quando o Danilo clica, mas a fila pode segurar
 {
@@ -150,8 +177,9 @@ confere("jid sem o 9", (await jidParaEnvio({ onWhatsApp: async (n: string) => [{
 // cópia igual à do motor (mesmo código, fora a tipagem)
 const motorJs = await Deno.readTextFile(new URL("../motor-zap/whats.js", import.meta.url));
 const zapTs = await Deno.readTextFile(new URL("../supabase/functions/zap/index.ts", import.meta.url));
-const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any|: string|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar|: \(ms: number\) => Promise<void>| as string/g, "").replace(/\s+/g, " "); };
-for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemCitada", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo", "horaBrasilia", "comSaudacaoDoEnvio"]) {
+const nucleo = (t: string, f: string) => { const i = t.indexOf("function " + f); return i < 0 ? "" : t.slice(i, t.indexOf("\n}\n", i)).replace(/: any\[\]|: string\[\]|: any|: string|: number|: unknown|: Record<string, string>|: \(ms: number\) => Promise<void> = esperar|: \(ms: number\) => Promise<void>| as string/g, "").replace(/\s+/g, " "); };
+for (const f of ["telefoneDaChave", "textoDaMensagem", "paraGuardar", "mensagemCitada", "midiaParaBaixar", "variacoes", "jidParaEnvio", "pdfConfere", "enviarComArquivo", "horaBrasilia", "comSaudacaoDoEnvio",
+                 "chaveTel", "telefoneDoParticipante", "participantesDoGrupo", "grupoLiberado", "grupoIgualAoEscolhido", "listarGrupos", "conferirGrupoAgora"]) {
   const a = nucleo(motorJs, f).replace(/\(x\)/g, "x"), b = nucleo(zapTs, f).replace(/\(x\)/g, "x").replace(/x =>/g, "x =>");
   confere("cópia igual no motor e na zap: " + f, a.length > 50 && a.replace(/[()]/g, "") === b.replace(/[()]/g, ""), a.length + "/" + b.length);
 }

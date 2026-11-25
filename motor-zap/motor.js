@@ -23,9 +23,9 @@ import { homedir, hostname, platform, release } from "node:os";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomUUID } from "node:crypto";
-import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere } from "./whats.js";
+import { paraGuardar, jidParaEnvio, midiaParaBaixar, enviarComArquivo, pdfConfere, conferirGrupoAgora, listarGrupos, numeroDoSock } from "./whats.js";
 
-export const VERSAO = "3.6";
+export const VERSAO = "3.7";
 export const PULSO_MS = 30000;          // sinal ao banco
 export const SEM_PULSO_MS = 70000;      // sem sinal aceito há isso: larga a conexão (a vez vence em 90 s)
 export const ROBO_EMAIL_MS = 5 * 60000; // robô do e-mail (v64): de quanto em quanto tempo dar o pulso na função "email"
@@ -370,9 +370,18 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     }
     const m = r.mensagem; let res;
     try {
-      const jid = await jidParaEnvio(s, m.telefone);
-      if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
-      else {
+      // v65: destino pode ser um grupo. A conferência dos participantes é AGORA, não a da escolha:
+      // entrou alguém que não é o Danilo nem o sócio, a mensagem não sai (e o motivo fica na fila).
+      let jid = null;
+      if (m.grupo && m.grupo.jid) {
+        const c = await conferirGrupoAgora(s, m.grupo, st.numero || numeroDoSock(s));
+        if (c.ok) jid = m.grupo.jid;
+        else res = { p_ok: false, p_erro: "Grupo não liberado: " + c.motivo + ". Nada foi enviado." };
+      } else {
+        jid = await jidParaEnvio(s, m.telefone);
+        if (!jid) res = { p_ok: false, p_erro: "Número sem WhatsApp." };
+      }
+      if (!res) {
         let pdf = null;
         if (m.arquivo) { try { pdf = await baixarPdf(m); } catch (e) { pdf = null; res = { p_ok: false, p_erro: "PDF não baixado (nada foi enviado): " + e.message }; } }
         if (!res) {
@@ -403,6 +412,21 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
         continue;
       }
     }
+  }
+
+  /** v65: pedido da tela "buscar os grupos". Lista os grupos do WhatsApp da oficina, já conferidos
+   *  pela regra (só o Danilo e o sócio), e grava para a tela mostrar. Sem conexão agora, o pedido
+   *  fica no banco e o próximo sinal tenta de novo. */
+  async function listarGruposAPedido() {
+    const s = st.sock;
+    if (!s || !st.aberto) return;
+    log("pedido da tela: buscar os grupos do WhatsApp");
+    try {
+      const autorizados = (await rpc("whatsapp_motor_autorizados", { p_chave: config.chave })) || [];
+      const lista = await listarGrupos(s, autorizados, st.numero || numeroDoSock(s));
+      await rpc("whatsapp_motor_grupos", { ...base(), p_lista: lista });
+      log("grupos gravados:", lista.length);
+    } catch (e) { log("grupos não listados (tenta de novo no próximo sinal):", e.message); }
   }
 
   async function desconectarAPedido() {
@@ -474,6 +498,7 @@ export function criarMotor({ config, buscar = globalThis.fetch, criarSocket = ma
     }
     if (!r.continua && st.sock) fechar("a vez foi interrompida: reabre com a sessão do banco");
     if (r.pedido === "desconectar") return desconectarAPedido();
+    if (r.pedido === "grupos") return listarGruposAPedido();
     await tentarPendentes();
     await mandarResultados(); await guardarMensagens(); await mandarEntregas();
     processarMidias(); // em segundo plano

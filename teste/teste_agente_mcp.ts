@@ -228,6 +228,15 @@ c = await chama("whatsapp_enviar", { texto: "Seu carro está pronto", cliente_id
 confere("whatsapp_enviar confirmado grava e acorda a zap", c.args?.p_gravar === true && (c.args?.p as Record<string, unknown>)?.fora_horario === false && (c.args?.p as Record<string, unknown>)?.origem === "claude" && JSON.stringify(acordadas) === JSON.stringify([["zap", { acao: "processar" }]]), JSON.stringify(acordadas));
 // v34: modelo e PDF vão pela função "email"
 acordadas.length = 0;
+// v64: grupo (resumo interno da oficina) — nunca junto de cliente, nunca com modelo ou PDF
+c = await chama("whatsapp_enviar", { grupo: "financeiro", texto: "Caixa de hoje: R$ 1.000,00" });
+confere("whatsapp_enviar para grupo: prévia com o apelido do grupo", c.fn === "whatsapp_enfileirar" && (c.args?.p as Record<string, unknown>)?.grupo === "financeiro" && c.args?.p_gravar === false, JSON.stringify(c.args));
+c = await chama("whatsapp_enviar", { grupo: "financeiro", telefone: "27999112233", texto: "oi" });
+confere("whatsapp_enviar: grupo junto de telefone é recusado sem ir ao banco", c.r?.isError === true && !c.fn);
+c = await chama("whatsapp_enviar", { grupo: "financeiro", modelo: "cobranca", numero_os: 1887 });
+confere("whatsapp_enviar: modelo e PDF não vão para grupo", c.r?.isError === true && !c.fn);
+c = await chama("whatsapp_enviar", { grupo: "financeiro" });
+confere("whatsapp_enviar: grupo sem texto é recusado", c.r?.isError === true && !c.fn);
 c = await chama("whatsapp_enviar", { modelo: "orcamento", numero_os: 1887, anexo: { fonte: "os", documento: "orcamento" } });
 const pw = acordadas[0] as [string, Record<string, unknown>];
 confere("whatsapp_enviar com modelo+PDF: prévia pela função email (sem gravar nem acordar a zap)", pw?.[0] === "email" && pw[1].acao === "whatsapp" && pw[1].modelo === "orcamento"

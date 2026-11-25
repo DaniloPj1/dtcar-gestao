@@ -90,6 +90,17 @@
         if (b.acao === "parear_qr") { z.situacao = "pareando"; z.atualizado_em = now(); z.qr_svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 4 4"><rect width="2" height="2"/></svg>'; return { qr: true, validade_s: 130 }; }
         if (b.acao === "parear") { z.situacao = "pareando"; z.numero = b.numero; return { codigo: "ABCD1234", validade_s: 120 }; }
         if (b.acao === "conferir") return { ok: true, ms: 3100 };
+        // v65: grupos do WhatsApp (só grupo com o Danilo e o sócio pode receber resumo interno)
+        if (b.acao === "grupos") {
+          const aut = ((db.config || {}).zapGrupos || {}).numeros || [];
+          if (!aut.length) throw new Error("Cadastre os números autorizados (o seu e o do sócio) antes de buscar os grupos.");
+          const lista = [
+            { jid: "120363000000000001@g.us", nome: "Financeiro", participantes: 3, ids: ["5527988881111@s.whatsapp.net", "5527997696545@s.whatsapp.net", "5527999674855@s.whatsapp.net"],
+              numeros: ["5527997696545", "5527999674855"], autorizado: true, motivo: "" },
+            { jid: "120363000000000002@g.us", nome: "Clientes Ducato", participantes: 9, ids: [], numeros: [], autorizado: false, motivo: "participante não autorizado: 5527991234567" },
+          ];
+          z.grupos = { em: now(), lista }; return { ok: true, ms: 1800, grupos: lista.length, lista };
+        }
         if (b.acao === "processar") return { ok: true, iniciado: true, detalhe: "Buscando mensagens novas e enviando a fila (leva até 2 minutos)." };
         if (b.acao === "desconectar" && window.__ZAP_OCUPADA) return { ok: false, resposta: "ocupada", detalhe: "A conexão está em uso (ou o banco não confirmou a reserva). Tente de novo em 1 minuto." };
         if (b.acao === "desconectar") { if (z.dono === "android" && z.dono_ate > now()) { z.pedido = "desconectar"; return { ok: true, pedido: true, detalhe: "Pedido enviado ao motor do Android: ele desconecta em até 30 segundos." }; } z.situacao = "desligado"; z.numero = ""; return { ok: true }; }

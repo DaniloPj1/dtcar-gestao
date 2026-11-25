@@ -16,7 +16,8 @@ const CORES = ["#174f94", "#a35a06", "#1f7a3a", "#8c1d1d"];
 const numBR = n => String(n).replace(".", ",");
 /** Mesma regra do js/obdgrafico.js: sem unidade, cada leitura é o seu gráfico. */
 const grupoDe = p => (p.unidade ? "u:" + p.unidade : "k:" + p.pid);
-const valorEscrito = l => (typeof l.valor === "number" ? numBR(l.valor.toFixed(l.casas || 0)) : "—");
+/** O valor já vem arredondado do js/obd.js: aqui só o ponto vira vírgula. */
+const valorEscrito = l => (typeof l.valor === "number" ? numBR(String(l.valor)) : "—");
 
 /** Um gráfico: a linha do último minuto, com o valor escrito na legenda (o olho não viaja até o eixo). */
 function Linha({ titulo, leituras, historia }) {

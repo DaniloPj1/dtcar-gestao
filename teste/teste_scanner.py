@@ -73,6 +73,8 @@ try:
 
         # ---------- 2) o Início são cards de ícone, sem menu lateral ----------
         t(not pg.is_visible('.rail'), 'no Início não há menu lateral: são cards')
+        t(pg.eval_on_selector('.cards', 'e => getComputedStyle(e).gridTemplateColumns').count(' ') == 4,
+          'deitado, as cinco funções cabem numa linha só')
         cards = pg.eval_on_selector_all('.cards .card b', 'es => es.map(e => e.textContent.trim())')
         t(cards == ['Ao vivo', 'Gráficos', 'Falhas', 'Rede CAN', 'Programações'],
           'os cinco cards do Início, na ordem: ' + str(cards))

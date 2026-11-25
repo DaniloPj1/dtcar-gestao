@@ -16,8 +16,9 @@ import { Cab, Trabalhando, Falhou, useApp, ir } from "../comum.js";
 import { Ic } from "../icones.js";
 
 const numBR = n => String(n).replace(".", ",");
-/** O valor do jeito que se lê num scanner: casas só quando a leitura tem casas. */
-const mostrar = l => (typeof l.valor === "number" ? numBR(l.valor.toFixed(l.casas || 0)) : "—");
+/** O valor como o motor já o arredondou (js/obd.js arredonda pelas casas de cada PID): só troca
+ *  o ponto pela vírgula. Formatar de novo aqui jogava fora a casa decimal — lambda 0,97 virava 1. */
+const mostrar = l => (typeof l.valor === "number" ? numBR(String(l.valor)) : "—");
 
 /** Um mostrador. O rótulo vai SEMPRE escrito: quem lê está embaixo do carro, com pressa. */
 function Vivo({ l, ctx }) {

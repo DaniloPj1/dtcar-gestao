@@ -1,0 +1,13 @@
+{
+  "appId": "br.com.dtcarcentroautomotivo.scanner",
+  "appName": "DTCar Scanner",
+  "webDir": "www",
+  "backgroundColor": "#174f94",
+  "server": {
+    "url": "https://gestao.dtcarcentroautomotivo.com.br/scanner/",
+    "cleartext": false
+  },
+  "android": {
+    "allowMixedContent": false
+  }
+}

@@ -1,0 +1,178 @@
+/* DTCar Scanner — tablet da oficina. Visual do protótipo aprovado pelo Danilo em 25/11/2026:
+   barra lateral azul #174f94, cards azuis com ícone branco, cartões brancos sóbrios, nada de
+   gradiente nem sombra grande. A fonte Barlow vem do próprio site (../app/fonts), para o app
+   abrir igual sem internet. */
+@font-face { font-family: "Barlow"; font-weight: 400; font-style: normal; font-display: swap; src: url("../app/fonts/barlow-400.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 500; font-style: normal; font-display: swap; src: url("../app/fonts/barlow-500.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 600; font-style: normal; font-display: swap; src: url("../app/fonts/barlow-600.woff2") format("woff2"); }
+@font-face { font-family: "Barlow"; font-weight: 700; font-style: normal; font-display: swap; src: url("../app/fonts/barlow-700.woff2") format("woff2"); }
+
+:root {
+  --azul: #2f6fb5; --forte: #174f94; --fundo: #eceef0; --sup: #ffffff;
+  --tinta: #16191d; --meio: #4a535e; --linha: #d3d7dc; --linha-fina: #eceef0;
+  --certo: #1f7a3a; --atencao: #a35a06; --ruim: #8c1d1d; --perigo: #d61c1c;
+  --claro: #cfe0f2; --anel: #9db8d9;
+  --corpo: "Barlow", system-ui, sans-serif;
+  --num: "Barlow Condensed", "Arial Narrow", "Barlow", sans-serif;
+  --r: 12px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: var(--corpo); color: var(--tinta); background: var(--fundo); -webkit-tap-highlight-color: transparent; overscroll-behavior: none; }
+button, input, select { font-family: inherit; color: inherit; }
+#raiz { height: 100%; }
+
+/* ---------- armação ---------- */
+.app { display: flex; height: 100%; }
+.corpo { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; height: 100%; }
+.rolo { flex-grow: 1; overflow-y: auto; padding: 14px 20px; display: flex; flex-direction: column; gap: 13px; }
+
+/* ---------- barra lateral (só dentro de uma leitura) ---------- */
+.rail { width: 112px; flex-shrink: 0; background: var(--forte); display: flex; flex-direction: column; gap: 3px; padding: 12px 8px; overflow-y: auto; }
+.rail .marca { font-family: var(--num); font-size: 19px; font-weight: 700; color: #fff; text-align: center; letter-spacing: .5px; padding: 4px 0 11px; line-height: 1.05; }
+.rail .marca span { color: var(--claro); font-size: 13px; }
+.rail a { display: flex; flex-direction: column; align-items: center; gap: 5px; padding: 11px 4px; border-radius: 10px; color: var(--claro); font-size: 11.5px; font-weight: 600; text-align: center; line-height: 1.15; text-decoration: none; }
+.rail a[aria-current="page"] { background: #fff; color: var(--forte); }
+.rail .sair { margin-top: auto; background: rgba(255,255,255,.16); border: 0; border-radius: 10px; color: #fff; font-size: 11.5px; font-weight: 700; padding: 11px 4px; }
+
+/* ---------- cabeçalho ---------- */
+.cab { background: var(--sup); border-bottom: 1px solid var(--linha); min-height: 62px; display: flex; align-items: center; gap: 15px; padding: 8px 20px; flex-shrink: 0; flex-wrap: wrap; }
+.cab h1 { margin: 0; font-size: 17px; font-weight: 700; }
+.cab .onde { font-size: 13.5px; color: var(--meio); }
+.cab .dir { margin-left: auto; display: flex; gap: 9px; align-items: center; }
+.sinal { display: flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 700; }
+.sinal i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; background: currentColor; }
+.sinal.on { color: var(--certo); }
+.sinal.off { color: var(--meio); }
+
+/* ---------- placa Mercosul ---------- */
+.placa-id { display: inline-flex; flex-direction: column; border: 2px solid var(--tinta); border-radius: 6px; overflow: hidden; background: #fff; line-height: 1; }
+.placa-id b { font-family: var(--num); font-size: 26px; font-weight: 700; letter-spacing: 2.5px; padding: 5px 12px 6px; }
+.placa-id em { background: var(--forte); color: #fff; font-size: 8.5px; font-style: normal; font-weight: 700; letter-spacing: 1.4px; text-align: center; padding: 2px 0; }
+
+/* ---------- cartões ---------- */
+.ct { background: var(--sup); border: 1px solid var(--linha); border-radius: var(--r); padding: 15px 18px; }
+.ct h2 { margin: 0 0 11px; font-size: 13.5px; font-weight: 700; letter-spacing: .3px; }
+.ct h3 { margin: 13px 0 8px; font-size: 12.5px; font-weight: 700; color: var(--meio); letter-spacing: .3px; }
+.par { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.kv { display: flex; justify-content: space-between; gap: 12px; font-size: 14px; padding: 6px 0; border-bottom: 1px solid var(--linha-fina); }
+.kv:last-child { border-bottom: 0; }
+.kv span { color: var(--meio); }
+.kv b { text-align: right; }
+
+/* ---------- cards de ícone do Início ---------- */
+.cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+.cards.tres { grid-template-columns: repeat(3, 1fr); }
+.card { background: var(--azul); border: 0; border-radius: 14px; min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px 12px; color: #fff; cursor: pointer; text-align: center; }
+.card svg { width: 54px; height: 54px; stroke: #fff; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.card b { font-size: 16px; font-weight: 700; letter-spacing: .3px; }
+.card small { font-size: 12.5px; color: var(--claro); line-height: 1.3; }
+.card.grava { background: var(--forte); }
+.card:disabled { opacity: .55; cursor: default; }
+.card .tag { font-size: 9.5px; font-weight: 700; letter-spacing: .5px; background: rgba(255,255,255,.22); border-radius: 4px; padding: 2px 7px; }
+
+/* ---------- selos e situações (a cor nunca anda só: o nome vai escrito) ---------- */
+.selo { font-size: 11px; font-weight: 700; letter-spacing: .4px; padding: 3px 8px; border-radius: 4px; color: #fff; background: var(--meio); white-space: nowrap; }
+.selo.certo { background: var(--certo); }
+.selo.atencao { background: var(--atencao); }
+.selo.ruim { background: var(--ruim); }
+.selo.rede { background: var(--forte); }
+.selo.mudo { background: #9aa3ad; }
+.selo.obra { background: var(--atencao); }
+
+/* ---------- botões ---------- */
+.bt { min-height: 50px; padding: 0 20px; border: 1.5px solid var(--anel); border-radius: 9px; background: #fff; color: var(--forte); font-size: 13.5px; font-weight: 700; letter-spacing: .3px; cursor: pointer; }
+.bt.cheio { background: var(--azul); border-color: var(--azul); color: #fff; }
+.bt.perigo { background: var(--perigo); border-color: var(--perigo); color: #fff; }
+.bt.alto { min-height: 56px; font-size: 15px; }
+.bt:disabled { opacity: .5; cursor: default; }
+.bt-linha { display: flex; gap: 11px; flex-wrap: wrap; }
+.bt-linha .bt { flex: 1; min-width: 150px; }
+
+/* ---------- lista com informação escondida (toque abre) ---------- */
+.lista { border-top: 1px solid var(--linha-fina); }
+.item { border-bottom: 1px solid var(--linha-fina); }
+.item > button { width: 100%; display: flex; align-items: center; gap: 12px; background: none; border: 0; padding: 13px 2px; text-align: left; cursor: pointer; font-size: 15px; }
+.item > button .nome { flex-grow: 1; min-width: 0; font-weight: 600; }
+.item > button .seta { color: var(--meio); font-size: 18px; flex-shrink: 0; }
+.item .dentro { padding: 2px 2px 15px; font-size: 14px; color: var(--tinta); line-height: 1.5; display: flex; flex-direction: column; gap: 10px; }
+.item .dentro .kv { font-size: 13.5px; }
+
+/* ---------- mostradores ao vivo ---------- */
+.vivos { display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); gap: 12px; }
+.vv { background: var(--sup); border: 1px solid var(--linha); border-radius: var(--r); padding: 13px 14px; display: flex; flex-direction: column; gap: 5px; }
+.vv.fora { border-color: var(--ruim); border-left-width: 4px; }
+.vv .rot { font-size: 12px; color: var(--meio); font-weight: 600; line-height: 1.25; min-height: 30px; }
+.vv .num { font-family: var(--num); font-size: 34px; font-weight: 700; line-height: 1; letter-spacing: .5px; }
+.vv .num i { font-family: var(--corpo); font-size: 14px; font-weight: 600; font-style: normal; color: var(--meio); margin-left: 4px; }
+.vv .faixa { font-size: 11.5px; color: var(--meio); }
+.vv .barra { height: 7px; border-radius: 4px; background: #e4e8ec; overflow: hidden; position: relative; }
+.vv .barra i { position: absolute; top: 0; bottom: 0; background: var(--azul); }
+.vv .barra u { position: absolute; top: 0; bottom: 0; background: rgba(31,122,58,.22); }
+.vv .sel { align-self: flex-start; }
+
+/* ---------- gráficos ---------- */
+.gras { display: grid; grid-template-columns: 1fr 1fr; gap: 13px; }
+.gra { background: var(--sup); border: 1px solid var(--linha); border-radius: var(--r); padding: 13px 15px; }
+.gra h3 { margin: 0 0 8px; font-size: 12.5px; font-weight: 700; color: var(--tinta); }
+.gra svg { width: 100%; height: 150px; display: block; }
+.gra .leg { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 7px; font-size: 12px; color: var(--meio); }
+.gra .leg b { display: inline-flex; align-items: center; gap: 5px; font-weight: 600; color: var(--tinta); }
+.gra .leg b s { width: 13px; height: 3px; border-radius: 2px; text-decoration: none; }
+
+/* ---------- falhas ---------- */
+.dtc { background: var(--sup); border: 1px solid var(--linha); border-left: 4px solid var(--meio); border-radius: var(--r); padding: 14px 16px; }
+.dtc.atual { border-left-color: var(--ruim); }
+.dtc.pendente { border-left-color: var(--atencao); }
+.dtc .topo { display: flex; align-items: center; gap: 11px; margin-bottom: 7px; flex-wrap: wrap; }
+.dtc .cod { font-family: var(--num); font-size: 27px; font-weight: 700; letter-spacing: 1.2px; line-height: 1; }
+.dtc .desc { font-size: 14.5px; line-height: 1.35; }
+.dtc .causas { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 16px; margin-top: 8px; }
+.dtc .causas div { font-size: 12.5px; padding: 3px 0 3px 15px; position: relative; }
+.dtc .causas div::before { content: ""; position: absolute; left: 3px; top: 10px; width: 5px; height: 5px; border-radius: 50%; background: var(--anel); }
+
+/* ---------- rede CAN ---------- */
+.mod { display: flex; align-items: center; gap: 11px; padding: 8px 0; border-bottom: 1px solid var(--linha-fina); font-size: 14.5px; }
+.mod:last-child { border-bottom: 0; }
+.mod .end { font-family: var(--num); font-weight: 700; font-size: 18px; letter-spacing: .9px; min-width: 46px; flex-shrink: 0; }
+.mod .nome { flex-grow: 1; min-width: 0; }
+.mod .nome small { display: block; font-size: 12px; color: var(--meio); line-height: 1.3; }
+.mod .ms { font-size: 12px; color: var(--meio); font-variant-numeric: tabular-nums; flex-shrink: 0; min-width: 44px; text-align: right; }
+.mod.fora { background: #fdf2f2; border-radius: 7px; padding: 8px 9px; margin: 0 -9px; }
+.vd { display: flex; gap: 13px; padding: 10px 0; border-bottom: 1px solid var(--linha-fina); }
+.vd:last-child { border-bottom: 0; padding-bottom: 0; }
+.vd:first-child { padding-top: 0; }
+.vd .g { font-size: 11px; font-weight: 700; letter-spacing: .4px; width: 106px; flex-shrink: 0; padding-top: 2px; }
+.vd .g span { display: block; font-weight: 400; color: var(--meio); }
+.vd .t { font-size: 14.5px; line-height: 1.4; }
+
+/* ---------- avisos (só os dois que o Danilo deixou) ---------- */
+.trabalhando { background: var(--sup); border: 1px solid var(--anel); border-radius: var(--r); padding: 15px 18px; font-size: 15px; font-weight: 600; color: var(--forte); display: flex; align-items: center; gap: 12px; }
+.trabalhando i { width: 16px; height: 16px; border-radius: 50%; border: 3px solid var(--claro); border-top-color: var(--azul); animation: gira .9s linear infinite; flex-shrink: 0; }
+@keyframes gira { to { transform: rotate(360deg); } }
+.falhou { background: #fdf2f2; border: 1px solid var(--ruim); border-radius: var(--r); padding: 14px 16px; font-size: 14.5px; color: var(--ruim); font-weight: 600; }
+.vazio { padding: 22px 4px; text-align: center; font-size: 14.5px; color: var(--meio); }
+@media (prefers-reduced-motion: reduce) { .trabalhando i { animation: none; } }
+
+/* ---------- tela da placa ---------- */
+.porta { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 26px; padding: 30px; background: var(--fundo); }
+.porta .cabeca { background: var(--forte); color: #fff; width: 100%; max-width: 760px; border-radius: var(--r) var(--r) 0 0; padding: 20px 26px; display: flex; align-items: center; gap: 20px; }
+.porta .cabeca img { height: 54px; width: auto; }
+.porta .cabeca div { flex-grow: 1; }
+.porta .cabeca h1 { margin: 0; font-size: 22px; font-weight: 700; }
+.porta .cabeca p { margin: 3px 0 0; font-size: 14px; color: var(--claro); }
+.porta .meio { background: var(--sup); width: 100%; max-width: 760px; border: 1px solid var(--linha); border-top: 0; border-radius: 0 0 var(--r) var(--r); padding: 26px; display: flex; flex-direction: column; gap: 16px; }
+.porta label { font-size: 13px; font-weight: 700; color: var(--meio); letter-spacing: .3px; }
+.porta input { width: 100%; height: 72px; border: 2px solid var(--anel); border-radius: 10px; padding: 0 18px; font-family: var(--num); font-size: 42px; font-weight: 700; letter-spacing: 7px; text-align: center; text-transform: uppercase; }
+.porta input:focus { outline: 3px solid var(--azul); outline-offset: 2px; border-color: var(--azul); }
+.porta .recentes { display: flex; flex-wrap: wrap; gap: 9px; }
+.porta .recentes button { border: 1.5px solid var(--anel); background: #fff; border-radius: 8px; padding: 9px 15px; font-family: var(--num); font-size: 19px; font-weight: 700; letter-spacing: 1.6px; color: var(--forte); cursor: pointer; }
+
+/* ---------- em pé (retrato) ---------- */
+@media (max-aspect-ratio: 1/1) {
+  .cards, .cards.tres { grid-template-columns: repeat(2, 1fr); }
+  .par, .gras { grid-template-columns: 1fr; }
+  .dtc .causas { grid-template-columns: 1fr; }
+  .rail { width: 92px; }
+  .vivos { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
+}

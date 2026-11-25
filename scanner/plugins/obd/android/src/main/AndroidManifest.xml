@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- As permissões de Bluetooth do app entram por aqui: o Android junta este manifesto ao do aplicativo
+     quando o APK é gerado, então não é preciso remendar o AndroidManifest.xml que o Capacitor cria.
+
+     Android 12 (API 31) em diante pede BLUETOOTH_CONNECT na hora do uso. Só essa: o app NÃO procura
+     aparelho, ele usa os que já estão pareados nos Ajustes do Android (getBondedDevices) e conecta.
+     Pedir BLUETOOTH_SCAN sem precisar faria o Android escrever "determinar a posição de aparelhos
+     próximos" no aviso de permissão, assustando o mecânico por nada.
+     Android 11 e anteriores usam as permissões antigas, concedidas na instalação. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+
+    <uses-feature android:name="android.hardware.bluetooth" android:required="false" />
+
+</manifest>

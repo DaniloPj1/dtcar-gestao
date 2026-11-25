@@ -4,6 +4,9 @@
  * REGRA (Danilo, 21/11/2026): até 3 GRÁFICOS na tela. Leituras da MESMA UNIDADE dividem um gráfico
  * e uma escala — é isso que deixa ver as 4 rodas do ABS juntas e enxergar a que diverge. Leitura
  * de unidade diferente abre outro gráfico, até o limite de 3.
+ *
+ * 25/11/2026: "trocar" aceita um limite próprio (max). O app do celular segue com 3; o DTCar Scanner
+ * (tablet, /scanner/) passa 4, que é o que cabe na tela dele.
  */
 export const GRAFICOS_MAX = 3;       // gráficos na tela
 export const LINHAS_MAX = 4;         // leituras no mesmo gráfico (as 4 rodas)
@@ -31,7 +34,7 @@ export function graficosDe(escolha, lidos) {
  * Tira ou põe uma leitura. Devolve { lista, recusa }: recusa "" quando entrou ou saiu, ou o motivo
  * escrito quando não coube.
  */
-export function trocar(escolha, chave, lidos) {
+export function trocar(escolha, chave, lidos, max = GRAFICOS_MAX) {
   const lista = (escolha || []).slice();
   const i = lista.indexOf(chave);
   if (i >= 0) { lista.splice(i, 1); return { lista, recusa: "" }; }
@@ -39,7 +42,7 @@ export function trocar(escolha, chave, lidos) {
   if (!l) return { lista, recusa: "" };
   const gs = graficosDe(lista, lidos), g = gs.find(x => x.grupo === grupoDe(l));
   if (g && g.leituras.length >= LINHAS_MAX) return { lista, recusa: "Este gráfico já tem " + LINHAS_MAX + " leituras. Tire uma para pôr outra." };
-  if (!g && gs.length >= GRAFICOS_MAX) return { lista, recusa: "Já tem " + GRAFICOS_MAX + " gráficos. Leitura da mesma unidade entra junto num deles; de unidade diferente, tire um gráfico antes." };
+  if (!g && gs.length >= max) return { lista, recusa: "Já tem " + max + " gráficos. Leitura da mesma unidade entra junto num deles; de unidade diferente, tire um gráfico antes." };
   lista.push(chave);
   return { lista, recusa: "" };
 }

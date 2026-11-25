@@ -53,6 +53,14 @@ jobs:
             echo "::error::Falta o segredo SUPABASE_ACCESS_TOKEN no repositório (Settings › Secrets and variables › Actions)."
             exit 1
           fi
+          # diz o que está no segredo sem mostrar o segredo: tamanho e as 4 primeiras letras.
+          # O CLI só aceita o Personal Access Token da conta (Supabase › Account › Access Tokens),
+          # que começa com "sbp_" — a chave do projeto ("sb_secret_…", "sbp_…" não) não serve.
+          echo "Token guardado: ${#SUPABASE_ACCESS_TOKEN} caracteres, começa com \"${SUPABASE_ACCESS_TOKEN:0:4}\""
+          case "$SUPABASE_ACCESS_TOKEN" in
+            sbp_*) ;;
+            *) echo "::error::O segredo SUPABASE_ACCESS_TOKEN não é um Personal Access Token: ele precisa começar com sbp_ (Supabase › Account › Access Tokens). O que está guardado começa com \"${SUPABASE_ACCESS_TOKEN:0:4}\" e tem ${#SUPABASE_ACCESS_TOKEN} caracteres."; exit 1 ;;
+          esac
           echo "Projeto de destino: $PROJETO (dtcar-gestao)"
           echo "Commit: ${{ github.sha }}"
 

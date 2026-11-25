@@ -17,14 +17,15 @@ import * as sessao from "../js/obdsessao.js";
 import * as confere from "../js/obdconfere.js";
 import { consultarPlaca, paraResumo, anoFabMod } from "../js/placa.js";
 import { normPlaca, placaValida, fmtKm } from "../js/util.js";
-import { Ctx, TELAS, ir, rotaDe, useApp, Sinal, PlacaId, Falhou, Trabalhando, Item, Ic, lerCofre, gravarCofre } from "./comum.js";
+import { Ctx, TELAS, ir, rotaDe, raizDa, useApp, Sinal, PlacaId, Falhou, Trabalhando, Ic, lerCofre, gravarCofre } from "./comum.js";
 import { AoVivo } from "./telas/aovivo.js";
 import { Graficos } from "./telas/graficos.js";
 import { Falhas } from "./telas/falhas.js";
 import { Rede } from "./telas/rede.js";
-import { Prog } from "./telas/prog.js";
+import { Prog, Atuador, Aprender, Bico } from "./telas/prog.js";
 
-const COMP = { aovivo: AoVivo, graficos: Graficos, falhas: Falhas, rede: Rede, prog: Prog };
+const COMP = { aovivo: AoVivo, graficos: Graficos, falhas: Falhas, rede: Rede, prog: Prog,
+  atuador: Atuador, aprender: Aprender, bico: Bico };
 
 const CHAVE_PLACA = "scanner_placa";
 const CHAVE_RECENTES = "scanner_placas_recentes";
@@ -44,7 +45,7 @@ function Rail({ rota }) {
   return html`<nav class="rail" aria-label="Funções">
     <div class="marca">DTCar<br /><span>SCANNER</span></div>
     <a href="#/inicio"><${Ic} n="carro" t=${23} />Início</a>
-    ${TELAS.map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === rota ? "page" : undefined}>
+    ${TELAS.map(t => html`<a key=${t.r} href=${"#/" + t.r} aria-current=${t.r === raizDa(rota) ? "page" : undefined}>
       <${Ic} n=${t.ic} t=${23} />${t.nome}</a>`)}
   </nav>`;
 }
@@ -207,8 +208,7 @@ function Inicio() {
           ${t.grava ? html`<span class="tag">ESCREVE NO CARRO</span>` : html`<small>${t.sub}</small>`}
         </button>`)}
       </div>
-      <${Adaptador} />
-      <${CarroCard} />
+      <div class="par"><${Adaptador} /><${CarroCard} /></div>
     </div>
   </div>`;
 }

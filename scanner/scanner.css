@@ -62,6 +62,7 @@ button, input, select { font-family: inherit; color: inherit; }
 
 /* ---------- cards de ícone do Início ---------- */
 .cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
+.cards.tres { grid-template-columns: repeat(3, 1fr); }
 .card { background: var(--azul); border: 0; border-radius: 14px; min-height: 150px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 16px 12px; color: #fff; cursor: pointer; text-align: center; }
 .card svg { width: 54px; height: 54px; stroke: #fff; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 .card b { font-size: 16px; font-weight: 700; letter-spacing: .3px; }
@@ -169,7 +170,7 @@ button, input, select { font-family: inherit; color: inherit; }
 
 /* ---------- em pé (retrato) ---------- */
 @media (max-aspect-ratio: 1/1) {
-  .cards { grid-template-columns: repeat(2, 1fr); }
+  .cards, .cards.tres { grid-template-columns: repeat(2, 1fr); }
   .par, .gras { grid-template-columns: 1fr; }
   .dtc .causas { grid-template-columns: 1fr; }
   .rail { width: 92px; }

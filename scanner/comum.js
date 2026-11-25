@@ -17,8 +17,17 @@ export const TELAS = [
   { r: "rede", nome: "Rede CAN", ic: "rede", titulo: "Mapa da rede CAN", sub: "quem responde e quem não" },
   { r: "prog", nome: "Programações", ic: "prog", titulo: "Programações avançadas", sub: "", grava: true },
 ];
-export const ROTAS = TELAS.map(t => t.r).concat(["inicio", "placa"]);
+/** As três telas de dentro de Programações avançadas. Cada função tem a SUA tela: nada de empilhar
+ *  uma embaixo da outra numa página que rola (pedido do Danilo, 25/11/2026). */
+export const PROGRAMACOES = [
+  { r: "atuador", nome: "Teste de atuador", ic: "atuador", titulo: "Teste de atuador", sub: "aciona uma saída para conferir no carro" },
+  { r: "aprender", nome: "Aprendizados", ic: "aprender", titulo: "Aprendizados e calibrações", sub: "zera adaptação, calibra, regenera" },
+  { r: "bico", nome: "Programar bico", ic: "bico", titulo: "Programar bico", sub: "grava o código do ímã de cada bico" },
+];
+export const ROTAS = TELAS.map(t => t.r).concat(PROGRAMACOES.map(t => t.r), ["inicio", "placa"]);
 export const ir = r => { location.hash = "#/" + r; };
+/** Em qual item do menu lateral esta rota se acende. */
+export const raizDa = r => (PROGRAMACOES.some(t => t.r === r) ? "prog" : r);
 export const rotaDe = () => {
   const m = /^#\/([a-z]+)/.exec(location.hash || "");
   const r = m ? m[1] : "inicio";

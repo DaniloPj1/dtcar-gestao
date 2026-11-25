@@ -195,19 +195,28 @@ try:
         t('O BARRAMENTO' in pg.inner_text('.rolo') and 'códigos de rede' in pg.inner_text('.rolo'),
           'o barramento e os códigos U ficam em dois quadros curtos, lado a lado')
 
-        # ---------- 9) programações avançadas: lista com informação escondida ----------
+        # ---------- 9) programações avançadas: cada função abre a SUA tela ----------
         pg.click('.rail a[href="#/prog"]')
         pg.wait_for_selector('#sc-descobrir', timeout=10000)
         t('ESCREVE NO CARRO' in pg.inner_text('.cab'), 'a aba avisa que esta é a tela que escreve no carro')
-        t('PROGRAMAR BICO' not in pg.inner_text('.rolo'), 'antes de perguntar ao módulo, não há lista nenhuma')
+        atalhos = pg.eval_on_selector_all('.cards.tres .card b', 'es => es.map(e => e.textContent.trim())')
+        t(atalhos == ['Teste de atuador', 'Aprendizados', 'Programar bico'],
+          'a aba é um MENU das três funções, não as três empilhadas: ' + str(atalhos))
+        t(len(pg.query_selector_all('.lista .item')) == 0, 'o menu não traz lista nenhuma: a lista é da tela de cada função')
         pg.click('#sc-descobrir')
-        pg.wait_for_function("/TESTE DE ATUADOR/.test(document.body.textContent)", timeout=60000)
-        corpo = pg.inner_text('.rolo')
-        t('TESTE DE ATUADOR' in corpo, 'a aba guarda o teste de atuador')
-        t('APRENDIZADOS E CALIBRAÇÕES' in corpo, 'a aba guarda os aprendizados')
-        t('PROGRAMAR BICO' in corpo, 'a aba guarda a programação de bico')
+        pg.wait_for_function("/que o módulo informou/.test(document.body.textContent)", timeout=60000)
+        t('que o módulo informou' in pg.inner_text('.cards.tres'), 'depois de perguntar, cada card diz quantos o módulo informou')
+
+        # cada card abre a tela inteira daquela função, com volta para o menu
+        pg.click('#sc-abrir-atuador')
+        pg.wait_for_selector('#sc-voltar-prog', timeout=10000)
+        t('Teste de atuador' in pg.inner_text('.cab h1'), 'o card do atuador abre a TELA do teste de atuador')
+        t('APRENDIZADOS' not in pg.inner_text('.rolo') and 'PROGRAMAR BICO' not in pg.inner_text('.rolo'),
+          'na tela do atuador não há as outras duas funções embaixo')
+        t(pg.eval_on_selector('.rail a[aria-current="page"]', 'e => e.textContent').find('Programa') >= 0,
+          'o menu lateral continua aceso em Programações')
         itens = pg.query_selector_all('.lista .item > button')
-        t(len(itens) > 0, 'as três coisas vêm em lista: ' + str(len(itens)) + ' itens')
+        t(len(itens) > 0, 'a tela do atuador traz as saídas em lista: ' + str(len(itens)))
         t(pg.eval_on_selector('.lista .item > button', 'e => e.getAttribute("aria-expanded")') == 'false',
           'a informação começa escondida')
         t(len(pg.query_selector_all('.lista .item .dentro')) == 0, 'nada aberto antes do toque')
@@ -218,15 +227,37 @@ try:
         t('Módulo' in dentro and 'Comando' in dentro, 'aberto, o item mostra o módulo e o comando que vai ser mandado')
         itens[0].click()
         t(len(pg.query_selector_all('.lista .item .dentro')) == 0, 'o segundo toque fecha de novo')
-        # a gravação de bico só libera depois de o módulo dizer que aceita
-        t('PERGUNTAR SE O MÓDULO ACEITA' in corpo or 'INFORME O CÓDIGO' in corpo,
-          'o bico não grava antes de perguntar ao módulo se ele aceita o campo')
+        pg.click('#sc-voltar-prog')
+        pg.wait_for_selector('#sc-descobrir', timeout=10000)
+        t(pg.is_visible('.cards.tres'), 'o botão PROGRAMAÇÕES volta para o menu das três funções')
+
+        pg.click('#sc-abrir-aprender')
+        pg.wait_for_selector('#sc-voltar-prog', timeout=10000)
+        t('Aprendizados' in pg.inner_text('.cab h1'), 'o card dos aprendizados abre a tela dos aprendizados')
+        t('SAÍDA' not in pg.inner_text('.rolo').upper().replace('SAÍDAS', ''), 'na tela dos aprendizados não há as saídas do atuador')
+        pg.click('#sc-voltar-prog')
+        pg.wait_for_selector('#sc-abrir-bico', timeout=10000)
+
+        pg.click('#sc-abrir-bico')
+        pg.wait_for_selector('#sc-voltar-prog', timeout=10000)
+        t('Programar bico' in pg.inner_text('.cab h1'), 'o card do bico abre a tela de programar bico')
+        cil = pg.eval_on_selector_all('.lista .item .nome', 'es => es.map(e => e.textContent.trim())')
+        t(cil == ['Cilindro 1', 'Cilindro 2', 'Cilindro 3', 'Cilindro 4'], 'os cilindros vêm em lista: ' + str(cil))
         t(not pg.query_selector('#sc-bico-gravar'), 'o botão de gravar bico não existe antes do aceite do módulo')
+        pg.click('.lista .item > button')
+        pg.wait_for_selector('#sc-trocado-1', timeout=10000)
+        t(pg.is_visible('#sc-trocado-1'), 'o toque abre o cilindro e mostra a marcação de bico trocado')
+        pg.click('#sc-voltar-prog')
+        pg.wait_for_selector('#sc-descobrir', timeout=10000)
 
         # ---------- 10) sem avisos, menos o EM DESENVOLVIMENTO ----------
         for rota in ['aovivo', 'graficos', 'falhas', 'rede', 'prog']:
             pg.click('.rail a[href="#/' + rota + '"]')
             pg.wait_for_timeout(250)
+            t(len(pg.query_selector_all('.nota')) == 0, 'a tela ' + rota + ' não tem bloco de aviso de rotina')
+        for rota in ['atuador', 'aprender', 'bico']:
+            pg.goto(BASE + '#/' + rota)
+            pg.wait_for_selector('#sc-voltar-prog', timeout=10000)
             t(len(pg.query_selector_all('.nota')) == 0, 'a tela ' + rota + ' não tem bloco de aviso de rotina')
 
         # ---------- 11) em pé (retrato) ----------

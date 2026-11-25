@@ -1,30 +1,26 @@
-// Sistema › WhatsApp e e-mail › Robô — monitor do e-mail da oficina, para ficar aberto no tablet da recepção.
-// Pedido do Danilo (24/11/2026): "um robô no tablete para monitorar o e-mail da contabilidade e alguns outros".
-// Ele escolheu: roda SÓ NO TABLET (enquanto esta tela estiver aberta), só mostra e avisa (não lança nada sozinho),
-// confere os anexos de duas formas — se o anexo abre de verdade e se o que veio já está no sistema — e manda um
-// WhatsApp curto para o número dele quando aparece algo importante. Sem alarde: nada pisca, nada apita.
+// Sistema › WhatsApp e e-mail › Robô — painel do robô do e-mail (pedido do Danilo em 24/11/2026).
 //
-// Tudo o que o robô já conferiu fica guardado NESTE tablet (localStorage): ele não reconfere nem reavisa o mesmo
-// e-mail. Trocou de aparelho, o robô começa do zero — é assim porque a decisão foi não rodar no servidor.
+// Quem roda o robô é o MOTOR DO TABLET (motor-zap/motor.js 3.6): o mesmo programa e o mesmo aparelho do WhatsApp,
+// no Termux, que sobe sozinho quando o tablet liga. A cada 5 minutos ele chama a função "email" (ação "robo"), que
+// olha a caixa, confere os anexos e manda o aviso. O robô NÃO depende desta tela aberta nem do tablet desbloqueado.
+//
+// Esta tela só mostra o que o robô achou (tabela email_robo, v64), liga/desliga e deixa conferir na hora.
+// O robô só olha e avisa: não lança, não responde, não apaga e não move e-mail nenhum.
 import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Texto, Vazio } from "../ui.js";
+import { useApp, Campo, Vazio } from "../ui.js";
 import { AbasMensagens } from "./email.js";
-import { fmtDataHora, soDig } from "../util.js";
+import { fmtDataHora } from "../util.js";
 
-const CHAVE = "robo:email";
-const MINUTOS = [3, 5, 10, 15, 30];
-// o nome da categoria vem sempre escrito, nunca só a cor (a tela é lida de longe, no tablet)
+const DIAS = [1, 2, 3, 5, 7];
+// o nome da categoria vem sempre escrito, nunca só a cor
 const CATEGORIAS = {
   fraude: ["Golpe", "bad"], importante: ["Importante", "ok"], util: ["Útil", "ok"],
   propaganda: ["Propaganda", "muted"], ignorar: ["Ignorado", "muted"], revisar: ["Revisar", "warn"], lixo: ["Lixo eletrônico", "muted"],
 };
 const catDe = c => CATEGORIAS[c] || [c || "Revisar", "warn"];
 
-const guardado = () => { try { return JSON.parse(localStorage.getItem(CHAVE) || "{}"); } catch (_) { return {}; } };
-const guardar = v => { try { localStorage.setItem(CHAVE, JSON.stringify(v)); } catch (_) { /* tablet sem espaço: segue sem guardar */ } };
-
-/** O que o robô achou de cada anexo, em palavras (nunca só um ícone). */
+/** O que o robô achou de cada anexo, em palavras. */
 function Anexo({ a }) {
   const probs = [];
   if (a.baixa === false) probs.push(a.aviso || "não baixa");
@@ -41,160 +37,84 @@ function Anexo({ a }) {
 }
 
 export function Robo() {
-  const { avisar } = useApp();
-  const inicial = guardado();
-  const [ligado, setLigado] = useState(!!inicial.ligado);
-  const [minutos, setMinutos] = useState(Number(inicial.minutos) || 5);
-  const [telefone, setTelefone] = useState(inicial.telefone || "");
-  const [avisarZap, setAvisarZap] = useState(inicial.avisarZap !== false);
-  const [vistos, setVistos] = useState(inicial.vistos || {});   // id do e-mail -> o que o robô achou
-  const [lista, setLista] = useState([]);
-  const [erro, setErro] = useState(""), [rodando, setRodando] = useState(false), [ultima, setUltima] = useState(inicial.ultima || "");
-  const vivo = useRef(true), vistosRef = useRef(vistos), ocupado = useRef(false);
-  vistosRef.current = vistos;
+  const { cfg, avisar, recarregar } = useApp();
+  const rb = (cfg && cfg.roboEmail) || {};
+  const [lista, setLista] = useState(null), [erro, setErro] = useState(""), [semV64, setSemV64] = useState(false);
+  const [conferindo, setConferindo] = useState(false), [salvando, setSalvando] = useState(false);
+  const vivo = useRef(true);
 
-  useEffect(() => () => { vivo.current = false; }, []);
-  useEffect(() => { guardar({ ligado, minutos, telefone, avisarZap, vistos, ultima }); }, [ligado, minutos, telefone, avisarZap, vistos, ultima]);
-
-  /** A NF que veio no anexo já está no sistema? (nota de entrada lançada ou nota da SEFAZ já baixada) */
-  const nfeNoSistema = async chave => {
+  const carregar = async () => {
     try {
-      const lancada = await api.notas.existe(chave);
-      if (lancada) return { chave, no_sistema: true, onde: "entrada de nota " + (lancada.numero || "") };
-      const nota = (await api.sefaz.notas()).find(n => n.chave === chave);
-      if (nota) return { chave, no_sistema: true, onde: "notas da SEFAZ" };
-      return { chave, no_sistema: false };
-    } catch (_) { return { chave, no_sistema: null }; }
-  };
-  /** O boleto que veio no anexo já está em contas a pagar? */
-  const boletoNoSistema = async b => {
-    const linha = soDig(b.linha || ""), cb = soDig(b.codigo_barras || "");
-    try {
-      const abertas = await api.contas.abertas();
-      const achou = abertas.find(c => (linha && soDig(c.linha_digitavel || "") === linha) || (cb && soDig(c.codigo_barras || "") === cb));
-      return { linha, valor: b.valor, vencimento: b.vencimento, no_sistema: !!achou, onde: achou ? "contas a pagar" : "" };
-    } catch (_) { return { linha, valor: b.valor, vencimento: b.vencimento, no_sistema: null }; }
-  };
-
-  /** Confere os anexos de um e-mail: se abrem de verdade e se o que veio já está no sistema. */
-  const conferirAnexos = async msg => {
-    const saida = [];
-    for (const a of (msg.anexos || [])) {
-      const r = { id: a.id, nome: a.nome, kb: a.tamanho_kb };
-      try {
-        const d = await api.email.chamar({ acao: "anexo", id: msg.id, anexo_id: a.id });
-        // "conteudo" sozinho é a explicação de por que não dá para abrir (link, e-mail anexado, grande demais)
-        const abriu = !!(d.texto || d.nfe || d.imagem);
-        r.baixa = abriu; if (!abriu) r.aviso = d.conteudo || "não deu para abrir";
-        const chave = (d.nfe && d.nfe.chave) || (d.chaves_nfe || [])[0];
-        if (chave) r.nfe = await nfeNoSistema(chave);
-        const bol = (d.boletos || [])[0];
-        if (bol) r.boleto = await boletoNoSistema(bol);
-      } catch (e) { r.baixa = false; r.aviso = e.message; }
-      saida.push(r);
-    }
-    return saida;
-  };
-
-  const pendencias = achado => {
-    const p = [];
-    for (const a of achado.anexos || []) {
-      if (a.baixa === false) p.push("anexo que não abre");
-      if (a.nfe && a.nfe.no_sistema === false) p.push("NF fora do sistema");
-      if (a.boleto && a.boleto.no_sistema === false) p.push("boleto fora do sistema");
-    }
-    return [...new Set(p)];
-  };
-
-  /** Aviso curto no WhatsApp, no estilo que o Danilo pediu: e-mail de Fulano "anexos". */
-  const avisarNoZap = async (msg, achado) => {
-    const tel = soDig(telefone);
-    if (!avisarZap || tel.length < 10) return false;
-    const quem = msg.de.nome || msg.de.email || "remetente desconhecido";
-    const p = pendencias(achado);
-    const oque = p.length ? p.join(", ") : (msg.anexos || []).length ? "anexos" : catDe(msg.categoria)[0].toLowerCase();
-    try {
-      await api.email.chamar({ acao: "whatsapp", telefone: tel, origem: "robo", confirmar: true,
-        texto: `e-mail de ${quem} "${oque}"` });
-      api.whatsapp.chamar({ acao: "processar" }).catch(() => {});
-      return true;
-    } catch (_) { return false; }
-  };
-
-  const conferir = async () => {
-    if (ocupado.current) return;
-    ocupado.current = true; setRodando(true); setErro("");
-    try {
-      const r = await api.email.chamar({ acao: "buscar", dias: 2, incluir: "todos", limite: 25 });
-      const msgs = (r && (r.mensagens || r.lista || r.itens)) || (Array.isArray(r) ? r : []);
+      const l = await api.email.robo();
       if (!vivo.current) return;
-      const novos = { ...vistosRef.current };
-      for (const m of msgs) {
-        if (novos[m.id]) continue;
-        const achado = { em: new Date().toISOString(), anexos: await conferirAnexos(m) };
-        achado.avisado = await avisarNoZap(m, achado);
-        novos[m.id] = achado;
-        if (!vivo.current) return;
-        setVistos({ ...novos });
-      }
-      setVistos(novos); setLista(msgs); setUltima(new Date().toISOString());
+      if (l === null) { setSemV64(true); setLista([]); return; }
+      setSemV64(false); setLista(l); setErro("");
     } catch (e) { if (vivo.current) setErro(e.message); }
-    finally { ocupado.current = false; if (vivo.current) setRodando(false); }
+  };
+  useEffect(() => { carregar(); const t = setInterval(carregar, 60000); return () => { vivo.current = false; clearInterval(t); }; }, []);
+
+  const gravar = async patch => {
+    setSalvando(true);
+    try { await api.salvarConfig({ ...cfg, roboEmail: { ...rb, ...patch } }); await recarregar(["config"]); }
+    catch (e) { avisar(e.message, true); } finally { setSalvando(false); }
+  };
+  const conferir = async () => {
+    setConferindo(true); setErro("");
+    try {
+      const r = await api.email.chamar({ acao: "robo", origem: "tela" });
+      avisar(r && r.novos ? r.novos + (r.novos === 1 ? " e-mail novo conferido." : " e-mails novos conferidos.") : "Nada novo na caixa.");
+      await carregar();
+    } catch (e) { setErro(e.message); } finally { setConferindo(false); }
   };
 
-  // o relógio do robô: só enquanto esta tela estiver aberta e ligada
-  useEffect(() => {
-    if (!ligado) return;
-    conferir();
-    const t = setInterval(conferir, Math.max(1, minutos) * 60000);
-    return () => clearInterval(t);
-  }, [ligado, minutos]);
-
-  const comProblema = lista.filter(m => pendencias(vistos[m.id] || {}).length);
+  const ligado = rb.ligado === true;
+  const comProblema = (lista || []).filter(l => (l.pendencias || []).length);
   return html`<div class="tela">
     <${AbasMensagens} ativa="robo" />
     <section class="card rb-painel">
       <div class="secao-topo"><h2>Robô do e-mail</h2>
-        <button type="button" class=${"btn " + (ligado ? "btn-perigo" : "btn-pri")} onClick=${() => setLigado(v => !v)}>
-          ${ligado ? "Desligar o robô" : "Ligar o robô"}</button></div>
-      <p class="sub">Confere o e-mail da oficina sozinho enquanto esta tela estiver aberta neste tablet. Ele só olha e avisa:
-        não lança, não responde, não apaga nada. De cada anexo ele diz se abre de verdade e se o que veio já está no sistema.</p>
+        <button type="button" class=${"btn " + (ligado ? "btn-perigo" : "btn-pri")} disabled=${salvando || semV64}
+          onClick=${() => gravar({ ligado: !ligado })}>${ligado ? "Desligar o robô" : "Ligar o robô"}</button></div>
+      <p class="sub">Quem confere é o programa do tablet, o mesmo que cuida do WhatsApp: roda sozinho, com a tela
+        apagada e sem ninguém por perto. O robô só olha e avisa — não lança, não responde e não apaga nada. De cada
+        anexo ele diz se abre de verdade e se o que veio já está no sistema, e manda um aviso curto no seu WhatsApp.</p>
+      ${semV64 ? html`<p class="aviso aviso-bad">Falta rodar o <b>supabase/v64.sql</b> no Supabase: sem ele o robô não
+        tem onde guardar o que confere.</p>` : null}
       <div class="rb-ajustes">
-        <${Campo} id="rb-min" rotulo="Conferir a cada">
-          <select id="rb-min" class="inp" value=${String(minutos)} onChange=${e => setMinutos(Number(e.target.value))}>
-            ${MINUTOS.map(n => html`<option value=${String(n)}>${n} minutos</option>`)}
+        <${Campo} id="rb-dias" rotulo="Olhar os últimos">
+          <select id="rb-dias" class="inp" disabled=${salvando || semV64} value=${String(Number(rb.dias) || 2)}
+            onChange=${e => gravar({ dias: Number(e.target.value) })}>
+            ${DIAS.map(n => html`<option value=${String(n)}>${n} ${n === 1 ? "dia" : "dias"}</option>`)}
           </select></${Campo}>
-        <${Campo} id="rb-tel" rotulo="Avisar no WhatsApp" dica="Seu número. Deixe em branco para não receber aviso nenhum.">
-          <${Texto} id="rb-tel" valor=${telefone} onMuda=${setTelefone} placeholder="27999999999" inputmode="numeric" />
-        </${Campo}>
-        <label class="rb-marca"><input type="checkbox" checked=${avisarZap} onChange=${e => setAvisarZap(e.target.checked)} />
-          <span>Mandar o aviso curto no WhatsApp</span></label>
-        <button type="button" class="btn" disabled=${rodando} onClick=${conferir}>${rodando ? "Conferindo…" : "Conferir agora"}</button>
+        <label class="rb-marca"><input type="checkbox" disabled=${salvando || semV64} checked=${rb.avisar !== false}
+          onChange=${e => gravar({ avisar: e.target.checked })} />
+          <span>Avisar no meu WhatsApp</span></label>
+        <button type="button" class="btn" id="rb-agora" disabled=${conferindo || semV64} onClick=${conferir}>
+          ${conferindo ? "Conferindo…" : "Conferir agora"}</button>
       </div>
-      <p class="sub">${ligado ? "Ligado" : "Desligado"}${ultima ? " · última conferência " + fmtDataHora(ultima) : ""}
+      <p class="sub">${ligado ? "Ligado: o tablet confere a cada 5 minutos." : "Desligado: o tablet não está conferindo."}
+        ${lista && lista.length ? " · último e-mail conferido " + fmtDataHora(lista[0].conferido_em) : ""}
         ${comProblema.length ? " · " + comProblema.length + " com pendência" : ""}</p>
+      <p class="sub">O aviso vai para o número de alerta cadastrado em <b>Sistema › WhatsApp</b>, o mesmo dos outros
+        avisos do sistema.</p>
       ${erro ? html`<p class="aviso aviso-bad">${erro}</p>` : null}
     </section>
 
-    ${!lista.length ? html`<${Vazio}>${ligado ? "Nada novo nos últimos dois dias." : "Ligue o robô para ele começar a conferir."}</${Vazio}>` : null}
-    ${lista.map(m => {
-      const achado = vistos[m.id] || {}, [nome, cor] = catDe(m.categoria), probs = pendencias(achado);
-      return html`<section class=${"card rb-email" + (probs.length ? " rb-com-prob" : "")} key=${m.id}>
+    ${lista && !lista.length && !semV64 ? html`<${Vazio}>${ligado ? "O robô ainda não achou nada." : "Ligue o robô para ele começar a conferir."}</${Vazio}>` : null}
+    ${(lista || []).map(l => {
+      const [nome, cor] = catDe(l.categoria), probs = l.pendencias || [];
+      return html`<section class=${"card rb-email" + (probs.length ? " rb-com-prob" : "")} key=${l.id}>
         <div class="rb-cab">
           <span class=${"rb-tag rb-" + cor}>${nome}</span>
-          <b class="rb-de">${m.de.nome || m.de.email}</b>
-          <span class="sub">${m.de.email}</span>
-          <span class="sub rb-hora">${fmtDataHora(m.data)}</span>
+          <b class="rb-de">${l.de_nome || l.de_email}</b>
+          <span class="sub">${l.de_email}</span>
+          <span class="sub rb-hora">${fmtDataHora(l.recebido_em || l.conferido_em)}</span>
         </div>
-        <p class="rb-assunto"><b>${m.assunto}</b></p>
-        <p class="sub">${m.previa}</p>
-        ${m.alerta ? html`<p class="aviso aviso-bad">${m.alerta}</p>` : null}
-        ${(achado.anexos || []).length
-          ? html`<ul class="rb-anexos">${achado.anexos.map(a => html`<${Anexo} a=${a} key=${a.id} />`)}</ul>`
-          : (m.anexos || []).length
-            ? html`<p class="sub">${m.anexos.length} anexo${m.anexos.length === 1 ? "" : "s"} · ainda não conferido${m.anexos.length === 1 ? "" : "s"}</p>`
-            : html`<p class="sub">Sem anexo.</p>`}
-        ${achado.avisado ? html`<p class="sub">Avisado no WhatsApp.</p>` : null}
+        <p class="rb-assunto"><b>${l.assunto || "(sem assunto)"}</b></p>
+        ${(l.anexos || []).length
+          ? html`<ul class="rb-anexos">${l.anexos.map((a, i) => html`<${Anexo} a=${a} key=${i} />`)}</ul>`
+          : html`<p class="sub">Sem anexo.</p>`}
+        ${l.avisado ? html`<p class="sub">Avisado no WhatsApp${l.avisado_em ? " em " + fmtDataHora(l.avisado_em) : ""}.</p>` : null}
       </section>`;
     })}
   </div>`;

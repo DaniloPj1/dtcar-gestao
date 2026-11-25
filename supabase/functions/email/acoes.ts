@@ -20,6 +20,7 @@ import { classificar, montarCtx, normalizar, valorDaRegra, type Anexo, type Cont
 import { acharBoletos, acharChavesNFe, resumirNFe } from "./documentos.ts";
 import { importarRH, listarRH } from "./rh.ts";
 import { ErroAnexo, montarAnexos, paraGraph, resumoAnexos, type Arquivo, type Geradores } from "./anexos.ts";
+import { configDoBanco as configRobo, rodar as rodarRobo } from "./robo.ts";
 import { prepararWhatsApp, type Mensagens } from "./whatsapp.ts";
 import { ErroBackup, iniciar, rodar, situacaoBackup, type DepsBackup } from "./backup.ts";
 
@@ -120,7 +121,7 @@ async function pastasFora(token: string): Promise<Record<string, string>> {
 
 export interface Busca { texto?: string; remetente?: string; dias?: number; pasta?: string; incluir?: "importantes" | "fora" | "todos"; limite?: number }
 
-async function buscar(d: Deps, token: string, b: Busca) {
+export async function buscar(d: Deps, token: string, b: Busca) {
   const agora = (d.agora || (() => new Date()))();
   const dias = Math.min(365, Math.max(1, Number(b.dias) || 3));
   const limite = Math.min(50, Math.max(1, Number(b.limite) || 20));
@@ -204,7 +205,7 @@ async function ler(d: Deps, token: string, id: string, max = 6000) {
 const decodificar = (b64: string) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 const LIMITE_ANEXO = 8 * 1024 * 1024;
 
-async function anexo(d: Deps, token: string, id: string, anexoId: string) {
+export async function anexo(d: Deps, token: string, id: string, anexoId: string) {
   const a = await graph(token, `/me/messages/${LIMPA_ID(id)}/attachments/${LIMPA_ID(anexoId)}`);
   const base = { nome: a.name || "", tipo: a.contentType || "", tamanho_kb: Math.round((a.size || 0) / 1024), aviso: AVISO_DADO };
   if (a["@odata.type"] !== "#microsoft.graph.fileAttachment" || !a.contentBytes) return { ...base, conteudo: "Este anexo não é um arquivo (é um e-mail ou link anexado): não dá para ler por aqui." };
@@ -551,6 +552,8 @@ export async function tratar(acao: string, corpo: Record<string, unknown>, d: De
   else if (acao === "responder") r = await responder(d, token, cx.conta || "", corpo, corpo.confirmar === true);
   else if (acao === "importar_rh") r = await importarRH(d.adm, token, corpo, (d.agora || (() => new Date()))());
   else if (acao === "anexar_os") r = await anexarOS(d, token, corpo);
+  // robô do e-mail (v64): um ciclo. Chamado pelo motor do tablet (index.ts) ou pelo "Conferir agora" da tela.
+  else if (acao === "robo") r = await rodarRobo(d, token, await configRobo(d.adm), String(corpo.origem || "tela"));
   else throw new ErroUso("Ação desconhecida.");
   if (cx.situacao !== "conectado") await situacao(d.adm, { situacao: "conectado", detalhe: "" });
   await d.adm.from("email_conexao").update({ ultimo_uso: new Date().toISOString() }).eq("id", 1);

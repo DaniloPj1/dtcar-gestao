@@ -83,7 +83,29 @@ const agendamento = withSupabase({ auth: "none" }, async (req, ctx) => {
 });
 
 // GET = retorno do login da Microsoft; o resto (POST e a consulta prévia OPTIONS do navegador) passa pelo login
+// Motor do tablet (v64): o mesmo aparelho e a MESMA chave do motor do WhatsApp dão o pulso do robô do e-mail.
+// Só a ação "robo": o motor não lê, não envia e não responde e-mail nenhum.
+const doMotor = withSupabase({ auth: "none" }, async (req, ctx) => {
+  const adm = ctx.supabaseAdmin as unknown as Db;
+  const chave = req.headers.get("x-dtcar-motor") || "";
+  if (!/^dtm_[0-9a-f]{64}$/.test(chave)) return json({ erro: "Chave do motor ausente." }, 401);
+  const { error } = await adm.rpc("whatsapp_motor_conferir", { p_chave: chave });
+  if (error) return json({ erro: "Chave do motor inválida ou revogada." }, 401);
+  const c = await req.json().catch(() => ({})) as Record<string, unknown>;
+  if (c.acao !== "robo") return json({ erro: "Ação desconhecida." }, 400);
+  try {
+    return json(await tratar("robo", { ...c, origem: "motor" }, { usuario: adm, adm, env,
+      backup: async () => depsBackup(adm, env, await segredoCron(adm)), segundoPlano }));
+  } catch (e) {
+    if (e instanceof ErroUso) return json({ erro: e.message }, 400);
+    if (e instanceof PrecisaConectar) return json({ erro: e.message, precisa_conectar: true }, 409);
+    console.error("email robo", e);
+    return json({ erro: (e as Error).message || "Falha no robô." }, 502);
+  }
+});
+
 export const atender = (req: Request) => req.method === "GET" ? retorno(req)
+  : req.method === "POST" && req.headers.get("x-dtcar-motor") ? doMotor(req)
   : req.method === "POST" && req.headers.get("x-dtcar-cron") ? agendamento(req) : acoes(req);
 
 if (import.meta.main) Deno.serve((req) => atender(req));

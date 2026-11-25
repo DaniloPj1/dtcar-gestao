@@ -15,7 +15,7 @@ const CHAVE = "dtm_" + "a".repeat(64);
 // ---------- banco simulado com as mesmas regras do v24 ----------
 function banco() {
   const b = { sessao: new Map(), con: { situacao: "conectado", numero: "", dono: "", dono_id: null, dono_ate: 0, pedido: null, detalhe: "" },
-    chamadas: [], pdfs: {}, fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], intervalos: false, proximo: 0, msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0 };
+    chamadas: [], pdfs: {}, fora: false, chaveValida: CHAVE, agora: 1e6, sessaoEm: 0, fila: [], resultados: [], intervalos: false, proximo: 0, msgs: [], entregas: [], midias: [], semV28: false, zapFalha: 0, robo: [], emailFalha: false };
   const erro = (msg, code) => ({ ok: false, status: 400, text: async () => JSON.stringify({ message: msg, code }) });
   const resp = (v) => ({ ok: true, status: 200, text: async () => (v === undefined ? "" : JSON.stringify(v)) });
   b.buscar = async (url, op) => {
@@ -29,6 +29,12 @@ function banco() {
         return resp({ url: "https://pasta.teste/" + f.arquivo.path, nome: f.arquivo.nome, tipo: "application/pdf", bytes: f.arquivo.bytes });
       }
       b.midias.push(a); return resp({ ok: true });
+    }
+    if (url.endsWith("/functions/v1/email")) { // v64: pulso do robô do e-mail (mesma chave do motor)
+      const a = JSON.parse(op.body); b.chamadas.push("email:" + a.acao);
+      if (op.headers.apikey !== "pub" || op.headers["x-dtcar-motor"] !== b.chaveValida) return { ok: false, status: 401, text: async () => '{"erro":"chave"}' };
+      if (b.emailFalha) return { ok: false, status: 502, text: async () => '{"erro":"e-mail não conectado"}' };
+      b.robo.push(a); return resp({ origem: "motor", olhados: 2, novos: 1, avisados: 1, pendencias: 1 });
     }
     if (url.startsWith("https://pasta.teste/")) { // v34: download do PDF pelo link temporário
       b.chamadas.push("pdf"); const x = b.pdfs[url.slice(20)];
@@ -448,6 +454,31 @@ function sessaoVinculada(b) {
   let erro = ""; try { lerConfig({ arquivo: arq, site }); } catch (e) { erro = e.message; }
   confere("config: chave com formato errado é recusada", /formato/.test(erro), erro);
   confere("vinculado pelo QR (me) e pelo código (registered)", vinculado({ me: { id: "x" } }) && vinculado({ registered: true }) && !vinculado({}));
+}
+
+// ---------- robô do e-mail (v64): o mesmo motor dá o pulso, isolado do WhatsApp ----------
+{
+  const b = banco(), f = fabrica(); sessaoVinculada(b); const m = novo(b, f);
+  await m.pulso();
+  confere("robô do e-mail: o pulso do motor chama a função email", b.chamadas.includes("email:robo"), b.chamadas);
+  confere("robô do e-mail: vai com a chave do motor, sem segredo de servidor", b.robo.length === 1 && b.robo[0].acao === "robo", b.robo);
+  const antes = b.chamadas.filter((c) => c === "email:robo").length;
+  await m.pulso();
+  confere("robô do e-mail: não chama a cada pulso de 30 s (espera o intervalo)",
+    b.chamadas.filter((c) => c === "email:robo").length === antes, b.chamadas);
+  b.agora += 6 * 60000;
+  await m.pulso();
+  confere("robô do e-mail: chama de novo depois do intervalo",
+    b.chamadas.filter((c) => c === "email:robo").length === antes + 1, b.chamadas);
+  await m.encerrar("fim");
+}
+{
+  // e-mail com problema (função não publicada, caixa desconectada) não pode derrubar o WhatsApp
+  const b = banco(), f = fabrica(); sessaoVinculada(b); b.emailFalha = true; const m = novo(b, f);
+  await m.pulso();
+  confere("robô do e-mail: erro no e-mail não impede o pulso do WhatsApp",
+    b.chamadas.includes("whatsapp_motor_pulso"), b.chamadas);
+  await m.encerrar("fim");
 }
 
 console.log(ok.map((x) => "OK " + x).join("\n")); console.log("FALHAS", JSON.stringify(falhas));

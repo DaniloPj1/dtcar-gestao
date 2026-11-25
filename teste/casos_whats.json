@@ -402,5 +402,192 @@
    },
    "esperado": null
   }
+ ],
+ "chaveTel": [
+  {
+   "tel": "5527999112233",
+   "esperado": "2799112233"
+  },
+  {
+   "tel": "27999112233",
+   "esperado": "2799112233"
+  },
+  {
+   "tel": "2733001122",
+   "esperado": "2733001122"
+  },
+  {
+   "tel": "552733001122",
+   "esperado": "2733001122"
+  },
+  {
+   "tel": "",
+   "esperado": ""
+  }
+ ],
+ "grupos": [
+  {
+   "nome": "oficina + Danilo + sócio: liberado",
+   "meta": {
+    "subject": "Financeiro",
+    "participants": [
+     {
+      "id": "5527988881111@s.whatsapp.net"
+     },
+     {
+      "id": "5527997696545@s.whatsapp.net"
+     },
+     {
+      "id": "5527999674855@s.whatsapp.net"
+     }
+    ]
+   },
+   "autorizados": [
+    "27997696545",
+    "27999674855"
+   ],
+   "meu": "5527988881111",
+   "ok": true
+  },
+  {
+   "nome": "número do Danilo sem o 9 (conta antiga) ainda é ele",
+   "meta": {
+    "subject": "Financeiro",
+    "participants": [
+     {
+      "id": "5527988881111@s.whatsapp.net"
+     },
+     {
+      "id": "5527997696545@s.whatsapp.net"
+     }
+    ]
+   },
+   "autorizados": [
+    "5527997696545"
+   ],
+   "meu": "5527988881111",
+   "ok": true
+  },
+  {
+   "nome": "entrou um cliente: barrado",
+   "meta": {
+    "subject": "Financeiro",
+    "participants": [
+     {
+      "id": "5527988881111@s.whatsapp.net"
+     },
+     {
+      "id": "5527997696545@s.whatsapp.net"
+     },
+     {
+      "id": "5527991234567@s.whatsapp.net"
+     }
+    ]
+   },
+   "autorizados": [
+    "5527997696545",
+    "5527999674855"
+   ],
+   "meu": "5527988881111",
+   "ok": false,
+   "motivo": "não autorizado"
+  },
+  {
+   "nome": "participante só com @lid (sem número para conferir): barrado",
+   "meta": {
+    "subject": "Financeiro",
+    "participants": [
+     {
+      "id": "5527988881111@s.whatsapp.net"
+     },
+     {
+      "id": "89365468426312@lid"
+     }
+    ]
+   },
+   "autorizados": [
+    "5527997696545"
+   ],
+   "meu": "5527988881111",
+   "ok": false,
+   "motivo": "não informou o número"
+  },
+  {
+   "nome": "sem número autorizado cadastrado: barrado",
+   "meta": {
+    "subject": "Financeiro",
+    "participants": [
+     {
+      "id": "5527988881111@s.whatsapp.net"
+     },
+     {
+      "id": "5527997696545@s.whatsapp.net"
+     }
+    ]
+   },
+   "autorizados": [],
+   "meu": "5527988881111",
+   "ok": false,
+   "motivo": "nenhum número autorizado"
+  },
+  {
+   "nome": "grupo sem participantes: barrado",
+   "meta": {
+    "subject": "Vazio",
+    "participants": []
+   },
+   "autorizados": [
+    "5527997696545"
+   ],
+   "meu": "5527988881111",
+   "ok": false,
+   "motivo": "não deu para ler"
+  }
+ ],
+ "grupoIgual": [
+  {
+   "nome": "mesmos participantes em outra ordem: igual",
+   "agora": [
+    "b@lid",
+    "a@lid"
+   ],
+   "escolhidos": [
+    "a@lid",
+    "b@lid"
+   ],
+   "ok": true
+  },
+  {
+   "nome": "entrou alguém: diferente",
+   "agora": [
+    "a@lid",
+    "b@lid",
+    "c@lid"
+   ],
+   "escolhidos": [
+    "a@lid",
+    "b@lid"
+   ],
+   "ok": false
+  },
+  {
+   "nome": "saiu alguém: diferente",
+   "agora": [
+    "a@lid"
+   ],
+   "escolhidos": [
+    "a@lid",
+    "b@lid"
+   ],
+   "ok": false
+  },
+  {
+   "nome": "sem lista aprovada: não confere",
+   "agora": [
+    "a@lid"
+   ],
+   "escolhidos": [],
+   "ok": false
+  }
  ]
 }

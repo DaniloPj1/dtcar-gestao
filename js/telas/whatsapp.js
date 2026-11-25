@@ -110,6 +110,48 @@ export function WhatsApp() {
       setTxtAgente(null); await lerAgente(); avisar(msg);
     } catch (e) { setErro(e.message); } finally { setFazendo(""); }
   };
+  // v65: grupos do WhatsApp. Regra do Danilo (25/11/2026): só grupo em que estão ele e o sócio —
+  // mais ninguém. O que fica gravado é o grupo escolhido e a lista de participantes conferida aqui;
+  // na hora de enviar, quem manda confere a lista de novo no WhatsApp e, se mudou, não envia.
+  const [cfgG, setCfgG] = useState(null), [nums, setNums] = useState(null);
+  const lerCfgG = async () => { try { const c = await api.config(); if (vivo.current) setCfgG((c && c.zapGrupos) || {}); } catch (e) { /* a tela segue sem o cartão */ } };
+  useEffect(() => { lerCfgG(); }, []);
+  const numsTexto = () => (nums === null ? (((cfgG && cfgG.numeros) || []).join(", ")) : nums);
+  const gravarGrupos = async (novoG, msg, qual) => {
+    setFazendo(qual); setErro("");
+    try {
+      const atual = await api.config();
+      const novo = { ...atual };
+      const temAlgo = novoG && (((novoG.numeros || []).length) || Object.keys(novoG).some(k => k !== "numeros"));
+      if (temAlgo) novo.zapGrupos = novoG; else delete novo.zapGrupos;
+      await api.salvarConfig(novo);
+      await recarregar(["config"]);
+      setNums(null); await lerCfgG(); avisar(msg);
+    } catch (e) { setErro(e.message); } finally { setFazendo(""); }
+  };
+  const salvarNumeros = async () => {
+    const lista = numsTexto().split(/[^0-9]+/).filter(Boolean).map(d => (d.length === 10 || d.length === 11 ? "55" + d : d));
+    const ruim = lista.find(d => !/^55\d{10,11}$/.test(d));
+    if (ruim) { setErro("Número inválido: " + ruim + ". Use DDD + número (ex.: 27 99999-0000)."); return; }
+    if (!lista.length) { setErro("Informe pelo menos um número (o seu)."); return; }
+    await gravarGrupos({ ...(cfgG || {}), numeros: lista }, "Números autorizados salvos. Busque os grupos para conferir.", "nums");
+  };
+  const buscarGrupos = async () => {
+    const r = await fazer("grupos");
+    if (!r) return;
+    avisar(r.pedido ? r.detalhe : "Grupos atualizados: " + (r.grupos || 0) + ".");
+    if (r.pedido) setTimeout(() => ler(), 20000);
+  };
+  const escolherGrupo = async g => {
+    if (!await confirmar({ titulo: "Usar como grupo Financeiro", texto: 'O grupo "' + g.nome + '" passa a receber os resumos do financeiro. Se entrar ou sair alguém do grupo, o envio para sozinho até você conferir aqui de novo.', botao: "Usar este grupo" })) return;
+    await gravarGrupos({ ...(cfgG || {}), financeiro: { jid: g.jid, nome: g.nome, ids: g.ids || [], participantes: g.participantes || (g.ids || []).length, em: new Date().toISOString() } },
+      "Grupo Financeiro escolhido.", "grupo");
+  };
+  const tirarGrupo = async () => {
+    if (!await confirmar({ titulo: "Tirar o grupo Financeiro", texto: "Os resumos do financeiro param de ir para o grupo. As mensagens já na fila para ele não são enviadas.", botao: "Tirar o grupo", perigo: true })) return;
+    const novo = { ...(cfgG || {}) }; delete novo.financeiro;
+    await gravarGrupos(novo, "Grupo Financeiro retirado.", "grupo");
+  };
   const salvarAgente = async () => {
     const t = (txtAgente === null ? (agente && agente.texto) || "" : txtAgente).trim();
     if (t.length < 40) { setErro("O texto do agente precisa ter pelo menos 40 caracteres: sem molde, ele não teria o que seguir."); return; }
@@ -280,6 +322,34 @@ export function WhatsApp() {
           ${agente.proprio ? html`<button type="button" class="btn btn-perigo" disabled=${!!fazendo} onClick=${voltarPadrao}>${fazendo === "padrao" ? "Voltando…" : "Voltar ao padrão"}</button>` : null}
         </div>
         <p class="sub">A mudança vale para os rascunhos seguintes. Texto muito curto não é aceito (menos de 40 caracteres): sem molde, o agente não teria o que seguir.</p>`}
+    </div>
+
+    <div class="card">
+      <h3>7. Grupos (resumos internos)</h3>
+      <p class="sub">Grupo do WhatsApp serve para os resumos internos da oficina — o financeiro, por exemplo. <b>Só grupo em que estão apenas os números autorizados abaixo</b> (o seu e o do seu sócio) pode receber: se entrar um cliente, um fornecedor ou qualquer outro número, o envio para sozinho e o motivo aparece na fila.</p>
+      <p class="sub">Só muda por aqui: o conector não escolhe grupo nem mexe nos números, como já acontece com o número dos avisos.</p>
+      <div class="campo"><label for="zap-grupo-nums">Números autorizados (DDD + número, separados por vírgula)</label>
+        <input id="zap-grupo-nums" class="inp" inputmode="tel" value=${numsTexto()} onInput=${e => setNums(e.target.value)} /></div>
+      <div class="acoes">
+        <button type="button" class="btn btn-pri" disabled=${!!fazendo} onClick=${salvarNumeros}>${fazendo === "nums" ? "Salvando…" : "Salvar números"}</button>
+        <button type="button" class="btn" id="zap-buscar-grupos" disabled=${!!fazendo || !((cfgG && cfgG.numeros || []).length)} onClick=${buscarGrupos}>${fazendo === "grupos" ? "Buscando…" : "Buscar grupos"}</button>
+      </div>
+      ${cfgG && cfgG.financeiro ? html`<p class="sub">Grupo Financeiro: <b>${cfgG.financeiro.nome || cfgG.financeiro.jid}</b> · ${cfgG.financeiro.participantes || (cfgG.financeiro.ids || []).length} participantes conferidos em ${fmtDataHora(cfgG.financeiro.em)}
+        <button type="button" class="btn btn-sm btn-perigo" disabled=${!!fazendo} onClick=${tirarGrupo}>Tirar</button></p>`
+      : html`<p class="sub">Nenhum grupo escolhido ainda: os resumos vão para o número dos avisos.</p>`}
+      ${st && st.grupos && (st.grupos.lista || []).length ? html`
+        <h4>Grupos do WhatsApp da oficina</h4>
+        <p class="sub">Lista de ${fmtDataHora(st.grupos.em)}.</p>
+        <ul class="zap-grupos">
+          ${(st.grupos.lista || []).map(g => html`<li key=${g.jid}>
+            <div><span class=${"pill p-" + (g.autorizado ? "ok" : "muted")}>${g.autorizado ? "Autorizado" : "Não autorizado"}</span> <b>${g.nome || g.jid}</b> <span class="sub">· ${g.participantes} participantes</span></div>
+            ${g.autorizado ? null : html`<div class="sub">${g.motivo}</div>`}
+            ${g.autorizado && !(cfgG && cfgG.financeiro && cfgG.financeiro.jid === g.jid)
+              ? html`<button type="button" class="btn btn-sm" disabled=${!!fazendo} onClick=${() => escolherGrupo(g)}>Usar como Financeiro</button>` : null}
+            ${cfgG && cfgG.financeiro && cfgG.financeiro.jid === g.jid ? html`<div class="sub">É o grupo Financeiro de agora.</div>` : null}
+          </li>`)}
+        </ul>` : st && st.grupos ? html`<p class="sub">O levantamento não encontrou grupo nenhum no WhatsApp da oficina.</p>` : null}
+      ${st && st.pedido === "grupos" ? html`<p class="sub">Buscando os grupos no tablet… a lista aparece aqui em até 30 segundos.</p>` : null}
     </div>
   </div>`;
 }

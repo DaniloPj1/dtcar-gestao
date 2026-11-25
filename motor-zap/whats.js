@@ -155,3 +155,100 @@ export async function enviarComArquivo(sock, jid, texto, arquivo, esperar = (ms)
     const x = new Error("O texto saiu, mas o PDF não: " + ((e && e.message) || e)); x.idTexto = id; throw x;
   }
 }
+
+// ---------------------------------------------------------------------
+// v65: GRUPO como destino (pedido do Danilo em 25/11/2026). Regra dele: "atender apenas grupos com
+// o meu número e do meu sócio". Quem confere de verdade é aqui, na hora do envio: a lista de
+// participantes do grupo é lida no WhatsApp e comparada com a que ele aprovou na tela. Entrou alguém
+// (um cliente, um fornecedor), a mensagem NÃO sai. A cópia igual está em supabase/functions/zap/index.ts.
+// ---------------------------------------------------------------------
+
+/** JID de grupo do WhatsApp (…@g.us). */
+export const conversaGrupo = (jid) => /@g\.us$/.test(String(jid || ""));
+
+/** Número do WhatsApp conectado (o da oficina), tirado do sock. */
+export const numeroDoSock = (sock) => String((sock && sock.user && sock.user.id) || "").split("@")[0].split(":")[0].replace(/\D/g, "");
+
+/** Chave de comparação de telefone, a MESMA da whatsapp_chave_tel do banco: DDD + últimos 8 dígitos
+ *  (o 9 do celular às vezes falta no WhatsApp, e o 55 às vezes não vem). */
+export function chaveTel(tel) {
+  const d = String(tel || "").replace(/\D/g, "");
+  if (d.length < 10) return d.slice(-8);
+  const corte = d.length === 11 || d.length === 13 ? 10 : 9;
+  const i = d.length - corte - 1;
+  return d.slice(i, i + 2) + d.slice(-8);
+}
+
+/** Telefone de um participante do grupo. O WhatsApp pode mandar só o @lid (identificador interno),
+ *  e aí não há número para conferir: devolve "" e o grupo é tratado como não conferível. */
+export function telefoneDoParticipante(p) {
+  const cands = [p && p.phoneNumber, p && p.jid, p && p.id, p && p.lid];
+  for (const c of cands) { const s = String(c || ""); if (/@s\.whatsapp\.net$/.test(s)) return s.split("@")[0].split(":")[0].replace(/\D/g, ""); }
+  for (const c of cands) { const d = String(c || "").split("@")[0].split(":")[0].replace(/\D/g, ""); if (/^55\d{10,11}$/.test(d)) return d; }
+  return "";
+}
+
+/** Participantes de um grupo: ids crus (para comparar com o que foi aprovado) e os números legíveis. */
+export function participantesDoGrupo(meta) {
+  const lista = (meta && meta.participants) || [];
+  const ids = [], numeros = []; let semNumero = 0;
+  for (const p of lista) {
+    const id = String((p && (p.id || p.jid || p.lid)) || "");
+    if (!id) continue;
+    ids.push(id);
+    const t = telefoneDoParticipante(p);
+    if (t) numeros.push(t); else semNumero++;
+  }
+  ids.sort();
+  return { ids, numeros, semNumero, total: ids.length };
+}
+
+/** O grupo pode receber mensagem da oficina? Só se todo participante for o próprio número da oficina
+ *  ou um dos autorizados (o do Danilo e o do sócio). Devolve { ok, motivo }. */
+export function grupoLiberado({ participantes, autorizados, meuNumero }) {
+  const p = participantes || { ids: [], numeros: [], semNumero: 0, total: 0 };
+  const ok = (autorizados || []).map(chaveTel).filter(Boolean);
+  const meu = chaveTel(meuNumero);
+  if (!p.total) return { ok: false, motivo: "não deu para ler os participantes do grupo" };
+  if (!ok.length) return { ok: false, motivo: "nenhum número autorizado cadastrado em Sistema › WhatsApp" };
+  if (p.semNumero) return { ok: false, motivo: "o WhatsApp não informou o número de " + p.semNumero + " participante(s) deste grupo" };
+  const fora = p.numeros.filter((n) => { const k = chaveTel(n); return k !== meu && ok.indexOf(k) < 0; });
+  if (fora.length) return { ok: false, motivo: "participante não autorizado: " + fora.join(", ") };
+  return { ok: true, motivo: "" };
+}
+
+/** O grupo continua igual ao que o Danilo aprovou na tela? Entrou ou saiu alguém = não envia. */
+export function grupoIgualAoEscolhido(participantes, idsEscolhidos) {
+  const a = ((participantes && participantes.ids) || []).slice().sort();
+  const b = (idsEscolhidos || []).map(String).slice().sort();
+  if (!a.length || !b.length) return { ok: false, motivo: "sem a lista de participantes para conferir" };
+  if (a.length !== b.length || a.some((x, i) => x !== b[i])) {
+    return { ok: false, motivo: "o grupo mudou de participantes desde a escolha (eram " + b.length + ", agora são " + a.length + "): confira em Sistema › WhatsApp" };
+  }
+  return { ok: true, motivo: "" };
+}
+
+/** Grupos do WhatsApp da oficina, já conferidos pela regra, para a tela escolher. */
+export async function listarGrupos(sock, autorizados, meuNumero) {
+  const todos = (await sock.groupFetchAllParticipating()) || {};
+  const lista = [];
+  for (const jid of Object.keys(todos)) {
+    if (!conversaGrupo(jid)) continue;
+    const meta = todos[jid] || {};
+    const p = participantesDoGrupo(meta);
+    const r = grupoLiberado({ participantes: p, autorizados, meuNumero });
+    lista.push({ jid, nome: String(meta.subject || "").slice(0, 120), participantes: p.total,
+                 ids: p.ids, numeros: p.numeros, autorizado: r.ok, motivo: r.motivo });
+  }
+  lista.sort((a, b) => (a.autorizado === b.autorizado ? String(a.nome).localeCompare(String(b.nome)) : a.autorizado ? -1 : 1));
+  return lista;
+}
+
+/** Conferência do grupo na hora do envio: lista de participantes de AGORA contra a aprovada. */
+export async function conferirGrupoAgora(sock, grupo, meuNumero) {
+  const meta = await sock.groupMetadata((grupo && grupo.jid) || "");
+  const p = participantesDoGrupo(meta);
+  const mesmo = grupoIgualAoEscolhido(p, grupo && grupo.ids);
+  if (!mesmo.ok) return mesmo;
+  return grupoLiberado({ participantes: p, autorizados: (grupo && grupo.numeros) || [], meuNumero });
+}

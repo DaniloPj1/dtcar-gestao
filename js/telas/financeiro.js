@@ -1,7 +1,7 @@
 // Financeiro: contas a pagar (boletos, duplicatas da NF-e, despesas fixas e parceladas)
 import { html, useState, useEffect, useMemo, useRef } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro, Abas, Foto } from "../ui.js";
+import { useApp, Campo, Texto, Area, Seg, Modal, Vazio, Dinheiro, Abas, Foto, FiltroVencimento, noVencimento } from "../ui.js";
 import { norm, soDig, reais, fmtData, fmtDoc, hojeISO, uuid, arred, parseValor } from "../util.js";
 import { pode, nomesContas } from "../regras.js";
 import { lerBoleto, fmtLinha, lerPDFBoleto, temCamera } from "../boleto.js";
@@ -326,7 +326,10 @@ const PERIODOS = [
 const SITUACOES = [["", "Todas"], ["aberta", "Em aberto"], ["vencida", "Vencidas"], ["hoje", "Vencem hoje"], ["avencer", "A vencer"], ["paga", "Pagas"], ["cancelada", "Canceladas"]];
 const ORIGENS_CONTA = { manual: "Lançamento manual", boleto: "Boleto", nfe: "Duplicata de nota", os: "Terceiro da O.S.", recorrente: "Despesa fixa", parcelado: "Parcelado" };
 const LS_FILTROS = "dtcar-fin-filtros";
-const FILTROS_VAZIOS = { q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "", periodo: "mes", campo: "vencimento", de: "", ate: "" };
+/* O filtro por data de VENCIMENTO (venc/vde/vate) é um filtro A MAIS: ele não substitui o "Período" + "Pela data de",
+   que continuam valendo (decisão do Danilo em 28/11/2026). Assim dá para pedir, por exemplo, o que foi PAGO este mês
+   e venceu até a semana passada. Vale nas duas abas, inclusive em "Em aberto", que não tinha filtro de data nenhum. */
+const FILTROS_VAZIOS = { q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "", periodo: "mes", campo: "vencimento", de: "", ate: "", venc: "", vde: "", vate: "" };
 
 export function Financeiro({ params = {} }) {
   const { dados } = useApp();
@@ -335,7 +338,7 @@ export function Financeiro({ params = {} }) {
   const [f, setF] = useState(() => { try { return { ...FILTROS_VAZIOS, ...(JSON.parse(localStorage.getItem(LS_FILTROS) || "null") || {}), ...(params.aba === "pagas" ? { sit: "paga", campo: "pago_em" } : {}) }; } catch (e) { return { ...FILTROS_VAZIOS }; } });
   const [nova, setNova] = useState(params.nova ? { modo: params.nova } : null), [det, setDet] = useState(null), [dup, setDup] = useState(false);
   const muda = o => setF(x => { const n = { ...x, ...o }; try { localStorage.setItem(LS_FILTROS, JSON.stringify(n)); } catch (e) {} return n; });
-  const limpar = () => muda({ q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "" });
+  const limpar = () => muda({ q: "", cat: "", fav: "", forma: "", origem: "", cx: "", sit: "", venc: "", vde: "", vate: "" });
   const intervalo = () => { const per = PERIODOS.find(x => x[0] === f.periodo); return per && per[2] ? per[2]() : [f.de || hojeISO().slice(0, 7) + "-01", f.ate || hojeISO()]; };
   const [de, ate] = intervalo();
   const carregar = () => { (async () => {
@@ -361,6 +364,7 @@ export function Financeiro({ params = {} }) {
       if (f.sit === "avencer" && !(c.status === "aberta" && (g === "semana" || g === "depois"))) return false;
       if (["vencida", "hoje", "paga", "cancelada"].includes(f.sit) && g !== f.sit) return false;
     }
+    if (!noVencimento(c.vencimento, { venc: f.venc, de: f.vde, ate: f.vate })) return false;
     return true;
   };
   const ab = abertas || [];
@@ -370,7 +374,7 @@ export function Financeiro({ params = {} }) {
   const lista = base.filter(passa).sort((a, b) => f.campo === "pago_em" && aba === "consulta" ? (b.pago_em || "").localeCompare(a.pago_em || "") : a.vencimento.localeCompare(b.vencimento));
   const opcoes = (fn) => [...new Set([...(abertas || []), ...(consulta || [])].map(fn).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const categorias = opcoes(c => c.categoria || "Sem categoria"), favorecidos = opcoes(fav), formas = opcoes(c => c.forma_pagamento), contasSaida = opcoes(c => c.conta_origem);
-  const ativos = ["q", "cat", "fav", "origem", ...(aba === "consulta" ? ["forma", "cx", "sit"] : [])].filter(k => f[k]).length;
+  const ativos = ["q", "cat", "fav", "origem", "venc", ...(aba === "consulta" ? ["forma", "cx", "sit"] : [])].filter(k => f[k]).length;
   // Em aberto: os filtros ficam gravados no aparelho e sobrevivem a sair e voltar; sem este aviso uma conta que vence hoje
   // some da lista enquanto o cartão "Vencem hoje" (que não filtra) continua contando (caso do aluguel, 10/11/2026)
   const escondidas = aba === "abertas" && ativos ? ab.filter(c => !passa(c)) : [];
@@ -415,6 +419,8 @@ export function Financeiro({ params = {} }) {
             <label class="filtro"><span>Pela data de</span><select class="inp" value=${f.campo} onChange=${e => muda({ campo: e.target.value })}><option value="vencimento">Vencimento</option><option value="pago_em">Pagamento</option><option value="emissao">Emissão</option></select></label>
           </div>
           <div class="chips rolagem" role="group" aria-label="Situação">${SITUACOES.map(([k, t]) => html`<button type="button" key=${k} class=${"chip-f" + (f.sit === k ? " ativo" : "")} onClick=${() => muda({ sit: k })}>${t}</button>`)}</div>` : null}
+          <div class="fin-periodo fin-venc"><${FiltroVencimento} id="fin-venc" valor=${{ venc: f.venc, de: f.vde, ate: f.vate }}
+            onMuda=${v => muda({ venc: v.venc, vde: v.de, vate: v.ate })} /></div>
           <div class="fin-sel">
             <label class="filtro fin-busca"><span>Buscar</span><input id="busca-conta" class="inp" type="search" placeholder="Descrição, documento, observação ou valor" value=${f.q} onInput=${e => muda({ q: e.target.value })} /></label>
             ${sel("fav", "Fornecedor / favorecido", favorecidos)}${sel("cat", "Categoria", categorias)}

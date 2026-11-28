@@ -2,8 +2,8 @@
 // baixa com recibo e alertas de vencimento. Tabela "receber" do supabase/v12.sql.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Modal, Seg, Dinheiro, Vazio, Abas } from "../ui.js";
-import { reais, fmtData, hojeISO, somaDias, arred, soDig, norm, numOS, linkWhats, fmtTel } from "../util.js";
+import { useApp, Campo, Modal, Seg, Dinheiro, Vazio, Abas, FiltroVencimento, noVencimento } from "../ui.js";
+import { reais, fmtData, hojeISO, somaDias, arred, soDig, norm, numOS, linkWhats, fmtTel, lsGet, lsSet } from "../util.js";
 import { pode } from "../regras.js";
 import { referenteOS, ContaEntrada } from "./recibos.js";
 import { msgCobrancaParcela } from "../mensagens.js";
@@ -133,16 +133,21 @@ export function ReceberParcelaModal({ parcela, ordem, onFechar, onFeito }) {
 }
 
 const msgCobranca = (p, cfg) => msgCobrancaParcela(p, cfg);
+const LS_VENC = "dtcar-receber-venc";
 
 /** Tela Financeiro › Contas a receber */
 export function ContasReceber() {
   const { dados, cfg, perfil, ir, recarregar } = useApp();
   const [aba, setAba] = useState("abertas"), [q, setQ] = useState(""), [baixa, setBaixa] = useState(null), [pagas, setPagas] = useState(null), [erro, setErro] = useState("");
+  // filtro por data de vencimento, guardado no aparelho (pedido do Danilo em 25/11/2026)
+  const [venc, setVenc] = useState(() => lsGet(LS_VENC) || { venc: "", de: "", ate: "" });
+  const mudaVenc = v => { setVenc(v); lsSet(LS_VENC, v); };
   const semTabela = !api.receber || (api.temV12 && !api.temV12()) || erro;
   useEffect(() => { recarregar(["receber"]); }, []);
   useEffect(() => { if (aba === "pagas" && api.receber) api.receber.listar({ status: "paga" }).then(l => setPagas(l.sort((a, b) => (b.pago_em || "").localeCompare(a.pago_em || "")))).catch(e => setErro(e.message)); }, [aba]);
   const abertas = (dados.receber || []).filter(p => p.status === "aberta");
-  const filtra = l => l.filter(p => !q || norm(p.cliente_nome).includes(norm(q)) || norm(p.descricao).includes(norm(q)) || norm(p.forma).includes(norm(q)));
+  const filtra = l => l.filter(p => noVencimento(p.vencimento, venc))
+    .filter(p => !q || norm(p.cliente_nome).includes(norm(q)) || norm(p.descricao).includes(norm(q)) || norm(p.forma).includes(norm(q)));
   const soma = l => l.reduce((s, p) => s + Number(p.valor), 0);
   const g = k => abertas.filter(p => situacaoParcela(p).g === k);
   const tel = p => { const o = dados.ordens.find(x => x.id === p.ordem_id); const c = dados.clientes.find(x => x.id === p.cliente_id); return (c && c.telefone) || (o && o.cliente && o.cliente.telefone) || ""; };
@@ -165,7 +170,9 @@ export function ContasReceber() {
     </div>
     <section class="card">
       <${Abas} abas=${[["abertas", "A receber (" + abertas.length + ")"], ["pagas", "Recebidas"]]} ativa=${aba} onTroca=${setAba} />
-      <div class="fin-sel" style=${{ margin: "12px 0" }}><label class="filtro fin-busca"><span>Buscar</span><input class="inp" type="search" placeholder="Cliente, O.S., placa ou forma" value=${q} onInput=${e => setQ(e.target.value)} /></label></div>
+      <div class="fin-sel" style=${{ margin: "12px 0" }}><label class="filtro fin-busca"><span>Buscar</span><input class="inp" type="search" placeholder="Cliente, O.S., placa ou forma" value=${q} onInput=${e => setQ(e.target.value)} /></label>
+        <${FiltroVencimento} id="rec-venc" valor=${venc} onMuda=${mudaVenc} /></div>
+      ${venc.venc ? html`<p class="sub" id="rec-venc-resumo">${filtra(aba === "abertas" ? abertas : (pagas || [])).length} parcela(s) no filtro de vencimento · ${reais(soma(filtra(aba === "abertas" ? abertas : (pagas || []))))}</p>` : null}
       ${aba === "abertas" ? (abertas.length ? [["vencida", "Vencidas"], ["hoje", "Vencem hoje"], ["semana", "Próximos 7 dias"], ["depois", "Mais adiante"]].map(([k, t]) => { const l = filtra(g(k)); return l.length ? html`<div class="grupo-contas" key=${k}><h4>${t}<span>${reais(soma(l))}</span></h4><div class="lista">${l.map(linha)}</div></div>` : null; })
           : html`<${Vazio}>Nenhuma conta a receber. Quando um veículo sair com pagamento a prazo, as parcelas aparecem aqui.</${Vazio}>`)
         : !pagas ? html`<div class="esqueleto"></div>` : filtra(pagas).length ? html`<div class="lista">${filtra(pagas).slice(0, 200).map(linha)}</div>` : html`<${Vazio}>Nenhuma parcela recebida ainda.</${Vazio}>`}

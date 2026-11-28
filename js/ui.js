@@ -1,5 +1,5 @@
 import { html, createContext, useContext, useState, useEffect, useRef } from "./lib.js";
-import { exPlaca, num2, parseValor, norm, soDig, fmtTel, fmtDoc, normPlaca } from "./util.js";
+import { exPlaca, num2, parseValor, norm, soDig, fmtTel, fmtDoc, normPlaca, lsGet, lsSet } from "./util.js";
 import { api } from "./api.js";
 import { STATUS, situacaoOS } from "./regras.js";
 
@@ -146,4 +146,56 @@ export function TrocaVisao({ visao, onTroca, cards }) {
     <button type="button" aria-pressed=${visao === "lista" ? "true" : "false"} title="Lista" onClick=${() => onTroca("lista")}>${I.lista}<span>Lista</span></button>
     <button type="button" aria-pressed=${visao === "tabela" ? "true" : "false"} title="Tabela" onClick=${() => onTroca("tabela")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18M3 14.5h18M9 9v11"/></svg><span>Tabela</span></button>
     ${cards ? html`<button type="button" aria-pressed=${visao === "cards" ? "true" : "false"} title="Cards" onClick=${() => onTroca("cards")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg><span>Cards</span></button>` : null}</div>`;
+}
+
+/* ---------------------------------------------------------------------------------------------------------------------
+ * Quadros que escondem o conteúdo ao clicar no título (pedido do Danilo em 25/11/2026, telas de RH e de Sistema).
+ * Em vez de mexer um por um nos quase 40 quadros dessas telas, a tela chama `useQuadrosDobraveis("rh")` e todo
+ * `<section class="card">` dela passa a dobrar: clica no título, some o conteúdo; clica de novo, volta. A escolha fica
+ * guardada no aparelho por tela (localStorage), então o que ele fechou continua fechado na próxima vez.
+ * O estado é só uma classe no próprio quadro — nenhum elemento é inserido no meio do que o Preact desenha — e a palavra
+ * "Mostrar"/"Ocultar" aparece escrita ao lado do título (a regra da casa é nunca deixar só a cor ou só o símbolo falando).
+ * ------------------------------------------------------------------------------------------------------------------ */
+const cabecalhoDo = c => { const p = c.firstElementChild;
+  return p && (p.tagName === "H2" || p.tagName === "H3" || p.classList.contains("secao-topo")) ? p : null; };
+const SELETOR_CAB = "section.card.card-dobravel > h2, section.card.card-dobravel > h3, section.card.card-dobravel > .secao-topo";
+export function useQuadrosDobraveis(chave) {
+  useEffect(() => {
+    const raiz = document.querySelector("main") || document.body;
+    const guarda = "dtcar-dobrados-" + chave;
+    const fechados = new Set(lsGet(guarda) || []);
+    const nomeDe = c => { const p = cabecalhoDo(c); return p ? p.textContent.trim().replace(/\s+/g, " ").slice(0, 60) : ""; };
+    const marcar = (c, p, fechado) => {
+      c.classList.toggle("card-dobrado", fechado);
+      p.setAttribute("aria-expanded", fechado ? "false" : "true");
+      p.setAttribute("title", fechado ? "Mostrar o conteúdo" : "Ocultar o conteúdo");
+    };
+    const aplicar = () => { for (const c of raiz.querySelectorAll("section.card")) {
+      const p = cabecalhoDo(c); if (!p) continue;
+      c.classList.add("card-dobravel");
+      p.setAttribute("role", "button"); p.setAttribute("tabindex", "0");
+      marcar(c, p, fechados.has(nomeDe(c)));
+    } };
+    const alternar = c => { const p = cabecalhoDo(c); if (!p) return;
+      const fechar = !c.classList.contains("card-dobrado"), nome = nomeDe(c);
+      marcar(c, p, fechar);
+      if (fechar) fechados.add(nome); else fechados.delete(nome);
+      lsSet(guarda, [...fechados]); };
+    const doClique = e => {
+      if (e.target.closest("button, a, input, select, textarea, label")) return;   // botão dentro do título continua funcionando
+      const p = e.target.closest(SELETOR_CAB);
+      if (p) alternar(p.parentElement);
+    };
+    const daTecla = e => { if (e.key !== "Enter" && e.key !== " ") return;
+      const p = e.target.closest && e.target.closest(SELETOR_CAB);
+      if (p && p === e.target) { e.preventDefault(); alternar(p.parentElement); } };
+    aplicar();
+    const obs = new MutationObserver(aplicar);   // quadro que aparece depois (carregou do banco) já nasce dobrável
+    obs.observe(raiz, { childList: true, subtree: true });
+    raiz.addEventListener("click", doClique);
+    raiz.addEventListener("keydown", daTecla);
+    return () => { obs.disconnect(); raiz.removeEventListener("click", doClique); raiz.removeEventListener("keydown", daTecla);
+      for (const c of raiz.querySelectorAll("section.card.card-dobravel")) { c.classList.remove("card-dobravel", "card-dobrado");
+        const p = cabecalhoDo(c); if (p) { p.removeAttribute("role"); p.removeAttribute("tabindex"); p.removeAttribute("aria-expanded"); } } };
+  }, [chave]);
 }

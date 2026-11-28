@@ -4,7 +4,7 @@
 // Só o administrador (salários e dados pessoais).
 import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Abas, Modal } from "../ui.js";
+import { useApp, Abas, Modal, useQuadrosDobraveis } from "../ui.js";
 import { reais, fmtData, hojeISO } from "../util.js";
 import { lerPDFBoleto, fmtLinha } from "../boleto.js";
 import { entregarArquivo } from "../pdf.js";
@@ -38,6 +38,7 @@ async function imprimirBlob(blob, nome) {
 }
 
 export function DocumentosRH() {
+  useQuadrosDobraveis("rh");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   const { cfg, avisar, confirmar, recarregar } = useApp();
   const [docs, setDocs] = useState(null), [erro, setErro] = useState(""), [mes, setMes] = useState("todos"), [tipo, setTipo] = useState("todos");
   const [buscando, setBuscando] = useState(""), [novo, setNovo] = useState(false), [fazendo, setFazendo] = useState(""), [config, setConfig] = useState(false);

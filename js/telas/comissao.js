@@ -10,7 +10,7 @@
 // nos serviços executados do app, para o histórico do mecânico ficar certo), do mesmo jeito que "Quem executou este serviço?".
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Modal, Vazio, Placa, Campo, Texto } from "../ui.js";
+import { useApp, Modal, Vazio, Placa, Campo, Texto, useQuadrosDobraveis } from "../ui.js";
 import { reais, fmtData, numOS, normPlaca, totalItem, parseValor } from "../util.js";
 import { pode, chaveGrupo, gruposDeProdutos } from "../regras.js";
 import { quinzenas, mesAtual, periodo, nomeMes, quintoDiaUtil } from "../folha.js";
@@ -239,6 +239,7 @@ function QuemFez({ linha, quinzena, funcs, perfilDe, onFechar, onFeito, avisar }
 
 /* =================== TELA =================== */
 export function Comissao() {
+  useQuadrosDobraveis("comissao");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   const { cfg, dados, perfil, avisar, confirmar, ir, recarregar } = useApp();
   const [ym, setYm] = useState(mesAtual());
   const [qz, setQz] = useState(new Date().getDate() <= 15 ? 0 : 1);

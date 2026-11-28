@@ -3,7 +3,7 @@
 // o mesmo arquivo que o app do mecânico (/mecanico/) lê. Cada ação grava na hora.
 import { html, useState } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Texto, Seg, Modal } from "../ui.js";
+import { useApp, Campo, Texto, Seg, Modal, useQuadrosDobraveis } from "../ui.js";
 import { SISTEMAS_PADRAO, ICONES, ICONE_D, TIPOS, pecasDoSistema, novoId } from "../appmecanico.js";
 
 const Icone = ({ nome, tam = 28 }) => html`<svg aria-hidden="true" width=${tam} height=${tam} viewBox="0 0 32 32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d=${ICONE_D[nome] || ICONE_D.chave}></path></svg>`;
@@ -13,6 +13,7 @@ const lista = t => String(t || "").split(/[,;]/).map(x => x.trim()).filter(Boole
 const descPos = p => p.pm === "chips" ? "Diant. | Tras. | Os 2" : p.pm === "chips2" ? "Dianteira | Traseira | As 2" : Array.isArray(p.pm) ? p.pm.join(" | ") + " (pode marcar mais de uma)" : "";
 
 export function AppMecanico() {
+  useQuadrosDobraveis("app-mecanico");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   const { cfg, avisar, recarregar } = useApp();
   const [sid, setSid] = useState(SISTEMAS_PADRAO[0].id), [ed, setEd] = useState(null), [salvando, setSalvando] = useState(false);
   const sis = SISTEMAS_PADRAO.find(s => s.id === sid);

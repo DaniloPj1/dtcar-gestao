@@ -4,7 +4,7 @@
 // v32: status de entrega (✓/✓✓/lida), alertas automáticos, conversa ligada ao cadastro, sem resposta e fotos recebidas)
 import { html, useState, useEffect, useRef } from "../lib.js";
 import { api } from "../api.js";
-import { useApp } from "../ui.js";
+import { useApp, useQuadrosDobraveis } from "../ui.js";
 import { AbasMensagens } from "./email.js";
 import { fmtDataHora } from "../util.js";
 
@@ -25,6 +25,7 @@ function regrasTexto(r) {
 const SIT = { desligado: ["Desligado", "muted"], pareando: ["Pareando…", "info"], conectado: ["Vinculado", "ok"], erro: ["Com problema", "bad"] };
 
 export function WhatsApp() {
+  useQuadrosDobraveis("whatsapp");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   const { avisar, confirmar, recarregar } = useApp();
   const [st, setSt] = useState(null), [erro, setErro] = useState(""), [fazendo, setFazendo] = useState("");
   const [pediu, setPediu] = useState(false), [teste, setTeste] = useState(null), [chave, setChave] = useState("");

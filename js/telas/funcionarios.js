@@ -1,7 +1,7 @@
 // Funcionários: cadastro, jornada (folha de ponto impressa) e contabilidade do mês. Só o administrador acessa.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Texto, Area, Abas, Modal, Vazio, Dinheiro } from "../ui.js";
+import { useApp, Campo, Texto, Area, Abas, Modal, Vazio, Dinheiro, useQuadrosDobraveis } from "../ui.js";
 import { AbasRH } from "./rh.js";
 import { norm, reais, fmtData, fmtTel, fmtDoc, soDig, validaCPF, hojeISO, parseValor, totalItem, numOS } from "../util.js";
 import { DIAS, VINCULOS, TIPOS_LANC, ENCARGOS_PADRAO, JORNADA_PADRAO, minutosDia, horasSemana, fmtHoras, periodo, mesAtual, nomeMes,
@@ -43,6 +43,7 @@ function SeletorMes({ ym, onMuda }) {
 
 /* =================== LISTA E RESUMO DO MÊS =================== */
 export function Funcionarios({ params }) {
+  useQuadrosDobraveis("funcionarios");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   const { ir, cfg, avisar, recarregar } = useApp();
   const [funcs, setFuncs] = useState(null), [erro, setErro] = useState(""), [ym, setYm] = useState(params.mes || mesAtual());
   const [mes, setMes] = useState(null), [inativos, setInativos] = useState(false), [encAberto, setEncAberto] = useState(false);

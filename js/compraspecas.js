@@ -235,3 +235,124 @@ export function corDoFornecedor(id, fornecedores = []) {
   const n = ids.indexOf(id);
   return CORES_FORNECEDOR[(n < 0 ? 0 : n) % CORES_FORNECEDOR.length];
 }
+
+/* ---------------- mesclar os fornecedores: o MESMO produto lado a lado (pedido do Danilo em 25/11/2026) ----------------
+ * "Quando eu pesquisar amortecedor o sistema precisa me dar lado a lado os amortecedores dianteiros de cada fornecedor,
+ *  os traseiros, os kits — lado a lado um com o outro por modelo do que o resultado da pesquisa me der."
+ * Antes o resultado vinha numa lista só, do mais barato para o mais caro, misturando dianteiro, traseiro e kit: para comparar
+ * o mesmo produto entre fornecedores ele tinha que procurar a linha na mão. Agora o resultado é separado por PRODUTO
+ * (tipo + posição + lado + se é kit) e, dentro de cada um, um ao lado do outro por preço.
+ * A descrição é a que o portal do fornecedor manda, então o que dá é ler o texto: nada é inventado e o que não casa fica
+ * no grupo "Outros resultados", nunca escondido. */
+const PARADAS = new Set(["de", "do", "da", "dos", "das", "e", "com", "sem", "para", "p", "c", "a", "o", "em", "un", "pc", "pcs", "pca", "pecas", "peca", "lado", "ld", "le"]);
+/** tira o plural do português (amortecedores → amortecedor; molas → mola; pinos → pino), sem mexer em palavra curta */
+const semPlural = p => {
+  if (p.length <= 4 || !/s$/.test(p)) return p;
+  if (/(r|z|s)es$/.test(p)) return p.slice(0, -2);     // amortecedores → amortecedor, luzes → luz
+  if (/ns$/.test(p)) return p.slice(0, -2) + "m";      // pinos não; bombons → bombom
+  return p.slice(0, -1);                                // molas → mola
+};
+/* Palavra que, sozinha, não diz que peça é: "filtro" pode ser de ar, de óleo ou de combustível, e juntar os três num quadro
+ * só seria pior que não agrupar. Quando a descrição começa por uma delas, o tipo leva DUAS palavras ("filtro ar",
+ * "coxim amortecedor"); nos outros casos leva uma só, senão o nome do carro entraria no tipo ("amortecedor gol g5" não
+ * casaria com "amortecedor" do outro fornecedor). */
+const GENERICOS = new Set(["filtro", "sensor", "bomba", "valvula", "correia", "junta", "cabo", "rolamento", "retentor", "interruptor",
+  "chave", "mangueira", "reservatorio", "suporte", "bucha", "parafuso", "anel", "tampa", "modulo", "cilindro", "atuador", "cubo",
+  "polia", "tensor", "coxim", "calco", "batente", "bieleta", "terminal", "pivo", "barra", "braco", "tubo", "duto", "cano", "bico",
+  "bobina", "rele", "fusivel", "farol", "lanterna", "espelho", "palheta", "escova", "disco", "plato", "engrenagem", "eixo", "trizeta"]);
+const POSICOES = [[/\bdianteir[oa]s?\b|\bdiant\b|\bfront\b/, "dianteiro", 1], [/\btraseir[oa]s?\b|\btras\b|\brear\b/, "traseiro", 2],
+  [/\bsuperior(es)?\b/, "superior", 3], [/\binferior(es)?\b/, "inferior", 4]];
+const LADOS = [[/\besquerd[oa]s?\b|\besq\b|\bl\.?e\.?\b/, "esquerdo", 1], [/\bdireit[oa]s?\b|\bdir\b|\bl\.?d\.?\b/, "direito", 2]];
+const E_KIT = /\bkit\b|\bjogo\b|\bconjunto\b|\bpar\b/;
+const maiusInicial = s => s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+/* Abreviações que a oficina e os portais escrevem o tempo todo: sem isso "COXIM AMORT DIANTEIRO" e "COXIM DO AMORTECEDOR
+ * DIANTEIRO" cairiam em quadros diferentes. Só as que não têm outro sentido numa descrição de peça. */
+const ABREV = { amort: "amortecedor", amortec: "amortecedor", amortecedo: "amortecedor", comb: "combustivel", combust: "combustivel",
+  susp: "suspensao", cond: "condicionado", radiad: "radiador", past: "pastilha", pastilh: "pastilha", cil: "cilindro", rolam: "rolamento" };
+const porExtenso = p => ABREV[p] || p;
+
+/**
+ * Produto de uma linha do resultado, lido da descrição que o fornecedor mandou.
+ * Devolve { chave, titulo, tipo, posicao, lado, kit, ordem } — a chave é o que põe fornecedores diferentes no mesmo quadro.
+ */
+export function produtoDaLinha(descricao, marca = "", ignorar = []) {
+  const t = " " + norm(descricao).replace(/[^a-z0-9.\s]+/g, " ").replace(/\s+/g, " ") + " ";
+  const achar = l => { for (const [re, nome, ordem] of l) if (re.test(t)) return { nome, ordem }; return { nome: "", ordem: 9 }; };
+  const posicao = achar(POSICOES), lado = achar(LADOS), kit = E_KIT.test(t);
+  const marcaN = norm(marca).split(/\s+/).filter(x => x.length > 2);
+  // o nome do carro pesquisado sai do tipo: "amortecedor dianteiro gol g5" e "amortecedor dianteiro" são o mesmo produto
+  const doCarro = new Set((Array.isArray(ignorar) ? ignorar : [ignorar]).flatMap(x => norm(x).split(/[^a-z0-9]+/)).filter(x => x.length >= 3).map(semPlural));
+  const fora = new RegExp("\\b(" + ["dianteir\\w*", "diant", "front", "traseir\\w*", "tras", "rear", "superior\\w*", "inferior\\w*",
+    "esquerd\\w*", "esq", "direit\\w*", "dir", "kit", "jogo", "conjunto", "par", "original", "novo", "nova"].join("|") + ")\\b", "g");
+  const palavras = t.replace(fora, " ").split(/\s+/)
+    .filter(p => p.length >= 2 && !PARADAS.has(p) && !/\d/.test(p) && !marcaN.includes(p))
+    .map(semPlural).map(porExtenso).filter(p => !doCarro.has(p));
+  // a 1ª palavra tem de ser uma peça (3 letras ou mais); a 2ª pode ser curta, porque é o que especifica ("filtro de AR")
+  const primeira = palavras.findIndex(p => p.length >= 3);
+  const resto = primeira < 0 ? [] : palavras.slice(primeira);
+  const tipo = resto.slice(0, GENERICOS.has(resto[0]) ? 2 : 1).join(" ");
+  const partes = [kit ? "kit" : "", tipo, posicao.nome, lado.nome].filter(Boolean);
+  return { chave: partes.join("|") || "outros", titulo: maiusInicial(partes.join(" ")) || "Outros resultados",
+    tipo, posicao: posicao.nome, lado: lado.nome, kit, ordem: [tipo, kit ? 1 : 0, posicao.ordem, lado.ordem] };
+}
+
+/**
+ * Resultado separado por produto, com os fornecedores lado a lado dentro de cada um.
+ * Devolve [{ chave, titulo, linhas, fornecedores, menor, de, ate }]: `linhas` do mais barato para o mais caro,
+ * `fornecedores` quantos fornecedores entraram (é o que diz se vale comparar), `menor` a linha mais barata do grupo.
+ * Ordem dos grupos: tipo da peça; dentro do tipo, peça solta antes do kit, dianteiro antes do traseiro, esquerdo antes do direito.
+ * Grupo com um só resultado e sem tipo reconhecido cai no fim, em "Outros resultados", para nada ficar de fora.
+ */
+export function agruparOfertas(linhas = [], ignorar = []) {
+  const g = new Map();
+  for (const o of linhas) {
+    const p = produtoDaLinha(o.descricao || o.codigo, o.marca, ignorar);
+    if (!g.has(p.chave)) g.set(p.chave, { chave: p.chave, titulo: p.titulo, tipo: p.tipo, ordem: p.ordem, linhas: [] });
+    g.get(p.chave).linhas.push({ ...o, produto: p });
+  }
+  const grupos = [...g.values()].map(x => {
+    const linhas = x.linhas.slice().sort((a, b) => a.preco - b.preco || a.fornecedor.localeCompare(b.fornecedor, "pt-BR"));
+    const precos = linhas.map(o => o.preco);
+    return { ...x, linhas, fornecedores: new Set(linhas.map(o => o.fornecedor_id)).size,
+      menor: linhas[0] || null, de: Math.min(...precos), ate: Math.max(...precos) };
+  });
+  const semTipo = x => !x.tipo ? 1 : 0;
+  grupos.sort((a, b) => semTipo(a) - semTipo(b) || String(a.ordem[0]).localeCompare(String(b.ordem[0]), "pt-BR")
+    || a.ordem[1] - b.ordem[1] || a.ordem[2] - b.ordem[2] || a.ordem[3] - b.ordem[3]);
+  return grupos;
+}
+
+/**
+ * O que a oficina já tem na prateleira, para não comprar o que está aqui (regra do Danilo em 25/11/2026:
+ * "sempre entregar o que está disponível no estoque"). Só produto ativo, com saldo, que casa com o que foi pesquisado
+ * (código/referência pelo começo, ou todas as palavras na descrição). Não entra na comparação de preço dos fornecedores:
+ * é outra coisa — aqui a peça já é nossa.
+ */
+export function linhasDoEstoque(produtos = [], termos = [], limite = 12) {
+  const chaves = termos.map(t => normCodigo(t)).filter(k => k.length >= 3);
+  const pals = termos.flatMap(t => norm(t).split(/[^a-z0-9.]+/)).filter(x => x.length >= 3).map(semPlural);
+  if (!chaves.length && !pals.length) return [];
+  const out = [];
+  for (const p of produtos) {
+    if (p.tipo && p.tipo !== "produto") continue;
+    if (p.ativo === false) continue;
+    const saldo = Number(p.estoque_atual) || 0;
+    if (!(saldo > 0)) continue;
+    const ref = normCodigo(p.referencia), cb = normCodigo(p.codigo_barras);
+    const porCodigo = chaves.some(k => (ref && (ref === k || ref.startsWith(k))) || (cb && cb === k));
+    const texto = norm([p.descricao, p.marca, p.categoria, p.referencia].join(" ")).split(/[^a-z0-9.]+/).map(semPlural).join(" ");
+    const porTexto = pals.length && pals.every(x => texto.includes(x));
+    if (!porCodigo && !porTexto) continue;
+    out.push({ chave: "e:" + p.id, produto_id: p.id, descricao: p.descricao || "", marca: p.marca || "", codigo: p.referencia || "",
+      saldo, unidade: p.unidade || "UN", local: p.localizacao || "", preco: Number(p.preco_vista) || Number(p.preco_prazo) || 0,
+      custo: Number(p.custo) || 0, origem: "estoque" });
+  }
+  out.sort((a, b) => b.saldo - a.saldo || a.descricao.localeCompare(b.descricao, "pt-BR"));
+  return out.slice(0, limite);
+}
+
+/** Linhas dentro da faixa de preço escolhida na tela (campos vazios = sem limite). Item 1.8 do pedido de 25/11/2026. */
+export function naFaixa(linhas = [], de = null, ate = null) {
+  const a = Number.isFinite(de) ? de : null, b = Number.isFinite(ate) ? ate : null;
+  return linhas.filter(o => (a === null || o.preco >= a) && (b === null || o.preco <= b));
+}

@@ -25,7 +25,12 @@ import { withSupabase } from "npm:@supabase/server@1.9.2";
 export const MAX_TERMOS = 6;
 /** trava do carrinho do portal esquecida há mais que isto pode ser tomada (maior que um login completo da DPK + leitura + gravação) */
 export const PRAZO_TRAVA_MS = 150000;
-export const LIMITE_MS = 12000;
+/* Regra do Danilo (25/11/2026): "não me importo do sistema demorar até 40 segundos para me dar o resultado se ele me
+ * entregar tudo". Com 12 s o portal lento era cortado no meio e o fornecedor aparecia como "não respondeu" mesmo tendo a
+ * peça. Cada pedido ao portal espera até LIMITE_MS e cada fornecedor tem o orçamento de LIMITE_FORNECEDOR_MS para a busca
+ * inteira (login + consulta); os fornecedores são consultados em paralelo, então o total continua perto do mais lento. */
+export const LIMITE_MS = 22000;
+export const LIMITE_FORNECEDOR_MS = 38000;
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36";
 // deno-lint-ignore no-explicit-any
 export type Json = Record<string, any>;
@@ -103,12 +108,17 @@ export function siteCompreOnline(c: { endereco?: string }): string {
 /** fetch com tempo-limite e User-Agent de navegador */
 async function pedir(deps: Deps, url: string, init: RequestInit = {}, limite = LIMITE_MS): Promise<Response> {
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), limite);
+  const inicio = Date.now();
   try {
     const headers = new Headers(init.headers || {});
     if (!headers.has("user-agent")) headers.set("user-agent", UA);
     return await deps.fetch(url, { ...init, headers, signal: ac.signal, redirect: init.redirect || "manual" });
-  } catch (_e) {
-    throw new Error("O portal do fornecedor não respondeu a tempo.");
+  } catch (e) {
+    // o motivo tem de aparecer na tela: "não respondeu" sem dizer o que foi não dá para consertar (pedido do Danilo em 25/11/2026)
+    const seg = Math.round((Date.now() - inicio) / 100) / 10;
+    const caminho = (() => { try { const u = new URL(url); return u.host + u.pathname; } catch (_x) { return url.slice(0, 60); } })();
+    if (seg * 1000 >= limite - 200) throw new Error("o portal não respondeu em " + seg + " s (" + caminho + ")");
+    throw new Error("não deu para falar com o portal (" + caminho + "): " + (((e as Error) && (e as Error).message) || "falha de rede"));
   } finally { clearTimeout(t); }
 }
 /** cookies de uma resposta (nome=valor), juntados aos que já havia */
@@ -169,7 +179,22 @@ async function dpkLogin(deps: Deps, c: Conexao, senha: string, cnpjOficina: stri
 export function dpkLerBusca(corpo: Json | null): { id: string; codigo: string; descricao: string; marca: string; foto: string; extra: Json }[] {
   const l = corpo && Array.isArray(corpo.products) ? corpo.products : [];
   // foto: o portal devolve só o nome do arquivo (MANN_WK84213.jpg); as imagens ficam no CDN do SuperK
-  const foto = (p: Json) => { const v = txt(p.image || p.imageUrl || ""); return /^https:/.test(v) ? fotoOk(v) : /^[\w.-]+\.(jpe?g|png|webp)$/i.test(v) ? DPK.cdn + "/img/" + v : ""; };
+  /* Foto da DPK (item 1.4 do pedido de 25/11/2026: "o DPK não está com as fotos"). O portal manda o nome do arquivo em
+   * campos diferentes conforme a rota, e às vezes com pasta ("MANN/WK84213.jpg") ou com espaço e acento no nome — a regra
+   * antiga só aceitava nome simples, então a foto sumia. Agora: endereço completo vale; qualquer outro valor que termine em
+   * imagem é montado no CDN do SuperK, com o nome escapado. */
+  const foto = (p: Json) => {
+    const cand = [p.image, p.imageUrl, p.urlImage, p.imagem, p.photo, p.picture, p.thumbnail, p.thumbnailUrl,
+      Array.isArray(p.images) ? (p.images[0] && (p.images[0].url || p.images[0].image || p.images[0])) : p.images];
+    for (const c of cand) {
+      const v = txt(c); if (!v) continue;
+      if (/^https?:/i.test(v) || v.startsWith("//")) { const u = fotoDoSite(v, DPK.cdn); if (u) return u; continue; }
+      if (!/\.(jpe?g|png|webp)$/i.test(v)) continue;
+      const u = fotoDoSite(v.split("/").map((x) => encodeURIComponent(x)).join("/"), DPK.cdn + "/img");
+      if (u) return u;
+    }
+    return "";
+  };
   return l.map((p: Json) => ({ id: String(p.sapCode ?? p.id ?? ""), codigo: txt(p.code), descricao: txt(p.description), marca: txt(p.manufacturer), foto: foto(p),
     extra: { productId: Number(p.id) || 0, sapCode: String(p.sapCode ?? ""), minimo: Number(p.minimumQuantity) || 0 } })).filter((p: Json) => p.id && p.codigo);
 }
@@ -272,6 +297,32 @@ async function dpkPlaca(deps: Deps, s: Sessao, placa: string): Promise<string> {
  *   POST dpk-order/api/cart { hubId, retailerId, cartItems: [{ productId, productRetailerId, quantity, position, code, description, manufacturer, total }] } → o carrinho
  *   DELETE dpk-order/api/cart/{cartId}/{itemId} → true  (não usado: o sistema só põe; tirar é no portal) */
 export type ItemPortal = { codigo: string; descricao: string; marca: string; qtd: number; preco: number; extra?: Json };
+/** Tira do carrinho do portal da DPK a peça do código informado (item 1.9 do pedido de 25/11/2026: tirar no sistema tira lá também).
+ *  Mesma regra do incluir: lê o carrinho inteiro e grava sem o item; não deu para ler, não grava nada. Nunca fecha pedido no portal. */
+async function dpkCarrinhoTirar(deps: Deps, s: Sessao, codigo: string, aindaMinha: () => Promise<boolean> = async () => true): Promise<{ ok: boolean; detalhe: string }> {
+  const store = Number(s.store) || DPK.store, alvo = normCodigo(codigo);
+  if (!alvo) return { ok: false, detalhe: "DPK: sem o código da peça, não deu para tirar do carrinho do portal." };
+  const rg = await pedir(deps, DPK.api + "/dpk-order/api/cart/getByFilter", { headers: dpkHeaders(s) });
+  if (rg.status === 401) throw new ErroAcesso("sessão vencida");
+  if (!rg.ok) return { ok: false, detalhe: "DPK: não deu para ler o carrinho do portal (HTTP " + rg.status + "); tire a peça lá no portal." };
+  const lista = (await rg.json().catch(() => undefined)) as Json[] | null | undefined;
+  if (!Array.isArray(lista) || lista.some((c) => !c || typeof c !== "object" || (c.cartItems !== undefined && !Array.isArray(c.cartItems))))
+    return { ok: false, detalhe: "DPK: o carrinho do portal respondeu fora do padrão; tire a peça lá no portal." };
+  const atual = lista.length ? lista.find((c) => c && c.closed === false) || lista[0] : null;
+  const existentes: Json[] = atual && Array.isArray(atual.cartItems) ? atual.cartItems : [];
+  const ficam = existentes.filter((i) => normCodigo(txt(i.code)) !== alvo);
+  if (ficam.length === existentes.length) return { ok: true, detalhe: "No carrinho da DPK essa peça já não estava." };
+  const corpo = { ...(atual && atual.id ? { id: atual.id } : {}), hubId: store, retailerId: Number(atual && atual.retailerId) || Number(s.retailerId) || 2,
+    cartItems: ficam.map((i, n) => ({ productId: i.productId, productRetailerId: i.productRetailerId, quantity: i.quantity, position: n + 1, code: i.code, description: i.description, manufacturer: i.manufacturer, total: i.total || 0 })) };
+  if (!(await aindaMinha())) return { ok: false, detalhe: "DPK: outra mudança começou no mesmo carrinho; nada foi mexido no portal. Tente de novo." };
+  const r = await pedir(deps, DPK.api + "/dpk-order/api/cart", { method: "POST", headers: { ...dpkHeaders(s), "content-type": "application/json" }, body: JSON.stringify(corpo) });
+  if (r.status === 401) throw new ErroAcesso("sessão vencida");
+  const resp = (await r.json().catch(() => null)) as Json | null;
+  const itens: Json[] = resp && Array.isArray(resp.cartItems) ? resp.cartItems : [];
+  if (!r.ok || itens.some((i) => normCodigo(txt(i.code)) === alvo)) return { ok: false, detalhe: "DPK: o portal não confirmou a retirada (HTTP " + r.status + "); tire a peça lá no portal." };
+  return { ok: true, detalhe: "Tirada também do carrinho da DPK." };
+}
+
 async function dpkCarrinho(deps: Deps, s: Sessao, item: ItemPortal, aindaMinha: () => Promise<boolean> = async () => true): Promise<{ ok: boolean; detalhe: string }> {
   const store = Number(s.store) || DPK.store;
   const productId = Number(item.extra && item.extra.productId) || 0, sap = Number(item.extra && item.extra.sapCode) || 0;
@@ -507,7 +558,8 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     }
     return { ok: true, encontrado: false, placa };
   }
-  if (acao === "carrinho_portal") {
+  if (acao === "carrinho_portal" || acao === "carrinho_portal_tirar") {
+    const tirando = acao === "carrinho_portal_tirar";
     // põe o item TAMBÉM no carrinho do portal do fornecedor (pedido do Danilo em 17/11/2026: ao clicar "Adicionar", a peça aparece no site dele)
     const idc = String(corpo.conexao || "");
     if (!/^[\w-]{1,64}$/.test(idc)) throw new ErroUso("Fornecedor conectado não encontrado.");
@@ -517,15 +569,15 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     const it = (corpo.item || {}) as Json;
     const item: ItemPortal = { codigo: txt(it.codigo).slice(0, 60), descricao: txt(it.descricao).slice(0, 200), marca: txt(it.marca).slice(0, 60), qtd: Number(it.qtd) || 1, preco: Number(it.preco) || 0, extra: it.extra && typeof it.extra === "object" ? it.extra : undefined };
     if (!item.codigo) throw new ErroUso("Informe o código da peça.");
-    if (robo !== "dpk") return { ok: false, robo, nome: robo ? NOME_ROBO[robo] : "", erro: (robo ? NOME_ROBO[robo] : "Este portal") + ": pôr no carrinho do portal ainda não está pronto; o item ficou só no carrinho do sistema." };
+    if (robo !== "dpk") return { ok: false, robo, nome: robo ? NOME_ROBO[robo] : "", erro: (robo ? NOME_ROBO[robo] : "Este portal") + ": o carrinho do portal ainda não está pronto; " + (tirando ? "tire a peça lá no portal." : "o item ficou só no carrinho do sistema.") };
     // uma inclusão por vez no carrinho de cada conexão (ler → somar → gravar), mesmo vindo de aparelhos diferentes
     let dono: string | null = deps.travar ? null : "sem-trava";
     for (let n = 0; !dono && n < 20; n++) { dono = await deps.travar!(c.id); if (!dono) await (deps.esperar || ((ms) => new Promise((r) => setTimeout(r, ms))))(500); }
     const aindaMinha = async () => !deps.renovar || dono === "sem-trava" || await deps.renovar(c.id, dono!);
-    if (!dono) return { ok: false, robo, nome: NOME_ROBO[robo], erro: NOME_ROBO[robo] + ": outra inclusão no carrinho do portal está em andamento; tente de novo em alguns segundos. O item ficou no carrinho do sistema." };
+    if (!dono) return { ok: false, robo, nome: NOME_ROBO[robo], erro: NOME_ROBO[robo] + ": outra mudança no carrinho do portal está em andamento; tente de novo em alguns segundos." };
     try {
       let res = { ok: false, detalhe: "" };
-      await comSessao(deps, c, robo, cnpjOficina, async (s) => { res = await dpkCarrinho(deps, s, item, aindaMinha); return []; });
+      await comSessao(deps, c, robo, cnpjOficina, async (s) => { res = tirando ? await dpkCarrinhoTirar(deps, s, item.codigo, aindaMinha) : await dpkCarrinho(deps, s, item, aindaMinha); return []; });
       return { ok: res.ok, robo, nome: NOME_ROBO[robo], detalhe: res.detalhe, erro: res.ok ? undefined : res.detalhe };
     } catch (e) {
       const msg = (e as Error).message || "falha";
@@ -549,12 +601,24 @@ export async function executar(corpo: Json, deps: Deps, cnpjOficina = ""): Promi
     if (robo === "toli") return { ...base, ok: false, ofertas: [], no_pc: true, erro: "Portal Toli: consulta pelo programa do PC (em preparação)." };
     try {
       const vistas = new Map<string, Oferta>(), info: Json = {};
-      await comSessao(deps, c, robo, cnpjOficina, async (s) => {
-        for (const t of termos) for (const o of await buscar(deps, robo, s, t, carro, info)) { const k = normCodigo(o.codigo) + "|" + normCodigo(o.marca); if (!vistas.has(k)) vistas.set(k, o); }
+      // cada fornecedor tem seu prazo: o que estourar aparece com o motivo e os outros entregam o resultado deles
+      let estourou = false;
+      const prazo = new Promise<void>((r) => setTimeout(() => { estourou = true; r(); }, LIMITE_FORNECEDOR_MS));
+      const trabalho = comSessao(deps, c, robo, cnpjOficina, async (s) => {
+        for (const t of termos) {
+          if (estourou) break;
+          for (const o of await buscar(deps, robo, s, t, carro, info)) { const k = normCodigo(o.codigo) + "|" + normCodigo(o.marca); if (!vistas.has(k)) vistas.set(k, o); }
+        }
         if (s.carrosMudou) { delete s.carrosMudou; await deps.gravarSessao(c.id, s); }   // o carro casado fica guardado: a próxima busca da mesma placa não refaz
         return [];
       });
+      await Promise.race([trabalho, prazo]);
+      trabalho.catch(() => {});   // estourou o prazo: a busca continua sozinha, mas a resposta sai agora com o que já veio
       const ofertas = [...vistas.values()];
+      if (estourou && !ofertas.length) {
+        await deps.situacao(c.id, "erro", "A consulta passou de " + Math.round(LIMITE_FORNECEDOR_MS / 1000) + " s e foi encerrada (" + horaBR(agora) + ").");
+        return { ...base, ok: false, ofertas: [], erro: "o portal passou de " + Math.round(LIMITE_FORNECEDOR_MS / 1000) + " s sem terminar a busca" };
+      }
       const gravadas = ofertas.length ? await deps.gravarPrecos(c.fornecedor_id, ofertas, em) : 0;
       await deps.situacao(c.id, "ok", "Última consulta " + horaBR(agora) + " (" + ofertas.length + " preço(s)).");
       return { ...base, ok: true, ofertas, gravadas, em, ...(info.veiculo ? { veiculo: info.veiculo } : {}), ...(info.semCarro ? { sem_carro: info.semCarro } : {}) };

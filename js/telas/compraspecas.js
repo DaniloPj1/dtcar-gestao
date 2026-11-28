@@ -15,7 +15,7 @@ import { normPlaca, placaValida, exPlaca, reais, fmtDataHora, fmtData, qtdFmt, p
 import { etapaOS } from "../regras.js";
 import { consultarPlaca, paraResumo } from "../placa.js";
 import { ORIGEM_TEXTO, SITUACOES_PEDIDO, numPedido, nomeFornecedor, totalLinha, arred2, indiceOfertas, agruparCarrinho, textoPedido,
-  NOME_ROBO, roboDaConexao, ondeConsulta, linhasCotacao, corDoFornecedor } from "../compraspecas.js";
+  NOME_ROBO, roboDaConexao, ondeConsulta, linhasCotacao, corDoFornecedor, agruparOfertas, linhasDoEstoque, naFaixa } from "../compraspecas.js";
 
 const LS_BUSCA = "dtcar-compras-busca";
 // tabela ausente = o v59 ainda não foi rodado (a api já traduz; aqui vale também para a resposta crua)
@@ -68,13 +68,15 @@ function SituacaoFornecedores({ conexoes, nomeDe, cor = () => "" }) {
     return html`<span key=${c.id} class=${"cot-sit cot-sit-" + sit} data-forn=${nomeDe(c.fornecedor_id)} title=${detalheLegivel(c.detalhe)} style=${"--forn:" + cor(c.fornecedor_id)}><i aria-hidden="true"></i><b>${nomeDe(c.fornecedor_id)}</b> · ${texto}${sit === "erro" && c.detalhe ? html`<small>: ${detalheLegivel(c.detalhe).slice(0, 90)}</small>` : null}</span>`; })}</div>`;
 }
 function Cotacao({ d, recarregar, irCarrinho }) {
-  const { dados } = useApp();
+  const { dados, avisar } = useApp();
   const g = lsGet(LS_COT) || {};
   const [placaTxt, setPlacaTxt] = useState(g.placa || ""), [txt, setTxt] = useState(g.txt || "");
   const [vivo, setVivo] = useState(null), [aoCarrinho, setAoCarrinho] = useState(null);
   const [visao, setVisao] = useState(g.visao === "lista" ? "lista" : "cards");   // Cards | Lista, como na DPK (pedido do Danilo em 17/11/2026)
   const [tamanho, setTamanho] = useState(["p", "m", "g"].includes(g.tamanho) ? g.tamanho : "m");   // tamanho dos cards
   const [soForn, setSoForn] = useState(""), [soMarca, setSoMarca] = useState("");   // filtros: fornecedor e marca da peça (fabricante)
+  const [pDe, setPDe] = useState(""), [pAte, setPAte] = useState("");   // filtro de preço (pedido do Danilo em 25/11/2026)
+  const [qtds, setQtds] = useState({}), [addando, setAddando] = useState("");   // quantidade por resultado e qual está sendo posto no carrinho
   useEffect(() => { lsSet(LS_COT, { placa: placaTxt, txt, visao, tamanho }); }, [placaTxt, txt, visao, tamanho]);
   const cor = id => corDoFornecedor(id, dados.fornecedores);
   const placa = normPlaca(placaTxt), ePlaca = placaValida(placa);
@@ -119,6 +121,30 @@ function Cotacao({ d, recarregar, irCarrinho }) {
   const res = useMemo(() => linhasCotacao({ resposta: vivo && vivo.r && vivo.r.ok ? vivo.r : null, idx, codigos: vivo && vivo.termos ? vivo.termos : alvo.termos, fornecedores: dados.fornecedores }), [vivo, idx, alvo.termos, dados.fornecedores]);
   const grupos = useMemo(() => agruparCarrinho(d.carrinho, dados.fornecedores), [d.carrinho, dados.fornecedores]);
   const totalCar = arred2(grupos.reduce((s, x) => s + x.total, 0));
+  // o que já está na prateleira, sempre que houver o que pesquisar (regra do Danilo: antes de comprar, mostrar o estoque)
+  const estoque = useMemo(() => linhasDoEstoque(dados.produtos, vivo && vivo.termos ? vivo.termos : alvo.termos), [dados.produtos, vivo, alvo.termos]);
+  const qtdDe = o => (qtds[o.chave] === undefined ? "1" : qtds[o.chave]);
+  /* "Adicionar" põe no carrinho NA HORA e deixa a tela como está, com os resultados na frente, para continuar adicionando
+     (pedido do Danilo em 25/11/2026). Preço do fornecedor consultado ao vivo também vai para o carrinho DO PORTAL dele,
+     sem perguntar: ele só fecha o pedido lá depois. O quadro com O.S. e placa continua, agora no botão "O.S.…". */
+  const porNoCarrinho = async o => {
+    const q = parseValor(qtdDe(o)); if (!(q > 0)) return avisar("Informe a quantidade.", true);
+    setAddando(o.chave);
+    try {
+      const desc = o.descricao || o.codigo;
+      await api.compras.carrinho.incluir({ fornecedor_id: o.fornecedor_id, codigo: o.codigo || "", marca: o.marca || "", descricao: desc,
+        qtd: q, preco: o.preco, origem_preco: o.origem, preco_em: o.em ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(o.em) ? o.em + "T12:00:00-03:00" : o.em).toISOString() : null,
+        os_numero: null, placa: ePlaca ? placa : "" });
+      let msg = "No carrinho: " + qtdFmt(q) + " x " + desc + " (" + o.fornecedor + ").";
+      if (o.origem === "ao_vivo" && o.conexao) {
+        const r = await api.compras.aoVivo({ acao: "carrinho_portal", conexao: o.conexao, item: { codigo: o.codigo, descricao: desc, marca: o.marca || "", qtd: q, preco: o.preco, extra: o.extra || null } });
+        msg += r && r.ok ? " " + (r.detalhe || "Também no carrinho do portal.") : " No portal do fornecedor não entrou: " + ((r && r.erro) || "sem resposta");
+      }
+      avisar(msg);
+      setQtds(x => ({ ...x, [o.chave]: "1" }));
+      await recarregar();
+    } catch (x) { avisar(x.message, true); } finally { setAddando(""); }
+  };
   const podeConsultar = !!alvo.termos.length && !!noServidor.length && !(vivo && vivo.buscando);
   return html`<div class="cot">
     <div class="cot-principal">
@@ -144,39 +170,65 @@ function Cotacao({ d, recarregar, irCarrinho }) {
         ${(vivo.r.resultados || []).filter(x => x.veiculo).map(x => html`<span key=${x.conexao} class="cot-carro-ok"><b>${nomeDe(x.fornecedor_id) || x.nome}</b>: só peças do <b>${x.veiculo}</b></span>`)}
         ${(vivo.r.resultados || []).filter(x => x.sem_carro && !x.veiculo).length ? html`<span class="cot-carro-sem"><b>${(vivo.r.resultados || []).filter(x => x.sem_carro && !x.veiculo).map(x => nomeDe(x.fornecedor_id) || x.nome).join(", ")}</b>: ainda sem o filtro do carro (confira a aplicação)</span>` : null}
       </div>` : null}
+      ${estoque.length ? html`<section class="card cot-estoque" id="cot-estoque">
+        <h3>${I.caixa}Já tem no estoque da oficina</h3>
+        <p class="sub">Antes de comprar: estas peças estão na prateleira (saldo do sistema). Confira na prateleira antes de lançar.</p>
+        <div class="cot-est-lista">${estoque.map(o => html`<div key=${o.chave} class="cot-est-item">
+          <span class="cot-est-desc"><b>${o.descricao}</b><small>${[o.marca, o.codigo].filter(Boolean).join(" ")}${o.local ? " · " + o.local : ""}</small></span>
+          <b class="cot-est-saldo">${qtdFmt(o.saldo)} ${o.unidade}</b>
+          ${o.preco > 0 ? html`<span class="cot-est-preco">venda ${reais(o.preco)}</span>` : null}
+        </div>`)}</div>
+      </section>` : null}
       ${res.linhas.length || res.semResposta.length ? (() => {
         const fornsRes = [...new Map(res.linhas.map(o => [o.fornecedor_id, o.fornecedor])).entries()];
         const marcas = [...new Set(res.linhas.map(o => o.marca).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-        const mostradas = res.linhas.filter(o => (!soForn || o.fornecedor_id === soForn) && (!soMarca || o.marca === soMarca));
+        const filtradas = naFaixa(res.linhas.filter(o => (!soForn || o.fornecedor_id === soForn) && (!soMarca || o.marca === soMarca)), parseValor(pDe) || null, parseValor(pAte) || null);
+        const foraFaixa = res.linhas.filter(o => (!soForn || o.fornecedor_id === soForn) && (!soMarca || o.marca === soMarca)).length - filtradas.length;
+        const mostradas = filtradas;
+        // mescla os fornecedores: um quadro por produto (dianteiro, traseiro, kit…) com os fornecedores lado a lado
+        const grupos = agruparOfertas(mostradas, [veiculo ? nomeVeic(veiculo) : ""]);
         const estoqueTxt = o => o.estoque === null || o.estoque === undefined ? "disponível no fornecedor" : qtdFmt(o.estoque) + " un. no estoque" + (o.prazo ? " · " + o.prazo : "");
         const origemTxt = o => ORIGEM_TEXTO[o.origem].toLowerCase() + " · " + dataPreco(o);
+        const Add = ({ o, menor = false }) => html`<div class="cot-add">
+          <label class="cot-add-qtd"><span>Qtd</span><input class="inp" inputmode="decimal" aria-label=${"Quantidade de " + (o.descricao || o.codigo)} value=${qtdDe(o)} onInput=${e => setQtds(q => ({ ...q, [o.chave]: e.target.value }))} /></label>
+          <button type="button" class=${"btn cp-add" + (menor ? " btn-pri" : "")} disabled=${addando === o.chave} onClick=${() => porNoCarrinho(o)}>${I.carrinho}<span>${addando === o.chave ? "Pondo…" : "Adicionar"}</span></button>
+          <button type="button" class="btn btn-sm cot-mais" title="Pôr no carrinho informando a O.S. e a placa" onClick=${() => setAoCarrinho(o)}>O.S.</button>
+        </div>`;
         return html`<section class="card cot-resultado">
         <div class="cot-topo">
-          <span class="sub" id="cot-res-info"><b>${mostradas.length}</b> ${mostradas.length === 1 ? "resultado" : "resultados"} com estoque${res.semEstoque ? html` · <span class="c-warn">${res.semEstoque} sem estoque ${res.semEstoque === 1 ? "não aparece" : "não aparecem"}</span>` : null}</span>
+          <span class="sub" id="cot-res-info"><b>${mostradas.length}</b> ${mostradas.length === 1 ? "resultado" : "resultados"} com estoque em <b>${grupos.length}</b> ${grupos.length === 1 ? "produto" : "produtos"}${res.semEstoque ? html` · <span class="c-warn">${res.semEstoque} sem estoque ${res.semEstoque === 1 ? "não aparece" : "não aparecem"}</span>` : null}${foraFaixa ? html` · <span class="c-warn">${foraFaixa} fora da faixa de preço</span>` : null}</span>
           <div class="cot-filtros">
             <select id="cot-forn-filtro" class="inp" aria-label="Fornecedor" value=${soForn} onChange=${e => setSoForn(e.target.value)}><option value="">Todos os fornecedores</option>${fornsRes.map(([id, n]) => html`<option key=${id} value=${id}>${n}</option>`)}</select>
             <select id="cot-marca-filtro" class="inp" aria-label="Marca da peça" value=${soMarca} onChange=${e => setSoMarca(e.target.value)}><option value="">Todas as marcas</option>${marcas.map(m => html`<option key=${m} value=${m}>${m}</option>`)}</select>
+            <div class="cot-faixa" role="group" aria-label="Faixa de preço"><span>Preço de R$</span>
+              <input id="cot-preco-de" class="inp" inputmode="decimal" placeholder="0,00" aria-label="Preço mínimo" value=${pDe} onInput=${e => setPDe(e.target.value)} />
+              <span>até R$</span>
+              <input id="cot-preco-ate" class="inp" inputmode="decimal" placeholder="0,00" aria-label="Preço máximo" value=${pAte} onInput=${e => setPAte(e.target.value)} />
+              ${pDe || pAte ? html`<button type="button" class="btn btn-sm" id="cot-preco-limpar" onClick=${() => { setPDe(""); setPAte(""); }}>Limpar</button>` : null}</div>
             <div class="seg cot-visao" role="group" aria-label="Como mostrar"><button type="button" class=${visao === "cards" ? "ativo" : ""} id="cot-ver-cards" onClick=${() => setVisao("cards")}>Cards</button><button type="button" class=${visao === "lista" ? "ativo" : ""} id="cot-ver-lista" onClick=${() => setVisao("lista")}>Lista</button></div>
             ${visao === "cards" ? html`<div class="seg cot-tamanho" role="group" aria-label="Tamanho dos cards">${[["p", "Pequeno"], ["m", "Médio"], ["g", "Grande"]].map(([k, n]) => html`<button type="button" key=${k} class=${tamanho === k ? "ativo" : ""} onClick=${() => setTamanho(k)}>${n}</button>`)}</div>` : null}
           </div>
         </div>
-        ${visao === "cards" ? html`<div class=${"cot-cards cot-t-" + tamanho}>${mostradas.map(o => html`<article key=${o.chave} class=${"cot-card" + (o.menor ? " cot-menor" : "") + (o.antigo ? " cp-velho" : "")} data-forn=${o.fornecedor} style=${"--forn:" + cor(o.fornecedor_id)}>
-            <div class="cot-card-forn"><b>${o.fornecedor}</b>${o.menor ? html`<span class="pill p-ok cp-selo-menor">menor preço</span>` : null}</div>
-            <div class="cot-card-foto">${o.foto ? html`<img src=${o.foto} alt="" loading="lazy" referrerpolicy="no-referrer" onError=${e => { e.target.parentNode.classList.add("sem"); }} />` : null}<span class="cot-sem-foto">sem foto</span></div>
-            <div class="cot-card-corpo"><strong>${o.descricao || o.codigo}</strong>
-              <b class="cot-card-preco">${reais(o.preco)}</b>
-              <span class="cot-card-est">${estoqueTxt(o)}</span>
-              <span class="cot-card-cod">Fabricante: <b>${o.marca || "—"}</b></span>
-              <span class="cot-card-cod">Cód. de fábrica: <b>${o.codigo}</b></span>
-              <small class="cot-card-ori">${origemTxt(o)}${o.antigo ? html` <span class="c-warn">(há ${o.idade} dias)</span>` : null}</small></div>
-            <button type="button" class=${"btn cp-add" + (o.menor ? " btn-pri" : "")} onClick=${() => setAoCarrinho(o)}>${I.carrinho}<span>Adicionar</span></button>
-          </article>`)}</div>`
-        : html`<div class="cot-lista">${mostradas.map(o => html`<div key=${o.chave} class=${"cot-linha" + (o.menor ? " cot-menor" : "") + (o.antigo ? " cp-velho" : "")} data-forn=${o.fornecedor} style=${"--forn:" + cor(o.fornecedor_id)}>
-            <span class="cot-l-foto">${o.foto ? html`<img src=${o.foto} alt="" loading="lazy" referrerpolicy="no-referrer" onError=${e => { e.target.style.display = "none"; }} />` : null}</span>
-            <span class="cot-l-peca"><b class="cot-l-forn">${o.fornecedor}</b>${o.menor ? html` <span class="pill p-ok cp-selo-menor">menor preço</span>` : null}<strong>${o.descricao || o.codigo}</strong><small>${[o.marca, o.codigo].filter(Boolean).join(" ")} · ${origemTxt(o)}</small></span>
-            <span class="cot-l-preco"><b>${reais(o.preco)}</b><small>${estoqueTxt(o)}</small></span>
-            <span class="cot-l-acao"><button type="button" class=${"btn btn-sm cp-add" + (o.menor ? " btn-pri" : "")} onClick=${() => setAoCarrinho(o)}>${I.carrinho}<span>Adicionar</span></button></span>
-          </div>`)}</div>`}
+        ${grupos.map(g => html`<div class="cot-grupo" key=${g.chave} data-produto=${g.titulo}>
+          <div class="cot-grupo-topo"><h4>${g.titulo}</h4><span class="sub">${g.fornecedores} ${g.fornecedores === 1 ? "fornecedor" : "fornecedores"} · ${g.de === g.ate ? reais(g.de) : reais(g.de) + " a " + reais(g.ate)}</span></div>
+          ${visao === "cards" ? html`<div class=${"cot-cards cot-t-" + tamanho}>${g.linhas.map(o => { const menor = g.linhas.length > 1 && g.menor && o.chave === g.menor.chave; return html`<article key=${o.chave} class=${"cot-card" + (menor ? " cot-menor" : "") + (o.antigo ? " cp-velho" : "")} data-forn=${o.fornecedor} style=${"--forn:" + cor(o.fornecedor_id)}>
+              <div class="cot-card-forn"><b>${o.fornecedor}</b>${menor ? html`<span class="pill p-ok cp-selo-menor">menor preço</span>` : null}</div>
+              <div class="cot-card-foto">${o.foto ? html`<img src=${o.foto} alt="" loading="lazy" referrerpolicy="no-referrer" onError=${e => { e.target.parentNode.classList.add("sem"); }} />` : null}<span class="cot-sem-foto">sem foto</span></div>
+              <div class="cot-card-corpo"><strong>${o.descricao || o.codigo}</strong>
+                <b class="cot-card-preco">${reais(o.preco)}</b>
+                <span class="cot-card-est">${estoqueTxt(o)}</span>
+                <span class="cot-card-cod">Fabricante: <b>${o.marca || "—"}</b></span>
+                <span class="cot-card-cod">Cód. de fábrica: <b>${o.codigo}</b></span>
+                <small class="cot-card-ori">${origemTxt(o)}${o.antigo ? html` <span class="c-warn">(há ${o.idade} dias)</span>` : null}</small></div>
+              <${Add} o=${o} menor=${menor} />
+            </article>`; })}</div>`
+          : html`<div class="cot-lista">${g.linhas.map(o => { const menor = g.linhas.length > 1 && g.menor && o.chave === g.menor.chave; return html`<div key=${o.chave} class=${"cot-linha" + (menor ? " cot-menor" : "") + (o.antigo ? " cp-velho" : "")} data-forn=${o.fornecedor} style=${"--forn:" + cor(o.fornecedor_id)}>
+              <span class="cot-l-foto">${o.foto ? html`<img src=${o.foto} alt="" loading="lazy" referrerpolicy="no-referrer" onError=${e => { e.target.style.display = "none"; }} />` : null}</span>
+              <span class="cot-l-peca"><b class="cot-l-forn">${o.fornecedor}</b>${menor ? html` <span class="pill p-ok cp-selo-menor">menor preço</span>` : null}<strong>${o.descricao || o.codigo}</strong><small>${[o.marca, o.codigo].filter(Boolean).join(" ")} · ${origemTxt(o)}</small></span>
+              <span class="cot-l-preco"><b>${reais(o.preco)}</b><small>${estoqueTxt(o)}</small></span>
+              <span class="cot-l-acao"><${Add} o=${o} menor=${menor} /></span>
+            </div>`; })}</div>`}
+        </div>`)}
         ${res.semResposta.length ? html`<div class="cot-sem-lista">${res.semResposta.map(x => html`<div key=${"s" + x.fornecedor_id} class="cot-sem" data-forn=${x.fornecedor} style=${"--forn:" + cor(x.fornecedor_id)}><b>${x.fornecedor}</b><span>${x.motivo}</span></div>`)}</div>` : null}
       </section>`; })() : vivo && !vivo.buscando && vivo.r && vivo.r.ok ? html`<div class="vazio" id="cot-nada">Nenhum fornecedor tem essa peça em estoque agora.</div>`
       : !vivo ? html`<${Vazio}>Digite o código ou a descrição da peça e clique em “Consultar fornecedores”. A busca é feita no portal de cada fornecedor; aparece o preço e o estoque de cada um, do mais barato para o mais caro.</${Vazio}>` : null}
@@ -190,19 +242,19 @@ function Cotacao({ d, recarregar, irCarrinho }) {
         <span class="dica">Os pedidos são criados aqui e finalizados em cada fornecedor, um a um.</span>`
         : html`<span class="dica">Vazio. Use “Carrinho” no preço do fornecedor escolhido.</span>`}
     </aside>
-    ${aoCarrinho ? html`<${AoCarrinho} o=${aoCarrinho} e=${null} placa=${ePlaca ? placa : ""} onFechar=${() => setAoCarrinho(null)} noPortal=${aoCarrinho.origem === "ao_vivo" && aoCarrinho.conexao ? aoCarrinho : null}
-      onSalvo=${async ir => { setAoCarrinho(null); await recarregar(); if (ir) irCarrinho(); }} />` : null}
+    ${aoCarrinho ? html`<${AoCarrinho} o=${aoCarrinho} e=${null} placa=${ePlaca ? placa : ""} qtd=${qtdDe(aoCarrinho)} onFechar=${() => setAoCarrinho(null)} noPortal=${aoCarrinho.origem === "ao_vivo" && aoCarrinho.conexao ? aoCarrinho : null}
+      onSalvo=${async () => { setAoCarrinho(null); await recarregar(); }} />` : null}
   </div>`;
 }
 
 /* ---------------- pôr no carrinho (a partir do preço de um fornecedor) ---------------- */
-function AoCarrinho({ o, e, placa, onFechar, onSalvo, noPortal = null }) {
+function AoCarrinho({ o, e, placa, onFechar, onSalvo, noPortal = null, qtd: qtdIni = "1" }) {
   const { dados, avisar } = useApp();
   const [portal, setPortal] = useState(!!noPortal);   // pôr também no carrinho do PORTAL do fornecedor (pedido do Danilo em 17/11/2026)
   const abertas = useMemo(() => dados.ordens.filter(x => !x._pendente && ["orcamento", "execucao", "pagamento"].includes(etapaOS(x))), [dados.ordens]);
-  const [qtd, setQtd] = useState("1"), [os, setOs] = useState(""), [pl, setPl] = useState(placa || ""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
+  const [qtd, setQtd] = useState(qtdIni || "1"), [os, setOs] = useState(""), [pl, setPl] = useState(placa || ""), [erro, setErro] = useState(""), [salvando, setSalvando] = useState(false);
   const desc = e ? e.peca.descricao : o.descricao || o.codigo;
-  const salvar = async continuar => {
+  const salvar = async () => {
     const q = parseValor(qtd); if (!(q > 0)) return setErro("Informe a quantidade.");
     const n = String(os).trim() ? Number(String(os).replace(/\D/g, "")) : null;
     if (n !== null && !(n > 0)) return setErro("Número da O.S. inválido.");
@@ -217,7 +269,7 @@ function AoCarrinho({ o, e, placa, onFechar, onSalvo, noPortal = null }) {
         const r = await api.compras.aoVivo({ acao: "carrinho_portal", conexao: noPortal.conexao, item: { codigo: o.codigo, descricao: desc, marca: o.marca || "", qtd: q, preco: o.preco, extra: noPortal.extra || null } });
         msg += r && r.ok ? " " + (r.detalhe || "Também no carrinho do portal.") : " No portal do fornecedor não entrou: " + ((r && r.erro) || "sem resposta") ;
       }
-      avisar(msg); await onSalvo(!continuar);
+      avisar(msg); await onSalvo();
     } catch (x) { setErro(x.message); } finally { setSalvando(false); }
   };
   return html`<${Modal} titulo="Pôr no carrinho" onFechar=${onFechar}>
@@ -232,8 +284,7 @@ function AoCarrinho({ o, e, placa, onFechar, onSalvo, noPortal = null }) {
     ${noPortal ? html`<label class="linha-check" id="cp-add-portal"><input type="checkbox" checked=${portal} onChange=${e => setPortal(e.target.checked)} /><span>Pôr também no carrinho do portal ${o.fornecedor} (com o seu login), para só fechar o pedido lá</span></label>` : null}
     ${erro ? html`<div class="erros" role="alert">${erro}</div>` : null}
     <div class="acoes"><span class="espaco"></span><button type="button" class="btn" onClick=${onFechar}>Voltar</button>
-      <button type="button" class="btn" id="cp-add-continuar" disabled=${salvando} onClick=${() => salvar(true)}>Pôr e continuar pesquisando</button>
-      <button type="button" class="btn btn-pri" id="cp-add-ir" disabled=${salvando} onClick=${() => salvar(false)}>Pôr e ver o carrinho</button></div>
+      <button type="button" class="btn btn-pri" id="cp-add-continuar" disabled=${salvando} onClick=${salvar}>Pôr no carrinho e continuar</button></div>
   </${Modal}>`;
 }
 
@@ -244,7 +295,21 @@ function Carrinho({ d, recarregar, irPedidos, irPesquisa }) {
   const total = arred2(grupos.reduce((s, g) => s + g.total, 0));
   const [gerando, setGerando] = useState(false);
   const mudar = async (i, patch) => { try { await api.compras.carrinho.atualizar(i.id, patch); await recarregar(); } catch (e) { avisar(e.message, true); } };
-  const tirar = async i => { try { await api.compras.carrinho.excluir(i.id); await recarregar(); } catch (e) { avisar(e.message, true); } };
+  /* Tirar é tirar: nada de confirmação nem de motivo (regra do Danilo em 25/11/2026 — "não quero justificar o porquê,
+     apenas quero excluir"). A peça que foi para o carrinho do portal do fornecedor sai de lá também, senão ela ficaria
+     no site dele depois de ter saído daqui. Não deu para tirar no portal: a peça sai do sistema do mesmo jeito e a tela
+     diz para tirar no portal, em vez de travar a exclusão. */
+  const tirar = async i => {
+    try {
+      await api.compras.carrinho.excluir(i.id);
+      const c = i.origem_preco === "ao_vivo" ? d.conexoes.find(x => x.fornecedor_id === i.fornecedor_id && x.ativo !== false) : null;
+      if (c && i.codigo) {
+        const r = await api.compras.aoVivo({ acao: "carrinho_portal_tirar", conexao: c.id, item: { codigo: i.codigo } });
+        avisar("Fora do carrinho: " + i.descricao + "." + (r && r.ok ? " " + (r.detalhe || "Tirada também do portal.") : " No portal do fornecedor não saiu: " + ((r && r.erro) || "sem resposta")), !(r && r.ok));
+      }
+      await recarregar();
+    } catch (e) { avisar(e.message, true); }
+  };
   const gerar = async () => {
     if (!(await confirmar({ titulo: "Gerar pedidos", botao: "Gerar " + grupos.length + (grupos.length === 1 ? " pedido" : " pedidos"),
       texto: "O carrinho vira um pedido por fornecedor: " + grupos.map(g => g.fornecedor + " (" + reais(g.total) + ")").join(", ") + ". Depois finalize cada pedido no fornecedor e marque como finalizado." }))) return;

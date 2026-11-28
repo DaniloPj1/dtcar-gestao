@@ -4,7 +4,8 @@
 // e os e-mails que chegaram, por prioridade (contabilidade › Objetiva › outros).
 // Regras da casa: nada fica em "Carregando…" sem fim (tempo-limite em toda chamada), sem internet
 // as janelas explicam em uma linha, e nome/descrição sempre escritos (nunca só um ícone ou cor).
-import { html, useState, useEffect } from "../lib.js";
+import { html, useState, useEffect, useRef } from "../lib.js";
+import { animarCena } from "../climacena.js";
 import { useApp, I } from "../ui.js";
 import { api } from "../api.js";
 import { pode } from "../regras.js";
@@ -41,7 +42,7 @@ const DIAS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
 const DIAS_LONGOS = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
 
 /** Desenho do tempo no estilo dos celulares: sol, sol com nuvem, nuvem, chuva ou tempestade. */
-export function IconeTempo({ cod, tam = 92 }) {
+export function IconeTempo({ cod, tam = 92, noite = false }) {
   const sol = html`<g><circle cx="32" cy="32" r="14" fill="#ffd977"></circle>
     <g stroke="#ffd977" stroke-width="3" stroke-linecap="round"><path d="M32 8v6"/><path d="M32 50v6"/><path d="M8 32h6"/><path d="M50 32h6"/><path d="M15 15l4 4"/><path d="M45 45l4 4"/><path d="M49 15l-4 4"/><path d="M19 45l-4 4"/></g></g>`;
   const solNuvem = html`<g><circle cx="24" cy="23" r="11" fill="#ffd977"></circle>
@@ -52,8 +53,44 @@ export function IconeTempo({ cod, tam = 92 }) {
     <g stroke="#8ec5ff" stroke-width="3.4" stroke-linecap="round"><path d="M24 48l-2 8"/><path d="M34 48l-2 8"/><path d="M44 48l-2 8"/></g></g>`;
   const raio = html`<g><path d="M44 40H22a10 10 0 0 1 0-20 14 14 0 0 1 26 2 8 8 0 0 1-4 18Z" fill="#b9c6d6"></path>
     <path d="M32 44l-7 11h6l-3 9 10-13h-6l4-7z" fill="#ffd977"></path></g>`;
-  const d = cod >= 95 ? raio : (cod >= 61 && cod <= 82) || (cod >= 51 && cod <= 57) ? chuva : cod === 3 || cod === 45 || cod === 48 ? nuvem : cod === 0 ? sol : solNuvem;
+  // à noite, céu limpo vira lua e "quase limpo" vira lua com nuvem
+  const lua = html`<path d="M40 10a22 22 0 1 0 14 38A18 18 0 0 1 40 10Z" fill="#f3e7b8"></path>`;
+  const luaNuvem = html`<g><path d="M30 6a17 17 0 1 0 11 29A14 14 0 0 1 30 6Z" fill="#f3e7b8"></path>
+    <path d="M46 53H25a9.5 9.5 0 0 1-.8-19A13 13 0 0 1 48 37.6 8 8 0 0 1 46 53Z" fill="#dde5ee"></path></g>`;
+  const d = cod >= 95 ? raio : (cod >= 61 && cod <= 82) || (cod >= 51 && cod <= 57) ? chuva : cod === 3 || cod === 45 || cod === 48 ? nuvem
+    : cod === 0 ? (noite ? lua : sol) : (noite ? luaNuvem : solNuvem);
   return html`<svg class="clima-ic" width=${tam} height=${tam} viewBox="0 0 64 64" aria-hidden="true">${d}</svg>`;
+}
+
+/** Cena de fundo do quadro do tempo (pedido do Danilo em 28/11/2026: "se estiver sol, coloque a expressão atrás como se
+    estivesse sol, se for chuva coloque chuva"). Devolve o nome da cena pelo código da OMM. */
+export function cenaDoTempo(cod) {
+  if (cod >= 95) return "tempestade";
+  if ((cod >= 61 && cod <= 67) || (cod >= 80 && cod <= 82)) return "chuva";
+  if (cod >= 51 && cod <= 57) return "garoa";
+  if (cod === 45 || cod === 48) return "neblina";
+  if (cod === 0) return "sol";
+  if (cod === 1 || cod === 2) return "parcial";
+  return "nublado";
+}
+
+/** É noite em Colatina agora? Pelo nascer e pôr do sol do dia, quando a previsão traz; senão, das 18h às 6h. */
+export function eNoite(agora, nasce, poe) {
+  const a = agora.getTime(), n = nasce ? Date.parse(nasce) : NaN, p = poe ? Date.parse(poe) : NaN;
+  if (!isNaN(n) && !isNaN(p)) return a < n || a >= p;
+  const h = agora.getHours(); return h < 6 || h >= 18;
+}
+
+/** O desenho de fundo (js/climacena.js): céu, sol com raios e reflexo, lua e estrelas, nuvens andando, névoa, garoa,
+    chuva com respingos ou tempestade com relâmpago. Fica atrás dos desenhos e do texto; só enfeite (aria-hidden). */
+function CenaTempo({ cena, noite }) {
+  const ref = useRef(null);
+  useEffect(() => { const c = ref.current; if (!c) return undefined;
+    const parado = !!(window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
+    try { return animarCena(c, { cena, noite, parado }); } catch (e) { return undefined; }   // sem canvas: fica o céu do quadro
+  }, [cena, noite]);
+  return html`<div class=${"clima-cena cena-" + cena + (noite ? " cena-noite" : "")} aria-hidden="true">
+    <canvas ref=${ref} class="clima-tela" data-cena=${cena + (noite ? "-noite" : "")}></canvas></div>`;
 }
 
 /** Relógio da janela do tempo: hora de Colatina, acertada de minuto em minuto (pedido do Danilo em 25/11/2026) */
@@ -66,35 +103,48 @@ const MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julh
 
 export function ClimaJanela() {
   const [d, setD] = useState(() => doCache("dtcar-clima")), [erro, setErro] = useState("");
+  const [sel, setSel] = useState(0);   // dia do calendário escolhido (0 = agora)
   const agora = useAgora();
   useEffect(() => { let vivo = true;
     if (d) return;
-    buscar(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=America%2FSao_Paulo&forecast_days=7`)
+    buscar(`https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,weather_code&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=America%2FSao_Paulo&forecast_days=7`)
       .then(r => r.json()).then(j => { if (!vivo) return; const dd = { agora: Math.round(j.current.temperature_2m), cod: j.current.weather_code,
-        dias: j.daily.time.map((t, n) => ({ t, cod: j.daily.weather_code[n], max: Math.round(j.daily.temperature_2m_max[n]), min: Math.round(j.daily.temperature_2m_min[n]), chuva: j.daily.precipitation_probability_max[n] })) };
+        dias: j.daily.time.map((t, n) => ({ t, cod: j.daily.weather_code[n], max: Math.round(j.daily.temperature_2m_max[n]), min: Math.round(j.daily.temperature_2m_min[n]), chuva: j.daily.precipitation_probability_max[n] })),
+        nasce: (j.daily.sunrise || [])[0] || "", poe: (j.daily.sunset || [])[0] || "" };
         setD(dd); paraCache("dtcar-clima", dd); })
       .catch(() => { if (vivo) setErro("Não deu para buscar a previsão agora (precisa de internet)."); });
     return () => { vivo = false; }; }, []);
   if (erro && !d) return html`<div class="clima clima-off"><span class="dica">${erro}</span></div>`;
   if (!d) return html`<div class="clima clima-off"><span class="dica">Buscando a previsão…</span></div>`;
   const hoje = d.dias[0] || {};
+  const dia = (sel && d.dias[sel]) || null;           // um dia da semana escolhido no calendário
+  const noite = !dia && eNoite(agora, d.nasce, d.poe);
+  const cod = dia ? dia.cod : d.cod, cena = cenaDoTempo(cod);
+  const nomeDia = x => { const dt = new Date(x.t + "T12:00:00"); return DIAS_LONGOS[dt.getDay()].replace("-feira", "") + ", " + dt.getDate(); };
+  const ref = dia || hoje;
   const hhmm = agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   const dataLonga = DIAS_LONGOS[agora.getDay()] + ", " + agora.getDate() + " de " + MESES[agora.getMonth()];
-  return html`<div class="clima">
+  return html`<div class=${"clima ceu-" + cena + (noite ? " ceu-noite" : "")} data-cena=${cena + (noite ? "-noite" : "")}>
+    <${CenaTempo} key=${cena + (noite ? "-n" : "")} cena=${cena} noite=${noite} />
     <div class="clima-ln">
-      <${IconeTempo} cod=${d.cod} />
-      <div class="clima-ag"><div class="clima-t">${d.agora}<sup>°C</sup></div>
-        <strong>${tempoTexto(d.cod)}</strong><span>Colatina · ES</span></div>
+      <${IconeTempo} cod=${cod} noite=${noite} />
+      ${dia
+        ? html`<div class="clima-ag"><div class="clima-t">${dia.max}<sup>°C</sup></div>
+            <strong>${tempoTexto(dia.cod)}</strong><span>Previsão de ${nomeDia(dia)}</span></div>`
+        : html`<div class="clima-ag"><div class="clima-t">${d.agora}<sup>°C</sup></div>
+            <strong>${tempoTexto(d.cod)}${noite ? " · noite" : ""}</strong><span>Colatina · ES</span></div>`}
       <div class="clima-relogio"><b>${hhmm}</b><span>${dataLonga}</span>
-        <small>Máxima ${hoje.max}° · Mínima ${hoje.min}° · Chuva ${hoje.chuva}%</small></div>
+        <small>Máxima ${ref.max}° · Mínima ${ref.min}° · Chuva ${ref.chuva}%</small></div>
     </div>
-    <div class="clima-cal">${d.dias.map((x, n) => { const dt = new Date(x.t + "T12:00:00");
-      return html`<div key=${x.t} class=${"clima-dia" + (n === 0 ? " clima-hoje" : "")}>
+    <div class="clima-cal" role="group" aria-label="Previsão da semana: toque num dia para ver o tempo dele">${d.dias.map((x, n) => { const dt = new Date(x.t + "T12:00:00");
+      return html`<button type="button" key=${x.t} class=${"clima-dia" + (n === 0 ? " clima-hoje" : "") + (n === sel ? " clima-sel" : "")}
+        aria-pressed=${n === sel} title=${n === 0 ? "Voltar para o tempo de agora" : "Ver o tempo de " + nomeDia(x)}
+        onClick=${() => setSel(n === sel ? 0 : n)}>
         <span class="clima-dia-nome">${n === 0 ? "Hoje" : DIAS[dt.getDay()]}</span>
         <span class="clima-dia-num">${dt.getDate()}</span>
         <${IconeTempo} cod=${x.cod} tam=${30} />
         <b>${x.max}°</b><span class="clima-dia-min">${x.min}°</span>
-        <small>${tempoTexto(x.cod)}${x.chuva >= 30 ? " · " + x.chuva + "%" : ""}</small></div>`; })}</div>
+        <small>${tempoTexto(x.cod)}${x.chuva >= 30 ? " · " + x.chuva + "%" : ""}</small></button>`; })}</div>
     <a class="clima-link" href=${"https://www.google.com/search?q=previs%C3%A3o+do+tempo+Colatina+ES"} target="_blank" rel="noopener noreferrer">Ver a previsão completa de Colatina</a>
   </div>`;
 }

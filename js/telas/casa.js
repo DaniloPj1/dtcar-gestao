@@ -108,7 +108,7 @@ export function ClimaJanela() {
    o filtro ligado, notícia que não bate em nenhuma palavra não aparece; nada é escondido sem ele mandar. */
 const FONTES = [
   { k: "cidade", t: "Colatina", rss: "https://news.google.com/rss/search?q=Colatina&hl=pt-BR&gl=BR&ceid=BR:pt-419", hosts: /\.google\.com\/|\.com\.br|\.com\// },
-  { k: "estado", t: "Espírito Santo", rss: "https://g1.globo.com/rss/g1/es/espirito-santo/", hosts: /^https:\/\/g1\.globo\.com\// },
+  { k: "estado", t: "Espírito Santo", rss: "https://g1.globo.com/rss/g1/es/espirito-santo/", hosts: /^https:\/\/g1\.globo\.com\//, fonte: "g1 ES" },
   { k: "pais", t: "Brasil", rss: "https://news.google.com/rss/headlines/section/topic/NATION?hl=pt-BR&gl=BR&ceid=BR:pt-419", hosts: /\.google\.com\/|\.com\.br|\.com\// },
 ];
 /* Palavras do que mexe com a oficina e com o bolso de quem trabalha nela. Não é censura de assunto: é o filtro que ele
@@ -121,14 +121,45 @@ export const PALAVRAS_AFETAM = ["combust", "gasolina", "diesel", "etanol", "álc
 export const afetaAOficina = t => { const x = String(t || "").toLowerCase(); return PALAVRAS_AFETAM.some(p => x.includes(p)); };
 const LS_FILTRO = "dtcar-noticias-filtro";
 
-function lerRSS(texto, hosts) {
+/** Foto da notícia, quando o RSS manda: media:content, media:thumbnail, enclosure ou a 1ª <img> do resumo. Só https. */
+function fotoDoItem(i) {
+  const tags = ["content", "thumbnail"].flatMap(n => [...i.getElementsByTagName("media:" + n), ...i.getElementsByTagName(n)]);
+  for (const t of tags) { const u = t.getAttribute && t.getAttribute("url"); if (u && /^https:\/\//.test(u)) return u; }
+  const enc = i.getElementsByTagName("enclosure")[0];
+  const eu = enc && enc.getAttribute("url");
+  if (eu && /^https:\/\//.test(eu) && /image|\.jpe?g|\.png|\.webp/i.test((enc.getAttribute("type") || "") + eu)) return eu;
+  const resumo = ((i.querySelector("description") || {}).textContent || "") + ((i.getElementsByTagName("content:encoded")[0] || {}).textContent || "");
+  const m = /<img[^>]+src=["'](https:\/\/[^"']+)["']/i.exec(resumo);
+  return m ? m[1] : "";
+}
+/** "agora", "há 2 h", "ontem" — como no celular, em vez do horário cru */
+export function hasAtras(iso, agora = Date.now()) {
+  const d = new Date(iso); if (isNaN(d)) return "";
+  const min = Math.round((agora - d.getTime()) / 60000);
+  if (min < 2) return "agora";
+  if (min < 60) return "há " + min + " min";
+  const h = Math.round(min / 60);
+  if (h < 24) return "há " + h + " h";
+  const dias = Math.round(h / 24);
+  return dias === 1 ? "ontem" : "há " + dias + " dias";
+}
+/** Nome da fonte: o RSS do Google manda em <source>; no g1 o título vem com " - Fonte" no fim */
+const fonteDoItem = (i, titulo) => {
+  const s = ((i.getElementsByTagName("source")[0] || {}).textContent || "").trim();
+  if (s) return s;
+  const m = / - ([^-]{2,30})$/.exec(titulo || "");
+  return m ? m[1].trim() : "";
+};
+function lerRSS(texto, hosts, fontePadrao = "") {
   const doc = new DOMParser().parseFromString(texto, "text/xml");
-  return [...doc.querySelectorAll("item")].map(i => ({
-    t: (i.querySelector("title") || {}).textContent || "",
-    u: (i.querySelector("link") || {}).textContent || "",
-    q: (i.querySelector("pubDate") || {}).textContent || "",
-    fonte: ((i.getElementsByTagName("source")[0] || {}).textContent || "").trim(),
-  })).filter(i => i.t && /^https:\/\//.test(i.u) && hosts.test(i.u));
+  return [...doc.querySelectorAll("item")].map(i => {
+    const t = (i.querySelector("title") || {}).textContent || "";
+    const fonte = fonteDoItem(i, t) || fontePadrao;
+    return { t: fonte && t.endsWith(" - " + fonte) ? t.slice(0, -(fonte.length + 3)) : t,
+      u: (i.querySelector("link") || {}).textContent || "",
+      q: (i.querySelector("pubDate") || {}).textContent || "",
+      foto: fotoDoItem(i), fonte };
+  }).filter(i => i.t && /^https:\/\//.test(i.u) && hosts.test(i.u));
 }
 
 export function NoticiasJanela() {
@@ -137,7 +168,7 @@ export function NoticiasJanela() {
   useEffect(() => { let vivo = true;
     if (d) return;
     Promise.all(FONTES.map(f => buscar("https://corsproxy.io/?url=" + encodeURIComponent(f.rss))
-      .then(r => r.text()).then(x => ({ k: f.k, itens: lerRSS(x, f.hosts).slice(0, 8) })).catch(() => ({ k: f.k, itens: [], falhou: true }))))
+      .then(r => r.text()).then(x => ({ k: f.k, itens: lerRSS(x, f.hosts, f.fonte || "").slice(0, 8) })).catch(() => ({ k: f.k, itens: [], falhou: true }))))
       .then(r => { if (!vivo) return;
         if (r.every(x => !x.itens.length)) throw new Error("vazio");
         const dd = Object.fromEntries(r.map(x => [x.k, x.itens]));
@@ -146,7 +177,6 @@ export function NoticiasJanela() {
     return () => { vivo = false; }; }, []);
   if (erro && !d) return html`<span class="dica">${erro}</span>`;
   if (!d) return html`<span class="dica">Buscando as notícias…</span>`;
-  const hora = q => { if (!q) return ""; const x = new Date(q); return isNaN(x) ? "" : x.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }); };
   const trocar = () => { const v = !soAfetam; setSoAfetam(v); lsSet(LS_FILTRO, v); };
   const doGrupo = k => (d[k] || []).filter(n => !soAfetam || afetaAOficina(n.t));
   const total = FONTES.reduce((s, f) => s + doGrupo(f.k).length, 0);
@@ -157,9 +187,22 @@ export function NoticiasJanela() {
     ${FONTES.map(f => { const l = doGrupo(f.k).slice(0, f.k === "cidade" ? 5 : 4); if (!l.length) return null;
       return html`<div class="not-grupo" key=${f.k} data-grupo=${f.k}>
         <div class="not-grupo-t">${f.t}<span>${f.k === "cidade" ? "cidade" : f.k === "estado" ? "estado" : "país"}</span></div>
-        ${l.map(n => html`<a key=${n.u} href=${n.u} target="_blank" rel="noopener noreferrer">
-          <span class="not-h">${hora(n.q)}</span><strong>${n.t}</strong>${n.fonte ? html`<small>${n.fonte}</small>` : null}</a>`)}</div>`; })}
+        <div class="not-cards">${l.map((n, i) => html`<${CardNoticia} key=${n.u} n=${n} grande=${i === 0 && f.k === "cidade"} />`)}</div></div>`; })}
   </div>`;
+}
+
+/** Cartão de uma notícia no estilo do celular: foto, fonte, manchete e há quanto tempo saiu.
+ *  Sem foto no RSS, entra a inicial da fonte num quadrado — nada de espaço vazio nem de foto inventada. */
+function CardNoticia({ n, grande = false }) {
+  const [semFoto, setSemFoto] = useState(false);
+  const inicial = (n.fonte || "N").trim().charAt(0).toUpperCase();
+  return html`<a class=${"not-card" + (grande ? " not-card-g" : "")} href=${n.u} target="_blank" rel="noopener noreferrer">
+    <div class="not-card-txt">
+      <span class="not-card-fonte"><i aria-hidden="true">${inicial}</i>${n.fonte || "Notícia"}<span class="not-card-h">${hasAtras(n.q)}</span></span>
+      <strong>${n.t}</strong>
+    </div>
+    <div class="not-card-foto">${n.foto && !semFoto ? html`<img src=${n.foto} alt="" loading="lazy" referrerpolicy="no-referrer" onError=${() => setSemFoto(true)} />` : html`<span>${inicial}</span>`}</div>
+  </a>`;
 }
 
 // ---------- Cotação do dólar e de outras moedas (pedido do Danilo em 25/11/2026) ----------
@@ -168,10 +211,38 @@ export function NoticiasJanela() {
    lugar com o dólar. A variação vem SEMPRE escrita ("subiu"/"caiu"), nunca só pela cor: em P&B seria a mesma seta. */
 export const MOEDAS = [["USD", "Dólar"], ["EUR", "Euro"], ["GBP", "Libra"], ["ARS", "Peso argentino"], ["BTC", "Bitcoin"]];
 const LS_MOEDA = "dtcar-moeda";
+const DIAS_GRAFICO = 15;
+
+/** Mini gráfico dos últimos dias (pedido do Danilo em 28/11/2026): linha simples, sem eixo e sem enfeite.
+ *  A conta é só regra de três entre o menor e o maior do período; com menos de 2 dias não desenha nada. */
+export function pontosDoGrafico(valores, larg = 220, alt = 54, folga = 4) {
+  const v = (valores || []).map(Number).filter(x => Number.isFinite(x));
+  if (v.length < 2) return null;
+  const min = Math.min(...v), max = Math.max(...v), faixa = max - min || 1;
+  const px = i => folga + (i * (larg - folga * 2)) / (v.length - 1);
+  const py = x => alt - folga - ((x - min) / faixa) * (alt - folga * 2);
+  const pts = v.map((x, i) => [px(i), py(x)]);
+  return { min, max, pts, linha: pts.map(([a, b]) => a.toFixed(1) + "," + b.toFixed(1)).join(" "),
+    area: "M" + pts.map(([a, b]) => a.toFixed(1) + "," + b.toFixed(1)).join(" L") + " L" + px(v.length - 1).toFixed(1) + "," + alt + " L" + folga + "," + alt + " Z",
+    fim: pts[pts.length - 1] };
+}
+function MiniGrafico({ valores, dias }) {
+  const g = pontosDoGrafico(valores);
+  if (!g) return null;
+  return html`<div class="moedas-graf">
+    <svg viewBox="0 0 220 54" width="100%" height="54" role="img" aria-label=${"Variação dos últimos " + dias + " dias: de R$ " + g.min.toFixed(4) + " a R$ " + g.max.toFixed(4)}>
+      <path d=${g.area} fill="rgba(255,255,255,.16)"></path>
+      <polyline points=${g.linha} fill="none" stroke="#fff" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"></polyline>
+      <circle cx=${g.fim[0]} cy=${g.fim[1]} r="3.2" fill="#fff"></circle>
+    </svg>
+    <div class="moedas-graf-pes"><span>${dias} dias</span><span>mín. ${g.min.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}</span><span>máx. ${g.max.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}</span></div>
+  </div>`;
+}
 const reaisMoeda = v => Number(v).toLocaleString("pt-BR", { minimumFractionDigits: Number(v) >= 1000 ? 2 : 4, maximumFractionDigits: Number(v) >= 1000 ? 2 : 4 });
 export function MoedasJanela() {
   const [d, setD] = useState(() => doCache("dtcar-moedas")), [erro, setErro] = useState("");
   const [moeda, setMoeda] = useState(() => lsGet(LS_MOEDA) || "USD");
+  const [serie, setSerie] = useState(() => doCache("dtcar-moedas-serie") || {});
   useEffect(() => { let vivo = true;
     if (d) return;
     buscar("https://economia.awesomeapi.com.br/json/last/" + MOEDAS.map(([k]) => k + "-BRL").join(","))
@@ -182,6 +253,16 @@ export function MoedasJanela() {
         setD(dd); paraCache("dtcar-moedas", dd); })
       .catch(() => { if (vivo) setErro("Não deu para buscar a cotação agora (precisa de internet)."); });
     return () => { vivo = false; }; }, []);
+  // os últimos dias da moeda escolhida, para o mini gráfico: busca uma vez por moeda e guarda no aparelho
+  useEffect(() => { let vivo = true;
+    if (serie[moeda]) return;
+    buscar("https://economia.awesomeapi.com.br/json/daily/" + moeda + "-BRL/" + DIAS_GRAFICO)
+      .then(r => r.json()).then(j => { if (!vivo || !Array.isArray(j) || j.length < 2) return;
+        const v = j.map(x => Number(x.bid)).filter(x => Number.isFinite(x)).reverse();   // a API manda do mais novo para o mais velho
+        if (v.length < 2) return;
+        setSerie(s => { const novo = { ...s, [moeda]: v }; paraCache("dtcar-moedas-serie", novo); return novo; }); })
+      .catch(() => { /* sem gráfico: o cartão segue com o número, que é o que importa */ });
+    return () => { vivo = false; }; }, [moeda, serie[moeda]]);
   if (erro && !d) return html`<div class="moedas moedas-off"><span class="dica">${erro}</span></div>`;
   if (!d) return html`<div class="moedas moedas-off"><span class="dica">Buscando a cotação…</span></div>`;
   const escolher = k => { setMoeda(k); lsSet(LS_MOEDA, k); };
@@ -194,7 +275,8 @@ export function MoedasJanela() {
       <div class="moedas-ag"><span class="moedas-nome">${nome} hoje</span>
         <div class="moedas-v">R$ ${reaisMoeda(atual.v)}</div>
         <span class=${"moedas-var " + (sobe ? "c-bad" : cai ? "c-ok" : "")}>${sobe ? "Subiu" : cai ? "Caiu" : "Sem variação"} ${Math.abs(Number(atual.pct) || 0).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% hoje</span>
-        ${quando ? html`<small>Atualizado em ${quando}</small>` : null}</div>
+        ${quando ? html`<small>Atualizado em ${quando}</small>` : null}
+        <${MiniGrafico} valores=${serie[moeda]} dias=${DIAS_GRAFICO} /></div>
       <div class="moedas-lista">${MOEDAS.filter(([k]) => d[k]).map(([k, t]) => html`
         <button type="button" key=${k} class=${"moedas-item" + (k === moeda ? " ativo" : "")} aria-pressed=${k === moeda ? "true" : "false"} onClick=${() => escolher(k)}>
           <span>${t}</span><b>R$ ${reaisMoeda(d[k].v)}</b></button>`)}</div>

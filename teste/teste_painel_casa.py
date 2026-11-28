@@ -20,10 +20,10 @@ FORA = r"""(() => {
   const TEMPO = { current: { temperature_2m: 27.4, weather_code: 2 },
     daily: { time: dias(7), weather_code: [2,0,3,61,95,1,2], temperature_2m_max: [31,33,29,27,26,30,32],
       temperature_2m_min: [20,21,19,19,18,20,21], precipitation_probability_max: [10,0,40,80,90,20,5] } };
-  const rss = itens => '<?xml version="1.0"?><rss><channel>' + itens.map(([t, u, f]) =>
-    '<item><title>' + t + '</title><link>' + u + '</link><pubDate>' + new Date().toUTCString() + '</pubDate>' +
-    (f ? '<source>' + f + '</source>' : '') + '</item>').join('') + '</channel></rss>';
-  const CIDADE = rss([["Colatina terá obra na BR-259 a partir de segunda", "https://g1.globo.com/es/c1", "g1"],
+  const rss = itens => '<?xml version="1.0"?><rss xmlns:media="http://search.yahoo.com/mrss/"><channel>' + itens.map(([t, u, f, img]) =>
+    '<item><title>' + t + '</title><link>' + u + '</link><pubDate>' + new Date(Date.now() - 2 * 3600e3).toUTCString() + '</pubDate>' +
+    (f ? '<source>' + f + '</source>' : '') + (img ? '<media:content url="' + img + '"/>' : '') + '</item>').join('') + '</channel></rss>';
+  const CIDADE = rss([["Colatina terá obra na BR-259 a partir de segunda", "https://g1.globo.com/es/c1", "g1", "https://exemplo.invalido/foto.jpg"],
     ["Festival de inverno movimenta Colatina", "https://g1.globo.com/es/c2", "A Gazeta"]]);
   const ESTADO = rss([["Diesel sobe nos postos do Espírito Santo", "https://g1.globo.com/es/e1"],
     ["Exposição de arte abre em Vitória", "https://g1.globo.com/es/e2"]]);
@@ -41,6 +41,11 @@ FORA = r"""(() => {
     const url = String(u && u.url ? u.url : u);
     window.__FORA.push(url);
     if (/api\.open-meteo\.com/.test(url)) return Promise.resolve(resp(JSON.stringify(TEMPO), "application/json"));
+    if (/economia\.awesomeapi\.com\.br\/json\/daily\//.test(url)) {
+      // a AwesomeAPI manda do dia mais NOVO para o mais velho: aqui é igual, para o teste pegar a inversão errada
+      const serie = Array.from({ length: 15 }, (_, i) => ({ bid: (5.48 - i * 0.02).toFixed(4) }));
+      return Promise.resolve(resp(JSON.stringify(serie), "application/json"));
+    }
     if (/economia\.awesomeapi\.com\.br/.test(url)) return Promise.resolve(resp(JSON.stringify(MOEDAS), "application/json"));
     if (/corsproxy\.io/.test(url)) {
       const alvo = decodeURIComponent(url.split("url=")[1] || "");
@@ -82,6 +87,17 @@ def rodar(b, nome, w, h):
   chk(T("notícias: o nome do grupo escrito e a manchete com link que abre fora"), "Colatina" in pg.inner_text(".not-grupo[data-grupo=cidade]")
       and "BR-259" in pg.inner_text(".not-grupo[data-grupo=cidade]")
       and pg.locator(".not-grupo[data-grupo=cidade] a").first.get_attribute("target") == "_blank", pg.inner_text(".noticias")[:300])
+  chk(T("notícias no estilo do celular: cartão com fonte, manchete, foto e há quanto tempo saiu"),
+      pg.locator(".not-card").count() >= 5 and "há 2 h" in pg.inner_text(".noticias")
+      and pg.locator(".not-card-foto").count() >= 5 and pg.locator(".not-card-fonte").first.inner_text().startswith("G"),
+      pg.locator(".not-card").first.inner_text()[:160])
+  chk(T("notícias: a primeira da cidade vem em cartão grande, como no celular"), pg.locator(".not-card-g").count() == 1
+      and pg.locator(".not-grupo[data-grupo=cidade] .not-card-g").count() == 1)
+  chk(T("notícia sem foto no RSS: entra a inicial da fonte, sem espaço vazio"),
+      pg.locator(".not-card-foto span").count() >= 1, pg.locator(".not-card-foto").nth(1).inner_html()[:80])
+  chk(T("feed sem o nome da fonte (g1 ES): a janela escreve a fonte do próprio feed, nunca 'Notícia'"),
+      "g1 ES" in pg.inner_text(".not-grupo[data-grupo=estado]") and "Noticia" not in pg.inner_text(".not-grupo[data-grupo=estado]"),
+      pg.inner_text(".not-grupo[data-grupo=estado]")[:200])
   chk(T("notícias: o filtro começa desligado e mostra tudo"), pg.locator("#not-filtro").count() == 1
       and not pg.is_checked("#not-filtro") and "amistoso" in pg.inner_text(".noticias").lower())
   pg.check("#not-filtro"); pg.wait_for_timeout(400)
@@ -96,11 +112,18 @@ def rodar(b, nome, w, h):
   chk(T("dólar: valor grande, variação escrita (não só a cor) e a hora da cotação"), pg.locator(".moedas").count() == 1
       and "5,4321" in pg.inner_text(".moedas-v") and "Subiu" in pg.inner_text(".moedas-var") and "0,85%" in pg.inner_text(".moedas-var")
       and "Atualizado em" in pg.inner_text(".moedas"), pg.inner_text(".moedas")[:300])
+  chk(T("dólar: mini gráfico dos últimos 15 dias, com mínima e máxima escritas"), pg.locator(".moedas-graf svg polyline").count() == 1
+      and "15 dias" in pg.inner_text(".moedas-graf-pes") and "mín." in pg.inner_text(".moedas-graf-pes") and "máx." in pg.inner_text(".moedas-graf-pes"),
+      pg.inner_text(".moedas-graf-pes"))
+  ys = pg.evaluate("""(() => { const p = document.querySelector('.moedas-graf polyline').getAttribute('points').split(' ');
+    return [Number(p[0].split(',')[1]), Number(p[p.length - 1].split(',')[1])]; })()""")
+  chk(T("o gráfico vai do dia mais velho para o mais novo: série que subiu termina mais alto no desenho"), ys[1] < ys[0], ys)
   chk(T("dólar: as outras moedas ficam na lista ao lado"), pg.locator(".moedas-item").count() == 5
       and "Euro" in pg.inner_text(".moedas-lista") and "Bitcoin" in pg.inner_text(".moedas-lista"))
   pg.click(".moedas-item:has-text('Euro')"); pg.wait_for_timeout(400)
   chk(T("escolhendo outra moeda, ela passa a ser a grande e a variação acompanha"), "Euro hoje" in pg.inner_text(".moedas-nome")
       and "5,9100" in pg.inner_text(".moedas-v") and "Caiu" in pg.inner_text(".moedas-var"), pg.inner_text(".moedas")[:200])
+  chk(T("trocando a moeda, o mini gráfico acompanha"), pg.locator(".moedas-graf svg polyline").count() == 1)
   pg.reload(); pg.wait_for_timeout(2500)
   chk(T("a moeda escolhida continua escolhida depois de recarregar"), "Euro hoje" in pg.inner_text(".moedas-nome"))
   pg.click(".moedas-item:has-text('Dólar')"); pg.wait_for_timeout(300)

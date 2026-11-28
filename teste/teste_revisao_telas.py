@@ -37,13 +37,26 @@ def rodar(b, nome, w, h):
   if w > 1100:
     pg.locator(".os-card:has-text('01898') .osc-corpo").first.click(); pg.wait_for_timeout(1500)
     pv = pg.locator(".pv")
-    chk(T("prévia: cada item com quantidade × unitário e o total da linha"), pv.count() == 1
-        and "TROCA DE OLEO E FILTRO" in pv.inner_text() and "1 × R$ 180,00" in pv.inner_text().replace(" ", " ")
-        and "2 × R$ 45,00" in pv.inner_text().replace(" ", " ") and "R$ 90,00" in pv.inner_text().replace(" ", " "), pv.inner_text()[:500])
+    txt_pv = pv.inner_text().replace("\u00a0", " ")
+    chk(T("prévia: cada item com o total da linha; a conta quantidade × unitário só quando diz algo"), pv.count() == 1
+        and "TROCA DE OLEO E FILTRO" in txt_pv and "R$ 180,00" in txt_pv and "1 × R$ 180,00" not in txt_pv
+        and "2 × R$ 45,00" in txt_pv and "R$ 90,00" in txt_pv, txt_pv[:500])
+    chk(T("prévia: item com desconto mostra a conta com o desconto"), "1 × R$ 260,00 − R$ 20,00" in txt_pv, txt_pv[:600])
     chk(T("prévia: soma por grupo, desconto do item e total da O.S."), "Soma das peças e terceiros" in pv.inner_text()
         and "R$ 240,00" in pv.inner_text().replace("\u00a0", " ")   # item com desconto: 1 × 260 − 20 and "330,00" in pv.inner_text().replace(" ", " ")
         and "Total da O.S." in pv.inner_text(), repr(pv.inner_text().replace("\u00a0", " ")[-500:]))
     pg.screenshot(path=os.path.join(TMP, "previa_precos_" + nome + ".png"))
+    pg.evaluate("""(() => { const db = window.__DB; db.os_itens.push({ id: 'longo', ordem_id: 'o2', tipo: 'peca',
+      descricao: 'FILTRO DE OLEO TOYOTA HILUX SW4 2.5 2.7 2.8 3.0 E 4.0 / LAND CRUISER / CAMRY E LINHA FORD (OC235)', qtd: 6.9, valor_unit: 53, custo_unit: 0, aprovado: true }); })()""")
+    pg.locator(".pv-fechar").click(); pg.wait_for_timeout(300)
+    pg.locator(".os-card:has-text('01898') .osc-corpo").first.click(); pg.wait_for_timeout(1500)
+    encostam = pg.evaluate("""(() => { const out = [];
+      for (const linha of document.querySelectorAll('.pv-itens > div')) {
+        const caixas = [...linha.children].map(c => c.getBoundingClientRect());
+        for (let i = 0; i < caixas.length; i++) for (let j = i + 1; j < caixas.length; j++) { const a = caixas[i], b = caixas[j];
+          if (a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5) out.push(linha.textContent.slice(0, 40)); } }
+      return out; })()""")
+    chk(T("prévia: nenhum preço por cima de outro, nem com descrição longa"), encostam == [] and "6,9 × R$ 53,00" in pg.inner_text(".pv").replace("\u00a0", " "), encostam)
 
   # ---------- 2. O.S. finalizadas: grade de 4 colunas, 6 linhas por vez (item 4.2)
   pg.goto(U + "#/ordens?filtro=finalizadas"); pg.wait_for_timeout(1500)
@@ -74,15 +87,10 @@ def rodar(b, nome, w, h):
     if not quadros.count():
       chk(T(tela + ": tem quadro dobrável"), False, "nenhum section.card com título direto")
       continue
-    if w > 900:
-      cols = pg.evaluate("getComputedStyle(document.querySelector('.pagina-quadros')).gridTemplateColumns.split(' ').length") if pg.locator(".pagina-quadros").count() else 0
-      chk(T(tela + ": os quadros ficam lado a lado quando a largura dá"), pg.locator(".pagina-quadros").count() == 1 and cols >= 2, cols)
-      if quadros.count() >= 2:
-        topos = pg.evaluate("[...document.querySelectorAll('main section.card')].slice(0,2).map(c => Math.round(c.getBoundingClientRect().top))")
-        chk(T(tela + ": o segundo quadro fica ao lado do primeiro, não embaixo"), topos[0] == topos[1], topos)
-    else:
-      chk(T(tela + ": no celular os quadros continuam um embaixo do outro"),
-          pg.evaluate("getComputedStyle(document.querySelector('main .pagina')).display") != "grid")
+    # 28/11/2026: os quadros lado a lado foram desfeitos a pedido do Danilo — um embaixo do outro, como sempre foi
+    if quadros.count() >= 2:
+      topos = pg.evaluate("[...document.querySelectorAll('main section.card')].slice(0,2).map(c => Math.round(c.getBoundingClientRect().top))")
+      chk(T(tela + ": os quadros ficam um embaixo do outro"), topos[1] > topos[0], topos)
     chk(T(tela + ": os quadros ficam dobráveis e o título vira botão"), quadros.count() >= 1
         and quadros.first.locator(":scope > h2, :scope > h3, :scope > .secao-topo").first.get_attribute("role") == "button")
     alvo = quadros.first
@@ -107,22 +115,45 @@ def rodar(b, nome, w, h):
   pg.goto(U + "#/painel"); pg.wait_for_timeout(1200)
   chk(T("tela fora de RH e Sistema não ganha quadro dobrável"), pg.locator("section.card.card-dobravel").count() == 0)
 
-  # ---------- 4. proporção da tela por aba (item 4.4)
-  if w > 900:
-    pg.goto(U + "#/ordens"); pg.wait_for_timeout(1200)
-    chk(T("proporção: os três botões na barra de cima"), pg.locator(".prop-seg button").count() == 3 and "Compacto" in pg.inner_text(".prop-seg"))
-    pg.click(".prop-seg button:has-text('Compacto')"); pg.wait_for_timeout(400)
-    largura_compacta = pg.evaluate("document.querySelector('.pagina').getBoundingClientRect().width")
-    chk(T("Compacto: a página estreita e o <main> marca a escolha"), pg.evaluate("document.querySelector('main').dataset.prop") == "compacto" and largura_compacta <= 901, largura_compacta)
-    pg.click(".prop-seg button:has-text('Largo')"); pg.wait_for_timeout(400)
-    largura_larga = pg.evaluate("document.querySelector('.pagina').getBoundingClientRect().width")
-    chk(T("Largo: a página usa a largura da tela"), largura_larga > largura_compacta, [largura_compacta, largura_larga])
+  # ---------- 4. proporção da tela por aba (item 4.4; refeito em 28/11/2026 depois da foto do Danilo)
+  def largura(): return pg.evaluate("document.querySelector('main .pagina').getBoundingClientRect().width")
+  def tela(): return pg.evaluate("document.documentElement.dataset.tela || ''")
+  for W in ([1366, 1920] if w > 900 else []):
+    pg.set_viewport_size({"width": W, "height": h})
+    pg.evaluate("localStorage.removeItem('dtcar-proporcao')")
+    pg.goto(U + "#/ordens"); pg.wait_for_timeout(1300)
+    chk(T(str(W) + ": um controle só, na barra de cima, com os três tamanhos"), pg.locator(".prop-seg button").count() == 3 and "Compacto" in pg.inner_text(".prop-seg"))
+    chk(T(str(W) + ": sem escolha, nenhum botão marcado e a tela fica como já era"), tela() == "" and pg.locator(".prop-seg button[aria-pressed=true]").count() == 0)
+    padrao = largura()
+    pg.click(".prop-seg button:has-text('Compacto')"); pg.wait_for_timeout(400); compacto = largura()
+    pg.click(".prop-seg button:has-text('Médio')"); pg.wait_for_timeout(400); medio = largura()
+    pg.click(".prop-seg button:has-text('Largo')"); pg.wait_for_timeout(400); largo = largura()
+    chk(T(str(W) + ": os três tamanhos mudam a tela de verdade, na ordem do nome (Compacto < Médio < Largo)"),
+        compacto < medio < largo, [compacto, medio, largo])
     pg.goto(U + "#/cadastros"); pg.wait_for_timeout(1200)
-    chk(T("a escolha é por aba: outra aba não herda o Largo"), pg.evaluate("document.querySelector('main').dataset.prop || ''") == "")
+    chk(T(str(W) + ": a escolha é por aba: outra aba não herda o Largo"), tela() == "", tela())
     pg.goto(U + "#/ordens"); pg.wait_for_timeout(1200)
-    chk(T("voltando para a aba, a proporção dela volta"), pg.evaluate("document.querySelector('main').dataset.prop") == "largo")
-    pg.click(".prop-seg button:has-text('Largo')"); pg.wait_for_timeout(400)
-    chk(T("clicar na opção ligada volta ao padrão da tela"), pg.evaluate("document.querySelector('main').dataset.prop || ''") == "")
+    chk(T(str(W) + ": voltando para a aba, o tamanho dela volta"), tela() == "largo" and pg.locator(".prop-seg button[aria-pressed=true]").inner_text() == "Largo")
+    pg.click(".prop-seg button:has-text('Largo')"); pg.wait_for_timeout(300)
+    chk(T(str(W) + ": clicar no botão marcado volta ao tamanho padrão da tela"), tela() == "" and abs(largura() - padrao) < 2, [largura(), padrao])
+    pg.goto(U + "#/painel"); pg.wait_for_timeout(1500)
+    chk(T(str(W) + ": no Painel aparece um controle só (o de dentro do Painel saiu)"), pg.locator(".tam-tela").count() == 1, pg.locator(".tam-tela").count())
+    # nenhum valor do painel cortado com reticências ("R$ 3…") em nenhum tamanho — foto do Danilo de 28/11/2026
+    for k in ["Compacto", "Médio", "Largo"]:
+      pg.click(".prop-seg button:has-text('" + k + "')"); pg.wait_for_timeout(350)
+      cortados = pg.evaluate("""[...document.querySelectorAll('.pn-kpi b, .clima-dia small')].filter(e => e.scrollWidth > e.clientWidth + 1).map(e => e.textContent)""")
+      chk(T(str(W) + " " + k + ": valores dos cartões e nome do tempo aparecem inteiros"), not cortados, cortados)
+    pg.click(".prop-seg button:has-text('Largo')"); pg.wait_for_timeout(200)
+  if w > 900:
+    pg.set_viewport_size({"width": w, "height": h})
+    # a escolha antiga, global, feita no botão que ficava dentro do Painel, vira a escolha da aba Painel
+    pg.evaluate("localStorage.removeItem('dtcar-proporcao'); localStorage.setItem('dtcar-tela', JSON.stringify('largo'))")
+    pg.goto(U + "#/painel"); pg.reload(); pg.wait_for_timeout(1600)
+    chk(T("a escolha antiga do Painel continua valendo no Painel, e só nele"), tela() == "largo"
+        and pg.evaluate("localStorage.getItem('dtcar-tela')") is None, [tela(), pg.evaluate("localStorage.getItem('dtcar-proporcao')")])
+    pg.goto(U + "#/ordens"); pg.wait_for_timeout(1200)
+    chk(T("as outras abas não herdam a escolha antiga"), tela() == "", tela())
+    pg.evaluate("localStorage.removeItem('dtcar-proporcao')")
 
   # ---------- 5. limpar notificações no sininho (item 3.1)
   pg.goto(U + "#/painel"); pg.wait_for_timeout(1500)

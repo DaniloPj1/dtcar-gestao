@@ -376,7 +376,6 @@ export function Painel() {
       <div><h1>${saud}, ${perfil.nome.split(" ")[0]}</h1><span class="sub">${new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</span></div>
       <div class="acoes">
         ${precisaRes ? html`<div class="periodo" role="group" aria-label="Período dos indicadores">${PERIODOS.map(([p, t]) => html`<button type="button" key=${p} aria-pressed=${per === p} onClick=${() => escolherPer(p)}>${t}</button>`)}</div>` : null}
-        ${!editar ? html`<${Tamanho} />` : null}
         ${admin && !editar ? html`<button type="button" class="btn btn-sm" onClick=${iniciarEdicao}>${I.editar} Personalizar</button>` : null}
         ${pode(perfil, "verValores") ? html`<button type="button" class="btn" onClick=${() => ir("/balcao")}>Venda de balcão</button>` : null}
         ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-pri" onClick=${() => ir("/entrada")}>${temRasc ? "Continuar O.S." : "+ Nova O.S."}</button>` : null}
@@ -403,7 +402,10 @@ export function Painel() {
   </div>`;
 }
 /** Tamanho da tela no computador (pedido do Danilo em 23/11/2026): compacto junta tudo, largo usa o monitor inteiro.
- *  Fica guardado NESTE aparelho (localStorage), porque cada monitor da oficina é de um tamanho. */
+ *  Fica guardado NESTE aparelho (localStorage), porque cada monitor da oficina é de um tamanho.
+ *  28/11/2026: o botão saiu de dentro do Painel. Agora é um só, na barra de cima, e vale POR ABA (Proporcao em
+ *  js/telas/topo.js) — antes eram dois controles na mesma tela e um anulava o outro. Esta função continua sendo quem
+ *  põe o tamanho na tela; o componente Tamanho fica para quem ainda o importar. */
 const TAMANHOS_TELA = [["compacto", "Compacto"], ["medio", "Médio"], ["largo", "Largo"]];
 export function aplicarTamanhoTela(t) { document.documentElement.dataset.tela = t || "medio"; }
 export function Tamanho() {

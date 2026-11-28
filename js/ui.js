@@ -222,10 +222,7 @@ export function useQuadrosDobraveis(chave) {
       p.setAttribute("aria-expanded", fechado ? "false" : "true");
       p.setAttribute("title", fechado ? "Mostrar o conteúdo" : "Ocultar o conteúdo");
     };
-    // os quadros ficam LADO A LADO quando a largura dá (pedido do Danilo em 28/11/2026): em vez de um embaixo do outro
-    // ocupando a tela toda, eles se encaixam em colunas. Quem não é quadro (título, abas, aviso) continua na linha inteira.
-    const aplicar = () => { const pag = raiz.querySelector(".pagina"); if (pag) pag.classList.add("pagina-quadros");
-      for (const c of raiz.querySelectorAll("section.card")) {
+    const aplicar = () => { for (const c of raiz.querySelectorAll("section.card")) {
       const p = cabecalhoDo(c); if (!p) continue;
       c.classList.add("card-dobravel");
       p.setAttribute("role", "button"); p.setAttribute("tabindex", "0");
@@ -250,7 +247,6 @@ export function useQuadrosDobraveis(chave) {
     raiz.addEventListener("click", doClique);
     raiz.addEventListener("keydown", daTecla);
     return () => { obs.disconnect(); raiz.removeEventListener("click", doClique); raiz.removeEventListener("keydown", daTecla);
-      for (const x of raiz.querySelectorAll(".pagina-quadros")) x.classList.remove("pagina-quadros");
       for (const c of raiz.querySelectorAll("section.card.card-dobravel")) { c.classList.remove("card-dobravel", "card-dobrado");
         const p = cabecalhoDo(c); if (p) { p.removeAttribute("role"); p.removeAttribute("tabindex"); p.removeAttribute("aria-expanded"); } } };
   }, [chave]);

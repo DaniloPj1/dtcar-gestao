@@ -142,26 +142,36 @@ function SinoVivo({ classe }) {
     </div>` : null}</div>`;
 }
 
-/* ---------------- Proporção da tela, uma por aba (pedido do Danilo em 25/11/2026) ----------------
- * Cada tela usa a largura que combina com ela: o Painel pede largo, um cadastro pede compacto. Antes a largura era fixa
- * por tela, escrita no código. Agora cada aba tem a escolha dele — Compacto, Médio ou Largo —, guardada neste aparelho
- * (dtcar-proporcao, uma entrada por aba). A classe vai no <main>, então vale para a tela inteira, e o padrão continua
- * sendo o que a tela já fazia: sem escolha, nada muda. Só no PC: no celular a tela é sempre a largura do aparelho. */
+/* ---------------- Proporção da tela, uma por aba (pedido do Danilo em 25/11/2026; refeito em 28/11/2026) ----------------
+ * Cada aba tem a sua escolha — Compacto, Médio ou Largo —, guardada neste aparelho (dtcar-proporcao, uma entrada por aba).
+ * Em 28/11 ele mostrou dois problemas: no Painel apareciam DOIS controles (o antigo, dentro do Painel, e este) e os
+ * botões "não respondiam" — o antigo, global, mandava no CSS com mais força e anulava este. Agora é um mecanismo só:
+ * este controle põe o tamanho da aba no `data-tela` da página, que é o que o CSS aprovado em 23/11 já usa. A escolha
+ * antiga (global, feita no Painel) vira a escolha da aba Painel, para nada mudar no que ele já tinha arrumado.
+ * Sem escolha (nenhum botão marcado), a aba fica como a tela já era. Com escolha, os três tamanhos são fixos e mudam a
+ * tela de verdade em qualquer monitor — inclusive no 1366 da recepção: Compacto 1040px < Médio 1180px < Largo (tudo).
+ * Clicar de novo no botão marcado volta ao padrão da tela. Só no PC: no celular a tela é sempre a largura do aparelho. */
 const LS_PROP = "dtcar-proporcao";
 const PROPORCOES = [["compacto", "Compacto"], ["medio", "Médio"], ["largo", "Largo"]];
+function mapaProporcao() {
+  const m = lsGet(LS_PROP) || {};
+  const antigo = lsGet("dtcar-tela");   // escolha global de antes (botão que ficava dentro do Painel)
+  if (antigo && !m.painel && antigo !== "medio") { m.painel = antigo; lsSet(LS_PROP, m); }
+  if (antigo) { try { localStorage.removeItem("dtcar-tela"); } catch (e) {} }
+  return m;
+}
+const porTamanho = t => { const r = document.documentElement; if (t) r.dataset.tela = t; else delete r.dataset.tela; };
 export function Proporcao() {
   const { aba } = useApp();
   const largo = usarLargo();
-  const [mapa, setMapa] = useState(() => lsGet(LS_PROP) || {});
+  const [mapa, setMapa] = useState(mapaProporcao);
   const atual = mapa[aba] || "";
-  useEffect(() => { const m = document.querySelector("main"); if (!m) return;
-    if (atual) m.dataset.prop = atual; else delete m.dataset.prop;
-    return () => { const x = document.querySelector("main"); if (x) delete x.dataset.prop; }; }, [aba, atual]);
+  useEffect(() => { porTamanho(atual); }, [aba, atual]);
   if (!largo) return null;
-  const escolher = k => { const novo = { ...mapa }; if (k === atual) delete novo[aba]; else novo[aba] = k; lsSet(LS_PROP, novo); setMapa(novo); };
-  return html`<div class="seg prop-seg" role="group" aria-label="Proporção desta tela">
-    ${PROPORCOES.map(([k, t]) => html`<button type="button" key=${k} class=${atual === k ? "ativo" : ""} aria-pressed=${atual === k ? "true" : "false"}
-      title=${"Largura desta tela: " + t.toLowerCase() + (atual === k ? " (clique para voltar ao padrão)" : "")} onClick=${() => escolher(k)}>${t}</button>`)}
+  const escolher = k => { const novo = { ...mapa }; if (k === atual) delete novo[aba]; else novo[aba] = k; lsSet(LS_PROP, novo); setMapa(novo); porTamanho(novo[aba] || ""); };
+  return html`<div class="tam-tela prop-seg" role="group" aria-label="Tamanho desta tela">
+    ${PROPORCOES.map(([k, t]) => html`<button type="button" key=${k} aria-pressed=${atual === k ? "true" : "false"}
+      title=${atual === k ? "Clique de novo para voltar ao tamanho padrão desta tela" : "Tamanho desta aba: " + t.toLowerCase()} onClick=${() => escolher(k)}>${t}</button>`)}
   </div>`;
 }
 

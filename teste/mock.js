@@ -359,6 +359,18 @@
               if (!x) { x = { id: uid(), fornecedor_id: c.fornecedor_id, codigo: o.codigo, codigo_norm: k, criado_em: now(), criado_por_nome: "robô", obs: "", prazo: "" }; db.compras_precos.push(x); }
               Object.assign(x, { marca: o.marca, descricao: o.descricao, preco: o.preco, estoque: o.estoque, origem: "ao_vivo", consultado_em: now(), atualizado_em: now() }); }
             return { conexao: c.id, fornecedor_id: c.fornecedor_id, robo: r, ok: true, ofertas, gravadas: ofertas.length, em: now() }; };
+          // carrinho do portal do fornecedor (pôr e tirar): só a DPK tem; sem isso a chamada cairia na consulta e gravaria preço do nada
+          if (body.acao === "carrinho_portal" || body.acao === "carrinho_portal_tirar") {
+            const c = db.compras_fornecedores.find(x => x.id === body.conexao);
+            if (!c) return { ok: false, erro: "Fornecedor conectado não encontrado." };
+            const r = robo(c);
+            if (r !== "dpk") return { ok: false, robo: r, erro: (r ? "Portal" : "Este portal") + ": o carrinho do portal ainda não está pronto." };
+            const cod = (body.item && body.item.codigo) || "";
+            window.__CARRINHO_PORTAL = window.__CARRINHO_PORTAL || [];
+            if (body.acao === "carrinho_portal_tirar") { window.__CARRINHO_PORTAL = window.__CARRINHO_PORTAL.filter(x => x !== cod); return { ok: true, robo: r, detalhe: "Tirada também do carrinho da DPK." }; }
+            window.__CARRINHO_PORTAL.push(cod);
+            return { ok: true, robo: r, detalhe: "No carrinho da DPK: " + ((body.item && body.item.qtd) || 1) + " x " + cod + "." };
+          }
           if (body.acao === "testar") { const c = cxs[0]; if (!c) return { ok: false, erro: "Fornecedor conectado não encontrado." }; const x = consultar(c); return x.no_pc ? { ok: true, robo: "toli", no_pc: true } : x.ok ? { ok: true, robo: x.robo, ofertas: x.ofertas } : { ok: false, robo: x.robo, erro: x.erro }; }
           return { ok: true, termos: body.termos, em: now(), resultados: cxs.map(consultar) }; },
         precos: { listar: async () => { v59(); return db.compras_precos.slice(); },

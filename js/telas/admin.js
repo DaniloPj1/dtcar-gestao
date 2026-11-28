@@ -1,7 +1,7 @@
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
 import { acessoApp, TELAS_APP, PERMISSOES_OBD, telasDoPapel, usuarioValido, emailDoLogin, usuarioDoEmail, loginParaMostrar, DIAS_SEMANA, HORARIO_PADRAO, horarioValido } from "../appacesso.js";
-import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I, Abas } from "../ui.js";
+import { useApp, Campo, Texto, Area, Dinheiro, Seg, Modal, Vazio, Foto, I, Abas, useQuadrosDobraveis } from "../ui.js";
 import { norm, reais, uuid, reduzirImagem, parseValor } from "../util.js";
 import { BotaoTema, BotaoInstalar } from "./topo.js";
 import { pode, PAPEIS, CONFIG_PADRAO, TERMO_ENTRADA, TERMO_ORCAMENTO, TERMO_GARANTIA } from "../regras.js";
@@ -203,6 +203,7 @@ export function Equipe() {
 
 /* ---------------- Ajustes ---------------- */
 export function Ajustes({ params }) {
+  useQuadrosDobraveis("ajustes");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   // Abas (pedido do Danilo em 22/11/2026: "organizar o conteúdo dentro de algumas telas"): o conteúdo é o mesmo
   // de sempre, só agrupado — nada foi removido. ?aba= abre direto numa aba (os testes e atalhos usam).
   const ABAS = [["oficina", "Oficina"], ["precos", "Preços e prazos"], ["os", "O.S. e cadastros"], ["consultas", "Consultas e integrações"], ["termos", "Termos"], ["sistema", "Mais do sistema"]];

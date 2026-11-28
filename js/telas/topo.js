@@ -5,7 +5,7 @@ import { useApp, I, Modal } from "../ui.js";
 import { norm, soDig, normPlaca, exPlaca, fmtTel, fmtDataHora, numOS, numORC, lsGet, lsSet } from "../util.js";
 import { api } from "../api.js";
 import { pode, STATUS, situacaoOS, ABERTOS } from "../regras.js";
-import { temaEfetivo, temaEscolhido, aplicarTema } from "../tema.js";
+import { temaEfetivo, temaEscolhido, aplicarTema, ligarRelogioDoTema, CLARO_DE, CLARO_ATE } from "../tema.js";
 
 const ICON_SOL = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
 const ICON_LUA = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/></svg>`;
@@ -16,10 +16,14 @@ export function BotaoTema({ classe, comTexto }) {
   const [, setN] = useState(0);
   useEffect(() => { const f = () => setN(n => n + 1); window.addEventListener("dtcar-tema", f); const m = matchMedia("(prefers-color-scheme: dark)"); m.addEventListener && m.addEventListener("change", f);
     return () => { window.removeEventListener("dtcar-tema", f); m.removeEventListener && m.removeEventListener("change", f); }; }, []);
+  useEffect(ligarRelogioDoTema, []);   // tema por horário: troca sozinho às 6h e às 18h com o sistema aberto
   const esc = temaEscolhido(), ef = temaEfetivo();
-  const prox = esc === "claro" ? "escuro" : esc === "escuro" ? "auto" : "claro";
-  const rot = esc === "auto" ? "Tema automático" : esc === "claro" ? "Tema claro" : "Tema escuro";
-  return html`<button type="button" class=${classe || "btn btn-sm"} title=${rot + " · clique para " + { claro: "tema claro", escuro: "tema escuro", auto: "automático" }[prox]} aria-label=${rot} onClick=${() => aplicarTema(prox)}>
+  // Claro → Escuro → Automático (segue o Windows) → Por horário (claro das 6h às 18h) → Claro…
+  const prox = esc === "claro" ? "escuro" : esc === "escuro" ? "auto" : esc === "auto" ? "horario" : "claro";
+  const NOME = { claro: "Tema claro", escuro: "Tema escuro", auto: "Tema automático", horario: "Tema pelo horário" };
+  const rot = NOME[esc] || NOME.auto;
+  const dica = esc === "horario" ? "Tema pelo horário: claro das " + CLARO_DE + "h às " + CLARO_ATE + "h, escuro no resto" : rot;
+  return html`<button type="button" class=${classe || "btn btn-sm"} title=${dica + " · clique para " + NOME[prox].toLowerCase()} aria-label=${rot} onClick=${() => aplicarTema(prox)}>
     ${ef === "escuro" ? ICON_LUA : ICON_SOL}${comTexto ? html`<span>${rot}</span>` : null}</button>`;
 }
 
@@ -82,6 +86,11 @@ function Situacao({ offline, pend, enviarFila }) {
  * Novo pedido de orçamento pelo app (e acréscimo a um pedido aberto) e "itens a orçar" escritos numa O.S. pelo app. Lidos a cada minuto
  * (api.avisosApp, só leitura); o que já foi visto fica guardado neste aparelho (dtcar-avisos-vistos). Só para quem orça (administrador e consultor). */
 const LS_AVISOS = "dtcar-avisos-vistos";
+/* "Limpar notificações" (pedido do Danilo em 25/11/2026): marcar como visto só tirava o número do sininho; a lista
+   continuava cheia. Limpar guarda neste aparelho os avisos que ele já recebeu e tira da lista — sem apagar nada no
+   banco, que é de onde a lista vem. Dá para ver de novo em "Ver os já recebidos". */
+const LS_LIMPOS = "dtcar-avisos-limpos";
+const avisosLimpos = () => lsGet(LS_LIMPOS) || [];
 const vistosAvisos = () => { const l = lsGet(LS_AVISOS, []); return Array.isArray(l) ? l : []; };
 const ICON_SINO = html`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15z"/><path d="M10 20a2 2 0 0 0 4 0"/></svg>`;
 /** Só um Sino consultando por vez: o do cabeçalho do celular (< 900px) ou o da barra do PC (revisão de 16/11/2026) */
@@ -99,6 +108,7 @@ export function Sino({ classe }) {
 function SinoVivo({ classe }) {
   const { perfil, ir, avisar } = useApp();
   const [lista, setLista] = useState([]), [aberto, setAberto] = useState(false), [vistos, setVistos] = useState(vistosAvisos), [erro, setErro] = useState(false);
+  const [limpos, setLimpos] = useState(avisosLimpos), [verTodos, setVerTodos] = useState(false);
   const ref = useRef(null), ultimo = useRef(null);
   const ler = async () => { try { const l = await api.avisosApp(); setLista(l); setErro(false);
       // chegou pedido novo com o sistema aberto: aviso na tela
@@ -108,21 +118,51 @@ function SinoVivo({ classe }) {
   useEffect(() => { if (!pode(perfil, "orcar")) return; ler(); const i = setInterval(() => { if (navigator.onLine !== false && !document.hidden) ler(); }, 60000); return () => clearInterval(i); }, [perfil && perfil.id]);
   useEffect(() => { if (!aberto) return; const f = e => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); }; document.addEventListener("mousedown", f); return () => document.removeEventListener("mousedown", f); }, [aberto]);
   if (!pode(perfil, "orcar")) return null;
-  const novos = lista.filter(x => !vistos.includes(x.chave));
+  const naLista = verTodos ? lista : lista.filter(x => !limpos.includes(x.chave));
+  const novos = naLista.filter(x => !vistos.includes(x.chave));
+  const escondidos = lista.length - lista.filter(x => !limpos.includes(x.chave)).length;
   const marcar = chaves => { const v = [...new Set(vistosAvisos().concat(chaves))].slice(-300); lsSet(LS_AVISOS, v); setVistos(v); };
+  const limpar = () => { const c = lista.map(x => x.chave);
+    const l = [...new Set(avisosLimpos().concat(c))].slice(-300); lsSet(LS_LIMPOS, l); setLimpos(l);
+    marcar(c); setVerTodos(false); };
   const abrir = x => { marcar([x.chave]); setAberto(false); ir(x.tipo === "orcamento" ? "/orcamento/" + x.id : "/os/" + x.id); };
   const veic = x => [exPlaca(x.veiculo.placa), x.veiculo.marca, x.veiculo.modelo].filter(Boolean).join(" ");
   return html`<div class=${"sino" + (classe ? " " + classe : "")} ref=${ref}>
     <button type="button" class=${"btn-icone sino-btn" + (novos.length ? " tem" : "")} title=${novos.length ? novos.length + " aviso(s) do app do celular" : "Avisos do app do celular"} aria-label=${"Avisos do app: " + novos.length + " novo(s)"} aria-expanded=${aberto ? "true" : "false"} onClick=${() => setAberto(!aberto)}>${ICON_SINO}${novos.length ? html`<span class="sino-n">${novos.length}</span>` : null}</button>
     ${aberto ? html`<div class="sino-lista" role="dialog" aria-label="Avisos do app do celular">
-      <div class="sino-cab"><b>Avisos do app do celular</b>${novos.length ? html`<button type="button" class="btn btn-sm" onClick=${() => marcar(novos.map(x => x.chave))}>Marcar todos como vistos</button>` : null}</div>
+      <div class="sino-cab"><b>Avisos do app do celular</b>
+        ${naLista.length ? html`<button type="button" class="btn btn-sm" id="sino-limpar" title="Tira os avisos da lista neste aparelho; nada é apagado no sistema" onClick=${limpar}>Limpar notificações</button>` : null}</div>
       ${erro ? html`<div class="sub" style="padding:8px 12px">Não deu para ler os avisos (sem internet?).</div>` : null}
-      ${!lista.length && !erro ? html`<div class="sub" style="padding:10px 12px">Nenhum pedido pelo app por enquanto.</div>` : null}
-      ${lista.slice(0, 30).map(x => html`<button type="button" key=${x.chave} class=${"sino-item" + (vistos.includes(x.chave) ? "" : " novo")} onClick=${() => abrir(x)}>
+      ${!naLista.length && !erro ? html`<div class="sub" style="padding:10px 12px">${lista.length ? "Avisos limpos. Nada novo por aqui." : "Nenhum pedido pelo app por enquanto."}</div>` : null}
+      ${naLista.slice(0, 30).map(x => html`<button type="button" key=${x.chave} class=${"sino-item" + (vistos.includes(x.chave) ? "" : " novo")} onClick=${() => abrir(x)}>
         <strong>${x.tipo === "orcamento" ? (x.acrescimo ? "Mais itens no pedido " : "Novo pedido de orçamento ") + numORC(x.numero) : "Itens a orçar na " + numOS(x.numero)}</strong>
         <span>${[veic(x), x.cliente.nome, x.quem ? "por " + x.quem : "", fmtDataHora(x.quando)].filter(Boolean).join(" · ")}</span>
         <span class="sino-texto">${String(x.texto).split("\n").slice(-1)[0].slice(0, 120)}</span></button>`)}
+      ${escondidos ? html`<button type="button" class="sino-rodape" id="sino-ver-limpos" onClick=${() => setVerTodos(!verTodos)}>${verTodos ? "Esconder os já recebidos" : "Ver os " + escondidos + " já recebidos"}</button>` : null}
     </div>` : null}</div>`;
+}
+
+/* ---------------- Proporção da tela, uma por aba (pedido do Danilo em 25/11/2026) ----------------
+ * Cada tela usa a largura que combina com ela: o Painel pede largo, um cadastro pede compacto. Antes a largura era fixa
+ * por tela, escrita no código. Agora cada aba tem a escolha dele — Compacto, Médio ou Largo —, guardada neste aparelho
+ * (dtcar-proporcao, uma entrada por aba). A classe vai no <main>, então vale para a tela inteira, e o padrão continua
+ * sendo o que a tela já fazia: sem escolha, nada muda. Só no PC: no celular a tela é sempre a largura do aparelho. */
+const LS_PROP = "dtcar-proporcao";
+const PROPORCOES = [["compacto", "Compacto"], ["medio", "Médio"], ["largo", "Largo"]];
+export function Proporcao() {
+  const { aba } = useApp();
+  const largo = usarLargo();
+  const [mapa, setMapa] = useState(() => lsGet(LS_PROP) || {});
+  const atual = mapa[aba] || "";
+  useEffect(() => { const m = document.querySelector("main"); if (!m) return;
+    if (atual) m.dataset.prop = atual; else delete m.dataset.prop;
+    return () => { const x = document.querySelector("main"); if (x) delete x.dataset.prop; }; }, [aba, atual]);
+  if (!largo) return null;
+  const escolher = k => { const novo = { ...mapa }; if (k === atual) delete novo[aba]; else novo[aba] = k; lsSet(LS_PROP, novo); setMapa(novo); };
+  return html`<div class="seg prop-seg" role="group" aria-label="Proporção desta tela">
+    ${PROPORCOES.map(([k, t]) => html`<button type="button" key=${k} class=${atual === k ? "ativo" : ""} aria-pressed=${atual === k ? "true" : "false"}
+      title=${"Largura desta tela: " + t.toLowerCase() + (atual === k ? " (clique para voltar ao padrão)" : "")} onClick=${() => escolher(k)}>${t}</button>`)}
+  </div>`;
 }
 
 export function BarraTopo({ titulo, offline, pend, enviarFila }) {
@@ -142,6 +182,7 @@ export function BarraTopo({ titulo, offline, pend, enviarFila }) {
       <${BotaoInstalar} />
       <${Situacao} offline=${offline} pend=${pend} enviarFila=${enviarFila} />
       <${Sino} />
+      <${Proporcao} />
       <${BotaoTema} classe="btn-icone" />
       <button type="button" class="btn btn-sm bt-oleo" title="Óleo e filtros pelo modelo do carro" aria-label="Óleo e filtros" onClick=${() => ir("/oleo-filtros")}>${I.gota}<span>Óleo e filtros</span></button>
       ${pode(perfil, "financeiro") ? html`<button type="button" class="btn btn-sm bt-oleo bt-fin" title="Painel Financeiro: entradas, saídas, faturamento e meta do mês" aria-label="Painel Financeiro" onClick=${() => ir("/painel-financeiro")}>${I.grafico}<span>Painel Financeiro</span></button>` : null}

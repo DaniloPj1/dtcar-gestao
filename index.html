@@ -15,7 +15,10 @@
 <link rel="stylesheet" href="css/app.css">
 <script>window.addEventListener("beforeinstallprompt", function (e) { e.preventDefault(); window.__dtcarInstalar = e; window.dispatchEvent(new Event("dtcar-instalavel")); });
 window.addEventListener("appinstalled", function () { window.__dtcarInstalar = null; window.dispatchEvent(new Event("dtcar-instalavel")); });</script>
-<script>try { var t = JSON.parse(localStorage.getItem("dtcar-tema") || "null"); if (t === "claro" || t === "escuro") document.documentElement.dataset.tema = t; } catch (e) {}</script>
+<script>try { var t = JSON.parse(localStorage.getItem("dtcar-tema") || "null");
+  // "horario": claro das 6h às 18h, escuro no resto (pedido do Danilo em 25/11/2026); resolvido aqui para a tela não piscar
+  if (t === "horario") { var h = new Date().getHours(); t = h >= 6 && h < 18 ? "claro" : "escuro"; }
+  if (t === "claro" || t === "escuro") document.documentElement.dataset.tema = t; } catch (e) {}</script>
 </head>
 <body>
 <div id="raiz"><div class="carregando">Carregando DTCar Gestão…</div></div>

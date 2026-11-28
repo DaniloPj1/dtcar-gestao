@@ -436,7 +436,7 @@ function GradeOS({ lista, ver, ir, soma, total, acoesDe, prox = {}, sel, onVer }
 
 /** O.S. em cards (só no computador): uma cor por etapa (classe e-*), o mesmo botão de avançar etapa e o mesmo menu da lista */
 const COR_ETAPA = { orcamento: "orc", execucao: "exe", pagamento: "pag", fechada: "fec", recusado: "rec", cancelado: "can" };
-function CardsOS({ lista, ver, ir, acoesDe, prox = {}, sel, onVer }) {
+function CardsOS({ lista, ver, ir, acoesDe, prox = {}, sel, onVer, grade = false }) {
   const abrir = o => onVer ? onVer(o.id) : ir("/os/" + o.id);
   const hoje = hojeISO();
   const carta = o => {
@@ -463,6 +463,9 @@ function CardsOS({ lista, ver, ir, acoesDe, prox = {}, sel, onVer }) {
   const COLS = [["orcamento", "Orçamento"], ["execucao", "Em execução"], ["pagamento", "Aguardando pagamento"]];
   const por = { orcamento: [], execucao: [], pagamento: [] }, resto = [];
   for (const o of lista) (por[etapaOS(o)] || resto).push(o);
+  /* Filtro que traz SÓ O.S. fora das etapas em aberto (Finalizadas, Fechadas, Recusadas, Canceladas): em vez de uma coluna
+     só com tudo empilhado, as O.S. saem numa grade de 4 colunas, 6 linhas por vez (pedido do Danilo em 25/11/2026). */
+  if (grade) return html`<div class="os-grade4">${lista.map(carta)}</div>`;
   // até 4 colunas: a quarta aparece quando o filtro traz fechadas, recusadas ou canceladas
   return html`<div class=${"os-colunas" + (resto.length ? " c4" : "")}>
     ${COLS.map(([k, t]) => html`<section key=${k} class=${"os-col ec-" + COR_ETAPA[k]}><h3>${t}<span>${por[k].length}</span></h3>
@@ -484,6 +487,7 @@ export function Ordens({ params = {} }) {
   const perfil = perfilNoApp(perfilReal); // no app do celular, só o administrador avança, recebe ou cancela O.S.
   const ver = pode(perfil, "verValores");
   const [q, setQ] = useState(""), [filtro, setFiltro] = useState(params.filtro === "receber" ? "pagamento" : params.filtro || "abertas"), [lim, setLim] = useState(60);
+  const [linhas, setLinhas] = useState(6);   // grade das finalizadas: 6 linhas de 4 colunas por vez
   const [ordem, setOrdem] = useState(() => lsGet("dtcar-os-ordem") || "recentes");
   const [cancelar, setCancelar] = useState(null), [encerrar, setEncerrar] = useState(null), [ocupado, setOcupado] = useState("");
   const [visao, setVisao, largo] = useVisao("os");
@@ -538,8 +542,13 @@ export function Ordens({ params = {} }) {
       previsao: (a, b) => (a.previsao_entrega || "9999").localeCompare(b.previsao_entrega || "9999"), valor: (a, b) => Number(b.total || 0) - Number(a.total || 0), numero: (a, b) => (Number(b.numero) || 0) - (Number(a.numero) || 0) }[ordem];
     return [...l].sort(cmp);
   }, [q, filtro, ordem, dados.ordens, prox]);
-  useEffect(() => setLim(60), [q, filtro, ordem]);
+  useEffect(() => { setLim(60); setLinhas(6); }, [q, filtro, ordem]);
   const soma = lista.reduce((s, o) => s + Number(o.total || 0), 0);
+  /* Filtro que só traz O.S. fora das etapas em aberto (Finalizadas, Fechadas, Recusadas, Canceladas): as 3 colunas de etapa
+     ficariam vazias e tudo cairia numa coluna só. Nesse caso a lista vira uma GRADE de 4 colunas, 6 linhas por vez, com
+     "Ver mais 6 linhas" (pedido do Danilo em 25/11/2026). Vale no PC; no celular a grade vira uma coluna, como sempre. */
+  const grade = visao === "cards" && ["finalizadas", "fechada", "recusado", "cancelado"].includes(filtro) && lista.length > 0;
+  const limite = linhas * 4;
   const resumo = ETAPAS_RESUMO.map(([k, t]) => { const l = dados.ordens.filter(o => naEtapa(o, k) && (k !== "fechada" || doMes(o)));
     return { k, t: k === "fechada" ? "Fechadas no mês" : t, n: l.length, v: l.reduce((s, o) => s + Number(k === "pagamento" ? faltaReceber(o) : o.total || 0), 0) }; });
   // como no sistema antigo: orçamento + execução + o que falta receber das que aguardam pagamento
@@ -566,11 +575,12 @@ export function Ordens({ params = {} }) {
      <div class="os-lista-col">
     <section class="card"><div class="secao-topo"><h2>${lista.length} O.S.</h2><span class="sub">${ver && soma ? reais(soma) : ""}</span>
         ${pode(perfil, "entrada") ? html`<button type="button" class="btn btn-sm btn-pri" onClick=${() => ir("/entrada")}>+ Nova O.S.</button>` : null}</div>
-      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} onVer=${id => temPainelLado() ? setPrevia(id) : ir("/os/" + id)} soma=${soma} total=${lista.length} acoesDe=${acoesTabela} prox=${prox} sel=${previa} />`
-      : lista.length && visao === "cards" ? html`<${CardsOS} lista=${lista.slice(0, lim)} ver=${ver} ir=${ir} onVer=${id => temPainelLado() ? setPrevia(id) : ir("/os/" + id)} acoesDe=${acoesDe} prox=${prox} sel=${previa} />`
+      ${lista.length && visao === "tabela" ? html`<${GradeOS} lista=${lista.slice(0, grade ? limite : lim)} ver=${ver} ir=${ir} onVer=${id => temPainelLado() ? setPrevia(id) : ir("/os/" + id)} soma=${soma} total=${lista.length} acoesDe=${acoesTabela} prox=${prox} sel=${previa} />`
+      : lista.length && visao === "cards" ? html`<${CardsOS} lista=${lista.slice(0, grade ? limite : lim)} ver=${ver} ir=${ir} onVer=${id => temPainelLado() ? setPrevia(id) : ir("/os/" + id)} acoesDe=${acoesDe} prox=${prox} sel=${previa} grade=${grade} />`
       : lista.length ? html`<div class="lista">${lista.slice(0, lim).map(o => html`<${LinhaOS} key=${o.id} o=${o} verValores=${ver} parcela=${prox[o.id]} acoes=${acoesDe(o)} sel=${previa === o.id} onClick=${() => temPainelLado() ? setPrevia(o.id) : ir("/os/" + o.id)} />`)}</div>`
         : html`<${Vazio}>${dados.ordens.length ? "Nenhuma O.S. com esse filtro." : "Nenhuma O.S. ainda."}</${Vazio}>`}
-      ${lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}
+      ${grade ? (lista.length > limite ? html`<div class="acoes os-ver-mais"><button type="button" class="btn" id="os-ver-mais" onClick=${() => setLinhas(linhas + 6)}>Ver mais 6 linhas (${lista.length - limite} ${lista.length - limite === 1 ? "O.S. restante" : "O.S. restantes"})</button></div>` : null)
+      : lista.length > lim ? html`<button type="button" class="btn" onClick=${() => setLim(lim + 100)}>Mostrar mais (${lista.length - lim} restantes)</button>` : null}
     </section>
      </div>
      <${PreviaOS} id=${previa} onFechar=${() => setPrevia(null)} acoes=${o => html`<div class="pv-acao">${acoesDe(o)}</div>`} />

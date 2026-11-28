@@ -593,6 +593,15 @@ body{font-size:15px}
   .rodape-acoes{left:0}
   .pagina{max-width:1200px}.pagina.larga{max-width:1480px}.pagina.larga-media{max-width:1200px}
 }
+/* Proporção escolhida por aba (pedido do Danilo em 25/11/2026): vale sobre a largura padrão da tela, inclusive nas
+   telas que já nascem largas. Sem escolha, o <main> não tem data-prop e nada muda. Só no PC. */
+@media (min-width:900px){
+  main[data-prop="compacto"] .pagina,main[data-prop="compacto"] .pagina.larga,main[data-prop="compacto"] .pagina.larga-media{max-width:900px}
+  main[data-prop="medio"] .pagina,main[data-prop="medio"] .pagina.larga,main[data-prop="medio"] .pagina.larga-media{max-width:1280px}
+  main[data-prop="largo"] .pagina,main[data-prop="largo"] .pagina.larga,main[data-prop="largo"] .pagina.larga-media{max-width:none}
+  .prop-seg button{padding:5px 10px;font-size:12.5px}
+}
+
 /* monitor grande: layout aberto de verdade — a página usa a largura da tela, com respiro proporcional (pedido do Danilo, 22/11/2026) */
 @media (min-width:1500px){
   .pagina,.pagina.larga,.pagina.larga-media{max-width:1760px}
@@ -1270,6 +1279,33 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
    O acento no topo da coluna usa a mesma cor dos cards da etapa; o nome da etapa fica sempre escrito. */
 .os-colunas{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start}
 .os-colunas.c4{grid-template-columns:repeat(4,1fr)}
+/* quadro que esconde o conteúdo ao clicar no título (RH e Sistema; pedido do Danilo em 25/11/2026).
+   A palavra "Mostrar"/"Ocultar" vai escrita ao lado do título: cor e seta sozinhas não dizem nada para quem lê com pressa. */
+.card-dobravel > h2, .card-dobravel > h3, .card-dobravel > .secao-topo{cursor:pointer;position:relative;padding-right:92px}
+.card-dobravel > h2::after, .card-dobravel > h3::after, .card-dobravel > .secao-topo::after{
+  content:"Ocultar";position:absolute;right:0;top:50%;transform:translateY(-50%);
+  font-family:var(--f-body);font-size:12px;font-weight:600;letter-spacing:.3px;text-transform:uppercase;
+  color:var(--brand-strong);border:1px solid var(--line);border-radius:999px;padding:2px 10px;background:var(--surface)}
+.card-dobrado > h2::after, .card-dobrado > h3::after, .card-dobrado > .secao-topo::after{content:"Mostrar"}
+.card-dobravel > h2:hover::after, .card-dobravel > h3:hover::after, .card-dobravel > .secao-topo:hover::after{background:var(--surface-2)}
+.card-dobravel > h2:focus-visible, .card-dobravel > h3:focus-visible, .card-dobravel > .secao-topo:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:6px}
+.card-dobrado > *:not(:first-child){display:none}
+.card-dobrado{padding-bottom:12px}
+/* Quadros LADO A LADO (pedido do Danilo em 28/11/2026): nas telas de RH e de Sistema os quadros deixam de ficar um
+   embaixo do outro ocupando a tela toda e passam a se encaixar em colunas, conforme a largura que sobra. Quadro fechado
+   (dobrado) vira uma faixa fina e não segura espaço. Só no PC: no celular continua uma coluna, como sempre foi. */
+@media (min-width:900px){
+  .pagina-quadros{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;align-items:start}
+  .pagina-quadros > *:not(section.card){grid-column:1 / -1}
+  .pagina-quadros > section.card.card-largo{grid-column:1 / -1}
+}
+@media (min-width:1500px){.pagina-quadros{grid-template-columns:repeat(auto-fill,minmax(460px,1fr))}}
+
+/* grade das O.S. finalizadas: 4 colunas, 6 linhas por vez, com "Ver mais 6 linhas" (pedido do Danilo em 25/11/2026) */
+.os-grade4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+@media (max-width:900px){.os-grade4{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+@media (max-width:640px){.os-grade4{grid-template-columns:minmax(0,1fr)}}
+.os-ver-mais{justify-content:center;margin-top:12px}
 .os-col{--colc:var(--muted);background:var(--surface-2);border:1px solid var(--line);border-top:3px solid var(--colc);border-radius:var(--r);padding:12px;min-width:0}
 .os-col.ec-orc{--colc:#b47708}
 @media (prefers-color-scheme: dark){:root:not([data-tema="claro"]) .os-col.ec-orc{--colc:#f1aa45}}
@@ -1893,6 +1929,10 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .sino-n{position:absolute;top:-6px;right:-6px;min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:var(--bad);color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
 .sino-lista{position:absolute;right:0;top:calc(100% + 6px);width:min(380px,calc(100vw - 24px));max-height:70vh;overflow:auto;background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:12px;box-shadow:0 12px 32px rgba(14,21,32,.18);z-index:60;display:flex;flex-direction:column}
 .sino-cab{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px}
+/* "Ver os já recebidos": os avisos limpos continuam no sistema, só não aparecem na lista deste aparelho */
+.sino-rodape{display:block;width:100%;border:0;border-top:1px solid var(--line);background:var(--surface-2);
+  padding:8px 12px;font:inherit;font-size:13px;color:var(--brand-strong);cursor:pointer;text-align:center}
+.sino-rodape:hover{background:var(--line)}
 .sino-item{display:flex;flex-direction:column;gap:2px;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:9px 12px;color:var(--ink);cursor:pointer;font:inherit}
 .sino-item:last-child{border-bottom:0}
 .sino-item.novo{background:var(--brand-soft)}
@@ -2306,6 +2346,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .os-palco.so-lista{grid-template-columns:minmax(0,1fr)}
   .os-palco.so-lista .pv{display:none}
   .os-palco .colunas,.os-palco .os-colunas{grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+  /* com a prévia aberta a lista fica com 2/3 da largura: a grade das finalizadas cai para 2 colunas, sem apertar o card */
+  .os-palco:not(.so-lista) .os-grade4{grid-template-columns:repeat(2,minmax(0,1fr))}
   .pv{display:block;position:sticky;top:120px;background:var(--surface);border:1px solid var(--line);border-radius:14px;
     box-shadow:0 4px 18px rgba(16,24,40,.08);overflow:hidden}
 }
@@ -2341,6 +2383,13 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pv-itens span:first-child{flex:1;min-width:0}
 .pv-itens .q{color:var(--muted);flex:none}
 .pv-itens b{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+/* preço de cada item na prévia: quantidade × unitário no meio, total da linha à direita (pedido de 25/11/2026) */
+.pv-itens .q{white-space:nowrap;font-variant-numeric:tabular-nums}
+.pv-itens b{margin-left:auto}
+.pv-item-fora span:first-child{color:var(--muted);text-decoration:line-through}
+.pv-item-fora small{text-decoration:none;display:inline-block}
+.pv-sub{display:flex;gap:10px;padding:5px 0 2px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)}
+.pv-sub b{margin-left:auto;color:var(--ink);font-variant-numeric:tabular-nums}
 .pv-tot{display:flex;align-items:baseline;gap:10px;padding-top:9px;margin-top:6px;border-top:2px solid var(--line2);font-size:13.5px}
 .pv-tot b{margin-left:auto;font-family:var(--f-display);font-size:20px;font-variant-numeric:tabular-nums}
 .pv-trilha{display:flex;flex-direction:column;font-size:13px}

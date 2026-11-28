@@ -1,6 +1,6 @@
 // Dados neste computador: pasta de dados no PC, cópia interna do navegador e fila de envio
 import { html, useState, useEffect } from "../lib.js";
-import { useApp, Modal } from "../ui.js";
+import { useApp, Modal, useQuadrosDobraveis } from "../ui.js";
 import { fmtDataHora, lsSet } from "../util.js";
 import { local } from "../local.js";
 import { replicaDisponivel, infoReplica, ouvirReplica, replicar, trocarOrdemLocal } from "../replica.js";
@@ -35,6 +35,7 @@ export function AssistentePasta({ onFechar }) {
 
 /** Tela Sistema › Dados neste computador */
 export function DadosLocais() {
+  useQuadrosDobraveis("dados-locais");   // clicar no título do quadro esconde/mostra o conteúdo (25/11/2026)
   const { pasta, pendentes, enviarFila, avisar, confirmar, abrirAssistentePasta, guardadas, atualizarPendentes, recarregar } = useApp();
   const abertasOff = pendentes.filter(op => op.tipo === "abrir_os"), alteracoes = pendentes.filter(ehAlteracao);
   // alterações de O.S. feitas sem internet: a primeira com problema trava as seguintes da mesma O.S.

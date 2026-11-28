@@ -443,7 +443,7 @@ function App() {
     clientes: [...dados.clientes, ...pendOS.filter(op => op.cliente && !dados.clientes.some(c => c.id === op.cliente.id)).map(op => ({ ...op.cliente, _pendente: true }))],
     veiculos: [...dados.veiculos, ...pendOS.filter(op => op.veiculo && !dados.veiculos.some(v => v.id === op.veiculo.id || v.placa === op.veiculo.placa)).map(op => ({ ...op.veiculo, _pendente: true }))],
   };
-  const ctx = { guardadas, pasta, abrirAssistentePasta: () => setAssistente(true), sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila };
+  const ctx = { guardadas, pasta, abrirAssistentePasta: () => setAssistente(true), sessao, perfil, cfg, dados: dadosVis, recarregar, avisar, confirmar, ir, sair, atualizarPendentes, pendentes: pend, enviarFila, aba: base || "painel" };
   if (base === "imprimir" && dados.carregado) return html`<${Ctx.Provider} value=${ctx}><${Imprimir} tipo=${param} id=${sub} params=${params} key=${rota} /></${Ctx.Provider}>`;
   let corpo;
   if (restrito[base] && !pode(perfil, restrito[base])) corpo = html`<div class="pagina"><div class="aviso">Seu papel não tem acesso a esta tela.</div></div>`;

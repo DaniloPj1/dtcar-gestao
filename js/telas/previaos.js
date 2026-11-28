@@ -4,7 +4,7 @@
 import { html, useState, useEffect } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Placa, Vazio } from "../ui.js";
-import { reais, numOS, fmtData, fmtTel, tempoDesde, linkWhats } from "../util.js";
+import { reais, numOS, fmtData, fmtTel, tempoDesde, linkWhats, totalItem, qtdFmt } from "../util.js";
 import { ETAPAS, etapaOS, situacaoOS, pode } from "../regras.js";
 
 const n = v => Number(v) || 0;
@@ -47,8 +47,15 @@ export function PreviaOS({ id, onFechar, acoes }) {
   const total = n(o.total), recebido = n(o.recebido), falta = Math.max(0, total - recebido);
   const itens = o.itens || [];
   const servicos = itens.filter(i => i.tipo === "servico"), pecas = itens.filter(i => i.tipo !== "servico");
-  const linha = i => html`<div key=${i.id}><span>${i.descricao}</span><span class="q">${n(i.quantidade) > 1 ? n(i.quantidade) + "×" : ""}</span>
-    ${ver ? html`<b>${reais(n(i.valor_unitario) * n(i.quantidade))}</b>` : null}</div>`;
+  /* Preço de cada item, não só o total da O.S. (pedido do Danilo em 25/11/2026). Os campos da tabela são `qtd` e
+     `valor_unit` (a prévia lia `quantidade` e `valor_unitario`, que não existem: por isso só o total aparecia).
+     A conta é a mesma `totalItem` da O.S. e do PDF, com o desconto do item. */
+  const soma = l => l.reduce((t, i) => t + totalItem(i), 0);
+  const linha = i => html`<div key=${i.id} class=${i.aprovado === false ? "pv-item-fora" : ""}>
+    <span>${i.descricao}${i.aprovado === false ? html` <small>(não aprovado)</small>` : null}</span>
+    ${ver ? html`<span class="q">${qtdFmt(i.qtd)}${n(i.qtd) !== 1 ? " × " : " × "}${reais(n(i.valor_unit))}</span><b>${reais(totalItem(i))}</b>`
+      : html`<span class="q">${n(i.qtd) !== 1 ? qtdFmt(i.qtd) + "×" : ""}</span>`}</div>`;
+  const subtotal = (rotulo, l) => ver && l.length > 1 ? html`<div class="pv-sub"><span>${rotulo}</span><b>${reais(soma(l))}</b></div>` : null;
 
   return html`<aside class=${"pv " + (COR[etapa] || "pv-can")}>
     <header class="pv-cab">
@@ -73,11 +80,12 @@ export function PreviaOS({ id, onFechar, acoes }) {
       <section><h4>Itens lançados</h4>
         ${o.itens === null ? html`<span class="dica">Carregando os itens…</span>`
           : itens.length ? html`<div class="pv-itens">
-              ${servicos.length ? html`<h5>Serviços</h5>${servicos.map(linha)}` : null}
-              ${pecas.length ? html`<h5>Peças e terceiros</h5>${pecas.map(linha)}` : null}</div>`
+              ${servicos.length ? html`<h5>Serviços</h5>${servicos.map(linha)}${subtotal("Soma dos serviços", servicos)}` : null}
+              ${pecas.length ? html`<h5>Peças e terceiros</h5>${pecas.map(linha)}${subtotal("Soma das peças e terceiros", pecas)}` : null}</div>`
           : html`<${Vazio}>Nenhum item lançado ainda.<//>`}
         ${ver ? html`<div class="pv-tot"><span>Total da O.S.</span><b>${reais(total)}</b></div>
-          <dl class="pv-kv"><dt>Recebido</dt><dd>${recebido ? reais(recebido) : "—"}</dd>
+          <dl class="pv-kv">${n(o.desconto) ? html`<dt>Desconto</dt><dd>− ${reais(n(o.desconto))}</dd>` : null}
+            <dt>Recebido</dt><dd>${recebido ? reais(recebido) : "—"}</dd>
             <dt>Falta receber</dt><dd class=${falta ? "c-bad" : ""}>${falta ? reais(falta) : "—"}</dd></dl>` : null}</section>
       <section><h4>Andamento</h4>
         <div class="pv-trilha">${trilha(o).map((t, i) => html`<div key=${i} class=${t.cls}><i aria-hidden="true"></i>${t.t}<time>${t.q}</time></div>`)}</div></section>

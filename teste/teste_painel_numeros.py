@@ -46,7 +46,7 @@ with sync_playwright() as p:
         chk("mesmo número nas duas telas: " + rot, a and b and a.group(1).replace("+", "").replace("\u00a0", " ").strip() == b.group(1).replace("+", "").replace("\u00a0", " ").strip(),
             (a.group(1) if a else "painel?") + " x " + (b.group(1) if b else "financeiro?"))
 
-    # o tamanho da tela é escolha do dono e fica guardada no aparelho
+    # o tamanho da tela é escolha do dono e fica guardada no aparelho (desde 28/11/2026, uma escolha por aba, na barra de cima)
     pg.goto(U + "#/painel"); pg.wait_for_timeout(1500)
     pg.click(".tam-tela button:has-text('Compacto')"); pg.wait_for_timeout(400)
     chk("tamanho: compacto aperta a página", pg.evaluate("document.documentElement.dataset.tela") == "compacto")
@@ -60,7 +60,8 @@ with sync_playwright() as p:
     cel = nav.new_page(viewport={"width": 390, "height": 840})
     cel.add_init_script(open(RAIZ + "/teste/mock.js").read())
     cel.goto(U + "#/painel"); cel.wait_for_timeout(2000)
-    chk("celular: o filtro de tamanho não aparece", cel.evaluate("getComputedStyle(document.querySelector('.tam-tela')).display") == "none")
+    # desde 28/11/2026 o controle fica na barra de cima e nem é desenhado no celular (antes ficava escondido pelo CSS)
+    chk("celular: o filtro de tamanho não aparece", cel.evaluate("(() => { const t = document.querySelector('.tam-tela'); return !t || getComputedStyle(t).display === 'none'; })()"))
     chk("celular: os blocos de dinheiro ficam um embaixo do outro",
         cel.evaluate("(() => { const g = document.querySelector('.pn-g4'); return !g || g.getBoundingClientRect().width < 420; })()"))
     cel.close(); pg.close(); nav.close()

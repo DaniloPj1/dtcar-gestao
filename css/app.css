@@ -593,15 +593,6 @@ body{font-size:15px}
   .rodape-acoes{left:0}
   .pagina{max-width:1200px}.pagina.larga{max-width:1480px}.pagina.larga-media{max-width:1200px}
 }
-/* Proporção escolhida por aba (pedido do Danilo em 25/11/2026): vale sobre a largura padrão da tela, inclusive nas
-   telas que já nascem largas. Sem escolha, o <main> não tem data-prop e nada muda. Só no PC. */
-@media (min-width:900px){
-  main[data-prop="compacto"] .pagina,main[data-prop="compacto"] .pagina.larga,main[data-prop="compacto"] .pagina.larga-media{max-width:900px}
-  main[data-prop="medio"] .pagina,main[data-prop="medio"] .pagina.larga,main[data-prop="medio"] .pagina.larga-media{max-width:1280px}
-  main[data-prop="largo"] .pagina,main[data-prop="largo"] .pagina.larga,main[data-prop="largo"] .pagina.larga-media{max-width:none}
-  .prop-seg button{padding:5px 10px;font-size:12.5px}
-}
-
 /* monitor grande: layout aberto de verdade — a página usa a largura da tela, com respiro proporcional (pedido do Danilo, 22/11/2026) */
 @media (min-width:1500px){
   .pagina,.pagina.larga,.pagina.larga-media{max-width:1760px}
@@ -636,7 +627,11 @@ body{font-size:15px}
   .tam-tela{display:inline-flex;background:var(--surface-2);border-radius:9px;padding:3px;gap:2px}
   .tam-tela button{border:0;background:none;padding:6px 12px;border-radius:7px;font-weight:600;font-size:13px;color:var(--muted);cursor:pointer}
   .tam-tela button[aria-pressed="true"]{background:var(--pf-az8);color:#fff}
-  :root[data-tela="compacto"] .pagina,:root[data-tela="compacto"] .pagina.larga,:root[data-tela="compacto"] .pagina.larga-media{max-width:1340px}
+  /* 28/11/2026: "Compacto" era 1340px — mais LARGO que o Médio (1200px) no monitor da recepção, e o botão parecia não
+     responder. Agora a ordem é a do nome em qualquer monitor: Compacto (1040px, junta tudo) < Médio (1180px) < Largo (tudo).
+     Sem escolha não há data-tela e cada tela fica com a largura que já tinha. */
+  :root[data-tela="compacto"] .pagina,:root[data-tela="compacto"] .pagina.larga,:root[data-tela="compacto"] .pagina.larga-media{max-width:1040px}
+  :root[data-tela="medio"] .pagina,:root[data-tela="medio"] .pagina.larga,:root[data-tela="medio"] .pagina.larga-media{max-width:1180px}
   :root[data-tela="compacto"] main{padding:18px 22px 110px}
   :root[data-tela="compacto"] .grade-painel{gap:10px}
   :root[data-tela="largo"] .pagina,:root[data-tela="largo"] .pagina.larga,:root[data-tela="largo"] .pagina.larga-media{max-width:none}
@@ -646,10 +641,13 @@ body{font-size:15px}
 /* Blocos de dinheiro na escala do Painel Financeiro; cartões brancos só para os gráficos. */
 .pn-g4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
 .pn-g2{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:12px}
-.pn-kpi{border-radius:14px;padding:13px 15px;color:#fff;display:flex;align-items:center;gap:11px;min-width:0}
-.pn-kpi .pn-tx{flex:1;min-width:0}
+.pn-kpi{border-radius:14px;padding:13px 15px;color:#fff;display:flex;align-items:center;gap:11px;min-width:0;container-type:inline-size}
+/* cartão estreito: o anel sai (o número dele já está escrito no cartão) e o valor ganha o espaço */
+@container (max-width:200px){.pn-kpi .pn-anel{display:none}}
+.pn-kpi .pn-tx{flex:1;min-width:0;container-type:inline-size}
 .pn-kpi span{display:block;font-size:12px;font-weight:600;letter-spacing:.03em;color:rgba(255,255,255,.88)}
-.pn-kpi b{display:block;font-family:var(--f-display);font-size:25px;font-weight:700;text-align:right;margin-top:9px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* o valor encolhe com o cartão (Compacto e telas cheias) em vez de virar "R$ 3…" */
+.pn-kpi b{display:block;font-family:var(--f-display);font-size:clamp(15px,21cqi,25px);font-weight:700;text-align:right;margin-top:9px;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pn-kpi small{display:block;font-size:11.5px;text-align:right;color:rgba(255,255,255,.78);margin-top:2px}
 .pn-az6{background:var(--pf-az6)}.pn-az7{background:var(--pf-az7)}.pn-az8{background:var(--pf-az8)}.pn-az9{background:var(--pf-az9)}
 .pn-ok{background:var(--pf-ok)}.pn-bad{background:var(--pf-bad)}
@@ -689,7 +687,7 @@ body{font-size:15px}
 @media (max-width:1280px){.pn-g4{grid-template-columns:repeat(2,minmax(0,1fr))}.pn-g2{grid-template-columns:minmax(0,1fr)}}
 
 /* Previsão do tempo: cartão azul com o desenho flutuando, no estilo dos celulares */
-.clima{position:relative;overflow:hidden;border-radius:14px;padding:16px 18px;color:#fff;
+.clima{container-type:inline-size;position:relative;overflow:hidden;border-radius:14px;padding:16px 18px;color:#fff;
   background:linear-gradient(135deg,#1f5fa8 0%,#2f6fb5 45%,#5b9ad8 100%)}
 .clima::after{content:"";position:absolute;right:-60px;bottom:-84px;width:230px;height:230px;border-radius:50%;background:rgba(255,255,255,.07)}
 .clima.clima-off{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
@@ -720,6 +718,8 @@ body{font-size:15px}
 .clima-link{display:inline-block;margin-top:10px;position:relative;z-index:1;color:#eaf2fb;font-size:12.5px;text-decoration:underline}
 .clima-link:hover{color:#fff}
 @media (max-width:900px){.clima-cal{grid-template-columns:repeat(4,1fr)}.clima-dia small{-webkit-line-clamp:3}}
+/* quadro de clima estreito (Compacto, ou dividindo a linha com outro quadro): 4 dias por linha, para o nome do tempo caber inteiro */
+@container (max-width:600px){.clima-cal{grid-template-columns:repeat(4,1fr)}.clima-dia small{-webkit-line-clamp:3}}
 
 /* Notícias: hora à esquerda, manchete à direita */
 .noticias{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column}
@@ -1359,15 +1359,7 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .card-dobravel > h2:focus-visible, .card-dobravel > h3:focus-visible, .card-dobravel > .secao-topo:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:6px}
 .card-dobrado > *:not(:first-child){display:none}
 .card-dobrado{padding-bottom:12px}
-/* Quadros LADO A LADO (pedido do Danilo em 28/11/2026): nas telas de RH e de Sistema os quadros deixam de ficar um
-   embaixo do outro ocupando a tela toda e passam a se encaixar em colunas, conforme a largura que sobra. Quadro fechado
-   (dobrado) vira uma faixa fina e não segura espaço. Só no PC: no celular continua uma coluna, como sempre foi. */
-@media (min-width:900px){
-  .pagina-quadros{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;align-items:start}
-  .pagina-quadros > *:not(section.card){grid-column:1 / -1}
-  .pagina-quadros > section.card.card-largo{grid-column:1 / -1}
-}
-@media (min-width:1500px){.pagina-quadros{grid-template-columns:repeat(auto-fill,minmax(460px,1fr))}}
+/* 28/11/2026: os quadros lado a lado foram desfeitos a pedido do Danilo — os quadros voltam a ficar um embaixo do outro. */
 
 /* grade das O.S. finalizadas: 4 colunas, 6 linhas por vez, com "Ver mais 6 linhas" (pedido do Danilo em 25/11/2026) */
 .os-grade4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
@@ -2444,14 +2436,17 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .pv-kv dt{color:var(--muted)}
 .pv-kv dd{margin:0;text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
 .pv-txt{font-size:13.5px;line-height:1.45}
-.pv-itens>div{display:flex;gap:10px;padding:6px 0;border-top:1px solid var(--line);font-size:13.5px}
+/* Linha do item na prévia (refeita em 28/11/2026, foto do Danilo): em grade, não em fila. Em fila, com descrição longa
+   ("FILTRO DE OLEO TOYOTA HILUX SW4 2.5 2.7 2.8 3.0 E 4.0 / LAND CRUISER…") a quantidade × unitário era espremida para
+   10px e o texto dela passava por cima do total — parecia preço riscado. Agora: descrição à esquerda, total em negrito à
+   direita e, embaixo do total, a conta "6,9 × R$ 53,00" pequena, só quando ela diz algo (quantidade diferente de 1 ou
+   desconto no item). */
+.pv-itens>div{display:grid;grid-template-columns:minmax(0,1fr) auto;column-gap:12px;row-gap:1px;align-items:baseline;
+  padding:7px 0;border-top:1px solid var(--line);font-size:13.5px}
 .pv-itens>div:first-of-type{border-top:0}
-.pv-itens span:first-child{flex:1;min-width:0}
-.pv-itens .q{color:var(--muted);flex:none}
-.pv-itens b{font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
-/* preço de cada item na prévia: quantidade × unitário no meio, total da linha à direita (pedido de 25/11/2026) */
-.pv-itens .q{white-space:nowrap;font-variant-numeric:tabular-nums}
-.pv-itens b{margin-left:auto}
+.pv-itens>div>span:first-child{grid-column:1;grid-row:1 / span 2;min-width:0;overflow-wrap:anywhere;line-height:1.35}
+.pv-itens>div>b{grid-column:2;grid-row:1;font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
+.pv-itens>div>.q{grid-column:2;grid-row:2;color:var(--muted);font-size:12px;white-space:nowrap;font-variant-numeric:tabular-nums;text-align:right}
 .pv-item-fora span:first-child{color:var(--muted);text-decoration:line-through}
 .pv-item-fora small{text-decoration:none;display:inline-block}
 .pv-sub{display:flex;gap:10px;padding:5px 0 2px;font-size:13px;color:var(--muted);border-top:1px solid var(--line)}

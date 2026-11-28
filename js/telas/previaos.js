@@ -51,10 +51,12 @@ export function PreviaOS({ id, onFechar, acoes }) {
      `valor_unit` (a prévia lia `quantidade` e `valor_unitario`, que não existem: por isso só o total aparecia).
      A conta é a mesma `totalItem` da O.S. e do PDF, com o desconto do item. */
   const soma = l => l.reduce((t, i) => t + totalItem(i), 0);
+  // a conta "quantidade × unitário" só aparece quando diz algo: quantidade diferente de 1 ou desconto no item
+  const contaDo = i => n(i.qtd) !== 1 || Math.abs(n(i.qtd) * n(i.valor_unit) - totalItem(i)) >= 0.005;
   const linha = i => html`<div key=${i.id} class=${i.aprovado === false ? "pv-item-fora" : ""}>
     <span>${i.descricao}${i.aprovado === false ? html` <small>(não aprovado)</small>` : null}</span>
-    ${ver ? html`<span class="q">${qtdFmt(i.qtd)}${n(i.qtd) !== 1 ? " × " : " × "}${reais(n(i.valor_unit))}</span><b>${reais(totalItem(i))}</b>`
-      : html`<span class="q">${n(i.qtd) !== 1 ? qtdFmt(i.qtd) + "×" : ""}</span>`}</div>`;
+    ${ver ? html`<b>${reais(totalItem(i))}</b>${contaDo(i) ? html`<span class="q">${qtdFmt(i.qtd) + " × " + reais(n(i.valor_unit))}${n(i.desconto) ? " − " + reais(n(i.desconto)) : ""}</span>` : null}`
+      : n(i.qtd) !== 1 ? html`<b>${qtdFmt(i.qtd)} ×</b>` : null}</div>`;
   const subtotal = (rotulo, l) => ver && l.length > 1 ? html`<div class="pv-sub"><span>${rotulo}</span><b>${reais(soma(l))}</b></div>` : null;
 
   return html`<aside class=${"pv " + (COR[etapa] || "pv-can")}>

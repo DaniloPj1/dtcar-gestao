@@ -638,6 +638,7 @@ function Servico() {
   /** começa pela placa, sem O.S. (pedido do Danilo em 28/11/2026): o mecânico não fica impedido de dar entrada no carro */
   const iniciarSemOS = async () => {
     if (andamento) return avisar("Pause ou finalize o serviço em andamento antes de iniciar outro.", true);
+    if (!/^[A-Z]{3}[0-9][A-Z0-9][0-9]{2}$/.test(normPlaca(placaSem))) return avisar("Confira a placa: são 3 letras e 4 caracteres (ex.: ABC1D23).", true);
     setIniciando(true);
     try { await api.apontamentos.abrir({ placa: placaSem, veiculo_id: v ? v.id : null, perfil_id: perfil.id, perfil_nome: perfil.nome });
       avisar("Serviço iniciado no " + exPlaca(placaSem) + ". Quando a O.S. for aberta, ele entra nela."); pl.limpar(); await recarregarServicos(); }
@@ -652,7 +653,8 @@ function Servico() {
   const placaSem = v ? v.placa : (pl.placa.naoAchou ? normPlaca(pl.placa.texto) : "");   // carro sem O.S. (ou placa fora do cadastro): segue para o pedido de orçamento
   const pedirOrcamento = () => { try { sessionStorage.setItem(CH_PLACA_PEDIDO, placaSem); } catch (e) { /* nada */ } ir("orcamento"); };
   const verIndicacao = async i => { try { await api.apontamentos.visto(i.apontamento_id); await recarregarServicos(); } catch (x) { avisar("Não deu: " + (x.message || x), true); } };
-  const jaComecei = placaSem && meus.some(s => !s.ordem_id && normPlaca(s.placa) === normPlaca(placaSem));
+  // qualquer avulso ainda aberto deste carro (solto ou já ligado numa O.S. que não está mais aberta) conta como começado
+  const jaComecei = placaSem && meus.some(s => s.avulso && normPlaca(s.placa) === normPlaca(placaSem));
   const ajuda = "Busque a placa: se o carro tem O.S. aberta, aparece o que precisa ser feito e o botão Iniciar serviço. Sem O.S., você pode iniciar o serviço mesmo assim (ele entra na O.S. quando ela for aberta) ou pedir orçamento. Só um serviço em andamento por vez: para abrir outro, pause (com o motivo) ou finalize. Ao finalizar, marque o que você fez e indique o responsável pelo resto.";
   return html`<${Tela} tela="servico" ajuda=${ajuda}>
     ${indicacoes.length ? html`<${Cartao} titulo="Avisos" id="sv-avisos">${indicacoes.map(i => html`<div class="aviso-orc" key=${i.apontamento_id + i.item_id + i.em}>

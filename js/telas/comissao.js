@@ -110,9 +110,9 @@ function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
       const aps = await api.apontamentos.listar({ ordem_id: o.id });
       const fins = (aps || []).filter(a => a.situacao === "finalizado");
       // serviço que o mecânico começou pela placa, antes da O.S. existir (v66): ele já vem escolhido para receber a O.S.
-      const avulsos = (aps || []).filter(a => a.avulso);
+      const avulsos = (aps || []).filter(a => a.avulso).sort((x, y) => (x.situacao === "finalizado" ? 0 : 1) - (y.situacao === "finalizado" ? 0 : 1));
       const dono = avulsos.length && (funcs || []).find(f => f.perfil_id === avulsos[0].perfil_id);
-      if (dono && !paraQuem) setParaQuem(dono.id);
+      setParaQuem(dono ? dono.id : "");   // a cada busca: o mecânico do serviço começado pela placa, ou nenhum
       const servicos = (o.itens || []).filter(i => i.tipo === "servico" && i.aprovado !== false).map(i => {
         const quem = fins.filter(a => (a.itens_executados || []).includes(i.id));
         return { item: i, quem: quem.map(a => ({ id: a.perfil_id, nome: a.perfil_nome })) };
@@ -302,7 +302,8 @@ export function Comissao() {
         for (const a of aps) {
           const antes = a.itens_executados || [], restam = antes.filter(x => !ids.includes(x));
           if (restam.length === antes.length) continue;
-          if (restam.length) await api.apontamentos.atualizar(a.id, { itens_executados: restam });
+          // o serviço começado pela placa (v66) guarda o tempo e o que o mecânico escreveu: esvazia, mas não apaga
+          if (restam.length || a.avulso) await api.apontamentos.atualizar(a.id, { itens_executados: restam });
           else await api.apontamentos.excluir(a.id);
         }
       }

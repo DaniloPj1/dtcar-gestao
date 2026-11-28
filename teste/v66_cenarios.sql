@@ -12,7 +12,7 @@ insert into public.perfis (id, nome, papel, ativo) values ('88888888-8888-8888-8
 insert into public.clientes (id, nome) values ('00000000-0000-0000-0000-0000000006c1', 'Transportadora X') on conflict (id) do nothing;
 insert into public.veiculos (id, cliente_id, placa, marca, modelo) values ('00000000-0000-0000-0000-0000000006f1', '00000000-0000-0000-0000-0000000006c1', 'QWE4R56', 'VW', 'Delivery') on conflict (id) do nothing;
 delete from public.servico_apontamentos where avulso or ordem_id in ('00000000-0000-0000-0000-000000006601', '00000000-0000-0000-0000-000000006602', '00000000-0000-0000-0000-000000006603');
-delete from public.ordens where id in ('00000000-0000-0000-0000-000000006601', '00000000-0000-0000-0000-000000006602', '00000000-0000-0000-0000-000000006603');
+delete from public.ordens where id in ('00000000-0000-0000-0000-000000006601', '00000000-0000-0000-0000-000000006602', '00000000-0000-0000-0000-000000006603', '00000000-0000-0000-0000-000000006604', '00000000-0000-0000-0000-000000006605', '00000000-0000-0000-0000-000000006606', '00000000-0000-0000-0000-000000006607');
 
 create temp table antes as select (select count(*) from public.estoque_mov) mov, (select count(*) from public.contas) contas,
   (select count(*) from public.recibos) recibos, (select count(*) from public.os_itens) itens;
@@ -97,6 +97,40 @@ do $$ declare it uuid; r jsonb; begin
   delete from public.os_itens where id = it;
 end $$;
 
+-- 10. (revisão) histórico do espelho: O.S. antiga da mesma placa, entregue ou não, não pega o avulso; salvar a O.S. sem mexer
+--     no carro não religa; O.S. cancelada devolve o avulso
+update public.servico_apontamentos set ordem_id = null, os_numero = null, ligado_em = null where avulso and feito_texto like 'Troca da embreagem%';
+delete from public.ordens where id = '00000000-0000-0000-0000-000000006602';
+insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total, criado_em)
+values ('00000000-0000-0000-0000-000000006604', 6604, 'entregue', '00000000-0000-0000-0000-0000000006c1', '00000000-0000-0000-0000-0000000006f1', '{}', '{"placa": "QWE-4R56"}', 1000, 0, '2024-03-01'),
+       ('00000000-0000-0000-0000-000000006605', 6605, 'execucao', '00000000-0000-0000-0000-0000000006c1', '00000000-0000-0000-0000-0000000006f1', '{}', '{"placa": "QWE4R56"}', 1000, 0, '2024-03-02');
+update public.ordens set veiculo = veiculo where id in ('00000000-0000-0000-0000-000000006604', '00000000-0000-0000-0000-000000006605');
+do $$ begin
+  if exists (select 1 from public.servico_apontamentos where ordem_id in ('00000000-0000-0000-0000-000000006604', '00000000-0000-0000-0000-000000006605')) then
+    raise exception 'FALHOU 10: ligou em O.S. antiga do histórico'; end if;
+end $$;
+insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total)
+values ('00000000-0000-0000-0000-000000006606', 6606, 'diagnostico', '00000000-0000-0000-0000-0000000006c1', '00000000-0000-0000-0000-0000000006f1', '{}', '{"placa": "QWE4R56"}', 1000, 0);
+update public.ordens set status = 'cancelado' where id = '00000000-0000-0000-0000-000000006606';
+do $$ begin
+  if not exists (select 1 from public.servico_apontamentos where avulso and ordem_id is null and feito_texto like 'Troca da embreagem%') then
+    raise exception 'FALHOU 10b: O.S. cancelada não devolveu o avulso'; end if;
+end $$;
+
+-- 11. (revisão) avulso PAUSADO ligado a uma O.S.; o mecânico começa de novo o mesmo carro sem O.S.; apagar a O.S. não pode dar
+--     erro (derrubaria a carga do espelho): o antigo é finalizado e solto
+insert into public.ordens (id, numero, status, cliente_id, veiculo_id, cliente, veiculo, km_entrada, total)
+values ('00000000-0000-0000-0000-000000006607', 6607, 'diagnostico', '00000000-0000-0000-0000-0000000006c1', null, '{}', '{"placa": "RTY5T67"}', 1000, 0);
+insert into public.servico_apontamentos (id, perfil_id, perfil_nome, placa, avulso, situacao, ordem_id, os_numero)
+values ('00000000-0000-0000-0000-00000000a6b1', '88888888-8888-8888-8888-888888888888', 'Zé', 'RTY5T67', true, 'pausado', '00000000-0000-0000-0000-000000006607', 6607),
+       ('00000000-0000-0000-0000-00000000a6b2', '88888888-8888-8888-8888-888888888888', 'Zé', 'RTY5T67', true, 'andamento', null, null);
+delete from public.ordens where id = '00000000-0000-0000-0000-000000006607';
+do $$ declare a public.servico_apontamentos; begin
+  select * into a from public.servico_apontamentos where id = '00000000-0000-0000-0000-00000000a6b1';
+  if a.ordem_id is not null or a.situacao <> 'finalizado' or a.fim is null then raise exception 'FALHOU 11: %', row_to_json(a); end if;
+  if not exists (select 1 from public.servico_apontamentos where id = '00000000-0000-0000-0000-00000000a6b2' and situacao = 'andamento') then raise exception 'FALHOU 11b'; end if;
+end $$;
+
 -- 9. nada mexeu em estoque nem financeiro
 do $$ declare a record; begin select * into a from antes;
   if (select count(*) from public.estoque_mov) <> a.mov or (select count(*) from public.contas) <> a.contas or (select count(*) from public.recibos) <> a.recibos then raise exception 'FALHOU 9: mexeu em estoque/financeiro'; end if;
@@ -104,6 +138,6 @@ end $$;
 
 -- limpeza
 delete from public.servico_apontamentos where avulso;
-delete from public.ordens where id in ('00000000-0000-0000-0000-000000006602', '00000000-0000-0000-0000-000000006603');
+delete from public.ordens where id in ('00000000-0000-0000-0000-000000006602', '00000000-0000-0000-0000-000000006603', '00000000-0000-0000-0000-000000006604', '00000000-0000-0000-0000-000000006605', '00000000-0000-0000-0000-000000006606');
 delete from public.funcionarios where id = '00000000-0000-0000-0000-0000000006e1';
 select 'v66 OK' as resultado;

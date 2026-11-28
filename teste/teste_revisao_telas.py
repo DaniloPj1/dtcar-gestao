@@ -74,6 +74,15 @@ def rodar(b, nome, w, h):
     if not quadros.count():
       chk(T(tela + ": tem quadro dobrável"), False, "nenhum section.card com título direto")
       continue
+    if w > 900:
+      cols = pg.evaluate("getComputedStyle(document.querySelector('.pagina-quadros')).gridTemplateColumns.split(' ').length") if pg.locator(".pagina-quadros").count() else 0
+      chk(T(tela + ": os quadros ficam lado a lado quando a largura dá"), pg.locator(".pagina-quadros").count() == 1 and cols >= 2, cols)
+      if quadros.count() >= 2:
+        topos = pg.evaluate("[...document.querySelectorAll('main section.card')].slice(0,2).map(c => Math.round(c.getBoundingClientRect().top))")
+        chk(T(tela + ": o segundo quadro fica ao lado do primeiro, não embaixo"), topos[0] == topos[1], topos)
+    else:
+      chk(T(tela + ": no celular os quadros continuam um embaixo do outro"),
+          pg.evaluate("getComputedStyle(document.querySelector('main .pagina')).display") != "grid")
     chk(T(tela + ": os quadros ficam dobráveis e o título vira botão"), quadros.count() >= 1
         and quadros.first.locator(":scope > h2, :scope > h3, :scope > .secao-topo").first.get_attribute("role") == "button")
     alvo = quadros.first

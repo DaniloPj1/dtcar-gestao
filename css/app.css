@@ -1285,6 +1285,15 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .card-dobravel > h2:focus-visible, .card-dobravel > h3:focus-visible, .card-dobravel > .secao-topo:focus-visible{outline:2px solid var(--brand);outline-offset:3px;border-radius:6px}
 .card-dobrado > *:not(:first-child){display:none}
 .card-dobrado{padding-bottom:12px}
+/* Quadros LADO A LADO (pedido do Danilo em 28/11/2026): nas telas de RH e de Sistema os quadros deixam de ficar um
+   embaixo do outro ocupando a tela toda e passam a se encaixar em colunas, conforme a largura que sobra. Quadro fechado
+   (dobrado) vira uma faixa fina e não segura espaço. Só no PC: no celular continua uma coluna, como sempre foi. */
+@media (min-width:900px){
+  .pagina-quadros{display:grid;grid-template-columns:repeat(auto-fill,minmax(420px,1fr));gap:14px;align-items:start}
+  .pagina-quadros > *:not(section.card){grid-column:1 / -1}
+  .pagina-quadros > section.card.card-largo{grid-column:1 / -1}
+}
+@media (min-width:1500px){.pagina-quadros{grid-template-columns:repeat(auto-fill,minmax(460px,1fr))}}
 
 /* grade das O.S. finalizadas: 4 colunas, 6 linhas por vez, com "Ver mais 6 linhas" (pedido do Danilo em 25/11/2026) */
 .os-grade4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}

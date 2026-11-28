@@ -81,6 +81,42 @@ def rodar(b, nome, w, h):
   chk(T("tempo: link para a previsão completa"), pg.locator(".clima-link").count() == 1
       and pg.locator(".clima-link").get_attribute("target") == "_blank")
 
+  # ---------- fundo do quadro conforme o tempo, e o calendário clicável (pedido do Danilo em 28/11/2026)
+  cena = lambda: pg.get_attribute(".clima", "data-cena") or ""
+  chk(T("cena: agora parcialmente nublado → sol com nuvens (ou lua, se for noite)"), cena().startswith("parcial") and pg.locator(".clima-cena canvas.clima-tela").count() == 1, cena())
+  q1 = pg.get_attribute(".clima-tela", "data-quadros"); pg.wait_for_timeout(900); q2 = pg.get_attribute(".clima-tela", "data-quadros")
+  chk(T("cena: o desenho de fundo está animando (quadros andando)"), q1 and q2 and int(q2) > int(q1), [q1, q2])
+  chk(T("cena: o canvas tem o tamanho do quadro e fica atrás do texto"), pg.evaluate("""(() => { const c = document.querySelector('.clima-tela'), q = document.querySelector('.clima');
+    return Math.abs(c.getBoundingClientRect().height - q.getBoundingClientRect().height) < 2 && getComputedStyle(document.querySelector('.clima-cena')).zIndex === '0'
+      && getComputedStyle(document.querySelector('.clima-ln')).zIndex === '1'; })()"""))
+  chk(T("cena: é só enfeite (aria-hidden) e não pega clique"), pg.get_attribute(".clima-cena", "aria-hidden") == "true"
+      and pg.evaluate("getComputedStyle(document.querySelector('.clima-cena')).pointerEvents") == "none")
+  chk(T("cena: os dias do calendário são botões"), pg.locator(".clima-cal button.clima-dia").count() == 7 and pg.locator(".clima-dia[aria-pressed=true]").count() == 1)
+  pg.locator(".clima-dia").nth(3).click(); pg.wait_for_timeout(300)
+  chk(T("cena: tocar num dia de chuva põe chuva no fundo e mostra a previsão dele"), cena() == "chuva" and pg.get_attribute(".clima-tela", "data-cena") == "chuva"
+      and "Chuva" in pg.inner_text(".clima-ag strong") and "Previsão de" in pg.inner_text(".clima-ag") and "27" in pg.inner_text(".clima-t")
+      and "Chuva 80%" in pg.inner_text(".clima-relogio small") and pg.get_attribute(".clima-dia:nth-child(4)", "aria-pressed") == "true", [cena(), pg.inner_text(".clima-ag")])
+  chk(T("cena: com um dia escolhido o cabeçalho não fica espremido (uma palavra por linha)"),
+      pg.evaluate("document.querySelector('.clima-ag span').getBoundingClientRect().height") < 40, pg.evaluate("document.querySelector('.clima-ag span').getBoundingClientRect().height"))
+  pg.locator(".clima-dia").nth(4).click(); pg.wait_for_timeout(300)
+  chk(T("cena: tempestade no fundo"), cena() == "tempestade" and pg.get_attribute(".clima-tela", "data-cena") == "tempestade"
+      and "Tempestade" in pg.inner_text(".clima-ag strong"), cena())
+  pg.locator(".clima-dia").nth(1).click(); pg.wait_for_timeout(300)
+  chk(T("cena: céu limpo de dia põe o sol no fundo"), cena() == "sol" and pg.get_attribute(".clima-tela", "data-cena") == "sol", cena())
+  pg.locator(".clima-dia").nth(2).click(); pg.wait_for_timeout(300)
+  chk(T("cena: nublado no fundo"), cena() == "nublado" and pg.get_attribute(".clima-tela", "data-cena") == "nublado", cena())
+  pg.locator(".clima-dia").nth(2).click(); pg.wait_for_timeout(300)
+  chk(T("cena: tocar de novo no dia escolhido volta para o tempo de agora"), cena().startswith("parcial") and "Colatina · ES" in pg.inner_text(".clima-ag"), cena())
+  pg.locator(".clima-dia").nth(4).click(); pg.locator(".clima-dia").nth(0).click(); pg.wait_for_timeout(300)
+  chk(T("cena: o botão Hoje também volta para agora"), cena().startswith("parcial"), cena())
+  noite = pg.evaluate("""import('/js/telas/casa.js').then(m => [
+    m.eNoite(new Date('2026-11-28T21:00:00-03:00'), '2026-11-28T05:05', '2026-11-28T18:20'),
+    m.eNoite(new Date('2026-11-28T12:00:00-03:00'), '2026-11-28T05:05', '2026-11-28T18:20'),
+    m.eNoite(new Date('2026-11-28T04:30:00-03:00'), '', ''),
+    [0,1,2,3,45,51,61,80,95,71].map(m.cenaDoTempo).join(',') ])""")
+  chk(T("cena: noite pelo pôr do sol, e o nome de cada cena pelo código do tempo"), noite[:3] == [True, False, True]
+      and noite[3] == "sol,parcial,parcial,nublado,neblina,garoa,chuva,chuva,tempestade,nublado", noite)
+
   # ---------- notícias por prioridade (item 3.3)
   chk(T("notícias: três grupos na ordem cidade, estado e país"), [x.get_attribute("data-grupo") for x in pg.locator(".noticias .not-grupo").all()] == ["cidade", "estado", "pais"],
       [x.get_attribute("data-grupo") for x in pg.locator(".noticias .not-grupo").all()])
@@ -152,6 +188,13 @@ def rodar(b, nome, w, h):
 with sync_playwright() as p:
   b = p.chromium.launch()
   rodar(b, "pc", 1366, 768); rodar(b, "celular", 390, 844)
+  # quem pediu menos movimento vê a cena parada
+  pg = b.new_context(viewport={"width": 1366, "height": 768}, reduced_motion="reduce").new_page()
+  pg.add_init_script(path=os.path.join(RAIZ, "teste", "mock.js")); pg.add_init_script(FORA); pg.add_init_script(PREP)
+  pg.goto(U + "#/painel"); pg.wait_for_timeout(2500); pg.locator(".clima-dia").nth(3).click(); pg.wait_for_timeout(300)
+  q1 = pg.get_attribute(".clima-tela", "data-quadros"); pg.wait_for_timeout(800)
+  chk("[pc] cena: com menos movimento pedido, a cena é um quadro parado", q1 == "1" and pg.get_attribute(".clima-tela", "data-quadros") == "1", q1)
+  pg.context.close()
   b.close()
 srv.terminate()
 for f in falhas: print("FALHOU:", f)

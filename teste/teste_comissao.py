@@ -181,6 +181,22 @@ try:
     chk("desmarcando tudo, não há o que puxar", pg.locator("#cm-puxar-tudo").is_disabled())
     pg.keyboard.press("Escape"); pg.wait_for_timeout(400)
 
+    # serviço que o mecânico começou PELA PLACA, antes da O.S. existir (v66, 28/11/2026): o banco ligou o apontamento
+    # na O.S. quando ela foi aberta; na puxada, ele já vem escolhido e o que ele escreveu aparece
+    pg.evaluate("""(() => { const o = window.__DB.ordens.find(x => x.numero === 1898);
+      window.__DB.apontamentos.push({ id: "apavulso", ordem_id: o.id, os_numero: 1898, perfil_id: "p2", perfil_nome: "Carlos", avulso: true,
+        placa: "ABC1D23", feito_texto: "Troca dos amortecedores, peça da empresa", ligado_em: new Date().toISOString(),
+        situacao: "finalizado", inicio: new Date(Date.now() - 2 * 86400000).toISOString(), fim: new Date(Date.now() - 86400000).toISOString(),
+        pausas: [], itens_executados: [], indicacoes: [] }); })()""")
+    pg.click(".painel-topo button:has-text('Puxar O.S.')"); pg.wait_for_timeout(600)
+    pg.fill("#cm-busca", "1898"); pg.click(".modal button:has-text('Procurar')"); pg.wait_for_timeout(1200)
+    m = txt(pg, ".modal")
+    chk("serviço começado pela placa: o mecânico dele já vem escolhido", pg.input_value("#cm-para") == "fmec1", pg.input_value("#cm-para"))
+    chk("e a puxada mostra o que ele escreveu no app", pg.locator(".modal [data-avulso]").count() == 1
+        and "Troca dos amortecedores, peça da empresa" in m and "pela placa" in m, m[:500])
+    pg.keyboard.press("Escape"); pg.wait_for_timeout(400)
+    pg.evaluate("window.__DB.apontamentos = window.__DB.apontamentos.filter(a => a.id !== 'apavulso')")
+
     # tirar o que foi puxado para o mecânico errado (pedido do Danilo, 24/11/2026)
     bloco = pg.locator(".cm-bloco:has-text('Beto')")
     chk("o cartão da O.S. tem 'Tirar a O.S.'", bloco.locator(".cm-os-tirar").count() >= 1)

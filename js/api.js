@@ -1,5 +1,5 @@
 // Camada de dados. Usa o Supabase; nos testes automáticos, window.__API_MOCK substitui tudo.
-import { local, erroDeRede, semTabelaComissao, semTabelaApontamentos } from "./local.js";
+import { local, erroDeRede, semTabelaComissao, semTabelaApontamentos, semV66 } from "./local.js";
 import { replicaDisponivel, replicaPronta, replicaProntaJa, leitorLocal as L, tabelaLocal, removerLocal, gravarLocal, trocarOrdemLocal } from "./replica.js";
 import { versaoOS, tocarOS } from "./fila.js";
 import { alterarOrdemOffline, salvarItensOffline, eventoOffline, iguais, temPendente, comTrava, podeAlterarSemInternet } from "./alteracoes.js";
@@ -408,7 +408,14 @@ function criarApiSupabase() {
         if (r.error && semTabelaApontamentos(r.error)) return [];
         return ok(r);
       },
-      abrir: async d => { const r = await sb.from("servico_apontamentos").insert({ ordem_id: d.ordem_id, os_numero: d.os_numero || null, perfil_id: d.perfil_id, perfil_nome: d.perfil_nome || "", situacao: "andamento" }).select().single();
+      /** com ordem_id: serviço dentro da O.S. Sem ordem_id e com placa (v66, 28/11/2026): o mecânico começa pela placa, antes de
+       *  existir O.S.; quando a O.S. dessa placa for aberta, o banco liga o apontamento nela sozinho. */
+      abrir: async d => { const avulso = !d.ordem_id;
+        const linha = { ordem_id: d.ordem_id || null, os_numero: d.os_numero || null, perfil_id: d.perfil_id, perfil_nome: d.perfil_nome || "", situacao: "andamento" };
+        if (avulso) Object.assign(linha, { placa: String(d.placa || "").toUpperCase().replace(/[^A-Z0-9]/g, ""), veiculo_id: d.veiculo_id || null, avulso: true });
+        const r = await sb.from("servico_apontamentos").insert(linha).select().single();
+        if (r.error && avulso && semV66(r.error)) throw new Error("Iniciar serviço sem O.S. ainda não foi ligado: falta rodar o supabase/v66.sql no banco. Por enquanto, peça a abertura da O.S.");
+        if (r.error && /servico_apontamentos_aberto_placa/i.test(r.error.message || "")) throw new Error("Você já tem um serviço aberto neste carro.");
         if (r.error && /duplicate|unique|servico_apontamentos_aberto/i.test(r.error.message || "")) throw new Error("Este mecânico já tem um apontamento aberto nesta O.S.");
         if (r.error && semTabelaApontamentos(r.error)) throw new Error("Iniciar serviço pelo app ainda não foi ligado: falta rodar o supabase/v60.sql no banco.");
         return ok(r); },

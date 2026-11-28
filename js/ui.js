@@ -147,3 +147,56 @@ export function TrocaVisao({ visao, onTroca, cards }) {
     <button type="button" aria-pressed=${visao === "tabela" ? "true" : "false"} title="Tabela" onClick=${() => onTroca("tabela")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M3 9h18M3 14.5h18M9 9v11"/></svg><span>Tabela</span></button>
     ${cards ? html`<button type="button" aria-pressed=${visao === "cards" ? "true" : "false"} title="Cards" onClick=${() => onTroca("cards")}><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="8" height="7" rx="1.5"/><rect x="13" y="4" width="8" height="7" rx="1.5"/><rect x="3" y="13" width="8" height="7" rx="1.5"/><rect x="13" y="13" width="8" height="7" rx="1.5"/></svg><span>Cards</span></button>` : null}</div>`;
 }
+
+/* ---------------------------------------------------------------------------------------------------------------------
+ * Filtro por data de VENCIMENTO, o mesmo em toda tela que guarda pagamento ou documento com vencimento
+ * (pedido do Danilo em 25/11/2026: contas a pagar, contas a receber, boletos, parcelas, despesas fixas).
+ * Ele decidiu em 28/11/2026 que este filtro NÃO substitui o filtro de data que a tela já tenha (emissão, lançamento,
+ * pagamento): entra como um filtro a mais, para poder cruzar os dois.
+ * Atalhos na ordem em que a oficina olha: vencidos primeiro, depois hoje, a semana, o mês. "Personalizado" abre de/até.
+ * ------------------------------------------------------------------------------------------------------------------ */
+const hojeVenc = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });   // AAAA-MM-DD de Brasília
+const maisDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+const mesVenc = n => { const d = new Date(hojeVenc() + "T12:00:00"); d.setDate(1); d.setMonth(d.getMonth() + n); const m = d.toISOString().slice(0, 7);
+  const [a, x] = m.split("-").map(Number); return [m + "-01", m + "-" + String(new Date(a, x, 0).getDate()).padStart(2, "0")]; };
+/** Atalhos do vencimento: [chave, rótulo, () => [de, ate]]. "" = sem filtro; "pers" = de/até escolhidos à mão. */
+export const VENCIMENTOS = [
+  ["", "Todos os vencimentos", null],
+  ["vencidos", "Vencidos", () => ["1900-01-01", maisDias(hojeVenc(), -1)]],
+  ["hoje", "Vencem hoje", () => [hojeVenc(), hojeVenc()]],
+  ["7d", "Próximos 7 dias", () => [hojeVenc(), maisDias(hojeVenc(), 7)]],
+  ["30d", "Próximos 30 dias", () => [hojeVenc(), maisDias(hojeVenc(), 30)]],
+  ["mes", "Este mês", () => mesVenc(0)],
+  ["mesant", "Mês passado", () => mesVenc(-1)],
+  ["mesprox", "Próximo mês", () => mesVenc(1)],
+  ["pers", "Período escolhido", null],
+];
+/** [de, ate] do filtro (null quando não há filtro). `v` = { venc, de, ate } */
+export function faixaVencimento(v = {}) {
+  const k = v.venc || "";
+  if (!k) return null;
+  if (k === "pers") { const de = v.de || "1900-01-01", ate = v.ate || "2999-12-31"; return de <= ate ? [de, ate] : [ate, de]; }
+  const p = VENCIMENTOS.find(x => x[0] === k);
+  return p && p[2] ? p[2]() : null;
+}
+/** A linha passa no filtro de vencimento? Registro sem vencimento fica de fora quando há filtro. */
+export function noVencimento(venc, v = {}) {
+  const f = faixaVencimento(v); if (!f) return true;
+  const d = String(venc || "").slice(0, 10);
+  return !!d && d >= f[0] && d <= f[1];
+}
+/** Controle do filtro: a lista de atalhos e, no "Período escolhido", os campos de/até. */
+export function FiltroVencimento({ valor = {}, onMuda, id = "venc" }) {
+  const f = faixaVencimento(valor);
+  return html`<div class="filtro-venc" id=${id}>
+    <label class="filtro"><span>Vencimento</span>
+      <select class="inp" id=${id + "-sel"} value=${valor.venc || ""} onChange=${e => onMuda({ ...valor, venc: e.target.value })}>
+        ${VENCIMENTOS.map(([k, t]) => html`<option key=${k} value=${k}>${t}</option>`)}</select></label>
+    ${valor.venc === "pers" ? html`
+      <label class="filtro"><span>De</span><input type="date" class="inp" id=${id + "-de"} value=${valor.de || ""} onInput=${e => onMuda({ ...valor, de: e.target.value })} /></label>
+      <label class="filtro"><span>Até</span><input type="date" class="inp" id=${id + "-ate"} value=${valor.ate || ""} onInput=${e => onMuda({ ...valor, ate: e.target.value })} /></label>` : null}
+    ${f && valor.venc !== "pers" ? html`<span class="filtro-venc-faixa">${valor.venc === "vencidos" ? "até " + fmtDataBR(f[1]) : fmtDataBR(f[0]) + " a " + fmtDataBR(f[1])}</span>` : null}
+    ${valor.venc ? html`<button type="button" class="btn btn-sm" id=${id + "-limpar"} onClick=${() => onMuda({ venc: "", de: "", ate: "" })}>Limpar</button>` : null}
+  </div>`;
+}
+const fmtDataBR = d => { const x = String(d || "").slice(0, 10).split("-"); return x.length === 3 ? x[2] + "/" + x[1] + "/" + x[0] : ""; };

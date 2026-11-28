@@ -7,8 +7,8 @@
 // Tabelas boletos e boletos_arquivos do supabase/v28.sql.
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
-import { useApp, Campo, Texto, Modal, Abas, Vazio } from "../ui.js";
-import { reais, fmtData, fmtDataHora, hojeISO, arred, soDig, norm, numOS, linkWhats, fmtDoc } from "../util.js";
+import { useApp, Campo, Texto, Modal, Abas, Vazio, FiltroVencimento, noVencimento } from "../ui.js";
+import { reais, fmtData, fmtDataHora, hojeISO, arred, soDig, norm, numOS, linkWhats, fmtDoc, lsGet, lsSet } from "../util.js";
 import { codigoBarras, linhaDigitavel, linhaFmt, nossoNumero, nossoNumeroFmt, conferirCarteira, conferirBoleto, montarRemessa, nomeRemessa,
   lerRetorno, ehLiquidacao, pixCopiaCola, textoCnab } from "../cnab.js";
 import { pdfBoletos, nomePdf, codigoBeneficiario, ESPECIES } from "../boletopdf.js";
@@ -55,11 +55,15 @@ const empresa = cfg => ({ nome: cfg.nome, cnpj: cfg.cnpj, endereco: cfg.endereco
 export const msgBoleto = (b, cfg) => `Olá, ${(b.pagador_nome || "").split(" ")[0]}! Aqui é da ${cfg.nome}.\n\nSegue o boleto ${b.descricao ? "(" + b.descricao + ") " : ""}no valor de *${reais(b.valor)}* com vencimento em *${fmtData(b.vencimento)}*.\n\n` +
   `Linha digitável:\n${linhaFmt(b.linha_digitavel)}` + (b.qr_url ? `\n\nOu pague com Pix (copia e cola):\n${emvDoBoleto(b, cfg)}` : "") + `\n\nQualquer dúvida, estamos à disposição.`;
 
+const LS_VENC_BOL = "dtcar-boletos-venc";
 export function Boletos() {
   const { dados, cfg, perfil, avisar, confirmar, recarregar, ir } = useApp();
   const [aba, setAba] = useState("emitir"), [boletos, setBoletos] = useState(null), [arquivos, setArquivos] = useState([]), [erro, setErro] = useState("");
   const [nfs, setNfs] = useState({});
   const [marcadas, setMarcadas] = useState({}), [ocupado, setOcupado] = useState(""), [resultado, setResultado] = useState(null), [ajustes, setAjustes] = useState(false), [q, setQ] = useState("");
+  // filtro por data de vencimento dos boletos, guardado no aparelho (pedido do Danilo em 25/11/2026)
+  const [venc, setVenc] = useState(() => lsGet(LS_VENC_BOL) || { venc: "", de: "", ate: "" });
+  const mudaVenc = v => { setVenc(v); lsSet(LS_VENC_BOL, v); };
   const cob = carteira(cfg), faltaCarteira = faltaNaCarteira(cob), porApi = cob.modo === "api";
   const ler = async () => { try { const [b, a] = await Promise.all([api.boletos.listar(), api.boletos.arquivos.listar().catch(() => [])]); setBoletos(b); setArquivos(a); } catch (e) { setErro(e.message); } };
   useEffect(() => { recarregar(["receber", "clientes"]); ler(); }, []);
@@ -246,7 +250,8 @@ export function Boletos() {
   };
   const tel = b => { const c = dados.clientes.find(x => x.id === b.cliente_id); return (c && c.telefone) || ""; };
 
-  const lista = (boletos || []).filter(b => !q || norm(b.pagador_nome).includes(norm(q)) || String(b.os_numero).includes(q) || b.nosso_numero.includes(soDig(q)));
+  const lista = (boletos || []).filter(b => noVencimento(b.vencimento, venc))
+    .filter(b => !q || norm(b.pagador_nome).includes(norm(q)) || String(b.os_numero).includes(q) || b.nosso_numero.includes(soDig(q)));
   const grupos = { abertos: lista.filter(b => ATIVOS.includes(b.situacao)), pagos: lista.filter(b => b.situacao === "pago"), outros: lista.filter(b => ["rejeitado", "baixado"].includes(b.situacao)) };
   const soma = l => l.reduce((s, b) => s + Number(b.valor), 0);
   const liberarReserva = async b => {
@@ -309,7 +314,9 @@ export function Boletos() {
             ${a.tipo === "remessa" ? html`<span class="rec-acoes"><button type="button" class="btn btn-sm" onClick=${async () => { const x = await api.boletos.arquivos.um(a.id); baixar(x.nome, x.conteudo); }}>Baixar de novo</button></span>` : null}</div>`)}</div>`
           : html`<${Vazio}>Nenhum arquivo ainda.</${Vazio}>`}
       </div>` : html`<div>
-        <div class="fin-sel" style=${{ margin: "12px 0" }}><label class="filtro fin-busca"><span>Buscar</span><input class="inp" type="search" placeholder="Cliente, O.S. ou nosso número" value=${q} onInput=${e => setQ(e.target.value)} /></label></div>
+        <div class="fin-sel" style=${{ margin: "12px 0" }}><label class="filtro fin-busca"><span>Buscar</span><input class="inp" type="search" placeholder="Cliente, O.S. ou nosso número" value=${q} onInput=${e => setQ(e.target.value)} /></label>
+          <${FiltroVencimento} id="bol-venc" valor=${venc} onMuda=${mudaVenc} /></div>
+        ${venc.venc ? html`<p class="sub" id="bol-venc-resumo">${grupos[aba].length} boleto(s) no filtro de vencimento · ${reais(soma(grupos[aba]))}</p>` : null}
         ${!boletos ? html`<div class="esqueleto"></div>` : grupos[aba].length ? html`<div class="lista">${grupos[aba].map(linhaBoleto)}</div>` : html`<${Vazio}>Nenhum boleto aqui.</${Vazio}>`}
       </div>`}
     </section>

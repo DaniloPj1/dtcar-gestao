@@ -1131,6 +1131,12 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 /* ---------- Contas a pagar: filtros ---------- */
 .fin-filtros{display:flex;flex-direction:column;gap:10px;margin:12px 0}
 .fin-periodo,.fin-sel{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end}
+/* filtro por data de vencimento: o mesmo em contas a pagar, contas a receber e boletos (pedido do Danilo em 25/11/2026) */
+.filtro-venc{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap}
+.filtro-venc .inp{height:38px;padding:0 8px}
+.filtro-venc-faixa{font-size:12.5px;color:var(--muted);padding-bottom:9px;white-space:nowrap}
+.fin-venc{margin-bottom:4px}
+@media (max-width:640px){.filtro-venc{width:100%}.filtro-venc label{flex:1 1 140px}}
 .filtro{display:flex;flex-direction:column;gap:3px;min-width:150px;flex:1 1 150px}
 .filtro>span{font-size:12px;font-weight:600;color:var(--muted)}
 .filtro .inp{min-height:38px}

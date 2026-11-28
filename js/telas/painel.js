@@ -6,7 +6,7 @@ import { useApp, Placa, Status, Vazio, I, useVisao, TrocaVisao } from "../ui.js"
 import { reais, numOS, tempoDesde, fmtData, hojeISO, norm, normPlaca, soDig, lsGet, lsSet, fmtTel, exPlaca, linkWhats } from "../util.js";
 import { STATUS, ABERTOS, ETAPAS, etapaOS, situacaoOS, pode } from "../regras.js";
 import { LS_NOVA } from "./entrada.js";
-import { ClimaJanela, NoticiasJanela, AtalhosJanela } from "./casa.js";
+import { ClimaJanela, NoticiasJanela, MoedasJanela, EmailsJanela, AtalhosJanela } from "./casa.js";
 import { PreviaOS } from "./previaos.js";
 const temPainelLado = () => typeof matchMedia === "function" && matchMedia("(min-width: 1100px)").matches;
 import { ResultadoMes, FluxoCaixaMes, AnalisePeriodo, CategoriasGasto, SubcategoriasGasto, PecasPorFornecedor } from "./painelnum.js";
@@ -72,7 +72,9 @@ export const JANELAS = {
   acoes: { t: "Ações do dia a dia", tam: 12 },
   atalhos: { t: "Atalhos", tam: 12 },
   clima: { t: "Previsão do tempo — Colatina/ES", tam: 4 },
-  noticias: { t: "Notícias do Espírito Santo", tam: 8 },
+  noticias: { t: "Notícias — cidade, estado e país", tam: 8 },
+  moedas: { t: "Dólar e outras moedas", tam: 4 },
+  emails: { t: "E-mails recebidos", tam: 4 },
   resultado: { t: "Resultado do mês · regime de competência", tam: 12, valores: true, fin: true, obs: "O.S. entregues e balcão" },
   caixames: { t: "Fluxo de caixa · regime de caixa", tam: 12, valores: true, fin: true, obs: "o que entrou e saiu no mês" },
   analise: { t: "Análise no período · regime de caixa", tam: 12, valores: true, fin: true, obs: "mês a mês" },
@@ -97,7 +99,7 @@ export const JANELAS = {
   aniversarios: { t: "Aniversariantes do mês", tam: 3, valores: true },
   contas: { t: "Contas a pagar", tam: 12, valores: true, fin: true },
 };
-export const LAYOUT_PADRAO = [["clima", 4], ["noticias", 8], ["busca", 12], ["acoes", 12], ["atalhos", 12], ["hoje", 7], ["patio", 5], ["resultado", 12], ["caixames", 12], ["analise", 12], ["gastos", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
+export const LAYOUT_PADRAO = [["clima", 4], ["noticias", 8], ["moedas", 4], ["emails", 4], ["busca", 12], ["acoes", 12], ["atalhos", 12], ["hoje", 7], ["patio", 5], ["resultado", 12], ["caixames", 12], ["analise", 12], ["gastos", 12], ["agenda", 12], ["contas", 12], ["alertas", 8], ["estoque", 4], ["quadro", 12], ["indicadores", 12], ["grafico", 8], ["composicao", 4],
   ["servicos", 4], ["pecas", 4], ["formas", 4], ["manutencao", 6], ["recuperar", 3], ["aniversarios", 3]].map(([k, tam]) => ({ k, tam }));
 const TAMANHOS = [[3, "¼"], [4, "⅓"], [6, "½"], [8, "⅔"], [12, "Inteira"]];
 
@@ -214,6 +216,11 @@ export function Painel() {
     if (novas.length) { const i = salvo.findIndex(j => j.k === "atalhos"); const em = i < 0 ? salvo.length : i + 1;
       salvo = [...salvo.slice(0, em), ...novas, ...salvo.slice(em)]; }
   }
+  // janelas novas da versão 10 (dólar e e-mails no painel, pedido do Danilo em 25/11/2026): entram uma vez, ao lado do clima
+  if (!cfg.painelV10) {
+    const falta = [["moedas", 4], ["emails", 4]].filter(([k]) => !salvo.some(j => j.k === k)).map(([k, tam]) => ({ k, tam }));
+    if (falta.length) { const i = Math.max(0, salvo.findIndex(j => j.k === "noticias")); salvo = [...salvo.slice(0, i + 1), ...falta, ...salvo.slice(i + 1)]; }
+  }
   // janelas novas da versão 8 (atalhos, notícias e previsão do tempo, pedido do Danilo em 22/11/2026): entram uma vez
   if (!cfg.painelV8) {
     if (!salvo.some(j => j.k === "atalhos")) { const i = Math.max(0, salvo.findIndex(j => j.k === "acoes")); salvo = [...salvo.slice(0, i + 1), { k: "atalhos", tam: 12 }, ...salvo.slice(i + 1)]; }
@@ -292,6 +299,8 @@ export function Painel() {
     atalhos: () => html`<${AtalhosJanela} />`,
     clima: () => html`<${ClimaJanela} />`,
     noticias: () => html`<${NoticiasJanela} />`,
+    moedas: () => html`<${MoedasJanela} />`,
+    emails: () => html`<${EmailsJanela} />`,
     resultado: () => html`<${ResultadoMes} />`,
     caixames: () => html`<${FluxoCaixaMes} />`,
     analise: () => html`<${AnalisePeriodo} />`,
@@ -356,7 +365,7 @@ export function Painel() {
   const mover = (i, d) => setRascunho(l => { const n = [...l], j = i + d; if (j < 0 || j >= n.length) return l; [n[i], n[j]] = [n[j], n[i]]; return n; });
   const soltar = (alvo) => { if (arrastando === null || arrastando === alvo) return; setRascunho(l => { const n = [...l]; const [x] = n.splice(arrastando, 1); n.splice(alvo, 0, x); return n; }); setArrastando(null); };
   const salvarLayout = async () => { setSalvando(true);
-    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true, painelV7: true, painelV8: true, painelV9: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
+    try { await api.salvarConfig({ ...cfg, painel: rascunho, painelV5: true, painelV6: true, painelV7: true, painelV8: true, painelV9: true, painelV10: true }); await recarregar(["config"]); setEditar(false); avisar("Painel salvo para toda a equipe."); } catch (e) { avisar(e.message, true); } finally { setSalvando(false); } };
   const restaurar = async () => { if (await confirmar({ titulo: "Restaurar painel padrão", texto: "As janelas voltam para a organização original.", botao: "Restaurar" })) setRascunho(LAYOUT_PADRAO.map(j => ({ ...j }))); };
   const ocultas = Object.keys(JANELAS).filter(k => !(rascunho || []).some(j => j.k === k));
 
@@ -379,7 +388,7 @@ export function Painel() {
       ${ocultas.length ? html`<div class="chips adicionar-janela"><span class="sub">Adicionar janela:</span>${ocultas.map(k => html`<button type="button" key=${k} class="chip-f" onClick=${() => setRascunho(l => [...l, { k, tam: JANELAS[k].tam }])}>+ ${JANELAS[k].t}</button>`)}</div>` : null}
     </div>` : null}
     <div class=${"grade-painel" + (editar ? " editando" : "")}>
-      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "acoes", "atalhos", "patio", "clima", "noticias"].includes(j.k) && !editar;
+      ${visiveis.map((j, i) => { const def = JANELAS[j.k], idx = layout.indexOf(j); const semTitulo = ["busca", "acoes", "atalhos", "patio", "clima", "noticias", "moedas", "emails"].includes(j.k) && !editar;
         return html`<section key=${j.k} class=${"janela t" + j.tam + " j-" + j.k + (semTitulo ? " sem-moldura" : "") + (arrastando === idx ? " arrastando" : "")} style=${{ "--tam": j.tam }}
           draggable=${editar ? "true" : "false"} onDragStart=${e => { setArrastando(idx); e.dataTransfer.effectAllowed = "move"; }} onDragOver=${e => editar && e.preventDefault()} onDrop=${e => { e.preventDefault(); soltar(idx); }} onDragEnd=${() => setArrastando(null)}
           aria-label=${def.t}>

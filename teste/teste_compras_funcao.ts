@@ -133,6 +133,16 @@ confere("carrinho do portal DPK: sem código interno, recusa com orientação", 
 }
 rc = await F.executar({ acao: "carrinho_portal", conexao: "c-rol", item: { codigo: "FCD2158/1", descricao: "x", marca: "WEGA", qtd: 1, preco: 1 } }, deps()) as L;
 confere("carrinho do portal Rolemar: ainda não pronto, aviso claro", rc.ok === false && /ainda não está pronto/.test(rc.erro));
+{ // tirar do carrinho do portal (item 1.9 do pedido de 25/11/2026): remover no sistema tira no fornecedor também
+  const antes = dpkPosts.length;
+  rc = await F.executar({ acao: "carrinho_portal_tirar", conexao: "c-dpk", item: { codigo: "WK84213" } }, deps(), "49016409000195") as L;
+  confere("tirar do carrinho da DPK: grava o carrinho sem a peça", rc.ok === true && dpkPosts.length === antes + 1 && !dpkPosts[antes].cartItems.some((i: L) => String(i.code) === "WK84213") && /Tirada também do carrinho da DPK/.test(rc.detalhe), JSON.stringify(rc) + JSON.stringify(dpkPosts[antes]));
+  rc = await F.executar({ acao: "carrinho_portal_tirar", conexao: "c-dpk", item: { codigo: "NAOTEM999" } }, deps(), "49016409000195") as L;
+  confere("tirar do carrinho da DPK: peça que não estava lá não vira erro", rc.ok === true && /já não estava/.test(rc.detalhe) && dpkPosts.length === antes + 1, JSON.stringify(rc));
+  const f = (async (u: string | URL | Request, i?: RequestInit) => String(u) === F.DPK.api + "/dpk-order/api/cart/getByFilter" ? new Response("erro", { status: 500 }) : fakeFetch(u, i)) as typeof fetch;
+  rc = await F.executar({ acao: "carrinho_portal_tirar", conexao: "c-dpk", item: { codigo: "WK84213" } }, { ...deps(), fetch: f }) as L;
+  confere("tirar do carrinho da DPK: leitura falhou → não grava e manda tirar no portal", rc.ok === false && /tire a peça lá no portal/.test(rc.erro), JSON.stringify(rc));
+}
 try { await F.executar({ acao: "carrinho_portal", conexao: "c-dpk", item: { codigo: "WK84213" } }, deps({ gestor: false, admin: false })); confere("carrinho do portal: mecânico não", false); } catch (e) { confere("carrinho do portal: mecânico não", e instanceof F.ErroUso); }
 
 // ---------- placa pelo portal (grátis)
@@ -341,6 +351,15 @@ confere("sem placa: busca sem filtro do carro", rc.resultados[0].ofertas.length 
   dpkBuscas.length = 0;
   x = await F.executar({ termos: ["pastilha"], placa: "AAA1A11", veiculo: "FIAT TORO 2.0 TURBO DIESEL 2020", conexoes: ["c-dpk"] }, deps()) as L;
   confere("mesma placa, agora com o texto do carro: reavalia e filtra pela Toro", /TORO/.test(x.resultados[0].veiculo || "") && /VehicleId=2420/.test(dpkBuscas.find((u) => /Query=pastilha/.test(u)) || ""), JSON.stringify(x.resultados[0]).slice(0, 200)); }
+
+{ // foto da DPK (item 1.4 do pedido de 25/11/2026): o portal manda o nome em campos diferentes, às vezes com pasta ou espaço
+  const caso = (p: L) => F.dpkLerBusca({ products: [{ id: 1, sapCode: "1", code: "WK84213", description: "FILTRO", manufacturer: "MANN", ...p }] })[0].foto;
+  confere("foto DPK: nome simples vai para o CDN", caso({ image: "MANN_WK84213.jpg" }) === "https://cdn-superk.azureedge.net/img/MANN_WK84213.jpg");
+  confere("foto DPK: endereço completo é aproveitado", caso({ image: "https://outro.cdn.com.br/x/y.png" }) === "https://outro.cdn.com.br/x/y.png");
+  confere("foto DPK: nome com pasta e com espaço também acha a foto", caso({ imageUrl: "mann/WK 84213.jpg" }) === "https://cdn-superk.azureedge.net/img/mann/WK%2084213.jpg", caso({ imageUrl: "mann/WK 84213.jpg" }));
+  confere("foto DPK: outros nomes de campo do portal", caso({ urlImage: "a.jpg" }) !== "" && caso({ thumbnail: "b.png" }) !== "" && caso({ images: [{ url: "c.webp" }] }) !== "");
+  confere("foto DPK: endereço sem https e valor que não é imagem ficam de fora", caso({ image: "http://inseguro.com/x.jpg" }).startsWith("https://") && caso({ image: "sem-extensao" }) === "" && caso({ image: "javascript:alert(1)" }) === "");
+}
 
 // ---------- o código-fonte não tem senha nem chave
 const fonte = await Deno.readTextFile(new URL("../supabase/functions/compras/index.ts", import.meta.url));

@@ -1811,6 +1811,34 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
 .cot-car-total{display:flex;justify-content:space-between;font-size:17px;font-weight:700}
 @media (max-width:1199px){.cot{grid-template-columns:1fr}.cot-carrinho{position:static}}
 @media (min-width:641px) and (max-width:1199px){.cot-carrinho{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;column-gap:16px}.cot-carrinho h3,.cot-carrinho .cot-car-forn,.cot-carrinho .cot-car-total{grid-column:1 / -1}.cot-carrinho .dica{grid-column:1}.cot-carrinho #cot-gerar{grid-column:2;grid-row:span 1}}
+/* quadro por produto: o MESMO produto de fornecedores diferentes lado a lado (pedido do Danilo em 25/11/2026).
+   O nome do produto é sempre escrito, nunca só a cor, e a faixa de preço do quadro fica ao lado para ele ver na hora
+   se vale comparar. Cor chapada, sem gradiente, e as cores vêm das variáveis: funciona no tema claro e no escuro. */
+.cot-grupo{border-top:1px solid var(--line)}.cot-grupo:first-of-type{border-top:0}
+.cot-grupo-topo{display:flex;justify-content:space-between;align-items:baseline;gap:10px;flex-wrap:wrap;padding:10px 16px 0}
+.cot-grupo-topo h4{margin:0;font-family:var(--f-display);font-size:18px;letter-spacing:.2px;color:var(--brand-strong)}
+.cot-grupo-topo .sub{margin:0;font-size:13px;white-space:nowrap}
+/* quantidade + Adicionar no próprio resultado: põe no carrinho na hora e a tela fica onde está */
+.cot-add{display:flex;align-items:flex-end;gap:6px;margin-top:auto}
+.cot-add .btn{flex:1 1 auto;justify-content:center;min-width:0}
+.cot-add-qtd{display:flex;flex-direction:column;gap:2px;flex:0 0 58px}
+.cot-add-qtd span{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.3px}
+.cot-add-qtd .inp{height:38px;padding:0 6px;text-align:center;font-size:15px}
+.cot-mais{flex:0 0 auto;padding:0 10px;white-space:nowrap}
+/* faixa de preço: filtro de "de" a "até", junto dos outros filtros do resultado */
+.cot-faixa{display:flex;align-items:center;gap:6px;font-size:14px;color:var(--muted)}
+.cot-faixa .inp{width:84px;max-width:84px;height:38px;padding:0 8px;text-align:right}
+/* o que a oficina já tem na prateleira: aparece antes dos fornecedores, para não comprar o que está aqui */
+.cot-estoque h3{display:flex;align-items:center;gap:8px;margin:0}
+.cot-estoque h3 svg{width:20px;height:20px}
+.cot-est-lista{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.cot-est-item{display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:4px 14px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.cot-est-item:last-child{border-bottom:0}
+.cot-est-desc{display:flex;flex-direction:column;min-width:0}.cot-est-desc b{font-size:15px;overflow-wrap:anywhere}
+.cot-est-desc small{color:var(--muted);font-size:12px;overflow-wrap:anywhere}
+.cot-est-saldo{font-family:var(--f-display);font-size:19px;color:var(--ok);white-space:nowrap}
+.cot-est-preco{font-size:13px;color:var(--muted);white-space:nowrap}
+
 /* consulta ao vivo (etapa 2): estado da última consulta e botões da conexão em Ajustes */
 .cp-vivo-estado{display:block;margin:0 0 6px;font-weight:500}
 .cp-vivo-livre{margin-top:8px;align-items:center;flex-wrap:wrap}
@@ -1822,6 +1850,11 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .cot-cards{grid-template-columns:1fr 1fr;gap:10px;padding:10px}.cot-card{padding:10px}.cot-card-foto{height:96px}
   .cot-linha{grid-template-columns:48px minmax(0,1fr)}.cot-l-foto{width:48px;height:40px}.cot-l-preco{grid-column:2;align-items:flex-start}.cot-l-acao{grid-column:1 / -1}.cot-l-acao .btn{width:100%}
   .cot-consultar{flex:1 1 100%}.cot-topo{padding:10px}
+  .cot-grupo-topo{padding:10px 10px 0}.cot-grupo-topo h4{font-size:17px}
+  .cot-faixa{flex:1 1 100%}.cot-faixa .inp{flex:1 1 auto;width:auto;max-width:none}
+  .cot-add{flex-wrap:wrap}.cot-add .btn{flex:1 1 100%}.cot-add-qtd{flex:0 0 64px}.cot-mais{flex:1 1 auto}
+  .cot-card-forn{flex-wrap:wrap}.cot-card-forn .cp-selo-menor{white-space:nowrap}
+  .cot-est-item{grid-template-columns:minmax(0,1fr) auto}.cot-est-preco{grid-column:2}
   .cp-item{grid-template-columns:64px minmax(0,1fr)}.cp-item .pv-botoes{grid-column:1 / -1;flex-direction:row}.cp-item .pv-botoes .btn{flex:1}
   .cp-oferta{grid-template-columns:minmax(0,1fr) auto}.cp-of-cod,.cp-of-est,.cp-of-origem{grid-column:1 / -1}.cp-of-acao{grid-column:1 / -1;text-align:left}.cp-of-acao .btn{width:100%}
   .cp-item-car{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cp-ic-desc{grid-column:1 / -1}.cp-ic-total,.cp-tirar{grid-column:auto}

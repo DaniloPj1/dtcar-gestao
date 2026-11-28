@@ -63,7 +63,7 @@ def rodar(b, nome, w, h):
   linhas = pg.locator(".cot-card")
   chk(T("tabela: DPK ao vivo (4 un) e AutoPeças informado (5 un), do mais barato para o mais caro; sem estoque fica de fora"), linhas.count() == 2 and linhas.nth(0).get_attribute("data-forn") == "DPK DISTRIBUIDORA" and "150,00" in linhas.nth(0).inner_text() and "4 un" in linhas.nth(0).inner_text()
       and linhas.nth(1).get_attribute("data-forn") == "AutoPeças" and "189,90" in linhas.nth(1).inner_text() and "NKF8288" not in pg.inner_text(".cot-resultado") and "1 sem estoque não aparece" in pg.inner_text(".cot-resultado"), pg.inner_text(".cot-resultado")[:600])
-  chk(T("menor preço na DPK; origem ao vivo com hora e informado com data"), linhas.nth(0).locator(".cp-selo-menor").count() == 1 and "ao vivo" in linhas.nth(0).inner_text() and "informado" in linhas.nth(1).inner_text())
+  chk(T("menor preço na DPK; origem ao vivo com hora e informado com data"), pg.locator(".cp-selo-menor").count() >= 1 and linhas.nth(0).locator(".cp-selo-menor").count() == 1 and "ao vivo" in linhas.nth(0).inner_text() and "informado" in linhas.nth(1).inner_text())
   chk(T("cards no estilo da DPK: foto, fabricante, cód. de fábrica, estoque em verde e Adicionar; cor por fornecedor"), "Fabricante: PERFECT" in linhas.nth(0).inner_text() and "Cód. de fábrica: CDRD0314" in linhas.nth(0).inner_text() and linhas.nth(0).locator(".cot-card-foto").count() == 1
       and linhas.nth(0).locator("button:has-text('Adicionar')").count() == 1 and linhas.nth(0).get_attribute("style") != linhas.nth(1).get_attribute("style"), linhas.nth(0).inner_text()[:300])
   pg.select_option("#cot-marca-filtro", "PERFECT"); pg.wait_for_timeout(200)
@@ -79,38 +79,87 @@ def rodar(b, nome, w, h):
   pg.click("#cot-ver-cards"); pg.click(".cot-tamanho button:has-text('Médio')"); pg.wait_for_timeout(300)
   chk(T("sem rolagem lateral"), pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
   pg.screenshot(path=os.path.join(TMP, "compras_fornecedores_" + nome + ".png"))
-  pg.evaluate("window.__AOVIVO_RESPOSTA = null")
-  # 3. carrinho: DPK (menor) e AutoPeças
-  linhas.nth(0).locator(".cp-add").click(); pg.wait_for_timeout(300)
-  chk(T("Pôr no carrinho: quantidade, O.S. e placa já preenchida; caixa 'também no carrinho do portal' marcada para o preço ao vivo"), pg.locator("#cp-add-qtd").count() == 1 and pg.input_value("#cp-add-placa") == "ONX2A20" and pg.locator("#cp-add-portal input").is_checked())
-  pg.evaluate("window.__AOVIVO_RESPOSTA = { ok: true, robo: 'dpk', detalhe: 'No carrinho da DPK: 2 x CDRD0314.' }")
-  pg.fill("#cp-add-qtd", "2"); pg.fill("#cp-add-os", "1950"); pg.click("#cp-add-continuar"); pg.wait_for_timeout(500)
+  # 2-B. mesclar os fornecedores: o MESMO produto lado a lado, por modelo (pedido do Danilo em 25/11/2026)
+  pg.evaluate("""window.__AOVIVO_RESPOSTA = { ok: true, em: new Date().toISOString(), resultados: [
+    { conexao: 'cx-dpk', fornecedor_id: 'f2', ok: true, ofertas: [
+      { codigo: 'AMD100', marca: 'COFAP', descricao: 'AMORTECEDOR DIANTEIRO ESQUERDO', preco: 210, estoque: 2, prazo: '' },
+      { codigo: 'AMT200', marca: 'COFAP', descricao: 'AMORTECEDOR TRASEIRO', preco: 150, estoque: 4, prazo: '' },
+      { codigo: 'KIT300', marca: 'NAKATA', descricao: 'KIT AMORTECEDOR DIANTEIRO (PAR)', preco: 390, estoque: 1, prazo: '' } ] },
+    { conexao: 'cx-r', fornecedor_id: 'f1', ok: true, ofertas: [
+      { codigo: 'AMD900', marca: 'MONROE', descricao: 'Amortecedores dianteiros esquerdo', preco: 198, estoque: 5, prazo: '' },
+      { codigo: 'AMT900', marca: 'MONROE', descricao: 'AMORTECEDOR TRAS.', preco: 142, estoque: 3, prazo: '' } ] } ] }""")
+  pg.fill("#cot-txt", "amortecedor"); pg.click("#cot-consultar"); pg.wait_for_timeout(1000)
+  grupos = pg.locator(".cot-grupo")
+  chk(T("mescla os fornecedores: um quadro por produto (dianteiro, traseiro, kit), com o nome escrito"), grupos.count() == 3
+      and grupos.nth(0).get_attribute("data-produto") == "Amortecedor dianteiro esquerdo" and grupos.nth(1).get_attribute("data-produto") == "Amortecedor traseiro"
+      and "Kit" in (grupos.nth(2).get_attribute("data-produto") or ""), [grupos.nth(i).get_attribute("data-produto") for i in range(grupos.count())])
+  chk(T("o selo 'menor preço' é por produto: compara amortecedor com amortecedor, não com o filtro"), grupos.nth(0).locator(".cp-selo-menor").count() == 1
+      and grupos.nth(0).locator('.cot-card[data-forn="AutoPeças"] .cp-selo-menor').count() == 1 and grupos.nth(1).locator(".cp-selo-menor").count() == 1, pg.inner_text(".cot-resultado")[:200])
+  chk(T("dentro do quadro os fornecedores ficam lado a lado, do mais barato para o mais caro"), grupos.nth(0).locator(".cot-card").count() == 2
+      and grupos.nth(0).locator(".cot-card").nth(0).get_attribute("data-forn") == "AutoPeças" and grupos.nth(0).locator(".cot-card").nth(1).get_attribute("data-forn") == "DPK DISTRIBUIDORA"
+      and "2 fornecedores" in grupos.nth(0).inner_text() and "198,00" in grupos.nth(0).inner_text() and "210,00" in grupos.nth(0).inner_text(), grupos.nth(0).inner_text()[:300])
+  chk(T("estoque da oficina: a peça que já está na prateleira aparece antes dos fornecedores, com o saldo"), pg.locator("#cot-estoque").count() == 1
+      and "AMORTECEDOR DIANT TOYOTA HILUX" in pg.inner_text("#cot-estoque") and "4 UN" in pg.inner_text("#cot-estoque") and "890,00" in pg.inner_text("#cot-estoque"), pg.inner_text("#cot-estoque")[:250])
+  pg.screenshot(path=os.path.join(TMP, "compras_mesclado_" + nome + ".png"), full_page=True)
+  # filtro de preço (item 1.8)
+  pg.fill("#cot-preco-de", "150"); pg.fill("#cot-preco-ate", "200"); pg.wait_for_timeout(300)
+  chk(T("filtro de preço: só o que está na faixa, e a tela diz quantos ficaram fora"), pg.locator(".cot-card").count() == 2 and "fora da faixa de preço" in pg.inner_text("#cot-res-info"), pg.inner_text("#cot-res-info"))
+  pg.click("#cot-preco-limpar"); pg.wait_for_timeout(300)
+  chk(T("limpar a faixa volta todos os resultados"), pg.locator(".cot-card").count() == 5)
+  chk(T("peça sem saldo não entra no quadro do estoque"), "PASTILHA DE FREIO DIANT" not in pg.inner_text(".cot"), pg.inner_text("#cot-estoque")[:200])
+  # 3. carrinho: Adicionar põe na hora e a tela fica onde está (itens 1.1 e 1.2)
+  pg.evaluate("window.__AOVIVO_RESPOSTA = { ok: true, robo: 'dpk', detalhe: 'No carrinho da DPK: 2 x AMT200.' }")
+  alvo = grupos.nth(1).locator('.cot-card[data-forn="DPK DISTRIBUIDORA"]')
+  alvo.locator(".cot-add-qtd input").fill("2"); alvo.locator(".cp-add").click(); pg.wait_for_timeout(700)
   cp = pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1]")
-  chk(T("Adicionar: o item vai também para o carrinho do portal (função carrinho_portal com os códigos internos) e o aviso diz"), cp["acao"] == "carrinho_portal" and cp["conexao"] == "cx-dpk" and cp["item"]["codigo"] == "CDRD0314" and cp["item"]["qtd"] == 2 and "carrinho da DPK" in pg.inner_text("body"), cp)
+  chk(T("Adicionar: põe no carrinho na hora, sem quadro, e vai junto para o carrinho do portal"), cp["acao"] == "carrinho_portal" and cp["conexao"] == "cx-dpk"
+      and cp["item"]["codigo"] == "AMT200" and cp["item"]["qtd"] == 2 and "carrinho da DPK" in pg.inner_text("body") and pg.locator("[role=dialog]").count() == 0, cp)
+  chk(T("a tela continua nos resultados da pesquisa, para seguir adicionando"), pg.locator(".cot-grupo").count() == 3 and pg.input_value("#cot-txt") == "amortecedor"
+      and "Carrinho (1)" in pg.inner_text(".abas") and "300,00" in pg.inner_text("#cot-carrinho"), pg.inner_text("#cot-carrinho")[:200])
   pg.evaluate("window.__AOVIVO_RESPOSTA = null")
-  chk(T("Pôr e continuar: segue na aba Fornecedores, carrinho com 1 na aba e no resumo ao lado"), pg.locator("#cot-txt").count() == 1 and "Carrinho (1)" in pg.inner_text(".abas") and "300,00" in pg.inner_text("#cot-carrinho"))
-  pg.locator(".cot-card").nth(1).locator(".cp-add").click(); pg.wait_for_timeout(300)
-  chk(T("preço informado (não ao vivo): sem a caixa do carrinho do portal"), pg.locator("#cp-add-portal").count() == 0)
-  pg.fill("#cp-add-qtd", "3"); pg.fill("#cp-add-os", "1950"); pg.click("#cp-add-ir"); pg.wait_for_timeout(600)
-  chk(T("Pôr e ver o carrinho: dois fornecedores, totais certos"), pg.locator(".cp-forn").count() == 2 and "569,70" in pg.locator('.cp-forn[data-forn="AutoPeças"]').inner_text() and "300,00" in pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"]').inner_text() and "869,70" in pg.inner_text("#cp-total"), pg.inner_text(".cp-carrinho")[:400])
+  outro = grupos.nth(1).locator('.cot-card[data-forn="AutoPeças"]')
+  outro.locator(".cot-add-qtd input").fill("3"); outro.locator(".cp-add").click(); pg.wait_for_timeout(700)
+  chk(T("segundo fornecedor no carrinho, ainda sem sair dos resultados"), "Carrinho (2)" in pg.inner_text(".abas") and pg.locator(".cot-grupo").count() == 3)
+  # o quadro com O.S. e placa continua, agora no botão "O.S.…"
+  alvo.locator(".cot-mais").click(); pg.wait_for_timeout(400)
+  chk(T("botão O.S.…: quadro com quantidade, O.S. e placa já preenchida"), pg.locator("#cp-add-qtd").count() == 1 and pg.input_value("#cp-add-placa") == "ONX2A20" and pg.locator("#cp-add-portal input").is_checked())
+  pg.fill("#cp-add-os", "1950"); pg.click("#cp-add-continuar"); pg.wait_for_timeout(700)
+  chk(T("pôr com O.S. também segue na aba Fornecedores"), pg.locator("#cot-txt").count() == 1 and "Carrinho (3)" in pg.inner_text(".abas") and "O.S." not in pg.inner_text("#cot-carrinho"))
+  pg.click(".abas button:has-text('Carrinho')"); pg.wait_for_timeout(600)
+  chk(T("carrinho: dois fornecedores, totais certos"), pg.locator(".cp-forn").count() == 2 and "426,00" in pg.locator('.cp-forn[data-forn="AutoPeças"]').inner_text() and "450,00" in pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"]').inner_text(), pg.inner_text(".cp-carrinho")[:400])
+  # tirar do carrinho: sem justificar e tirando também do portal (item 1.9)
+  pg.evaluate("window.__AOVIVO_RESPOSTA = { ok: true, robo: 'dpk', detalhe: 'Tirada também do carrinho da DPK.' }")
+  n_antes = pg.evaluate("window.__DB.compras_carrinho.length")
+  pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"] .cp-item-car').nth(0).locator(".cp-tirar").click(); pg.wait_for_timeout(700)
+  cp = pg.evaluate("window.__AOVIVO[window.__AOVIVO.length - 1]")
+  chk(T("tirar do carrinho: exclui na hora, sem pedir motivo, e tira também no carrinho do portal"), pg.evaluate("window.__DB.compras_carrinho.length") == n_antes - 1
+      and pg.locator("[role=dialog]").count() == 0 and cp["acao"] == "carrinho_portal_tirar" and cp["item"]["codigo"] == "AMT200" and "carrinho da DPK" in pg.inner_text("body"), cp)
+  pg.evaluate("window.__AOVIVO_RESPOSTA = null")
+  pg.click(".abas button:has-text('Fornecedores')"); pg.wait_for_timeout(500)
+  pg.evaluate("""window.__AOVIVO_RESPOSTA = { ok: true, em: new Date().toISOString(), resultados: [
+    { conexao: 'cx-dpk', fornecedor_id: 'f2', ok: true, ofertas: [{ codigo: 'CDRD0314', marca: 'PERFECT', descricao: 'CUBO DE RODA', preco: 150, estoque: 4, prazo: '' }] } ] }""")
+  pg.fill("#cot-txt", "CDRD0314"); pg.click("#cot-consultar"); pg.wait_for_timeout(1000)
+  pg.evaluate("window.__AOVIVO_RESPOSTA = null")
+  linhas = pg.locator(".cot-card")
+  pg.click(".abas button:has-text('Carrinho')"); pg.wait_for_timeout(600)
   chk(T("item do carrinho mostra O.S. e placa"), "O.S. 1950" in pg.inner_text(".cp-carrinho") and "ONX2A20" in pg.inner_text(".cp-carrinho"))
   pg.screenshot(path=os.path.join(TMP, "compras_carrinho_" + nome + ".png"))
   # mudar a quantidade recalcula
-  q = pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"] .cp-ic-qtd input'); q.fill("1"); q.press("Enter"); pg.wait_for_timeout(500)
-  chk(T("quantidade alterada: total do fornecedor e do carrinho"), "150,00" in pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"]').inner_text() and "719,70" in pg.inner_text("#cp-total"), pg.inner_text("#cp-total"))
+  q = pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"] .cp-ic-qtd input'); q.fill("2"); q.press("Enter"); pg.wait_for_timeout(500)
+  chk(T("quantidade alterada: total do fornecedor e do carrinho"), "300,00" in pg.locator('.cp-forn[data-forn="DPK DISTRIBUIDORA"]').inner_text() and "726,00" in pg.inner_text("#cp-total"), pg.inner_text("#cp-total"))
   chk(T("sem rolagem lateral no carrinho"), pg.evaluate("document.documentElement.scrollWidth <= window.innerWidth + 1"))
   # 4. gerar pedidos
   pg.click("#cp-gerar"); pg.wait_for_timeout(300)
   chk(T("confirma antes de gerar, dizendo os fornecedores"), "AutoPeças" in pg.inner_text("[role=dialog]") and "DPK" in pg.inner_text("[role=dialog]"))
   pg.click("[role=dialog] .btn-pri"); pg.wait_for_timeout(800)
   chk(T("dois pedidos a finalizar, um por fornecedor, carrinho vazio"), pg.locator(".cp-pedido").count() == 2 and "A finalizar no fornecedor" in pg.inner_text(".cp-pedidos") and pg.evaluate("window.__DB.compras_carrinho.length") == 0, pg.inner_text(".cp-pedidos")[:300])
-  chk(T("o pedido guarda os itens com O.S. e placa"), "O.S. 1950" in pg.locator(".cp-pedido:has-text('AutoPeças')").inner_text() and "569,70" in pg.locator(".cp-pedido:has-text('AutoPeças')").inner_text())
+  chk(T("o pedido guarda os itens com O.S. e placa"), "O.S. 1950" in pg.locator(".cp-pedido:has-text('DPK')").inner_text() and "426,00" in pg.locator(".cp-pedido:has-text('AutoPeças')").inner_text(), pg.inner_text(".cp-pedidos")[:400])
   chk(T("nada no estoque, O.S. ou financeiro"), pg.evaluate("window.__DB.produtos.length") == 4 and pg.evaluate("window.__DB.os_itens.filter(i => i.ordem_id === 'ox').length") == 0 and pg.evaluate("window.__DB.contas.length") == 4)
   pg.screenshot(path=os.path.join(TMP, "compras_pedidos_" + nome + ".png"))
   # texto do pedido no padrão das mensagens
   pg.locator(".cp-pedido:has-text('AutoPeças') .cp-texto").click(); pg.wait_for_timeout(300)
   txt = pg.input_value("#cp-texto-pedido")
-  chk(T("texto do pedido: saudação com Sr., itens em tópicos, assinatura e marca do sistema"), txt.startswith(("Bom dia, Sr. Joao!", "Boa tarde, Sr. Joao!", "Boa noite, Sr. Joao!")) and "• 3 x CUBO DE RODA" in txt and "DTCar Centro Automotivo" in txt and txt.endswith("*Mensagem gerada pelo sistema Gestão DTCar*"), txt)
+  chk(T("texto do pedido: saudação com Sr., itens em tópicos, assinatura e marca do sistema"), txt.startswith(("Bom dia, Sr. Joao!", "Boa tarde, Sr. Joao!", "Boa noite, Sr. Joao!")) and "• 3 x AMORTECEDOR TRAS." in txt and "DTCar Centro Automotivo" in txt and txt.endswith("*Mensagem gerada pelo sistema Gestão DTCar*"), txt)
   chk(T("fornecedor com telefone: botão Abrir no WhatsApp"), pg.locator("[role=dialog] a:has-text('Abrir no WhatsApp')").count() == 1 and "wa.me/5527988887777" in pg.locator("[role=dialog] a:has-text('Abrir no WhatsApp')").get_attribute("href"))
   pg.keyboard.press("Escape"); pg.wait_for_timeout(200)
   # voltar ao carrinho, finalizar e cancelar

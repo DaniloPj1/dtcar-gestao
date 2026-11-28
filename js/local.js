@@ -29,6 +29,11 @@ export const semTabelaComissao = e => !!e && (/PGRST205/i.test(e.code || "") || 
   || /could not find the table[^\n]*comiss/i.test(e.message || "")
   || /schema cache[^\n]*comiss|comiss[^\n]*schema cache/i.test(e.message || ""));
 
+/** banco sem o v66: servico_apontamentos ainda não tem as colunas do serviço iniciado pela placa (placa/avulso) e ordem_id
+ *  continua obrigatório — o PostgREST responde "column not found" (PGRST204) ou o Postgres recusa ordem_id nulo. */
+export const semV66 = e => !!e && (/PGRST204/i.test(e.code || "") || /(avulso|placa|veiculo_id)[^\n]*(schema cache|does not exist)|could not find the '(avulso|placa|veiculo_id)' column/i.test(e.message || "")
+  || /null value in column "ordem_id"|ordem_id[^\n]*not-null/i.test(e.message || ""));
+
 /** banco ainda sem o v60: a TABELA servico_apontamentos não existe. Duplicidade, permissão ou qualquer outro erro
  *  NÃO entram aqui — precisam chegar ao usuário como são (24/11/2026: a puxada de O.S. acusava "falta rodar o v60"
  *  quando na verdade o mecânico já tinha um apontamento aberto na O.S.). */

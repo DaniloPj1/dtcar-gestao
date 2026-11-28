@@ -247,6 +247,7 @@ ORCS = [{'id': 'orc1', 'numero': 5, 'situacao': 'enviado', 'cliente_id': 'c1', '
         {'id': 'orc2', 'numero': 6, 'situacao': 'aprovado', 'cliente_id': 'c1', 'veiculo_id': 'v1', 'cliente': {'nome': 'JOÃO DA SILVA'}, 'veiculo': {'placa': 'ABC1D23', 'marca': 'Volkswagen', 'modelo': 'GOL 1.0', 'ano': '2014/2015'}, 'reclamacao': 'Troca de óleo', 'obs_internas': 'Pedido pelo app — Fulano de Teste, 14/11/2026 09:00', 'consultor_id': UID, 'consultor_nome': 'Fulano de Teste', 'criado_em': '2026-11-14T12:00:00Z', 'atualizado_em': '2026-11-15T12:00:00Z', 'respondido_em': '2026-11-15T12:00:00Z', 'ordem_id': 'o2', 'os_numero': 1920, 'total': 300},
         {'id': 'orc3', 'numero': 7, 'situacao': 'aprovado', 'cliente': {'nome': 'OUTRO'}, 'veiculo': {'placa': 'QQQ1Q11'}, 'reclamacao': 'x', 'obs_internas': '', 'consultor_id': 'outra-pessoa', 'consultor_nome': 'Outra', 'criado_em': '2026-11-14T12:00:00Z', 'atualizado_em': '2026-11-15T12:00:00Z', 'ordem_id': 'o9', 'os_numero': 1999, 'total': 1}]
 class Fake:
+    sem_v66 = False   # banco sem o supabase/v66.sql (serviço sem O.S. ainda não ligado)
     def __init__(s, papel='admin', ativo=True, acessos=None): s.papel, s.ativo, s.pedidos, s.refresh, s.n = papel, ativo, [], 'r0', 0; s.gravados = []; s.acessos = acessos; s.eventos = []; s.apont = []; s.vistos = []; s.orcs = json.loads(json.dumps(ORCS)); s.funcao_pedido = []
     def instalar(s, pg):
         def resp(route, corpo, st=200): route.fulfill(status=st, content_type='application/json', body=json.dumps(corpo), headers={'access-control-allow-origin': '*', 'access-control-allow-headers': '*'})
@@ -288,7 +289,9 @@ class Fake:
             if '/rest/v1/servico_apontamentos' in u:
                 if rq.method == 'POST':
                     d = json.loads(rq.post_data or '{}'); s.gravados.append(('servico_apontamentos', d))
-                    if any(a['perfil_id'] == d['perfil_id'] and a['ordem_id'] == d['ordem_id'] and a['situacao'] != 'finalizado' for a in s.apont): return resp(route, {'code': '23505', 'message': 'duplicate key value violates unique constraint "servico_apontamentos_aberto"'}, 409)
+                    if d.get('avulso') and s.sem_v66: return resp(route, {'code': 'PGRST204', 'message': "Could not find the 'avulso' column of 'servico_apontamentos' in the schema cache"}, 400)
+                    if d.get('avulso') and any(a['perfil_id'] == d['perfil_id'] and not a.get('ordem_id') and a.get('placa') == d.get('placa') and a['situacao'] != 'finalizado' for a in s.apont): return resp(route, {'code': '23505', 'message': 'duplicate key value violates unique constraint "servico_apontamentos_aberto_placa"'}, 409)
+                    if not d.get('avulso') and any(a['perfil_id'] == d['perfil_id'] and a['ordem_id'] == d['ordem_id'] and a['situacao'] != 'finalizado' for a in s.apont): return resp(route, {'code': '23505', 'message': 'duplicate key value violates unique constraint "servico_apontamentos_aberto"'}, 409)
                     a = {'id': 'ap%d' % (len(s.apont) + 1), 'inicio': '2026-11-16T18:50:00Z', 'fim': None, 'motivo_pausa': '', 'pausas': [], 'itens_executados': [], 'indicacoes': [], 'obs': '', **d}; s.apont.append(a); return resp(route, a)
                 if rq.method == 'PATCH':
                     d = json.loads(rq.post_data or '{}'); s.gravados.append(('servico_apontamentos', d)); i = u.split('id=eq.')[1].split('&')[0]
@@ -673,6 +676,29 @@ try:
         tela(pg, 'meus'); pg.wait_for_timeout(800); tx = textos(pg)
         t('1 carro(s)' in tx and 'OS 01920' in tx and ('1 a 15' in tx or '16 a' in tx) and 'Beto' not in tx.split('MEUS SERVIÇOS')[1], 'Meus serviços agrupa por quinzena e mostra só os meus')
         t(not er, 'sem erro de script no serviço: %s' % er); ctx.close()
+        # Serviço iniciado pela placa, SEM O.S. (v66, pedido do Danilo em 28/11/2026): o mecânico não fica impedido de dar entrada no carro
+        f = Fake(); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'servico')
+        pg.fill('#sv-placa', 'qxn1e49'); pg.keyboard.press('Enter'); pg.wait_for_selector('#sv-sem-os', timeout=8000); pg.wait_for_timeout(300)
+        t(pg.locator('#sv-pedir').count() == 1 and 'Iniciar serviço sem O.S.' in textos(pg), 'carro sem O.S.: aparece Iniciar serviço sem O.S. e continua o Pedir orçamento')
+        pg.click('#sv-sem-os'); pg.wait_for_selector('[data-sem-os]', timeout=8000); pg.wait_for_timeout(400)
+        ap = f.apont[-1]
+        t(ap.get('avulso') is True and ap.get('ordem_id') is None and ap.get('placa') == 'QXN1E49' and ap['perfil_id'] == UID and ap['situacao'] == 'andamento', 'grava o apontamento só com a placa, sem O.S.: %s' % ap)
+        t('Em andamento · sem O.S.' in textos(pg) and 'QXN1E49' in textos(pg).replace('-', ''), 'o serviço aparece em andamento, sem O.S., com a placa')
+        pg.fill('#sv-placa', 'qxn1e49'); pg.keyboard.press('Enter'); pg.wait_for_timeout(800)
+        t(pg.locator('#sv-sem-os').count() == 0 and 'já iniciou o serviço neste carro' in textos(pg), 'o mesmo carro não é iniciado duas vezes')
+        pg.click('[data-finalizar]'); pg.wait_for_selector('#sv-fim-ok'); pg.click('#sv-fim-ok'); pg.wait_for_timeout(500)
+        t(f.apont[-1]['situacao'] == 'andamento' and 'Escreva o que você fez' in textos(pg), 'sem O.S., finalizar pede o que foi feito')
+        pg.fill('#sv-feito', 'Troca da embreagem, peça da empresa'); pg.click('#sv-fim-ok'); pg.wait_for_timeout(800)
+        ap = f.apont[-1]; t(ap['situacao'] == 'finalizado' and ap['fim'] and ap.get('feito_texto') == 'Troca da embreagem, peça da empresa' and ap['itens_executados'] == [], 'finaliza guardando o que fez: %s' % ap)
+        t(not any(tb == 'os_itens' for tb, c in f.gravados), 'sem O.S. não grava nada em itens de O.S.')
+        tela(pg, 'meus'); pg.wait_for_timeout(800); tx = textos(pg)
+        t('sem O.S. ainda' in tx and 'Troca da embreagem' in tx and '1 carro(s)' in tx, 'Meus serviços mostra o serviço sem O.S. com o que foi feito')
+        t(not er, 'sem erro de script no serviço sem O.S.: %s' % er); ctx.close()
+        # banco ainda sem o v66: o botão avisa o que falta, sem quebrar
+        f = Fake(); f.sem_v66 = True; ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'servico')
+        pg.fill('#sv-placa', 'qxn1e49'); pg.keyboard.press('Enter'); pg.wait_for_selector('#sv-sem-os', timeout=8000); pg.click('#sv-sem-os'); pg.wait_for_timeout(800)
+        t('v66' in textos(pg) and pg.locator('[data-sem-os]').count() == 0, 'sem o v66 no banco: avisa que falta rodar o SQL')
+        t(not er, 'sem erro de script sem o v66: %s' % er); ctx.close()
         # mecânico: na agenda só os dele
         f = Fake('mecanico', True, {UID: {'entra': True, 'telas': ['agenda', 'servico']}}); ctx, pg, er = abrir(br, f, URL, plugin=False); entrar(pg); tela(pg, 'agenda'); pg.wait_for_timeout(800); tx = textos(pg)
         t('JOÃO DA SILVA' in tx and 'MARIA' not in tx and pg.locator('.ag-item').count() == 1, 'mecânico vê só os agendamentos em que é o mecânico'); ctx.close()

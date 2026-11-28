@@ -11,7 +11,7 @@
 import { html, useState, useEffect, useMemo } from "../lib.js";
 import { api } from "../api.js";
 import { useApp, Modal, Vazio, Placa, Campo, Texto, useQuadrosDobraveis } from "../ui.js";
-import { reais, fmtData, numOS, normPlaca, totalItem, parseValor } from "../util.js";
+import { reais, fmtData, fmtDataHora, numOS, normPlaca, totalItem, parseValor } from "../util.js";
 import { pode, chaveGrupo, gruposDeProdutos } from "../regras.js";
 import { quinzenas, mesAtual, periodo, nomeMes, quintoDiaUtil } from "../folha.js";
 import { AbasRH } from "./rh.js";
@@ -109,11 +109,15 @@ function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
       if (!o) { setAchados([]); return; }
       const aps = await api.apontamentos.listar({ ordem_id: o.id });
       const fins = (aps || []).filter(a => a.situacao === "finalizado");
+      // serviço que o mecânico começou pela placa, antes da O.S. existir (v66): ele já vem escolhido para receber a O.S.
+      const avulsos = (aps || []).filter(a => a.avulso);
+      const dono = avulsos.length && (funcs || []).find(f => f.perfil_id === avulsos[0].perfil_id);
+      if (dono && !paraQuem) setParaQuem(dono.id);
       const servicos = (o.itens || []).filter(i => i.tipo === "servico" && i.aprovado !== false).map(i => {
         const quem = fins.filter(a => (a.itens_executados || []).includes(i.id));
         return { item: i, quem: quem.map(a => ({ id: a.perfil_id, nome: a.perfil_nome })) };
       });
-      setAchados([{ os: o, servicos }]);
+      setAchados([{ os: o, servicos, avulsos }]);
     } catch (e) { avisar(e.message, true); setAchados([]); } finally { setCarregando(false); }
   };
 
@@ -170,6 +174,9 @@ function PuxarOS({ onFechar, onPuxar, avisar, funcs, quinzena, onAtribuido }) {
         <span class="sub">${(achado.os.cliente || {}).nome || ""} · ${achado.servicos.length} serviço${achado.servicos.length === 1 ? "" : "s"}
           · ${comApontamento.length} apontado${comApontamento.length === 1 ? "" : "s"} no app</span></div>
       ${!achado.servicos.length ? html`<${Vazio}>Esta O.S. não tem mão de obra aprovada.</${Vazio}>` : html`
+        ${(achado.avulsos || []).map(a => html`<p class="aviso" key=${a.id} data-avulso>
+          <b>${a.perfil_nome}</b> começou este carro pela placa antes da O.S. (${fmtDataHora(a.inicio)})${a.feito_texto ? html`: <i>${a.feito_texto}</i>` : ""}.
+          Ele já vem escolhido abaixo.</p>`)}
         <div class="cm-puxar-destino">
           <${Campo} id="cm-para" rotulo="Puxar para o mecânico" obrig>
             <select id="cm-para" class="inp" value=${paraQuem} onChange=${e => setParaQuem(e.target.value)}>

@@ -210,12 +210,12 @@ function RelColaboradores() {
   const [quem, setQuem] = useState("");
   const [lin, erro] = useCarga(() => api.apontamentos.listar({ desde: limites(de, ate)[0], ate: limites(de, ate)[1] }), [de, ate]);
   const ordens = useMemo(() => Object.fromEntries((dados.ordens || []).map(o => [o.id, o])), [dados.ordens]);
-  const linhas = useMemo(() => (lin || []).filter(s => !quem || s.perfil_id === quem).map(s => { const o = ordens[s.ordem_id] || {}; const v = o.veiculo || {};
+  const linhas = useMemo(() => (lin || []).filter(s => !quem || s.perfil_id === quem).map(s => { const o = ordens[s.ordem_id] || {}; const v = s.ordem_id ? (o.veiculo || {}) : { placa: s.placa };
     return { ...s, numero: s.os_numero || o.numero, placa: v.placa || "", veiculo: [v.marca, v.modelo].filter(Boolean).join(" "), cliente: (o.cliente || {}).nome || "", minutos: minutosDe(s), executados: (s.itens_executados || []).length, indicou: (Array.isArray(s.indicacoes) ? s.indicacoes : []).map(i => i.descricao + " → " + i.para_nome).join("; ") }; }), [lin, quem, ordens]);
   const porPessoa = useMemo(() => { const g = new Map(); for (const x of linhas) { const k = x.perfil_nome || "?"; const y = g.get(k) || { k, servicos: 0, carros: new Set(), minutos: 0 }; y.servicos++; y.carros.add(x.ordem_id); y.minutos += x.minutos; g.set(k, y); } return [...g.values()].map(y => ({ k: y.k, servicos: y.servicos, carros: y.carros.size, minutos: y.minutos })); }, [linhas]);
   const cols = [{ t: "Colaborador", v: x => x.perfil_nome }, { t: "Início", v: x => fmtDataHora(x.inicio) }, { t: "Fim", v: x => x.fim ? fmtDataHora(x.fim) : "—" }, { t: "Tempo", v: x => horasTxt(x.minutos) },
-    { t: "O.S.", v: x => x.numero ? numOS(x.numero) : "—" }, { t: "Placa", v: x => exPlaca(x.placa) }, { t: "Veículo", v: x => x.veiculo }, { t: "Cliente", v: x => x.cliente },
-    { t: "Situação", v: x => SITUACAO_AP[x.situacao] || x.situacao }, { t: "Pausa", v: x => x.motivo_pausa || "" }, { t: "Itens executados", v: x => x.executados, f: "qtd" }, { t: "Indicou", v: x => x.indicou }];
+    { t: "O.S.", v: x => x.numero ? numOS(x.numero) : x.avulso ? "sem O.S. ainda" : "—" }, { t: "Placa", v: x => exPlaca(x.placa) }, { t: "Veículo", v: x => x.veiculo }, { t: "Cliente", v: x => x.cliente },
+    { t: "Situação", v: x => SITUACAO_AP[x.situacao] || x.situacao }, { t: "Pausa", v: x => x.motivo_pausa || "" }, { t: "Itens executados", v: x => x.executados, f: "qtd" }, { t: "O que fez", v: x => x.feito_texto || "" }, { t: "Indicou", v: x => x.indicou }];
   const pessoas = (dados.perfis || []).filter(p => p.papel !== "pendente");
   return html`<${Moldura} chave="colaboradores" de=${de} ate=${ate} setPer=${setPer} exportar=${() => baixarCSV("colaboradores-" + de + "-a-" + ate, cols, linhas)}
     filtros=${html`<div class="filtros-linha"><div class="campo"><label for="rel-quem">Colaborador</label><select id="rel-quem" class="inp" value=${quem} onChange=${e => setQuem(e.target.value)}><option value="">Todos</option>${pessoas.map(p => html`<option key=${p.id} value=${p.id}>${p.nome}</option>`)}</select></div></div>`}>

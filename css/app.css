@@ -702,14 +702,24 @@ body{font-size:15px}
 .clima-t sup{font-size:21px;vertical-align:super}
 .clima-ag strong{display:block;font-size:15px;margin-top:2px}
 .clima-ag span{font-size:12.5px;color:#d4e4f6}
-.clima-mais{margin-left:auto;text-align:right;font-size:12.5px;color:#d4e4f6;line-height:1.7;flex:none}
-.clima-mais b{color:#fff}
-.clima-dias{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;position:relative;z-index:1}
-.clima-dias>div{background:rgba(255,255,255,.14);border-radius:10px;padding:7px 9px;display:flex;align-items:center;gap:8px;min-width:0}
-.clima-dias>div>div{min-width:0}
-.clima-dias span{display:block;font-size:12px;font-weight:700;color:#d4e4f6}
-.clima-dias b{display:block;font-size:13.5px;white-space:nowrap;font-variant-numeric:tabular-nums}
-.clima-dias small{display:block;font-size:11px;color:#cfe0f3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* hora de agora e o dia por extenso, ao lado da temperatura (pedido do Danilo em 25/11/2026) */
+.clima-relogio{margin-left:auto;text-align:right;flex:none;position:relative;z-index:1}
+.clima-relogio b{display:block;font-family:var(--f-display);font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.clima-relogio span{display:block;font-size:12.5px;color:#d4e4f6;margin-top:2px}
+.clima-relogio small{display:block;font-size:11.5px;color:#cfe0f3;margin-top:4px}
+/* mini calendário da semana: um quadradinho por dia, com o dia, o número, o desenho do tempo e as temperaturas */
+.clima-cal{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;margin-top:12px;position:relative;z-index:1}
+.clima-dia{background:rgba(255,255,255,.14);border-radius:10px;padding:7px 4px;display:flex;flex-direction:column;align-items:center;gap:1px;min-width:0;text-align:center}
+.clima-dia.clima-hoje{background:rgba(255,255,255,.28);box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
+.clima-dia-nome{font-size:11.5px;font-weight:700;color:#eaf2fb}
+.clima-dia-num{font-size:12px;color:#cfe0f3;font-variant-numeric:tabular-nums}
+.clima-dia b{font-size:14px;font-variant-numeric:tabular-nums}
+.clima-dia-min{font-size:11.5px;color:#cfe0f3;font-variant-numeric:tabular-nums}
+/* o nome do tempo fica escrito sempre, inclusive no celular: o desenho sozinho não diz se é garoa ou tempestade */
+.clima-dia small{font-size:10.5px;color:#cfe0f3;line-height:1.2;width:100%;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.clima-link{display:inline-block;margin-top:10px;position:relative;z-index:1;color:#eaf2fb;font-size:12.5px;text-decoration:underline}
+.clima-link:hover{color:#fff}
+@media (max-width:900px){.clima-cal{grid-template-columns:repeat(4,1fr)}.clima-dia small{-webkit-line-clamp:3}}
 
 /* Notícias: hora à esquerda, manchete à direita */
 .noticias{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column}
@@ -721,6 +731,70 @@ body{font-size:15px}
 .noticias a:hover strong{color:var(--brand);text-decoration:underline}
 .not-h{font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums;flex:none;min-width:40px}
 .noticias strong{font-size:14px;font-weight:600;line-height:1.35}
+.noticias a small{font-size:11.5px;color:var(--muted);margin-left:auto;white-space:nowrap}
+/* notícias por prioridade: cidade, estado e país, com o nome do grupo escrito */
+.not-grupo{margin-top:8px}
+.not-grupo:first-of-type{margin-top:2px}
+.not-grupo-t{display:flex;align-items:baseline;gap:8px;font-size:12.5px;font-weight:700;color:var(--brand-strong);
+  text-transform:uppercase;letter-spacing:.4px;border-top:2px solid var(--line);padding-top:7px}
+.not-grupo-t span{margin-left:auto;font-size:11.5px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0}
+/* notícia no estilo do celular: foto à direita, fonte com a inicial, manchete e "há quanto tempo" */
+.not-cards{display:flex;flex-direction:column;gap:2px}
+.not-card{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--line);color:var(--ink);text-decoration:none}
+.not-cards .not-card:first-child{border-top:0}
+.not-card-txt{flex:1 1 auto;min-width:0;display:flex;flex-direction:column;gap:3px}
+.not-card-fonte{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);font-weight:600}
+.not-card-fonte i{width:17px;height:17px;border-radius:5px;background:var(--brand-strong);color:#fff;font-style:normal;
+  font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none}
+.not-card-h{margin-left:auto;font-weight:500;white-space:nowrap}
+.not-card strong{font-size:14.5px;font-weight:600;line-height:1.3;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.not-card:hover strong{color:var(--brand);text-decoration:underline}
+.not-card-foto{flex:0 0 76px;width:76px;height:62px;border-radius:10px;overflow:hidden;background:var(--surface-2);
+  display:flex;align-items:center;justify-content:center;color:var(--muted);font-family:var(--f-display);font-size:24px}
+.not-card-foto img{width:100%;height:100%;object-fit:cover}
+.not-card-g{flex-direction:column-reverse;gap:8px}
+.not-card-g .not-card-foto{width:100%;height:150px;flex:none;border-radius:12px}
+.not-card-g strong{font-size:17px;-webkit-line-clamp:2}
+@media (max-width:640px){.not-card-foto{flex-basis:64px;width:64px;height:54px}.not-card-g .not-card-foto{height:120px}}
+
+.not-filtro{display:flex;align-items:center;gap:6px;margin-left:auto;font-size:12.5px;font-weight:600;color:var(--muted);cursor:pointer}
+.not-filtro input{width:16px;height:16px}
+.not-cab .not-filtro+span{margin-left:0}
+
+/* Dólar e outras moedas, no mesmo tamanho da previsão do tempo. Cor chapada (sem gradiente) e a variação SEMPRE
+   escrita: em preto e branco uma seta verde e uma vermelha são a mesma seta. */
+.moedas{background:var(--brand-strong);color:#fff;border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}
+.moedas.moedas-off{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.moedas-ln{display:flex;gap:14px;align-items:flex-start}
+.moedas-ag{min-width:0;flex:1 1 auto}
+.moedas-nome{font-size:12.5px;color:#d4e4f6}
+.moedas-v{font-family:var(--f-display);font-size:40px;line-height:1.05;font-variant-numeric:tabular-nums}
+.moedas-var{display:block;font-size:13px;font-weight:600;margin-top:3px;color:#eaf2fb}
+.moedas-ag small{display:block;font-size:11.5px;color:#cfe0f3;margin-top:3px}
+/* mini gráfico dos últimos dias, dentro do cartão: linha branca sobre o azul, sem eixo e sem grade */
+.moedas-graf{margin-top:8px}
+.moedas-graf svg{display:block}
+.moedas-graf-pes{display:flex;gap:10px;font-size:11.5px;color:#cfe0f3;margin-top:2px;flex-wrap:wrap}
+.moedas-graf-pes span:first-child{font-weight:700;color:#eaf2fb}
+.moedas-lista{display:flex;flex-direction:column;gap:4px;flex:0 0 auto;min-width:148px}
+.moedas-item{display:flex;align-items:baseline;gap:8px;width:100%;border:0;border-radius:8px;background:rgba(255,255,255,.14);
+  color:#fff;padding:5px 9px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.moedas-item b{margin-left:auto;font-variant-numeric:tabular-nums}
+.moedas-item:hover{background:rgba(255,255,255,.24)}
+.moedas-item.ativo{background:rgba(255,255,255,.3);box-shadow:inset 0 0 0 1px rgba(255,255,255,.45)}
+.moedas-link{display:inline-block;margin-top:10px;color:#eaf2fb;font-size:12.5px;text-decoration:underline}
+.moedas-link:hover{color:#fff}
+
+/* E-mails recebidos, por prioridade: contabilidade, Objetiva e o resto */
+.emails{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:13px 15px;display:flex;flex-direction:column}
+.emails .not-cab i{background:var(--brand)}
+.email-item{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;width:100%;border:0;border-top:1px solid var(--line);
+  background:none;color:var(--ink);font:inherit;text-align:left;padding:8px 0;cursor:pointer}
+.email-item strong{font-size:13.5px;font-weight:600;line-height:1.3;min-width:0;flex:1 1 auto}
+.email-item small{width:100%;font-size:11.5px;color:var(--muted);padding-left:50px}
+.email-item:hover strong{color:var(--brand);text-decoration:underline}
+.emails-link{margin-top:10px;border:0;background:none;color:var(--brand-strong);font:inherit;font-size:12.5px;
+  text-decoration:underline;cursor:pointer;align-self:flex-start;padding:0}
 .aj-botoes{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}
 .aj-botoes button{padding:16px 14px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-weight:700;font-size:14.5px;cursor:pointer;text-align:center}
 .aj-botoes button:hover{border-color:var(--brand);color:var(--brand)}
@@ -2088,10 +2162,8 @@ button.kpi{text-align:left;font:inherit;color:inherit;cursor:pointer}
   .painel .atalho:hover{background:var(--brand-soft);color:var(--brand-strong)}
   .painel .patio-item.t-info{border-top-color:var(--warn)}
   .painel .patio-item.t-warn{border-top-color:var(--ok)}
-  .painel .clima-hoje{flex-wrap:wrap;padding-bottom:12px;border-bottom:1px solid var(--line)}
-  .painel .clima-hoje>b{font-size:46px;color:var(--brand-strong)}
-  .painel .clima-dias{grid-template-columns:repeat(auto-fit,minmax(min(100%,86px),1fr))}
-  .painel .clima-dias small{white-space:normal;overflow:visible;overflow-wrap:anywhere}
+  /* o quadro do tempo foi refeito em 25/11/2026 (relógio + mini calendário): as regras de .clima-dias e do antigo
+     .clima-hoje saíram daqui porque não existiam mais no desenho e estavam estourando o número do dia de hoje */
   .painel .noticias a{padding:10px 4px}
   .painel .noticias a:first-child{padding-top:0}
   .painel .noticias a:last-child{padding-bottom:0}
